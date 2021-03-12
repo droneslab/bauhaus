@@ -1,5 +1,5 @@
 [package]
-name = "DARVIS"
+name = "darvis"
 version = "0.1.0"
 authors = ["TJ Chase <tbchase@buffalo.edu>"]
 edition = "2018"
