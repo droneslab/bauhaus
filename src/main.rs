@@ -18,9 +18,10 @@ use timely::dataflow::operators::{Inspect, Probe};
 // use timely::dataflow::channels::pact::Exchange;
 use timely::dataflow::operators::Exchange;
 
+mod base;
+
 use std::hash::{Hash, Hasher};
 use std::collections::hash_map::DefaultHasher;
-
 fn my_hash<T>(obj: T) -> u64
 where
     T: Hash,
