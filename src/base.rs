@@ -49,5 +49,4 @@ pub mod base {
     pub struct BowDB {
 
     }
-
 }
