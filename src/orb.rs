@@ -29,9 +29,10 @@ use opencv::{
     types::{PtrOfORB, VectorOfKeyPoint},
 };
 
-pub fn orb_extract() {
+pub fn orb_extract(img_paths: Vec<String>) {
+
     // initializes and runs a timely dataflow.
-    timely::execute_from_args(std::env::args(), |worker| {
+    timely::execute_from_args(std::env::args(), move |worker| {
 
         let index = worker.index();
 
@@ -67,7 +68,7 @@ pub fn orb_extract() {
         });
 
         // feed the dataflow with data.
-        let img_paths = ["data/1.png".to_string(), "data/2.png".to_string()];
+        // let img_paths = ["data/1.png".to_string(), "data/2.png".to_string()];
 
         for i in 0..img_paths.len() {
             if index == 0 {
