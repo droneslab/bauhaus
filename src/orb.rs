@@ -1,7 +1,7 @@
 extern crate timely;
 use timely::dataflow::{InputHandle, ProbeHandle};
 // use timely::dataflow::channels::pact::Exchange;
-use timely::dataflow::Scope;
+// use timely::dataflow::Scope;
 use timely::dataflow::operators::*;
 
 use std::hash::{Hash, Hasher};
@@ -17,13 +17,13 @@ where
 
 // #[allow(unused_imports)]
 use opencv::{
-    core,
-    features2d,
+    // core,
+    // features2d,
     features2d::{Feature2DTrait, ORB},
-    highgui,
-    imgproc,
+    // highgui,
+    // imgproc,
     prelude::*,
-    videoio,
+    // videoio,
     imgcodecs,
     types::{PtrOfORB, VectorOfKeyPoint},
 };
