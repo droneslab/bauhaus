@@ -1,6 +1,6 @@
 extern crate nalgebra as na;
 
-use std::rc::Rc;
+use std::sync::Arc;
 
 #[allow(dead_code)] // TODO: This is temporary
 pub struct Pose {
@@ -14,7 +14,7 @@ pub struct Pose {
 pub struct Frame {
     id: u64,
     timestamp: u64,
-    key_points: Rc<opencv::types::VectorOfKeyPoint>,
+    key_points: Arc<opencv::types::VectorOfKeyPoint>,
     descriptors: opencv::core::Mat,
     pose: Pose,
     depth_threshold: u64,
@@ -25,11 +25,11 @@ pub struct Frame {
 pub struct KeyFrame {
     id: u64,
     timestamp: u64,
-    map_points: Rc<Vec<MapPoint>>,
+    map_points: Arc<Vec<MapPoint>>,
     bow: abow::BoW,
     pose: Pose,
-    map: Rc<Map>,
-    bow_db: Rc<BowDB>,
+    map: Arc<Map>,
+    bow_db: Arc<BowDB>,
     scale: f64,
     depth_threshold: f64,
 }
@@ -40,9 +40,9 @@ pub struct MapPoint {
     first_keyframe_id: u64,
     // 3-Vector
     position: na::Matrix<f64, na::U3, na::U1, na::base::storage::Owned<f64, na::U3, na::U1>>,
-    keyframe_ref: Rc<KeyFrame>,
-    keyframe_list: Rc<Vec<KeyFrame>>,
-    map: Rc<Map>,
+    keyframe_ref: Arc<KeyFrame>,
+    keyframe_list: Arc<Vec<KeyFrame>>,
+    map: Arc<Map>,
     depth_threshold: f64,
 }
 
