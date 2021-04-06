@@ -11,42 +11,42 @@ use opencv::{
     types::{PtrOfORB, VectorOfKeyPoint},
 };
 
-pub fn orb_extract(img_paths: Vec<String>) {
+// Axiom stuff
+use axiom::prelude::*;
+use serde::{Deserialize, Serialize};
 
-    // initializes and runs a timely dataflow.
-    timely::execute_from_args(std::env::args().skip(2), move |worker| {
+// Message type for the actor
+#[derive(Debug, Serialize, Deserialize)]
+pub struct OrbMsg {
+    // The ID of the actor that sent this message
+    aid: Aid,
+    // Vector of image paths to read in/extract
+    img_paths: Vec<String>,
+}
 
-        let index = worker.index();
-
-        // create input and output handles.
-        let mut input = InputHandle::new();
-        let mut probe = ProbeHandle::new();
-
-        // build a new dataflow.
-        worker.dataflow(|scope| {
-            input.to_stream(scope)
-                .exchange(|x: &String| my_hash(x))
-                .inspect(move |x| {
-                    // Read image
-                    let img = imgcodecs::imread(x, imgcodecs::IMREAD_COLOR).unwrap();
-                    let mut orb: PtrOfORB = ORB::default().unwrap();
-                    let mut kp = VectorOfKeyPoint::new();
-                    let mut des = Mat::default().unwrap();
-
-                    orb.detect_and_compute(&img,&Mat::default().unwrap(), &mut kp, &mut des, false).unwrap();
-                    println!("worker {}, processed {}, found {} keypoints",index, x, kp.len());
-                })
-                .probe_with(&mut probe);
-        });
-
-        for i in 0..img_paths.len() {
-            if index == 0 {
-                input.send(img_paths[i].to_owned());
-            }
-            input.advance_to(i + 1);
-            while probe.less_than(input.time()) {
-                worker.step();
-            }
+impl OrbMsg {
+    pub fn new(aid: Aid, vec: Vec<String>) -> Self {
+        Self {
+            aid,
+            img_paths: vec,
         }
-    }).unwrap();
+    }
+}
+
+// This is the handler that will be used by the actor.
+pub async fn orb_extract(_: (), context: Context, message: Message) -> ActorResult<()> {
+    if let Some(msg) = message.content_as::<OrbMsg>() {
+        println!("{:?}", context);
+        for path in &msg.img_paths {
+            let img = imgcodecs::imread(path, imgcodecs::IMREAD_COLOR).unwrap();
+            let mut orb: PtrOfORB = ORB::default().unwrap();
+            let mut kp = VectorOfKeyPoint::new();
+            let mut des = Mat::default().unwrap();
+
+            orb.detect_and_compute(&img,&Mat::default().unwrap(), &mut kp, &mut des, false).unwrap();
+            println!("Processed {}, found {} keypoints", path, kp.len());
+        }
+        context.system.trigger_shutdown();
+    }
+    Ok(Status::done(()))
 }
