@@ -1,20 +1,3 @@
-extern crate timely;
-use timely::dataflow::{InputHandle, ProbeHandle};
-// use timely::dataflow::channels::pact::Exchange;
-// use timely::dataflow::Scope;
-use timely::dataflow::operators::*;
-
-use std::hash::{Hash, Hasher};
-use std::collections::hash_map::DefaultHasher;
-fn my_hash<T>(obj: T) -> u64
-where
-    T: Hash,
-{
-    let mut hasher = DefaultHasher::new();
-    obj.hash(&mut hasher);
-    hasher.finish()
-}
-
 // #[allow(unused_imports)]
 use opencv::{
     // core,
