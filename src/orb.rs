@@ -18,16 +18,13 @@ use serde::{Deserialize, Serialize};
 // Message type for the actor
 #[derive(Debug, Serialize, Deserialize)]
 pub struct OrbMsg {
-    // The ID of the actor that sent this message
-    aid: Aid,
     // Vector of image paths to read in/extract
     img_paths: Vec<String>,
 }
 
 impl OrbMsg {
-    pub fn new(aid: Aid, vec: Vec<String>) -> Self {
+    pub fn new(vec: Vec<String>) -> Self {
         Self {
-            aid,
             img_paths: vec,
         }
     }
@@ -46,7 +43,7 @@ pub async fn orb_extract(_: (), context: Context, message: Message) -> ActorResu
             orb.detect_and_compute(&img,&Mat::default().unwrap(), &mut kp, &mut des, false).unwrap();
             println!("Processed {}, found {} keypoints", path, kp.len());
         }
-        context.system.trigger_shutdown();
+        // context.system.trigger_shutdown();
     }
     Ok(Status::done(()))
 }
