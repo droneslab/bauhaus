@@ -5,9 +5,6 @@ RUN apt-get update && \
     apt-get install -y wget git cmake vim \
                        clang libclang-dev pkg-config
 
-# Add darvis
-ADD . darvis
-
 # Install rust
 RUN wget https://raw.githubusercontent.com/rust-lang/rustup/master/rustup-init.sh && \
     chmod +x rustup-init.sh && \
