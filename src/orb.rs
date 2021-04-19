@@ -1,6 +1,6 @@
 #[allow(unused_imports)]
 use opencv::{
-    prelude::*;
+    prelude::*,
     core,
     features2d,
     features2d::{Feature2DTrait, ORB},
