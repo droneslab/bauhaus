@@ -1,12 +1,12 @@
-// #[allow(unused_imports)]
+#[allow(unused_imports)]
 use opencv::{
-    // core,
-    // features2d,
-    features2d::{Feature2DTrait, ORB},
-    // highgui,
-    // imgproc,
     prelude::*,
-    // videoio,
+    core,
+    features2d,
+    features2d::{Feature2DTrait, ORB},
+    highgui,
+    imgproc,
+    videoio,
     imgcodecs,
     types::{PtrOfORB, VectorOfKeyPoint},
 };
@@ -38,9 +38,9 @@ pub async fn orb_extract(_: (), context: Context, message: Message) -> ActorResu
             let img = imgcodecs::imread(path, imgcodecs::IMREAD_COLOR).unwrap();
             let mut orb: PtrOfORB = ORB::default().unwrap();
             let mut kp = VectorOfKeyPoint::new();
-            let mut des = Mat::default().unwrap();
+            let mut des = Mat::default();
 
-            orb.detect_and_compute(&img,&Mat::default().unwrap(), &mut kp, &mut des, false).unwrap();
+            orb.detect_and_compute(&img,&Mat::default(), &mut kp, &mut des, false).unwrap();
             println!("Processed {}, found {} keypoints", path, kp.len());
         }
         // context.system.trigger_shutdown();
