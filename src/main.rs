@@ -44,15 +44,15 @@ fn main() {
     }
 
     // First we initialize the actor system using the default config
-    let config = ActorSystemConfig::default();
-    let system = ActorSystem::create(config);
+    // let config = ActorSystemConfig::default();
+    // let system = ActorSystem::create(config);
 
-    // Spawn actors
-    let feat_aid = system.spawn().name("orb_extract").with((), orb::orb_extract).unwrap();
-    let align_aid = system.spawn().name("alignment").with((), align::align).unwrap();
+    // // Spawn actors
+    // let feat_aid = system.spawn().name("orb_extract").with((), orb::orb_extract).unwrap();
+    // let align_aid = system.spawn().name("alignment").with((), align::align).unwrap();
 
-    // Send images
-    feat_aid.send_new(orb::OrbMsg::new(img_paths)).unwrap();
+    // // Send images
+    // feat_aid.send_new(orb::OrbMsg::new(img_paths)).unwrap();
 
     /***********************************************************************************************/
 
@@ -65,7 +65,7 @@ fn main() {
     let _cluster_mgr2 = TcpClusterMgr::create(&system2, socket_addr2);
 
     cluster_mgr1
-        .connect(socket_addr2, Duration::from_millis(1000000000))
+        .connect(socket_addr2, Duration::from_millis(1000))
         .unwrap();
 
     // The actor will trigger shutdown, we just wait for it
