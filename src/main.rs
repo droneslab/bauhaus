@@ -18,6 +18,7 @@ use log::LevelFilter;
 mod base;
 mod orb;
 mod align;
+mod utils;
 
 fn main() {
 
@@ -44,30 +45,30 @@ fn main() {
     }
 
     // First we initialize the actor system using the default config
-    // let config = ActorSystemConfig::default();
-    // let system = ActorSystem::create(config);
+    let config = ActorSystemConfig::default();
+    let system = ActorSystem::create(config);
 
-    // // Spawn actors
-    // let feat_aid = system.spawn().name("orb_extract").with((), orb::orb_extract).unwrap();
-    // let align_aid = system.spawn().name("alignment").with((), align::align).unwrap();
+    // Spawn actors
+    let feat_aid = system.spawn().name("orb_extract").with((), orb::orb_extract).unwrap();
+    let align_aid = system.spawn().name("alignment").with((), align::align).unwrap();
 
-    // // Send images
-    // feat_aid.send_new(orb::OrbMsg::new(img_paths)).unwrap();
+    // Send images
+    feat_aid.send_new(orb::OrbMsg::new(img_paths)).unwrap();
 
     /***********************************************************************************************/
 
-    let socket_addr1 = SocketAddr::from(([127, 0, 0, 1], 7717));
-    let system1 = ActorSystem::create(ActorSystemConfig::default().thread_pool_size(2));
-    let cluster_mgr1 = TcpClusterMgr::create(&system1, socket_addr1);
+    // let socket_addr1 = SocketAddr::from(([127, 0, 0, 1], 7717));
+    // let system1 = ActorSystem::create(ActorSystemConfig::default().thread_pool_size(2));
+    // let cluster_mgr1 = TcpClusterMgr::create(&system1, socket_addr1);
 
-    let socket_addr2 = SocketAddr::from(([127, 0, 0, 1], 7727));
-    let system2 = ActorSystem::create(ActorSystemConfig::default().thread_pool_size(2));
-    let _cluster_mgr2 = TcpClusterMgr::create(&system2, socket_addr2);
+    // let socket_addr2 = SocketAddr::from(([127, 0, 0, 1], 7727));
+    // let system2 = ActorSystem::create(ActorSystemConfig::default().thread_pool_size(2));
+    // let _cluster_mgr2 = TcpClusterMgr::create(&system2, socket_addr2);
 
-    cluster_mgr1
-        .connect(socket_addr2, Duration::from_millis(1000))
-        .unwrap();
+    // cluster_mgr1
+    //     .connect(socket_addr2, Duration::from_millis(1000))
+    //    .unwrap();
 
     // The actor will trigger shutdown, we just wait for it
-    // system.await_shutdown(None);
+    system.await_shutdown(None);
 }
