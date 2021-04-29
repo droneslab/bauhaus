@@ -29,7 +29,10 @@ impl AlignMsg {
 pub async fn align(_: (), context: Context, message: Message) -> ActorResult<()> {
     if let Some(msg) = message.content_as::<AlignMsg>() {
         println!("{:?}", context);
-        println!("{:?}", msg);
+        println!("{:?}", &msg.img1_kps.nrows());
+        println!("{:?}", &msg.img1_des.nrows());
+        println!("{:?}", &msg.img2_kps.nrows());
+        println!("{:?}", &msg.img2_des.nrows());
     }
     Ok(Status::done(()))
 }
