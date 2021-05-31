@@ -13,6 +13,7 @@ use opencv::{
     types::{PtrOfORB, VectorOfKeyPoint},
 };
 use na::*;
+
 use std::convert::TryInto;
 
 
@@ -26,18 +27,20 @@ pub struct DmatKeyPoint {
 }
 
 // Function to convert cv matrix to na matrix - For descriptors which is usually a 2D array
-// Casts the u8 that comes out of the descriptor matrix to f64's
-pub fn cv_mat_to_na_grayscale(mat: &Mat) -> na::DMatrix<f64> {
+// Currently, type used is u8 because orb.detect_and_compute returns Mat with u8 type
+// Can use mat.convert_to to convert the elements to the desired type. Need to check on the syntax of the function.
+
+pub fn cv_mat_to_na_grayscale(mat: Mat) -> na::DMatrix<u8> {
     // Iterate through image print pixel values
     // println!("{}", mat.rows());
     // println!("{}", mat.cols());
-    let mut dmat = na::DMatrix::from_element(mat.rows().try_into().unwrap(), mat.cols().try_into().unwrap(), 0f64);
+    let mut dmat = na::DMatrix::from_element(mat.rows().try_into().unwrap(), mat.cols().try_into().unwrap(), 0u8);
     for i in 0..mat.rows() {
             for j in 0..mat.cols() {
                    let val = *mat.at_2d::<u8>(i, j).unwrap(); // Grayscale 1 channel uint8
                    let r: usize = i.try_into().unwrap();
                    let c: usize = j.try_into().unwrap();
-                   dmat[(r, c)] = val as f64;
+                   dmat[(r, c)] = val;
             }
     }
     return dmat;
@@ -73,16 +76,39 @@ pub fn cv_vector_of_keypoint_to_na(vkp: VectorOfKeyPoint) -> Vec<DmatKeyPoint> {
 
 }
 
-pub fn na_grayscale_to_cv_mat(dmat: na::DMatrix<f64>) -> Mat {
-    let mut mat = Mat::new_rows_cols_with_default(dmat.nrows().try_into().unwrap(),dmat.ncols().try_into().unwrap(),CV_64FC1, opencv::core::Scalar::all(1.0)).unwrap();
+pub fn na_grayscale_to_cv_mat(dmat: na::DMatrix<u8>) -> Mat {
+    let mut mat = Mat::new_rows_cols_with_default(dmat.nrows().try_into().unwrap(),dmat.ncols().try_into().unwrap(),CV_8UC1, opencv::core::Scalar::all(0.0)).unwrap();
 
     for i in 0..dmat.nrows() {
             for j in 0..dmat.ncols() {
                     let r: usize = i.try_into().unwrap();
                     let c: usize = j.try_into().unwrap();
-                    unsafe {*mat.at_2d_unchecked_mut::<f64>(i.try_into().unwrap(), j.try_into().unwrap()).unwrap() = dmat[(r, c)];}
+                    unsafe {*mat.at_2d_unchecked_mut::<u8>(i.try_into().unwrap(), j.try_into().unwrap()).unwrap() = dmat[(r, c)];}
             }
     }
     return mat;
+
+}
+
+
+pub fn na_keypoint_to_cv_vector_of_keypoint(dkp: Vec::<DmatKeyPoint>) -> VectorOfKeyPoint {
+
+    let mut cv_vkp = VectorOfKeyPoint::new();
+
+    for i in 0..dkp.len() {
+        let mut dkp_instance = &dkp[i];
+        let mut p2f = Point_::new(dkp_instance.p2f[0], dkp_instance.p2f[1]);
+        let mut cvkp = KeyPoint::new_point(
+                        p2f,
+                        dkp_instance.size,
+                        dkp_instance.angle,
+                        dkp_instance.response,
+                        dkp_instance.octave,
+                        dkp_instance.class_id
+                        );
+        cv_vkp.push(cvkp.unwrap());
+    }
+
+    return cv_vkp;
 
 }
