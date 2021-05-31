@@ -13,10 +13,10 @@ use opencv::{
     types::{PtrOfORB, VectorOfKeyPoint},
 };
 use na::*;
-
+use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
 
-
+#[derive(Debug, Serialize, Deserialize)]
 pub struct DmatKeyPoint {
     p2f: Vec<f32>,
     size: f32,
@@ -30,7 +30,7 @@ pub struct DmatKeyPoint {
 // Currently, type used is u8 because orb.detect_and_compute returns Mat with u8 type
 // Can use mat.convert_to to convert the elements to the desired type. Need to check on the syntax of the function.
 
-pub fn cv_mat_to_na_grayscale(mat: Mat) -> na::DMatrix<u8> {
+pub fn cv_mat_to_na_grayscale(mat: &Mat) -> na::DMatrix<u8> {
     // Iterate through image print pixel values
     // println!("{}", mat.rows());
     // println!("{}", mat.cols());
@@ -52,7 +52,7 @@ pub fn cv_mat_to_na_grayscale(mat: Mat) -> na::DMatrix<u8> {
 // Need to convert the Point2f for serialization
 // Currently using rust Vec type since its simpler and trivial than using DMatrix
 
-pub fn cv_vector_of_keypoint_to_na(vkp: VectorOfKeyPoint) -> Vec<DmatKeyPoint> {
+pub fn cv_vector_of_keypoint_to_na(vkp: &VectorOfKeyPoint) -> Vec<DmatKeyPoint> {
 
     //let mut dmat_vkp = na::DVector::<DmatKeyPoint>;//::from_element(vkp.len().try_into().unwrap(), dummy);
 
@@ -76,7 +76,7 @@ pub fn cv_vector_of_keypoint_to_na(vkp: VectorOfKeyPoint) -> Vec<DmatKeyPoint> {
 
 }
 
-pub fn na_grayscale_to_cv_mat(dmat: na::DMatrix<u8>) -> Mat {
+pub fn na_grayscale_to_cv_mat(dmat: &na::DMatrix<u8>) -> Mat {
     let mut mat = Mat::new_rows_cols_with_default(dmat.nrows().try_into().unwrap(),dmat.ncols().try_into().unwrap(),CV_8UC1, opencv::core::Scalar::all(0.0)).unwrap();
 
     for i in 0..dmat.nrows() {
@@ -91,7 +91,7 @@ pub fn na_grayscale_to_cv_mat(dmat: na::DMatrix<u8>) -> Mat {
 }
 
 
-pub fn na_keypoint_to_cv_vector_of_keypoint(dkp: Vec::<DmatKeyPoint>) -> VectorOfKeyPoint {
+pub fn na_keypoint_to_cv_vector_of_keypoint(dkp: &Vec::<DmatKeyPoint>) -> VectorOfKeyPoint {
 
     let mut cv_vkp = VectorOfKeyPoint::new();
 
