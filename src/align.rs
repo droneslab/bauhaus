@@ -4,14 +4,16 @@ use opencv::{
     prelude::*,
     core,
     features2d,
-    features2d::{Feature2DTrait, ORB},
+    features2d::{Feature2DTrait, BFMatcher},
     highgui,
     imgproc,
     videoio,
     imgcodecs,
-    types::{VectorOfKeyPoint},
+    calib3d,
+    types::{VectorOfKeyPoint, PtrOfBFMatcher, VectorOfDMatch},
 };
-
+use opencv::core::CV_32FC1;
+use std::convert::TryInto;
 extern crate nalgebra as na;
 use na::*;
 use axiom::prelude::*;
@@ -59,6 +61,76 @@ pub async fn align(_: (), context: Context, message: Message) -> ActorResult<()>
         println!("Align actor img1 des {:?}", des1.rows());
         println!("Align actor img2 kps {:?}", kp2.len());
         println!("Align actor img2 des {:?}", des2.rows());
+
+        // BFMatcher to get good matches
+        let mut bfmtch = BFMatcher::create(features2d::DescriptorMatcher_BRUTEFORCE_HAMMING, true).unwrap(); 
+        let mut mask = core::Mat::default(); 
+        let mut matches = VectorOfDMatch::new();
+        bfmtch.train_match(&des2, &des1, &mut matches, &mut mask); 
+        println!("Number of matches: {:}", matches.len());
+
+        // Sort the matches based on the distance in ascending order
+        // Using O(n^2) sort here. Need to make the code use cv sort function
+        // by providing custom comparator
+
+        let mut sortedMatches = VectorOfDMatch::new();
+        let mut added = vec![false; matches.len()];
+        for i in 0..matches.len() {
+            if(added[i] == true) {
+                continue;
+            }
+            let mut mn = i;
+            let mut dist = matches.get(i).unwrap().distance;
+            for j in 0..matches.len() {
+                let dmatch2 = matches.get(j).unwrap();
+                if(dist > dmatch2.distance && !added[j]) {
+                    mn = j;
+                    dist = dmatch2.distance;
+                }        
+            }      
+            let dmatch1 = matches.get(mn).unwrap();
+            sortedMatches.push(dmatch1);
+            added[mn] = true;
+        }
+
+        // Point vectors to hold the corresponding matched points 
+        let mut p2f1 = core::Vector::<core::Point2f>::new(); 
+        let mut p2f2 = core::Vector::<core::Point2f>::new();
+
+        for i in 0..sortedMatches.len() {
+            p2f1.push(kp1.get(sortedMatches.get(i).unwrap().train_idx.try_into().unwrap()).unwrap().pt);
+            p2f2.push(kp2.get(sortedMatches.get(i).unwrap().query_idx.try_into().unwrap()).unwrap().pt);
+        }
+        println!("Number of points: {:}", p2f1.len());
+        println!("Number of points: {:}", p2f2.len());
+         
+        // Find essential matrix using K
+        let mut K = Mat::new_rows_cols_with_default(3, 3 ,CV_32FC1, opencv::core::Scalar::all(0.0)).unwrap();
+        // Mat K = (Mat_<double>(3,3) << 718.8560, 0, 607.1928, 0, 718.8560, 185.2157, 0, 0, 1 );
+        unsafe {
+            *K.at_2d_unchecked_mut::<f32>(0,0).unwrap() = 718.8560;
+            *K.at_2d_unchecked_mut::<f32>(0,1).unwrap() = 0.0;
+            *K.at_2d_unchecked_mut::<f32>(0,2).unwrap() = 607.1928;
+            *K.at_2d_unchecked_mut::<f32>(1,0).unwrap() = 0.0;
+            *K.at_2d_unchecked_mut::<f32>(1,1).unwrap() = 718.8560;
+            *K.at_2d_unchecked_mut::<f32>(1,2).unwrap() = 185.2157;
+            *K.at_2d_unchecked_mut::<f32>(2,0).unwrap() = 0.0;
+            *K.at_2d_unchecked_mut::<f32>(2,1).unwrap() = 0.0;
+            *K.at_2d_unchecked_mut::<f32>(2,2).unwrap() = 1.0;
+        }
+        let mut ess_mat = calib3d::find_essential_mat_matrix(&mut p2f1, &mut p2f2, &mut K, calib3d::CV_RANSAC, 0.999, 1.0, &mut Mat::default()).unwrap();
+
+        // Recover pose using the matrix
+        let mut R = Mat::default();
+        let mut t = Mat::default();
+        let mut thresh: f32 = 1.0;
+        let inliers = calib3d::recover_pose_camera(&mut ess_mat, &mut p2f1, &mut p2f2, &mut K, &mut R, &mut t, &mut Mat::default());
+        println!("Number of inliers:{:}", inliers.unwrap());
+        print_matrix(&R);
+        print_matrix(&t);
+        //println!("Rotation :{:}", R);
+        //println!("Translation :{:}", t);
+        
     }
     Ok(Status::done(()))
 }
