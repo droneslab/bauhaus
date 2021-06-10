@@ -46,6 +46,19 @@ pub fn cv_mat_to_na_grayscale(mat: &Mat) -> na::DMatrix<u8> {
     return dmat;
 }
 
+// Function to print matrix
+pub fn print_matrix(mat: &Mat) {
+
+    for i in 0..mat.rows() {
+        for j in 0..mat.cols() {
+            let val = *mat.at_2d::<f64>(i, j).unwrap();
+            print!("{:} ", val);
+        }
+        println!("");
+    }
+
+}
+
 
 // Function to convert cv vector of keypoints to rust vector.
 // Needed because KeyPoint is a structure with Point2f cv type holding the points.
