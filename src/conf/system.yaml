@@ -1,0 +1,39 @@
+master:
+       name: manager
+       address: localhost
+       file: main.rs
+
+modules:
+      -
+       name: FeatureDectection
+       file: orb.rs
+       address: locahost
+       port: !!str 7777
+       multithreaded: false
+       threads: 1
+       possible_paths:
+                      - 
+                       from: ImageRead
+                       to: Initilization
+                       input: images
+                       output: feature vectors
+                      -
+                       from: ImageRead
+                       to: ImageAlignment
+                       input: images
+                       output: feature vectors
+
+      -
+       name: ImageAlignment
+       file: align.rs
+       address: localhost
+       port: !!str 7778
+       multithreaded: false
+       threads: 1
+       possible_paths:
+                     -
+                      from: FeatureDetection
+                      to: KFDecision
+                      input: feature vectors
+                      output: frame, feature points
+  
