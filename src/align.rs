@@ -45,29 +45,18 @@ impl AlignMsg {
 pub async fn align(_: (), context: Context, message: Message) -> ActorResult<()> {
     if let Some(msg) = message.content_as::<AlignMsg>() {
         println!("{:?}", context);
-        println!("Align actor img1 kps {:?}", &msg.img1_kps.len());
-        println!("Align actor img1 des {:?}", &msg.img1_des.nrows());
-        println!("Align actor img2 kps {:?}", &msg.img2_kps.len());
-        println!("Align actor img2 des {:?}", &msg.img2_des.nrows());
 
         // Convert back to cv structures
         let mut kp1 = na_keypoint_to_cv_vector_of_keypoint(&msg.img1_kps);
         let mut des1 = na_grayscale_to_cv_mat(&msg.img1_des);
         let mut kp2 = na_keypoint_to_cv_vector_of_keypoint(&msg.img2_kps);
         let mut des2 = na_grayscale_to_cv_mat(&msg.img2_des);
-       
-        println!("After conversion!"); 
-        println!("Align actor img1 kps {:?}", kp1.len());
-        println!("Align actor img1 des {:?}", des1.rows());
-        println!("Align actor img2 kps {:?}", kp2.len());
-        println!("Align actor img2 des {:?}", des2.rows());
 
         // BFMatcher to get good matches
         let mut bfmtch = BFMatcher::create(features2d::DescriptorMatcher_BRUTEFORCE_HAMMING, true).unwrap(); 
         let mut mask = core::Mat::default(); 
         let mut matches = VectorOfDMatch::new();
         bfmtch.train_match(&des2, &des1, &mut matches, &mut mask); 
-        println!("Number of matches: {:}", matches.len());
 
         // Sort the matches based on the distance in ascending order
         // Using O(n^2) sort here. Need to make the code use cv sort function
@@ -101,8 +90,6 @@ pub async fn align(_: (), context: Context, message: Message) -> ActorResult<()>
             p2f1.push(kp1.get(sortedMatches.get(i).unwrap().train_idx.try_into().unwrap()).unwrap().pt);
             p2f2.push(kp2.get(sortedMatches.get(i).unwrap().query_idx.try_into().unwrap()).unwrap().pt);
         }
-        println!("Number of points: {:}", p2f1.len());
-        println!("Number of points: {:}", p2f2.len());
          
         // Find essential matrix using K
         let mut K = Mat::new_rows_cols_with_default(3, 3 ,CV_32FC1, opencv::core::Scalar::all(0.0)).unwrap();
@@ -128,8 +115,6 @@ pub async fn align(_: (), context: Context, message: Message) -> ActorResult<()>
         println!("Number of inliers:{:}", inliers.unwrap());
         print_matrix(&R);
         print_matrix(&t);
-        //println!("Rotation :{:}", R);
-        //println!("Translation :{:}", t);
         
     }
     Ok(Status::done(()))
