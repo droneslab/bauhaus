@@ -36,7 +36,13 @@ impl VisMsg {
 //temporary "global" identity variables
 //identity matrix for Rpos and tpos
 let Rpos = DMatrix::<f32>::identity(3, 3);
-let tpos = DMatrix::<f32>::identity(1, 3);
+let tpos = DMatrix::<f32>::identity(1, 3);              //aren't identity matrices squares? with a diagonal of 1's
+
+
+//blank image for graph using opencv
+Mat img(Size(320,240),CV_8UC3);                 // create 320x240 image
+Mat roi(img, Rect(0,0,320,240));                // select roi
+roi = Scalar(0,0,0);                            // fill entire 320x240 image roi with black color
 
 
 // This is the handler that will be used by the actor.
@@ -48,9 +54,15 @@ pub async fn Vis_extract(_: (), context: Context, message: Message) -> ActorResu
 
         // rotate and translate matrices from pose to track trajectory (R and t from pose)
         // Rpos = RRpos
-        Rpos = &msg.img_pose.rot * Rpos
+        Rpos = &msg.img_pose.rot * Rpos;
         // tpos = tpose + tRpos
-        tpos = tpos + (&msg.img_pose.pos * Rpos)
+        tpos = tpos + (&msg.img_pose.pos * Rpos);
+        
+        // update image with a small red square (there is no 'circle struct in opencv::core)
+        let x = ???
+        let y = ???
+        Mat roi(img, Rect(x, y, 20, 20));       // select square roi on the graph by using x, y
+        roi = Scalar(255, 0, 0);                // fill square roi with red color
         }
         context.system.trigger_shutdown();
     }
