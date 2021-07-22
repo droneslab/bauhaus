@@ -5,8 +5,9 @@ master:
 
 modules:
       -
-       name: FeatureDectection
-       file: orb.rs
+       name: orb_extract
+       file: orb
+       module: orb_extract
        address: locahost
        port: !!str 7777
        multithreaded: false
@@ -24,8 +25,9 @@ modules:
                        output: feature vectors
 
       -
-       name: ImageAlignment
-       file: align.rs
+       name: alignment
+       file: align
+       module: align
        address: localhost
        port: !!str 7778
        multithreaded: false
