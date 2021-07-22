@@ -1,6 +1,7 @@
 extern crate nalgebra as na;
 
 use std::sync::Arc;
+use std::collections::HashMap;
 
 #[allow(dead_code)] // TODO: This is temporary
 pub struct Pose {
@@ -54,4 +55,16 @@ pub struct Map {
 #[allow(dead_code)] // TODO: This is temporary
 pub struct BowDB {
 
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct ModuleConf{
+    pub module_name: String,
+    pub module_file: String,
+    pub module: String,
+    pub ip_address: String,
+    pub port: String,
+    pub multithreaded: bool,
+    pub threads: i64,
+    pub possible_paths: HashMap<String, String>
 }
