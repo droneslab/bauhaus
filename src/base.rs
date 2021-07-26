@@ -5,9 +5,9 @@ use std::sync::Arc;
 #[allow(dead_code)] // TODO: This is temporary
 pub struct Pose {
     // 3-Vector
-    pos: na::Matrix<f64, na::U3, na::U1, na::base::storage::Owned<f64, na::U3, na::U1>>,
+    pub pos: na::Matrix<f64, na::U3, na::U1, na::base::storage::Owned<f64, na::U3, na::U1>>,
     // 3x3 Matrix
-    rot: na::Matrix<f64, na::U3, na::U3, na::base::storage::Owned<f64, na::U3, na::U3>>,
+    pub rot: na::Matrix<f64, na::U3, na::U3, na::base::storage::Owned<f64, na::U3, na::U3>>,
 }
 
 #[allow(dead_code)] // TODO: This is temporary
