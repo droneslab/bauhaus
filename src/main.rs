@@ -19,6 +19,7 @@ mod base;
 mod orb;
 mod align;
 mod utils;
+mod vis;
 
 fn main() {
 
@@ -53,6 +54,11 @@ fn main() {
     let feat_aid = system.spawn().name("orb_extract").with((), orb::orb_extract).unwrap();
     feat_aid.send_new(orb::OrbMsg::new(img_paths, align_aid)).unwrap();
 
+
+    let new_pose = base::Pose::new_pose;                                            // this is supposed to be a new pose that the vis takes in
+
+    let vis_aid = system.spawn().name("vis_extract").with((), vis::Vis_extract).unwrap();
+    vis_aid.send_new(vis::VisMsg::new(align_aid, img_paths)).unwrap();
     /***********************************************************************************************/
 
     /*let socket_addr1 = SocketAddr::from(([127, 0, 0, 1], 7717));
@@ -76,5 +82,8 @@ fn main() {
     // The actor will trigger shutdown, we just wait for it
     system1.await_shutdown(None);
     system2.await_shutdown(None);*/
+
+    
+
     system.await_shutdown(None);
 }
