@@ -11,6 +11,8 @@ use opencv::{
     types::{PtrOfORB, VectorOfKeyPoint},
 };
 
+use std::collections::HashMap;
+
 // Axiom stuff
 use axiom::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -23,14 +25,14 @@ use crate::align;
 pub struct OrbMsg {
     // Vector of image paths to read in/extract
     img_paths: Vec<String>,
-    alignment_id: axiom::actors::Aid,
+    actor_ids: std::collections::HashMap<String, axiom::actors::Aid>,
 }
 
 impl OrbMsg {
-    pub fn new(vec: Vec<String>, align_id: axiom::actors::Aid) -> Self {
+    pub fn new(vec: Vec<String>, ids: std::collections::HashMap<String, axiom::actors::Aid>) -> Self {
         Self {
             img_paths: vec,
-            alignment_id: align_id,
+            actor_ids: ids,
         }
     }
 }
@@ -59,8 +61,9 @@ pub async fn orb_extract(_: (), context: Context, message: Message) -> ActorResu
                 let nades2 = utils::cv_mat_to_na_grayscale(&des2);
 
                 // Sent to alignment
+                let align_id = &msg.actor_ids.get("align").unwrap();
                 // TODO: This is just a test send for now. Need to change message to accept the custom DmatKeypoint type
-                &msg.alignment_id.send_new(align::AlignMsg::new(kpvec1, nades1, kpvec2, nades2)).unwrap();
+                align_id.send_new(align::AlignMsg::new(kpvec1, nades1, kpvec2, nades2, msg.actor_ids.clone())).unwrap();
             }
 
             kp2 = kp1;

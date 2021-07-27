@@ -3,15 +3,8 @@ use glob::glob;
 use axiom::prelude::*;
 use axiom::cluster::*;
 
-// use std::collections::HashMap;
-// use std::io::prelude::*;
-// use std::io::{BufReader, BufWriter};
+use std::collections::HashMap;
 use std::net::{SocketAddr};
-// use std::sync::atomic::{AtomicBool, Ordering};
-// use std::sync::{Arc, RwLock};
-// use std::sync::{Condvar, Mutex};
-// use std::thread;
-// use std::thread::JoinHandle;
 use std::time::Duration;
 use log::LevelFilter;
 
@@ -45,45 +38,24 @@ fn main() {
         }
     }
 
+    let mut aids = HashMap::new();
+
     // First we initialize the actor system using the default config
     let config = ActorSystemConfig::default();
     let system = ActorSystem::create(config);
 
-    let align_aid = system.spawn().name("alignment").with((), align::align).unwrap();
-
+    // Next we spawn each actor
     let feat_aid = system.spawn().name("orb_extract").with((), orb::orb_extract).unwrap();
-    feat_aid.send_new(orb::OrbMsg::new(img_paths, align_aid)).unwrap();
-
-
-    let new_pose = base::Pose::new_pose;                                            // this is supposed to be a new pose that the vis takes in
-
+    let align_aid = system.spawn().name("alignment").with((), align::align).unwrap();
     let vis_aid = system.spawn().name("vis_extract").with((), vis::Vis_extract).unwrap();
-    vis_aid.send_new(vis::VisMsg::new(align_aid, img_paths)).unwrap();
-    /***********************************************************************************************/
 
-    /*let socket_addr1 = SocketAddr::from(([127, 0, 0, 1], 7717));
-    let system1 = ActorSystem::create(ActorSystemConfig::default().thread_pool_size(2));
-    let cluster_mgr1 = TcpClusterMgr::create(&system1, socket_addr1);
+    // Save spawned actor ID's for lookup later
+    aids.insert("feat".to_string(), feat_aid.clone());
+    aids.insert("alilgn".to_string(), align_aid.clone());
+    aids.insert("vis".to_string(), vis_aid.clone());
 
-    let socket_addr2 = SocketAddr::from(([127, 0, 0, 1], 7727));
-    let system2 = ActorSystem::create(ActorSystemConfig::default().thread_pool_size(2));
-    let _cluster_mgr2 = TcpClusterMgr::create(&system2, socket_addr2);
-
-    // Connect both actor systems
-    cluster_mgr1.connect(socket_addr2, Duration::from_millis(1000)).unwrap();
-
-    // Spawn actors, orb on sys1 align on sys2
-    let feat_aid = system1.spawn().name("orb_extract").with((), orb::orb_extract).unwrap();
-    let align_aid = system2.spawn().name("alignment").with((), align::align).unwrap();
-
-    // Send images
-    feat_aid.send_new(orb::OrbMsg::new(img_paths, align_aid)).unwrap();
-
-    // The actor will trigger shutdown, we just wait for it
-    system1.await_shutdown(None);
-    system2.await_shutdown(None);*/
-
-    
-
+    // Kickoff the pipeline by sending the feature extraction module images
+    feat_aid.send_new(orb::OrbMsg::new(img_paths, aids)).unwrap();
+   
     system.await_shutdown(None);
 }
