@@ -52,8 +52,8 @@ impl VisMsg {
 
 //temporary "global" identity variables
 //identity matrix for Rpos and tpos
-static mut Rpos: DMatrix::<f64> = DMatrix::<f64>::identity(3, 3);
-static mut tpos: DMatrix::<f64> = DMatrix::<f64>::identity(1, 3);              //aren't identity matrices squares? with a diagonal of 1's
+static Rpos: &DMatrix::<f64> = &DMatrix::<f64>::identity(3, 3);
+static tpos: &DMatrix::<f64> = &DMatrix::<f64>::identity(1, 3);              //aren't identity matrices squares? with a diagonal of 1's
 
 
 //blank image for graph using opencv
@@ -62,24 +62,24 @@ static mut img: Mat = Mat::new_rows_cols_with_default(400, 400, CV_32FC1, opencv
 
 // This is the handler that will be used by the actor.
 // couldn't find the stuff for Message and Context type - gonna assume we take in a single VisMsg at a time for now
-pub async fn Vis_extract(_: (), context: Context, message: Message) -> ActorResult<()> {
+pub async fn vis_extract(_: (), context: Context, message: Message) -> ActorResult<()> {
     if let Some(msg) = message.content_as::<VisMsg>() {
         println!("{:?}", context);
        
 
         // rotate and translate matrices from pose to track trajectory (R and t from pose)
         // Rpos = RRpos
-        let new_Rpos = &msg.img_pose.rot * &Rpos;
+        let new_Rpos = &msg.img_pose.rot * Rpos;
         // tpos = tpose + tRpos
-        let new_tpos = &tpos + (&msg.img_pose.pos * &Rpos);
+        let new_tpos = &tpos + (msg.img_pose.pos * Rpos);
         
         // update image with a small red square (there is no 'circle struct in opencv::core)
         
-        //let x = ???
-        //let y = ???
+        let x = new_Rpos[0] as i32;
+        let y = new_Rpos[1] as i32;
 
-        // use (200, 200) for x, y coordinates until we can extract them from Rpos and tpos
-        opencv::imgproc::circle( &mut opencv::core::ToInputOutputArray::input_output_array(&mut img).unwrap(), core::Point_::new(200, 200), 40, core::Scalar_([4.0, 3.0, 4.0, 5.0]) , -1, 8, 0);
+        // use x, y coordinates until we can extract them from Rpos and/or tpos
+        opencv::imgproc::circle( &mut opencv::core::ToInputOutputArray::input_output_array(&mut img).unwrap(), core::Point_::new(x, y), 40, core::Scalar_([4.0, 3.0, 4.0, 5.0]) , -1, 8, 0);
 
         
         opencv::highgui::imshow("image", & img);

@@ -55,7 +55,7 @@ pub async fn align(_: (), context: Context, message: Message) -> ActorResult<()>
         let mut des2 = na_grayscale_to_cv_mat(&msg.img2_des);
 
         // BFMatcher to get good matches
-        let mut bfmtch = BFMatcher::create(features2d::DescriptorMatcher_BRUTEFORCE_HAMMING, true).unwrap(); 
+        let mut bfmtch = BFMatcher::create(4, true).unwrap(); 
         let mut mask = core::Mat::default(); 
         let mut matches = VectorOfDMatch::new();
         bfmtch.train_match(&des2, &des1, &mut matches, &mut mask); 
@@ -107,7 +107,7 @@ pub async fn align(_: (), context: Context, message: Message) -> ActorResult<()>
             *K.at_2d_unchecked_mut::<f32>(2,1).unwrap() = 0.0;
             *K.at_2d_unchecked_mut::<f32>(2,2).unwrap() = 1.0;
         }
-        let mut ess_mat = calib3d::find_essential_mat_matrix(&mut p2f1, &mut p2f2, &mut K, calib3d::CV_RANSAC, 0.999, 1.0, &mut Mat::default()).unwrap();
+        let mut ess_mat = calib3d::find_essential_mat_matrix(&mut p2f1, &mut p2f2, &mut K, calib3d::FM_RANSAC, 0.999, 1.0, &mut Mat::default()).unwrap();
 
         // Recover pose using the matrix
         let mut R = Mat::default();
