@@ -5,9 +5,10 @@ master:
 
 modules:
       -
-       name: orb_extract
+       name: feature_extraction
        file: orb
-       module: orb_extract
+       actor_message: OrbMsg
+       actor_function: orb_extract
        address: locahost
        port: !!str 7777
        multithreaded: false
@@ -25,9 +26,10 @@ modules:
                        output: feature vectors
 
       -
-       name: alignment
+       name: feature_matching
        file: align
-       module: align
+       actor_message: AlignMsg
+       actor_function: align
        address: localhost
        port: !!str 7778
        multithreaded: false

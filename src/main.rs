@@ -1,14 +1,7 @@
-extern crate yaml_rust;
-use yaml_rust::YamlLoader;
-use yaml_rust::yaml;
-use yaml_rust::yaml::Yaml;
-use yaml_rust::yaml::Hash;
 use std::env;
 use glob::glob;
 use axiom::prelude::*;
 use axiom::cluster::*;
-use std::fs::File;
-use std::collections::HashMap;
 use std::io::prelude::*;
 // use std::io::{BufReader, BufWriter};
 use std::net::{SocketAddr};
@@ -24,44 +17,7 @@ mod base;
 mod orb;
 mod align;
 mod utils;
-
-fn read_config_file(str: &mut String, file_name: &String) {
-   let mut f = File::open(file_name).unwrap();
-   let mut s = String::new();
-   f.read_to_string(str).unwrap();
-}
-
-fn load_config(str: &mut String, all_modules: &mut Vec<base::ModuleConf>) {
-
-    let docs = yaml::YamlLoader::load_from_str(&str).unwrap();
-    for doc in &docs {
-
-        let v = doc["modules"].as_vec().unwrap();
-        for i in 0..v.len() {
-
-            let h = &v[i].as_hash().unwrap();
-            let mut mconf = base::ModuleConf::default();
-            mconf.module_name = h[&Yaml::String("name".to_string())].as_str().unwrap().to_string();
-            mconf.module_file = h[&Yaml::String("file".to_string())].as_str().unwrap().to_string();
-            mconf.module = h[&Yaml::String("module".to_string())].as_str().unwrap().to_string();
-            mconf.ip_address = h[&Yaml::String("address".to_string())].as_str().unwrap().to_string();
-            mconf.port = h[&Yaml::String("port".to_string())].as_str().unwrap().to_string();
-            mconf.multithreaded = h[&Yaml::String("multithreaded".to_string())].as_bool().unwrap();
-            mconf.threads = h[&Yaml::String("threads".to_string())].as_i64().unwrap();
-            let paths = &h[&Yaml::String("possible_paths".to_string())].as_vec().unwrap();
-            let mut hmap = HashMap::<String, String>::new();
-            for p in 0..paths.len() {
-                let path = paths[p].as_hash().unwrap();
-                hmap.insert(path[&Yaml::String("from".to_string())].as_str().unwrap().to_string()
-                                            , path[&Yaml::String("to".to_string())].as_str().unwrap().to_string());
-            }
-            mconf.possible_paths = hmap;
-            all_modules.push(mconf.clone());
-
-        }
-    }
-
-}
+mod config;
 
 fn main() {
 
@@ -71,7 +27,11 @@ fn main() {
         .unwrap();
 
     let args: Vec<String> = env::args().collect();
+
+    //TODO: Check input arguments/error if not enough
     let img_dir = args[1].to_owned();
+    let config_file = args[2].to_owned();
+
     let mut glob_str = img_dir.to_owned();
     glob_str.push_str("/*.png");
 
@@ -89,23 +49,31 @@ fn main() {
     
     // Load the config file 
     let mut conf_str = String::new();
-    read_config_file(&mut conf_str, &args[2]);
+    config::read_config_file(&mut conf_str, &config_file);
 
-    // Create module configuration objects
-    let mut all_modules = Vec::<base::ModuleConf>::new();
-    load_config(&mut conf_str, &mut all_modules);
-    
+    // Get configuration for each actor (aka the "modules" of the system)
+    let mut modules = Vec::<base::ActorConf>::new();
+    config::load_config(&mut conf_str, &mut modules);
 
     // First we initialize the actor system using the default config
     let config = ActorSystemConfig::default();
     let system = ActorSystem::create(config);
 
-    let align_aid = system.spawn().name("alignment").with((), align::align).unwrap();
+    // Spawn all actors
+    for actor_conf in modules {
+        // TODO: Need to add message/function tables (hashmaps) somewhere that map sttrings to Fn pointers
+        // https://stackoverflow.com/questions/30540807/calling-a-function-only-known-at-runtime
+        println!("{:?}", actor_conf);
+        // let test = actor_conf.file as module;
+        // let new_aid = system.spawn().name(actor_conf.name).with((), actor_conf.file::actor_conf.actor_function).unwrap();
+    }
+
+    // let align_aid = system.spawn().name("alignment").with((), align::align).unwrap();
     //let align_aid = system.spawn().name(all_modules[0].module_name).with((), all_modules[0].module_file::all_modules[0].module).unwrap();
     
-    let feat_aid = system.spawn().name("orb_extract").with((), orb::orb_extract).unwrap();
+    // let feat_aid = system.spawn().name("orb_extract").with((), orb::orb_extract).unwrap();
     //let feat_aid = system.spawn().name(all_modules[1].module_name).with((), all_modules[1].module_file::all_modules[1].module).unwrap();
-    feat_aid.send_new(orb::OrbMsg::new(img_paths, align_aid)).unwrap();
+    // feat_aid.send_new(orb::OrbMsg::new(img_paths, align_aid)).unwrap();
 
     /***********************************************************************************************/
 
