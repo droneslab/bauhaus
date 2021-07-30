@@ -47,7 +47,7 @@ fn main() {
     // Next we spawn each actor
     let feat_aid = system.spawn().name("orb_extract").with((), orb::orb_extract).unwrap();
     let align_aid = system.spawn().name("alignment").with((), align::align).unwrap();
-    let vis_aid = system.spawn().name("vis_extract").with((), vis::Vis_extract).unwrap();
+    let vis_aid = system.spawn().name("vis_extract").with((), vis::vis_extract).unwrap();
 
     // Save spawned actor ID's for lookup later
     aids.insert("feat".to_string(), feat_aid.clone());
