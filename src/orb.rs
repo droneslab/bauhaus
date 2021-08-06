@@ -20,18 +20,23 @@ use serde::{Deserialize, Serialize};
 use crate::utils;
 use crate::align;
 
+extern crate nalgebra as na;
+use na::*;
+
 // Message type for the actor
 #[derive(Debug, Serialize, Deserialize)]
 pub struct OrbMsg {
     // Vector of image paths to read in/extract
     img_paths: Vec<String>,
+    img: na::DMatrix<u8>,
     actor_ids: std::collections::HashMap<String, axiom::actors::Aid>,
 }
 
 impl OrbMsg {
-    pub fn new(vec: Vec<String>, ids: std::collections::HashMap<String, axiom::actors::Aid>) -> Self {
+    pub fn new(vec: Vec<String>, img: na::DMatrix<u8>, ids: std::collections::HashMap<String, axiom::actors::Aid>) -> Self {
         Self {
             img_paths: vec,
+            img: img,
             actor_ids: ids,
         }
     }
@@ -63,7 +68,7 @@ pub async fn orb_extract(_: (), context: Context, message: Message) -> ActorResu
                 // Sent to alignment
                 let align_id = &msg.actor_ids.get("align").unwrap();
                 // TODO: This is just a test send for now. Need to change message to accept the custom DmatKeypoint type
-                align_id.send_new(align::AlignMsg::new(kpvec1, nades1, kpvec2, nades2, msg.actor_ids.clone())).unwrap();
+                align_id.send_new(align::AlignMsg::new(kpvec1, nades1, kpvec2, nades2, msg.img.clone(), msg.actor_ids.clone())).unwrap();
             }
 
             kp2 = kp1;

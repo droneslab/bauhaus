@@ -8,6 +8,23 @@ use std::net::{SocketAddr};
 use std::time::Duration;
 use log::LevelFilter;
 
+#[allow(unused_imports)]
+use opencv::{
+    prelude::*,
+    core,
+    features2d,
+    features2d::{Feature2DTrait, ORB},
+    highgui,
+    imgproc,
+    videoio,
+    imgcodecs,
+    types::{PtrOfORB, VectorOfKeyPoint},
+};
+use opencv::core::CV_32FC1;
+
+extern crate nalgebra as na;
+use na::*;
+
 mod base;
 mod orb;
 mod align;
@@ -38,6 +55,10 @@ fn main() {
         }
     }
 
+    //blank image for graph using opencv
+    let mut img: Mat = Mat::new_rows_cols_with_default(400, 400, CV_32FC1, opencv::core::Scalar::all(0.0)).unwrap();                // create 400x400 image
+    let mut img_na = utils::cv_mat_to_na_grayscale(&img);
+
     let mut aids = HashMap::new();
 
     // First we initialize the actor system using the default config
@@ -55,7 +76,7 @@ fn main() {
     aids.insert("vis".to_string(), vis_aid.clone());
 
     // Kickoff the pipeline by sending the feature extraction module images
-    feat_aid.send_new(orb::OrbMsg::new(img_paths, aids)).unwrap();
+    feat_aid.send_new(orb::OrbMsg::new(img_paths, img_na.clone(), aids)).unwrap();
    
     system.await_shutdown(None);
 }

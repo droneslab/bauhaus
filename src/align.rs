@@ -28,16 +28,18 @@ pub struct AlignMsg {
     img1_des: na::DMatrix<u8>,
     img2_kps: Vec<DmatKeyPoint>,
     img2_des: na::DMatrix<u8>,
+    img: na::DMatrix<u8>,
     actor_ids: std::collections::HashMap<String, axiom::actors::Aid>,
 }
 
 impl AlignMsg {
-    pub fn new(kps1: Vec<DmatKeyPoint>, des1: DMatrix<u8>, kps2: Vec<DmatKeyPoint>, des2: na::DMatrix<u8>, ids: std::collections::HashMap<String, axiom::actors::Aid>) -> Self {
+    pub fn new(kps1: Vec<DmatKeyPoint>, des1: DMatrix<u8>, kps2: Vec<DmatKeyPoint>, des2: na::DMatrix<u8>, img: na::DMatrix<u8>, ids: std::collections::HashMap<String, axiom::actors::Aid>) -> Self {
         Self {
             img1_kps: kps1,
             img1_des: des1,
             img2_kps: kps2,
             img2_des: des2,
+            img: img,
             actor_ids: ids,
         }
     }
