@@ -29,7 +29,6 @@ pub struct DmatKeyPoint {
 // Function to convert cv matrix to na matrix - For descriptors which is usually a 2D array
 // Currently, type used is u8 because orb.detect_and_compute returns Mat with u8 type
 // Can use mat.convert_to to convert the elements to the desired type. Need to check on the syntax of the function.
-
 pub fn cv_mat_to_na_grayscale(mat: &Mat) -> na::DMatrix<u8> {
     // Iterate through image print pixel values
     // println!("{}", mat.rows());
@@ -64,7 +63,6 @@ pub fn print_matrix(mat: &Mat) {
 // Needed because KeyPoint is a structure with Point2f cv type holding the points.
 // Need to convert the Point2f for serialization
 // Currently using rust Vec type since its simpler and trivial than using DMatrix
-
 pub fn cv_vector_of_keypoint_to_na(vkp: &VectorOfKeyPoint) -> Vec<DmatKeyPoint> {
 
     //let mut dmat_vkp = na::DVector::<DmatKeyPoint>;//::from_element(vkp.len().try_into().unwrap(), dummy);

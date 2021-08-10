@@ -1,13 +1,24 @@
 extern crate nalgebra as na;
-
+use na::*;
 use std::sync::Arc;
+use serde::{Deserialize, Serialize};
 
 #[allow(dead_code)] // TODO: This is temporary
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Pose {
-    // 3-Vector
-    pub pos: na::Matrix<f64, na::U3, na::U1, na::base::storage::Owned<f64, na::U3, na::U1>>,
-    // 3x3 Matrix
-    pub rot: na::Matrix<f64, na::U3, na::U3, na::base::storage::Owned<f64, na::U3, na::U3>>,
+    // Position 3-Vector
+    pos: Vector3<f64>,
+    // Rotation 3x3 Matrix
+    rot: Matrix3<f64>,
+}
+
+impl Pose {
+    pub fn default_ones() -> Pose {
+        Pose {
+            pos: Vector3::new(1.0,1.0,1.0),
+            rot: Matrix3::new(1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0),
+        }
+    }
 }
 
 #[allow(dead_code)] // TODO: This is temporary
