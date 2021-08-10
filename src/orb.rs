@@ -10,33 +10,28 @@ use opencv::{
     imgcodecs,
     types::{PtrOfORB, VectorOfKeyPoint},
 };
-
-use std::collections::HashMap;
-
-// Axiom stuff
 use axiom::prelude::*;
 use serde::{Deserialize, Serialize};
-
 use crate::utils;
 use crate::align;
+use std::sync::Arc;
+use std::sync::Mutex;
+use std::ffi::c_void;
 
 extern crate nalgebra as na;
-use na::*;
 
 // Message type for the actor
 #[derive(Debug, Serialize, Deserialize)]
 pub struct OrbMsg {
     // Vector of image paths to read in/extract
     img_paths: Vec<String>,
-    img: na::DMatrix<u8>,
     actor_ids: std::collections::HashMap<String, axiom::actors::Aid>,
 }
 
 impl OrbMsg {
-    pub fn new(vec: Vec<String>, img: na::DMatrix<u8>, ids: std::collections::HashMap<String, axiom::actors::Aid>) -> Self {
+    pub fn new(vec: Vec<String>, ids: std::collections::HashMap<String, axiom::actors::Aid>) -> Self {
         Self {
             img_paths: vec,
-            img: img,
             actor_ids: ids,
         }
     }
@@ -45,7 +40,7 @@ impl OrbMsg {
 // This is the handler that will be used by the actor.
 pub async fn orb_extract(_: (), context: Context, message: Message) -> ActorResult<()> {
     if let Some(msg) = message.content_as::<OrbMsg>() {
-        println!("{:?}", context);
+        // println!("{:?}", context);
         let mut kp1 = VectorOfKeyPoint::new();
         let mut des1 = Mat::default();
         let mut kp2 = VectorOfKeyPoint::new();
@@ -57,7 +52,7 @@ pub async fn orb_extract(_: (), context: Context, message: Message) -> ActorResu
             orb.detect_and_compute(&img,&Mat::default(), &mut kp1, &mut des1, false).unwrap();
             println!("Processed {}, found {} keypoints", path, kp1.len());
 
-            if(kp1.len() > 0 && kp2.len() > 0) {
+            if kp1.len() > 0 && kp2.len() > 0 {
                 let kpvec1 = utils::cv_vector_of_keypoint_to_na(&kp1);
                 let kpvec2 = utils::cv_vector_of_keypoint_to_na(&kp2);
 
@@ -66,9 +61,11 @@ pub async fn orb_extract(_: (), context: Context, message: Message) -> ActorResu
                 let nades2 = utils::cv_mat_to_na_grayscale(&des2);
 
                 // Sent to alignment
+                println!("{:?}", &msg.actor_ids);
                 let align_id = &msg.actor_ids.get("align").unwrap();
+                println!("{}", align_id);
                 // TODO: This is just a test send for now. Need to change message to accept the custom DmatKeypoint type
-                align_id.send_new(align::AlignMsg::new(kpvec1, nades1, kpvec2, nades2, msg.img.clone(), msg.actor_ids.clone())).unwrap();
+                align_id.send_new(align::AlignMsg::new(kpvec1, nades1, kpvec2, nades2, msg.actor_ids.clone())).unwrap();
             }
 
             kp2 = kp1;

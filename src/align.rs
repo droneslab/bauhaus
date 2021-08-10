@@ -18,7 +18,9 @@ extern crate nalgebra as na;
 use na::*;
 use axiom::prelude::*;
 use serde::{Deserialize, Serialize};
+
 use crate::utils::*;
+use crate::base::*;
 
 // Message type for this actor
 #[derive(Debug, Serialize, Deserialize)]
@@ -28,18 +30,16 @@ pub struct AlignMsg {
     img1_des: na::DMatrix<u8>,
     img2_kps: Vec<DmatKeyPoint>,
     img2_des: na::DMatrix<u8>,
-    img: na::DMatrix<u8>,
     actor_ids: std::collections::HashMap<String, axiom::actors::Aid>,
 }
 
 impl AlignMsg {
-    pub fn new(kps1: Vec<DmatKeyPoint>, des1: DMatrix<u8>, kps2: Vec<DmatKeyPoint>, des2: na::DMatrix<u8>, img: na::DMatrix<u8>, ids: std::collections::HashMap<String, axiom::actors::Aid>) -> Self {
+    pub fn new(kps1: Vec<DmatKeyPoint>, des1: DMatrix<u8>, kps2: Vec<DmatKeyPoint>, des2: na::DMatrix<u8>, ids: std::collections::HashMap<String, axiom::actors::Aid>) -> Self {
         Self {
             img1_kps: kps1,
             img1_des: des1,
             img2_kps: kps2,
             img2_des: des2,
-            img: img,
             actor_ids: ids,
         }
     }
@@ -69,14 +69,14 @@ pub async fn align(_: (), context: Context, message: Message) -> ActorResult<()>
         let mut sortedMatches = VectorOfDMatch::new();
         let mut added = vec![false; matches.len()];
         for i in 0..matches.len() {
-            if(added[i] == true) {
+            if added[i] == true {
                 continue;
             }
             let mut mn = i;
             let mut dist = matches.get(i).unwrap().distance;
             for j in 0..matches.len() {
                 let dmatch2 = matches.get(j).unwrap();
-                if(dist > dmatch2.distance && !added[j]) {
+                if dist > dmatch2.distance && !added[j] {
                     mn = j;
                     dist = dmatch2.distance;
                 }        
@@ -120,7 +120,11 @@ pub async fn align(_: (), context: Context, message: Message) -> ActorResult<()>
         print_matrix(&R);
         print_matrix(&t);
 
+        let mut pose = Pose::default_ones();
+        // pose.pos[0] = 
+
         //TODO: convert R,t to NA matrices and make Pose object, send to vis
+
         
     }
     Ok(Status::done(()))
