@@ -1,4 +1,3 @@
-#[allow(unused_imports)]
 use opencv::{
     prelude::*,
     core,
@@ -12,7 +11,6 @@ use opencv::{
 };
 use axiom::prelude::*;
 use serde::{Deserialize, Serialize};
-use opencv::core::CV_32FC1;
 extern crate nalgebra as na;
 use na::*;
 use crate::base::Pose;

@@ -1,6 +1,3 @@
-extern crate nalgebra as na;
-
-#[allow(unused_imports)]
 use opencv::{
     prelude::*,
     core::*,
@@ -12,9 +9,11 @@ use opencv::{
     imgcodecs,
     types::{PtrOfORB, VectorOfKeyPoint},
 };
-use na::*;
 use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
+extern crate nalgebra as na;
+use na::*;
+
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DmatKeyPoint {
@@ -29,11 +28,11 @@ pub struct DmatKeyPoint {
 // Function to convert cv matrix to na matrix - For descriptors which is usually a 2D array
 // Currently, type used is u8 because orb.detect_and_compute returns Mat with u8 type
 // Can use mat.convert_to to convert the elements to the desired type. Need to check on the syntax of the function.
-pub fn cv_mat_to_na_grayscale(mat: &Mat) -> na::DMatrix<u8> {
+pub fn cv_mat_to_na_grayscale(mat: &Mat) -> DMatrix<u8> {
     // Iterate through image print pixel values
     // println!("{}", mat.rows());
     // println!("{}", mat.cols());
-    let mut dmat = na::DMatrix::from_element(mat.rows().try_into().unwrap(), mat.cols().try_into().unwrap(), 0u8);
+    let mut dmat = DMatrix::from_element(mat.rows().try_into().unwrap(), mat.cols().try_into().unwrap(), 0u8);
     for i in 0..mat.rows() {
             for j in 0..mat.cols() {
                    let val = *mat.at_2d::<u8>(i, j).unwrap(); // Grayscale 1 channel uint8
@@ -86,7 +85,7 @@ pub fn cv_vector_of_keypoint_to_na(vkp: &VectorOfKeyPoint) -> Vec<DmatKeyPoint> 
 
 }
 
-pub fn na_grayscale_to_cv_mat(dmat: &na::DMatrix<u8>) -> Mat {
+pub fn na_grayscale_to_cv_mat(dmat: &DMatrix<u8>) -> Mat {
     let mut mat = Mat::new_rows_cols_with_default(dmat.nrows().try_into().unwrap(),dmat.ncols().try_into().unwrap(),CV_8UC1, opencv::core::Scalar::all(0.0)).unwrap();
 
     for i in 0..dmat.nrows() {
@@ -105,9 +104,9 @@ pub fn na_keypoint_to_cv_vector_of_keypoint(dkp: &Vec::<DmatKeyPoint>) -> Vector
     let mut cv_vkp = VectorOfKeyPoint::new();
 
     for i in 0..dkp.len() {
-        let mut dkp_instance = &dkp[i];
-        let mut p2f = Point_::new(dkp_instance.p2f[0], dkp_instance.p2f[1]);
-        let mut cvkp = KeyPoint::new_point(
+        let dkp_instance = &dkp[i];
+        let p2f = Point_::new(dkp_instance.p2f[0], dkp_instance.p2f[1]);
+        let cvkp = KeyPoint::new_point(
                         p2f,
                         dkp_instance.size,
                         dkp_instance.angle,

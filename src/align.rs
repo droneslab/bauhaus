@@ -1,5 +1,4 @@
 // Accepts a message of two image extracted data (kps, des), computes homography
-#[allow(unused_imports)]
 use opencv::{
     prelude::*,
     core,
@@ -50,16 +49,16 @@ impl AlignMsg {
 pub async fn align(_: (), context: Context, message: Message) -> ActorResult<()> {
     if let Some(msg) = message.content_as::<AlignMsg>() {
         // Convert back to cv structures
-        let mut kp1 = na_keypoint_to_cv_vector_of_keypoint(&msg.img1_kps);
-        let mut des1 = na_grayscale_to_cv_mat(&msg.img1_des);
-        let mut kp2 = na_keypoint_to_cv_vector_of_keypoint(&msg.img2_kps);
-        let mut des2 = na_grayscale_to_cv_mat(&msg.img2_des);
+        let kp1 = na_keypoint_to_cv_vector_of_keypoint(&msg.img1_kps);
+        let des1 = na_grayscale_to_cv_mat(&msg.img1_des);
+        let kp2 = na_keypoint_to_cv_vector_of_keypoint(&msg.img2_kps);
+        let des2 = na_grayscale_to_cv_mat(&msg.img2_des);
 
         // BFMatcher to get good matches
-        let mut bfmtch = BFMatcher::create(4, true).unwrap(); 
+        let bfmtch = BFMatcher::create(4, true).unwrap(); 
         let mut mask = Mat::default(); 
         let mut matches = VectorOfDMatch::new();
-        bfmtch.train_match(&des2, &des1, &mut matches, &mut mask); 
+        bfmtch.train_match(&des2, &des1, &mut matches, &mut mask)?; 
 
         // Sort the matches based on the distance in ascending order
         // Using O(n^2) sort here. Need to make the code use cv sort function
@@ -113,7 +112,6 @@ pub async fn align(_: (), context: Context, message: Message) -> ActorResult<()>
         // Recover pose using the matrix
         let mut R = Mat::default();
         let mut t = Mat::default();
-        let mut thresh: f32 = 1.0;
         let inliers = calib3d::recover_pose_camera(&mut ess_mat, &mut p2f1, &mut p2f2, &mut K, &mut R, &mut t, &mut Mat::default());
         // println!("Number of inliers:{:}", inliers.unwrap());
         // print_matrix(&R);
