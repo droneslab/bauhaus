@@ -1,4 +1,3 @@
-#[allow(unused_imports)]
 use opencv::{
     prelude::*,
     core,
@@ -15,10 +14,6 @@ use serde::{Deserialize, Serialize};
 use crate::utils::*;
 use crate::align::*;
 use crate::vis::*;
-use std::sync::Arc;
-use std::sync::Mutex;
-use std::ffi::c_void;
-
 extern crate nalgebra as na;
 
 // Message type for the actor
@@ -39,7 +34,7 @@ impl OrbMsg {
 }
 
 // This is the handler that will be used by the actor.
-pub async fn orb_extract(_: (), context: Context, message: Message) -> ActorResult<()> {
+pub async fn orb_extract(_: (), _context: Context, message: Message) -> ActorResult<()> {
     if let Some(msg) = message.content_as::<OrbMsg>() {
         // println!("{:?}", context);
         let mut kp1 = VectorOfKeyPoint::new();
@@ -67,6 +62,7 @@ pub async fn orb_extract(_: (), context: Context, message: Message) -> ActorResu
                 let vis_id = &msg.actor_ids.get("vis").unwrap();
                 // println!("{}", align_id);
                 // TODO: This is just a test send for now. Need to change message to accept the custom DmatKeypoint type
+                println!("Processed image: {}", path);
                 vis_id.send_new(VisPathMsg::new(path.to_string())).unwrap();
                 align_id.send_new(AlignMsg::new(kpvec1, nades1, kpvec2, nades2, msg.actor_ids.clone())).unwrap();
             }

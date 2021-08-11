@@ -3,7 +3,6 @@ use glob::glob;
 use axiom::prelude::*;
 use std::collections::HashMap;
 use log::LevelFilter;
-
 #[allow(unused_imports)]
 use opencv::{
     prelude::*,
@@ -17,22 +16,17 @@ use opencv::{
     types::{PtrOfORB, VectorOfKeyPoint},
 };
 
-use std::sync::Arc;
-use std::sync::Mutex;
-
-extern crate nalgebra as na;
-use na::*;
-
 mod base;
 mod orb;
 mod align;
 mod utils;
 mod vis;
 
+
 fn main() {
 
     env_logger::builder() 
-        .filter_level(LevelFilter::Info)
+        .filter_level(LevelFilter::Warn)
         .try_init()
         .unwrap();
 
