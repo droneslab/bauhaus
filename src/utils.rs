@@ -58,7 +58,6 @@ pub fn print_matrix(mat: &Mat) {
 
 }
 
-
 // Function to convert cv vector of keypoints to rust vector.
 // Needed because KeyPoint is a structure with Point2f cv type holding the points.
 // Need to convert the Point2f for serialization
@@ -100,7 +99,6 @@ pub fn na_grayscale_to_cv_mat(dmat: &na::DMatrix<u8>) -> Mat {
     return mat;
 
 }
-
 
 pub fn na_keypoint_to_cv_vector_of_keypoint(dkp: &Vec::<DmatKeyPoint>) -> VectorOfKeyPoint {
 

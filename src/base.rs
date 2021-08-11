@@ -7,9 +7,9 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Pose {
     // Position 3-Vector
-    pos: Vector3<f64>,
+    pub pos: Vector3<f64>,
     // Rotation 3x3 Matrix
-    rot: Matrix3<f64>,
+    pub rot: Matrix3<f64>,
 }
 
 impl Pose {
