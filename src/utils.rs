@@ -14,7 +14,6 @@ use std::convert::TryInto;
 extern crate nalgebra as na;
 use na::*;
 
-
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DmatKeyPoint {
     p2f: Vec<f32>,

@@ -20,6 +20,7 @@ mod base;
 mod orb;
 mod align;
 mod utils;
+mod config;
 mod vis;
 
 
@@ -31,7 +32,11 @@ fn main() {
         .unwrap();
 
     let args: Vec<String> = env::args().collect();
+
+    //TODO: Check input arguments/error if not enough
     let img_dir = args[1].to_owned();
+    let config_file = args[2].to_owned();
+
     let mut glob_str = img_dir.to_owned();
     glob_str.push_str("/*.png");
 
@@ -46,10 +51,27 @@ fn main() {
             Err(e) => println!("{:?}", e),
         }
     }
+    
+    // Load the config file 
+    let mut conf_str = String::new();
+    config::read_config_file(&mut conf_str, &config_file);
+
+    // Get configuration for each actor (aka the "modules" of the system)
+    let mut modules = Vec::<base::ActorConf>::new();
+    config::load_config(&mut conf_str, &mut modules);
 
     // First we initialize the actor system using the default config
     let config = ActorSystemConfig::default();
     let system = ActorSystem::create(config);
+
+    // TODO: Spawn all actors based on config, need a table to map string names to functions
+//     for actor_conf in modules {
+//         // TODO: Need to add message/function tables (hashmaps) somewhere that map sttrings to Fn pointers
+//         // https://stackoverflow.com/questions/30540807/calling-a-function-only-known-at-runtime
+//         println!("{:?}", actor_conf);
+//         // let test = actor_conf.file as module;
+//         // let new_aid = system.spawn().name(actor_conf.name).with((), actor_conf.file::actor_conf.actor_function).unwrap();
+//     }
 
     // Next we spawn each actor
     let feat_aid = system.spawn().name("feature_extraction").with((), orb::orb_extract).unwrap();

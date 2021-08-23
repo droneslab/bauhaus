@@ -16,6 +16,9 @@ use crate::align::*;
 use crate::vis::*;
 extern crate nalgebra as na;
 
+use crate::utils;
+use crate::align;
+
 // Message type for the actor
 #[derive(Debug, Serialize, Deserialize)]
 pub struct OrbMsg {
@@ -36,7 +39,6 @@ impl OrbMsg {
 // This is the handler that will be used by the actor.
 pub async fn orb_extract(_: (), _context: Context, message: Message) -> ActorResult<()> {
     if let Some(msg) = message.content_as::<OrbMsg>() {
-        // println!("{:?}", context);
         let mut kp1 = VectorOfKeyPoint::new();
         let mut des1 = Mat::default();
         let mut kp2 = VectorOfKeyPoint::new();

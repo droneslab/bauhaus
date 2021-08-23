@@ -17,7 +17,6 @@ extern crate nalgebra as na;
 use na::*;
 use axiom::prelude::*;
 use serde::{Deserialize, Serialize};
-
 use crate::utils::*;
 use crate::base::*;
 use crate::vis::*;
