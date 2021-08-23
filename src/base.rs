@@ -1,17 +1,25 @@
 extern crate nalgebra as na;
-
+use na::*;
 use std::sync::Arc;
-use std::collections::HashMap;
+use serde::{Deserialize, Serialize};
 
-#[allow(dead_code)] // TODO: This is temporary
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Pose {
-    // 3-Vector
-    pos: na::Matrix<f64, na::U3, na::U1, na::base::storage::Owned<f64, na::U3, na::U1>>,
-    // 3x3 Matrix
-    rot: na::Matrix<f64, na::U3, na::U3, na::base::storage::Owned<f64, na::U3, na::U3>>,
+    // Position 3-Vector
+    pub pos: Vector3<f64>,
+    // Rotation 3x3 Matrix
+    pub rot: Matrix3<f64>,
 }
 
-#[allow(dead_code)] // TODO: This is temporary
+impl Pose {
+    pub fn default_ones() -> Pose {
+        Pose {
+            pos: Vector3::new(1.0,1.0,1.0),
+            rot: Matrix3::new(1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0),
+        }
+    }
+}
+
 pub struct Frame {
     id: u64,
     timestamp: u64,
@@ -22,7 +30,6 @@ pub struct Frame {
     cam_params: opencv::core::Mat,
 }
 
-#[allow(dead_code)] // TODO: This is temporary
 pub struct KeyFrame {
     id: u64,
     timestamp: u64,
@@ -35,7 +42,6 @@ pub struct KeyFrame {
     depth_threshold: f64,
 }
 
-#[allow(dead_code)] // TODO: This is temporary
 pub struct MapPoint {
     id: u64,
     first_keyframe_id: u64,
@@ -47,12 +53,10 @@ pub struct MapPoint {
     depth_threshold: f64,
 }
 
-#[allow(dead_code)] // TODO: This is temporary
 pub struct Map {
 
 }
 
-#[allow(dead_code)] // TODO: This is temporary
 pub struct BowDB {
 
 }
