@@ -1,5 +1,4 @@
 // Accepts a message of two image extracted data (kps, des), computes homography
-#[allow(unused_imports)]
 use opencv::{
     prelude::*,
     core,
@@ -19,6 +18,8 @@ use na::*;
 use axiom::prelude::*;
 use serde::{Deserialize, Serialize};
 use crate::utils::*;
+use crate::base::*;
+use crate::vis::*;
 
 // Message type for this actor
 #[derive(Debug, Serialize, Deserialize)]
@@ -28,15 +29,17 @@ pub struct AlignMsg {
     img1_des: na::DMatrix<u8>,
     img2_kps: Vec<DmatKeyPoint>,
     img2_des: na::DMatrix<u8>,
+    actor_ids: std::collections::HashMap<String, axiom::actors::Aid>,
 }
 
 impl AlignMsg {
-    pub fn new(kps1: Vec<DmatKeyPoint>, des1: DMatrix<u8>, kps2: Vec<DmatKeyPoint>, des2: na::DMatrix<u8>) -> Self {
+    pub fn new(kps1: Vec<DmatKeyPoint>, des1: DMatrix<u8>, kps2: Vec<DmatKeyPoint>, des2: na::DMatrix<u8>, ids: std::collections::HashMap<String, axiom::actors::Aid>) -> Self {
         Self {
             img1_kps: kps1,
             img1_des: des1,
             img2_kps: kps2,
             img2_des: des2,
+            actor_ids: ids,
         }
     }
 }
@@ -44,19 +47,17 @@ impl AlignMsg {
 // This is the handler that will be used by the actor.
 pub async fn align(_: (), context: Context, message: Message) -> ActorResult<()> {
     if let Some(msg) = message.content_as::<AlignMsg>() {
-        println!("{:?}", context);
-
         // Convert back to cv structures
-        let mut kp1 = na_keypoint_to_cv_vector_of_keypoint(&msg.img1_kps);
-        let mut des1 = na_grayscale_to_cv_mat(&msg.img1_des);
-        let mut kp2 = na_keypoint_to_cv_vector_of_keypoint(&msg.img2_kps);
-        let mut des2 = na_grayscale_to_cv_mat(&msg.img2_des);
+        let kp1 = na_keypoint_to_cv_vector_of_keypoint(&msg.img1_kps);
+        let des1 = na_grayscale_to_cv_mat(&msg.img1_des);
+        let kp2 = na_keypoint_to_cv_vector_of_keypoint(&msg.img2_kps);
+        let des2 = na_grayscale_to_cv_mat(&msg.img2_des);
 
         // BFMatcher to get good matches
-        let mut bfmtch = BFMatcher::create(core::NORM_HAMMING, true).unwrap(); 
-        let mut mask = core::Mat::default(); 
+        let bfmtch = BFMatcher::create(4, true).unwrap(); 
+        let mut mask = Mat::default(); 
         let mut matches = VectorOfDMatch::new();
-        bfmtch.train_match(&des2, &des1, &mut matches, &mut mask); 
+        bfmtch.train_match(&des2, &des1, &mut matches, &mut mask)?; 
 
         // Sort the matches based on the distance in ascending order
         // Using O(n^2) sort here. Need to make the code use cv sort function
@@ -65,14 +66,14 @@ pub async fn align(_: (), context: Context, message: Message) -> ActorResult<()>
         let mut sortedMatches = VectorOfDMatch::new();
         let mut added = vec![false; matches.len()];
         for i in 0..matches.len() {
-            if(added[i] == true) {
+            if added[i] == true {
                 continue;
             }
             let mut mn = i;
             let mut dist = matches.get(i).unwrap().distance;
             for j in 0..matches.len() {
                 let dmatch2 = matches.get(j).unwrap();
-                if(dist > dmatch2.distance && !added[j]) {
+                if dist > dmatch2.distance && !added[j] {
                     mn = j;
                     dist = dmatch2.distance;
                 }        
@@ -110,12 +111,31 @@ pub async fn align(_: (), context: Context, message: Message) -> ActorResult<()>
         // Recover pose using the matrix
         let mut R = Mat::default();
         let mut t = Mat::default();
-        let mut thresh: f32 = 1.0;
         let inliers = calib3d::recover_pose_camera(&mut ess_mat, &mut p2f1, &mut p2f2, &mut K, &mut R, &mut t, &mut Mat::default());
-        println!("Number of inliers:{:}", inliers.unwrap());
-        print_matrix(&R);
-        print_matrix(&t);
-        
+        // println!("Number of inliers:{:}", inliers.unwrap());
+        // print_matrix(&R);
+        // print_matrix(&t);
+
+        let mut pose = Pose::default_ones();
+        pose.pos[0] = *t.at::<f64>(0).unwrap();
+        pose.pos[1] = *t.at::<f64>(1).unwrap();
+        pose.pos[2] = *t.at::<f64>(2).unwrap();
+
+        pose.rot[(0,0)] = *R.at_2d::<f64>(0,0).unwrap();
+        pose.rot[(0,1)] = *R.at_2d::<f64>(0,1).unwrap();
+        pose.rot[(0,2)] = *R.at_2d::<f64>(0,2).unwrap();
+        pose.rot[(1,0)] = *R.at_2d::<f64>(1,0).unwrap();
+        pose.rot[(1,1)] = *R.at_2d::<f64>(1,1).unwrap();
+        pose.rot[(1,2)] = *R.at_2d::<f64>(1,2).unwrap();
+        pose.rot[(2,0)] = *R.at_2d::<f64>(2,0).unwrap();
+        pose.rot[(2,1)] = *R.at_2d::<f64>(2,1).unwrap();
+        pose.rot[(2,2)] = *R.at_2d::<f64>(2,2).unwrap();
+
+        // println!("{}", pose.pos);
+        // println!("{}", pose.rot);
+
+        let vis_id = &msg.actor_ids.get("vis").unwrap();
+        vis_id.send_new(VisMsg::new(pose, msg.actor_ids.clone())).unwrap();
     }
     Ok(Status::done(()))
 }
