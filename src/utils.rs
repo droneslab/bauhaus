@@ -43,6 +43,25 @@ pub fn cv_mat_to_na_grayscale(mat: &Mat) -> DMatrix<u8> {
     return dmat;
 }
 
+// Function to convert cv matrix to na matrix - For descriptors which is usually a 2D array
+// Currently, type used is u8 because sift.detect_and_compute returns Mat with f32 type
+// Can use mat.convert_to to convert the elements to the desired type. Need to check on the syntax of the function.
+pub fn cv_mat_f32_to_na_grayscale(mat: &Mat) -> DMatrix<u8> {
+    // Iterate through image print pixel values
+    // println!("{}", mat.rows());
+    // println!("{}", mat.cols());
+    let mut dmat = DMatrix::from_element(mat.rows().try_into().unwrap(), mat.cols().try_into().unwrap(), 0u8);
+    for i in 0..mat.rows() {
+            for j in 0..mat.cols() {
+                   let val = *mat.at_2d::<f32>(i, j).unwrap(); // Grayscale 1 channel uint8
+                   let r: usize = i.try_into().unwrap();
+                   let c: usize = j.try_into().unwrap();
+                   dmat[(r, c)] = val as u8;
+            }
+    }
+    return dmat;
+}
+
 // Function to print matrix
 pub fn print_matrix(mat: &Mat) {
 

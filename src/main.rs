@@ -22,7 +22,7 @@ mod align;
 mod utils;
 mod config;
 mod vis;
-
+mod sift;
 
 fn main() {
 
@@ -74,7 +74,7 @@ fn main() {
 //     }
 
     // Next we spawn each actor
-    let feat_aid = system.spawn().name("feature_extraction").with((), orb::orb_extract).unwrap();
+    let feat_aid = system.spawn().name("feature_extraction").with((), sift::sift_extract).unwrap();
     let align_aid = system.spawn().name("alignment").with((), align::align).unwrap();
     let vis_aid = system.spawn().name("visulization").with(vis::Vis::new(), vis::Vis::visualize).unwrap();
 
@@ -85,7 +85,7 @@ fn main() {
     aids.insert("vis".to_string(), vis_aid.clone());
 
     // Kickoff the pipeline by sending the feature extraction module images
-    feat_aid.send_new(orb::OrbMsg::new(img_paths, aids.clone())).unwrap();
+    feat_aid.send_new(sift::SiftMsg::new(img_paths, aids.clone())).unwrap();
    
     system.await_shutdown(None);
 }
