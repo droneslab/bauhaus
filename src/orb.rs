@@ -36,13 +36,15 @@ impl OrbMsg {
     }
 }
 
+#[no_mangle]
 // This is the handler that will be used by the actor.
-pub async fn orb_extract(_: (), _context: Context, message: Message) -> ActorResult<()> {
+pub fn orb_extract(_: (), _context: Context, message: Message) -> ActorResult<()> {
     if let Some(msg) = message.content_as::<OrbMsg>() {
         let mut kp1 = VectorOfKeyPoint::new();
         let mut des1 = Mat::default();
         let mut kp2 = VectorOfKeyPoint::new();
         let mut des2 = Mat::default();
+
         for path in &msg.img_paths {
             let img = imgcodecs::imread(&path, imgcodecs::IMREAD_GRAYSCALE)?;
             let mut orb: PtrOfORB = ORB::default().unwrap();

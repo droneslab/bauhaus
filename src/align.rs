@@ -44,8 +44,10 @@ impl AlignMsg {
     }
 }
 
+
+#[no_mangle]
 // This is the handler that will be used by the actor.
-pub async fn align(_: (), context: Context, message: Message) -> ActorResult<()> {
+pub fn align(_: (), context: Context, message: Message) -> ActorResult<()> {
     if let Some(msg) = message.content_as::<AlignMsg>() {
         // Convert back to cv structures
         let kp1 = na_keypoint_to_cv_vector_of_keypoint(&msg.img1_kps);
