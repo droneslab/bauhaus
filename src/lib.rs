@@ -51,6 +51,7 @@ impl Data {
 } 
  
 mod manager;
+use std::ffi::c_void;
 
 pub fn execute() {
 
@@ -110,21 +111,35 @@ pub fn execute() {
     //let feat_aid = system.spawn().name("feature_extraction").with(data, Data::handle).unwrap();
     
     let mut handles1 = manager::get_handler("orb::orb_extract");
-    let mut mgr = manager::Manager {handles: handles1, curr_handle : "orb::orb_extract".to_string()};
+    let empty = "";
+    let mut mgr = manager::Manager {handles: handles1,
+         curr_handle : "orb::orb_extract".to_string(),
+         object: manager::Myobject{object:(empty.as_ptr() as *mut c_void)}};
 
     let feat_aid = system.spawn().name("feature_extraction").with(mgr, manager::Manager::handle).unwrap();
 
 
     let mut handles1 = manager::get_handler("align::align");
-    let mut mgr = manager::Manager {handles: handles1, curr_handle : "align::align".to_string()};
+    let mut mgr = manager::Manager {handles: handles1, 
+        curr_handle : "align::align".to_string(),
+        object: manager::Myobject{object:(empty.as_ptr() as *mut c_void)}};
     let align_aid = system.spawn().name("alignment").with(mgr, manager::Manager::handle).unwrap();
 
-    //let mut handles1 = manager::get_handler("vis::Vis::visualize");
-    //let mut mgr = manager::Manager {handles: handles1, curr_handle : "vis::Vis::visualize".to_string()};
-    //vis::Vis::new();
-    //let vis_aid = system.spawn().name("visulization").with(mgr, manager::Manager::handle).unwrap();
 
 
+    // let mut handles1 = manager::get_handler("vis::Vis::visualize");
+
+    // let mut vis_obj = vis::Vis::new();
+    // let vizobj_ptr: *mut c_void = &mut vis_obj as *mut _ as *mut c_void;
+    // let mut mgr = manager::Manager {handles: handles1, 
+    //     curr_handle : "vis::Vis::visualize".to_string(),
+    //     object: manager::Myobject{object:(vizobj_ptr)}};
+    // vis::Vis::new();
+    // let vis_aid = system.spawn().name("visulization").with(mgr, manager::Manager::handle).unwrap();
+
+
+
+    
     // Next we spawn each actor
     //let feat_aid = system.spawn().name("feature_extraction").with((), orb::orb_extract).unwrap();
     //let align_aid = system.spawn().name("alignment").with((), align::align).unwrap();

@@ -25,24 +25,35 @@ lazy_static! {
         let mut map = HashMap::new();
         map.insert("orb::orb_extract", "orb_extract");
         map.insert("align::align", "align");
-        map.insert("vis::Vis::visualize", "Vis::visualize");
+        map.insert("vis::Vis::visualize", "visualize_static");
         map
     };
 }
 
+use std::ffi::c_void;
+
+pub struct Myobject{
+    pub object :  *mut c_void
+}
+unsafe impl Send for Myobject {}
+unsafe impl Sync for Myobject {}
+
 
 pub struct Manager{
     pub handles :  HashMap<String, DarvisMessage>,
-    pub curr_handle : String
+    pub curr_handle : String,
+    pub object :  Myobject
 }
 
 
 impl Manager
 {
     pub async fn handle(mut self, _context: axiom::prelude::Context, message: Message) -> ActorResult<Self> {
+
         self.handles[&self.curr_handle]((), _context, message).unwrap();
         Ok(Status::done(self))    
     }
+
 }
 
 use std::ffi::CString;

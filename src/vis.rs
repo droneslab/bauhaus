@@ -102,3 +102,16 @@ impl Vis {
 unsafe impl Send for Vis {}
 unsafe impl Sync for Vis {}
 
+
+#[no_mangle]
+pub fn visualize_static(visobj : Vis, context: Context, message: Message) -> ActorResult<()> {
+
+    visobj.visualize(context, message);
+    Ok(Status::done(()))
+
+}
+
+#[no_mangle]
+pub fn visualize_new() -> Vis {
+    Vis::new()
+}
