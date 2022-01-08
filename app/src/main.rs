@@ -3,29 +3,15 @@ use glob::glob;
 use axiom::prelude::*;
 use std::collections::HashMap;
 use log::LevelFilter;
-// #[allow(unused_imports)]
-// use opencv::{
-//     prelude::*,
-//     core::*,
-//     features2d,
-//     features2d::{Feature2DTrait, ORB},
-//     highgui,
-//     imgproc,
-//     videoio,
-//     imgcodecs,
-//     types::{PtrOfORB, VectorOfKeyPoint},
-// };
+
 
 mod load_plugin;
 
 use plugins_core::base;
 use plugins_core::config;
 
-use std::any::{TypeId};
-
 use plugins_core::darvismsg::DarvisMessage;
 
-use plugins_core::*;
 
 fn main() {
 

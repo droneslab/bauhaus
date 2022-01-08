@@ -22,18 +22,7 @@ impl Function for OrbExtract {
 
     fn send_new(&mut self, message: DarvisMessage, aids: &HashMap<String, axiom::actors::Aid>) -> ActorResult<()>
     {   
-        // match message
-        // {
-        //     DarvisMessage::ImagePaths(img_paths) =>
-        //     {
-        //         //OrbMsg::new(img_paths,*aids);
-        //         let feat_aid = aids.get("feat").unwrap();
-        //         feat_aid.send_new(OrbMsg::new(img_paths, aids.clone())).unwrap();
 
-        //     } 
-        // }
-        
-        //OrbMsg::new(message as Vec<String>, aids.clone());
         Ok(Status::done(()))
     }
 

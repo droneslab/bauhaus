@@ -4,6 +4,8 @@ version = "0.1.0"
 authors = ["Pranay Meshram <pranaywa@buffalo.edu>"]
 edition = "2018"
 
+[lib]
+crate-type = ["rlib", "dylib"]
 
 [dependencies]
 axiom = "*"

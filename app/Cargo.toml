@@ -7,6 +7,7 @@ edition = "2018"
 [dependencies]
 libloading = "0.5.2"
 plugins_core = { path = "../core" }
+plugins = { path = "../plugins" }
 
 
 glob = "*"
