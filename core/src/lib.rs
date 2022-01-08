@@ -1,5 +1,3 @@
-
-
 pub mod align;
 pub mod base;
 pub mod utils;
@@ -7,9 +5,12 @@ pub mod vis;
 pub mod config;
 pub mod orb;
 
+pub mod darvismsg;
 
-//use async_trait::async_trait;
 use axiom::prelude::*;
+
+use darvismsg::DarvisMessage;
+use std::collections::HashMap;
 
 
 pub static CORE_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -17,16 +18,10 @@ pub static RUSTC_VERSION: &str = env!("RUSTC_VERSION");
 
 //#[async_trait]
 pub trait Function: FunctionClone {
-    //fn call(&self, args: &[f64]) -> Result<f64, InvocationError>;
-
-    /// Help text that may be used to display information about this function.
-    //fn help(&self) -> Option<&str> { None }
-
-     //async 
-    // fn handle1(&self, _context: axiom::prelude::Context, message: Message) -> ActorResult<()>;  
-    //async fn handle(mut self, _context: axiom::prelude::Context, message: Message) -> ActorResult<Self>;     
+    
     fn handle(&mut self, _context: axiom::prelude::Context, message: Message) -> ActorResult<()>;  
 
+    fn send_new(&mut self, message: DarvisMessage, aids:  &HashMap<String, axiom::actors::Aid>) -> ActorResult<()>;
 }
 
 pub trait FunctionClone {
@@ -89,24 +84,3 @@ macro_rules! export_plugin {
             };
     };
 }
-
-
-
-// use serde::{Deserialize, Serialize};
-
-// // Message type for the actor
-// #[derive(Debug, Serialize, Deserialize)]
-// pub struct OrbMsg {
-//     // Vector of image paths to read in/extract
-//     pub img_paths: Vec<String>,
-//     pub actor_ids: std::collections::HashMap<String, axiom::actors::Aid>,
-// }
-
-// impl OrbMsg {
-//     pub fn new(vec: Vec<String>, ids: std::collections::HashMap<String, axiom::actors::Aid>) -> Self {
-//         Self {
-//             img_paths: vec,
-//             actor_ids: ids,
-//         }
-//     }
-// }

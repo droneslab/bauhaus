@@ -7,17 +7,10 @@ edition = "2018"
 [dependencies]
 libloading = "0.5.2"
 plugins_core = { path = "../core" }
-plugins = { path = "../plugins" }
 
-opencv = "0.53"
-abow = {version = "*", default-features = false, features = ["bincode"]}
-nalgebra = {version = "*", features = ["serde-serialize"]}
+
 glob = "*"
-serde = "*"
+
 axiom = "*"
 log = "*"
 env_logger = "*"
-yaml-rust = "0.4"
-
-async-trait = "0.1.52"
-unique-type-id = "1.0.0"

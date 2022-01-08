@@ -1,7 +1,7 @@
 use libloading::Library;
-use plugins_core::{Function, InvocationError, PluginDeclaration};
+use plugins_core::{Function, PluginDeclaration};
 use std::{
-    alloc::System, collections::HashMap, env, ffi::OsStr, io, path::PathBuf,
+     collections::HashMap, ffi::OsStr, io, 
     rc::Rc,
 };
 use axiom::prelude::*;
@@ -10,8 +10,6 @@ use axiom::prelude::*;
 //static ALLOCATOR: System = System;
 
 pub struct Manager{
-    pub curr_handle : String,
-    //pub functions :  ExternalFunctions,
     pub object: FunctionProxy,
 }
 
@@ -31,10 +29,7 @@ impl Manager
 {
     pub async fn handle(mut self, _context: axiom::prelude::Context, message: Message) -> ActorResult<Self> {
         
-        //let fnstr :&str = &self.curr_handle.clone();
         self.object.handle(_context, message).unwrap();
-        //self.functions.handle(fnstr).clone().handle(_context, message);
-        //self.functions.clone().call(fnstr, _context, message);
         Ok(Status::done(self))    
     }
 }
@@ -62,19 +57,9 @@ impl ExternalFunctions {
         self.functions
         .get(function)
         .ok_or_else(|| format!("\"{}\" not found", function)).unwrap().clone()
-       // .handle
+
     }
-    // pub fn call(mut self,
-    //     function: &str, _context: axiom::prelude::Context, message: Message
-    // ) ->  ActorResult<Self> 
-    // {
-    //     self.functions
-    //     .get(function)
-    //     .ok_or_else(|| format!("\"{}\" not found", function)).unwrap()
-    //     .handle(_context, message);
-    //     //println!("Function Proxy handle call");
-    //    Ok(Status::done(self))
-    // }
+
     /// Load a plugin library and add all contained functions to the internal
     /// function table.
     ///
@@ -156,15 +141,19 @@ pub struct FunctionProxy {
 unsafe impl Send for FunctionProxy {}
 unsafe impl Sync for FunctionProxy {}
 
-//#[async_trait]
+use plugins_core::darvismsg::DarvisMessage;
+
 
 impl Function for FunctionProxy {
 
-    //async 
     fn handle(&mut self, _context: axiom::prelude::Context, message: Message) -> ActorResult<()> 
     {
-        //println!("Function Proxy handle");
-        self.function.handle(_context, message);
+        self.function.handle(_context, message).unwrap();
+        Ok(Status::done(()))
+    }
+
+    fn send_new(&mut self, message: DarvisMessage, aids: &HashMap<String, axiom::actors::Aid>) -> ActorResult<()>
+    {
         Ok(Status::done(()))
     }
 

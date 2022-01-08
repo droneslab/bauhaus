@@ -1,22 +1,17 @@
-use plugins_core::{Function, InvocationError, PluginRegistrar};
-
+use plugins_core::{Function};
 
 use axiom::prelude::*;
 
-// plugins_core::export_plugin!(register_orb_extract);
-
-// extern "C" fn register_orb_extract(registrar: &mut dyn PluginRegistrar) {
-//     registrar.register_function("orb_extract", Box::new(OrbExtract));
-// }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct OrbExtract;
 
-use std::any::{TypeId};
+//use std::any::{TypeId};
 
 use plugins_core::orb::*;
+use plugins_core::darvismsg::DarvisMessage;
+use std::collections::HashMap;
 
-//#[async_trait]
 impl Function for OrbExtract {
     fn handle(&mut self, _context: axiom::prelude::Context, message: Message) -> ActorResult<()>
     {
@@ -24,4 +19,22 @@ impl Function for OrbExtract {
         orb_extract((), _context, message).unwrap();
         Ok(Status::done(()))
     } 
+
+    fn send_new(&mut self, message: DarvisMessage, aids: &HashMap<String, axiom::actors::Aid>) -> ActorResult<()>
+    {   
+        // match message
+        // {
+        //     DarvisMessage::ImagePaths(img_paths) =>
+        //     {
+        //         //OrbMsg::new(img_paths,*aids);
+        //         let feat_aid = aids.get("feat").unwrap();
+        //         feat_aid.send_new(OrbMsg::new(img_paths, aids.clone())).unwrap();
+
+        //     } 
+        // }
+        
+        //OrbMsg::new(message as Vec<String>, aids.clone());
+        Ok(Status::done(()))
+    }
+
 }

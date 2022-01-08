@@ -3,38 +3,29 @@ use glob::glob;
 use axiom::prelude::*;
 use std::collections::HashMap;
 use log::LevelFilter;
-#[allow(unused_imports)]
-use opencv::{
-    prelude::*,
-    core::*,
-    features2d,
-    features2d::{Feature2DTrait, ORB},
-    highgui,
-    imgproc,
-    videoio,
-    imgcodecs,
-    types::{PtrOfORB, VectorOfKeyPoint},
-};
-
-//mod base;
-//mod orb;
-//mod align;
-//mod utils;
-//mod config;
-//mod vis;
+// #[allow(unused_imports)]
+// use opencv::{
+//     prelude::*,
+//     core::*,
+//     features2d,
+//     features2d::{Feature2DTrait, ORB},
+//     highgui,
+//     imgproc,
+//     videoio,
+//     imgcodecs,
+//     types::{PtrOfORB, VectorOfKeyPoint},
+// };
 
 mod load_plugin;
 
-//use plugins_core::{OrbMsg};
-//use plugins_core::{Function, InvocationError, PluginDeclaration};
-
-use plugins_core::vis;
 use plugins_core::base;
-use plugins_core::align;
 use plugins_core::config;
-use plugins_core::orb::OrbMsg;
-use std::any::{Any, TypeId};
 
+use std::any::{TypeId};
+
+use plugins_core::darvismsg::DarvisMessage;
+
+use plugins_core::*;
 
 fn main() {
 
@@ -85,20 +76,17 @@ fn main() {
 //         // let new_aid = system.spawn().name(actor_conf.name).with((), actor_conf.file::actor_conf.actor_function).unwrap();
 //     }
 
-//type DarvisFunction  = fn(_a: (),_context: axiom::prelude::Context, message: Message) -> ActorResult<()>;
-
 
     let lib_functions = load_plugin::load("../target/debug/libplugins.so".to_string());
-    let extract_fn = load_plugin::Manager{curr_handle:"orb_extract".to_string(), object: lib_functions.handle("orb_extract")};
     
-    let feat_aid = system.spawn().name("feature_extraction").with(extract_fn, load_plugin::Manager::handle).unwrap();
+    let feat_extract_fn = load_plugin::Manager{object: lib_functions.handle("orb_extract")};
+    
+    let feat_aid = system.spawn().name("feature_extraction").with(feat_extract_fn, load_plugin::Manager::handle).unwrap();
 
-    //let lib_functions = load_plugin::load("../target/debug/libplugins.so".to_string());
-    let align_fn = load_plugin::Manager{curr_handle:"alignment".to_string(), object: lib_functions.handle("alignment")};
+    let align_fn = load_plugin::Manager{object: lib_functions.handle("alignment")};
     let align_aid = system.spawn().name("alignment").with(align_fn, load_plugin::Manager::handle).unwrap();
 
-    //let lib_functions = load_plugin::load("../target/debug/libplugins.so".to_string());
-    let vis_fn = load_plugin::Manager{curr_handle:"visualization".to_string(), object: lib_functions.handle("visualization")};
+    let vis_fn = load_plugin::Manager{object: lib_functions.handle("visualization")};
     let vis_aid = system.spawn().name("visulization").with(vis_fn, load_plugin::Manager::handle).unwrap();
 
 
@@ -113,12 +101,13 @@ fn main() {
     aids.insert("align".to_string(), align_aid.clone());
     aids.insert("vis".to_string(), vis_aid.clone());
 
-    println!("main call {:?}", TypeId::of::<OrbMsg>());
+    //println!("main call {:?}", TypeId::of::<OrbMsg>());
 
     // Kickoff the pipeline by sending the feature extraction module images
+    feat_aid.send_new(DarvisMessage::ImagePaths(img_paths.clone(), aids.clone())).unwrap();
+    //feat_aid.send_new(OrbMsg::new(img_paths.clone(), aids.clone())).unwrap();
     
-    feat_aid.send_new(OrbMsg::new(img_paths.clone(), aids.clone())).unwrap();
-   
+    //&feat_extract_fn.object.send_new(DarvisMessage::ImagePaths(img_paths), &aids);
    
     system.await_shutdown(None);
 }

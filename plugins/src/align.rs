@@ -1,27 +1,25 @@
-use plugins_core::{Function, InvocationError, PluginRegistrar};
-
+use plugins_core::{Function};
 
 use axiom::prelude::*;
 
-// plugins_core::export_plugin!(register_align);
-
-// extern "C" fn register_align(registrar: &mut dyn PluginRegistrar) {
-//     registrar.register_function("alignment", Box::new(Alignment));
-// }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Alignment;
 
-use std::any::{TypeId};
-
 use plugins_core::align::*;
+use plugins_core::darvismsg::DarvisMessage;
+use std::collections::HashMap;
 
-//#[async_trait]
 impl Function for Alignment {
     fn handle(&mut self, _context: axiom::prelude::Context, message: Message) -> ActorResult<()>
     {
-        //println!("call from plugins AlignMsg {:?}", TypeId::of::<AlignMsg>());
-        align((), _context, message);
+        align((), _context, message).unwrap();
         Ok(Status::done(()))
     } 
+
+    fn send_new(&mut self, message: DarvisMessage, aids:  &HashMap<String, axiom::actors::Aid>) -> ActorResult<()>
+    {
+        Ok(Status::done(()))
+    }
+
 }
