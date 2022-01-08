@@ -47,6 +47,7 @@ impl VisPathMsg {
     }
 }
 
+#[derive(Debug, Clone)]
 // Vis state data
 pub struct Vis {
     traj_img: Mat, // Trajectory image for visualization
@@ -55,6 +56,8 @@ pub struct Vis {
     traj_rot: Matrix3<f64>, // Built up trajectory rotation
     // actor_ids: std::collections::HashMap<String, axiom::actors::Aid>, // Collection of all spawned actor ids
 }
+
+
 
 impl Vis {
     pub fn new() -> Vis {
@@ -97,21 +100,39 @@ impl Vis {
         }
         Ok(Status::done(self))
     }
+
+    pub fn visualize1(&mut self, context: Context, message: Message) -> ActorResult<&Self> {
+        if let Some(msg) = message.content_as::<VisMsg>() {
+            // rotate and translate matrices from pose to track trajectory (R and t from pose)
+            if self.traj_pos == Vector3::zeros() && self.traj_rot == Matrix3::zeros() {
+                self.traj_pos = msg.new_pose.pos;
+                self.traj_rot = msg.new_pose.rot;
+            }
+            else {
+                self.traj_pos = self.traj_pos + self.traj_rot*&msg.new_pose.pos;
+                self.traj_rot = &msg.new_pose.rot * self.traj_rot;
+            }
+                        
+            // Draw new circle on image and show
+            let x = self.traj_pos[0] as i32;
+            let y = -self.traj_pos[2] as i32;
+
+            let x_offset = 500;
+            let y_offset = 375;
+
+            imgproc::circle(&mut self.traj_img, core::Point_::new(x+x_offset, y+y_offset), 3, core::Scalar_([0.0, 0.0, 255.0, 0.0]), -1, 8, 0)?;
+            highgui::imshow("Trajectory", &self.traj_img)?;
+            highgui::wait_key(1)?;   
+        }
+        else if let Some(msg) = message.content_as::<VisPathMsg>() {
+            self.cam_img = imgcodecs::imread(&msg.last_img_path, imgcodecs::IMREAD_COLOR)?;
+            highgui::imshow("Camera Image", &self.cam_img)?;
+            highgui::wait_key(1)?;   
+        }
+        Ok(Status::done(self))
+    }
 }
 
 unsafe impl Send for Vis {}
 unsafe impl Sync for Vis {}
 
-
-#[no_mangle]
-pub fn visualize_static(visobj : Vis, context: Context, message: Message) -> ActorResult<()> {
-
-    visobj.visualize(context, message);
-    Ok(Status::done(()))
-
-}
-
-#[no_mangle]
-pub fn visualize_new() -> Vis {
-    Vis::new()
-}

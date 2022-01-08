@@ -1,0 +1,23 @@
+[package]
+name = "plugins"
+version = "0.1.0"
+authors = ["Pranay Meshram <pranaywa@buffalo.edu>"]
+edition = "2018"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+plugins_core = { path = "../core" }
+reqwest = "0.9.20"
+async-trait = "0.1.52"
+axiom = "*"
+nalgebra = {version = "*", features = ["serde-serialize"]}
+opencv = "0.53"
+serde = "*"
+abow = {version = "*", default-features = false, features = ["bincode"]}
+
+unique-type-id = "1.0.0"
+
+[build-dependencies]
+rustc_version = "0.2.3"

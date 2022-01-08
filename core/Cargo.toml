@@ -1,0 +1,20 @@
+[package]
+name = "plugins_core"
+version = "0.1.0"
+authors = ["Pranay Meshram <pranaywa@buffalo.edu>"]
+edition = "2018"
+
+
+[dependencies]
+axiom = "*"
+serde = "*"
+nalgebra = {version = "*", features = ["serde-serialize"]}
+opencv = "0.53"
+abow = {version = "*", default-features = false, features = ["bincode"]}
+yaml-rust = "0.4"
+
+
+
+[build-dependencies]
+rustc_version = "0.2.3"
+

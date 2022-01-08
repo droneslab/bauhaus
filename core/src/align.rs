@@ -44,10 +44,12 @@ impl AlignMsg {
     }
 }
 
+use std::any::{TypeId};
 
-#[no_mangle]
 // This is the handler that will be used by the actor.
 pub fn align(_: (), context: Context, message: Message) -> ActorResult<()> {
+    println!("call from align -> AlignMsg {:?}", TypeId::of::<AlignMsg>());
+    println!("call from align -> VisMsg {:?}", TypeId::of::<VisMsg>());
     if let Some(msg) = message.content_as::<AlignMsg>() {
         // Convert back to cv structures
         let kp1 = na_keypoint_to_cv_vector_of_keypoint(&msg.img1_kps);
@@ -137,6 +139,7 @@ pub fn align(_: (), context: Context, message: Message) -> ActorResult<()> {
         // println!("{}", pose.rot);
 
         let vis_id = &msg.actor_ids.get("vis").unwrap();
+        println!("{:?}", vis_id);
         vis_id.send_new(VisMsg::new(pose, msg.actor_ids.clone())).unwrap();
     }
     Ok(Status::done(()))

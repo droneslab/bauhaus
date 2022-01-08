@@ -1,8 +1,3 @@
-#[macro_use]
-extern crate dlopen_derive;
-
-
-
 use std::env;
 use glob::glob;
 use axiom::prelude::*;
@@ -21,41 +16,27 @@ use opencv::{
     types::{PtrOfORB, VectorOfKeyPoint},
 };
 
-mod base;
-mod orb;
-mod align;
-mod utils;
-mod config;
-mod vis;
+//mod base;
+//mod orb;
+//mod align;
+//mod utils;
+//mod config;
+//mod vis;
 
-extern crate libc;
-extern crate dlopen;
+mod load_plugin;
 
-use dlopen::wrapper::{Container, WrapperApi};
+//use plugins_core::{OrbMsg};
+//use plugins_core::{Function, InvocationError, PluginDeclaration};
 
-
-#[derive(WrapperApi)]
-struct Api{
-     orb_extract:  fn(_a: (),_context: axiom::prelude::Context, message: Message) -> ActorResult<()>
-}
-
-pub struct Data {
-    cont: Container<Api>,
-} 
-
-impl Data {
-    async fn handle(mut self, _context: axiom::prelude::Context, message: Message) -> ActorResult<Self> {
-        self.cont.orb_extract((), _context, message).unwrap();
-        Ok(Status::done(self))    
-    }
-} 
- 
-mod manager;
-use std::ffi::c_void;
-
-pub fn execute() {
+use plugins_core::vis;
+use plugins_core::base;
+use plugins_core::align;
+use plugins_core::config;
+use plugins_core::orb::OrbMsg;
+use std::any::{Any, TypeId};
 
 
+fn main() {
 
     env_logger::builder() 
         .filter_level(LevelFilter::Warn)
@@ -104,46 +85,27 @@ pub fn execute() {
 //         // let new_aid = system.spawn().name(actor_conf.name).with((), actor_conf.file::actor_conf.actor_function).unwrap();
 //     }
 
-    let cont1: Container<Api> =
-    unsafe { Container::load("libdarvis.so") }.expect("Could not open library or load symbols");
+//type DarvisFunction  = fn(_a: (),_context: axiom::prelude::Context, message: Message) -> ActorResult<()>;
 
-    //let data = Data { cont: cont1 };
-    //let feat_aid = system.spawn().name("feature_extraction").with(data, Data::handle).unwrap();
+
+    let lib_functions = load_plugin::load("../target/debug/libplugins.so".to_string());
+    let extract_fn = load_plugin::Manager{curr_handle:"orb_extract".to_string(), object: lib_functions.handle("orb_extract")};
     
-    let mut handles1 = manager::get_handler("orb::orb_extract");
-    let empty = "";
-    let mut mgr = manager::Manager {handles: handles1,
-         curr_handle : "orb::orb_extract".to_string(),
-         object: manager::Myobject{object:(empty.as_ptr() as *mut c_void)}};
+    let feat_aid = system.spawn().name("feature_extraction").with(extract_fn, load_plugin::Manager::handle).unwrap();
 
-    let feat_aid = system.spawn().name("feature_extraction").with(mgr, manager::Manager::handle).unwrap();
+    //let lib_functions = load_plugin::load("../target/debug/libplugins.so".to_string());
+    let align_fn = load_plugin::Manager{curr_handle:"alignment".to_string(), object: lib_functions.handle("alignment")};
+    let align_aid = system.spawn().name("alignment").with(align_fn, load_plugin::Manager::handle).unwrap();
 
-
-    let mut handles1 = manager::get_handler("align::align");
-    let mut mgr = manager::Manager {handles: handles1, 
-        curr_handle : "align::align".to_string(),
-        object: manager::Myobject{object:(empty.as_ptr() as *mut c_void)}};
-    let align_aid = system.spawn().name("alignment").with(mgr, manager::Manager::handle).unwrap();
+    //let lib_functions = load_plugin::load("../target/debug/libplugins.so".to_string());
+    let vis_fn = load_plugin::Manager{curr_handle:"visualization".to_string(), object: lib_functions.handle("visualization")};
+    let vis_aid = system.spawn().name("visulization").with(vis_fn, load_plugin::Manager::handle).unwrap();
 
 
-
-    // let mut handles1 = manager::get_handler("vis::Vis::visualize");
-
-    // let mut vis_obj = vis::Vis::new();
-    // let vizobj_ptr: *mut c_void = &mut vis_obj as *mut _ as *mut c_void;
-    // let mut mgr = manager::Manager {handles: handles1, 
-    //     curr_handle : "vis::Vis::visualize".to_string(),
-    //     object: manager::Myobject{object:(vizobj_ptr)}};
-    // vis::Vis::new();
-    // let vis_aid = system.spawn().name("visulization").with(mgr, manager::Manager::handle).unwrap();
-
-
-
-    
     // Next we spawn each actor
     //let feat_aid = system.spawn().name("feature_extraction").with((), orb::orb_extract).unwrap();
     //let align_aid = system.spawn().name("alignment").with((), align::align).unwrap();
-    let vis_aid = system.spawn().name("visulization").with(vis::Vis::new(), vis::Vis::visualize).unwrap();
+    //let vis_aid = system.spawn().name("visulization").with(vis::Vis::new(), vis::Vis::visualize).unwrap();
 
     // Save spawned actor ID's for lookup later
     let mut aids = HashMap::new();
@@ -151,8 +113,12 @@ pub fn execute() {
     aids.insert("align".to_string(), align_aid.clone());
     aids.insert("vis".to_string(), vis_aid.clone());
 
+    println!("main call {:?}", TypeId::of::<OrbMsg>());
+
     // Kickoff the pipeline by sending the feature extraction module images
-    feat_aid.send_new(orb::OrbMsg::new(img_paths, aids.clone())).unwrap();
+    
+    feat_aid.send_new(OrbMsg::new(img_paths.clone(), aids.clone())).unwrap();
+   
    
     system.await_shutdown(None);
 }

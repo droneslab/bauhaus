@@ -11,20 +11,31 @@ use opencv::{
 };
 use axiom::prelude::*;
 use serde::{Deserialize, Serialize};
+//use crate::utils::*;
+//use crate::align::*;
+//use crate::vis::*;
+extern crate nalgebra as na;
+
+//use crate::utils;
+//use crate::align;
+// mod base;
+// mod utils;
+// mod align;
+// mod vis;
+
 use crate::utils::*;
 use crate::align::*;
 use crate::vis::*;
-extern crate nalgebra as na;
-
-use crate::utils;
-use crate::align;
+// use utils::*;
+// use align::*;
+// use vis::*;
 
 // Message type for the actor
 #[derive(Debug, Serialize, Deserialize)]
 pub struct OrbMsg {
     // Vector of image paths to read in/extract
-    img_paths: Vec<String>,
-    actor_ids: std::collections::HashMap<String, axiom::actors::Aid>,
+    pub img_paths: Vec<String>,
+    pub actor_ids: std::collections::HashMap<String, axiom::actors::Aid>,
 }
 
 impl OrbMsg {
@@ -36,7 +47,8 @@ impl OrbMsg {
     }
 }
 
-#[no_mangle]
+
+
 // This is the handler that will be used by the actor.
 pub fn orb_extract(_: (), _context: Context, message: Message) -> ActorResult<()> {
     if let Some(msg) = message.content_as::<OrbMsg>() {
@@ -44,7 +56,6 @@ pub fn orb_extract(_: (), _context: Context, message: Message) -> ActorResult<()
         let mut des1 = Mat::default();
         let mut kp2 = VectorOfKeyPoint::new();
         let mut des2 = Mat::default();
-
         for path in &msg.img_paths {
             let img = imgcodecs::imread(&path, imgcodecs::IMREAD_GRAYSCALE)?;
             let mut orb: PtrOfORB = ORB::default().unwrap();
