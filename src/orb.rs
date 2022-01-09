@@ -16,8 +16,9 @@ use crate::align::*;
 use crate::vis::*;
 extern crate nalgebra as na;
 
-use crate::utils;
-use crate::align;
+
+
+use crate::pluginfunction::*;
 
 // Message type for the actor
 #[derive(Debug, Serialize, Deserialize)]
@@ -36,8 +37,18 @@ impl OrbMsg {
     }
 }
 
+
+#[derive(Debug, Clone)]
+pub struct DarvisOrb;
+
+impl DarvisOrb
+{
+    pub fn new() -> DarvisOrb {
+        DarvisOrb {}
+    }
+    // This is the handler that will be used by the actor.
 // This is the handler that will be used by the actor.
-pub async fn orb_extract(_: (), _context: Context, message: Message) -> ActorResult<()> {
+pub fn orb_extract(&mut self, _context: Context, message: Message) -> ActorResult<()> {
     if let Some(msg) = message.content_as::<OrbMsg>() {
         let mut kp1 = VectorOfKeyPoint::new();
         let mut des1 = Mat::default();
@@ -78,3 +89,97 @@ pub async fn orb_extract(_: (), _context: Context, message: Message) -> ActorRes
     }
     Ok(Status::done(()))
 }
+}
+
+
+impl Function for DarvisOrb {
+
+    fn handle(&mut self, _context: axiom::prelude::Context, message: Message) -> ActorResult<()>
+    {
+        self.orb_extract(_context, message).unwrap();
+        Ok(Status::done(()))
+    }
+
+}
+
+// use std::collections::HashMap;
+
+
+
+// pub fn getmethods() -> HashMap<String,  FunctionProxy > {
+
+
+//     let mut methods: HashMap<String,  FunctionProxy > = HashMap::new();
+
+//     methods.insert("orb_extract".to_string(), FunctionProxy {function: Box::new(DarvisOrb)});
+
+//     methods
+// }
+
+
+
+
+// pub trait Function: FunctionClone {
+    
+//     fn handle(&mut self, _context: axiom::prelude::Context, message: Message) -> ActorResult<()>;  
+
+//  }
+
+// pub trait FunctionClone {
+//     fn clone_box(&self) -> Box<dyn Function>;
+// }
+
+// impl<T> FunctionClone for T
+// where
+//     T: 'static + Function + Clone,
+// {
+//     fn clone_box(&self) -> Box<dyn Function> {
+//         Box::new(self.clone())
+//     }
+// }
+
+// impl Clone for Box<dyn Function> {
+//     fn clone(&self) -> Box<dyn Function> {
+//         self.clone_box()
+//     }
+// }
+
+
+
+// #[derive(Clone)]
+// pub struct FunctionProxy {
+//     pub function: Box<dyn Function>,
+// }
+
+
+// // to avoid error in async_trait handle implementation
+// unsafe impl Send for FunctionProxy {}
+// unsafe impl Sync for FunctionProxy {}
+
+
+// impl Function for FunctionProxy {
+
+//     fn handle(&mut self, _context: axiom::prelude::Context, message: Message) -> ActorResult<()> 
+//     {
+//         self.function.handle(_context, message).unwrap();
+//         Ok(Status::done(()))
+//     }
+
+// }
+
+
+
+
+
+// pub struct Manager{
+//     pub object: FunctionProxy,
+// }
+
+// impl Manager
+// {
+//     pub async fn handle(mut self, _context: axiom::prelude::Context, message: Message) -> ActorResult<Self> {
+        
+//         self.object.handle(_context, message).unwrap();
+//         Ok(Status::done(self))    
+//     }
+// }
