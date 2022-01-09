@@ -56,7 +56,7 @@ impl Function for DarvisNone {
 
     fn handle(&mut self, _context: axiom::prelude::Context, message: Message) -> ActorResult<()>
     {
-        println!("Darvis None : Not Implemented!!")
+        println!("Darvis None : Not Implemented!!");
         Ok(Status::done(()))
     }
 
