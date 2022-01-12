@@ -50,14 +50,15 @@ impl VisPathMsg {
 
 use crate::pluginfunction::Function;
 
+use crate::dvutils::*;
 
 #[derive(Debug, Clone)]
 // Vis state data
 pub struct DarvisVis {
     traj_img: Mat, // Trajectory image for visualization
     cam_img: Mat, // Camera image for visualization
-    traj_pos: Vector3<f64>, // Built up trajectory translation
-    traj_rot: Matrix3<f64>, // Built up trajectory rotation
+    traj_pos: DVVec3f64, // Built up trajectory translation
+    traj_rot: DVMat3f64, // Built up trajectory rotation
     id: String
     // actor_ids: std::collections::HashMap<String, axiom::actors::Aid>, // Collection of all spawned actor ids
 }
@@ -67,8 +68,8 @@ impl DarvisVis {
         DarvisVis {
             traj_img: Mat::new_rows_cols_with_default(750, 1000, core::CV_8UC3, core::Scalar::all(0.0)).unwrap(),
             cam_img: Mat::default(),
-            traj_pos: Vector3::zeros(),
-            traj_rot: Matrix3::zeros(),
+            traj_pos: DVVec3f64::zeros(),
+            traj_rot: DVMat3f64::zeros(),
             id: id
             // actor_ids: ids,
         }
@@ -77,13 +78,13 @@ impl DarvisVis {
     pub fn visualize(&mut self, context: Context, message: Message) -> ActorResult<()> {
         if let Some(msg) = message.content_as::<VisMsg>() {
             // rotate and translate matrices from pose to track trajectory (R and t from pose)
-            if self.traj_pos == Vector3::zeros() && self.traj_rot == Matrix3::zeros() {
+            if *self.traj_pos == Vector3::zeros() && *self.traj_rot == Matrix3::zeros() {
                 self.traj_pos = msg.new_pose.pos;
                 self.traj_rot = msg.new_pose.rot;
             }
             else {
-                self.traj_pos = self.traj_pos + self.traj_rot*&msg.new_pose.pos;
-                self.traj_rot = &msg.new_pose.rot * self.traj_rot;
+                self.traj_pos = DVVec3f64::from(&(*self.traj_pos + *self.traj_rot*&*msg.new_pose.pos));
+                self.traj_rot = DVMat3f64::from(&(&*msg.new_pose.rot * *self.traj_rot));
             }
                         
             // Draw new circle on image and show
@@ -94,6 +95,7 @@ impl DarvisVis {
             let y_offset = 375;
             let mut imtitle = "Trajectory_".to_string();
             imtitle.push_str(&self.id);
+            //let mut showimg =  self.traj_img.cv_mat();
             imgproc::circle(&mut self.traj_img, core::Point_::new(x+x_offset, y+y_offset), 3, core::Scalar_([0.0, 0.0, 255.0, 0.0]), -1, 8, 0)?;
             highgui::imshow(&imtitle, &self.traj_img)?;
             highgui::wait_key(1)?;   
@@ -104,6 +106,7 @@ impl DarvisVis {
 
             self.cam_img = imgcodecs::imread(&msg.last_img_path, imgcodecs::IMREAD_COLOR)?;
             highgui::imshow(&imtitle, &self.cam_img)?;
+
             highgui::wait_key(1)?;   
         }
         Ok(Status::done(()))
