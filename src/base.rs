@@ -4,19 +4,21 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+use crate::dvutils::*;
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Pose {
     // Position 3-Vector
-    pub pos: Vector3<f64>,
+    pub pos: DVVec3f64,
     // Rotation 3x3 Matrix
-    pub rot: Matrix3<f64>,
+    pub rot: DVMat3f64,
 }
 
 impl Pose {
     pub fn default_ones() -> Pose {
         Pose {
-            pos: Vector3::new(1.0,1.0,1.0),
-            rot: Matrix3::new(1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0),
+            pos: DVVec3f64::from(&Vector3::new(1.0,1.0,1.0)),
+            rot: DVMat3f64::from(&Matrix3::new(1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0)),
         }
     }
 }
