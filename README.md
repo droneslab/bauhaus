@@ -1,2 +1,2 @@
-# DARVIS
+# darvis
 Distributed, modulAR Visual SLAM
