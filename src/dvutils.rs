@@ -35,7 +35,7 @@ pub type DVMatrix3 = na::Matrix3<f64>;
 pub trait DarvisMatrix
 {
     fn grayscale_to_cv_mat(&self) -> opencv::core::Mat;
-    fn grayscale_mat(&self) -> na::DMatrix<u8>;
+    fn grayscale_mat(&self) -> DVMatrixGrayscale;
 }
 
 
@@ -45,7 +45,7 @@ impl DarvisMatrix for opencv::core::Mat
     {
         self.clone()
     }
-    fn grayscale_mat(&self) -> na::DMatrix<u8>
+    fn grayscale_mat(&self) -> DVMatrixGrayscale
     {
         let mut dmat = DMatrix::from_element(self.rows().try_into().unwrap(), self.cols().try_into().unwrap(), 0u8);
         for i in 0..self.rows() {
@@ -61,7 +61,7 @@ impl DarvisMatrix for opencv::core::Mat
 }
 
 
-impl DarvisMatrix for na::DMatrix<u8>
+impl DarvisMatrix for DVMatrixGrayscale
 {
     fn grayscale_to_cv_mat(&self) -> opencv::core::Mat
     {
@@ -76,7 +76,7 @@ impl DarvisMatrix for na::DMatrix<u8>
         }
         return mat;
     }
-    fn grayscale_mat(&self) -> na::DMatrix<u8>
+    fn grayscale_mat(&self) -> DVMatrixGrayscale
     {
         self.clone()     
     }
