@@ -1,5 +1,5 @@
 extern crate nalgebra as na;
-use na::*;
+
 use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -9,16 +9,16 @@ use crate::dvutils::*;
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Pose {
     // Position 3-Vector
-    pub pos: DVVec3f64,
+    pub pos: DVVector3,
     // Rotation 3x3 Matrix
-    pub rot: DVMat3f64,
+    pub rot: DVMatrix3,
 }
 
 impl Pose {
     pub fn default_ones() -> Pose {
         Pose {
-            pos: DVVec3f64::from(&Vector3::new(1.0,1.0,1.0)),
-            rot: DVMat3f64::from(&Matrix3::new(1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0)),
+            pos: DVVector3::new(1.0,1.0,1.0),
+            rot: DVMatrix3::new(1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0),
         }
     }
 }
