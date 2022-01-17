@@ -44,8 +44,20 @@ impl AlignMsg {
     }
 }
 
+
+
+
+#[derive(Debug, Clone)]
+pub struct DarvisAlign;
+
+impl DarvisAlign
+{
+    pub fn new() -> DarvisAlign {
+        DarvisAlign {}
+    }
+    // This is the handler that will be used by the actor.
 // This is the handler that will be used by the actor.
-pub async fn align(_: (), context: Context, message: Message) -> ActorResult<()> {
+pub fn align(&mut self, context: Context, message: Message) -> ActorResult<()> {
     if let Some(msg) = message.content_as::<AlignMsg>() {
         // Convert back to cv structures
         let kp1 = na_keypoint_to_cv_vector_of_keypoint(&msg.img1_kps);
@@ -138,4 +150,18 @@ pub async fn align(_: (), context: Context, message: Message) -> ActorResult<()>
         vis_id.send_new(VisMsg::new(pose, msg.actor_ids.clone())).unwrap();
     }
     Ok(Status::done(()))
+}
+}
+
+
+use crate::pluginfunction::Function;
+
+impl Function for DarvisAlign {
+
+    fn handle(&mut self, _context: axiom::prelude::Context, message: Message) -> ActorResult<()>
+    {
+        self.align(_context, message).unwrap();
+        Ok(Status::done(()))
+    }
+
 }

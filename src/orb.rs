@@ -16,8 +16,9 @@ use crate::align::*;
 use crate::vis::*;
 extern crate nalgebra as na;
 
-use crate::utils;
-use crate::align;
+
+
+use crate::pluginfunction::*;
 
 // Message type for the actor
 #[derive(Debug, Serialize, Deserialize)]
@@ -36,8 +37,18 @@ impl OrbMsg {
     }
 }
 
+
+#[derive(Debug, Clone)]
+pub struct DarvisOrb;
+
+impl DarvisOrb
+{
+    pub fn new() -> DarvisOrb {
+        DarvisOrb {}
+    }
+    // This is the handler that will be used by the actor.
 // This is the handler that will be used by the actor.
-pub async fn orb_extract(_: (), _context: Context, message: Message) -> ActorResult<()> {
+pub fn orb_extract(&mut self, _context: Context, message: Message) -> ActorResult<()> {
     if let Some(msg) = message.content_as::<OrbMsg>() {
         let mut kp1 = VectorOfKeyPoint::new();
         let mut des1 = Mat::default();
@@ -77,4 +88,16 @@ pub async fn orb_extract(_: (), _context: Context, message: Message) -> ActorRes
         // context.system.trigger_shutdown();
     }
     Ok(Status::done(()))
+}
+}
+
+
+impl Function for DarvisOrb {
+
+    fn handle(&mut self, _context: axiom::prelude::Context, message: Message) -> ActorResult<()>
+    {
+        self.orb_extract(_context, message).unwrap();
+        Ok(Status::done(()))
+    }
+
 }

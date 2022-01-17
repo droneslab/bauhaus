@@ -47,27 +47,34 @@ impl VisPathMsg {
     }
 }
 
+
+use crate::pluginfunction::Function;
+
+
+#[derive(Debug, Clone)]
 // Vis state data
-pub struct Vis {
+pub struct DarvisVis {
     traj_img: Mat, // Trajectory image for visualization
     cam_img: Mat, // Camera image for visualization
     traj_pos: Vector3<f64>, // Built up trajectory translation
     traj_rot: Matrix3<f64>, // Built up trajectory rotation
+    id: String
     // actor_ids: std::collections::HashMap<String, axiom::actors::Aid>, // Collection of all spawned actor ids
 }
 
-impl Vis {
-    pub fn new() -> Vis {
-        Vis {
+impl DarvisVis {
+    pub fn new(id: String) -> DarvisVis {
+        DarvisVis {
             traj_img: Mat::new_rows_cols_with_default(750, 1000, core::CV_8UC3, core::Scalar::all(0.0)).unwrap(),
             cam_img: Mat::default(),
             traj_pos: Vector3::zeros(),
             traj_rot: Matrix3::zeros(),
+            id: id
             // actor_ids: ids,
         }
     }
 
-    pub async fn visualize(mut self, context: Context, message: Message) -> ActorResult<Self> {
+    pub fn visualize(&mut self, context: Context, message: Message) -> ActorResult<()> {
         if let Some(msg) = message.content_as::<VisMsg>() {
             // rotate and translate matrices from pose to track trajectory (R and t from pose)
             if self.traj_pos == Vector3::zeros() && self.traj_rot == Matrix3::zeros() {
@@ -85,20 +92,32 @@ impl Vis {
 
             let x_offset = 500;
             let y_offset = 375;
-
+            let mut imtitle = "Trajectory_".to_string();
+            imtitle.push_str(&self.id);
             imgproc::circle(&mut self.traj_img, core::Point_::new(x+x_offset, y+y_offset), 3, core::Scalar_([0.0, 0.0, 255.0, 0.0]), -1, 8, 0)?;
-            highgui::imshow("Trajectory", &self.traj_img)?;
+            highgui::imshow(&imtitle, &self.traj_img)?;
             highgui::wait_key(1)?;   
         }
         else if let Some(msg) = message.content_as::<VisPathMsg>() {
+            let mut imtitle = "Camera Image_".to_string();
+            imtitle.push_str(&self.id);
+
             self.cam_img = imgcodecs::imread(&msg.last_img_path, imgcodecs::IMREAD_COLOR)?;
-            highgui::imshow("Camera Image", &self.cam_img)?;
+            highgui::imshow(&imtitle, &self.cam_img)?;
             highgui::wait_key(1)?;   
         }
-        Ok(Status::done(self))
+        Ok(Status::done(()))
     }
 }
 
-unsafe impl Send for Vis {}
-unsafe impl Sync for Vis {}
 
+
+impl Function for DarvisVis {
+
+    fn handle(&mut self, _context: axiom::prelude::Context, message: Message) -> ActorResult<()>
+    {
+        self.visualize(_context, message).unwrap();
+        Ok(Status::done(()))
+    }
+
+}
