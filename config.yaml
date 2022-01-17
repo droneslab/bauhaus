@@ -1,0 +1,43 @@
+master:
+       name: manager
+       address: localhost
+       file: main.rs
+
+modules:
+      -
+       name: feature_extraction
+       file: orb
+       actor_message: OrbMsg
+       actor_function: orb_extract
+       address: locahost
+       port: !!str 7777
+       multithreaded: false
+       threads: 1
+       possible_paths:
+                      - 
+                       from: ImageRead
+                       to: Initilization
+                       input: images
+                       output: feature vectors
+                      -
+                       from: ImageRead
+                       to: ImageAlignment
+                       input: images
+                       output: feature vectors
+
+      -
+       name: feature_matching
+       file: align
+       actor_message: AlignMsg
+       actor_function: align
+       address: localhost
+       port: !!str 7778
+       multithreaded: false
+       threads: 1
+       possible_paths:
+                     -
+                      from: FeatureDetection
+                      to: KFDecision
+                      input: feature vectors
+                      output: frame, feature points
+  
