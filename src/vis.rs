@@ -11,8 +11,7 @@ use opencv::{
 };
 use axiom::prelude::*;
 use serde::{Deserialize, Serialize};
-extern crate nalgebra as na;
-use na::*;
+
 use crate::base::Pose;
 
 
@@ -57,8 +56,8 @@ use crate::dvutils::*;
 pub struct DarvisVis {
     traj_img: Mat, // Trajectory image for visualization
     cam_img: Mat, // Camera image for visualization
-    traj_pos: DVVec3f64, // Built up trajectory translation
-    traj_rot: DVMat3f64, // Built up trajectory rotation
+    traj_pos: DVVector3, // Built up trajectory translation
+    traj_rot: DVMatrix3, // Built up trajectory rotation
     id: String
     // actor_ids: std::collections::HashMap<String, axiom::actors::Aid>, // Collection of all spawned actor ids
 }
@@ -68,8 +67,8 @@ impl DarvisVis {
         DarvisVis {
             traj_img: Mat::new_rows_cols_with_default(750, 1000, core::CV_8UC3, core::Scalar::all(0.0)).unwrap(),
             cam_img: Mat::default(),
-            traj_pos: DVVec3f64::zeros(),
-            traj_rot: DVMat3f64::zeros(),
+            traj_pos: DVVector3::zeros(),
+            traj_rot: DVMatrix3::zeros(),
             id: id
             // actor_ids: ids,
         }
@@ -78,13 +77,13 @@ impl DarvisVis {
     pub fn visualize(&mut self, context: Context, message: Message) -> ActorResult<()> {
         if let Some(msg) = message.content_as::<VisMsg>() {
             // rotate and translate matrices from pose to track trajectory (R and t from pose)
-            if *self.traj_pos == Vector3::zeros() && *self.traj_rot == Matrix3::zeros() {
+            if self.traj_pos == DVVector3::zeros() && self.traj_rot == DVMatrix3::zeros() {
                 self.traj_pos = msg.new_pose.pos;
                 self.traj_rot = msg.new_pose.rot;
             }
             else {
-                self.traj_pos = DVVec3f64::from(&(*self.traj_pos + *self.traj_rot*&*msg.new_pose.pos));
-                self.traj_rot = DVMat3f64::from(&(&*msg.new_pose.rot * *self.traj_rot));
+                self.traj_pos = self.traj_pos + self.traj_rot * msg.new_pose.pos;
+                self.traj_rot = msg.new_pose.rot * self.traj_rot;
             }
                         
             // Draw new circle on image and show

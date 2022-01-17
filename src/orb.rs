@@ -14,7 +14,6 @@ use serde::{Deserialize, Serialize};
 //use crate::utils::*;
 use crate::align::*;
 use crate::vis::*;
-extern crate nalgebra as na;
 
 
 use crate::dvutils::*;
@@ -64,19 +63,19 @@ pub fn orb_extract(&mut self, _context: Context, message: Message) -> ActorResul
             // println!("Processed {}, found {} keypoints", path, kp1.len());
 
             if kp1.len() > 0 && kp2.len() > 0 {
-                let kpvec1 = DVVectorOfKeyPoint::from(&kp1);
-                let kpvec2 = DVVectorOfKeyPoint::from(&kp2);
+                let kpvec1 = kp1.darvis_vector_of_keypoint(); //DVVectorOfKeyPoint::from(&kp1);
+                let kpvec2 = kp2.darvis_vector_of_keypoint(); //DVVectorOfKeyPoint::from(&kp2);
 
                 // TODO: Changed this util function to accept a reference to avoid "move" limitation. See if this is ok
-                let nades1 = DVMat::from(&des1);
-                let nades2 = DVMat::from(&des2);
+                let nades1 = des1.grayscale_mat();//DVMat::from(&des1);
+                let nades2 = des2.grayscale_mat();//DVMat::from(&des2);
 
                 // Sent to alignment
                 // println!("{:?}", &msg.actor_ids);
                 let align_id = &msg.actor_ids.get("align").unwrap();
                 let vis_id = &msg.actor_ids.get("vis").unwrap();
                 // println!("{}", align_id);
-                // TODO: This is just a test send for now. Need to change message to accept the custom DmatKeypoint type
+                // TODO: This is just a test send for now. Need to change message to accept the custom DarvisKeyPoint type
                 println!("Processed image: {}", path);
                 vis_id.send_new(VisPathMsg::new(path.to_string())).unwrap();
                 align_id.send_new(AlignMsg::new(kpvec1, nades1, kpvec2, nades2, msg.actor_ids.clone())).unwrap();
