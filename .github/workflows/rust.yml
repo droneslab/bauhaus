@@ -21,4 +21,4 @@ jobs:
     - name: Build doc
       run: cargo doc --lib --no-deps
     - name: Run tests
-      run: cargo test --doc -- --skip doc::
+      run: cargo test --doc -- --skip doc
