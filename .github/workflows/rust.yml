@@ -12,10 +12,19 @@ env:
 jobs:
   build:
 
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-18.04
 
     steps:
     - uses: actions/checkout@v2
+    - uses: Dovyski/setup-opencv-action@v1
+      with:
+        opencv-version: 3.4.0
+        opencv-extra-modules : true
+        BUILD_opencv_xfeatures2d: ON
+        OPENCV_ENABLE_NONFREE: ON
+        
+    - name: Install dependencies
+      run: apt-get install -y wget git cmake clang libclang-dev pkg-config
     - name: Build
       run: cargo build --verbose
     - name: Build doc
