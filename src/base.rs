@@ -1,22 +1,24 @@
 extern crate nalgebra as na;
-use na::*;
+
 use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+use crate::dvutils::*;
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Pose {
     // Position 3-Vector
-    pub pos: Vector3<f64>,
+    pub pos: DVVector3,
     // Rotation 3x3 Matrix
-    pub rot: Matrix3<f64>,
+    pub rot: DVMatrix3,
 }
 
 impl Pose {
     pub fn default_ones() -> Pose {
         Pose {
-            pos: Vector3::new(1.0,1.0,1.0),
-            rot: Matrix3::new(1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0),
+            pos: DVVector3::new(1.0,1.0,1.0),
+            rot: DVMatrix3::new(1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0),
         }
     }
 }

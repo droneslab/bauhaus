@@ -13,27 +13,30 @@ use opencv::{
 };
 use opencv::core::CV_32FC1;
 use std::convert::TryInto;
-extern crate nalgebra as na;
-use na::*;
+
 use axiom::prelude::*;
 use serde::{Deserialize, Serialize};
-use crate::utils::*;
+use crate::dvutils::*;
 use crate::base::*;
 use crate::vis::*;
+
+
+
+
 
 // Message type for this actor
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AlignMsg {
     // Vector of image paths to read in/extract
-    img1_kps: Vec<DmatKeyPoint>,
-    img1_des: na::DMatrix<u8>,
-    img2_kps: Vec<DmatKeyPoint>,
-    img2_des: na::DMatrix<u8>,
+    img1_kps: DVVectorOfKeyPoint,
+    img1_des: DVMatrixGrayscale,
+    img2_kps: DVVectorOfKeyPoint,
+    img2_des: DVMatrixGrayscale,
     actor_ids: std::collections::HashMap<String, axiom::actors::Aid>,
 }
 
 impl AlignMsg {
-    pub fn new(kps1: Vec<DmatKeyPoint>, des1: DMatrix<u8>, kps2: Vec<DmatKeyPoint>, des2: na::DMatrix<u8>, ids: std::collections::HashMap<String, axiom::actors::Aid>) -> Self {
+    pub fn new(kps1: DVVectorOfKeyPoint, des1: DVMatrixGrayscale, kps2: DVVectorOfKeyPoint, des2: DVMatrixGrayscale, ids: std::collections::HashMap<String, axiom::actors::Aid>) -> Self {
         Self {
             img1_kps: kps1,
             img1_des: des1,
@@ -60,10 +63,10 @@ impl DarvisAlign
 pub fn align(&mut self, context: Context, message: Message) -> ActorResult<()> {
     if let Some(msg) = message.content_as::<AlignMsg>() {
         // Convert back to cv structures
-        let kp1 = na_keypoint_to_cv_vector_of_keypoint(&msg.img1_kps);
-        let des1 = na_grayscale_to_cv_mat(&msg.img1_des);
-        let kp2 = na_keypoint_to_cv_vector_of_keypoint(&msg.img2_kps);
-        let des2 = na_grayscale_to_cv_mat(&msg.img2_des);
+        let kp1 =  msg.img1_kps.cv_vector_of_keypoint();
+        let des1 = msg.img1_des.grayscale_to_cv_mat();
+        let kp2 = msg.img2_kps.cv_vector_of_keypoint();
+        let des2 = msg.img2_des.grayscale_to_cv_mat();
 
         // BFMatcher to get good matches
         let bfmtch = BFMatcher::create(4, true).unwrap(); 
