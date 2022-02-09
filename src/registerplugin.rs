@@ -3,7 +3,22 @@ use axiom::prelude::*;
 
 use crate::pluginfunction::*;
 
+/// All the features/actors that are implemented, need to be registered through this function.
 
+/// Returns a actor method of type FunctionProxy
+///
+/// # Arguments
+///
+/// * `fnname` - A string slice that holds the name of the actor function to be instanciated and called later
+/// * `id` - A string slice that holds the unique id for each actor function created. Help to call a unique actor.
+///
+/// # Examples
+///
+/// ```
+/// # use darvis::registerplugin::getmethod;
+/// let orb_extract_fn = getmethod("orb_extract".to_string(), "orb_extract".to_string());
+/// ```
+/// 
 pub fn getmethod(fnname: String, id: String) -> FunctionProxy
 {
     match fnname.as_ref()
