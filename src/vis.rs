@@ -11,17 +11,16 @@ use opencv::{
 };
 use axiom::prelude::*;
 use serde::{Deserialize, Serialize};
-extern crate nalgebra as na;
-use na::*;
+
 use crate::base::Pose;
 
 
-// Public message struct for the actor
+/// Public message struct for the actor
 #[derive(Debug, Serialize, Deserialize)]
 pub struct VisMsg {
-    // Pose of image paths to read in/extract, Poses take 2 matrixes, pos and rot <int type, # rows, # col, data storage?>
+    /// Pose of image paths to read in/extract, Poses take 2 matrixes, pos and rot <int type, # rows, # col, data storage?>
     new_pose: Pose,
-    // all actor ids
+    /// all actor ids
     actor_ids: std::collections::HashMap<String, axiom::actors::Aid>
 }
 
@@ -34,9 +33,12 @@ impl VisMsg {
     }
 }
 
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct VisPathMsg {
+    /// last processed image path.
     last_img_path: String
+    
 }
 
 impl VisPathMsg {
@@ -50,34 +52,41 @@ impl VisPathMsg {
 
 use crate::pluginfunction::Function;
 
+use crate::dvutils::*;
 
 #[derive(Debug, Clone)]
-// Vis state data
+/// Vis state data
 pub struct DarvisVis {
-    traj_img: Mat, // Trajectory image for visualization
-    cam_img: Mat, // Camera image for visualization
-    traj_pos: Vector3<f64>, // Built up trajectory translation
-    traj_rot: Matrix3<f64>, // Built up trajectory rotation
+    /// Trajectory image for visualization
+    traj_img: Mat, 
+    /// Camera image for visualization
+    cam_img: Mat,
+    /// Built up trajectory translation 
+    traj_pos: DVVector3, 
+    /// Built up trajectory rotation
+    traj_rot: DVMatrix3, 
+    /// actor_ids: std::collections::HashMap<String, axiom::actors::Aid>, // Collection of all spawned actor ids
     id: String
-    // actor_ids: std::collections::HashMap<String, axiom::actors::Aid>, // Collection of all spawned actor ids
-}
+    }
 
 impl DarvisVis {
+    /// Constructor
     pub fn new(id: String) -> DarvisVis {
         DarvisVis {
             traj_img: Mat::new_rows_cols_with_default(750, 1000, core::CV_8UC3, core::Scalar::all(0.0)).unwrap(),
             cam_img: Mat::default(),
-            traj_pos: Vector3::zeros(),
-            traj_rot: Matrix3::zeros(),
+            traj_pos: DVVector3::zeros(),
+            traj_rot: DVMatrix3::zeros(),
             id: id
             // actor_ids: ids,
         }
     }
 
+    /// Visualize core function to be called by the action framework that process VisMsg type message.
     pub fn visualize(&mut self, context: Context, message: Message) -> ActorResult<()> {
         if let Some(msg) = message.content_as::<VisMsg>() {
             // rotate and translate matrices from pose to track trajectory (R and t from pose)
-            if self.traj_pos == Vector3::zeros() && self.traj_rot == Matrix3::zeros() {
+            if self.traj_pos == DVVector3::zeros() && self.traj_rot == DVMatrix3::zeros() {
                 self.traj_pos = msg.new_pose.pos;
                 self.traj_rot = msg.new_pose.rot;
             }
@@ -94,6 +103,7 @@ impl DarvisVis {
             let y_offset = 375;
             let mut imtitle = "Trajectory_".to_string();
             imtitle.push_str(&self.id);
+
             imgproc::circle(&mut self.traj_img, core::Point_::new(x+x_offset, y+y_offset), 3, core::Scalar_([0.0, 0.0, 255.0, 0.0]), -1, 8, 0)?;
             highgui::imshow(&imtitle, &self.traj_img)?;
             highgui::wait_key(1)?;   

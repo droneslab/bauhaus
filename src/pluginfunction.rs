@@ -1,6 +1,7 @@
 use axiom::prelude::*;
 
-
+/// Prototype function to be implemented for each new actor added.
+/// Each actor implementation should have this trait implemented in order to make it callable through the framework
 pub trait Function: FunctionClone {
     
     fn handle(&mut self, _context: axiom::prelude::Context, message: Message) -> ActorResult<()>;  
@@ -29,6 +30,7 @@ impl Clone for Box<dyn Function> {
 
 
 #[derive(Clone)]
+/// All the function traits will be wrapped under  FunctionProxy struct in order to attain polymorphism. To select a function at runtime using framework, the actual function is boxed into this struct.
 pub struct FunctionProxy {
     pub function: Box<dyn Function>,
 }
@@ -50,6 +52,7 @@ impl Function for FunctionProxy {
 }
 
 #[derive(Debug, Clone)]
+/// A Dummy Implementation that will be called for unimplemented actor function i.e. if the framework didn't find any registered actor, will by default call to this trait implementation.
 pub struct DarvisNone;
 
 impl Function for DarvisNone {

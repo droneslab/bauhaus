@@ -4,6 +4,16 @@ version = "0.1.0"
 authors = ["TJ Chase <tbchase@buffalo.edu>"]
 edition = "2018"
 
+
+[[bin]]
+name = "bindarvis"
+path = "src/main.rs"
+
+[lib]
+name = "darvis"
+path = "src/lib.rs"
+
+
 [dependencies]
 opencv = "0.53"
 abow = {version = "*", default-features = false, features = ["bincode"]}
