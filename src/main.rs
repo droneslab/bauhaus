@@ -19,13 +19,13 @@ use opencv::{
 mod base;
 mod orb;
 mod align;
-//mod utils;
+mod dvutils;
 mod config;
 mod vis;
 mod pluginfunction;
 mod registerplugin;
 
-mod dvutils;
+
 
 
 fn main() {

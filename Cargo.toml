@@ -24,5 +24,3 @@ axiom = "*"
 log = "*"
 env_logger = "*"
 yaml-rust = "0.4"
-
-

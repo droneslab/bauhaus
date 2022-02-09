@@ -91,8 +91,8 @@ impl DarvisVis {
                 self.traj_rot = msg.new_pose.rot;
             }
             else {
-                self.traj_pos = self.traj_pos + self.traj_rot * msg.new_pose.pos;
-                self.traj_rot = msg.new_pose.rot * self.traj_rot;
+                self.traj_pos = self.traj_pos + self.traj_rot*&msg.new_pose.pos;
+                self.traj_rot = &msg.new_pose.rot * self.traj_rot;
             }
                         
             // Draw new circle on image and show
@@ -103,7 +103,7 @@ impl DarvisVis {
             let y_offset = 375;
             let mut imtitle = "Trajectory_".to_string();
             imtitle.push_str(&self.id);
-            //let mut showimg =  self.traj_img.cv_mat();
+
             imgproc::circle(&mut self.traj_img, core::Point_::new(x+x_offset, y+y_offset), 3, core::Scalar_([0.0, 0.0, 255.0, 0.0]), -1, 8, 0)?;
             highgui::imshow(&imtitle, &self.traj_img)?;
             highgui::wait_key(1)?;   
@@ -114,7 +114,6 @@ impl DarvisVis {
 
             self.cam_img = imgcodecs::imread(&msg.last_img_path, imgcodecs::IMREAD_COLOR)?;
             highgui::imshow(&imtitle, &self.cam_img)?;
-
             highgui::wait_key(1)?;   
         }
         Ok(Status::done(()))
