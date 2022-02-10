@@ -80,7 +80,7 @@ fn main() {
  
     for actor_conf in modules {
 
-        system.spawn().name(actor_conf.name).with(registerplugin::FeatureManager::new(actor_conf.actor_function.to_string(),actor_conf.actor_function.to_string()), registerplugin::FeatureManager::handle).unwrap();
+        system.spawn().name(actor_conf.name).with(registerplugin::FeatureManager::new(&actor_conf.actor_function,&actor_conf.actor_function), registerplugin::FeatureManager::handle).unwrap();
 
     }
 
