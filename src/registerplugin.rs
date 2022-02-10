@@ -19,7 +19,7 @@ use crate::pluginfunction::*;
 /// let orb_extract_fn = getmethod("orb_extract".to_string(), "orb_extract".to_string());
 /// ```
 /// 
-pub fn getmethod(fnname: String, id: String) -> FunctionProxy
+pub fn getmethod(fnname: &String, id: &String) -> FunctionProxy
 {
     match fnname.as_ref()
     {
@@ -27,7 +27,7 @@ pub fn getmethod(fnname: String, id: String) -> FunctionProxy
         ,
         "align" => FunctionProxy {function: Box::new(crate::align::DarvisAlign::new())}
         ,
-        "vis" => FunctionProxy {function: Box::new(crate::vis::DarvisVis::new(id))}
+        "vis" => FunctionProxy {function: Box::new(crate::vis::DarvisVis::new(id.clone()))}
         ,
         _ => FunctionProxy {function: Box::new(crate::pluginfunction::DarvisNone)}
         ,
@@ -41,7 +41,7 @@ pub struct FeatureManager{
 
 impl FeatureManager
 {
-    pub fn new(fnname: String, id: String) -> FeatureManager
+    pub fn new(fnname: &String, id: &String) -> FeatureManager
     {
         FeatureManager { object: getmethod(fnname, id)}
     }
