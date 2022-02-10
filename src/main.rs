@@ -77,22 +77,25 @@ fn main() {
 //         // let new_aid = system.spawn().name(actor_conf.name).with((), actor_conf.file::actor_conf.actor_function).unwrap();
 //     }
 
+ 
+    for actor_conf in modules {
 
-    let feat_aid = system.spawn().name("feature_extraction").with(registerplugin::FeatureManager::new("orb_extract".to_string(),"orb_extract".to_string()), registerplugin::FeatureManager::handle).unwrap();
+        system.spawn().name(actor_conf.name).with(registerplugin::FeatureManager::new(actor_conf.actor_function.to_string(),actor_conf.actor_function.to_string()), registerplugin::FeatureManager::handle).unwrap();
 
-    let align_aid = system.spawn().name("alignment").with(registerplugin::FeatureManager::new("align".to_string(),"align".to_string()), registerplugin::FeatureManager::handle).unwrap();
+    }
 
-    let vis_aid = system.spawn().name("visulization").with(registerplugin::FeatureManager::new("vis".to_string(),"vis".to_string()), registerplugin::FeatureManager::handle).unwrap();
 
-    // Save spawned actor ID's for lookup later
+    // // Save spawned actor ID's for lookup later
     let mut aids = HashMap::new();
-    aids.insert("feat".to_string(), feat_aid.clone());
-    aids.insert("align".to_string(), align_aid.clone());
-    aids.insert("vis".to_string(), vis_aid.clone());
 
 
+    let feat_aid = system.find_aid_by_name("feature_extraction").unwrap();
     // Kickoff the pipeline by sending the feature extraction module images
-    feat_aid.send_new(orb::OrbMsg::new(img_paths, aids.clone())).unwrap();
+    feat_aid.send_new(orb::OrbMsg::new(img_paths.clone(), aids.clone())).unwrap();
    
     system.await_shutdown(None);
 }
+
+
+
+
