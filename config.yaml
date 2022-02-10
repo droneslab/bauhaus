@@ -40,4 +40,20 @@ modules:
                       to: KFDecision
                       input: feature vectors
                       output: frame, feature points
+
+      -
+       name: visulization
+       file: vis
+       actor_message: VisMsg
+       actor_function: vis
+       address: localhost
+       port: !!str 7778
+       multithreaded: false
+       threads: 1
+       possible_paths:
+                     -
+                      from: FeatureDetection
+                      to: KFDecision
+                      input: feature vectors
+                      output: frame, feature points
   

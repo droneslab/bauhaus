@@ -49,7 +49,7 @@ impl DarvisOrb
     }
     // This is the handler that will be used by the actor.
 // This is the handler that will be used by the actor.
-pub fn orb_extract(&mut self, _context: Context, message: Message) -> ActorResult<()> {
+pub fn orb_extract(&mut self, context: Context, message: Message) -> ActorResult<()> {
     if let Some(msg) = message.content_as::<OrbMsg>() {
         let mut kp1 = VectorOfKeyPoint::new();
         let mut des1 = Mat::default();
@@ -72,8 +72,8 @@ pub fn orb_extract(&mut self, _context: Context, message: Message) -> ActorResul
 
                 // Sent to alignment
                 // println!("{:?}", &msg.actor_ids);
-                let align_id = &msg.actor_ids.get("align").unwrap();
-                let vis_id = &msg.actor_ids.get("vis").unwrap();
+                let align_id = context.system.find_aid_by_name("feature_matching").unwrap();
+                let vis_id = context.system.find_aid_by_name("visulization").unwrap();
                 // println!("{}", align_id);
                 // TODO: This is just a test send for now. Need to change message to accept the custom DarvisKeyPoint type
                 println!("Processed image: {}", path);
