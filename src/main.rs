@@ -25,7 +25,9 @@ mod vis;
 mod pluginfunction;
 mod registerplugin;
 
-
+use axiom::cluster::*;
+use std::net::{SocketAddr};
+use std::time::Duration;
 
 
 fn main() {
@@ -65,8 +67,8 @@ fn main() {
     config::load_config(&mut conf_str, &mut modules);
 
     // First we initialize the actor system using the default config
-    let config = ActorSystemConfig::default();
-    let system = ActorSystem::create(config);
+    //let config = ActorSystemConfig::default();
+    //let system = ActorSystem::create(config);
 
     // TODO: Spawn all actors based on config, need a table to map string names to functions
 //     for actor_conf in modules {
@@ -77,21 +79,60 @@ fn main() {
 //         // let new_aid = system.spawn().name(actor_conf.name).with((), actor_conf.file::actor_conf.actor_function).unwrap();
 //     }
 
- 
-    for actor_conf in modules {
+    // let mut socket_addr1 = "localhost:7717".to_socket_addrs().unwrap().next().unwrap();
+    // //let socket_addr1 = SocketAddr::from(addrs_iter);
+    // let cluster_mgr1 = TcpClusterMgr::create(&system, socket_addr1);
 
-        system.spawn().name(actor_conf.name).with(registerplugin::FeatureManager::new(&actor_conf.actor_function,&actor_conf.actor_function), registerplugin::FeatureManager::handle).unwrap();
+    let mut features = vec![];
+    let mut systems  = HashMap::<String, ActorSystem>::new();
+
+    let mut clusters  = HashMap::<String, TcpClusterMgr>::new();
+
+    let mut socket_addrs  = HashMap::<String, SocketAddr>::new();
+
+    let mut aids = HashMap::new();
+
+    for actor_conf in modules {
+        let actname = actor_conf.name.clone();
+        features.push(actname.clone());
+
+        let port = actor_conf.port.parse::<u16>().unwrap();
+        let socket_addr1 = SocketAddr::from(([127, 0, 0, 1], port));
+        socket_addrs.insert(actname.clone(), socket_addr1.clone());
+        let system1 = ActorSystem::create(ActorSystemConfig::default());
+        
+        systems.insert(actname.clone(), system1.clone());
+        let cluster_mgr1 = TcpClusterMgr::create(&system1, socket_addr1);
+        clusters.insert(actname.clone(), cluster_mgr1);
+        
+
+        let c_aid  = system1.spawn().name(&actor_conf.name).with(registerplugin::FeatureManager::new(&actor_conf.actor_function,&actor_conf.actor_function), registerplugin::FeatureManager::handle).unwrap();
+        
+        aids.insert(actname.clone(), c_aid.clone());
 
     }
 
+    let cluster_mgr1 = clusters.get("feature_extraction").unwrap();
+    for (i, feature) in features.iter().enumerate() {
+        if i == 0 { continue; }
+        println!("INDEX = {}, COLOR = {}", i, feature);
+        
+        let socket_addr2 = socket_addrs.get(feature).unwrap();
+        cluster_mgr1
+        .connect(*socket_addr2, Duration::from_millis(2000))
+        .unwrap();
 
-    // // Save spawned actor ID's for lookup later
-    let mut aids = HashMap::new();
+        ActorSystem::connect_with_channels(&systems.get(&features[0]).unwrap(), &systems.get(feature).unwrap());
+    }
+
+
+
+    let system = systems.get("feature_extraction").unwrap();
 
 
     let feat_aid = system.find_aid_by_name("feature_extraction").unwrap();
-    // Kickoff the pipeline by sending the feature extraction module images
-    feat_aid.send_new(orb::OrbMsg::new(img_paths.clone(), aids.clone())).unwrap();
+    //Kickoff the pipeline by sending the feature extraction module images
+    feat_aid.send_new(orb::OrbMsg::new(img_paths.clone(), aids)).unwrap();
    
     system.await_shutdown(None);
 }

@@ -72,8 +72,12 @@ pub fn orb_extract(&mut self, context: Context, message: Message) -> ActorResult
 
                 // Sent to alignment
                 // println!("{:?}", &msg.actor_ids);
-                let align_id = context.system.find_aid_by_name("feature_matching").unwrap();
-                let vis_id = context.system.find_aid_by_name("visulization").unwrap();
+                
+                //let align_id = context.system.find_aid_by_name("feature_matching").unwrap();
+                //let vis_id = context.system.find_aid_by_name("visulization").unwrap();
+                
+                let align_id = msg.actor_ids.get("feature_matching").unwrap();
+                let vis_id = msg.actor_ids.get("visulization").unwrap();
                 // println!("{}", align_id);
                 // TODO: This is just a test send for now. Need to change message to accept the custom DarvisKeyPoint type
                 println!("Processed image: {}", path);
