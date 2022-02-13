@@ -47,7 +47,7 @@ modules:
        actor_message: VisMsg
        actor_function: vis
        address: localhost
-       port: !!str 7778
+       port: !!str 7779
        multithreaded: false
        threads: 1
        possible_paths:
