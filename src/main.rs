@@ -37,7 +37,12 @@ fn main() {
 
     let args: Vec<String> = env::args().collect();
 
-    //TODO: Check input arguments/error if not enough
+    if args.len() < 3 {
+        println!("[ERROR] Invalid number of input parameters.");
+        println!("Usage: cargo run -- [PATH_TO_DATA_DIRECTORY] [PATH_TO_CONFIG_FILE]");
+        return;
+    }
+
     let img_dir = args[1].to_owned();
     let config_file = args[2].to_owned();
 
@@ -89,7 +94,6 @@ fn main() {
     aids.insert("feat".to_string(), feat_aid.clone());
     aids.insert("align".to_string(), align_aid.clone());
     aids.insert("vis".to_string(), vis_aid.clone());
-
 
     // Kickoff the pipeline by sending the feature extraction module images
     feat_aid.send_new(orb::OrbMsg::new(img_paths, aids.clone())).unwrap();
