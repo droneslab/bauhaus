@@ -101,16 +101,14 @@ impl DarvisVis {
 
             let x_offset = 500;
             let y_offset = 375;
-            let mut imtitle = "Trajectory_".to_string();
-            imtitle.push_str(&self.id);
+            let imtitle = "Estimated Trajectory".to_string();
 
             imgproc::circle(&mut self.traj_img, core::Point_::new(x+x_offset, y+y_offset), 3, core::Scalar_([0.0, 0.0, 255.0, 0.0]), -1, 8, 0)?;
             highgui::imshow(&imtitle, &self.traj_img)?;
             highgui::wait_key(1)?;   
         }
         else if let Some(msg) = message.content_as::<VisPathMsg>() {
-            let mut imtitle = "Camera Image_".to_string();
-            imtitle.push_str(&self.id);
+            let imtitle = "Camera Frame".to_string();
 
             self.cam_img = imgcodecs::imread(&msg.last_img_path, imgcodecs::IMREAD_COLOR)?;
             highgui::imshow(&imtitle, &self.cam_img)?;
