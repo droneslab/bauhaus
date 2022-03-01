@@ -28,6 +28,8 @@ pub fn getmethod(fnname: String, id: String) -> FunctionProxy
         "align" => FunctionProxy {function: Box::new(crate::align::DarvisAlign::new())}
         ,
         "vis" => FunctionProxy {function: Box::new(crate::vis::DarvisVis::new(id))}
+        ,        
+        "sift_extract" => FunctionProxy {function: Box::new(crate::sift::DarvisSift::new())}
         ,
         _ => FunctionProxy {function: Box::new(crate::pluginfunction::DarvisNone)}
         ,

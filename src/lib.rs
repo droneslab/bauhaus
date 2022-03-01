@@ -25,3 +25,6 @@ pub mod dvutils;
 /// This is documentation of all development and how to's to enable graceful enhancement.
 pub mod doc;
 
+/// Sift Feature extraction 
+pub mod sift;
+

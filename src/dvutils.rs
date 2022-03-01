@@ -46,6 +46,13 @@ pub trait DarvisMatrix
     fn grayscale_mat(&self) -> DVMatrixGrayscale;
 }
 
+/// Traits useful fo converting between OPENCV and Algebra library format f32.
+pub trait DarvisMatrixf32u8
+{
+    fn grayscale_mat_f32_u8(&self) -> DVMatrixGrayscale;
+}
+
+
 /// Matrix Trait implementation for OpenCV Mat
 impl DarvisMatrix for opencv::core::Mat
 {
@@ -70,6 +77,27 @@ impl DarvisMatrix for opencv::core::Mat
         dmat      
     }
 }
+
+/// Matrix Trait implementation for OpenCV Mat f32
+impl DarvisMatrixf32u8 for opencv::core::Mat
+{
+    /// Convert OpenCV mat to Grayscale matrix
+    fn grayscale_mat_f32_u8(&self) -> DVMatrixGrayscale
+    {
+        let mut dmat = DMatrix::from_element(self.rows().try_into().unwrap(), self.cols().try_into().unwrap(), 0u8);
+        for i in 0..self.rows() {
+                for j in 0..self.cols() {
+                       let val = *self.at_2d::<f32>(i, j).unwrap(); // Grayscale 1 channel uint8
+                       let r: usize = i.try_into().unwrap();
+                       let c: usize = j.try_into().unwrap();
+                       dmat[(r, c)] = val as u8;
+                }
+        }
+        dmat
+    }    
+}
+
+
 
 /// Matrix Trait implementation for Algebra Matrix
 impl DarvisMatrix for DVMatrixGrayscale
