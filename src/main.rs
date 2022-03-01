@@ -115,7 +115,7 @@ fn main() {
     let cluster_mgr1 = clusters.get("feature_extraction").unwrap();
     for (i, feature) in features.iter().enumerate() {
         if i == 0 { continue; }
-        println!("INDEX = {}, COLOR = {}", i, feature);
+        println!("Index = {}, Feature = {}", i, feature);
         
         let socket_addr2 = socket_addrs.get(feature).unwrap();
         cluster_mgr1
