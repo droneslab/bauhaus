@@ -69,31 +69,41 @@ fn main() {
     let mut modules = Vec::<base::ActorConf>::new();
     config::load_config(&mut conf_str, &mut modules);
 
-    // First we initialize the actor system using the default config
-    let config = ActorSystemConfig::default();
-    let system = ActorSystem::create(config);
+    //TODO: Use Cluster manager to do remote agent calls
 
-    // TODO: Spawn all actors based on config, need a table to map string names to functions
-//     for actor_conf in modules {
-//         // TODO: Need to add message/function tables (hashmaps) somewhere that map sttrings to Fn pointers
-//         // https://stackoverflow.com/questions/30540807/calling-a-function-only-known-at-runtime
-//         println!("{:?}", actor_conf);
-//         // let test = actor_conf.file as module;
-//         // let new_aid = system.spawn().name(actor_conf.name).with((), actor_conf.file::actor_conf.actor_function).unwrap();
-//     }
+    let mut systems  = HashMap::<String, ActorSystem>::new();
 
-
-    let feat_aid = system.spawn().name("feature_extraction").with(registerplugin::FeatureManager::new("orb_extract".to_string(),"orb_extract".to_string()), registerplugin::FeatureManager::handle).unwrap();
-
-    let align_aid = system.spawn().name("alignment").with(registerplugin::FeatureManager::new("align".to_string(),"align".to_string()), registerplugin::FeatureManager::handle).unwrap();
-
-    let vis_aid = system.spawn().name("visulization").with(registerplugin::FeatureManager::new("vis".to_string(),"vis".to_string()), registerplugin::FeatureManager::handle).unwrap();
-
-    // Save spawned actor ID's for lookup later
     let mut aids = HashMap::new();
-    aids.insert("feat".to_string(), feat_aid.clone());
-    aids.insert("align".to_string(), align_aid.clone());
-    aids.insert("vis".to_string(), vis_aid.clone());
+
+    // Note: was used in connect_with_channels call
+    //let mut i =0;
+    //let mut features = vec![];
+
+    // Loop through the config to initialize actor system using the default config
+    for actor_conf in modules {
+        let actname = actor_conf.name.clone();
+        
+
+        let system_current = ActorSystem::create(ActorSystemConfig::default());
+        
+        systems.insert(actname.clone(), system_current.clone());
+
+        let c_aid  = system_current.spawn().name(&actor_conf.name).with(registerplugin::FeatureManager::new(&actor_conf.actor_function,&actor_conf.actor_function), registerplugin::FeatureManager::handle).unwrap();
+        
+        aids.insert(actname.clone(), c_aid.clone());
+
+        // TODO: Identify the role of using connect_with_channels, as the system communications are working without doing the following.
+        //features.push(actname.clone());
+        // if i > 0 { 
+        //     ActorSystem::connect_with_channels(&systems.get(&features[0]).unwrap(), &system_current);            
+        // }
+        //i+=1;
+    
+    }
+
+    let system = systems.get("feature_extraction").unwrap();
+
+    let feat_aid = system.find_aid_by_name("feature_extraction").unwrap();
 
     // Kickoff the pipeline by sending the feature extraction module images
     feat_aid.send_new(orb::OrbMsg::new(img_paths, aids.clone())).unwrap();
