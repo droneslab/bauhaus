@@ -149,7 +149,8 @@ pub fn align(&mut self, context: Context, message: Message) -> ActorResult<()> {
         // println!("{}", pose.pos);
         // println!("{}", pose.rot);
 
-        let vis_id = &msg.actor_ids.get("vis").unwrap();
+        //let vis_id = context.system.find_aid_by_name("visulization").unwrap();
+        let vis_id = msg.actor_ids.get("visulization").unwrap();
         vis_id.send_new(VisMsg::new(pose, msg.actor_ids.clone())).unwrap();
     }
     Ok(Status::done(()))
