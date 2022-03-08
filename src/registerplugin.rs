@@ -29,6 +29,8 @@ pub fn getmethod(fnname: &String, id: &String) -> FunctionProxy
         ,
         "vis" => FunctionProxy {function: Box::new(crate::vis::DarvisVis::new(id.clone()))}
         ,
+        "opflow_extract" => FunctionProxy {function: Box::new(crate::opflow::DarvisOpFlow::new())}
+        ,
         _ => FunctionProxy {function: Box::new(crate::pluginfunction::DarvisNone)}
         ,
     }

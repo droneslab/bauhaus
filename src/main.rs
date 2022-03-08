@@ -24,7 +24,7 @@ mod config;
 mod vis;
 mod pluginfunction;
 mod registerplugin;
-
+mod opflow;
 
 
 
@@ -84,8 +84,9 @@ fn main() {
         let actname = actor_conf.name.clone();
         
 
-        let system_current = ActorSystem::create(ActorSystemConfig::default());
+        let system_current = ActorSystem::create(ActorSystemConfig::default().message_channel_size(32));
         
+
         systems.insert(actname.clone(), system_current.clone());
 
         let c_aid  = system_current.spawn().name(&actor_conf.name).with(registerplugin::FeatureManager::new(&actor_conf.actor_function,&actor_conf.actor_function), registerplugin::FeatureManager::handle).unwrap();
@@ -106,7 +107,7 @@ fn main() {
     let feat_aid = system.find_aid_by_name("feature_extraction").unwrap();
 
     // Kickoff the pipeline by sending the feature extraction module images
-    feat_aid.send_new(orb::OrbMsg::new(img_paths, aids.clone())).unwrap();
+    feat_aid.send_new(base::ImagesMsg::new(img_paths, aids.clone())).unwrap();
    
     system.await_shutdown(None);
 }
