@@ -73,7 +73,8 @@ impl DarvisVis {
     /// Constructor
     pub fn new(id: String) -> DarvisVis {
         DarvisVis {
-            traj_img: Mat::new_rows_cols_with_default(750, 1000, core::CV_8UC3, core::Scalar::all(0.0)).unwrap(),
+            //traj_img: Mat::new_rows_cols_with_default(750, 1000, core::CV_8UC3, core::Scalar::all(0.0)).unwrap(),
+            traj_img: Mat::new_rows_cols_with_default(376, 500, core::CV_8UC3, core::Scalar::all(0.0)).unwrap(),
             cam_img: Mat::default(),
             traj_pos: DVVector3::zeros(),
             traj_rot: DVMatrix3::zeros(),
@@ -96,23 +97,43 @@ impl DarvisVis {
             }
                         
             // Draw new circle on image and show
-            let x = self.traj_pos[0] as i32;
-            let y = -self.traj_pos[2] as i32;
+            let x = self.traj_pos[0] as i32 / 2;
+            let y = -self.traj_pos[2] as i32 / 2 ;
 
-            let x_offset = 500;
-            let y_offset = 375;
-            let imtitle = "Estimated Trajectory".to_string();
+            // let x_offset = 500 ;
+            // let y_offset = 375 ;
+            let x_offset = 200 ;
+            let y_offset = 350 ;
+            //let imtitle = "Estimated Trajectory".to_string();
 
             imgproc::circle(&mut self.traj_img, core::Point_::new(x+x_offset, y+y_offset), 3, core::Scalar_([0.0, 0.0, 255.0, 0.0]), -1, 8, 0)?;
-            highgui::imshow(&imtitle, &self.traj_img)?;
-            highgui::wait_key(1)?;   
+            
+
+
+            //highgui::imshow(&imtitle, &self.traj_img)?;
+            //highgui::wait_key(1)?;   
         }
         else if let Some(msg) = message.content_as::<VisPathMsg>() {
-            let imtitle = "Camera Frame".to_string();
+            //let imtitle = "Camera Frame".to_string();
 
             self.cam_img = imgcodecs::imread(&msg.last_img_path, imgcodecs::IMREAD_COLOR)?;
-            highgui::imshow(&imtitle, &self.cam_img)?;
-            highgui::wait_key(1)?;   
+
+
+
+            //highgui::imshow(&imtitle, &self.cam_img)?;
+            //highgui::wait_key(1)?;   
+        }
+
+        if self.cam_img.rows()>0 && self.traj_img.rows() >0 {
+        let mut out = Mat::default();
+        let mut matrices = opencv::types::VectorOfMat::default();
+        matrices.push(self.cam_img.clone());
+        matrices.push(self.traj_img.clone());
+
+        core::hconcat( &matrices, &mut out )?;
+        let imtitle = "Estimated Trajectory".to_string();
+        highgui::imshow(&imtitle, &out)?;
+        highgui::wait_key(1)?;   
         }
         Ok(Status::done(()))
     }

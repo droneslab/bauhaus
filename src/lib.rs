@@ -25,3 +25,5 @@ pub mod dvutils;
 /// This is documentation of all development and how to's to enable graceful enhancement.
 pub mod doc;
 
+/// Implemented optical flow feature extraction and tracking
+pub mod opflow;

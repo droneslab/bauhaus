@@ -14,29 +14,29 @@ use serde::{Deserialize, Serialize};
 use crate::dvutils::*;
 use crate::align::*;
 use crate::vis::*;
-
+use crate::base::*;
 
 
 
 
 use crate::pluginfunction::*;
 
-// Message type for the actor
-#[derive(Debug, Serialize, Deserialize)]
-pub struct OrbMsg {
-    // Vector of image paths to read in/extract
-    img_paths: Vec<String>,
-    actor_ids: std::collections::HashMap<String, axiom::actors::Aid>,
-}
+// // Message type for the actor
+// #[derive(Debug, Serialize, Deserialize)]
+// pub struct OrbMsg {
+//     // Vector of image paths to read in/extract
+//     img_paths: Vec<String>,
+//     actor_ids: std::collections::HashMap<String, axiom::actors::Aid>,
+// }
 
-impl OrbMsg {
-    pub fn new(vec: Vec<String>, ids: std::collections::HashMap<String, axiom::actors::Aid>) -> Self {
-        Self {
-            img_paths: vec,
-            actor_ids: ids,
-        }
-    }
-}
+// impl OrbMsg {
+//     pub fn new(vec: Vec<String>, ids: std::collections::HashMap<String, axiom::actors::Aid>) -> Self {
+//         Self {
+//             img_paths: vec,
+//             actor_ids: ids,
+//         }
+//     }
+// }
 
 
 #[derive(Debug, Clone)]
@@ -50,14 +50,22 @@ impl DarvisOrb
     // This is the handler that will be used by the actor.
 // This is the handler that will be used by the actor.
 pub fn orb_extract(&mut self, context: Context, message: Message) -> ActorResult<()> {
-    if let Some(msg) = message.content_as::<OrbMsg>() {
+    if let Some(msg) = message.content_as::<ImagesMsg>() {
         let mut kp1 = VectorOfKeyPoint::new();
         let mut des1 = Mat::default();
         let mut kp2 = VectorOfKeyPoint::new();
         let mut des2 = Mat::default();
-        for path in &msg.img_paths {
+        let mut img1 = Mat::default();
+        let mut img2 = Mat::default();
+
+
+        for path in msg.get_img_paths() {
+
+
             let img = imgcodecs::imread(&path, imgcodecs::IMREAD_GRAYSCALE)?;
             let mut orb: PtrOfORB = ORB::default().unwrap();
+
+
 
             orb.detect_and_compute(&img,&Mat::default(), &mut kp1, &mut des1, false).unwrap();
             // println!("Processed {}, found {} keypoints", path, kp1.len());
@@ -70,25 +78,31 @@ pub fn orb_extract(&mut self, context: Context, message: Message) -> ActorResult
                 let nades1 = des1.grayscale_mat();
                 let nades2 = des2.grayscale_mat();
 
+                let naimg1 = img1.grayscale_mat();
+                let naimg2 = img2.grayscale_mat();
+
                 // Sent to alignment
                 // println!("{:?}", &msg.actor_ids);
                 
                 //let align_id = context.system.find_aid_by_name("feature_matching").unwrap();
                 //let vis_id = context.system.find_aid_by_name("visulization").unwrap();
                 
-                let align_id = msg.actor_ids.get("feature_matching").unwrap();
-                let vis_id = msg.actor_ids.get("visulization").unwrap();
+                let align_id = msg.get_actor_ids().get("feature_matching").unwrap();
+                let vis_id = msg.get_actor_ids().get("visulization").unwrap();
                 // println!("{}", align_id);
                 // TODO: This is just a test send for now. Need to change message to accept the custom DarvisKeyPoint type
                 println!("Processed image: {}", path);
                 vis_id.send_new(VisPathMsg::new(path.to_string())).unwrap();
-                align_id.send_new(AlignMsg::new(kpvec1, nades1, kpvec2, nades2, msg.actor_ids.clone())).unwrap();
+                align_id.send_new(AlignMsg::new(kpvec1, nades1, kpvec2, nades2, msg.get_actor_ids().clone())).unwrap();
+                //align_id.send_new(AlignImgMsg::new(kpvec1, naimg1, kpvec2, naimg2, msg.get_actor_ids().clone())).unwrap();
             }
 
             kp2 = kp1;
             des2 = des1;
+            img2 = img1;
             kp1 = VectorOfKeyPoint::new();
             des1 = Mat::default();
+            img1 = Mat::default();
         }
         // context.system.trigger_shutdown();
     }
