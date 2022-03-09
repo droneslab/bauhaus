@@ -12,31 +12,14 @@ use opencv::{
 use axiom::prelude::*;
 use serde::{Deserialize, Serialize};
 use crate::dvutils::*;
-use crate::align::*;
 use crate::vis::*;
 use crate::base::*;
+use crate::frameloader::*;
 
-
+use crate::actornames::*;
 
 
 use crate::pluginfunction::*;
-
-// // Message type for the actor
-// #[derive(Debug, Serialize, Deserialize)]
-// pub struct OpFlowMsg {
-//     // Vector of image paths to read in/extract
-//     img_paths: Vec<String>,
-//     actor_ids: std::collections::HashMap<String, axiom::actors::Aid>,
-// }
-
-// impl OpFlowMsg {
-//     pub fn new(vec: Vec<String>, ids: std::collections::HashMap<String, axiom::actors::Aid>) -> Self {
-//         Self {
-//             img_paths: vec,
-//             actor_ids: ids,
-//         }
-//     }
-// }
 
 
 #[derive(Debug, Clone)]
@@ -60,10 +43,7 @@ impl DarvisOpFlow
 
 pub fn opflow_extract(&mut self, context: Context, message: Message) -> ActorResult<()> {
     if let Some(msg) = message.content_as::<ImagesMsg>() {
-        // let mut kp1 = VectorOfKeyPoint::new();
-        // let mut des1 = Mat::default();
-        // let mut kp2 = VectorOfKeyPoint::new();
-        // let mut des2 = Mat::default();
+
 
         let mut curr_image = Mat::default();
         let mut prev_image = Mat::default();
@@ -104,8 +84,8 @@ pub fn opflow_extract(&mut self, context: Context, message: Message) -> ActorRes
               }
 
 
-              // let align_id = msg.actor_ids.get("feature_matching").unwrap();
-              // let vis_id = msg.actor_ids.get("visulization").unwrap();
+              // let align_id = msg.actor_ids.get(TRACKER).unwrap();
+              // let vis_id = msg.actor_ids.get(VISUALIZER).unwrap();
               // // println!("{}", align_id);
               // // TODO: This is just a test send for now. Need to change message to accept the custom DarvisKeyPoint type
               // println!("Processed image: {}", path);
@@ -133,15 +113,15 @@ pub fn opflow_extract(&mut self, context: Context, message: Message) -> ActorRes
               // println!("{}", pose.pos);
               // println!("{}", pose.rot);
       
-              //let vis_id = context.system.find_aid_by_name("visulization").unwrap();
-              let vis_id = msg.get_actor_ids().get("visulization").unwrap();
-              vis_id.send_new(VisMsg::new(pose, msg.get_actor_ids().clone())).unwrap();
+              //let vis_id = context.system.find_aid_by_name(VISUALIZER).unwrap();
+              //let vis_id = msg.get_actor_ids().get(VISUALIZER).unwrap();
+              //vis_id.send_new(VisMsg::new(pose, msg.get_actor_ids().clone())).unwrap();
 
 
 
 
             }
-            let vis_id = msg.get_actor_ids().get("visulization").unwrap();
+            let vis_id = msg.get_actor_ids().get(VISUALIZER).unwrap();
             // println!("{}", align_id);
             // TODO: This is just a test send for now. Need to change message to accept the custom DarvisKeyPoint type
             println!("Processed image: {}", path);

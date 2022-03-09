@@ -5,7 +5,27 @@ master:
 
 modules:
       -
-       name: feature_extraction
+       name: FRAME_LOADER
+       file: frameloader
+       actor_message: ImagesMsg
+       actor_function: frameloader
+       address: locahost
+       port: !!str 7777
+       multithreaded: false
+       threads: 1
+       possible_paths:
+                      - 
+                       from: ImageRead
+                       to: Initilization
+                       input: images
+                       output: feature vectors
+                      -
+                       from: ImageRead
+                       to: ImageAlignment
+                       input: images
+                       output: feature vectors
+      -
+       name: FEATURE_EXTRACTOR
        file: orb
        actor_message: OrbMsg
        actor_function: orb_extract
@@ -26,10 +46,10 @@ modules:
                        output: feature vectors
 
       -
-       name: feature_matching
-       file: align
-       actor_message: AlignImgMsg
-       actor_function: align
+       name: TRACKER
+       file: tracker
+       actor_message: TrackerMsg
+       actor_function: tracker
        address: localhost
        port: !!str 7778
        multithreaded: false
@@ -42,7 +62,7 @@ modules:
                       output: frame, feature points
 
       -
-       name: visulization
+       name: VISUALIZER
        file: vis
        actor_message: VisMsg
        actor_function: vis

@@ -79,26 +79,25 @@ pub struct ActorConf{
 }
 
 
-
 // Message type for the actor
 #[derive(Debug, Serialize, Deserialize)]
-pub struct ImagesMsg {
+pub struct FrameMsg {
     // Vector of image paths to read in/extract
-    img_paths: Vec<String>,
+    frame: DVMatrixGrayscale,
     actor_ids: std::collections::HashMap<String, axiom::actors::Aid>,
 }
 
-impl ImagesMsg {
-    pub fn new(vec: Vec<String>, ids: std::collections::HashMap<String, axiom::actors::Aid>) -> Self {
+impl FrameMsg {
+    pub fn new(img: DVMatrixGrayscale, ids: std::collections::HashMap<String, axiom::actors::Aid>) -> Self {
         Self {
-             img_paths: vec,
-             actor_ids: ids,
+            frame: img,
+            actor_ids: ids,
         }
     }
 
-    pub fn get_img_paths(&self ) -> &Vec<String>
+    pub fn get_frame(&self ) -> &DVMatrixGrayscale
     {
-        &self.img_paths
+        &self.frame
     }
     pub fn get_actor_ids(&self ) -> &std::collections::HashMap<String, axiom::actors::Aid>
     {
