@@ -5,7 +5,7 @@ pub mod base;
 /// Orb Feature extraction 
 pub mod orb;
 /// Alignment of two frames and getting alignment translation and rotation.
-pub mod align;
+pub mod tracker;
 
 /// Configuration file handling utilities.
 pub mod config;
@@ -27,3 +27,9 @@ pub mod doc;
 
 /// Implemented optical flow feature extraction and tracking
 pub mod opflow;
+
+/// Frame Loader to load frames and stream to the Feature Extraction actor
+pub mod frameloader;
+
+/// Static variables for Names of the actors to be used while sending message
+pub mod actornames;

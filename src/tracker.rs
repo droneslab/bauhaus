@@ -2,14 +2,8 @@
 use opencv::{
     prelude::*,
     core,
-    features2d,
-    features2d::{Feature2DTrait, BFMatcher, FlannBasedMatcher},
-    highgui,
-    imgproc,
-    videoio,
-    imgcodecs,
-    calib3d,
-    types::{VectorOfKeyPoint, PtrOfBFMatcher, VectorOfDMatch},
+    features2d::{BFMatcher, FlannBasedMatcher},
+    types::{VectorOfKeyPoint, VectorOfDMatch, VectorOfPoint2f},
 };
 use opencv::core::CV_32FC1;
 use std::convert::TryInto;
@@ -19,29 +13,25 @@ use serde::{Deserialize, Serialize};
 use crate::dvutils::*;
 use crate::base::*;
 use crate::vis::*;
-
-
-
+use crate::actornames::*;
 
 
 // Message type for this actor
 #[derive(Debug, Serialize, Deserialize)]
-pub struct AlignMsg {
+pub struct TrackerMsg {
     // Vector of image paths to read in/extract
+    img1: DVMatrixGrayscale,
     img1_kps: DVVectorOfKeyPoint,
     img1_des: DVMatrixGrayscale,
-    img2_kps: DVVectorOfKeyPoint,
-    img2_des: DVMatrixGrayscale,
     actor_ids: std::collections::HashMap<String, axiom::actors::Aid>,
 }
 
-impl AlignMsg {
-    pub fn new(kps1: DVVectorOfKeyPoint, des1: DVMatrixGrayscale, kps2: DVVectorOfKeyPoint, des2: DVMatrixGrayscale, ids: std::collections::HashMap<String, axiom::actors::Aid>) -> Self {
+impl TrackerMsg {
+    pub fn new(image1: DVMatrixGrayscale, kps1: DVVectorOfKeyPoint, des1: DVMatrixGrayscale, ids: std::collections::HashMap<String, axiom::actors::Aid>) -> Self {
         Self {
+            img1 : image1,
             img1_kps: kps1,
             img1_des: des1,
-            img2_kps: kps2,
-            img2_des: des2,
             actor_ids: ids,
         }
     }
@@ -51,54 +41,93 @@ impl AlignMsg {
 
 
 #[derive(Debug, Clone)]
-pub struct DarvisAlign;
-
-impl DarvisAlign
+pub struct DarvisTracker
 {
-    pub fn new() -> DarvisAlign {
-        DarvisAlign {}
+    prev_frame: Mat,
+    prev_kps: VectorOfKeyPoint,
+    prev_des: Mat,
+    first_frame: bool
+}
+
+impl DarvisTracker
+{
+    pub fn new() -> DarvisTracker {
+        DarvisTracker {
+            prev_frame : Mat::default(),
+            prev_kps: VectorOfKeyPoint::new(),
+            prev_des: Mat::default(),
+            first_frame: true            
+        }
     }
     // This is the handler that will be used by the actor.
 // This is the handler that will be used by the actor.
-pub fn align(&mut self, context: Context, message: Message) -> ActorResult<()> {
-    if let Some(msg) = message.content_as::<AlignMsg>() {
+pub fn align(&mut self, _context: Context, message: Message) -> ActorResult<()> {
+    if let Some(msg) = message.content_as::<TrackerMsg>() {
         // Convert back to cv structures
+
+        let img1 = msg.img1.grayscale_to_cv_mat();
         let kp1 =  msg.img1_kps.cv_vector_of_keypoint();
         let des1 = msg.img1_des.grayscale_to_cv_mat();
-        let kp2 = msg.img2_kps.cv_vector_of_keypoint();
-        let des2 = msg.img2_des.grayscale_to_cv_mat();
-
         
-        let (p2f1, p2f2) =self.find_best_match(&des1, &des2, &kp1, &kp2);
 
-        //println!("{:.2}", ((p2f1.len() as f64)/(kp1.len() as f64)));
-        let (R, t) = self.calculate_transform(&p2f1, &p2f2);
+        if !self.first_frame
+        {
+            let pt_indx = opencv::types::VectorOfi32::new();
+            let mut prev_points = VectorOfPoint2f::new();
+            core::KeyPoint::convert(&self.prev_kps, &mut prev_points, &pt_indx).unwrap();
 
+            let curr_features = self.track_features(&self.prev_frame, &img1, &mut prev_points);
 
-        let mut pose = Pose::default_ones();
-        pose.pos[0] = *t.at::<f64>(0).unwrap();
-        pose.pos[1] = *t.at::<f64>(1).unwrap();
-        pose.pos[2] = *t.at::<f64>(2).unwrap();
-
-        pose.rot[(0,0)] = *R.at_2d::<f64>(0,0).unwrap();
-        pose.rot[(0,1)] = *R.at_2d::<f64>(0,1).unwrap();
-        pose.rot[(0,2)] = *R.at_2d::<f64>(0,2).unwrap();
-        pose.rot[(1,0)] = *R.at_2d::<f64>(1,0).unwrap();
-        pose.rot[(1,1)] = *R.at_2d::<f64>(1,1).unwrap();
-        pose.rot[(1,2)] = *R.at_2d::<f64>(1,2).unwrap();
-        pose.rot[(2,0)] = *R.at_2d::<f64>(2,0).unwrap();
-        pose.rot[(2,1)] = *R.at_2d::<f64>(2,1).unwrap();
-        pose.rot[(2,2)] = *R.at_2d::<f64>(2,2).unwrap();
+            println!("Current Feature count {:?}", curr_features.len());
+            let (rotation, translation) = self.calculate_transform(&curr_features, &mut prev_points);
 
 
-        // println!("{}", pose.pos);
-        // println!("{}", pose.rot);
+            // //println!("Tracking ");
+            // let (p2f1, p2f2) =self.find_best_match(&des1, &self.prev_des, &kp1, &self.prev_kps);
 
-        //let vis_id = context.system.find_aid_by_name("visulization").unwrap();
-        let vis_id = msg.actor_ids.get("visulization").unwrap();
-        vis_id.send_new(VisMsg::new(pose, msg.actor_ids.clone())).unwrap();
+            // //println!("{:.2}", ((p2f1.len() as f64)/(kp1.len() as f64)));
+            // let (R, t) = self.calculate_transform(&p2f1, &p2f2);
+
+            let pose = self.get_pose(&rotation, &translation);
+
+            // println!("{}", pose.pos);
+            // println!("{}", pose.rot);
+
+            let vis_id = msg.actor_ids.get(VISUALIZER).unwrap();
+            vis_id.send_new(VisMsg::new(pose, msg.actor_ids.clone())).unwrap();
+            
+        }
+        else
+        {
+            println!("First Image ");
+            self.first_frame = false;
+        }
+        //println!("Tracking done!");
+        self.prev_frame = img1;
+        self.prev_kps = kp1;
+        self.prev_des = des1;
     }
     Ok(Status::done(()))
+}
+
+pub fn get_pose(&self, r: &Mat, t: &Mat) -> Pose
+{
+    let mut pose = Pose::default_ones();
+    pose.pos[0] = *t.at::<f64>(0).unwrap();
+    pose.pos[1] = *t.at::<f64>(1).unwrap();
+    pose.pos[2] = *t.at::<f64>(2).unwrap();
+
+    pose.rot[(0,0)] = *r.at_2d::<f64>(0,0).unwrap();
+    pose.rot[(0,1)] = *r.at_2d::<f64>(0,1).unwrap();
+    pose.rot[(0,2)] = *r.at_2d::<f64>(0,2).unwrap();
+    pose.rot[(1,0)] = *r.at_2d::<f64>(1,0).unwrap();
+    pose.rot[(1,1)] = *r.at_2d::<f64>(1,1).unwrap();
+    pose.rot[(1,2)] = *r.at_2d::<f64>(1,2).unwrap();
+    pose.rot[(2,0)] = *r.at_2d::<f64>(2,0).unwrap();
+    pose.rot[(2,1)] = *r.at_2d::<f64>(2,1).unwrap();
+    pose.rot[(2,2)] = *r.at_2d::<f64>(2,2).unwrap();
+
+    pose
 }
 
 pub fn find_best_match(&self,
@@ -290,14 +319,65 @@ pub fn scale_transform(&self,
     }
   }
 
-  
+  pub fn track_features(
+    &self,
+    src_image: &Mat,
+    dst_image: &Mat,
+    src_image_points: &mut VectorOfPoint2f,
+  ) -> VectorOfPoint2f {
+    let mut status = opencv::types::VectorOfu8::new();
+    let mut dst_image_points = VectorOfPoint2f::new(); //vectors to store the coordinates of the feature points
+    self.feature_tracking(
+      &src_image,
+      &dst_image,
+      src_image_points,
+      &mut dst_image_points,
+      &mut status,
+    ); //track those features to img_2
+    dst_image_points
+  }
 
+  pub fn feature_tracking(
+    &self,
+    img_1: &opencv::core::Mat,
+    img_2: &opencv::core::Mat,
+    points1: &mut VectorOfPoint2f,
+    points2: &mut VectorOfPoint2f,
+    status: &mut opencv::types::VectorOfu8,
+  ) {
+    //this function automatically gets rid of points for which tracking fails
+    let mut err = opencv::types::VectorOff32::default();
+    let win_size = core::Size::new(21, 21);
+    let termcrit = opencv::core::TermCriteria {
+      typ: 3,
+      max_count: 30,
+      epsilon: 0.01,
+    };
+    let max_level = 3;
+    opencv::video::calc_optical_flow_pyr_lk(
+      img_1, img_2, points1, points2, status, &mut err, win_size, max_level, termcrit, 0, 0.001,
+    )
+    .unwrap();
+    //getting rid of points for which the KLT tracking failed or those who have gone outside the framed
+    let mut indez_correction = 0;
+    for i in 0..status.len() {
+      let pt = points2.get(i - indez_correction).unwrap();
+      if (status.get(i).unwrap() == 0) || pt.x < 0.0 || pt.y < 0.0 {
+        if pt.x < 0.0 || pt.y < 0.0 {
+          status.set(i, 0).unwrap();
+        }
+        points1.remove(i - indez_correction).unwrap();
+        points2.remove(i - indez_correction).unwrap();
+        indez_correction = indez_correction + 1;
+      }
+    }
+  }
 }
 
 
 use crate::pluginfunction::Function;
 
-impl Function for DarvisAlign {
+impl Function for DarvisTracker {
 
     fn handle(&mut self, _context: axiom::prelude::Context, message: Message) -> ActorResult<()>
     {

@@ -18,15 +18,17 @@ use opencv::{
 
 mod base;
 mod orb;
-mod align;
+mod tracker;
 mod dvutils;
 mod config;
 mod vis;
 mod pluginfunction;
 mod registerplugin;
 mod opflow;
+mod frameloader;
+mod actornames;
 
-
+use actornames::*;
 
 fn main() {
 
@@ -84,7 +86,7 @@ fn main() {
         let actname = actor_conf.name.clone();
         
 
-        let system_current = ActorSystem::create(ActorSystemConfig::default().message_channel_size(32));
+        let system_current = ActorSystem::create(ActorSystemConfig::default());
         
 
         systems.insert(actname.clone(), system_current.clone());
@@ -102,12 +104,14 @@ fn main() {
     
     }
 
-    let system = systems.get("feature_extraction").unwrap();
+    //println!("{:?}",aids);
 
-    let feat_aid = system.find_aid_by_name("feature_extraction").unwrap();
+    let system = systems.get(FRAME_LOADER).unwrap();
+
+    let feat_aid = system.find_aid_by_name(FRAME_LOADER).unwrap();
 
     // Kickoff the pipeline by sending the feature extraction module images
-    feat_aid.send_new(base::ImagesMsg::new(img_paths, aids.clone())).unwrap();
+    feat_aid.send_new(frameloader::ImagesMsg::new(img_paths, aids.clone())).unwrap();
    
     system.await_shutdown(None);
 }

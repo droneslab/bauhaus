@@ -25,11 +25,11 @@ pub fn getmethod(fnname: &String, id: &String) -> FunctionProxy
     {
         "orb_extract" => FunctionProxy {function: Box::new(crate::orb::DarvisOrb::new())}
         ,
-        "align" => FunctionProxy {function: Box::new(crate::align::DarvisAlign::new())}
-        ,
         "vis" => FunctionProxy {function: Box::new(crate::vis::DarvisVis::new(id.clone()))}
         ,
-        "opflow_extract" => FunctionProxy {function: Box::new(crate::opflow::DarvisOpFlow::new())}
+        "tracker" => FunctionProxy {function: Box::new(crate::tracker::DarvisTracker::new())}
+        ,
+        "frameloader" => FunctionProxy {function: Box::new(crate::frameloader::DarvisFrameLoader::new())}
         ,
         _ => FunctionProxy {function: Box::new(crate::pluginfunction::DarvisNone)}
         ,
