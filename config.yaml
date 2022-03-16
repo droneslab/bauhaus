@@ -35,21 +35,17 @@ modules:
        threads: 1
        possible_paths:
                       - 
-                       from: ImageRead
-                       to: Initilization
+                       from: FRAME_LOADER
+                       to: TRACKER
                        input: images
                        output: feature vectors
-                      -
-                       from: ImageRead
-                       to: ImageAlignment
-                       input: images
-                       output: feature vectors
+
 
       -
        name: TRACKER
        file: tracker
-       actor_message: TrackerMsg
-       actor_function: tracker
+       actor_message: TrackerMsgKLT
+       actor_function: tracker_klt
        address: localhost
        port: !!str 7778
        multithreaded: false

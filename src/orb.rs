@@ -6,6 +6,7 @@ use opencv::{
 use axiom::prelude::*;
 use crate::dvutils::*;
 use crate::tracker::*;
+use crate::tracker_klt::*;
 
 use crate::base::*;
 
@@ -40,8 +41,23 @@ pub fn orb_extract(&mut self, _context: Context, message: Message) -> ActorResul
 
         let align_id = msg.get_actor_ids().get(TRACKER).unwrap();
 
-        align_id.send_new(TrackerMsg::new(msg.get_frame().clone(), kp1.darvis_vector_of_keypoint(), des1.grayscale_mat(), msg.get_actor_ids().clone())).unwrap();
+        let traker_msg: String = get_global_param(&TRACKER.to_string(), &"actor_message".to_string());
 
+        match traker_msg.as_ref()
+        {
+            "TrackerMsg" => {align_id.send_new(TrackerMsg::new(kp1.darvis_vector_of_keypoint(), des1.grayscale_mat(), msg.get_actor_ids().clone())).unwrap();
+            }
+            ,
+            "TrackerMsgKLT" => {align_id.send_new(TrackerMsgKLT::new(msg.get_frame().clone(), kp1.darvis_vector_of_keypoint(), des1.grayscale_mat(), msg.get_actor_ids().clone())).unwrap();
+            }
+            ,
+            _ => {
+                println!("Invalid Message type: selecting TrackerMsg");
+                align_id.send_new(TrackerMsg::new(kp1.darvis_vector_of_keypoint(), des1.grayscale_mat(), msg.get_actor_ids().clone())).unwrap();
+
+                }
+            ,
+        }
     }
     Ok(Status::done(()))
   }
