@@ -19,17 +19,14 @@ use crate::actornames::*;
 // Message type for this actor
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TrackerMsg {
-    // Vector of image paths to read in/extract
-    pub img1: DVMatrixGrayscale,
     pub img1_kps: DVVectorOfKeyPoint,
     pub img1_des: DVMatrixGrayscale,
     pub actor_ids: std::collections::HashMap<String, axiom::actors::Aid>,
 }
 
 impl TrackerMsg {
-    pub fn new(image1: DVMatrixGrayscale, kps1: DVVectorOfKeyPoint, des1: DVMatrixGrayscale, ids: std::collections::HashMap<String, axiom::actors::Aid>) -> Self {
+    pub fn new(kps1: DVVectorOfKeyPoint, des1: DVMatrixGrayscale, ids: std::collections::HashMap<String, axiom::actors::Aid>) -> Self {
         Self {
-            img1 : image1,
             img1_kps: kps1,
             img1_des: des1,
             actor_ids: ids,
@@ -69,7 +66,6 @@ pub fn align(&mut self, _context: Context, message: Message) -> ActorResult<()> 
     if let Some(msg) = message.content_as::<TrackerMsg>() {
         // Convert back to cv structures
 
-        let img1 = msg.img1.grayscale_to_cv_mat();
         let kp1 =  msg.img1_kps.cv_vector_of_keypoint();
         let des1 = msg.img1_des.grayscale_to_cv_mat();
         
@@ -99,7 +95,6 @@ pub fn align(&mut self, _context: Context, message: Message) -> ActorResult<()> 
             self.first_frame = false;
         }
         //println!("Tracking done!");
-        self.prev_frame = img1;
         self.prev_kps = kp1;
         self.prev_des = des1;
     }

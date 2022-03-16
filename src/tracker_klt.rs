@@ -14,29 +14,29 @@ use crate::dvutils::*;
 use crate::base::*;
 use crate::vis::*;
 use crate::actornames::*;
-use crate::tracker::TrackerMsg;
 
 
-// // Message type for this actor
-// #[derive(Debug, Serialize, Deserialize)]
-// pub struct TrackerMsg {
-//     // Vector of image paths to read in/extract
-//     img1: DVMatrixGrayscale,
-//     img1_kps: DVVectorOfKeyPoint,
-//     img1_des: DVMatrixGrayscale,
-//     actor_ids: std::collections::HashMap<String, axiom::actors::Aid>,
-// }
 
-// impl TrackerMsg {
-//     pub fn new(image1: DVMatrixGrayscale, kps1: DVVectorOfKeyPoint, des1: DVMatrixGrayscale, ids: std::collections::HashMap<String, axiom::actors::Aid>) -> Self {
-//         Self {
-//             img1 : image1,
-//             img1_kps: kps1,
-//             img1_des: des1,
-//             actor_ids: ids,
-//         }
-//     }
-// }
+// Message type for this actor
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TrackerMsgKLT {
+    // Vector of image paths to read in/extract
+    pub img1: DVMatrixGrayscale,
+    pub img1_kps: DVVectorOfKeyPoint,
+    pub img1_des: DVMatrixGrayscale,
+    pub actor_ids: std::collections::HashMap<String, axiom::actors::Aid>,
+}
+
+impl TrackerMsgKLT {
+    pub fn new(image1: DVMatrixGrayscale, kps1: DVVectorOfKeyPoint, des1: DVMatrixGrayscale, ids: std::collections::HashMap<String, axiom::actors::Aid>) -> Self {
+        Self {
+            img1 : image1,
+            img1_kps: kps1,
+            img1_des: des1,
+            actor_ids: ids,
+        }
+    }
+}
 
 
 
@@ -67,7 +67,7 @@ impl DarvisTrackerKLT
     // This is the handler that will be used by the actor.
 // This is the handler that will be used by the actor.
 pub fn align(&mut self, _context: Context, message: Message) -> ActorResult<()> {
-    if let Some(msg) = message.content_as::<TrackerMsg>() {
+    if let Some(msg) = message.content_as::<TrackerMsgKLT>() {
         // Convert back to cv structures
 
         let img1 = msg.img1.grayscale_to_cv_mat();
