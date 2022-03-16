@@ -31,6 +31,10 @@ pub fn getmethod(fnname: &String, id: &String) -> FunctionProxy
         ,
         "frameloader" => FunctionProxy {function: Box::new(crate::frameloader::DarvisFrameLoader::new())}
         ,
+        "fast_extract" => FunctionProxy {function: Box::new(crate::fast::DarvisFast::new())}
+        ,
+        "tracker_klt" => FunctionProxy {function: Box::new(crate::tracker_klt::DarvisTrackerKLT::new())}
+        ,
         _ => FunctionProxy {function: Box::new(crate::pluginfunction::DarvisNone)}
         ,
     }

@@ -1,4 +1,6 @@
 ///How to add a new actor to the framework
+// Use Following command to generate documentation: 
+//                cargo doc --lib --no-deps --document-private-items --open 
 /// * For comprehensive example refer to [`darvis::vis`](../vis/index.html)
 /// 1) Create a new feature source file in src directory
 /// 2) Import following crates to use actor framwork

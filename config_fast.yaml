@@ -26,9 +26,9 @@ modules:
                        output: feature vectors
       -
        name: FEATURE_EXTRACTOR
-       file: orb
+       file: fast
        actor_message: FrameMsg
-       actor_function: orb_extract
+       actor_function: fast_extract
        address: locahost
        port: !!str 7777
        multithreaded: false
@@ -47,9 +47,9 @@ modules:
 
       -
        name: TRACKER
-       file: tracker
+       file: tracker_klt
        actor_message: TrackerMsg
-       actor_function: tracker
+       actor_function: tracker_klt
        address: localhost
        port: !!str 7778
        multithreaded: false

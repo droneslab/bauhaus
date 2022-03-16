@@ -27,6 +27,8 @@ mod registerplugin;
 mod opflow;
 mod frameloader;
 mod actornames;
+mod fast;
+mod tracker_klt;
 
 use actornames::*;
 
