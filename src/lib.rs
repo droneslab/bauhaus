@@ -33,3 +33,9 @@ pub mod frameloader;
 
 /// Static variables for Names of the actors to be used while sending message
 pub mod actornames;
+
+/// FAST Feature extraction 
+pub mod fast;
+
+/// Tracker with KLT
+pub mod tracker_klt;
