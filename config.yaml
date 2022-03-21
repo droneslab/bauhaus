@@ -2,6 +2,7 @@ master:
        name: manager
        address: localhost
        file: main.rs
+       show_ui: false
 
 modules:
       -
