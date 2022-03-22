@@ -40,3 +40,5 @@ pub mod fast;
 /// Tracker with KLT
 pub mod tracker_klt;
 
+/// SIFT Feature extraction
+pub mod sift;

@@ -29,6 +29,7 @@ mod frameloader;
 mod actornames;
 mod fast;
 mod tracker_klt;
+mod sift;
 
 use actornames::*;
 

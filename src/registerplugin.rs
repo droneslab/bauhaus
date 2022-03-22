@@ -35,6 +35,8 @@ pub fn getmethod(fnname: &String, id: &String) -> FunctionProxy
         ,
         "tracker_klt" => FunctionProxy {function: Box::new(crate::tracker_klt::DarvisTrackerKLT::new())}
         ,
+        "sift_extract" => FunctionProxy {function: Box::new(crate::sift::DarvisSift::new())}
+        ,
         _ => FunctionProxy {function: Box::new(crate::pluginfunction::DarvisNone)}
         ,
     }
