@@ -11,7 +11,7 @@ use crate::base::*;
 use crate::vis::*;
 use crate::actornames::*;
 
-
+use std::time::{Duration, Instant};
 
 
 
@@ -47,23 +47,25 @@ impl ImagesMsg {
 #[derive(Debug, Clone)]
 pub struct DarvisFrameLoader
 {
-    fps: i32
+    fps: f32
 }
 
 impl DarvisFrameLoader
 {
     pub fn new() -> DarvisFrameLoader {
         DarvisFrameLoader {
-            fps: 20
+            fps: 20.0
         }
     }
     // This is the handler that will be used by the actor.
 // This is the handler that will be used by the actor.
 pub fn load_frames(&mut self, _context: Context, message: Message) -> ActorResult<()> {
 
+    let mut prev = Instant::now();
     if let Some(msg) = message.content_as::<ImagesMsg>() {
         for path in msg.get_img_paths() {
 
+            let mut processed = false;
 
             let img = imgcodecs::imread(&path, imgcodecs::IMREAD_GRAYSCALE)?;
 
@@ -75,7 +77,19 @@ pub fn load_frames(&mut self, _context: Context, message: Message) -> ActorResul
             // Kickoff the pipeline by sending the feature extraction module images
             feat_aid.send_new(FrameMsg::new(img.grayscale_mat(), msg.actor_ids.clone())).unwrap();
 
- 
+
+            while !processed
+            {
+                let time_elapsed = prev.elapsed();            
+                if time_elapsed.as_secs_f32()> 1.0/self.fps
+                {
+                    processed = true;    
+                    prev = Instant::now();          
+    
+                }                
+            }            
+
+
         }
     }
         Ok(Status::done(()))

@@ -44,8 +44,8 @@ modules:
       -
        name: TRACKER
        file: tracker
-       actor_message: TrackerMsgKLT
-       actor_function: tracker_klt
+       actor_message: TrackerMsg
+       actor_function: tracker
        address: localhost
        port: !!str 7778
        multithreaded: false
