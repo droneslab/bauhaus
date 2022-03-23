@@ -33,30 +33,6 @@ mod tracker_klt;
 use actornames::*;
 
 
-
-
-fn initialize_config(config_file: &String) {
-    // Load the config file 
-    let mut conf_str = String::new();
-    config::read_config_file(&mut conf_str, &config_file);
-
-    // Get configuration for each actor (aka the "modules" of the system)
-    let mut modules = Vec::<base::ActorConf>::new();
-    config::load_config(&mut conf_str, &mut modules);
-    for actor_conf in modules {
-        let actname = actor_conf.name.clone();
-        let filenm = format!("{}_file", &actname);
-        let actor_message = format!("{}_actor_message", &actname);
-        let actor_function = format!("{}_actor_function", &actname);
-
-        let mut _map = GLOBAL_MAP.write().unwrap();
-
-        _map.insert(filenm, actor_conf.file.clone());
-        _map.insert(actor_message, actor_conf.actor_message.clone());
-        _map.insert(actor_function, actor_conf.actor_function.clone());
-    }
-}
-
 fn main() {
 
     env_logger::builder() 
@@ -76,7 +52,9 @@ fn main() {
     let config_file = args[2].to_owned();
 
     // Populate global config parameters
-    initialize_config(&config_file);
+    // Get configuration for each actor (aka the "modules" of the system)
+    let mut modules = Vec::<base::ActorConf>::new();
+    config::load_config(&config_file, &mut modules);
 
     let mut glob_str = img_dir.to_owned();
     glob_str.push_str("/*.png");
@@ -93,14 +71,6 @@ fn main() {
         }
     }
     
-    // Load the config file 
-    let mut conf_str = String::new();
-    config::read_config_file(&mut conf_str, &config_file);
-
-    // Get configuration for each actor (aka the "modules" of the system)
-    let mut modules = Vec::<base::ActorConf>::new();
-    config::load_config(&mut conf_str, &mut modules);
-
     //TODO: Use Cluster manager to do remote agent calls
 
     let mut systems  = HashMap::<String, ActorSystem>::new();
