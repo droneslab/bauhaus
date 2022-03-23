@@ -11,7 +11,7 @@ use crate::tracker_klt::*;
 use crate::base::*;
 
 
-use crate::actornames::*;
+use crate::config::*;
 
 
 use crate::pluginfunction::*;
@@ -36,6 +36,8 @@ pub fn orb_extract(&mut self, _context: Context, message: Message) -> ActorResul
         let img1 = msg.get_frame().grayscale_to_cv_mat();
 
         let mut orb: PtrOfORB =  ORB::default().unwrap();
+
+        set_extractor_settings(&mut orb);
 
         orb.detect_and_compute(&img1,&Mat::default(), &mut kp1, &mut des1, false).unwrap();
 
@@ -64,6 +66,23 @@ pub fn orb_extract(&mut self, _context: Context, message: Message) -> ActorResul
 
 }
 
+fn set_extractor_settings(orb: &mut PtrOfORB) {
+    let max_features: i32 = GLOBAL_PARAMS.get(SYSTEM_SETTINGS.to_string(), "max_features".to_string());
+    let scale_factor: f64 = GLOBAL_PARAMS.get(SYSTEM_SETTINGS.to_string(), "scale_factor".to_string());
+    let n_levels: i32 = GLOBAL_PARAMS.get(SYSTEM_SETTINGS.to_string(), "n_levels".to_string());
+    let fast_threshold: i32 = GLOBAL_PARAMS.get(SYSTEM_SETTINGS.to_string(), "fast_threshold".to_string());
+
+    let res1 = orb.set_max_features(max_features);
+    let res2 = orb.set_max_features(max_features);
+    let res3 = orb.set_scale_factor(scale_factor);
+    let res4 = orb.set_n_levels(n_levels);
+    let res5 = orb.set_fast_threshold(fast_threshold);
+
+    if res1.is_err() || res2.is_err() || res3.is_err() || res4.is_err() || res5.is_err() {
+        println!("Error setting ORB extractor options from config");
+    }
+
+}
 
 impl Function for DarvisOrb {
 

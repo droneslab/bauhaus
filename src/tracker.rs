@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use crate::dvutils::*;
 use crate::base::*;
 use crate::vis::*;
-use crate::actornames::*;
+use crate::config::*;
 
 
 // Message type for this actor

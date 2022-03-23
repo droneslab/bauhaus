@@ -7,7 +7,10 @@ pub mod orb;
 /// Alignment of two frames and getting alignment translation and rotation.
 pub mod tracker;
 
-/// Configuration file handling utilities.
+/// Handles logic to load data from config file.
+pub mod load_config;
+
+/// Utilities to get/set global configuration parameters
 pub mod config;
 
 /// Visualization of the Frames and Trajectory traced
@@ -30,9 +33,6 @@ pub mod opflow;
 
 /// Frame Loader to load frames and stream to the Feature Extraction actor
 pub mod frameloader;
-
-/// Static variables for Names of the actors to be used while sending message
-pub mod actornames;
 
 /// FAST Feature extraction 
 pub mod fast;

@@ -3,17 +3,12 @@ use opencv::{
     imgcodecs,
 };
 
-
 use axiom::prelude::*;
 use serde::{Deserialize, Serialize};
 use crate::dvutils::*;
 use crate::base::*;
 use crate::vis::*;
-use crate::actornames::*;
-
-
-
-
+use crate::config::*;
 
 // Message type for the actor
 #[derive(Debug, Serialize, Deserialize)]
@@ -41,9 +36,6 @@ impl ImagesMsg {
     }
 }
 
-
-
-
 #[derive(Debug, Clone)]
 pub struct DarvisFrameLoader
 {
@@ -62,6 +54,7 @@ impl DarvisFrameLoader
 pub fn load_frames(&mut self, _context: Context, message: Message) -> ActorResult<()> {
 
     if let Some(msg) = message.content_as::<ImagesMsg>() {
+        let use_visualizer = GLOBAL_PARAMS.get(SYSTEM_SETTINGS.to_string(), "show_ui".to_string());
         for path in msg.get_img_paths() {
 
 
@@ -71,7 +64,9 @@ pub fn load_frames(&mut self, _context: Context, message: Message) -> ActorResul
 
             let feat_aid = msg.actor_ids.get(FEATURE_EXTRACTOR).unwrap();
             println!("Processed image: {}", path);
-            vis_id.send_new(VisPathMsg::new(path.to_string())).unwrap();
+            if use_visualizer{
+                vis_id.send_new(VisPathMsg::new(path.to_string())).unwrap();
+            }
             // Kickoff the pipeline by sending the feature extraction module images
             feat_aid.send_new(FrameMsg::new(img.grayscale_mat(), msg.actor_ids.clone())).unwrap();
 
@@ -80,12 +75,7 @@ pub fn load_frames(&mut self, _context: Context, message: Message) -> ActorResul
     }
         Ok(Status::done(()))
     }
-
-    
 }
-
-
-
 
 use crate::pluginfunction::Function;
 

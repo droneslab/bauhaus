@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use crate::dvutils::*;
 use crate::base::*;
 use crate::vis::*;
-use crate::actornames::*;
+use crate::config::*;
 
 
 
@@ -104,7 +104,6 @@ pub fn align(&mut self, _context: Context, message: Message) -> ActorResult<()> 
         }
         else
         {
-            println!("First Image ");
             self.first_frame = false;
             let pt_indx = opencv::types::VectorOfi32::new();
             let mut prev_points = VectorOfPoint2f::new();

@@ -20,17 +20,17 @@ mod base;
 mod orb;
 mod tracker;
 mod dvutils;
-mod config;
+mod load_config;
 mod vis;
 mod pluginfunction;
 mod registerplugin;
 mod opflow;
 mod frameloader;
-mod actornames;
+mod config;
 mod fast;
 mod tracker_klt;
 
-use actornames::*;
+use config::*;
 
 
 fn main() {
@@ -54,7 +54,7 @@ fn main() {
     // Populate global config parameters
     // Get configuration for each actor (aka the "modules" of the system)
     let mut modules = Vec::<base::ActorConf>::new();
-    config::load_config(&config_file, &mut modules);
+    load_config::load_config(&config_file, &mut modules);
 
     let mut glob_str = img_dir.to_owned();
     glob_str.push_str("/*.png");
