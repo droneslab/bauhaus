@@ -41,7 +41,7 @@ pub fn orb_extract(&mut self, _context: Context, message: Message) -> ActorResul
 
         let align_id = msg.get_actor_ids().get(TRACKER).unwrap();
 
-        let traker_msg: String = get_global_param(&TRACKER.to_string(), &"actor_message".to_string());
+        let traker_msg: String = GLOBAL_PARAMS.get(TRACKER.to_string(), "actor_message".to_string());
 
         match traker_msg.as_ref()
         {
