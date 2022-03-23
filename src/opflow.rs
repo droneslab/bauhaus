@@ -16,7 +16,7 @@ use crate::vis::*;
 use crate::base::*;
 use crate::frameloader::*;
 
-use crate::actornames::*;
+use crate::config::*;
 
 
 use crate::pluginfunction::*;

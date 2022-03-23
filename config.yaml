@@ -4,7 +4,29 @@ master:
        file: main.rs
 
 system_settings:
-       show_ui: false
+       show_ui: true
+
+      # CAMERA CALIBRATION
+       camera_fx: 718.856
+       camera_fy: 718.856
+       camera_cx: 607.1928
+       camera_cy: 185.2157
+       camera_k1: 0.0
+       camera_k2: 0.0
+       camera_p1: 0.0
+       camera_p2: 0.0
+       camera_width: 1241
+       camera_height: 376
+       fps: 10.0
+       camera_bf: 386.1448
+       thdepth: 35
+      #  depth_map_factor:
+      #  ORB FEATURE DETECTION
+       max_features: 2000
+       scale_factor: 1.2
+       n_levels: 8
+       fast_threshold: 20
+
 
 modules:
       -
@@ -47,8 +69,8 @@ modules:
       -
        name: TRACKER
        file: tracker
-       actor_message: TrackerMsgKLT
-       actor_function: tracker_klt
+       actor_message: TrackerMsg
+       actor_function: tracker
        address: localhost
        port: !!str 7778
        multithreaded: false

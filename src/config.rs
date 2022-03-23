@@ -1,72 +1,107 @@
-extern crate yaml_rust;
-
-use yaml_rust::yaml;
-use yaml_rust::yaml::Yaml;
-use std::fs::File;
+use lazy_static::*;
 use std::collections::HashMap;
-use std::io::Read;
 
-use crate::actornames::*;
-use crate::base;
+pub static FRAME_LOADER: &str = "FRAME_LOADER";
+pub static FEATURE_EXTRACTOR: &str = "FEATURE_EXTRACTOR";
+pub static TRACKER: &str = "TRACKER";
+pub static VISUALIZER: &str = "VISUALIZER";
+pub static SYSTEM_SETTINGS: &str = "SYSTEM_SETTINGS"; 
 
-
-pub fn load_config(config_file: &String, all_modules: &mut Vec<base::ActorConf>) {
-    let mut config_as_string = String::new();
-    read_config_file(&mut config_as_string, &config_file);
-
-    let yaml_document = &yaml::YamlLoader::load_from_str(&config_as_string).unwrap()[0];
-    load_module_info(yaml_document, all_modules);
-    load_system_settings(yaml_document);
+pub trait OverloadedConfigParams<T> {
+    fn get_value_from_box(&self, boxed_value : &ConfigValueBox) -> T;
+    fn make_box_from_value(&self, value: T) -> ConfigValueBox;
 }
 
-fn read_config_file(str: &mut String, file_name: &String) {
-    let mut f = File::open(file_name).unwrap();
-    f.read_to_string(str).unwrap();
- }
- 
-fn load_system_settings(doc: &Yaml) {
-    println!("SYSTEM SETTINGS");
-
-    let system_settings = &doc["system_settings"];
-
-    let show_ui = system_settings["show_ui"].as_bool().unwrap();
-    GLOBAL_PARAMS.insert(SYSTEM_SETTINGS.to_string(), show_ui);
-    println!("\t show_ui: {}", show_ui);
+pub struct ConfigValueBox {
+    string_field: Option<String>,
+    bool_field: Option<bool>,
+    float_field: Option<f64>,
+    int_field: Option<i32>
 }
 
-fn load_module_info(doc: &Yaml, all_modules: &mut Vec<base::ActorConf>) {
-    let v = doc["modules"].as_vec().unwrap();
+pub struct GlobalParams {
+    // Sofiya: Not sure that lock is necessary here
+    // config only ever written by 1 thread at the beginning
+    pub params: std::sync::RwLock<HashMap<String, ConfigValueBox>>,
+}
 
-    for i in 0..v.len() {
-        let h = &v[i].as_hash().unwrap();
-        let mut mconf = base::ActorConf::default();
-        mconf.name = h[&Yaml::String("name".to_string())].as_str().unwrap().to_string();
-        mconf.file = h[&Yaml::String("file".to_string())].as_str().unwrap().to_string();
-        mconf.actor_message = h[&Yaml::String("actor_message".to_string())].as_str().unwrap().to_string();
-        mconf.actor_function = h[&Yaml::String("actor_function".to_string())].as_str().unwrap().to_string();
-        mconf.ip_address = h[&Yaml::String("address".to_string())].as_str().unwrap().to_string();
-        mconf.port = h[&Yaml::String("port".to_string())].as_str().unwrap().to_string();
-        mconf.multithreaded = h[&Yaml::String("multithreaded".to_string())].as_bool().unwrap();
-        mconf.threads = h[&Yaml::String("threads".to_string())].as_i64().unwrap();
-        let paths = &h[&Yaml::String("possible_paths".to_string())].as_vec().unwrap();
-        let mut hmap = HashMap::<String, String>::new();
-        for p in 0..paths.len() {
-            let path = paths[p].as_hash().unwrap();
-            hmap.insert(path[&Yaml::String("from".to_string())].as_str().unwrap().to_string()
-                                        , path[&Yaml::String("to".to_string())].as_str().unwrap().to_string());
-        }
-        mconf.possible_paths = hmap;
-        all_modules.push(mconf.clone());
+lazy_static! {
+    #[derive(Debug)]
+    pub static ref GLOBAL_PARAMS: GlobalParams = GlobalParams {
+        params: std::sync::RwLock::new(HashMap::new())
+    };
+}
 
+impl GlobalParams {
+    // Search code for GLOBAL_PARAMS.insert and GLOBAL_PARAMS.get for examples 
+    pub fn get<T>(&self, module : String, param: String) -> T
+    where Self: OverloadedConfigParams<T> {
+        let key = format!("{}_{}", module, param);
+        let unlocked_params = GLOBAL_PARAMS.params.read().unwrap();
+        let boxed_value = unlocked_params.get(&key).unwrap();
+        return self.get_value_from_box(boxed_value);
+    }
+    pub fn insert<T>(&self, key_module: String, key_param: String, value: T)
+    where Self: OverloadedConfigParams<T> {
+        let key = format!("{}_{}", key_module, key_param);
+        let value = self.make_box_from_value(value);
+        let mut unlocked_params = GLOBAL_PARAMS.params.write().unwrap();
+        unlocked_params.insert(key, value);
+    }
+}
 
-        let actname = mconf.name.clone();
-        let filenm = format!("{}_file", &actname);
-        let actor_message = format!("{}_actor_message", &actname);
-        let actor_function = format!("{}_actor_function", &actname);
+impl OverloadedConfigParams<String> for GlobalParams {
+    fn get_value_from_box(&self, boxed_value : &ConfigValueBox) -> String {
+        return boxed_value.string_field.as_ref().unwrap().to_string();
+    }
+    fn make_box_from_value(&self, value: String) -> ConfigValueBox {
+        return ConfigValueBox {
+            string_field: Some(value.clone()),
+            bool_field: None,
+            float_field: None,
+            int_field: None
+        };
+    }
+}
 
-        println!("{}", &filenm);
-        GLOBAL_PARAMS.insert(filenm, mconf.file);
-        GLOBAL_PARAMS.insert(actor_message, mconf.actor_message);
-        GLOBAL_PARAMS.insert(actor_function, mconf.actor_function);
+impl OverloadedConfigParams<bool> for GlobalParams {
+    fn get_value_from_box(&self, boxed_value : &ConfigValueBox) -> bool {
+        return *boxed_value.bool_field.as_ref().unwrap();
+    }
+    fn make_box_from_value(&self, value: bool) -> ConfigValueBox  {
+        return ConfigValueBox {
+            string_field: None,
+            bool_field: Some(value),
+            float_field: None,
+            int_field: None
+        };
+    }
+}
+
+impl OverloadedConfigParams<f64> for GlobalParams {
+    fn get_value_from_box(&self, boxed_value : &ConfigValueBox) -> f64 {
+        return *boxed_value.float_field.as_ref().unwrap();
+    }
+    fn make_box_from_value(&self, value: f64) -> ConfigValueBox  {
+        return ConfigValueBox {
+            string_field: None,
+            bool_field: None,
+            float_field: Some(value),
+            int_field: None
+        };
+    }
+}
+
+impl OverloadedConfigParams<i32> for GlobalParams {
+    fn get_value_from_box(&self, boxed_value : &ConfigValueBox) -> i32 {
+        return *boxed_value.int_field.as_ref().unwrap();
+    }
+    fn make_box_from_value(&self, value: i32) -> ConfigValueBox  {
+        return ConfigValueBox {
+            string_field: None,
+            bool_field: None,
+            float_field: None,
+            int_field: Some(value)
+        };
     }
 }
