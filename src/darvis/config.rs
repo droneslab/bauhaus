@@ -1,10 +1,6 @@
 use lazy_static::*;
 use std::collections::HashMap;
 
-pub static FRAME_LOADER: &str = "FRAME_LOADER";
-pub static FEATURE_EXTRACTOR: &str = "FEATURE_EXTRACTOR";
-pub static TRACKER: &str = "TRACKER";
-pub static VISUALIZER: &str = "VISUALIZER";
 pub static SYSTEM_SETTINGS: &str = "SYSTEM_SETTINGS"; 
 
 pub trait OverloadedConfigParams<T> {
@@ -20,8 +16,8 @@ pub struct ConfigValueBox {
 }
 
 pub struct GlobalParams {
-    // Sofiya: Not sure that lock is necessary here
-    // config only ever written by 1 thread at the beginning
+    // Lock is necessary because GLOBAL_PARAMS is a static variable
+    // https://stackoverflow.com/questions/34832583/global-mutable-hashmap-in-a-library
     pub params: std::sync::RwLock<HashMap<String, ConfigValueBox>>,
 }
 

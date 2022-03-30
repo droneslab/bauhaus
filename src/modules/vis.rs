@@ -1,18 +1,16 @@
 use opencv::{
     prelude::*,
     core,
-    features2d,
-    features2d::{Feature2DTrait, ORB},
     highgui,
     imgproc,
-    videoio,
     imgcodecs,
-    types::{PtrOfORB, VectorOfKeyPoint},
 };
 use axiom::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::base::Pose;
+use darvis::base::Pose;
+use darvis::plugin_functions::Function;
+use darvis::dvutils::*;
 
 
 /// Public message struct for the actor
@@ -49,10 +47,6 @@ impl VisPathMsg {
     }
 }
 
-
-use crate::pluginfunction::Function;
-
-use crate::dvutils::*;
 
 #[derive(Debug, Clone)]
 /// Vis state data

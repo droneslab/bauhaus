@@ -13,42 +13,15 @@ use crate::base;
 pub fn load_config(config_file: &String, all_modules: &mut Vec<base::ActorConf>) {
     let mut config_as_string = String::new();
     read_config_file(&mut config_as_string, &config_file);
-
     let yaml_document = &yaml::YamlLoader::load_from_str(&config_as_string).unwrap()[0];
     load_module_info(yaml_document, all_modules);
-    load_system_settings(yaml_document);
 }
 
-fn read_config_file(str: &mut String, file_name: &String) {
+pub fn read_config_file(str: &mut String, file_name: &String) {
     let mut f = File::open(file_name).unwrap();
     f.read_to_string(str).unwrap();
  }
  
-fn load_system_settings(doc: &Yaml) {
-    println!("SYSTEM SETTINGS");
-
-    let system_settings = &doc["system_settings"];
-
-    let show_ui = system_settings["show_ui"].as_bool().unwrap();
-    GLOBAL_PARAMS.insert(SYSTEM_SETTINGS.to_string(), "show_ui".to_string(), show_ui);
-    println!("\t show_ui: {}", show_ui);
-
-    let max_features: i32 = system_settings["max_features"].as_i64().unwrap() as i32;
-    GLOBAL_PARAMS.insert(SYSTEM_SETTINGS.to_string(), "max_features".to_string(), max_features);
-    println!("\t orb extractor: max_features: {}", max_features);
-
-    let scale_factor: f64 = system_settings["scale_factor"].as_f64().unwrap();
-    GLOBAL_PARAMS.insert(SYSTEM_SETTINGS.to_string(), "scale_factor".to_string(), scale_factor);
-    println!("\t orb extractor: scale_factor: {}", scale_factor);
-
-    let n_levels: i32 = system_settings["n_levels"].as_i64().unwrap() as i32;
-    GLOBAL_PARAMS.insert(SYSTEM_SETTINGS.to_string(), "n_levels".to_string(), n_levels);
-    println!("\t orb extractor: n_levels: {}", n_levels);
-
-    let fast_threshold: i32 = system_settings["fast_threshold"].as_i64().unwrap() as i32;
-    GLOBAL_PARAMS.insert(SYSTEM_SETTINGS.to_string(), "fast_threshold".to_string(), fast_threshold);
-    println!("\t orb extractor: fast_threshold: {}", fast_threshold);
-}
 
 fn load_module_info(doc: &Yaml, all_modules: &mut Vec<base::ActorConf>) {
     let v = doc["modules"].as_vec().unwrap();

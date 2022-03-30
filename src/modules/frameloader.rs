@@ -1,14 +1,18 @@
+use axiom::prelude::*;
+use serde::{Deserialize, Serialize};
+
 // Accepts a message of two image extracted data (kps, des), computes homography
 use opencv::{
     imgcodecs,
 };
 
-use axiom::prelude::*;
-use serde::{Deserialize, Serialize};
-use crate::dvutils::*;
-use crate::base::*;
-use crate::vis::*;
-use crate::config::*;
+use darvis::base::*;
+use darvis::config::*;
+use darvis::dvutils::*;
+use darvis::plugin_functions::Function;
+
+use crate::registered_modules::{VISUALIZER, FEATURE_EXTRACTOR};
+use crate::modules::vis::*;
 
 // Message type for the actor
 #[derive(Debug, Serialize, Deserialize)]
@@ -76,8 +80,6 @@ pub fn load_frames(&mut self, _context: Context, message: Message) -> ActorResul
         Ok(Status::done(()))
     }
 }
-
-use crate::pluginfunction::Function;
 
 impl Function for DarvisFrameLoader {
 
