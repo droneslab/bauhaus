@@ -21,7 +21,7 @@
 /// ```
 /// 4) Import following crates used for Darvis framwork integration trait implementation
 /// ```
-/// use crate::pluginfunction::Function;
+/// use crate::plugin_functions::Function;
 /// use crate::dvutils::*;
 /// ```
 /// 5) Implement new function to create an instance
@@ -72,7 +72,7 @@ pub fn How_to_Add_a_new_Feature()
 
 /// Once the new actor is implemented, you need to register it to the framework, in order to be used.
 /// 
-/// Modify the registerplugin.rs getmethod function by adding new entry in the pattern match control statement
+/// Modify the register_modules.rs getmethod function by adding new entry in the pattern match control statement
 /// ```
 /// pub fn getmethod(fnname: String, id: String) -> FunctionProxy
 /// {
@@ -84,7 +84,7 @@ pub fn How_to_Add_a_new_Feature()
 ///         "vis" => FunctionProxy {function: Box::new(crate::vis::DarvisVis::new(id))}
 ///  //      ,
 ///  //      Always add your entry Just above the _ pattern.
-///         _ => FunctionProxy {function: Box::new(crate::pluginfunction::DarvisNone)}
+///         _ => FunctionProxy {function: Box::new(crate::plugin_functions::DarvisNone)}
 ///         ,
 ///     }
 /// }

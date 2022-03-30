@@ -3,13 +3,7 @@
 use opencv::{
     prelude::*,
     core::*,
-    features2d,
-    features2d::{Feature2DTrait, ORB},
-    highgui,
-    imgproc,
-    videoio,
-    imgcodecs,
-    types::{PtrOfORB, VectorOfKeyPoint},
+    types::{VectorOfKeyPoint},
 };
 use serde::{Deserialize, Serialize};
 use std::convert::TryInto;

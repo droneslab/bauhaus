@@ -1,25 +1,18 @@
+use axiom::prelude::*;
+
 use opencv::{
     prelude::*,
     core,
-    features2d,
-    features2d::{Feature2DTrait},
-    highgui,
-    imgproc,
-    videoio,
     imgcodecs,
     types::{VectorOfKeyPoint, VectorOfPoint2f, VectorOfu8},
 };
-use axiom::prelude::*;
-use serde::{Deserialize, Serialize};
-use crate::dvutils::*;
-use crate::vis::*;
-use crate::base::*;
-use crate::frameloader::*;
 
-use crate::config::*;
+use darvis::base::*;
+use darvis::plugin_functions::*;
 
-
-use crate::pluginfunction::*;
+use crate::modules::frameloader::*;
+use crate::registered_modules::{VISUALIZER};
+use crate::modules::vis::VisPathMsg;
 
 
 #[derive(Debug, Clone)]

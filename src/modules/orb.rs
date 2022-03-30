@@ -1,22 +1,19 @@
+use axiom::prelude::*;
+
 use opencv::{
     prelude::*,
     features2d::{Feature2DTrait, ORB},
     types::{PtrOfORB, VectorOfKeyPoint},
 };
-use axiom::prelude::*;
-use crate::dvutils::*;
-use crate::tracker::*;
-use crate::tracker_klt::*;
 
-use crate::base::*;
+use darvis::base::*;
+use darvis::config::*;
+use darvis::dvutils::*;
+use darvis::plugin_functions::*;
 
-
-use crate::config::*;
-
-
-use crate::pluginfunction::*;
-
-
+use crate::registered_modules::{TRACKER};
+use crate::modules::tracker::*;
+use crate::modules::tracker_klt::*;
 
 
 #[derive(Debug, Clone)]
