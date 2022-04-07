@@ -16,6 +16,8 @@ use std::convert::TryInto;
 extern crate nalgebra as na;
 use na::*;
 
+use crate::base::*;
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct DarvisKeyPoint {
     p2f: Vec<f32>,
@@ -37,6 +39,23 @@ pub type DVVectorOfKeyPoint = Vec<DarvisKeyPoint>;
 pub type DVVector3 = na::Vector3<f64>;
 /// Used to handle 3x3 matrix 
 pub type DVMatrix3 = na::Matrix3<f64>;
+
+
+/// Used to handle 3x3 matrix 
+pub type DVVectorOfPose = na::Vector3<Pose>;
+
+/// Used to handle 3 dimentional column vector
+pub type DVVector2 = na::Vector2<f64>;
+
+pub type DVPoint2d = na::Point2<f64>;
+pub type DVPoint3d = na::Point3<f64>;
+
+pub type DVVectorOfPoint2d = na::DMatrix<f32>;
+
+pub type DVVectorOfPoint3d = na::DMatrix<f32>;
+
+
+pub type DVVectorOfMatchPair = na::MatrixXx2<i32>;
 
 
 /// Traits useful fo converting between OPENCV and Algebra library format.
@@ -197,4 +216,119 @@ impl DarvisVectorOfKeyPoint for DVVectorOfKeyPoint
     {
         self.clone()       
     }    
+}
+
+
+/// Traits useful fo converting between OPENCV and Algebra library format f32.
+pub trait CVProjectionMatrix
+{
+    fn get_projection_matrix(&self) -> Mat;
+    fn get_relative_projection_matrix(&self) -> Mat;
+    fn get_transformation_matrix(&self) -> Mat;
+    fn get_relative_transformation_matrix(&self) -> Mat;
+}
+
+impl CVProjectionMatrix for Pose
+{
+    fn get_projection_matrix(&self) -> Mat
+    {
+
+        let mut proj_mat = Mat::new_rows_cols_with_default(3,4 ,CV_32FC1, opencv::core::Scalar::all(0.0)).unwrap();
+
+        unsafe {
+            for i in 0..3
+            {
+                let r: usize = i.try_into().unwrap();
+                for j in 0..3
+                {
+                    
+                    let c: usize = j.try_into().unwrap();
+                    *proj_mat.at_2d_unchecked_mut::<f64>(i.try_into().unwrap(), j.try_into().unwrap()).unwrap() = self.rot[(r,c)];
+                    
+                }
+                *proj_mat.at_2d_unchecked_mut::<f64>(i.try_into().unwrap(), 3).unwrap() = self.pos[r];
+            }
+        
+        }
+
+        proj_mat
+    }
+    fn get_relative_projection_matrix(&self) -> Mat
+    {
+
+        let mut proj_mat = Mat::new_rows_cols_with_default(3,4 ,CV_32FC1, opencv::core::Scalar::all(0.0)).unwrap();
+
+        let rot_inverse = self.rot.transpose();
+        let trans_inverse = - rot_inverse * self.pos;
+        unsafe {
+            for i in 0..3
+            {
+                let r: usize = i.try_into().unwrap();
+                for j in 0..3
+                {
+                    
+                    let c: usize = j.try_into().unwrap();
+                    *proj_mat.at_2d_unchecked_mut::<f64>(i.try_into().unwrap(), j.try_into().unwrap()).unwrap() = rot_inverse[(r,c)];
+                    
+                }
+                *proj_mat.at_2d_unchecked_mut::<f64>(i.try_into().unwrap(), 3).unwrap() = trans_inverse[r];
+            }
+        
+        }
+
+        proj_mat
+    }
+
+    fn get_transformation_matrix(&self) -> Mat
+    {
+        let mut proj_mat = Mat::eye(4, 4, CV_32FC1).unwrap().to_mat().unwrap();
+
+        unsafe {
+            for i in 0..3
+            {
+                let r: usize = i.try_into().unwrap();
+                for j in 0..3
+                {
+                    
+                    let c: usize = j.try_into().unwrap();
+                    *proj_mat.at_2d_unchecked_mut::<f64>(i.try_into().unwrap(), j.try_into().unwrap()).unwrap() = self.rot[(r,c)];
+                    
+                }
+                *proj_mat.at_2d_unchecked_mut::<f64>(i.try_into().unwrap(), 3).unwrap() = self.pos[r];
+            }
+        
+        }
+
+        proj_mat
+
+    }
+
+    fn get_relative_transformation_matrix(&self) -> Mat
+    {
+        let mut proj_mat = Mat::eye(4, 4, CV_32FC1).unwrap().to_mat().unwrap();
+
+        let rot_inverse = self.rot.transpose();
+        let trans_inverse = - rot_inverse * self.pos;
+        unsafe {
+            for i in 0..3
+            {
+                let r: usize = i.try_into().unwrap();
+                for j in 0..3
+                {
+                    
+                    let c: usize = j.try_into().unwrap();
+                    *proj_mat.at_2d_unchecked_mut::<f64>(i.try_into().unwrap(), j.try_into().unwrap()).unwrap() = rot_inverse[(r,c)];
+                    
+                }
+                *proj_mat.at_2d_unchecked_mut::<f64>(i.try_into().unwrap(), 3).unwrap() = trans_inverse[r];
+            }
+        
+        }
+
+        proj_mat
+
+    }
+
+
+
 }

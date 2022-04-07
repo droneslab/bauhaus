@@ -72,4 +72,19 @@ modules:
                       to: KFDecision
                       input: feature vectors
                       output: frame, feature points
-  
+      -
+       name: TRIANGULATION
+       file: triangulation
+       actor_message: TriangulationMsg
+       actor_function: triangulate
+       address: localhost
+       port: !!str 7779
+       multithreaded: false
+       threads: 1
+       possible_paths:
+                     -
+                      from: FeatureDetection
+                      to: KFDecision
+                      input: feature vectors
+                      output: frame, feature points
+    

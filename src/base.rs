@@ -6,7 +6,7 @@ use std::collections::HashMap;
 
 use crate::dvutils::*;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Pose {
     // Position 3-Vector
     pub pos: DVVector3,

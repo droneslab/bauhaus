@@ -7,12 +7,30 @@ use opencv::{
     imgproc,
     videoio,
     imgcodecs,
-    types::{PtrOfORB, VectorOfKeyPoint},
+    types::{PtrOfORB, VectorOfKeyPoint, VectorOfPoint3d},
 };
 use axiom::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::base::Pose;
+
+
+
+/// Public message struct for the actor
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Vis3dMsg {
+
+    points3d: DVVectorOfPoint3d,
+}
+
+impl Vis3dMsg {
+    pub fn new(pts3d: DVVectorOfPoint3d) -> Self {
+        Self {
+            points3d: pts3d,
+        }
+    }
+}
+
 
 
 /// Public message struct for the actor
@@ -106,7 +124,7 @@ impl DarvisVis {
             let y_offset = 350 ;
             //let imtitle = "Estimated Trajectory".to_string();
 
-            imgproc::circle(&mut self.traj_img, core::Point_::new(x+x_offset, y+y_offset), 3, core::Scalar_([0.0, 0.0, 255.0, 0.0]), -1, 8, 0)?;
+            imgproc::circle(&mut self.traj_img, core::Point_::new(x+x_offset, y+y_offset), 3, core::Scalar::new(0.0, 0.0, 255.0, 0.0), -1, 8, 0)?;
             
 
 

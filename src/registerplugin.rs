@@ -37,6 +37,8 @@ pub fn getmethod(fnname: &String, id: &String) -> FunctionProxy
         ,
         "sift_extract" => FunctionProxy {function: Box::new(crate::sift::DarvisSift::new())}
         ,
+        "triangulate" => FunctionProxy {function: Box::new(crate::triangulation::DarvisTriangulator::new())}
+        ,
         _ => FunctionProxy {function: Box::new(crate::pluginfunction::DarvisNone)}
         ,
     }

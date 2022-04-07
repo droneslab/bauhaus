@@ -54,7 +54,7 @@ impl DarvisFrameLoader
 {
     pub fn new() -> DarvisFrameLoader {
         DarvisFrameLoader {
-            fps: 20.0
+            fps: 5.0
         }
     }
     // This is the handler that will be used by the actor.
@@ -62,9 +62,16 @@ impl DarvisFrameLoader
 pub fn load_frames(&mut self, _context: Context, message: Message) -> ActorResult<()> {
 
     let mut prev = Instant::now();
+
+    let mut indx=0;
     if let Some(msg) = message.content_as::<ImagesMsg>() {
         for path in msg.get_img_paths() {
 
+            indx = indx+1;
+            if indx % 3 !=0
+            {
+                continue;
+            }
             let mut processed = false;
 
             let img = imgcodecs::imread(&path, imgcodecs::IMREAD_GRAYSCALE)?;
@@ -77,7 +84,7 @@ pub fn load_frames(&mut self, _context: Context, message: Message) -> ActorResul
             // Kickoff the pipeline by sending the feature extraction module images
             feat_aid.send_new(FrameMsg::new(img.grayscale_mat(), msg.actor_ids.clone())).unwrap();
 
-
+            
             while !processed
             {
                 let time_elapsed = prev.elapsed();            

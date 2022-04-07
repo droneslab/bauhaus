@@ -42,3 +42,6 @@ pub mod tracker_klt;
 
 /// SIFT Feature extraction
 pub mod sift;
+
+/// Triangulation from 2d to 3d
+pub mod triangulation;

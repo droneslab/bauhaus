@@ -31,6 +31,9 @@ mod fast;
 mod tracker_klt;
 mod sift;
 
+mod triangulation;
+
+
 use actornames::*;
 
 
