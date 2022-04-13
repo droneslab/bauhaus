@@ -226,6 +226,8 @@ pub trait CVProjectionMatrix
     fn get_relative_projection_matrix(&self) -> Mat;
     fn get_transformation_matrix(&self) -> Mat;
     fn get_relative_transformation_matrix(&self) -> Mat;
+    fn get_rotation_matrix(&self) -> Mat;
+    fn get_translation_matrix(&self) -> Mat;
 }
 
 impl CVProjectionMatrix for Pose
@@ -329,6 +331,45 @@ impl CVProjectionMatrix for Pose
 
     }
 
+
+    fn get_rotation_matrix(&self) -> Mat
+    {
+        let mut rot_mat = Mat::eye(3, 3, CV_64FC1).unwrap().to_mat().unwrap();
+
+        unsafe {
+            for i in 0..3
+            {
+                let r: usize = i.try_into().unwrap();
+                for j in 0..3
+                {
+                    
+                    let c: usize = j.try_into().unwrap();
+                    *rot_mat.at_2d_unchecked_mut::<f64>(i.try_into().unwrap(), j.try_into().unwrap()).unwrap() = self.rot[(r,c)];
+                    
+                }
+            }
+        
+        }
+
+        rot_mat
+
+    }
+    fn get_translation_matrix(&self) -> Mat
+    {
+        let mut trans_mat = Mat::eye(3, 1, CV_64FC1).unwrap().to_mat().unwrap();
+
+        unsafe {
+            for i in 0..3
+            {
+                let r: usize = i.try_into().unwrap();
+                *trans_mat.at_2d_unchecked_mut::<f64>(i.try_into().unwrap(), 0).unwrap() = self.pos[r];
+            }
+        
+        }
+
+        trans_mat
+
+    }
 
 
 }

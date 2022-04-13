@@ -63,15 +63,10 @@ pub fn load_frames(&mut self, _context: Context, message: Message) -> ActorResul
 
     let mut prev = Instant::now();
 
-    let mut indx=0;
+
     if let Some(msg) = message.content_as::<ImagesMsg>() {
         for path in msg.get_img_paths() {
 
-            indx = indx+1;
-            if indx % 3 !=0
-            {
-                continue;
-            }
             let mut processed = false;
 
             let img = imgcodecs::imread(&path, imgcodecs::IMREAD_GRAYSCALE)?;
