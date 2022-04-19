@@ -1,13 +1,12 @@
 //For testing all the implemented features using cargo test --doc 
 
-/// Base data structures to be used across the framwork.
 pub mod base;
+
+/// Utilities to get/set global configuration parameters, 
+pub mod config;
 
 /// Handles logic to load data from config file.
 pub mod load_config;
-
-/// Utilities to get/set global configuration parameters
-pub mod config;
 
 /// Internal core framework trait/abstraction functions to be implemented. [NOTE] DO NOT MODIFY THIS FILE
 pub mod plugin_functions;
@@ -18,26 +17,5 @@ pub mod dvutils;
 /// This is documentation of all development and how to's to enable graceful enhancement.
 pub mod doc;
 
-// /// Orb Feature extraction 
-// pub mod orb;
-// /// Alignment of two frames and getting alignment translation and rotation.
-// pub mod tracker;
-
-// /// Visualization of the Frames and Trajectory traced
-// pub mod vis;
-
-// /// Register new plugins in this module.
-// pub mod register_modules;
-
-// /// Implemented optical flow feature extraction and tracking
-// pub mod opflow;
-
-// /// Frame Loader to load frames and stream to the Feature Extraction actor
-// pub mod frameloader;
-
-// /// FAST Feature extraction 
-// pub mod fast;
-
-// /// Tracker with KLT
-// pub mod tracker_klt;
-
+// Global map
+pub mod map;

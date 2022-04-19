@@ -7,36 +7,16 @@ use opencv::{
 };
 use axiom::prelude::*;
 use serde::{Deserialize, Serialize};
-
-use darvis::base::Pose;
-use darvis::plugin_functions::Function;
-use darvis::dvutils::*;
-
-
-/// Public message struct for the actor
-#[derive(Debug, Serialize, Deserialize)]
-pub struct VisMsg {
-    /// Pose of image paths to read in/extract, Poses take 2 matrixes, pos and rot <int type, # rows, # col, data storage?>
-    new_pose: Pose,
-    /// all actor ids
-    actor_ids: std::collections::HashMap<String, axiom::actors::Aid>
-}
-
-impl VisMsg {
-    pub fn new(pose: Pose, ids: std::collections::HashMap<String, axiom::actors::Aid>) -> Self {
-        Self {
-            new_pose: pose,
-            actor_ids: ids,
-        }
-    }
-}
-
+use darvis::{
+    plugin_functions::Function,
+    dvutils::*,
+};
+use crate::modules::messages::vis_msg::VisMsg;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct VisPathMsg {
     /// last processed image path.
     last_img_path: String
-    
 }
 
 impl VisPathMsg {
@@ -46,7 +26,6 @@ impl VisPathMsg {
         }
     }
 }
-
 
 #[derive(Debug, Clone)]
 /// Vis state data
@@ -89,7 +68,7 @@ impl DarvisVis {
                 self.traj_pos = self.traj_pos + self.traj_rot*&msg.new_pose.pos;
                 self.traj_rot = &msg.new_pose.rot * self.traj_rot;
             }
-                        
+
             // Draw new circle on image and show
             let x = self.traj_pos[0] as i32 / 2;
             let y = -self.traj_pos[2] as i32 / 2 ;
@@ -101,42 +80,34 @@ impl DarvisVis {
             //let imtitle = "Estimated Trajectory".to_string();
 
             imgproc::circle(&mut self.traj_img, core::Point_::new(x+x_offset, y+y_offset), 3, core::Scalar_([0.0, 0.0, 255.0, 0.0]), -1, 8, 0)?;
-            
-
 
             //highgui::imshow(&imtitle, &self.traj_img)?;
             //highgui::wait_key(1)?;   
         }
         else if let Some(msg) = message.content_as::<VisPathMsg>() {
             //let imtitle = "Camera Frame".to_string();
-
             self.cam_img = imgcodecs::imread(&msg.last_img_path, imgcodecs::IMREAD_COLOR)?;
-
-
-
             //highgui::imshow(&imtitle, &self.cam_img)?;
             //highgui::wait_key(1)?;   
         }
 
         if self.cam_img.rows()>0 && self.traj_img.rows() >0 {
-        let mut out = Mat::default();
-        let mut matrices = opencv::types::VectorOfMat::default();
-        matrices.push(self.cam_img.clone());
-        matrices.push(self.traj_img.clone());
+            let mut out = Mat::default();
+            let mut matrices = opencv::types::VectorOfMat::default();
+            matrices.push(self.cam_img.clone());
+            matrices.push(self.traj_img.clone());
 
-        core::hconcat( &matrices, &mut out )?;
-        let imtitle = "Estimated Trajectory".to_string();
-        highgui::imshow(&imtitle, &out)?;
-        highgui::wait_key(1)?;   
+            core::hconcat( &matrices, &mut out )?;
+            let imtitle = "Estimated Trajectory".to_string();
+            highgui::imshow(&imtitle, &out)?;
+            highgui::wait_key(1)?;
         }
+
         Ok(Status::done(()))
     }
 }
 
-
-
 impl Function for DarvisVis {
-
     fn handle(&mut self, _context: axiom::prelude::Context, message: Message) -> ActorResult<()>
     {
         self.visualize(_context, message).unwrap();

@@ -1,4 +1,7 @@
-use darvis::plugin_functions::*;
+use darvis::{
+    plugin_functions::*,
+    map::mapactor::ReadOnlyMap
+};
 
 // REGISTER MODULE: add a string to refer to your module here
 pub static FRAME_LOADER: &str = "FRAME_LOADER";
@@ -23,7 +26,7 @@ pub static VISUALIZER: &str = "VISUALIZER";
 /// let orb_extract_fn = getmethod("orb_extract".to_string(), "orb_extract".to_string());
 /// ```
 /// 
-pub fn getmethod(fnname: &String, id: &String) -> FunctionProxy
+pub fn getmethod(fnname: &String, id: &String, map: ReadOnlyMap) -> FunctionProxy
 {
     match fnname.as_ref()
     {
@@ -31,7 +34,7 @@ pub fn getmethod(fnname: &String, id: &String) -> FunctionProxy
         ,
         "vis" => FunctionProxy {function: Box::new(crate::modules::vis::DarvisVis::new(id.clone()))}
         ,
-        "tracker" => FunctionProxy {function: Box::new(crate::modules::tracker::DarvisTracker::new())}
+        "tracker" => FunctionProxy {function: Box::new(crate::modules::tracker::DarvisTracker::new(map))}
         ,
         "frameloader" => FunctionProxy {function: Box::new(crate::modules::frameloader::DarvisFrameLoader::new())}
         ,
@@ -54,9 +57,9 @@ pub struct FeatureManager{
 
 impl FeatureManager
 {
-    pub fn new(fnname: &String, id: &String) -> FeatureManager
+    pub fn new(fnname: &String, id: &String, map: ReadOnlyMap) -> FeatureManager
     {
-        FeatureManager { object: getmethod(fnname, id)}
+        FeatureManager { object: getmethod(fnname, id, map)}
     }
 
     pub async fn handle(mut self, _context: axiom::prelude::Context, message: Message) -> ActorResult<Self> {
