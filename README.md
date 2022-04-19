@@ -89,7 +89,7 @@ impl DarvisVis {
     ```
 
 #### Create the message that the actor processes
-1. Create the struct for the message. Example:
+1. Create the struct for the message. You can do this in ``src/modules/modulename.rs`` or ``src/modules/messages/messagename.rs``. Example:
     ```Rust
     #[derive(Debug, Serialize, Deserialize)]
     pub struct VisMsg {
@@ -98,7 +98,7 @@ impl DarvisVis {
     }
     ```
     ==TODO: What are actor ids?==
-3. Implement the constructor for the message. Example:
+3. Implement the constructor for the message. Likewise, you can do this in ``src/modules/modulename.rs`` or ``src/modules/messages/messagename.rs``. Example:
     ```Rust
     impl VisMsg {
         pub fn new(pose: Pose, ids: std::collections::HashMap<String, axiom::actors::Aid>) -> Self {
@@ -136,10 +136,10 @@ You can add custom settings to the ``config.yaml`` file. These can be anything, 
 
 To add a new setting, under ``system_settings`` in the config file, add a new key-value pair. Supported types are ``String``, ``bool``, ``f64``, and ``i32``. You do not have to declare the type in the config file.
 
-To load the new config file to memory when initializing the system, modify the function ``load_custom_settings()`` in ``src/main.rs`` to parse for your setting and insert it into the global params. This function already has examples so just copy one of them.
+To load the new config file to memory when initializing the system, modify the function ``load_config()`` in ``src/main.rs`` to parse for your setting and insert it into the global params. This function already has examples so just copy one of them.
 
 To use the setting in your code, reference it like:
 ```Rust
-let max_features: i32 = GLOBAL_PARAMS.get(SYSTEM_SETTINGS.to_string(), "max_features".to_string());
+let max_features: i32 = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "max_features");
 ```
 Where ``max_features`` is the key you added in the config file.

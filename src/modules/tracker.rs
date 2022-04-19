@@ -1,4 +1,6 @@
 use std::convert::TryInto;
+use std::collections::HashMap;
+use std::sync::Arc;
 use axiom::prelude::*;
 use opencv::{
     prelude::*,
@@ -8,8 +10,11 @@ use opencv::{
 };
 use darvis::{
     dvutils::*,
-    map::pose::Pose,
-    map::mapactor::ReadOnlyMap,
+    map::{
+        pose::Pose, map::Map, map_actor::MapWriteMsg, map_actor::MAP_ACTOR,
+        keyframe::KeyFrame
+    },
+    lockwrap::ReadOnlyWrapper,
     plugin_functions::Function
 };
 use crate::{
@@ -29,12 +34,12 @@ pub struct DarvisTracker {
     prev_points: VectorOfPoint2f,
     first_frame: bool,
     min_num_feat: i32,
-    map: ReadOnlyMap,
+    map: ReadOnlyWrapper<Map>,
     latest_frame_id: u32,
 }
 
 impl DarvisTracker {
-    pub fn new(map: ReadOnlyMap) -> DarvisTracker {
+    pub fn new(map: ReadOnlyWrapper<Map>) -> DarvisTracker {
         DarvisTracker {
             prev_frame : Mat::default(),
             prev_kps: VectorOfKeyPoint::new(),
@@ -43,44 +48,73 @@ impl DarvisTracker {
             first_frame: true,
             min_num_feat: 2000,
             map: map,
-            latest_frame_id: 0
+            latest_frame_id: 0,
         }
     }
-    // This is the handler that will be used by the actor.
-    // This is the handler that will be used by the actor.
-    pub fn align(&mut self, _context: Context, message: Message) -> ActorResult<()> {
-        if let Some(msg) = message.content_as::<TrackerMsg>() {
-            self.latest_frame_id += 1;
 
-            // Convert back to cv structures
-            let kp1 =  msg.img1_kps.cv_vector_of_keypoint();
-            let des1 = msg.img1_des.grayscale_to_cv_mat();
+    fn track(&mut self, _context: Context, msg: Arc<TrackerMsg>) {
+        self.align(_context, &msg);
 
-            if !self.first_frame {
-                //println!("Tracking ");
-                let (p2f1, p2f2) =self.find_best_match(&des1, &self.prev_des, &kp1, &self.prev_kps);
+        let n = self.map.read();
 
-                //println!("{:.2}", ((p2f1.len() as f64)/(kp1.len() as f64)));
-                let (rotation, translation) = self.calculate_transform(&p2f1, &p2f2);
-                let pose = self.get_pose(&rotation, &translation);
-
-                // println!("{}", pose.pos);
-                // println!("{}", pose.rot);
-
-                let vis_id = msg.actor_ids.get(VISUALIZER).unwrap();
-                vis_id.send_new(VisMsg::new(pose, msg.actor_ids.clone())).unwrap();
-            } else {
-                println!("First Image ");
-                self.first_frame = false;
-            }
-            //println!("Tracking done!");
-            self.prev_kps = kp1;
-            self.prev_des = des1;
-        }
-        Ok(Status::done(()))
+        // if self.need_new_keyframe() {
+        //     self.insert_keyframe(&msg);
+        // }
     }
 
-    pub fn get_pose(&self, r: &Mat, t: &Mat) -> Pose {
+    fn align(&mut self, _context: Context, msg: &Arc<TrackerMsg>) {
+        self.latest_frame_id += 1;
+
+        // Convert back to cv structures
+        let kp1 =  msg.img1_kps.cv_vector_of_keypoint();
+        let des1 = msg.img1_des.grayscale_to_cv_mat();
+
+        if !self.first_frame {
+            //println!("Tracking ");
+            let (p2f1, p2f2) = self.find_best_match(&des1, &self.prev_des, &kp1, &self.prev_kps);
+
+            //println!("{:.2}", ((p2f1.len() as f64)/(kp1.len() as f64)));
+            let (rotation, translation) = self.calculate_transform(&p2f1, &p2f2);
+            let pose = self.get_pose(&rotation, &translation);
+
+            // println!("{}", pose.pos);
+            // println!("{}", pose.rot);
+
+            let vis_id = msg.actor_ids.get(VISUALIZER).unwrap();
+            vis_id.send_new(VisMsg::new(pose, msg.actor_ids.clone())).unwrap();
+        } else {
+            println!("First Image ");
+            self.first_frame = false;
+        }
+        //println!("Tracking done!");
+        self.prev_kps = kp1;
+        self.prev_des = des1;
+    }
+
+    // fn new_align() {
+    //     if !self.first_frame {
+    //         let num_matches = track_with_motion_model();
+    //         if num_matches < threshold {
+    //             track_reference_keyframe();
+    //         }
+    //     }
+    // }
+
+    fn track_with_motion_model() {
+        // If tracking was successful for last frame, we use a constant
+        // velocity motion model to predict the camera pose and perform
+        // a guided search of the map points observed in the last frame. If
+        // not enough matches were found (i.e. motion model is clearly
+        // violated), we use a wider search of the map points around
+        // their position in the last frame. The pose is then optimized
+        // with the found correspondences.
+    }
+
+    fn track_reference_keyframe() {
+
+    }
+
+    fn get_pose(&self, r: &Mat, t: &Mat) -> Pose {
         let mut pose = Pose::default_ones();
         pose.pos[0] = *t.at::<f64>(0).unwrap();
         pose.pos[1] = *t.at::<f64>(1).unwrap();
@@ -99,7 +133,7 @@ impl DarvisTracker {
         pose
     }
 
-    pub fn find_best_match(&self,
+    fn find_best_match(&self,
         des1 :&Mat,
         des2 :&Mat,
         kp1: &VectorOfKeyPoint, 
@@ -147,7 +181,7 @@ impl DarvisTracker {
         (p2f1, p2f2)
     }
 
-    pub fn calculate_transform(
+    fn calculate_transform(
         &self,
         curr_features: &opencv::types::VectorOfPoint2f,
         prev_features: &opencv::types::VectorOfPoint2f,
@@ -178,7 +212,7 @@ impl DarvisTracker {
         (recover_r, recover_t)
     }
 
-    pub fn scale_transform(&self,
+    fn scale_transform(&self,
         scale: f64,
         rotation: &Mat,
         translation: &Mat,
@@ -211,25 +245,32 @@ impl DarvisTracker {
         }
     }
 
-    fn insert_keyframe(&self) {
+    fn insert_keyframe(&self, msg: &Arc<TrackerMsg>) {
+        // Sofiya: this function needs to be finished
+        let new_kf = KeyFrame {
+            id: 1,
+            // timestamp: 1,
+            // map_points: Arc::new(),
+        };
+        let map_msg = MapWriteMsg::new_keyframe(1, new_kf);
 
+        let map_actor = msg.actor_ids.get(MAP_ACTOR).unwrap();
+        map_actor.send_new(map_msg).unwrap();
     }
 
     fn need_new_keyframe(&self) -> bool {
-        let map_lock = self.map.read();
-        let num_kfs = map_lock.num_kfs;
-        return false;
+        // Sofiya: function needs to be finished
+        // let map_lock = self.map.read();
+        // let num_kfs = map_lock.num_kfs;
+        return true;
     }
 }
 
 impl Function for DarvisTracker {
-    fn handle(&mut self, _context: axiom::prelude::Context, message: Message) -> ActorResult<()>
+    fn handle(&mut self, context: axiom::prelude::Context, message: Message) -> ActorResult<()>
     {
-        self.align(_context, message).unwrap();
-        let n = self.map.read();
-
-        if self.need_new_keyframe() {
-            self.insert_keyframe();
+        if let Some(msg) = message.content_as::<TrackerMsg>() {
+            self.track(context, msg);
         }
 
         Ok(Status::done(()))

@@ -5,28 +5,15 @@
 /// (string, bool, f64, and i32) without needing to call a specific function for each type.
 /// 
 /// To insert a new parameter into GLOBAL_PARAMS:
-///     GLOBAL_PARAMS.insert(SYSTEM_SETTINGS.to_string(), "show_ui".to_string(), show_ui);
+///     GLOBAL_PARAMS.insert(SYSTEM_SETTINGS, "show_ui", show_ui);
 /// To get a parameter from GLOBAL_PARAMS:
-///     let max_features: i32 = GLOBAL_PARAMS.get(SYSTEM_SETTINGS.to_string(), "max_features".to_string());
+///     let max_features: i32 = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "max_features".to_string());
 /// 
-
 use std::collections::HashMap;
 use lazy_static::*;
 use parking_lot::RwLock;
 
 pub static SYSTEM_SETTINGS: &str = "SYSTEM_SETTINGS"; 
-
-pub trait OverloadedConfigParams<T> {
-    fn get_value_from_box(&self, boxed_value : &ConfigValueBox) -> T;
-    fn make_box_from_value(&self, value: T) -> ConfigValueBox;
-}
-
-pub struct ConfigValueBox {
-    string_field: Option<String>,
-    bool_field: Option<bool>,
-    float_field: Option<f64>,
-    int_field: Option<i32>
-}
 
 pub struct GlobalParams {
     // Lock is necessary because GLOBAL_PARAMS is a static variable
@@ -42,15 +29,14 @@ lazy_static! {
 }
 
 impl GlobalParams {
-    // Search code for GLOBAL_PARAMS.insert and GLOBAL_PARAMS.get for examples 
-    pub fn get<T>(&self, module : String, param: String) -> T
+    pub fn get<T>(&self, module : &str, param: &str) -> T
     where Self: OverloadedConfigParams<T> {
         let key = format!("{}_{}", module, param);
         let unlocked_params = GLOBAL_PARAMS.params.read();
         let boxed_value = unlocked_params.get(&key).unwrap();
         return self.get_value_from_box(boxed_value);
     }
-    pub fn insert<T>(&self, key_module: String, key_param: String, value: T)
+    pub fn insert<T>(&self, key_module: &str, key_param: &str, value: T)
     where Self: OverloadedConfigParams<T> {
         let key = format!("{}_{}", key_module, key_param);
         let value = self.make_box_from_value(value);
@@ -113,4 +99,16 @@ impl OverloadedConfigParams<i32> for GlobalParams {
             int_field: Some(value)
         };
     }
+}
+
+pub trait OverloadedConfigParams<T> {
+    fn get_value_from_box(&self, boxed_value : &ConfigValueBox) -> T;
+    fn make_box_from_value(&self, value: T) -> ConfigValueBox;
+}
+
+pub struct ConfigValueBox {
+    string_field: Option<String>,
+    bool_field: Option<bool>,
+    float_field: Option<f64>,
+    int_field: Option<i32>
 }

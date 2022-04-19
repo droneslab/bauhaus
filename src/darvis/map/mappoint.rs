@@ -1,8 +1,9 @@
 use std::sync::Arc;
+use serde::{Deserialize, Serialize};
 extern crate nalgebra as na;
 use crate::map::keyframe::KeyFrame;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MapPoint {
     id: u64,
     first_keyframe_id: u64,

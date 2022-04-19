@@ -1,6 +1,8 @@
+use axiom::prelude::*;
 use darvis::{
     plugin_functions::*,
-    map::mapactor::ReadOnlyMap
+    lockwrap::ReadOnlyWrapper,
+    map::map::Map,
 };
 
 // REGISTER MODULE: add a string to refer to your module here
@@ -26,7 +28,7 @@ pub static VISUALIZER: &str = "VISUALIZER";
 /// let orb_extract_fn = getmethod("orb_extract".to_string(), "orb_extract".to_string());
 /// ```
 /// 
-pub fn getmethod(fnname: &String, id: &String, map: ReadOnlyMap) -> FunctionProxy
+pub fn getmethod(fnname: &String, id: &String, map: ReadOnlyWrapper<Map>) -> FunctionProxy
 {
     match fnname.as_ref()
     {
@@ -47,23 +49,17 @@ pub fn getmethod(fnname: &String, id: &String, map: ReadOnlyMap) -> FunctionProx
     }
 }
 
-use axiom::prelude::*;
-
-use darvis::plugin_functions::FunctionProxy;
-
-pub struct FeatureManager{
+pub struct FeatureManager {
     pub object: FunctionProxy,
 }
 
 impl FeatureManager
 {
-    pub fn new(fnname: &String, id: &String, map: ReadOnlyMap) -> FeatureManager
-    {
+    pub fn new(fnname: &String, id: &String, map: ReadOnlyWrapper<Map>) -> FeatureManager {
         FeatureManager { object: getmethod(fnname, id, map)}
     }
 
     pub async fn handle(mut self, _context: axiom::prelude::Context, message: Message) -> ActorResult<Self> {
-        
         self.object.handle(_context, message).unwrap();
         Ok(Status::done(self))    
     }
