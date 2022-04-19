@@ -3,10 +3,8 @@ use axiom::prelude::*;
 /// Prototype function to be implemented for each new actor added.
 /// Each actor implementation should have this trait implemented in order to make it callable through the framework
 pub trait Function: FunctionClone {
-    
     fn handle(&mut self, _context: axiom::prelude::Context, message: Message) -> ActorResult<()>;  
-
- }
+}
 
 pub trait FunctionClone {
     fn clone_box(&self) -> Box<dyn Function>;
@@ -27,28 +25,21 @@ impl Clone for Box<dyn Function> {
     }
 }
 
-
-
 #[derive(Clone)]
 /// All the function traits will be wrapped under  FunctionProxy struct in order to attain polymorphism. To select a function at runtime using framework, the actual function is boxed into this struct.
 pub struct FunctionProxy {
     pub function: Box<dyn Function>,
 }
 
-
 // to avoid error in async_trait handle implementation
 unsafe impl Send for FunctionProxy {}
 unsafe impl Sync for FunctionProxy {}
 
-
 impl Function for FunctionProxy {
-
-    fn handle(&mut self, _context: axiom::prelude::Context, message: Message) -> ActorResult<()> 
-    {
+    fn handle(&mut self, _context: axiom::prelude::Context, message: Message) -> ActorResult<()>  {
         self.function.handle(_context, message).unwrap();
         Ok(Status::done(()))
     }
-
 }
 
 #[derive(Debug, Clone)]
@@ -56,11 +47,9 @@ impl Function for FunctionProxy {
 pub struct DarvisNone;
 
 impl Function for DarvisNone {
-
-    fn handle(&mut self, _context: axiom::prelude::Context, message: Message) -> ActorResult<()>
+    fn handle(&mut self, _context: axiom::prelude::Context, _message: Message) -> ActorResult<()>
     {
         println!("Darvis None : Not Implemented!!");
         Ok(Status::done(()))
     }
-
 }

@@ -1,5 +1,18 @@
-use lazy_static::*;
+/// *** Structs to help get/set global configuration parameters that are read from the config file. *** //
+/// 
+/// This section is a little complicated and the details don't matter too much if you're just using it.
+/// Basically, this implementation of GlobalParams allows inserting a parameter of 4 different types
+/// (string, bool, f64, and i32) without needing to call a specific function for each type.
+/// 
+/// To insert a new parameter into GLOBAL_PARAMS:
+///     GLOBAL_PARAMS.insert(SYSTEM_SETTINGS.to_string(), "show_ui".to_string(), show_ui);
+/// To get a parameter from GLOBAL_PARAMS:
+///     let max_features: i32 = GLOBAL_PARAMS.get(SYSTEM_SETTINGS.to_string(), "max_features".to_string());
+/// 
+
 use std::collections::HashMap;
+use lazy_static::*;
+use parking_lot::RwLock;
 
 pub static SYSTEM_SETTINGS: &str = "SYSTEM_SETTINGS"; 
 
@@ -18,13 +31,13 @@ pub struct ConfigValueBox {
 pub struct GlobalParams {
     // Lock is necessary because GLOBAL_PARAMS is a static variable
     // https://stackoverflow.com/questions/34832583/global-mutable-hashmap-in-a-library
-    pub params: std::sync::RwLock<HashMap<String, ConfigValueBox>>,
+    pub params: RwLock<HashMap<String, ConfigValueBox>>,
 }
 
 lazy_static! {
     #[derive(Debug)]
     pub static ref GLOBAL_PARAMS: GlobalParams = GlobalParams {
-        params: std::sync::RwLock::new(HashMap::new())
+        params: RwLock::new(HashMap::new())
     };
 }
 
@@ -33,7 +46,7 @@ impl GlobalParams {
     pub fn get<T>(&self, module : String, param: String) -> T
     where Self: OverloadedConfigParams<T> {
         let key = format!("{}_{}", module, param);
-        let unlocked_params = GLOBAL_PARAMS.params.read().unwrap();
+        let unlocked_params = GLOBAL_PARAMS.params.read();
         let boxed_value = unlocked_params.get(&key).unwrap();
         return self.get_value_from_box(boxed_value);
     }
@@ -41,7 +54,7 @@ impl GlobalParams {
     where Self: OverloadedConfigParams<T> {
         let key = format!("{}_{}", key_module, key_param);
         let value = self.make_box_from_value(value);
-        let mut unlocked_params = GLOBAL_PARAMS.params.write().unwrap();
+        let mut unlocked_params = GLOBAL_PARAMS.params.write();
         unlocked_params.insert(key, value);
     }
 }

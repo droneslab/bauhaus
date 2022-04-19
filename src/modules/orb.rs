@@ -1,66 +1,74 @@
 use axiom::prelude::*;
-
 use opencv::{
     prelude::*,
     features2d::{Feature2DTrait, ORB},
     types::{PtrOfORB, VectorOfKeyPoint},
 };
-
-use darvis::base::*;
-use darvis::config::*;
-use darvis::dvutils::*;
-use darvis::plugin_functions::*;
-
-use crate::registered_modules::{TRACKER};
-use crate::modules::tracker::*;
-use crate::modules::tracker_klt::*;
-
+use darvis::{
+    config::*,
+    dvutils::*,
+    plugin_functions::*
+};
+use crate::{
+    registered_modules::{TRACKER},
+    modules::{
+        tracker_klt::*,
+        messages::{
+            frame_msg::FrameMsg,
+            tracker_msg::TrackerMsg,
+        },
+    },
+};
 
 #[derive(Debug, Clone)]
 pub struct DarvisOrb;
 
-impl DarvisOrb
-{
+impl DarvisOrb {
     pub fn new() -> DarvisOrb {
         DarvisOrb {}
     }
 
-// This is the handler that will be used by the actor.
-pub fn orb_extract(&mut self, _context: Context, message: Message) -> ActorResult<()> {
-    if let Some(msg) = message.content_as::<FrameMsg>() {
-        let mut kp1 = VectorOfKeyPoint::new();
-        let mut des1 = Mat::default();
-        let img1 = msg.get_frame().grayscale_to_cv_mat();
+    // This is the handler that will be used by the actor.
+    pub fn orb_extract(&mut self, _context: Context, message: Message) -> ActorResult<()> {
+        if let Some(msg) = message.content_as::<FrameMsg>() {
+            let mut kp1 = VectorOfKeyPoint::new();
+            let mut des1 = Mat::default();
+            let img1 = msg.get_frame().grayscale_to_cv_mat();
 
-        let mut orb: PtrOfORB =  ORB::default().unwrap();
+            let mut orb: PtrOfORB =  <dyn ORB>::default().unwrap();
+            set_extractor_settings(&mut orb);
+            orb.detect_and_compute(&img1,&Mat::default(), &mut kp1, &mut des1, false).unwrap();
 
-        set_extractor_settings(&mut orb);
-
-        orb.detect_and_compute(&img1,&Mat::default(), &mut kp1, &mut des1, false).unwrap();
-
-        let align_id = msg.get_actor_ids().get(TRACKER).unwrap();
-
-        let traker_msg: String = GLOBAL_PARAMS.get(TRACKER.to_string(), "actor_message".to_string());
-
-        match traker_msg.as_ref()
-        {
-            "TrackerMsg" => {align_id.send_new(TrackerMsg::new(kp1.darvis_vector_of_keypoint(), des1.grayscale_mat(), msg.get_actor_ids().clone())).unwrap();
+            let align_id = msg.get_actor_ids().get(TRACKER).unwrap();
+            let tracker_msg: String = GLOBAL_PARAMS.get(TRACKER.to_string(), "actor_message".to_string());
+            match tracker_msg.as_ref() {
+                "TrackerMsg" => {
+                    align_id.send_new(TrackerMsg::new(
+                        kp1.darvis_vector_of_keypoint(),
+                        des1.grayscale_mat(),
+                        msg.get_actor_ids().clone()
+                    )).unwrap();
+                },
+                "TrackerMsgKLT" => {
+                    align_id.send_new(TrackerMsgKLT::new(
+                        msg.get_frame().clone(),
+                        kp1.darvis_vector_of_keypoint(),
+                        des1.grayscale_mat(),
+                        msg.get_actor_ids().clone()
+                    )).unwrap();
+                },
+                _ => {
+                    println!("Invalid Message type: selecting TrackerMsg");
+                    align_id.send_new(TrackerMsg::new(
+                        kp1.darvis_vector_of_keypoint(),
+                        des1.grayscale_mat(),
+                        msg.get_actor_ids().clone()
+                    )).unwrap();
+                },
             }
-            ,
-            "TrackerMsgKLT" => {align_id.send_new(TrackerMsgKLT::new(msg.get_frame().clone(), kp1.darvis_vector_of_keypoint(), des1.grayscale_mat(), msg.get_actor_ids().clone())).unwrap();
-            }
-            ,
-            _ => {
-                println!("Invalid Message type: selecting TrackerMsg");
-                align_id.send_new(TrackerMsg::new(kp1.darvis_vector_of_keypoint(), des1.grayscale_mat(), msg.get_actor_ids().clone())).unwrap();
-
-                }
-            ,
         }
+        Ok(Status::done(()))
     }
-    Ok(Status::done(()))
-  }
-
 }
 
 fn set_extractor_settings(orb: &mut PtrOfORB) {
@@ -78,15 +86,12 @@ fn set_extractor_settings(orb: &mut PtrOfORB) {
     if res1.is_err() || res2.is_err() || res3.is_err() || res4.is_err() || res5.is_err() {
         println!("Error setting ORB extractor options from config");
     }
-
 }
 
 impl Function for DarvisOrb {
-
     fn handle(&mut self, _context: axiom::prelude::Context, message: Message) -> ActorResult<()>
     {
         self.orb_extract(_context, message).unwrap();
         Ok(Status::done(()))
     }
-
 }

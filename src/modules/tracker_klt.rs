@@ -1,20 +1,20 @@
-
 // Accepts a message of two image extracted data (kps, des), computes homography
 use opencv::{
     prelude::*,
     core,
     types::{VectorOfKeyPoint, VectorOfPoint2f},
 };
-
 use axiom::prelude::*;
 use serde::{Deserialize, Serialize};
-use darvis::dvutils::*;
-use darvis::base::*;
-use crate::modules::vis::*;
-
-use crate::registered_modules::{VISUALIZER};
-use darvis::plugin_functions::Function;
-
+use darvis::{
+    dvutils::*,
+    map::pose::Pose,
+    plugin_functions::Function,
+};
+use crate::{
+    modules::messages::vis_msg::VisMsg,
+    registered_modules::VISUALIZER,
+};
 
 // Message type for this actor
 #[derive(Debug, Serialize, Deserialize)]
@@ -36,8 +36,6 @@ impl TrackerMsgKLT {
         }
     }
 }
-
-
 
 
 #[derive(Debug, Clone)]
@@ -259,7 +257,6 @@ pub fn scale_transform(&self,
     }
   }
 }
-
 
 impl Function for DarvisTrackerKLT {
 

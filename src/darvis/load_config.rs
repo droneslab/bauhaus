@@ -1,16 +1,16 @@
-extern crate yaml_rust;
-
-use yaml_rust::yaml;
-use yaml_rust::yaml::Yaml;
 use std::fs::File;
 use std::collections::HashMap;
 use std::io::Read;
+extern crate yaml_rust;
+use yaml_rust::yaml;
+use yaml_rust::yaml::Yaml;
+use crate::{
+    config::*,
+    base::ActorConf,
+};
 
-use crate::config::*;
-use crate::base;
-
-
-pub fn load_config(config_file: &String, all_modules: &mut Vec<base::ActorConf>) {
+/// *** Functions to load actor info from the config file *** ///
+pub fn load_config(config_file: &String, all_modules: &mut Vec<ActorConf>) {
     let mut config_as_string = String::new();
     read_config_file(&mut config_as_string, &config_file);
     let yaml_document = &yaml::YamlLoader::load_from_str(&config_as_string).unwrap()[0];
@@ -21,14 +21,13 @@ pub fn read_config_file(str: &mut String, file_name: &String) {
     let mut f = File::open(file_name).unwrap();
     f.read_to_string(str).unwrap();
  }
- 
 
-fn load_module_info(doc: &Yaml, all_modules: &mut Vec<base::ActorConf>) {
+fn load_module_info(doc: &Yaml, all_modules: &mut Vec<ActorConf>) {
     let v = doc["modules"].as_vec().unwrap();
 
     for i in 0..v.len() {
         let h = &v[i].as_hash().unwrap();
-        let mut mconf = base::ActorConf::default();
+        let mut mconf = ActorConf::default();
         mconf.name = h[&Yaml::String("name".to_string())].as_str().unwrap().to_string();
         mconf.file = h[&Yaml::String("file".to_string())].as_str().unwrap().to_string();
         mconf.actor_message = h[&Yaml::String("actor_message".to_string())].as_str().unwrap().to_string();
@@ -46,7 +45,6 @@ fn load_module_info(doc: &Yaml, all_modules: &mut Vec<base::ActorConf>) {
         }
         mconf.possible_paths = hmap;
         all_modules.push(mconf.clone());
-
 
         let actname = mconf.name.clone();
 

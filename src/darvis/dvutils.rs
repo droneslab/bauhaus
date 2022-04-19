@@ -1,5 +1,3 @@
-
-
 use opencv::{
     prelude::*,
     core::*,
@@ -20,9 +18,6 @@ pub struct DarvisKeyPoint {
     class_id: i32
 }
 
-
-
-
 /// Used to handle Grayscale images 
 pub type DVMatrixGrayscale = na::DMatrix<u8>;
 /// Used to handle Vector of KeyPoint
@@ -32,136 +27,112 @@ pub type DVVector3 = na::Vector3<f64>;
 /// Used to handle 3x3 matrix 
 pub type DVMatrix3 = na::Matrix3<f64>;
 
-
 /// Traits useful fo converting between OPENCV and Algebra library format.
-pub trait DarvisMatrix
-{
+pub trait DarvisMatrix {
     fn grayscale_to_cv_mat(&self) -> opencv::core::Mat;
     fn grayscale_mat(&self) -> DVMatrixGrayscale;
 }
 
 /// Matrix Trait implementation for OpenCV Mat
-impl DarvisMatrix for opencv::core::Mat
-{
+impl DarvisMatrix for opencv::core::Mat {
     /// get OpenCV Mat
-    fn grayscale_to_cv_mat(&self) -> opencv::core::Mat
-    {
+    fn grayscale_to_cv_mat(&self) -> opencv::core::Mat {
         self.clone()
     }
 
     /// Convert OpenCV mat to Grayscale matrix
-    fn grayscale_mat(&self) -> DVMatrixGrayscale
-    {
+    fn grayscale_mat(&self) -> DVMatrixGrayscale {
         let mut dmat = DMatrix::from_element(self.rows().try_into().unwrap(), self.cols().try_into().unwrap(), 0u8);
         for i in 0..self.rows() {
-                for j in 0..self.cols() {
-                       let val = *self.at_2d::<u8>(i, j).unwrap(); // Grayscale 1 channel uint8
-                       let r: usize = i.try_into().unwrap();
-                       let c: usize = j.try_into().unwrap();
-                       dmat[(r, c)] = val;
-                }
+            for j in 0..self.cols() {
+                let val = *self.at_2d::<u8>(i, j).unwrap(); // Grayscale 1 channel uint8
+                let r: usize = i.try_into().unwrap();
+                let c: usize = j.try_into().unwrap();
+                dmat[(r, c)] = val;
+            }
         }
-        dmat      
+        dmat
     }
 }
 
 /// Matrix Trait implementation for Algebra Matrix
-impl DarvisMatrix for DVMatrixGrayscale
-{
-
+impl DarvisMatrix for DVMatrixGrayscale {
     /// Convert Grayscale matrix to OpenCV mat
-    fn grayscale_to_cv_mat(&self) -> opencv::core::Mat
-    {
+    fn grayscale_to_cv_mat(&self) -> opencv::core::Mat {
         let mut mat = Mat::new_rows_cols_with_default(self.nrows().try_into().unwrap(),self.ncols().try_into().unwrap(),CV_8UC1, opencv::core::Scalar::all(0.0)).unwrap();
 
         for i in 0..self.nrows() {
-                for j in 0..self.ncols() {
-                        let r: usize = i.try_into().unwrap();
-                        let c: usize = j.try_into().unwrap();
-                        unsafe {*mat.at_2d_unchecked_mut::<u8>(i.try_into().unwrap(), j.try_into().unwrap()).unwrap() = self[(r, c)];}
-                }
+            for j in 0..self.ncols() {
+                let r: usize = i.try_into().unwrap();
+                let c: usize = j.try_into().unwrap();
+                unsafe {*mat.at_2d_unchecked_mut::<u8>(i.try_into().unwrap(), j.try_into().unwrap()).unwrap() = self[(r, c)];}
+            }
         }
         return mat;
     }
 
     /// Get Algebra Matrix
-    fn grayscale_mat(&self) -> DVMatrixGrayscale
-    {
-        self.clone()     
+    fn grayscale_mat(&self) -> DVMatrixGrayscale {
+        self.clone()
     }
 }
 
-
-
-
-
 /// Traits useful fo converting between OPENCV and Darvis format of Keypoint.
-pub trait DarvisVectorOfKeyPoint
-{
+pub trait DarvisVectorOfKeyPoint {
     fn cv_vector_of_keypoint(&self) -> VectorOfKeyPoint;
     fn darvis_vector_of_keypoint(&self) -> DVVectorOfKeyPoint;
 }
 
 /// Trait implementation for OpenCV vector of KeyPoint
-impl DarvisVectorOfKeyPoint for VectorOfKeyPoint
-{
+impl DarvisVectorOfKeyPoint for VectorOfKeyPoint {
     /// get OpenCV vector of KeyPoint
-    fn cv_vector_of_keypoint(&self) -> VectorOfKeyPoint
-    {
+    fn cv_vector_of_keypoint(&self) -> VectorOfKeyPoint {
         self.clone()
     }
     /// Convert opencv to Darvis vector of KeyPoint
-    fn darvis_vector_of_keypoint(&self) -> DVVectorOfKeyPoint
-    {
-
+    fn darvis_vector_of_keypoint(&self) -> DVVectorOfKeyPoint {
         let mut dmat_vkp = DVVectorOfKeyPoint::new();
 
         for i in 0..self.len() {
             let kp = self.get(i).unwrap();
             let dkp = DarvisKeyPoint {
-                    p2f: vec![kp.pt.x, kp.pt.y],
-                    size: kp.size,
-                    angle: kp.angle,
-                    response: kp.response,
-                    octave: kp.octave,
-                    class_id: kp.class_id
-                    };
+                p2f: vec![kp.pt.x, kp.pt.y],
+                size: kp.size,
+                angle: kp.angle,
+                response: kp.response,
+                octave: kp.octave,
+                class_id: kp.class_id
+            };
             //dmat_vkp[i.try_into().unwrap()] = dkp;
             dmat_vkp.push(dkp);
         }
-    
-        return dmat_vkp;        
+        return dmat_vkp;
     }
 }
 
-
 /// Trait implementation for Darvis vector of KeyPoint
-impl DarvisVectorOfKeyPoint for DVVectorOfKeyPoint
-{
+impl DarvisVectorOfKeyPoint for DVVectorOfKeyPoint {
     /// Convert Darvis to opencv vector of KeyPoint
-    fn cv_vector_of_keypoint(&self) -> VectorOfKeyPoint
-    {
+    fn cv_vector_of_keypoint(&self) -> VectorOfKeyPoint {
         let mut cv_vkp = VectorOfKeyPoint::new();
 
         for i in 0..self.len() {
             let dkp_instance = &self[i];
             let p2f = Point_::new(dkp_instance.p2f[0], dkp_instance.p2f[1]);
             let cvkp = KeyPoint::new_point(
-                            p2f,
-                            dkp_instance.size,
-                            dkp_instance.angle,
-                            dkp_instance.response,
-                            dkp_instance.octave,
-                            dkp_instance.class_id
-                            );
+                p2f,
+                dkp_instance.size,
+                dkp_instance.angle,
+                dkp_instance.response,
+                dkp_instance.octave,
+                dkp_instance.class_id
+            );
             cv_vkp.push(cvkp.unwrap());
         }
-    
         return cv_vkp;
     }
     /// get Darvis vector of KeyPoint
-    fn darvis_vector_of_keypoint(&self) -> DVVectorOfKeyPoint
-    {
-        self.clone()       
-    }    
+    fn darvis_vector_of_keypoint(&self) -> DVVectorOfKeyPoint {
+        self.clone()
+    }
 }
