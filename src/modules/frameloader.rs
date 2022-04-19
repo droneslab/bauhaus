@@ -4,7 +4,7 @@ use opencv::{
     imgcodecs,
 };
 use darvis::{
-    config::*,
+    global_params::*,
     dvutils::*,
     plugin_functions::Function
 };
@@ -32,7 +32,7 @@ impl DarvisFrameLoader {
     // This is the handler that will be used by the actor.
     pub fn load_frames(&mut self, _context: Context, message: Message) -> ActorResult<()> {
         if let Some(msg) = message.content_as::<ImagesMsg>() {
-            let use_visualizer = GLOBAL_PARAMS.get(SYSTEM_SETTINGS.to_string(), "show_ui".to_string());
+            let use_visualizer = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "show_ui");
             for path in msg.get_img_paths() {
                 let img = imgcodecs::imread(&path, imgcodecs::IMREAD_GRAYSCALE)?;
                 let vis_id = msg.get_actor_ids().get(VISUALIZER).unwrap();

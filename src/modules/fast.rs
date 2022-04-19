@@ -5,7 +5,7 @@ use opencv::{
     types::{PtrOfBRISK, VectorOfKeyPoint},
 };
 use darvis::{
-    config::*,
+    global_params::*,
     dvutils::*,
     plugin_functions::Function
 };
@@ -44,7 +44,7 @@ impl DarvisFast {
             brisk.compute(&img1, &mut kp1, &mut des1).unwrap();
 
             let align_id = msg.get_actor_ids().get(TRACKER).unwrap();
-            let traker_msg: String = GLOBAL_PARAMS.get(TRACKER.to_string(), "actor_message".to_string());
+            let traker_msg: String = GLOBAL_PARAMS.get(TRACKER, "actor_message");
 
             //align_id.send_new(TrackerMsgKLT::new(msg.get_frame().clone(), kp1.darvis_vector_of_keypoint(), des1.grayscale_mat(), msg.get_actor_ids().clone())).unwrap();
 

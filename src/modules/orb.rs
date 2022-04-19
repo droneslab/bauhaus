@@ -5,7 +5,7 @@ use opencv::{
     types::{PtrOfORB, VectorOfKeyPoint},
 };
 use darvis::{
-    config::*,
+    global_params::*,
     dvutils::*,
     plugin_functions::*
 };
@@ -40,7 +40,7 @@ impl DarvisOrb {
             orb.detect_and_compute(&img1,&Mat::default(), &mut kp1, &mut des1, false).unwrap();
 
             let align_id = msg.get_actor_ids().get(TRACKER).unwrap();
-            let tracker_msg: String = GLOBAL_PARAMS.get(TRACKER.to_string(), "actor_message".to_string());
+            let tracker_msg: String = GLOBAL_PARAMS.get(TRACKER, "actor_message");
             match tracker_msg.as_ref() {
                 "TrackerMsg" => {
                     align_id.send_new(TrackerMsg::new(
@@ -72,10 +72,10 @@ impl DarvisOrb {
 }
 
 fn set_extractor_settings(orb: &mut PtrOfORB) {
-    let max_features: i32 = GLOBAL_PARAMS.get(SYSTEM_SETTINGS.to_string(), "max_features".to_string());
-    let scale_factor: f64 = GLOBAL_PARAMS.get(SYSTEM_SETTINGS.to_string(), "scale_factor".to_string());
-    let n_levels: i32 = GLOBAL_PARAMS.get(SYSTEM_SETTINGS.to_string(), "n_levels".to_string());
-    let fast_threshold: i32 = GLOBAL_PARAMS.get(SYSTEM_SETTINGS.to_string(), "fast_threshold".to_string());
+    let max_features: i32 = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "max_features");
+    let scale_factor: f64 = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "scale_factor");
+    let n_levels: i32 = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "n_levels");
+    let fast_threshold: i32 = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "fast_threshold");
 
     let res1 = orb.set_max_features(max_features);
     let res2 = orb.set_max_features(max_features);

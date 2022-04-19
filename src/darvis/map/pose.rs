@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use crate::dvutils::*;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Pose {
     // Position 3-Vector
     pub pos: DVVector3,

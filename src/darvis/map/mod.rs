@@ -1,4 +1,4 @@
-pub mod mapactor;
+pub mod map_actor;
 
 pub mod map;
 

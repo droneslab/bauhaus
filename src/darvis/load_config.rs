@@ -1,3 +1,4 @@
+/// *** Functions to load actor info from the config file *** ///
 use std::fs::File;
 use std::collections::HashMap;
 use std::io::Read;
@@ -5,25 +6,20 @@ extern crate yaml_rust;
 use yaml_rust::yaml;
 use yaml_rust::yaml::Yaml;
 use crate::{
-    config::*,
+    global_params::*,
     base::ActorConf,
 };
 
-/// *** Functions to load actor info from the config file *** ///
-pub fn load_config(config_file: &String, all_modules: &mut Vec<ActorConf>) {
+pub fn read_config_file(file_name: &String) -> String {
     let mut config_as_string = String::new();
-    read_config_file(&mut config_as_string, &config_file);
-    let yaml_document = &yaml::YamlLoader::load_from_str(&config_as_string).unwrap()[0];
-    load_module_info(yaml_document, all_modules);
+    let mut f = File::open(file_name).unwrap();
+    f.read_to_string(&mut config_as_string).unwrap();
+    config_as_string
 }
 
-pub fn read_config_file(str: &mut String, file_name: &String) {
-    let mut f = File::open(file_name).unwrap();
-    f.read_to_string(str).unwrap();
- }
-
-fn load_module_info(doc: &Yaml, all_modules: &mut Vec<ActorConf>) {
-    let v = doc["modules"].as_vec().unwrap();
+pub fn load_modules_from_config(config_string: &String, all_modules: &mut Vec<ActorConf>) {
+    let yaml_document = &yaml::YamlLoader::load_from_str(config_string).unwrap()[0];
+    let v = yaml_document["modules"].as_vec().unwrap();
 
     for i in 0..v.len() {
         let h = &v[i].as_hash().unwrap();
@@ -48,8 +44,26 @@ fn load_module_info(doc: &Yaml, all_modules: &mut Vec<ActorConf>) {
 
         let actname = mconf.name.clone();
 
-        GLOBAL_PARAMS.insert(actname.clone(), "file".to_string(), mconf.file);
-        GLOBAL_PARAMS.insert(actname.clone(), "actor_message".to_string(), mconf.actor_message);
-        GLOBAL_PARAMS.insert(actname.clone(), "actor_function".to_string(), mconf.actor_function);
+        GLOBAL_PARAMS.insert(&actname, "file", mconf.file);
+        GLOBAL_PARAMS.insert(&actname, "actor_message", mconf.actor_message);
+        GLOBAL_PARAMS.insert(&actname, "actor_function", mconf.actor_function);
     }
+}
+
+pub fn add_system_setting_bool(yaml: &Yaml, param_name: &str) {
+    let value = yaml[param_name].as_bool().unwrap();
+    GLOBAL_PARAMS.insert(SYSTEM_SETTINGS, param_name, value);
+    println!("\t {}: {}", param_name, value);
+}
+
+pub fn add_system_setting_i32(yaml: &Yaml, param_name: &str) {
+    let value: i32 = yaml[param_name].as_i64().unwrap() as i32;
+    GLOBAL_PARAMS.insert(SYSTEM_SETTINGS, param_name, value);
+    println!("\t {}: {}", param_name, value);
+}
+
+pub fn add_system_setting_f64(yaml: &Yaml, param_name: &str) {
+    let value: f64 = yaml[param_name].as_f64().unwrap();
+    GLOBAL_PARAMS.insert(SYSTEM_SETTINGS, param_name, value);
+    println!("\t {}: {}", param_name, value);
 }
