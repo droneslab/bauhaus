@@ -42,6 +42,7 @@ fn load_config(config_file: String) -> Vec<base::ActorConf> {
     add_system_setting_f64(yaml, "scale_factor");
     add_system_setting_i32(yaml, "n_levels");
     add_system_setting_i32(yaml, "fast_threshold");
+    add_system_setting_sensor(yaml);
 
     module_info
 }

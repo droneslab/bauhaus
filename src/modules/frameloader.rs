@@ -38,9 +38,13 @@ impl DarvisFrameLoader {
                 let vis_id = msg.get_actor_ids().get(VISUALIZER).unwrap();
                 let feat_aid = msg.actor_ids.get(FEATURE_EXTRACTOR).unwrap();
                 println!("Processed image: {}", path);
-                if use_visualizer{
+                if use_visualizer {
                     vis_id.send_new(VisPathMsg::new(path.to_string())).unwrap();
                 }
+
+                // TODO: Check ORBSLAM3 frame loader, image gets scaled and resized. Do we need this?
+                // https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/Examples/RGB-D/rgbd_tum.cc#L89
+
                 // Kickoff the pipeline by sending the feature extraction module images
                 feat_aid.send_new(FrameMsg::new(img.grayscale_mat(), msg.actor_ids.clone())).unwrap();
             }

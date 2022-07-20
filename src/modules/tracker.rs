@@ -1,7 +1,6 @@
-use std::convert::TryInto;
-use std::collections::HashMap;
 use std::sync::Arc;
 use axiom::prelude::*;
+use chrono::{prelude::*, Duration};
 use opencv::{
     prelude::*,
     core,
@@ -12,13 +11,13 @@ use darvis::{
     dvutils::*,
     map::{
         pose::Pose, map::Map, map_actor::MapWriteMsg, map_actor::MAP_ACTOR,
-        keyframe::KeyFrame
+        keyframe::KeyFrame, frame::Frame, map::Id, misc::IMUBias, mappoint::MapPoint
     },
     lockwrap::ReadOnlyWrapper,
-    plugin_functions::Function
+    plugin_functions::Function,
+    global_params::*,
 };
 use crate::{
-    // modules::vis::*,
     registered_modules::VISUALIZER,
     modules::messages::{
         vis_msg::VisMsg,
@@ -28,79 +27,369 @@ use crate::{
 
 #[derive(Debug, Clone)]
 pub struct DarvisTracker {
-    prev_frame: Mat,
-    prev_kps: VectorOfKeyPoint,
-    prev_des: Mat,
-    prev_points: VectorOfPoint2f,
     first_frame: bool,
-    min_num_feat: i32,
+    last_frame: Option<Frame>,
     map: ReadOnlyWrapper<Map>,
-    latest_frame_id: u32,
+    state: TrackingState,
+    last_frame_id: i32,
+    temporal_points: Vec<MapPoint>,
+    reference_keyframe_id: Option<Id>,
+
+    // IMU 
+    velocity: Option<Mat>, // Note: ORB_SLAM3 uses C++ package Sophus
+    last_bias: Option<IMUBias>,
+
+    // Relocalization
+    last_reloc_frame_id: Id,
+    timestamp_lost: Option<DateTime<Utc>>,
+
+    // Defaults set from global variables
+    // Never change, so just get once instead of having to look up each time
+    recently_lost_cutoff: Duration,
+    sensor: Sensor,
+    localization_only_mode: bool,
+    frames_to_reset_imu: i32,
+    insert_kfs_when_lost: bool,
+    min_num_features: i32,
+}
+
+#[derive(Debug, Clone)]
+enum TrackingState {
+    NotInitialized,
+    NoImagesYet,
+    Lost,
+    RecentlyLost,
+    Ok
 }
 
 impl DarvisTracker {
     pub fn new(map: ReadOnlyWrapper<Map>) -> DarvisTracker {
+        let recently_lost_cutoff: i32 = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "recently_lost_cutoff");
+        let sensor: Sensor = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "sensor");
+        let localization_only_mode: bool = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "localization_only_mode");
+        let frames_to_reset_imu: i32 = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "frames_to_reset_IMU");
+        let insert_kfs_when_lost: bool = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "insert_KFs_when_lost");
+        let min_num_features: i32 = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "min_num_features");
+
         DarvisTracker {
-            prev_frame : Mat::default(),
-            prev_kps: VectorOfKeyPoint::new(),
-            prev_des: Mat::default(),
-            prev_points: VectorOfPoint2f::new(),
             first_frame: true,
-            min_num_feat: 2000,
+            last_frame: None,
             map: map,
-            latest_frame_id: 0,
+            state: TrackingState::NoImagesYet,
+            last_frame_id: -1,
+            temporal_points: Vec::new(),
+            reference_keyframe_id: None,
+
+            // Defaults set from global variables
+            recently_lost_cutoff: Duration::seconds(recently_lost_cutoff.into()),
+            sensor: sensor,
+            localization_only_mode: localization_only_mode,
+            frames_to_reset_imu: frames_to_reset_imu,
+            insert_kfs_when_lost: insert_kfs_when_lost,
+            min_num_features: min_num_features,
+
+            // IMU
+            last_bias: None,
+            velocity: None,
+
+            // Relocalization
+            timestamp_lost: None,
+            last_reloc_frame_id: 0,
         }
     }
 
     fn track(&mut self, _context: Context, msg: Arc<TrackerMsg>) {
-        self.align(_context, &msg);
+        let map_actor = msg.actor_ids.get(MAP_ACTOR).unwrap();
 
-        let n = self.map.read();
+        self.last_frame_id += 1;
+        let mut current_frame = Frame::new(
+            self.last_frame_id, 
+            Utc::now(), 
+            msg.keypoints.cv_vector_of_keypoint(),
+            msg.descriptors.grayscale_to_cv_mat()
+        );
 
-        // if self.need_new_keyframe() {
-        //     self.insert_keyframe(&msg);
-        // }
-    }
+        // TODO (reset): Reset map because local mapper set the bad imu flag
+        // Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Tracking.cc#L1808
 
-    fn align(&mut self, _context: Context, msg: &Arc<TrackerMsg>) {
-        self.latest_frame_id += 1;
+        // TODO (multimaps): Create new map if timestamp older than previous frame arrives
+        // Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Tracking.cc#L1820
 
-        // Convert back to cv structures
-        let kp1 =  msg.img1_kps.cv_vector_of_keypoint();
-        let des1 = msg.img1_des.grayscale_to_cv_mat();
+        // TODO (reset) TODO (multimaps): Timestamp jump detected, either reset active map or create new map
+        // Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Tracking.cc#L1828
+        // (entire block)
 
-        if !self.first_frame {
-            //println!("Tracking ");
-            let (p2f1, p2f2) = self.find_best_match(&des1, &self.prev_des, &kp1, &self.prev_kps);
+        // TODO: set bias of new frame = to bias of last
+        // Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Tracking.cc#L1860
 
-            //println!("{:.2}", ((p2f1.len() as f64)/(kp1.len() as f64)));
-            let (rotation, translation) = self.calculate_transform(&p2f1, &p2f2);
-            let pose = self.get_pose(&rotation, &translation);
-
-            // println!("{}", pose.pos);
-            // println!("{}", pose.rot);
-
-            let vis_id = msg.actor_ids.get(VISUALIZER).unwrap();
-            vis_id.send_new(VisMsg::new(pose, msg.actor_ids.clone())).unwrap();
-        } else {
-            println!("First Image ");
-            self.first_frame = false;
+        if !self.sensor.is_mono() {
+            self.preintegrate_IMU();
         }
-        //println!("Tracking done!");
-        self.prev_kps = kp1;
-        self.prev_des = des1;
+
+        // TODO: update map change index. Not sure why this is useful
+        // Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Tracking.cc#L1890
+
+        // Initial estimation of camera pose and matching
+        let mut success = match self.state {
+            TrackingState::NotInitialized => {
+                let ok = match self.sensor.is_mono() {
+                    true => self.monocular_initialization(),
+                    false => self.stereo_initialization()
+                };
+                if !ok {
+                    self.last_frame = Some(current_frame);
+                    return;
+                }
+                ok
+            },
+            TrackingState::Ok => {
+                let mut ok;
+
+                let enough_frames_since_last_reloc = current_frame.id < self.last_reloc_frame_id + 2;
+                let no_imu_data = self.velocity.is_none() && !self.is_imu_initialized();
+                if no_imu_data || enough_frames_since_last_reloc {
+                    ok = self.track_reference_keyframe();
+                } else {
+                    ok = self.track_with_motion_model();
+                    if !ok {
+                        ok = self.track_reference_keyframe();
+                    }
+                }
+
+                if !ok {
+                    let enough_frames_to_reset_imu = current_frame.id <= self.last_reloc_frame_id + self.frames_to_reset_imu;
+                    if enough_frames_to_reset_imu && self.sensor.is_imu() {
+                        self.state = TrackingState::Lost;
+                    } else if self.kfs_in_map() > 10 {
+                        self.state = TrackingState::RecentlyLost;
+                        self.timestamp_lost = Some(current_frame.timestamp);
+                    } else {
+                        self.state = TrackingState::Lost;
+                    }
+                }
+                ok
+            },
+            TrackingState::RecentlyLost => {
+                println!("TRACK: State recently lost");
+                let mut ok;
+                let time_since_lost = current_frame.timestamp - self.timestamp_lost.unwrap();
+                if self.sensor.is_imu() {
+                    if self.is_imu_initialized() {
+                        ok = self.predict_state_IMU();
+                    } else {
+                        ok = false;
+                    }
+
+                    if time_since_lost > self.recently_lost_cutoff {
+                        self.state = TrackingState::Lost;
+                        println!("TRACK: Tracking lost...");
+                        ok = false;
+                    }
+                } else {
+                    ok = self.relocalization();
+                    if time_since_lost > Duration::seconds(3) && !ok {
+                        self.state = TrackingState::Lost;
+                        println!("TRACK: Tracking lost...");
+                        ok = false;
+                    }
+                }
+                ok
+            },
+            TrackingState::Lost => {
+                println!("TRACK: New map...");
+                if self.kfs_in_map() < 10 {
+                    println!("TRACK: Reseting current map...");
+                    let map_msg = MapWriteMsg::reset_active_map();
+                    map_actor.send_new(map_msg).unwrap();
+                } else {
+                    self.create_new_map();
+                }
+
+                self.last_frame = None;
+                return;
+            },
+            TrackingState::NoImagesYet => {
+                panic!("Should not be possible to get here!");
+            }
+        };
+
+        // TODO (localization-only): Above match should check for localization-only mode
+        // and only run the above code if localization-only is NOT enabled. Need to implement
+        // localization-only version.
+        // Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Tracking.cc#L1933
+        // Look for "mbOnlyTracking" in Track() function
+
+        // Track Local Map
+        if success {
+            success = self.track_local_map();
+        }
+        if success {
+            self.state = TrackingState::Ok;
+        } else if matches!(self.state, TrackingState::Ok) {
+            if self.sensor.is_imu() {
+                println!("TRACK: Track lost for less than 1 second");
+
+                // TODO (reset) TODO (IMU): Reset map because local mapper set the bad imu flag
+                // Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Tracking.cc#L2149
+            }
+            self.state = TrackingState::RecentlyLost;
+            self.timestamp_lost = Some(current_frame.timestamp);
+        }
+
+        // TODO (IMU)
+        // Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Tracking.cc#L2167
+        // This code not done, so double check with C++ reference.
+        {
+            // Save frame if recent relocalization, since they are used for IMU reset (as we are making copy, it shluld be once mCurrFrame is completely modified)
+            let enough_frames_to_reset_imu = current_frame.id <= self.last_reloc_frame_id + self.frames_to_reset_imu;
+            if enough_frames_to_reset_imu && current_frame.id > self.frames_to_reset_imu && self.sensor.is_imu() && self.is_imu_initialized() {
+                // Load preintegration
+                // This code directly copied from C++, obviously needs to be changed
+                // pF->mpImuPreintegratedFrame = new IMU::Preintegrated(mCurrentFrame.mpImuPreintegratedFrame);
+            }
+            if self.is_imu_initialized() && success {
+                if current_frame.id == self.last_reloc_frame_id + self.frames_to_reset_imu {
+                    println!("TRACK: RESETING FRAME!!!");
+                    self.reset_frame_IMU();
+                }
+                else if current_frame.id > self.last_reloc_frame_id + 30 {
+                    self.last_bias = current_frame.imu_bias;
+                }
+            }
+        }
+
+        if success || matches!(self.state, TrackingState::RecentlyLost) {
+            // Update motion model
+            let last_frame = self.last_frame.as_ref();
+            if !last_frame.is_none() && !last_frame.unwrap().pose.is_none() && !current_frame.pose.is_none() {
+                let last_pose = last_frame.unwrap().pose.as_ref().unwrap();
+                let _last_twc = last_pose.inverse();
+                // TODO (IMU)
+                // Ref code: This line exactly: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Tracking.cc#L2211
+                // Pose is Sophus::SE3 type, not sure what this multiplication is actually doing
+                // self.velocity = current_frame.pose.unwrap() * last_twc; 
+            } else {
+                self.velocity = None;
+            }
+
+            // Clean VO matches
+            current_frame.clean_VO_matches();
+
+            // Delete temporal MapPoints
+            // TODO:
+            // mlpTemporalPoints is added to in UpdateLastFrame, which is called by TrackWithMotionModel
+            self.temporal_points = Vec::new();
+
+            // Check if we need to insert a new keyframe
+            let need_kf = self.need_new_keyframe();
+            let insert_if_lost_anyway = self.insert_kfs_when_lost && matches!(self.state, TrackingState::RecentlyLost) && self.sensor.is_imu();
+            if need_kf && (success || insert_if_lost_anyway) {
+                self.create_new_keyframe();
+            }
+
+            // We allow points with high innovation (considererd outliers by the Huber Function)
+            // pass to the new keyframe, so that bundle adjustment will finally decide
+            // if they are outliers or not. We don't want next frame to estimate its position
+            // with those points so we discard them in the frame. Only has effect if lastframe is tracked
+            current_frame.delete_VO_matches_if_not_outliers();
+        }
+
+        // Reset if the camera get lost soon after initialization
+        if matches!(self.state, TrackingState::Lost) {
+            if self.kfs_in_map() <= 10 {
+                let map_msg = MapWriteMsg::reset_active_map();
+                map_actor.send_new(map_msg).unwrap();
+                return;
+            }
+            if self.sensor.is_imu() && !self.is_imu_initialized() {
+                println!("TRACK: Track lost before IMU initialisation, resetting...",);
+                let map_msg = MapWriteMsg::reset_active_map();
+                map_actor.send_new(map_msg).unwrap();
+                return;
+            }
+
+            self.create_new_map();
+
+            return;
+        }
+
+        if current_frame.reference_keyframe_id.is_none() {
+            current_frame.reference_keyframe_id = self.reference_keyframe_id;
+        }
+
+        self.last_frame = Some(current_frame);
+
+        match self.state {
+            TrackingState::Ok | TrackingState::RecentlyLost => self.store_pose_info(),
+            _ => {}
+        }
+
+        // self.align(_context, &msg);
+
     }
 
-    // fn new_align() {
-    //     if !self.first_frame {
-    //         let num_matches = track_with_motion_model();
-    //         if num_matches < threshold {
-    //             track_reference_keyframe();
-    //         }
-    //     }
-    // }
+    //* IMU stuff */
+    fn is_imu_initialized(&self) -> bool {
+        let imu_initialized;
+        {
+            let map_read_lock = self.map.read();
+            imu_initialized = map_read_lock.imu_initialized;
+        }
+        imu_initialized
+    }
 
-    fn track_with_motion_model() {
+    fn stereo_initialization(&self) -> bool {
+        // TODO (stereo)
+        // Probably can skip stereo and RGBD modes until after first pass of system is done
+        // Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Tracking.cc#L2335
+        return false;
+    }
+
+    fn predict_state_IMU(&self) -> bool {
+        // TODO (IMU)
+        // Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Tracking.cc#L1738
+        return false;
+    }
+
+    fn preintegrate_IMU(&self) {
+        // TODO (IMU): if using inertial, preintegrate sensor messages
+        // Probably can skip all IMU code until after first pass of system is done
+        // Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Tracking.cc#L1624
+    }
+
+    fn reset_frame_IMU(&self) -> bool {
+        // TODO (IMU)
+        // ResetFrameIMU in Tracking.cc
+        return false;
+    }
+
+    //* MVP */
+    fn kfs_in_map(&self) -> u64 {
+        let kfs_in_map;
+        {
+            let map_read_lock = self.map.read();
+            kfs_in_map = map_read_lock.num_kfs;
+        }
+        kfs_in_map
+    }
+
+    fn monocular_initialization(&self) -> bool {
+        // TODO
+        // Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Tracking.cc#L2448
+        return false;
+    }
+
+    fn track_reference_keyframe(&self) -> bool {
+        println!("TRACK: Track with respect to the reference KF");
+        // TODO
+        // Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Tracking.cc#L2720
+        return false;
+    }
+
+    fn track_with_motion_model(&self) -> bool {
+        println!("TRACK: Track with motion model");
+        // TODO
+        // Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Tracking.cc#L2854
         // If tracking was successful for last frame, we use a constant
         // velocity motion model to predict the camera pose and perform
         // a guided search of the map points observed in the last frame. If
@@ -108,161 +397,69 @@ impl DarvisTracker {
         // violated), we use a wider search of the map points around
         // their position in the last frame. The pose is then optimized
         // with the found correspondences.
+        return false;
     }
 
-    fn track_reference_keyframe() {
-
+    fn track_local_map(&self) -> bool {
+        // TODO
+        // Ref code:
+        return false;
     }
 
-    fn get_pose(&self, r: &Mat, t: &Mat) -> Pose {
-        let mut pose = Pose::default_ones();
-        pose.pos[0] = *t.at::<f64>(0).unwrap();
-        pose.pos[1] = *t.at::<f64>(1).unwrap();
-        pose.pos[2] = *t.at::<f64>(2).unwrap();
-
-        pose.rot[(0,0)] = *r.at_2d::<f64>(0,0).unwrap();
-        pose.rot[(0,1)] = *r.at_2d::<f64>(0,1).unwrap();
-        pose.rot[(0,2)] = *r.at_2d::<f64>(0,2).unwrap();
-        pose.rot[(1,0)] = *r.at_2d::<f64>(1,0).unwrap();
-        pose.rot[(1,1)] = *r.at_2d::<f64>(1,1).unwrap();
-        pose.rot[(1,2)] = *r.at_2d::<f64>(1,2).unwrap();
-        pose.rot[(2,0)] = *r.at_2d::<f64>(2,0).unwrap();
-        pose.rot[(2,1)] = *r.at_2d::<f64>(2,1).unwrap();
-        pose.rot[(2,2)] = *r.at_2d::<f64>(2,2).unwrap();
-
-        pose
+    fn relocalization(&self) -> bool {
+        println!("TRACK: Relocalization");
+        // TODO
+        // Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Tracking.cc#L3609
+        return false;
     }
 
-    fn find_best_match(&self,
-        des1 :&Mat,
-        des2 :&Mat,
-        kp1: &VectorOfKeyPoint, 
-        kp2: & VectorOfKeyPoint
-    ) -> (opencv::types::VectorOfPoint2f, opencv::types::VectorOfPoint2f) {
-        // BFMatcher to get good matches
-        let bfmtch = BFMatcher::create(6 , true).unwrap(); 
-        let mut mask = Mat::default(); 
-        let mut matches = VectorOfDMatch::new();
-        bfmtch.train_match(&des2, &des1, &mut matches, &mut mask).unwrap(); 
+    fn create_new_keyframe(&self) {
+        // TODO
+        // Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Tracking.cc#L3216
+        // let new_kf = KeyFrame {
+        //     id: 1,
+        //     // timestamp: 1,
+        //     // map_points: Arc::new(),
+        // };
+        // let map_msg = MapWriteMsg::new_keyframe(1, new_kf);
 
-        // Sort the matches based on the distance in ascending order
-        // Using O(n^2) sort here. Need to make the code use cv sort function
-        // by providing custom comparator
-
-        let mut sorted_matches = VectorOfDMatch::new();
-        let mut added = vec![false; matches.len()];
-        for i in 0.. matches.len() {
-            if added[i] == true {
-                continue;
-            }
-            let mut mn = i;
-            let mut dist = matches.get(i).unwrap().distance;
-            for j in 0..matches.len() {
-                let dmatch2 = matches.get(j).unwrap();
-                if dist > dmatch2.distance && !added[j] {
-                    mn = j;
-                    dist = dmatch2.distance;
-                }
-            }
-            let dmatch1 = matches.get(mn).unwrap();
-            sorted_matches.push(dmatch1);
-            added[mn] = true;
-        }
-
-        // Point vectors to hold the corresponding matched points 
-        let mut p2f1 = core::Vector::<core::Point2f>::new(); 
-        let mut p2f2 = core::Vector::<core::Point2f>::new();
-
-        for i in 0..sorted_matches.len(){
-            p2f1.push(kp1.get(sorted_matches.get(i).unwrap().train_idx.try_into().unwrap()).unwrap().pt);
-            p2f2.push(kp2.get(sorted_matches.get(i).unwrap().query_idx.try_into().unwrap()).unwrap().pt);
-
-        }
-        (p2f1, p2f2)
-    }
-
-    fn calculate_transform(
-        &self,
-        curr_features: &opencv::types::VectorOfPoint2f,
-        prev_features: &opencv::types::VectorOfPoint2f,
-    ) -> (Mat, Mat) {
-        //recovering the pose and the essential matrix
-        let (mut recover_r, mut recover_t, mut mask) = (Mat::default(), Mat::default(), Mat::default());
-        let essential_mat = opencv::calib3d::find_essential_mat_2(
-            &curr_features,
-            &prev_features,
-            718.8560, // self.focal,
-            core::Point2d::new(607.1928, 185.2157) , //self.pp,
-            opencv::calib3d::RANSAC,
-            0.999,
-            1.0,
-            &mut mask,
-        ).unwrap();
-        opencv::calib3d::recover_pose(
-            &essential_mat,
-            &curr_features,
-            &prev_features,
-            &mut recover_r,
-            &mut recover_t,
-            718.8560, // self.focal,
-            core::Point2d::new(607.1928, 185.2157) , //self.pp,
-            &mut mask,
-        ).unwrap();
-
-        (recover_r, recover_t)
-    }
-
-    fn scale_transform(&self,
-        scale: f64,
-        rotation: &Mat,
-        translation: &Mat,
-        recover_mat: &Mat,
-        t: &Mat,
-    ) -> (Mat, Mat) {
-        //R = recover_mat, R_f= rotation, t_f =translation , t
-        if scale > 0.1
-            && (t.at::<f64>(2).unwrap() > t.at::<f64>(0).unwrap())
-            && (t.at::<f64>(2).unwrap() > t.at::<f64>(1).unwrap())
-        {
-            // t_f = t_f + scale*(R_f*t);
-            let mut rf_cross_t = opencv::core::mul_mat_mat(&rotation, &t).unwrap();
-            rf_cross_t = opencv::core::mul_matexpr_f64(&rf_cross_t, scale).unwrap();
-            let t_f = opencv::core::add_mat_matexpr(&translation, &rf_cross_t)
-                .unwrap()
-                .to_mat()
-                .unwrap();
-
-            // R_f = R*R_f;
-            let r_f = opencv::core::mul_mat_mat(&recover_mat, &rotation)
-                .unwrap()
-                .to_mat()
-                .unwrap();
-
-            (r_f, t_f)
-        } else {
-            println!("scale below 0.1, or incorrect translation");
-            (rotation.clone(), translation.clone())
-        }
-    }
-
-    fn insert_keyframe(&self, msg: &Arc<TrackerMsg>) {
-        // Sofiya: this function needs to be finished
-        let new_kf = KeyFrame {
-            id: 1,
-            // timestamp: 1,
-            // map_points: Arc::new(),
-        };
-        let map_msg = MapWriteMsg::new_keyframe(1, new_kf);
-
-        let map_actor = msg.actor_ids.get(MAP_ACTOR).unwrap();
-        map_actor.send_new(map_msg).unwrap();
+        // let map_actor = msg.actor_ids.get(MAP_ACTOR).unwrap();
+        // map_actor.send_new(map_msg).unwrap();
     }
 
     fn need_new_keyframe(&self) -> bool {
-        // Sofiya: function needs to be finished
+        // TODO
         // let map_lock = self.map.read();
         // let num_kfs = map_lock.num_kfs;
         return true;
+    }
+
+    fn store_pose_info(&self) {
+        // TODO: Convert this to Rust obv
+        // Store frame pose information to retrieve the complete camera trajectory afterwards.
+        // if(mCurrentFrame.isSet())
+        // {
+        //     Sophus::SE3f Tcr_ = mCurrentFrame.GetPose() * mCurrentFrame.mpReferenceKF->GetPoseInverse();
+        //     mlRelativeFramePoses.push_back(Tcr_);
+        //     mlpReferences.push_back(mCurrentFrame.mpReferenceKF);
+        //     mlFrameTimes.push_back(mCurrentFrame.mTimeStamp);
+        //     mlbLost.push_back(mState==LOST);
+        // }
+        // else
+        // {
+        //     // This can happen if tracking is lost
+        //     mlRelativeFramePoses.push_back(mlRelativeFramePoses.back());
+        //     mlpReferences.push_back(mlpReferences.back());
+        //     mlFrameTimes.push_back(mlFrameTimes.back());
+        //     mlbLost.push_back(mState==LOST);
+        // }
+    }
+
+    //* Multi-maps */
+    fn create_new_map(&self) -> bool {
+        // TODO (multimaps)
+        // Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Tracking.cc#L2662
+        return false;
     }
 }
 

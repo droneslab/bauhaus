@@ -4,5 +4,6 @@ pub mod map;
 
 pub mod keyframe;
 pub mod mappoint;
+pub mod frame;
 pub mod pose;
 pub mod misc; //BowDB

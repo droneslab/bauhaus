@@ -15,6 +15,32 @@ use parking_lot::RwLock;
 
 pub static SYSTEM_SETTINGS: &str = "SYSTEM_SETTINGS"; 
 
+#[derive(Clone, Copy, Debug)]
+pub enum Sensor {
+    Mono,
+    ImuMono,
+    Stereo,
+    ImuStereo,
+    Rgbd,
+    ImuRgbd
+}
+
+impl Sensor {
+    pub fn is_imu(&self) -> bool {
+        match *self {
+            Sensor::ImuMono | Sensor::ImuStereo | Sensor::ImuRgbd => true,
+            _ => false
+        }
+    }
+
+    pub fn is_mono(&self) -> bool {
+        match *self {
+            Sensor::ImuMono | Sensor::Mono => true,
+            _ => false
+        }
+    }
+}
+
 pub struct GlobalParams {
     // Lock is necessary because GLOBAL_PARAMS is a static variable
     // https://stackoverflow.com/questions/34832583/global-mutable-hashmap-in-a-library
@@ -54,7 +80,8 @@ impl OverloadedConfigParams<String> for GlobalParams {
             string_field: Some(value.clone()),
             bool_field: None,
             float_field: None,
-            int_field: None
+            int_field: None,
+            sensor_field: None
         };
     }
 }
@@ -68,7 +95,8 @@ impl OverloadedConfigParams<bool> for GlobalParams {
             string_field: None,
             bool_field: Some(value),
             float_field: None,
-            int_field: None
+            int_field: None,
+            sensor_field: None
         };
     }
 }
@@ -82,7 +110,8 @@ impl OverloadedConfigParams<f64> for GlobalParams {
             string_field: None,
             bool_field: None,
             float_field: Some(value),
-            int_field: None
+            int_field: None,
+            sensor_field: None
         };
     }
 }
@@ -96,7 +125,23 @@ impl OverloadedConfigParams<i32> for GlobalParams {
             string_field: None,
             bool_field: None,
             float_field: None,
-            int_field: Some(value)
+            int_field: Some(value),
+            sensor_field: None
+        };
+    }
+}
+
+impl OverloadedConfigParams<Sensor> for GlobalParams {
+    fn get_value_from_box(&self, boxed_value : &ConfigValueBox) -> Sensor {
+        return *boxed_value.sensor_field.as_ref().unwrap();
+    }
+    fn make_box_from_value(&self, value: Sensor) -> ConfigValueBox  {
+        return ConfigValueBox {
+            string_field: None,
+            bool_field: None,
+            float_field: None,
+            int_field: None,
+            sensor_field: Some(value)
         };
     }
 }
@@ -110,5 +155,6 @@ pub struct ConfigValueBox {
     string_field: Option<String>,
     bool_field: Option<bool>,
     float_field: Option<f64>,
-    int_field: Option<i32>
+    int_field: Option<i32>,
+    sensor_field: Option<Sensor>
 }

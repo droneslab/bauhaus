@@ -1,15 +1,15 @@
 use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 extern crate nalgebra as na;
-use crate::map::keyframe::KeyFrame;
+use crate::map::map::Id;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MapPoint {
-    id: u64,
-    first_keyframe_id: u64,
+    id: Id,
+    first_keyframe_id: Id,
     // 3-Vector
     position: na::Matrix<f64, na::U3, na::U1, na::base::storage::Owned<f64, na::U3, na::U1>>,
-    keyframe_ref: Arc<KeyFrame>,
-    keyframe_list: Arc<Vec<KeyFrame>>,
+    ref_keyframe: u64,
+    seen_by_keyframes: Vec<Id>,
     depth_threshold: f64,
 }

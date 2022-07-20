@@ -67,3 +67,19 @@ pub fn add_system_setting_f64(yaml: &Yaml, param_name: &str) {
     GLOBAL_PARAMS.insert(SYSTEM_SETTINGS, param_name, value);
     println!("\t {}: {}", param_name, value);
 }
+
+pub fn add_system_setting_sensor(yaml: &Yaml) {
+    let param_name = "sensor";
+    let value_str = yaml["sensor"].as_str().unwrap();
+    let value = match value_str {
+        "Mono" => Sensor::Mono,
+        "IMU_Mono" => Sensor::ImuMono,
+        "Stereo" => Sensor::Stereo,
+        "IMU_STEREO" => Sensor::ImuStereo,
+        "RGBD" => Sensor::Rgbd,
+        "IMU_RGBD" => Sensor::ImuRgbd,
+        _ => panic!("Incompatible sensor type"),
+    };
+    GLOBAL_PARAMS.insert(SYSTEM_SETTINGS, param_name, value);
+    println!("\t {}: {}", param_name, value_str);
+}
