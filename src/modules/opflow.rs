@@ -52,7 +52,7 @@ impl DarvisOpFlow {
 
                     let (recover_r, recover_t) = self.calculate_transform(&curr_features, &mut prev_features);
                 
-                    //// TODO: Scaling not implemented
+                    /// TODO: Scaling not implemented
                     // let mut curr_pos = Point2d::new(0.0,0.0);
                     // let scale = self.get_scale(num_frame, &self.get_translation(), &mut curr_pos);         
                     //let (rotation, translation) = self.scale_transform(scale, &self.get_rotation(), &self.get_translation(), &recover_r, &recover_t);
@@ -67,13 +67,6 @@ impl DarvisOpFlow {
                         curr_features = self.track_features(&prev_image, &curr_image, &mut prev_features);
                     }
 
-                    // let align_id = msg.actor_ids.get(TRACKER).unwrap();
-                    // let vis_id = msg.actor_ids.get(VISUALIZER).unwrap();
-                    // // println!("{}", align_id);
-                    // // TODO: This is just a test send for now. Need to change message to accept the custom DarvisKeyPoint type
-                    // println!("Processed image: {}", path);
-                    // vis_id.send_new(VisPathMsg::new(path.to_string())).unwrap();
-                    // align_id.send_new(AlignMsg::new(kpvec1, nades1, kpvec2, nades2, msg.actor_ids.clone())).unwrap();
 
                     let t = recover_t;
                     let R = recover_r;

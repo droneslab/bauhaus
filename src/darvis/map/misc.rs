@@ -4,3 +4,8 @@ use serde::{Deserialize, Serialize};
 pub struct BowDB {
 
 }
+
+#[derive(Clone, Debug, Serialize, Deserialize, Copy)]
+pub struct IMUBias {
+    // TODO (IMU)
+}

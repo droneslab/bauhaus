@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
 extern crate nalgebra as na;
 use na::*;
+use opencv::core::Mat;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct DarvisKeyPoint {
@@ -136,3 +137,31 @@ impl DarvisVectorOfKeyPoint for DVVectorOfKeyPoint {
         self.clone()
     }
 }
+
+
+
+// Functions to serialize and deserialize Mat objects, since they cannot be 
+// inferred with serde.
+
+// // Serde calls this the definition of the remote type. It is just a copy of the
+// // remote data structure. The `remote` attribute gives the path to the actual
+// // type we intend to derive code for.
+// #[derive(Serialize, Deserialize)]
+// #[serde(remote = "Mat")]
+// struct DurationDef {
+//     secs: i64,
+//     nanos: i32,
+// }
+
+// // Now the remote type can be used almost like it had its own Serialize and
+// // Deserialize impls all along. The `with` attribute gives the path to the
+// // definition for the remote type. Note that the real type of the field is the
+// // remote type, not the definition type.
+// #[derive(Serialize, Deserialize)]
+// struct Process {
+//     command_line: String,
+
+//     #[serde(with = "DurationDef")]
+//     wall_time: Duration,
+// }
+

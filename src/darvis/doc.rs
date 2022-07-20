@@ -64,6 +64,7 @@
 /// }
 /// ```
 /// 
+#[allow(non_snake_case)]
 pub fn How_to_Add_a_new_Feature()
 {
 
@@ -90,6 +91,7 @@ pub fn How_to_Add_a_new_Feature()
 /// }
 /// ```
 ///   
+#[allow(non_snake_case)]
 pub fn How_to_Register_new_Feature()
 {
 
@@ -120,6 +122,7 @@ pub fn How_to_Register_new_Feature()
 ///     actor_ids: std::collections::HashMap<String, axiom::actors::Aid>,
 /// }
 /// ```
+#[allow(non_snake_case)]
 pub fn How_to_define_Actor_Message()
 {
 

@@ -1,3 +1,4 @@
+use std::ops::Mul;
 use serde::{Deserialize, Serialize};
 use crate::dvutils::*;
 
@@ -15,5 +16,20 @@ impl Pose {
             pos: DVVector3::new(1.0,1.0,1.0),
             rot: DVMatrix3::new(1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0),
         }
+    }
+
+    pub fn inverse(&self) -> Pose{
+        // TODO: what is inverse?
+        Pose::default_ones()
+    }
+}
+impl Mul for Pose {
+    type Output = Pose;
+
+    fn mul(self, _other: Pose) -> Pose {
+        // TODO
+        // implement this, used by tracker
+        // (look for current_frame.pose.unwrap() * last_twc)
+        Pose::default_ones()
     }
 }

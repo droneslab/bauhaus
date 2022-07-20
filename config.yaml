@@ -4,7 +4,9 @@ master:
        file: main.rs
 
 system_settings:
-       show_ui: true
+       show_ui: false
+
+       sensor: Mono
 
       # CAMERA CALIBRATION
        camera_fx: 718.856
@@ -26,6 +28,12 @@ system_settings:
        scale_factor: 1.2
        n_levels: 8
        fast_threshold: 20
+       # TRACKING
+       recently_lost_cutoff: 5
+       frames_to_reset_IMU: 30
+       insert_KFs_when_lost: true
+       min_num_features: 2000
+       localization_only_mode: false
 
 
 modules:

@@ -17,6 +17,7 @@ path = "src/darvis/lib.rs"
 [dependencies]
 opencv = "0.53"
 abow = {version = "*", default-features = false, features = ["bincode"]}
+chrono = "0.4"
 nalgebra = {version = "*", features = ["serde-serialize"]}
 glob = "*"
 serde = "*"
