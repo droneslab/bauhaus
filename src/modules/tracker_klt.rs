@@ -1,21 +1,21 @@
+use std::sync::Arc;
+use axiom::prelude::*;
+use serde::{Deserialize, Serialize};
 // Accepts a message of two image extracted data (kps, des), computes homography
 use opencv::{
     prelude::*,
     core,
-    features2d::{BFMatcher, FlannBasedMatcher},
-    types::{VectorOfKeyPoint, VectorOfDMatch, VectorOfPoint2f},
+    types::{VectorOfKeyPoint, VectorOfPoint2f},
 };
-use opencv::core::CV_32FC1;
-use std::convert::TryInto;
-
-use axiom::prelude::*;
-use serde::{Deserialize, Serialize};
-use crate::dvutils::*;
-use crate::base::*;
-use crate::vis::*;
-use crate::actornames::*;
-
-
+use darvis::{
+    dvutils::*,
+    map::pose::Pose,
+    plugin_functions::Function,
+};
+use crate::{
+    modules::messages::vis_msg::VisMsg,
+    registered_modules::VISUALIZER,
+};
 
 // Message type for this actor
 #[derive(Debug, Serialize, Deserialize)]
@@ -37,8 +37,6 @@ impl TrackerMsgKLT {
         }
     }
 }
-
-
 
 
 #[derive(Debug, Clone)]
@@ -66,58 +64,56 @@ impl DarvisTrackerKLT
     }
     // This is the handler that will be used by the actor.
 // This is the handler that will be used by the actor.
-pub fn align(&mut self, _context: Context, message: Message) -> ActorResult<()> {
-    if let Some(msg) = message.content_as::<TrackerMsgKLT>() {
-        // Convert back to cv structures
+pub fn align(&mut self, _context: Context, msg: Arc<TrackerMsgKLT>) {
+    // Convert back to cv structures
 
-        let img1 = msg.img1.grayscale_to_cv_mat();
-        let kp1 =  msg.img1_kps.cv_vector_of_keypoint();
-        let des1 = msg.img1_des.grayscale_to_cv_mat();
+    let img1 = msg.img1.grayscale_to_cv_mat();
+    let kp1 =  msg.img1_kps.cv_vector_of_keypoint();
+    let des1 = msg.img1_des.grayscale_to_cv_mat();
+
+    if !self.first_frame
+    {
         
+        let mut prev_points = VectorOfPoint2f::from_iter(&self.prev_points);
 
-        if !self.first_frame
+        let curr_features = self.track_features(&self.prev_frame, &img1, &mut prev_points);
+        
+        let (rotation, translation) = self.calculate_transform(&curr_features, &mut prev_points);
+
+
+
+        // a redetection is triggered in case the number of feautres being trakced go below a particular threshold
+        if prev_points.len() < self.min_num_feat as usize 
         {
-            
-            let mut prev_points = VectorOfPoint2f::from_iter(&self.prev_points);
-
-            let curr_features = self.track_features(&self.prev_frame, &img1, &mut prev_points);
-            
-            let (rotation, translation) = self.calculate_transform(&curr_features, &mut prev_points);
-
-
-
-            // a redetection is triggered in case the number of feautres being trakced go below a particular threshold
-            if prev_points.len() < self.min_num_feat as usize 
-            {
-                println!("Current Feature count {:?}", curr_features.len());
-                let pt_indx = opencv::types::VectorOfi32::new();
-                core::KeyPoint::convert(&self.prev_kps, &mut prev_points, &pt_indx).unwrap();
-            }
-
-            self.prev_points = prev_points;
-            let pose = self.get_pose(&rotation, &translation);
-
-
-            let vis_id = msg.actor_ids.get(VISUALIZER).unwrap();
-            vis_id.send_new(VisMsg::new(pose, msg.actor_ids.clone())).unwrap();
-            
-        }
-        else
-        {
-            println!("First Image ");
-            self.first_frame = false;
+            println!("Current Feature count {:?}", curr_features.len());
             let pt_indx = opencv::types::VectorOfi32::new();
-            let mut prev_points = VectorOfPoint2f::new();
-            core::KeyPoint::convert(&kp1, &mut prev_points, &pt_indx).unwrap();
-
-            self.prev_points = prev_points;
+            core::KeyPoint::convert(&self.prev_kps, &mut prev_points, &pt_indx).unwrap();
         }
-        //println!("Tracking done!");
-        self.prev_frame = img1;
-        self.prev_kps = kp1;
-        self.prev_des = des1;
+
+        self.prev_points = prev_points;
+        let pose = self.get_pose(&rotation, &translation);
+
+
+        let vis_id = msg.actor_ids.get(VISUALIZER).unwrap();
+        vis_id.send_new(VisMsg::new(pose, msg.actor_ids.clone())).unwrap();
+        
     }
-    Ok(Status::done(()))
+    else
+    {
+        self.first_frame = false;
+        let pt_indx = opencv::types::VectorOfi32::new();
+        let mut prev_points = VectorOfPoint2f::new();
+        core::KeyPoint::convert(&kp1, &mut prev_points, &pt_indx).unwrap();
+
+        self.prev_points = prev_points;
+    }
+    //println!("Tracking done!");
+    self.prev_frame = img1;
+    self.prev_kps = kp1;
+    self.prev_des = des1;
+
+    // MapWriteMsg
+
 }
 
 pub fn get_pose(&self, r: &Mat, t: &Mat) -> Pose
@@ -262,14 +258,13 @@ pub fn scale_transform(&self,
   }
 }
 
-
-use crate::pluginfunction::Function;
-
 impl Function for DarvisTrackerKLT {
 
     fn handle(&mut self, _context: axiom::prelude::Context, message: Message) -> ActorResult<()>
     {
-        self.align(_context, message).unwrap();
+        if let Some(msg) = message.content_as::<TrackerMsgKLT>() {
+            self.align(_context, msg);
+        }
         Ok(Status::done(()))
     }
 

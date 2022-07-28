@@ -191,7 +191,7 @@ pub fn triangulate(&mut self, _context: Context, message: Message) -> ActorResul
 
         let (mut recover_r, mut recover_t, mut mask) = (Mat::default(), Mat::default(), Mat::default());
         let mut triangulated_points = Mat::default() ;//opencv::types::VectorOfPoint3f::new();
-        let essential_mat = opencv::calib3d::find_essential_mat_2(
+        let essential_mat = opencv::calib3d::find_essential_mat(
           &proj_points2,
           &proj_points1,
           718.8560, // self.focal,
@@ -265,10 +265,14 @@ pub fn triangulate(&mut self, _context: Context, message: Message) -> ActorResul
 
         //==============================================================
 
+        points_3d = points_3d.reshape(1, 0).unwrap();
+        let mut points_3d_new = points_3d.clone();
+        points_3d.convert_to(&mut points_3d_new, CV_32FC1, 1.0, 0.0).unwrap();
+        points_3d = points_3d_new;
 
-        unsafe{
-            points_3d.create_nd( &[points_3d.rows(), 3], CV_32FC1)?;
-        }
+        // unsafe{
+        //     points_3d.create_nd( &[points_3d.rows(), 3], CV_32FC1)?;
+        // }
         println!("{:?}", mask);
         let mut filtered_points = VectorOfPoint3f::new();
         
@@ -295,29 +299,42 @@ pub fn triangulate(&mut self, _context: Context, message: Message) -> ActorResul
 
         if points_3d.rows()>0
         {
-
-
             
             let curr_pose = self.get_pose(&self.traj_rot, &self.traj_pos);    
             let relative_proj_mat = curr_pose.get_relative_projection_matrix();    
             let mut tri_trans_points = Mat::default();
 
-            unsafe{
-                triangulated_points.create_nd( &[triangulated_points.rows(), 1], core::CV_32FC4)?;
-            }
 
+            triangulated_points = triangulated_points.reshape(4,0).unwrap();
+            let mut tmp_triangulated_points = triangulated_points.clone();
+
+            // unsafe{
+            //     tmp_triangulated_points.create_nd( &[tmp_triangulated_points.rows(), 1], core::CV_32FC4)?;
+            // }
+            
+            
+            //triangulated_points.convert_to(&mut tmp_triangulated_points, core::CV_32FC4, 1.0, 0.0).unwrap();
+            
+            //triangulated_points = tmp_triangulated_points.clone();
 
             println!("{:?}", triangulated_points);
+            println!("{:?}", tmp_triangulated_points);
             core::transform(&triangulated_points, &mut tri_trans_points, &relative_proj_mat).unwrap();
             points_3d = tri_trans_points;
             
             let mut new_3dPoints = Mat::default();
             opencv::calib3d::convert_points_from_homogeneous(&points_3d, &mut new_3dPoints)?;
-            println!("New points {:?}", new_3dPoints);
-            points_3d = new_3dPoints;
-            unsafe{
-                    points_3d.create_nd( &[points_3d.rows(), 3], CV_32FC1)?;
-                }
+            
+            println!("New points {:?}", points_3d);
+            //points_3d = new_3dPoints;
+
+            new_3dPoints = points_3d.reshape(1, 0).unwrap();
+            new_3dPoints.convert_to(&mut points_3d, CV_32FC1, 1.0, 0.0).unwrap();
+            
+            println!("New points {:?}", points_3d);
+            // unsafe{
+            //         points_3d.create_nd( &[points_3d.rows(), 3], CV_32FC1)?;
+            //     }
     
             
     

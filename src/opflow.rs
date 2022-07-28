@@ -206,7 +206,7 @@ pub fn feature_tracking(
   ) -> (Mat, Mat) {
     //recovering the pose and the essential matrix
     let (mut recover_r, mut recover_t, mut mask) = (Mat::default(), Mat::default(), Mat::default());
-    let essential_mat = opencv::calib3d::find_essential_mat_2(
+    let essential_mat = opencv::calib3d::find_essential_mat(
       &curr_features,
       &prev_features,
       self.focal,
