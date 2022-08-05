@@ -1,17 +1,18 @@
 use std::sync::Arc;
 use axiom::prelude::*;
 use chrono::{prelude::*, Duration};
+use nalgebra::Matrix3;
 use opencv::{
     prelude::*,
-    core,
+    core::{self, Point2f, CV_32F},
     features2d::{BFMatcher},
-    types::{VectorOfKeyPoint, VectorOfDMatch, VectorOfPoint2f},
+    types::{VectorOfKeyPoint, VectorOfDMatch, VectorOfPoint2f, VectorOfPoint3f},
 };
 use darvis::{
     dvutils::*,
     map::{
         pose::Pose, map::Map, map_actor::MapWriteMsg, map_actor::MAP_ACTOR,
-        keyframe::KeyFrame, frame::Frame, map::Id, misc::IMUBias, mappoint::MapPoint
+        keyframe::KeyFrame, frame::Frame, map::Id, misc::IMUBias, mappoint::MapPoint, orbmatcher::ORBmatcher, camera::DVCamera
     },
     lockwrap::ReadOnlyWrapper,
     plugin_functions::Function,
@@ -34,9 +35,22 @@ pub struct DarvisTracker {
     last_frame_id: i32,
     temporal_points: Vec<MapPoint>,
     reference_keyframe_id: Option<Id>,
+    current_frame: Option<Frame>,
+    initial_frame: Option<Frame>,
+
+
+    // Initialization Variables (Monocular)
+    // std::vector<int> mvIniLastMatches;
+    ini_matches: Vec<i64>,// std::vector<int> mvIniMatches;
+    prev_matched: Vec<Point2f>,// std::vector<cv::Point2f> mvbPrevMatched;
+    ini_p3d: VectorOfPoint3f,// std::vector<cv::Point3f> mvIniP3D;
+    // Frame mInitialFrame;
+
+    // Initalization (only for monocular)
+    ready_to_initializate: bool,
 
     // IMU 
-    velocity: Option<Mat>, // Note: ORB_SLAM3 uses C++ package Sophus
+    velocity: Option<Pose>, // Note: ORB_SLAM3 uses C++ package Sophus
     last_bias: Option<IMUBias>,
 
     // Relocalization
@@ -51,6 +65,12 @@ pub struct DarvisTracker {
     frames_to_reset_imu: i32,
     insert_kfs_when_lost: bool,
     min_num_features: i32,
+
+    //Camera
+    camera: Option<DVCamera>,
+
+    K: Option<Mat>, // Might be redundant
+    K_: Option<Matrix3<f32>>,
 }
 
 #[derive(Debug, Clone)]
@@ -71,7 +91,7 @@ impl DarvisTracker {
         let insert_kfs_when_lost: bool = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "insert_KFs_when_lost");
         let min_num_features: i32 = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "min_num_features");
 
-        DarvisTracker {
+        let mut tracker = DarvisTracker {
             first_frame: true,
             last_frame: None,
             map: map,
@@ -79,6 +99,20 @@ impl DarvisTracker {
             last_frame_id: -1,
             temporal_points: Vec::new(),
             reference_keyframe_id: None,
+            current_frame: None,
+            initial_frame: None,
+
+            // Initialization Variables (Monocular)
+            // std::vector<int> mvIniLastMatches;
+            ini_matches: Vec::new(),// std::vector<int> mvIniMatches;
+            prev_matched: Vec::new(),// std::vector<cv::Point2f> mvbPrevMatched;
+            ini_p3d: VectorOfPoint3f::new(),// std::vector<cv::Point3f> mvIniP3D;
+            // Frame mInitialFrame;
+
+
+            // Initalization (only for monocular)
+            ready_to_initializate: false,
+
 
             // Defaults set from global variables
             recently_lost_cutoff: Duration::seconds(recently_lost_cutoff.into()),
@@ -95,19 +129,62 @@ impl DarvisTracker {
             // Relocalization
             timestamp_lost: None,
             last_reloc_frame_id: 0,
-        }
+
+            //Camera
+            camera: None,
+            K: None,
+            K_: None,
+        };
+
+        // camera_fx: 718.856
+        // camera_fy: 718.856
+        // camera_cx: 607.1928
+        // camera_cy: 185.2157
+
+        tracker.init_camera();
+
+        tracker
+    }
+
+    pub fn init_camera(&mut self)
+    {
+        let fx: f64 = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "camera_fx");
+        let fy: f64 = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "camera_fy");
+        let cx: f64 = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "camera_cx");
+        let cy: f64 = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "camera_cy");
+        
+        self.camera = Some(DVCamera::new(&vec![fx as f32, fy as f32, cx as f32, cy as f32]));
+
+
+        let mut K = Mat::eye(3,3,CV_32F).unwrap().to_mat().unwrap();
+
+        *K.at_2d_mut::<f32>(0,0).unwrap() = fx as f32;
+        *K.at_2d_mut::<f32>(1,1).unwrap() = fy as f32;
+        *K.at_2d_mut::<f32>(0,2).unwrap() = cx as f32;
+        *K.at_2d_mut::<f32>(1,2).unwrap() = cy as f32;
+
+        self.K = Some(K.clone());
+
+        self.K_.unwrap().fill_with_identity();
+        self.K_.unwrap()[(0,0)] = fx as f32;
+        self.K_.unwrap()[(1,1)] = fy as f32;
+        self.K_.unwrap()[(0,2)] = cx as f32;
+        self.K_.unwrap()[(1,2)] = cy as f32;
+
     }
 
     fn track(&mut self, _context: Context, msg: Arc<TrackerMsg>) {
         let map_actor = msg.actor_ids.get(MAP_ACTOR).unwrap();
 
         self.last_frame_id += 1;
-        let mut current_frame = Frame::new(
+        self.current_frame = Some(Frame::new(
             self.last_frame_id, 
             Utc::now(), 
             msg.keypoints.cv_vector_of_keypoint(),
-            msg.descriptors.grayscale_to_cv_mat()
-        );
+            msg.descriptors.grayscale_to_cv_mat(),
+            msg.im_width,
+            msg.im_height
+        ));
 
         // TODO (reset): Reset map because local mapper set the bad imu flag
         // Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Tracking.cc#L1808
@@ -137,7 +214,7 @@ impl DarvisTracker {
                     false => self.stereo_initialization()
                 };
                 if !ok {
-                    self.last_frame = Some(current_frame);
+                    self.last_frame = Some(self.current_frame.as_ref().unwrap().clone());
                     return;
                 }
                 ok
@@ -145,7 +222,7 @@ impl DarvisTracker {
             TrackingState::Ok => {
                 let mut ok;
 
-                let enough_frames_since_last_reloc = current_frame.id < self.last_reloc_frame_id + 2;
+                let enough_frames_since_last_reloc = self.current_frame.as_ref().unwrap().id < self.last_reloc_frame_id + 2;
                 let no_imu_data = self.velocity.is_none() && !self.is_imu_initialized();
                 if no_imu_data || enough_frames_since_last_reloc {
                     ok = self.track_reference_keyframe();
@@ -157,12 +234,12 @@ impl DarvisTracker {
                 }
 
                 if !ok {
-                    let enough_frames_to_reset_imu = current_frame.id <= self.last_reloc_frame_id + self.frames_to_reset_imu;
+                    let enough_frames_to_reset_imu = self.current_frame.as_ref().unwrap().id <= self.last_reloc_frame_id + self.frames_to_reset_imu;
                     if enough_frames_to_reset_imu && self.sensor.is_imu() {
                         self.state = TrackingState::Lost;
                     } else if self.kfs_in_map() > 10 {
                         self.state = TrackingState::RecentlyLost;
-                        self.timestamp_lost = Some(current_frame.timestamp);
+                        self.timestamp_lost = Some(self.current_frame.as_ref().unwrap().timestamp);
                     } else {
                         self.state = TrackingState::Lost;
                     }
@@ -172,7 +249,7 @@ impl DarvisTracker {
             TrackingState::RecentlyLost => {
                 println!("TRACK: State recently lost");
                 let mut ok;
-                let time_since_lost = current_frame.timestamp - self.timestamp_lost.unwrap();
+                let time_since_lost = self.current_frame.as_ref().unwrap().timestamp - self.timestamp_lost.unwrap();
                 if self.sensor.is_imu() {
                     if self.is_imu_initialized() {
                         ok = self.predict_state_IMU();
@@ -233,7 +310,7 @@ impl DarvisTracker {
                 // Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Tracking.cc#L2149
             }
             self.state = TrackingState::RecentlyLost;
-            self.timestamp_lost = Some(current_frame.timestamp);
+            self.timestamp_lost = Some(self.current_frame.as_ref().unwrap().timestamp);
         }
 
         // TODO (IMU)
@@ -241,19 +318,19 @@ impl DarvisTracker {
         // This code not done, so double check with C++ reference.
         {
             // Save frame if recent relocalization, since they are used for IMU reset (as we are making copy, it shluld be once mCurrFrame is completely modified)
-            let enough_frames_to_reset_imu = current_frame.id <= self.last_reloc_frame_id + self.frames_to_reset_imu;
-            if enough_frames_to_reset_imu && current_frame.id > self.frames_to_reset_imu && self.sensor.is_imu() && self.is_imu_initialized() {
+            let enough_frames_to_reset_imu = self.current_frame.as_ref().unwrap().id <= self.last_reloc_frame_id + self.frames_to_reset_imu;
+            if enough_frames_to_reset_imu && self.current_frame.as_ref().unwrap().id > self.frames_to_reset_imu && self.sensor.is_imu() && self.is_imu_initialized() {
                 // Load preintegration
                 // This code directly copied from C++, obviously needs to be changed
                 // pF->mpImuPreintegratedFrame = new IMU::Preintegrated(mCurrentFrame.mpImuPreintegratedFrame);
             }
             if self.is_imu_initialized() && success {
-                if current_frame.id == self.last_reloc_frame_id + self.frames_to_reset_imu {
+                if self.current_frame.as_ref().unwrap().id == self.last_reloc_frame_id + self.frames_to_reset_imu {
                     println!("TRACK: RESETING FRAME!!!");
                     self.reset_frame_IMU();
                 }
-                else if current_frame.id > self.last_reloc_frame_id + 30 {
-                    self.last_bias = current_frame.imu_bias;
+                else if self.current_frame.as_ref().unwrap().id > self.last_reloc_frame_id + 30 {
+                    self.last_bias = self.current_frame.as_ref().unwrap().imu_bias;
                 }
             }
         }
@@ -261,19 +338,20 @@ impl DarvisTracker {
         if success || matches!(self.state, TrackingState::RecentlyLost) {
             // Update motion model
             let last_frame = self.last_frame.as_ref();
-            if !last_frame.is_none() && !last_frame.unwrap().pose.is_none() && !current_frame.pose.is_none() {
+            if !last_frame.is_none() && !last_frame.unwrap().pose.is_none() && !self.current_frame.as_mut().unwrap().pose.is_none() {
                 let last_pose = last_frame.unwrap().pose.as_ref().unwrap();
-                let _last_twc = last_pose.inverse();
+                let _last_Twc = last_pose.inverse();
                 // TODO (IMU)
                 // Ref code: This line exactly: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Tracking.cc#L2211
                 // Pose is Sophus::SE3 type, not sure what this multiplication is actually doing
                 // self.velocity = current_frame.pose.unwrap() * last_twc; 
+                self.velocity = Some(self.current_frame.as_ref().unwrap().pose.as_ref().unwrap().clone() * _last_Twc);
             } else {
                 self.velocity = None;
             }
 
             // Clean VO matches
-            current_frame.clean_VO_matches();
+            self.current_frame.as_mut().unwrap().clean_VO_matches();
 
             // Delete temporal MapPoints
             // TODO:
@@ -291,7 +369,7 @@ impl DarvisTracker {
             // pass to the new keyframe, so that bundle adjustment will finally decide
             // if they are outliers or not. We don't want next frame to estimate its position
             // with those points so we discard them in the frame. Only has effect if lastframe is tracked
-            current_frame.delete_VO_matches_if_not_outliers();
+            self.current_frame.as_mut().unwrap().delete_VO_matches_if_not_outliers();
         }
 
         // Reset if the camera get lost soon after initialization
@@ -313,11 +391,11 @@ impl DarvisTracker {
             return;
         }
 
-        if current_frame.reference_keyframe_id.is_none() {
-            current_frame.reference_keyframe_id = self.reference_keyframe_id;
+        if self.current_frame.as_mut().unwrap().reference_keyframe_id.is_none() {
+            self.current_frame.as_mut().unwrap().reference_keyframe_id = self.reference_keyframe_id;
         }
 
-        self.last_frame = Some(current_frame);
+        self.last_frame = self.current_frame.clone();
 
         match self.state {
             TrackingState::Ok | TrackingState::RecentlyLost => self.store_pose_info(),
@@ -373,21 +451,109 @@ impl DarvisTracker {
         kfs_in_map
     }
 
-    fn monocular_initialization(&self) -> bool {
+    fn monocular_initialization(&mut self) -> bool {
         // TODO
         // Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Tracking.cc#L2448
+        if !self.ready_to_initializate
+        {
+            // Set Reference Frame
+            if self.current_frame.as_ref().unwrap().key_points.len()>100
+            {
+    
+                self.initial_frame = self.current_frame.clone();
+                self.last_frame = self.current_frame.clone();
+                self.prev_matched.resize(self.current_frame.as_ref().unwrap().key_points_un.len(), Point2f::default());
+
+                for i in 0..self.current_frame.as_ref().unwrap().key_points_un.len()
+                {
+                    self.prev_matched[i] = self.current_frame.as_ref().unwrap().key_points_un.get(i).unwrap().pt.clone();
+                }
+    
+                self.ini_matches.iter_mut().map(|x| *x = -1).count();
+    
+                if self.sensor.is_mono() && self.sensor.is_imu()
+                {
+                    //TODO: (IMU) 
+                    //Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/4452a3c4ab75b1cde34e5505a36ec3f9edcdc4c4/src/Tracking.cc#L2467
+
+                    // if(mpImuPreintegratedFromLastKF)
+                    // {
+                    //     delete mpImuPreintegratedFromLastKF;
+                    // }
+                    // mpImuPreintegratedFromLastKF = new IMU::Preintegrated(IMU::Bias(),*mpImuCalib);
+                    // mCurrentFrame.mpImuPreintegrated = mpImuPreintegratedFromLastKF;    
+                }
+    
+                self.ready_to_initializate = true;
+    
+                return true;
+            }
+        }
+        else
+        {
+            if (self.current_frame.as_ref().unwrap().key_points.len() <=100)||((self.sensor.is_mono() && self.sensor.is_imu() )&&(self.last_frame.as_ref().unwrap().timestamp - self.initial_frame.as_ref().unwrap().timestamp> Duration::seconds(1)))
+            {
+                self.ready_to_initializate  = false;
+    
+                return false;
+            }
+    
+            // Find correspondences
+            
+            let matcher = ORBmatcher::new(0.9,true);
+
+            let mut nmatches = matcher.search_for_initialization(&self.initial_frame.as_ref().unwrap(), &self.current_frame.as_ref().unwrap(), &mut self.prev_matched,&mut self.ini_matches, 100);
+    
+            // Check if there are enough correspondences
+            if nmatches<100
+            {
+                self.ready_to_initializate  = false;
+                return false;
+            }
+    
+            let mut Tcw = Pose::default(); //Sophus::SE3f Tcw;
+            let mut vb_triangulated = Vec::<bool>::new();
+            //vector<bool> vb_triangulated; // Triangulated Correspondences (mvIniMatches)
+    
+
+            if self.camera.as_mut().unwrap().reconstruct_with_two_views(&self.initial_frame.as_ref().unwrap().key_points_un, &self.current_frame.as_ref().unwrap().key_points_un, &self.ini_matches, &mut Tcw, &mut self.ini_p3d,&mut vb_triangulated)
+            {
+                for i in 0..self.ini_matches.len()
+                {
+                    if self.ini_matches[i]>=0 && !vb_triangulated[i]
+                    {
+                        self.ini_matches[i]=-1;
+                        nmatches-=1;
+                    }
+                }
+    
+                // Set Frame Poses
+                self.initial_frame.as_mut().unwrap().SetPose(&Pose::default());//.SetPose(Sophus::SE3f());
+                self.current_frame.as_mut().unwrap().SetPose(&Tcw);
+    
+                self.create_initial_map_monocular();
+            }
+        }
+
         return false;
     }
 
+    //void Tracking::CreateInitialMapMonocular()
+    pub fn create_initial_map_monocular(&mut self)
+    {
+        todo!("Implement create_initial_map_monocular");
+    }
+
+
     fn track_reference_keyframe(&self) -> bool {
-        println!("TRACK: Track with respect to the reference KF");
+        todo!("TRACK: Track with respect to the reference KF");
         // TODO
         // Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Tracking.cc#L2720
         return false;
     }
 
     fn track_with_motion_model(&self) -> bool {
-        println!("TRACK: Track with motion model");
+        todo!("TRACK: Track with motion model");
         // TODO
         // Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Tracking.cc#L2854
         // If tracking was successful for last frame, we use a constant
@@ -403,11 +569,12 @@ impl DarvisTracker {
     fn track_local_map(&self) -> bool {
         // TODO
         // Ref code:
+        todo!("TRACK: local map");
         return false;
     }
 
     fn relocalization(&self) -> bool {
-        println!("TRACK: Relocalization");
+        todo!("TRACK: Relocalization");
         // TODO
         // Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Tracking.cc#L3609
         return false;

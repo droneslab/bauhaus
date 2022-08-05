@@ -5,9 +5,17 @@ use crate::{
     dvutils::*
 };
 
+use opencv::{
+    prelude::*, core::KeyPoint,
+};
+
 use super::misc::IMUBias;
 
 unsafe impl Sync for Frame {}
+
+const FRAME_GRID_ROWS :i64 = 48;
+const FRAME_GRID_COLS :i64 = 64;
+
 
 #[derive(Debug, Clone)]
 pub struct Frame {
@@ -20,17 +28,36 @@ pub struct Frame {
     pub reference_keyframe_id: Option<Id>,
     // depth_threshold: u64,
     // cam_params: opencv::core::Mat,
+    pub key_points_un: opencv::types::VectorOfKeyPoint,
+
+
+    // Undistorted Image Bounds (computed once).
+    pub min_x: f64,//static float mnMinX;
+    pub max_x: f64,//static float mnMaxX;
+    pub min_y: f64,//static float mnMinY;
+    pub max_y: f64,//static float mnMaxY;
+
+    pub dist_coef: Vec<f64>,//mDistCoef
+
+    // Keypoints are assigned to cells in a grid to reduce matching complexity when projecting MapPoints.
+    pub grid_element_width_inv: f64, //static float mfGridElementWidthInv;
+    pub grid_element_height_inv: f64,//static float mfGridElementHeightInv;
+    pub grid: Vec<Vec<Vec<usize>>>,//std::vector<std::size_t> mGrid[FRAME_GRID_COLS][FRAME_GRID_ROWS];
+
+    pub width: i32,
+    pub height: i32,
 }
 
 impl Frame {
-    pub fn new(id: i32, timestamp: DateTime<Utc>, keypoints_vec: opencv::types::VectorOfKeyPoint, descriptors_vec: opencv::core::Mat) -> Self {
+    pub fn new(id: i32, timestamp: DateTime<Utc>, keypoints_vec: opencv::types::VectorOfKeyPoint, descriptors_vec: opencv::core::Mat, im_width: i32, im_height: i32) -> Self {
         let keypoints = keypoints_vec.cv_vector_of_keypoint();
         let descriptors = descriptors_vec.grayscale_to_cv_mat();
 
-        let frame = Frame{
+        
+        let mut frame = Frame{
             id: id,
             timestamp: timestamp,
-            key_points: keypoints,
+            key_points: keypoints.clone(),
             descriptors: descriptors,
             pose: None,
             imu_bias: None,
@@ -38,18 +65,247 @@ impl Frame {
 
             // depth_threshold:
             // cam_params: 
+            key_points_un: keypoints.clone(), //TODO : need to compute undistorted keypoints
+
+            min_x: 0.0,
+            max_x: 0.0,
+            min_y: 0.0,
+            max_y: 0.0,
+            dist_coef: vec![0.0; 5],//mDistCoef, setting default to zeros
+
+            // Keypoints are assigned to cells in a grid to reduce matching complexity when projecting MapPoints.
+            grid_element_width_inv: 0.0,// FRAME_GRID_COLS as f64/(max_x-min_x) as f64, //static float mfGridElementWidthInv;
+            //mfGridElementWidthInv=static_cast<float>(FRAME_GRID_COLS)/(mnMaxX-mnMinX);
+            //mfGridElementHeightInv=static_cast<float>(FRAME_GRID_ROWS)/(mnMaxY-mnMinY);
+            grid_element_height_inv: 0.0,//static float mfGridElementHeightInv;
+            grid: Vec::new(),//std::vector<std::size_t> mGrid[FRAME_GRID_COLS][FRAME_GRID_ROWS];
+            width: im_width,
+            height: im_height,
         };
 
         // frame.calculate_pose();
+        frame.ComputeImageBounds();
+
+
+        frame.grid_element_width_inv = FRAME_GRID_COLS as f64/(frame.max_x - frame.min_x) as f64;
+        frame.grid_element_height_inv = FRAME_GRID_COLS as f64/(frame.max_y - frame.min_y) as f64;
+
+        frame.assign_features_to_grid();
+
 
         frame
     }
+
+
+    pub fn ComputeImageBounds(&mut self) //, im_left: Mat)
+    {
+
+        if self.dist_coef[0]!=0.0
+        {
+            //TODO: implement code if dist_coef is non-zero
+            todo!("implement code if dist_coef is non-zero");
+            // cv::Mat mat(4,2,CV_32F);
+            // mat.at<float>(0,0)=0.0; mat.at<float>(0,1)=0.0;
+            // mat.at<float>(1,0)=imLeft.cols; mat.at<float>(1,1)=0.0;
+            // mat.at<float>(2,0)=0.0; mat.at<float>(2,1)=imLeft.rows;
+            // mat.at<float>(3,0)=imLeft.cols; mat.at<float>(3,1)=imLeft.rows;
+
+            // mat=mat.reshape(2);
+            // cv::undistortPoints(mat,mat,static_cast<Pinhole*>(mpCamera)->toK(),mDistCoef,cv::Mat(),mK);
+            // mat=mat.reshape(1);
+
+            // // Undistort corners
+            // mnMinX = min(mat.at<float>(0,0),mat.at<float>(2,0));
+            // mnMaxX = max(mat.at<float>(1,0),mat.at<float>(3,0));
+            // mnMinY = min(mat.at<float>(0,1),mat.at<float>(1,1));
+            // mnMaxY = max(mat.at<float>(2,1),mat.at<float>(3,1));
+        }
+        else
+        {
+            self.min_x = 0.0;
+            self.max_x = self.width as f64;
+            self.min_y = 0.0;
+            self.max_y = self.height as f64;
+        }
+    }
+
+
+
+    pub fn GetFeaturesInArea(&self, x: &f64, y: &f64, r: &f64, min_level: &i64, max_level: &i64, right: bool) -> Vec<usize>
+    {
+
+        let grid_element_width_inv = FRAME_GRID_COLS as f64/(self.max_x - self.min_x) as f64;
+
+        let grid_element_height_inv = FRAME_GRID_COLS as f64/(self.max_y - self.min_y) as f64;
+
+
+        let mut indices = Vec::<usize>::new();
+        indices.reserve(self.key_points.len());
+    
+        let factorX = *r;
+        let factorY = *r;
+        
+        let min_cell_x = i64::max(0, ((x-self.min_x-factorX)*grid_element_width_inv).floor() as i64);
+
+        if min_cell_x>=FRAME_GRID_COLS
+        {
+            return indices;
+        }
+        
+        let max_cell_x = i64::min(FRAME_GRID_COLS-1, ((x-self.min_x+factorX)*grid_element_width_inv).ceil() as i64);
+
+        if max_cell_x<0
+        {
+            return indices;
+        }
+    
+        let min_cell_y = i64::max(0, ((y-self.min_y-factorY)*grid_element_height_inv).floor() as i64);
+        
+        if min_cell_y>=FRAME_GRID_ROWS
+        {
+            return indices;
+        }
+    
+        let max_cell_y = i64::min(FRAME_GRID_ROWS-1, ((y-self.min_y+factorY)*grid_element_height_inv).ceil() as i64);
+        if max_cell_y<0
+        {
+            return indices;
+        }
+    
+        let b_check_levels = *min_level>0 || *max_level>=0;
+    
+        for  ix in min_cell_x..max_cell_x+1
+        {
+            for iy in min_cell_y..max_cell_y+1
+            {
+                //todo!("mGrid implementatiion");
+                let v_cell = Vec::<usize>::new();
+                //const vector<size_t> vCell = (!bRight) ? mGrid[ix][iy] : mGridRight[ix][iy];
+
+                if v_cell.is_empty()
+                {
+                    continue;
+                }
+                    
+                for j in 0..v_cell.len()
+                {
+                
+                    //TODO: [Stereo] Need to update this if stereo images are processed
+                    let kpUn = &self.key_points_un.get(v_cell[j]).unwrap();
+                    //const cv::KeyPoint &kpUn = (Nleft == -1) ? mvKeysUn[v_cell[j]]
+                    //                                         : (!bRight) ? mvKeys[v_cell[j]]
+                    //                                                     : mvKeysRight[v_cell[j]];
+                    if b_check_levels
+                    {
+                        if kpUn.octave< *min_level as i32
+                        {
+                            continue;
+                        }
+                            
+                        if *max_level>=0
+                        {
+                            if kpUn.octave> *max_level as i32
+                            {
+                                continue;
+                            }
+                        }
+
+                    }
+    
+                    let distx = kpUn.pt.x- (*x as f32);
+                    let disty = kpUn.pt.y- (*y as f32);
+    
+                    if distx.abs()<(factorX as f32) && disty.abs() < (factorY as f32) 
+                    {
+                        indices.push(v_cell[j]);
+                    }
+                        
+                }
+            }
+        }
+    
+        return indices;
+    }
+
+    //AssignFeaturesToGrid
+    pub fn assign_features_to_grid(&mut self)
+    {
+        // Fill matrix with points
+        let n_cells = FRAME_GRID_COLS*FRAME_GRID_ROWS;
+        
+        let N = self.key_points.len() ; //TODO: [Stereo] Need to update this if stereo images are processed
+        let nReserve = ((0.5 *N as f64)/(n_cells as f64)) as usize;
+    
+        for i in 0..FRAME_GRID_COLS as usize
+        {
+            for j in 0..FRAME_GRID_ROWS as usize
+            {
+                self.grid[i][j].reserve(nReserve);
+                //TODO: [Stereo] Need to update this if stereo images are processed
+                // if(Nleft != -1){
+                //     mGridRight[i][j].reserve(nReserve);
+                // }                
+            }
+        }
+
+        for i in 0..N
+        {    
+
+            //TODO: [Stereo] Need to update this if stereo images are processed
+            let kp = &self.key_points_un.get(i).unwrap();
+            // const cv::KeyPoint &kp = (Nleft == -1) ? mvKeysUn[i]
+            //                                          : (i < Nleft) ? mvKeys[i]
+            //                                                          : mvKeysRight[i - Nleft]; 
+
+            let (mut grid_pos_x, mut grid_pos_y) = (0i64,0i64);
+            if self.pos_in_grid(kp,&mut grid_pos_x,&mut grid_pos_y)
+            {
+                self.grid[grid_pos_x as usize][grid_pos_y as usize].push(i);
+
+                //TODO: [Stereo] Need to update this if stereo images are processed
+                // if(Nleft == -1 || i < Nleft)
+                //     mGrid[grid_pos_x][grid_pos_y].push_back(i);
+                // else
+                //     mGridRight[grid_pos_x][grid_pos_y].push_back(i - Nleft);
+            }
+        }
+    
+    }
+
+
+    //bool Frame::PosInGrid(const cv::KeyPoint &kp, int &posX, int &posY)
+    pub fn pos_in_grid(&self, kp : &KeyPoint, posX: &mut i64, posY : &mut i64) -> bool
+    {
+
+        *posX = (kp.pt.x-(self.min_x as f32)*self.grid_element_width_inv as f32).round() as i64;
+        *posY = (kp.pt.y-(self.min_y as f32)*self.grid_element_height_inv as f32).round() as i64;
+
+        //Keypoint's coordinates are undistorted, which could cause to go out of the image
+        if *posX<0 || *posX>=FRAME_GRID_COLS || *posY<0 || *posY>=FRAME_GRID_ROWS
+        {
+            return false;
+        }
+            
+        return true;
+    }
+
+
+    //void Frame::SetPose(const Sophus::SE3<float> &Tcw) 
+    pub fn SetPose(&mut self, Tcw: &Pose)
+    {
+        self.pose = Some(Tcw.clone());
+    
+        //UpdatePoseMatrices();
+        //mbIsSet = true;
+        //mbHasPose = true;
+    }
+
 
     // TODO: These functions moved out of tracking, but need to figure out what should be here and what should go back in tracking
     // Need to compare this current method of tracking to ORBSLAM3, probably the track reference keyframe function?
 
     // fn calculate_pose(&self, r: &Mat, t: &Mat) -> Pose {
-    //     let mut pose = Pose::default_ones();
+    //     let mut pose = Pose::default();
     //     pose.pos[0] = *t.at::<f64>(0).unwrap();
     //     pose.pos[1] = *t.at::<f64>(1).unwrap();
     //     pose.pos[2] = *t.at::<f64>(2).unwrap();
@@ -148,7 +404,7 @@ impl Frame {
     // ) -> (Mat, Mat) {
     //     //recovering the pose and the essential matrix
     //     let (mut recover_r, mut recover_t, mut mask) = (Mat::default(), Mat::default(), Mat::default());
-    //     let essential_mat = opencv::calib3d::find_essential_mat_2(
+    //     let essential_mat = opencv::calib3d::find_essential_mat(
     //         &curr_features,
     //         &prev_features,
     //         718.8560, // self.focal,

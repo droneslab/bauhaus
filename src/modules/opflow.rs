@@ -71,19 +71,20 @@ impl DarvisOpFlow {
                     let t = recover_t;
                     let R = recover_r;
 
-                    let mut pose = Pose::default_ones();
-                    pose.pos[0] = *t.at::<f64>(0).unwrap();
-                    pose.pos[1] = *t.at::<f64>(1).unwrap();
-                    pose.pos[2] = *t.at::<f64>(2).unwrap();
-                    pose.rot[(0,0)] = *R.at_2d::<f64>(0,0).unwrap();
-                    pose.rot[(0,1)] = *R.at_2d::<f64>(0,1).unwrap();
-                    pose.rot[(0,2)] = *R.at_2d::<f64>(0,2).unwrap();
-                    pose.rot[(1,0)] = *R.at_2d::<f64>(1,0).unwrap();
-                    pose.rot[(1,1)] = *R.at_2d::<f64>(1,1).unwrap();
-                    pose.rot[(1,2)] = *R.at_2d::<f64>(1,2).unwrap();
-                    pose.rot[(2,0)] = *R.at_2d::<f64>(2,0).unwrap();
-                    pose.rot[(2,1)] = *R.at_2d::<f64>(2,1).unwrap();
-                    pose.rot[(2,2)] = *R.at_2d::<f64>(2,2).unwrap();
+                    let mut pose = Pose::default();
+                    // Pose::new(t, R);
+                    // pose.pos[0] = *t.at::<f64>(0).unwrap();
+                    // pose.pos[1] = *t.at::<f64>(1).unwrap();
+                    // pose.pos[2] = *t.at::<f64>(2).unwrap();
+                    // pose.rot[(0,0)] = *R.at_2d::<f64>(0,0).unwrap();
+                    // pose.rot[(0,1)] = *R.at_2d::<f64>(0,1).unwrap();
+                    // pose.rot[(0,2)] = *R.at_2d::<f64>(0,2).unwrap();
+                    // pose.rot[(1,0)] = *R.at_2d::<f64>(1,0).unwrap();
+                    // pose.rot[(1,1)] = *R.at_2d::<f64>(1,1).unwrap();
+                    // pose.rot[(1,2)] = *R.at_2d::<f64>(1,2).unwrap();
+                    // pose.rot[(2,0)] = *R.at_2d::<f64>(2,0).unwrap();
+                    // pose.rot[(2,1)] = *R.at_2d::<f64>(2,1).unwrap();
+                    // pose.rot[(2,2)] = *R.at_2d::<f64>(2,2).unwrap();
 
                     // println!("{}", pose.pos);
                     // println!("{}", pose.rot);
@@ -168,7 +169,7 @@ impl DarvisOpFlow {
     ) -> (Mat, Mat) {
         //recovering the pose and the essential matrix
         let (mut recover_r, mut recover_t, mut mask) = (Mat::default(), Mat::default(), Mat::default());
-        let essential_mat = opencv::calib3d::find_essential_mat_2(
+        let essential_mat = opencv::calib3d::find_essential_mat(
             &curr_features,
             &prev_features,
             self.focal,
