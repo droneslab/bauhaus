@@ -11,13 +11,17 @@ pub struct TrackerMsg {
     pub keypoints: DVVectorOfKeyPoint,
     pub descriptors: DVMatrixGrayscale,
     pub actor_ids: std::collections::HashMap<String, axiom::actors::Aid>,
+    pub im_width: i32,
+    pub im_height: i32,
 }
 impl TrackerMsg {
-    pub fn new(keypoints: DVVectorOfKeyPoint, descriptors: DVMatrixGrayscale, ids: std::collections::HashMap<String, axiom::actors::Aid>) -> Self {
+    pub fn new(keypoints: DVVectorOfKeyPoint, descriptors: DVMatrixGrayscale, im_width: i32, im_height: i32, ids: std::collections::HashMap<String, axiom::actors::Aid>) -> Self {
         Self {
             keypoints: keypoints,
             descriptors: descriptors,
             actor_ids: ids,
+            im_width: im_width,
+            im_height: im_height,
         }
     }
 }

@@ -61,12 +61,12 @@ impl DarvisVis {
         if let Some(msg) = message.content_as::<VisMsg>() {
             // rotate and translate matrices from pose to track trajectory (R and t from pose)
             if self.traj_pos == DVVector3::zeros() && self.traj_rot == DVMatrix3::zeros() {
-                self.traj_pos = msg.new_pose.pos;
-                self.traj_rot = msg.new_pose.rot;
+                self.traj_pos = msg.new_pose.pos();
+                self.traj_rot = msg.new_pose.rot();
             }
             else {
-                self.traj_pos = self.traj_pos + self.traj_rot*&msg.new_pose.pos;
-                self.traj_rot = &msg.new_pose.rot * self.traj_rot;
+                self.traj_pos = self.traj_pos + self.traj_rot*&msg.new_pose.pos();
+                self.traj_rot = &msg.new_pose.rot() * self.traj_rot;
             }
 
             // Draw new circle on image and show
@@ -79,7 +79,7 @@ impl DarvisVis {
             let y_offset = 350 ;
             //let imtitle = "Estimated Trajectory".to_string();
 
-            imgproc::circle(&mut self.traj_img, core::Point_::new(x+x_offset, y+y_offset), 3, core::Scalar_([0.0, 0.0, 255.0, 0.0]), -1, 8, 0)?;
+            imgproc::circle(&mut self.traj_img, core::Point_::new(x+x_offset, y+y_offset), 3, core::Scalar::new(0.0, 0.0, 255.0, 0.0), -1, 8, 0)?;
 
             //highgui::imshow(&imtitle, &self.traj_img)?;
             //highgui::wait_key(1)?;   
