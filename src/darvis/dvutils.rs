@@ -1,3 +1,4 @@
+use na::DMatrix;
 use opencv::{
     prelude::*,
     core::*,
@@ -6,7 +7,7 @@ use opencv::{
 use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
 extern crate nalgebra as na;
-use na::*;
+//use na::*;
 use opencv::core::Mat;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -18,6 +19,8 @@ pub struct DarvisKeyPoint {
     octave: i32,
     class_id: i32
 }
+
+use cv_convert::{FromCv, IntoCv, TryFromCv, TryIntoCv};
 
 /// Used to handle Grayscale images 
 pub type DVMatrixGrayscale = na::DMatrix<u8>;

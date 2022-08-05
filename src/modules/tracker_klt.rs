@@ -118,21 +118,25 @@ pub fn align(&mut self, _context: Context, msg: Arc<TrackerMsgKLT>) {
 
 pub fn get_pose(&self, r: &Mat, t: &Mat) -> Pose
 {
-    let mut pose = Pose::default_ones();
-    pose.pos[0] = *t.at::<f64>(0).unwrap();
-    pose.pos[1] = *t.at::<f64>(1).unwrap();
-    pose.pos[2] = *t.at::<f64>(2).unwrap();
+      
+    let x  = *t.at::<f64>(0).unwrap();
+    let y = *t.at::<f64>(1).unwrap();
+    let z = *t.at::<f64>(2).unwrap();
 
-    pose.rot[(0,0)] = *r.at_2d::<f64>(0,0).unwrap();
-    pose.rot[(0,1)] = *r.at_2d::<f64>(0,1).unwrap();
-    pose.rot[(0,2)] = *r.at_2d::<f64>(0,2).unwrap();
-    pose.rot[(1,0)] = *r.at_2d::<f64>(1,0).unwrap();
-    pose.rot[(1,1)] = *r.at_2d::<f64>(1,1).unwrap();
-    pose.rot[(1,2)] = *r.at_2d::<f64>(1,2).unwrap();
-    pose.rot[(2,0)] = *r.at_2d::<f64>(2,0).unwrap();
-    pose.rot[(2,1)] = *r.at_2d::<f64>(2,1).unwrap();
-    pose.rot[(2,2)] = *r.at_2d::<f64>(2,2).unwrap();
+    let pos = DVVector3::from_vec(vec![x,y,z]);
 
+    let mut rot = DVMatrix3::identity();
+    rot[(0,0)] = *r.at_2d::<f64>(0,0).unwrap();
+    rot[(0,1)] = *r.at_2d::<f64>(0,1).unwrap();
+    rot[(0,2)] = *r.at_2d::<f64>(0,2).unwrap();
+    rot[(1,0)] = *r.at_2d::<f64>(1,0).unwrap();
+    rot[(1,1)] = *r.at_2d::<f64>(1,1).unwrap();
+    rot[(1,2)] = *r.at_2d::<f64>(1,2).unwrap();
+    rot[(2,0)] = *r.at_2d::<f64>(2,0).unwrap();
+    rot[(2,1)] = *r.at_2d::<f64>(2,1).unwrap();
+    rot[(2,2)] = *r.at_2d::<f64>(2,2).unwrap();
+
+    let mut pose = Pose::new(&pos, &rot);
     pose
 }
 
@@ -144,7 +148,7 @@ pub fn calculate_transform(
 ) -> (Mat, Mat) {
   //recovering the pose and the essential matrix
   let (mut recover_r, mut recover_t, mut mask) = (Mat::default(), Mat::default(), Mat::default());
-  let essential_mat = opencv::calib3d::find_essential_mat_2(
+  let essential_mat = opencv::calib3d::find_essential_mat(
     &curr_features,
     &prev_features,
     718.8560, // self.focal,
