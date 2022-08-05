@@ -46,6 +46,8 @@ impl DarvisOrb {
                     align_id.send_new(TrackerMsg::new(
                         kp1.darvis_vector_of_keypoint(),
                         des1.grayscale_mat(),
+                        img1.cols(),
+                        img1.rows(),
                         msg.get_actor_ids().clone()
                     )).unwrap();
                 },
@@ -62,6 +64,8 @@ impl DarvisOrb {
                     align_id.send_new(TrackerMsg::new(
                         kp1.darvis_vector_of_keypoint(),
                         des1.grayscale_mat(),
+                        img1.cols(),
+                        img1.rows(),
                         msg.get_actor_ids().clone()
                     )).unwrap();
                 },
