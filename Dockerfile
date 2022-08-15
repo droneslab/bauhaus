@@ -5,7 +5,7 @@ RUN apt-get update && \
     apt-get install -y wget git cmake vim \
                        clang libclang-dev pkg-config \
                        libc6-dbg gdb valgrind \
-                       libgtk2.0-dev
+                       libgtk2.0-dev 
 
 # Install rust
 RUN wget https://raw.githubusercontent.com/rust-lang/rustup/master/rustup-init.sh && \
@@ -25,3 +25,14 @@ RUN cd opencv && mkdir build && cd build && \
     make -j4 install
 
 ENV LD_LIBRARY_PATH=/usr/local/lib/
+
+# Upgrade version of cmake (needed for C++ bindings)
+RUN apt remove --purge cmake && hash -r
+RUN apt install build-essential libssl-dev
+RUN wget https://github.com/Kitware/CMake/releases/download/v3.20.2/cmake-3.20.2.tar.gz && tar -zxvf cmake-3.20.2.tar.gz
+RUN cd cmake-3.20.2 && ./bootstrap && make && make install
+
+# g2o bindings package
+RUN apt install libeigen3-dev
+RUN git clone https://github.com/ssemenova/g2o-bindings.git
+RUN cd g2o-bindings/g2orust/ && cargo build

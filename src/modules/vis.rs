@@ -57,7 +57,7 @@ impl DarvisVis {
     }
 
     /// Visualize core function to be called by the action framework that process VisMsg type message.
-    pub fn visualize(&mut self, context: Context, message: Message) -> ActorResult<()> {
+    pub fn visualize(&mut self, _context: Context, message: Message) -> ActorResult<()> {
         if let Some(msg) = message.content_as::<VisMsg>() {
             // rotate and translate matrices from pose to track trajectory (R and t from pose)
             if self.traj_pos == DVVector3::zeros() && self.traj_rot == DVMatrix3::zeros() {

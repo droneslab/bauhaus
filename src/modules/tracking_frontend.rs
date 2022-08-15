@@ -1,3 +1,5 @@
+extern crate g2orust;
+
 use axiom::prelude::*;
 use std::sync::Arc;
 use opencv::{
@@ -8,8 +10,7 @@ use opencv::{
 use darvis::{
     dvutils::*,
     map::{
-        pose::Pose, map::Map, map_actor::MapWriteMsg, map_actor::MAP_ACTOR,
-        keyframe::KeyFrame, frame::Frame, map::Id, misc::IMUBias, mappoint::MapPoint, orbmatcher::ORBmatcher, camera::DVCamera
+        map::Map,
     },
     lockwrap::ReadOnlyWrapper,
     plugin_functions::Function,
@@ -18,7 +19,6 @@ use darvis::{
 use crate::{
     registered_modules::{TRACKER},
     modules::{
-        tracker_klt::*,
         messages::{
             image_msg::ImageMsg,
             feature_msg::FeatureMsg,
