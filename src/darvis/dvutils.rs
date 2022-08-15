@@ -36,6 +36,12 @@ pub trait DarvisMatrix {
     fn grayscale_mat(&self) -> DVMatrixGrayscale;
 }
 
+pub fn DVVector3_to_array(
+    vector: DVVector3
+) -> [f64; 3] {
+    return [vector.x, vector.y, vector.z];
+}
+
 /// Matrix Trait implementation for OpenCV Mat
 impl DarvisMatrix for opencv::core::Mat {
     /// get OpenCV Mat

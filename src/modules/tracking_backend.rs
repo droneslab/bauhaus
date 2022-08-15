@@ -4,49 +4,59 @@ use chrono::{prelude::*, Duration};
 use nalgebra::Matrix3;
 use opencv::{
     prelude::*,
-    core::{self, Point2f, CV_32F},
-    features2d::{BFMatcher},
-    types::{VectorOfKeyPoint, VectorOfDMatch, VectorOfPoint2f, VectorOfPoint3f},
+    core::{Point2f, CV_32F},
+    types::{VectorOfPoint3f},
 };
 use darvis::{
     dvutils::*,
     map::{
         pose::Pose, map::Map, map_actor::MapWriteMsg, map_actor::MAP_ACTOR,
-        keyframe::KeyFrame, frame::Frame, map::Id, misc::IMUBias, mappoint::MapPoint, orbmatcher::ORBmatcher, camera::DVCamera
+        // keyframe::KeyFrame, 
+        frame::Frame, map::Id, misc::IMUBias, 
+        mappoint::MapPoint, orbmatcher::ORBmatcher, 
+        camera::DVCamera
     },
     lockwrap::ReadOnlyWrapper,
     plugin_functions::Function,
     global_params::*,
 };
 use crate::{
-    registered_modules::VISUALIZER,
+    // registered_modules::VISUALIZER,
+    modules::optimizer::optimize_pose,
     modules::messages::{
-        vis_msg::VisMsg,
+        // vis_msg::VisMsg,
         feature_msg::FeatureMsg,
     },
 };
 
 #[derive(Debug, Clone)]
 pub struct DarvisTrackingBack {
-    first_frame: bool,
-    last_frame: Option<Frame>,
     map: ReadOnlyWrapper<Map>,
     state: TrackingState,
-    last_frame_id: i32,
-    temporal_points: Vec<MapPoint>,
-    reference_keyframe_id: Option<Id>,
+
+    // Frames
+    first_frame: bool,
+    last_frame: Option<Frame>,
+    last_frame_id: Id,
     current_frame: Option<Frame>,
     initial_frame: Option<Frame>,
     reference_frame: Option<Frame>, //Redundant hence will remove once frame database is established.
 
-    // Initialization Variables (Monocular)
+    // KeyFrames
+    reference_keyframe_id: Id,
+    last_keyframe_id: Id,
+
+    temporal_points: Vec<MapPoint>,
+    relative_frame_poses: Vec<Pose>, // Calculated poses
+
+    orb_matcher: ORBmatcher,
+
+    // Initialization (Monocular)
     // std::vector<int> mvIniLastMatches;
     ini_matches: Vec<i32>,// std::vector<int> mvIniMatches;
     prev_matched: Vec<Point2f>,// std::vector<cv::Point2f> mvbPrevMatched;
     ini_p3d: VectorOfPoint3f,// std::vector<cv::Point3f> mvIniP3D;
     // Frame mInitialFrame;
-
-    // Initalization (only for monocular)
     ready_to_initializate: bool,
 
     // IMU 
@@ -103,10 +113,15 @@ impl DarvisTrackingBack {
             state: TrackingState::NoImagesYet,
             last_frame_id: -1,
             temporal_points: Vec::new(),
-            reference_keyframe_id: None,
+            reference_keyframe_id: -1,
             current_frame: None,
             initial_frame: None,
             reference_frame: None,
+            last_keyframe_id: -1,
+
+            relative_frame_poses: Vec::new(),
+
+            orb_matcher: ORBmatcher::new(0.9,true),
 
             // Initialization Variables (Monocular)
             // std::vector<int> mvIniLastMatches;
@@ -114,9 +129,6 @@ impl DarvisTrackingBack {
             prev_matched: Vec::new(),// std::vector<cv::Point2f> mvbPrevMatched;
             ini_p3d: VectorOfPoint3f::new(),// std::vector<cv::Point3f> mvIniP3D;
             // Frame mInitialFrame;
-
-
-            // Initalization (only for monocular)
             ready_to_initializate: false,
 
 
@@ -232,12 +244,12 @@ impl DarvisTrackingBack {
             TrackingState::Ok => {
                 let mut ok;
 
-                let enough_frames_since_last_reloc = self.current_frame.as_ref().unwrap().id < self.last_reloc_frame_id + 2;
+                let not_enough_frames_since_last_reloc = self.current_frame.as_ref().unwrap().id < self.last_reloc_frame_id + 2;
                 let no_imu_data = self.velocity.is_none() && !self.is_imu_initialized();
-                if no_imu_data || enough_frames_since_last_reloc {
+                if no_imu_data || not_enough_frames_since_last_reloc {
                     ok = self.track_reference_keyframe();
                 } else {
-                    ok = self.track_with_motion_model();
+                    ok = self.track_with_motion_model(map_actor);
                     if !ok {
                         ok = self.track_reference_keyframe();
                     }
@@ -326,24 +338,24 @@ impl DarvisTrackingBack {
         // TODO (IMU)
         // Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Tracking.cc#L2167
         // This code not done, so double check with C++ reference.
-        {
-            // Save frame if recent relocalization, since they are used for IMU reset (as we are making copy, it shluld be once mCurrFrame is completely modified)
-            let enough_frames_to_reset_imu = self.current_frame.as_ref().unwrap().id <= self.last_reloc_frame_id + self.frames_to_reset_imu;
-            if enough_frames_to_reset_imu && self.current_frame.as_ref().unwrap().id > self.frames_to_reset_imu && self.sensor.is_imu() && self.is_imu_initialized() {
-                // Load preintegration
-                // This code directly copied from C++, obviously needs to be changed
-                // pF->mpImuPreintegratedFrame = new IMU::Preintegrated(mCurrentFrame.mpImuPreintegratedFrame);
-            }
-            if self.is_imu_initialized() && success {
-                if self.current_frame.as_ref().unwrap().id == self.last_reloc_frame_id + self.frames_to_reset_imu {
-                    println!("TRACK: RESETING FRAME!!!");
-                    self.reset_frame_IMU();
-                }
-                else if self.current_frame.as_ref().unwrap().id > self.last_reloc_frame_id + 30 {
-                    self.last_bias = self.current_frame.as_ref().unwrap().imu_bias;
-                }
-            }
-        }
+        // {
+        //     // Save frame if recent relocalization, since they are used for IMU reset (as we are making copy, it shluld be once mCurrFrame is completely modified)
+        //     let enough_frames_to_reset_imu = self.current_frame.as_ref().unwrap().id <= self.last_reloc_frame_id + self.frames_to_reset_imu;
+        //     if enough_frames_to_reset_imu && self.current_frame.as_ref().unwrap().id > self.frames_to_reset_imu && self.sensor.is_imu() && self.is_imu_initialized() {
+        //         // Load preintegration
+        //         // This code directly copied from C++, obviously needs to be changed
+        //         // pF->mpImuPreintegratedFrame = new IMU::Preintegrated(mCurrentFrame.mpImuPreintegratedFrame);
+        //     }
+        //     if self.is_imu_initialized() && success {
+        //         if self.current_frame.as_ref().unwrap().id == self.last_reloc_frame_id + self.frames_to_reset_imu {
+        //             println!("TRACK: RESETING FRAME!!!");
+        //             self.reset_frame_IMU();
+        //         }
+        //         else if self.current_frame.as_ref().unwrap().id > self.last_reloc_frame_id + 30 {
+        //             self.last_bias = self.current_frame.as_ref().unwrap().imu_bias;
+        //         }
+        //     }
+        // }
 
         if success || matches!(self.state, TrackingState::RecentlyLost) {
             // Update motion model
@@ -402,7 +414,7 @@ impl DarvisTrackingBack {
         }
 
         if self.current_frame.as_mut().unwrap().reference_keyframe_id.is_none() {
-            self.current_frame.as_mut().unwrap().reference_keyframe_id = self.reference_keyframe_id;
+            self.current_frame.as_mut().unwrap().reference_keyframe_id = Some(self.reference_keyframe_id);
         }
 
         self.last_frame = self.current_frame.clone();
@@ -504,27 +516,22 @@ impl DarvisTrackingBack {
             if (self.current_frame.as_ref().unwrap().key_points.len() <=100)||((self.sensor.is_mono() && self.sensor.is_imu() )&&(self.last_frame.as_ref().unwrap().timestamp - self.initial_frame.as_ref().unwrap().timestamp> Duration::seconds(1)))
             {
                 self.ready_to_initializate  = false;
-    
                 return false;
             }
-    
-            // Find correspondences
-            
-            let matcher = ORBmatcher::new(0.9,true);
 
-            let mut nmatches = matcher.search_for_initialization(&self.initial_frame.as_ref().unwrap(), &self.current_frame.as_ref().unwrap(), &mut self.prev_matched,&mut self.ini_matches, 100);
-    
+            // Find correspondences
+            let mut nmatches = self.orb_matcher.search_for_initialization(&self.initial_frame.as_ref().unwrap(), &self.current_frame.as_ref().unwrap(), &mut self.prev_matched,&mut self.ini_matches, 100);
+
             // Check if there are enough correspondences
             if nmatches<100
             {
                 self.ready_to_initializate  = false;
                 return false;
             }
-    
+
             let mut Tcw = Pose::default(); //Sophus::SE3f Tcw;
             let mut vb_triangulated = Vec::<bool>::new();
             //vector<bool> vb_triangulated; // Triangulated Correspondences (mvIniMatches)
-    
 
             if self.camera.as_mut().unwrap().reconstruct_with_two_views(&self.initial_frame.as_ref().unwrap().key_points_un, &self.current_frame.as_ref().unwrap().key_points_un, &self.ini_matches, &mut Tcw, &mut self.ini_p3d,&mut vb_triangulated)
             {
@@ -689,9 +696,8 @@ impl DarvisTrackingBack {
 
     }
 
-    fn track_with_motion_model(&self) -> bool {
-        todo!("TRACK: Track with motion model");
-        // TODO
+    fn track_with_motion_model(&mut self, map_actor: &axiom::actors::Aid) -> bool {
+        println!("TRACK: Track with motion model");
         // Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Tracking.cc#L2854
         // If tracking was successful for last frame, we use a constant
         // velocity motion model to predict the camera pose and perform
@@ -700,21 +706,198 @@ impl DarvisTrackingBack {
         // violated), we use a wider search of the map points around
         // their position in the last frame. The pose is then optimized
         // with the found correspondences.
-        return false;
+
+        // Update last frame pose according to its reference keyframe
+        // Create "visual odometry" points if in Localization Mode
+        self.update_last_frame();
+
+        let enough_frames_to_reset_imu = self.current_frame.as_ref().unwrap().id <= self.last_reloc_frame_id + self.frames_to_reset_imu;
+        if self.is_imu_initialized() && enough_frames_to_reset_imu {
+            // Predict state with IMU if it is initialized and it doesnt need reset
+            self.predict_state_IMU();
+            return true;
+        } else {
+            // let pos = DVVector3::from_vec(vec![x,y,z]);
+
+            // let mut rot = DVMatrix3::identity();
+            // rot[(0,0)] = *r.at_2d::<f64>(0,0).unwrap();
+            // rot[(0,1)] = *r.at_2d::<f64>(0,1).unwrap();
+            // rot[(0,2)] = *r.at_2d::<f64>(0,2).unwrap();
+            // rot[(1,0)] = *r.at_2d::<f64>(1,0).unwrap();
+            // rot[(1,1)] = *r.at_2d::<f64>(1,1).unwrap();
+            // rot[(1,2)] = *r.at_2d::<f64>(1,2).unwrap();
+            // rot[(2,0)] = *r.at_2d::<f64>(2,0).unwrap();
+            // rot[(2,1)] = *r.at_2d::<f64>(2,1).unwrap();
+            // rot[(2,2)] = *r.at_2d::<f64>(2,2).unwrap();
+
+            // let mut pose = Pose::new(&pos, &rot);
+            // self.current_frame.SetPose(mVelocity * mLastFrame.GetPose());
+        }
+
+        self.current_frame.as_mut().unwrap().clear_mappoints();
+
+        // Project points seen in previous frame
+        let _th = match self.sensor.is_mono() {
+            true => 15,
+            false => 7
+        };
+        let mut matches = self.orb_matcher.search_by_projection(); // (mCurrentFrame,mLastFrame,th,mSensor==System::MONOCULAR || mSensor==System::IMU_MONOCULAR);
+
+        // If few matches, uses a wider window search
+        if matches.len() < 20 {
+            println!("TRACK: track_with_motion_model... not enough matches, wider window search");
+            self.current_frame.as_mut().unwrap().clear_mappoints();
+            matches = self.orb_matcher.search_by_projection(); //(mCurrentFrame,mLastFrame,2*th,mSensor==System::MONOCULAR || mSensor==System::IMU_MONOCULAR);
+        }
+
+        if matches.len() < 20 {
+            println!("TRACK: track_with_motion_model... not enough matches!!");
+            return self.sensor.is_imu();
+        }
+
+        // Optimize frame pose with all matches
+        let (pose, inliers) = optimize_pose(&mut self.current_frame.as_mut().unwrap(), &self.map);
+
+        // Discard outliers
+        let mut nmatches_map = 0;
+        let matches = &self.current_frame.as_ref().unwrap().mappoint_matches; // Sofiya: honestly don't know why I need to borrow (&) here...
+        for (index, mp_id) in matches {
+            {
+                let map_lock = self.map.read();
+                let mappoint_observations = map_lock.mappoints.get(mp_id).unwrap().num_observations;
+                
+                if self.current_frame.as_ref().unwrap().mappoint_outliers.contains_key(mp_id) {
+                    {
+                        let map_msg = MapWriteMsg::delete_mappoint_match(self.current_frame.as_ref().unwrap().id, *mp_id, true);
+                        map_actor.send_new(map_msg).unwrap();
+                    }
+
+                    // if(i < mCurrentFrame.Nleft){
+                    //     pMP->mbTrackInView = false;
+                    // }
+                    // else{
+                    //     pMP->mbTrackInViewR = false;
+                    // }
+                } else if mappoint_observations > 0 {
+                    nmatches_map += 1;
+                }
+            }
+        }
+
+        // TODO (localization only)
+        // if(mbOnlyTracking)
+        // {
+        //     mbVO = nmatchesMap<10;
+        //     return nmatches>20;
+        // }
+
+        match self.sensor.is_imu() {
+            true => { return true; },
+            false => { return nmatches_map >= 10; }
+        };
+    }
+
+    fn update_last_frame(&self) {
+        // TODO
+        // Ref code:  https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Tracking.cc#L2781
+
+        // let last_frame = self.last_frame.unwrap();
+        
+        // // Update pose according to reference keyframe
+        // let reference_kf = last_frame.reference_keyframe_id;
+        // let Tlr = self.relative_frame_poses.last();
+        // {
+        //     let map_lock = self.map.read();
+        //     let reference_kf_pose = map_lock.keyframes[reference_kf];
+        //     last_frame.set_pose(Tlr * reference_kf_pose);
+        // }
+
+        // if self.sensor.is_mono() || self.last_keyframe_id.unwrap() == self.last_frame_id.unwrap() {
+        //     return;
+        // }
+
+        
+        // // Create "visual odometry" MapPoints
+        // // We sort points according to their measured depth by the stereo/RGB-D sensor
+        
+        // let depth_idx = Vec::new
+        
+        // HashMap::<i32, f32>::new();
+        // let num_features = match last_frame.Nleft {
+        //     -1 => last_frame.N,
+        //     _ => last_frame.Nleft
+        // };
+
+        // for i in 0..num_features {
+        //     let z = last_frame.mv_depth[i];
+        //     depth_idx
+        //     if(z>0)
+        //     {
+        //         vDepthIdx.push_back(make_pair(z,i));
+        //     }
+        // }
+
+        // if(vDepthIdx.empty())
+        //     return;
+
+        // sort(vDepthIdx.begin(),vDepthIdx.end());
+
+        // // We insert all close points (depth<mThDepth)
+        // // If less than 100 close points, we insert the 100 closest ones.
+        // int nPoints = 0;
+        // for(size_t j=0; j<vDepthIdx.size();j++)
+        // {
+        //     int i = vDepthIdx[j].second;
+
+        //     bool bCreateNew = false;
+
+        //     MapPoint* pMP = mLastFrame.mvpMapPoints[i];
+
+        //     if(!pMP)
+        //         bCreateNew = true;
+        //     else if(pMP->Observations()<1)
+        //         bCreateNew = true;
+
+        //     if(bCreateNew)
+        //     {
+        //         Eigen::Vector3f x3D;
+
+        //         if(mLastFrame.Nleft == -1){
+        //             mLastFrame.UnprojectStereo(i, x3D);
+        //         }
+        //         else{
+        //             x3D = mLastFrame.UnprojectStereoFishEye(i);
+        //         }
+
+        //         MapPoint* pNewMP = new MapPoint(x3D,mpAtlas->GetCurrentMap(),&mLastFrame,i);
+        //         mLastFrame.mvpMapPoints[i]=pNewMP;
+
+        //         mlpTemporalPoints.push_back(pNewMP);
+        //         nPoints++;
+        //     }
+        //     else
+        //     {
+        //         nPoints++;
+        //     }
+
+        //     if(vDepthIdx[j].first>mThDepth && nPoints>100)
+        //         break;
+
+        // }
     }
 
     fn track_local_map(&self) -> bool {
         // TODO
         // Ref code:
         todo!("TRACK: local map");
-        return false;
+        // return false;
     }
 
     fn relocalization(&self) -> bool {
         todo!("TRACK: Relocalization");
         // TODO
         // Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Tracking.cc#L3609
-        return false;
+        // return false;
     }
 
     fn create_new_keyframe(&self) {
@@ -740,11 +923,14 @@ impl DarvisTrackingBack {
 
     fn store_pose_info(&self) {
         // TODO: Convert this to Rust obv
+        // if self.current_frame.is_set {
+            
+        // }
         // Store frame pose information to retrieve the complete camera trajectory afterwards.
         // if(mCurrentFrame.isSet())
         // {
         //     Sophus::SE3f Tcr_ = mCurrentFrame.GetPose() * mCurrentFrame.mpReferenceKF->GetPoseInverse();
-        //     mlRelativeFramePoses.push_back(Tcr_);
+        //     relative_frame_poses.push_back(Tcr_);
         //     mlpReferences.push_back(mCurrentFrame.mpReferenceKF);
         //     mlFrameTimes.push_back(mCurrentFrame.mTimeStamp);
         //     mlbLost.push_back(mState==LOST);
@@ -752,7 +938,7 @@ impl DarvisTrackingBack {
         // else
         // {
         //     // This can happen if tracking is lost
-        //     mlRelativeFramePoses.push_back(mlRelativeFramePoses.back());
+        //     relative_frame_poses.push_back(relative_frame_poses.back());
         //     mlpReferences.push_back(mlpReferences.back());
         //     mlFrameTimes.push_back(mlFrameTimes.back());
         //     mlbLost.push_back(mState==LOST);

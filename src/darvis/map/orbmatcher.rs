@@ -5,7 +5,8 @@ use opencv::{
 };
 use crate::{
     map::{
-    frame::Frame
+    frame::Frame,
+    mappoint::MapPoint
     },
 };
 
@@ -256,6 +257,13 @@ impl ORBmatcher {
             *ind3=-1;
         }
     }
+
+    pub fn search_by_projection(&self) -> Vec<MapPoint> {
+        //TODO
+        todo!("TRACK: motion model");
+        let vec = vec![];
+        return vec;
+    } 
 
 
     //int ORBmatcher::SearchByBoW(KeyFrame *pKF1, KeyFrame *pKF2, vector<MapPoint *> &vpMatches12)

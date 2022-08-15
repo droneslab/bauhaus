@@ -3,7 +3,6 @@ use darvis::dvutils::{
     DVVectorOfKeyPoint,
     DVMatrixGrayscale
 };
-use darvis::map::frame::Frame;
 
 // Message type for this actor
 #[derive(Debug, Serialize, Deserialize)]
