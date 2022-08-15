@@ -11,7 +11,6 @@ use darvis::{
 };
 use crate::{
     modules::{
-        tracker_klt::*,
         messages::{
             feature_msg::FeatureMsg, image_msg::ImageMsg
         },

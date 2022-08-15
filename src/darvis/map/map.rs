@@ -13,7 +13,7 @@ pub struct Map {
 
     keyframes: HashMap<Id, KeyFrame>, // = mspKeyFrames
     last_kf_id: Id, // = mnMaxKFid
-    mappoints: HashMap<Id, MapPoint>, // = mspMapPoints
+    pub mappoints: HashMap<Id, MapPoint>, // = mspMapPoints
     _last_mp_id: Id,
 
     initial_kf_id: Id,

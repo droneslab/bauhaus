@@ -16,6 +16,8 @@ pub mod fast;
 // Messages sent to/from actors
 pub mod messages;
 
+// Optimization code, uses g2orust crate to call g2o in C++
+pub mod optimizer; 
 
 // Commented out, see files for notes
 /// Implemented optical flow feature extraction and tracking

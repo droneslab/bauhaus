@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use chrono::{DateTime, Utc};
 
 use crate::{
@@ -31,6 +33,17 @@ pub struct Frame {
     // cam_params: opencv::core::Mat,
     pub key_points_un: opencv::types::VectorOfKeyPoint,
 
+    // equivalent to mvpmappoints in orbslam3
+    // i32 is index in array, Id is mappoint Id
+    pub mappoint_matches: HashMap::<i32, Id>,
+
+    // Flag to identify outlier associations.
+    // equivalent to mvbOutlier in orbslam3
+    // i32 is index in array, bool is true if outlier
+    pub mappoint_outliers: HashMap::<i32, bool>,
+
+    pub N: usize,
+    pub mvInvLevelSigma2: Vec<f32>,
 
     // Undistorted Image Bounds (computed once).
     pub min_x: f64,//static float mnMinX;
@@ -74,6 +87,9 @@ impl Frame {
             imu_bias: None,
             reference_keyframe_id: None,
 
+            mappoint_matches: HashMap::new(),
+            mappoint_outliers: HashMap::new(),
+
             // depth_threshold:
             // cam_params: 
             key_points_un: keypoints.clone(), //TODO : need to compute undistorted keypoints
@@ -93,8 +109,7 @@ impl Frame {
             width: im_width,
             height: im_height,
             featvec: None,
-            mvpMapPoints: Vec::new(),
-            mvbOutlier: Vec::new(),
+            mvInvLevelSigma2: vec![], //TODO: should be this: mvInvLevelSigma2 = mpORBextractorLeft->GetInverseScaleSigmaSquares();
         };
 
         // frame.calculate_pose();
@@ -247,8 +262,8 @@ impl Frame {
         // Fill matrix with points
         let n_cells = FRAME_GRID_COLS*FRAME_GRID_ROWS;
         
-        let N = self.key_points.len() ; //TODO: [Stereo] Need to update this if stereo images are processed
-        let nReserve = ((0.5 *N as f64)/(n_cells as f64)) as usize;
+        self.N = self.key_points.len() ; //TODO: [Stereo] Need to update this if stereo images are processed
+        let nReserve = ((0.5 *self.N as f64)/(n_cells as f64)) as usize;
     
         for i in 0..FRAME_GRID_COLS as usize
         {
@@ -262,7 +277,7 @@ impl Frame {
             }
         }
 
-        for i in 0..N
+        for i in 0..self.N
         {    
 
             //TODO: [Stereo] Need to update this if stereo images are processed
@@ -314,6 +329,7 @@ impl Frame {
         //mbHasPose = true;
     }
 
+<<<<<<< HEAD
     pub fn GetPose(&self) -> Pose
     {
         self.pose.as_ref().unwrap().clone()
@@ -335,6 +351,10 @@ impl Frame {
         }   
 
 
+=======
+    pub fn clear_mappoints(&mut self) {
+        self.mappoint_matches = HashMap::new();
+>>>>>>> Should be done with track with motion model, new dependency on g2orust bindings crate
     }
 
 
@@ -518,8 +538,11 @@ impl Frame {
         // }
     }
 
+<<<<<<< HEAD
     pub fn GetMapPointMatches(&self) -> &Vec<Id>
     {
         &self.mvpMapPoints
     }
+=======
+>>>>>>> Should be done with track with motion model, new dependency on g2orust bindings crate
 }
