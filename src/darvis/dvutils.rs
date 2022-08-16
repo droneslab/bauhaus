@@ -168,3 +168,33 @@ impl DarvisVectorOfKeyPoint for DVVectorOfKeyPoint {
 //     wall_time: Duration,
 // }
 
+
+pub struct Converter{
+
+}
+
+use abow::Desc;
+
+impl Converter {
+    //std::vector<cv::Mat> Converter::toDescriptorVector(const cv::Mat &Descriptors)
+    pub fn toDescriptorVector(Descriptors : &Mat) -> Vec<Desc>
+    {
+        let mut vDesc = vec![];
+        vDesc.reserve(Descriptors.rows() as usize);
+
+        let desc_vec = Descriptors.to_vec_2d::<u8>().unwrap();
+
+        for j in 0..Descriptors.rows()
+        {
+            let desc_j = desc_vec.get(j as usize).unwrap();
+            let mut desc_val : Desc = [0; 32];
+            for (&x, p) in desc_j.iter().zip(desc_val.iter_mut()) {
+                *p = x;
+            }
+            vDesc.push(desc_val);
+
+        }
+
+        return vDesc;
+    }
+}

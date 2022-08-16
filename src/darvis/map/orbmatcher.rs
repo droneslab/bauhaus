@@ -9,6 +9,10 @@ use crate::{
     },
 };
 
+use super::keyframe::KeyFrame;
+use super::map::Id;
+use super::mappoint::MapPoint;
+
 unsafe impl Sync for ORBmatcher {}
 
 const  TH_HIGH: i64= 100;
@@ -252,6 +256,16 @@ impl ORBmatcher {
             *ind3=-1;
         }
     }
+
+
+    //int ORBmatcher::SearchByBoW(KeyFrame *pKF1, KeyFrame *pKF2, vector<MapPoint *> &vpMatches12)
+    pub fn SearchByBoW(&self, pKF1 : &KeyFrame, pKF2 : &KeyFrame, vpMatches12: &Vec<Id>) -> i32
+    {
+        todo!("ORBmatcher: SearchByBoW");
+        
+
+    }
+
 
 
 }
