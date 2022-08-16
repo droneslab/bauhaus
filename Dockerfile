@@ -14,9 +14,9 @@ RUN wget https://raw.githubusercontent.com/rust-lang/rustup/master/rustup-init.s
 
 # Grab opencv (3.4) and contrib modules (for SIFT, etc)
 RUN git clone https://github.com/opencv/opencv.git && \
-    cd opencv && git checkout 3.4 && cd .. && \
+    cd opencv && git checkout tags/4.5.4 && cd .. && \
     git clone https://github.com/opencv/opencv_contrib.git && \
-    cd opencv_contrib && git checkout 3.4 && cd .. 
+    cd opencv_contrib && git checkout tags/4.5.4 && cd .. 
 
 # Build opencv
 RUN cd opencv && mkdir build && cd build && \

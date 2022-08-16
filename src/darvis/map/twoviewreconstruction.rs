@@ -151,7 +151,7 @@ impl TwoViewReconstruction {
 
 
         let F = opencv::calib3d::find_fundamental_mat(&pn2, 
-            &pn1, opencv::calib3d::FM_RANSAC, 3.0, 0.99,  &mut mask).unwrap();
+            &pn1, opencv::calib3d::FM_RANSAC, 3.0, 0.99,  200, &mut mask).unwrap();
 
 
         let F21 = nalgebra::Matrix3::<f32>::try_from_cv(&F).unwrap();

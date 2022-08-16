@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 extern crate nalgebra as na;
 use crate::map::map::Id;

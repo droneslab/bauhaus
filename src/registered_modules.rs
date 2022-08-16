@@ -32,20 +32,13 @@ pub fn getmethod(fnname: &String, id: &String, map: ReadOnlyWrapper<Map>) -> Fun
 {
     match fnname.as_ref()
     {
-        "orb_extract" => FunctionProxy {function: Box::new(crate::modules::orb::DarvisOrb::new())}
-        ,
-        "vis" => FunctionProxy {function: Box::new(crate::modules::vis::DarvisVis::new(id.clone()))}
-        ,
-        "tracker" => FunctionProxy {function: Box::new(crate::modules::tracker::DarvisTracker::new(map))}
-        ,
-        "frameloader" => FunctionProxy {function: Box::new(crate::modules::frameloader::DarvisFrameLoader::new())}
-        ,
-        "fast_extract" => FunctionProxy {function: Box::new(crate::modules::fast::DarvisFast::new())}
-        ,
-        "tracker_klt" => FunctionProxy {function: Box::new(crate::modules::tracker_klt::DarvisTrackerKLT::new())}
-        ,
-        _ => FunctionProxy {function: Box::new(darvis::plugin_functions::DarvisNone)}
-        ,
+        "frameloader" => FunctionProxy {function: Box::new(crate::modules::frameloader::DarvisFrameLoader::new())},
+        "tracking_frontend" => FunctionProxy {function: Box::new(crate::modules::tracking_frontend::DarvisTrackingFront::new(map))},
+        "tracking_backend" => FunctionProxy {function: Box::new(crate::modules::tracking_backend::DarvisTrackingBack::new(map))},
+        "vis" => FunctionProxy {function: Box::new(crate::modules::vis::DarvisVis::new(id.clone()))},
+        "fast_extract" => FunctionProxy {function: Box::new(crate::modules::fast::DarvisFast::new())},
+        // "tracker_klt" => FunctionProxy {function: Box::new(crate::modules::tracker_klt::DarvisTrackerKLT::new())}, /// Commented out, see note in file
+        _ => FunctionProxy {function: Box::new(darvis::plugin_functions::DarvisNone)},
     }
 }
 

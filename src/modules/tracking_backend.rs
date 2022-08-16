@@ -22,12 +22,12 @@ use crate::{
     registered_modules::VISUALIZER,
     modules::messages::{
         vis_msg::VisMsg,
-        tracker_msg::TrackerMsg,
+        framepose_msg::FramePoseMsg,
     },
 };
 
 #[derive(Debug, Clone)]
-pub struct DarvisTracker {
+pub struct DarvisTrackingBack {
     first_frame: bool,
     last_frame: Option<Frame>,
     map: ReadOnlyWrapper<Map>,
@@ -82,8 +82,8 @@ enum TrackingState {
     Ok
 }
 
-impl DarvisTracker {
-    pub fn new(map: ReadOnlyWrapper<Map>) -> DarvisTracker {
+impl DarvisTrackingBack {
+    pub fn new(map: ReadOnlyWrapper<Map>) -> DarvisTrackingBack {
         let recently_lost_cutoff: i32 = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "recently_lost_cutoff");
         let sensor: Sensor = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "sensor");
         let localization_only_mode: bool = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "localization_only_mode");
@@ -91,7 +91,7 @@ impl DarvisTracker {
         let insert_kfs_when_lost: bool = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "insert_KFs_when_lost");
         let min_num_features: i32 = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "min_num_features");
 
-        let mut tracker = DarvisTracker {
+        let mut tracker = DarvisTrackingBack {
             first_frame: true,
             last_frame: None,
             map: map,
@@ -173,7 +173,7 @@ impl DarvisTracker {
 
     }
 
-    fn track(&mut self, _context: Context, msg: Arc<TrackerMsg>) {
+    fn track(&mut self, _context: Context, msg: Arc<FramePoseMsg>) {
         let map_actor = msg.actor_ids.get(MAP_ACTOR).unwrap();
 
         self.last_frame_id += 1;
@@ -630,10 +630,10 @@ impl DarvisTracker {
     }
 }
 
-impl Function for DarvisTracker {
+impl Function for DarvisTrackingBack {
     fn handle(&mut self, context: axiom::prelude::Context, message: Message) -> ActorResult<()>
     {
-        if let Some(msg) = message.content_as::<TrackerMsg>() {
+        if let Some(msg) = message.content_as::<FramePoseMsg>() {
             self.track(context, msg);
         }
 

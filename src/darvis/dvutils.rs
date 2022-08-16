@@ -20,7 +20,6 @@ pub struct DarvisKeyPoint {
     class_id: i32
 }
 
-use cv_convert::{FromCv, IntoCv, TryFromCv, TryIntoCv};
 
 /// Used to handle Grayscale images 
 pub type DVMatrixGrayscale = na::DMatrix<u8>;
