@@ -1,4 +1,3 @@
-
 use na::Vector3;
 use serde::{Deserialize, Serialize};
 extern crate nalgebra as na;

@@ -1,5 +1,5 @@
 use std::ops::Mul;
-use nalgebra::{Isometry3, UnitQuaternion, Rotation3};
+use nalgebra::{Isometry3, Rotation3};
 use serde::{Deserialize, Serialize};
 use crate::dvutils::*;
 

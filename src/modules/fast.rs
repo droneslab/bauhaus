@@ -13,8 +13,7 @@ use crate::{
     modules::{
         tracker_klt::*,
         messages::{
-            frame_msg::FrameMsg,
-            tracker_msg::TrackerMsg,
+            framepose_msg::FramePoseMsg, image_msg::ImageMsg
         },
     },
     registered_modules::TRACKER
@@ -30,7 +29,7 @@ impl DarvisFast {
 
     // This is the handler that will be used by the actor.
     pub fn fast_extract(&mut self, _context: Context, message: Message) -> ActorResult<()> {
-        if let Some(msg) = message.content_as::<FrameMsg>() {
+        if let Some(msg) = message.content_as::<ImageMsg>() {
             let mut kp1 = VectorOfKeyPoint::new();
             let mut des1 = Mat::default();
             let img1 = msg.get_frame().grayscale_to_cv_mat();
@@ -50,8 +49,8 @@ impl DarvisFast {
 
             match traker_msg.as_ref()
             {
-                "TrackerMsg" => {
-                    align_id.send_new(TrackerMsg::new(
+                "FramePoseMsg" => {
+                    align_id.send_new(FramePoseMsg::new(
                         kp1.darvis_vector_of_keypoint(),
                         des1.grayscale_mat(),
                         img1.cols(),
@@ -59,17 +58,17 @@ impl DarvisFast {
                         msg.get_actor_ids().clone()
                     )).unwrap();
                 },
-                "TrackerMsgKLT" => {
-                    align_id.send_new(TrackerMsgKLT::new(
-                        msg.get_frame().clone(),
-                        kp1.darvis_vector_of_keypoint(),
-                        des1.grayscale_mat(),
-                        msg.get_actor_ids().clone()
-                    )).unwrap();
-                },
+                // "TrackerMsgKLT" => {
+                //     align_id.send_new(TrackerMsgKLT::new(
+                //         msg.get_frame().clone(),
+                //         kp1.darvis_vector_of_keypoint(),
+                //         des1.grayscale_mat(),
+                //         msg.get_actor_ids().clone()
+                //     )).unwrap();
+                // },
                 _ => {
-                    println!("Invalid Message type: selecting TrackerMsg");
-                    align_id.send_new(TrackerMsg::new(
+                    println!("Invalid Message type: selecting FramePoseMsg");
+                    align_id.send_new(FramePoseMsg::new(
                         kp1.darvis_vector_of_keypoint(),
                         des1.grayscale_mat(),
                         img1.cols(),

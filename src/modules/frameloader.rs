@@ -12,7 +12,7 @@ use crate::{
     modules::vis::*,
     registered_modules::{VISUALIZER, FEATURE_EXTRACTOR},
     modules::messages::{
-        frame_msg::FrameMsg,
+        image_msg::ImageMsg,
         images_msg::ImagesMsg,
     }
 };
@@ -46,7 +46,7 @@ impl DarvisFrameLoader {
                 // https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/Examples/RGB-D/rgbd_tum.cc#L89
 
                 // Kickoff the pipeline by sending the feature extraction module images
-                feat_aid.send_new(FrameMsg::new(img.grayscale_mat(), msg.actor_ids.clone())).unwrap();
+                feat_aid.send_new(ImageMsg::new(img.grayscale_mat(), msg.actor_ids.clone())).unwrap();
             }
         }
         Ok(Status::done(()))
