@@ -13,7 +13,7 @@ pub struct Map {
 
     keyframes: HashMap<Id, KeyFrame>, // = mspKeyFrames
     last_kf_id: Id, // = mnMaxKFid
-    _mappoints: HashMap<Id, MapPoint>, // = mspMapPoints
+    mappoints: HashMap<Id, MapPoint>, // = mspMapPoints
     _last_mp_id: Id,
 
     initial_kf_id: Id,
@@ -46,7 +46,7 @@ impl Map {
         Map {
             keyframes: HashMap::new(),
             last_kf_id: 0,
-            _mappoints: HashMap::new(),
+            mappoints: HashMap::new(),
             _last_mp_id: 0,
             initial_kf_id: 0,
             num_kfs: 0,
@@ -74,4 +74,22 @@ impl Map {
         // TODO
     }
 
+    pub fn get_keyframe(&self, id: &Id) -> Option<&KeyFrame>
+    {
+        self.keyframes.get(id)
+    }
+
+    pub fn get_mappoint(&self, id: &Id) -> Option<&MapPoint>
+    {
+        self.mappoints.get(id)
+    }
+
+    pub fn discard_mappoint(&mut self, id: &Id)
+    {
+        self.mappoints.remove(id);
+        println!("MapPoint removed {}", id);
+        // Following is done in ORB SLAM , check if this is need to be done.
+        // pMP.mbTrackInView= false;      
+        // pMP.mnLastFrameSeen = self.current_frame.unwrap().id;     
+    }
 }

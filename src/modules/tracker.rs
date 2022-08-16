@@ -71,6 +71,11 @@ pub struct DarvisTracker {
 
     K: Option<Mat>, // Might be redundant
     K_: Option<Matrix3<f32>>,
+
+    // Reference Keyframe.
+    mpReferenceKF: Option<Id>,//,*mut KeyFrame,//KeyFrame* mpReferenceKF;
+
+    map_actor: Option<Aid>, //QUICK FIX to get going with the message communication 
 }
 
 #[derive(Debug, Clone)]
@@ -134,6 +139,8 @@ impl DarvisTracker {
             camera: None,
             K: None,
             K_: None,
+            mpReferenceKF: None,
+            map_actor: None,
         };
 
         // camera_fx: 718.856
@@ -175,6 +182,8 @@ impl DarvisTracker {
 
     fn track(&mut self, _context: Context, msg: Arc<TrackerMsg>) {
         let map_actor = msg.actor_ids.get(MAP_ACTOR).unwrap();
+
+        self.map_actor = Some(map_actor.clone());
 
         self.last_frame_id += 1;
         self.current_frame = Some(Frame::new(
@@ -545,11 +554,118 @@ impl DarvisTracker {
     }
 
 
-    fn track_reference_keyframe(&self) -> bool {
-        todo!("TRACK: Track with respect to the reference KF");
-        // TODO
+    fn track_reference_keyframe(&mut self) -> bool {
         // Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Tracking.cc#L2720
-        return false;
+    
+        // Compute Bag of Words vector
+        self.current_frame.as_mut().unwrap().ComputeBoW();// mCurrentFrame.ComputeBoW();
+
+        // We perform first an ORB matching with the reference keyframe
+        // If enough matches are found we setup a PnP solver
+        
+        let mut matcher = ORBmatcher::new(0.7, true);
+        let mut vpMapPointMatches = Vec::<Id>::new();
+        
+        //ORBmatcher matcher(0.7,true);
+        //vector<MapPoint*> vpMapPointMatches;
+
+        let mut nmatches = 0;
+        if self.mpReferenceKF.is_some()
+        {
+            let map_read_lock = self.map.read();
+            let ref_kf = map_read_lock.get_keyframe(&self.mpReferenceKF.unwrap());
+            let cur_kf = map_read_lock.get_keyframe(&self.current_frame.as_ref().unwrap().id);
+            if ref_kf.is_none()
+            {
+                nmatches = matcher.SearchByBoW(ref_kf.unwrap(), cur_kf.unwrap(), &vpMapPointMatches);
+            }
+            else
+            {
+                todo!("fix invalid ref KF assignment");
+            }
+
+        }
+        else
+        {
+            todo!("fix ref KF assignment");
+        }
+
+        if nmatches<15
+        {
+            println!("TRACK_REF_KF: Less than 15 matches!!\n");
+            return false;
+        }
+
+        self.current_frame.as_mut().unwrap().mvpMapPoints = vpMapPointMatches.clone();
+        self.current_frame.as_mut().unwrap().SetPose(&self.last_frame.as_ref().unwrap().GetPose());
+
+        //mCurrentFrame.PrintPointDistribution();
+
+
+        // cout << " TrackReferenceKeyFrame mLastFrame.mTcw:  " << mLastFrame.mTcw << endl;
+        //TODO: (Optimization) Implement pose optimization
+        //Optimizer::PoseOptimization(&mCurrentFrame);
+
+        // Discard outliers
+        let mut nmatchesMap = 0;
+        //for(int i =0; i<mCurrentFrame.N; i++)
+        for i in 0..self.current_frame.as_ref().unwrap().mvpMapPoints.len()
+        {
+
+            if self.current_frame.as_ref().unwrap().mvpMapPoints[i] !=-1  // if invalid kf id
+            {
+                if self.current_frame.as_ref().unwrap().mvbOutlier[i]
+                {
+                    let pMP = self.current_frame.as_ref().unwrap().mvpMapPoints[i];
+                    
+                    let map_msg = MapWriteMsg::discard_mappoint(&pMP);
+                    self.map_actor.as_ref().unwrap().send_new(map_msg).unwrap();
+
+                    self.current_frame.as_mut().unwrap().mvpMapPoints[i]=-1; // static_cast<MapPoint*>(NULL);
+                    self.current_frame.as_mut().unwrap().mvbOutlier[i]=false;
+
+
+                    // pMP.mbTrackInView= false;      
+                    // pMP.mnLastFrameSeen = self.current_frame.unwrap().id;                 
+
+                    // if(i < mCurrentFrame.Nleft){
+                    //     pMP->mbTrackInView = false;
+                    // }
+                    // else{
+                    //     pMP->mbTrackInViewR = false;
+                    // }
+                    //pMP->mbTrackInView = false;
+
+                    nmatches-=1;
+                }
+                else 
+                {
+                    
+                    if self.current_frame.as_ref().unwrap().mvpMapPoints[i] !=-1
+                    {
+                        let map_read_lock = self.map.read();
+                        let ref_kf = map_read_lock.get_mappoint(&self.current_frame.as_ref().unwrap().mvpMapPoints[i]);
+    
+                        if ref_kf.unwrap().observations()>0
+                        {
+                            nmatchesMap+=1;
+                        }
+                    }
+
+                }
+
+            }
+        }
+
+        if self.sensor.is_imu() //if (mSensor == System::IMU_MONOCULAR || mSensor == System::IMU_STEREO || mSensor == System::IMU_RGBD)
+        {
+            return true;
+        }
+        else
+        {
+            return nmatchesMap>=10;
+        }
+
     }
 
     fn track_with_motion_model(&self) -> bool {

@@ -9,13 +9,14 @@ use opencv::{
     prelude::*, core::KeyPoint,
 };
 
-use super::misc::IMUBias;
+use super::{misc::IMUBias, mappoint::MapPoint};
 
 unsafe impl Sync for Frame {}
 
 const FRAME_GRID_ROWS :i64 = 48;
 const FRAME_GRID_COLS :i64 = 64;
 
+use abow::{BoW, Vocabulary};
 
 #[derive(Debug, Clone)]
 pub struct Frame {
@@ -46,6 +47,14 @@ pub struct Frame {
 
     pub width: i32,
     pub height: i32,
+
+    pub bow: Option<BoW>,
+    // Corresponding stereo coordinate and depth for each keypoint.
+    pub  mvpMapPoints:  Vec<Id> ,   //std::vector<MapPoint*> mvpMapPoints;
+
+    // MapPoints associated to keypoints, NULL pointer if no association.
+    // Flag to identify outlier associations.
+    pub mvbOutlier: Vec<bool>,//std::vector<bool> mvbOutlier;
 }
 
 impl Frame {
@@ -81,6 +90,9 @@ impl Frame {
             grid: Vec::new(),//std::vector<std::size_t> mGrid[FRAME_GRID_COLS][FRAME_GRID_ROWS];
             width: im_width,
             height: im_height,
+            bow: None,
+            mvpMapPoints: Vec::new(),
+            mvbOutlier: Vec::new(),
         };
 
         // frame.calculate_pose();
@@ -298,6 +310,29 @@ impl Frame {
         //UpdatePoseMatrices();
         //mbIsSet = true;
         //mbHasPose = true;
+    }
+
+    pub fn GetPose(&self) -> Pose
+    {
+        self.pose.as_ref().unwrap().clone()
+    }
+
+    pub fn ComputeBoW(&mut self)
+    {
+
+        //Ref code : https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Frame.cc#L740
+        //todo!("Implement : ComputeBoW");
+        if self.bow.is_none()
+        {
+            let features = Converter::toDescriptorVector(&self.descriptors);
+            let k=10;
+            let l =4;
+            let voc = Vocabulary::create(&features, k, l);
+            self.bow = Some(voc.transform(&features).unwrap());
+            
+        }   
+
+
     }
 
 
