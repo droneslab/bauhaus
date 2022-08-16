@@ -3,13 +3,13 @@ use darvis::dvutils::DVMatrixGrayscale;
 
 // Message type for the actor
 #[derive(Debug, Serialize, Deserialize)]
-pub struct FrameMsg {
+pub struct ImageMsg {
     // Vector of image paths to read in/extract
     frame: DVMatrixGrayscale,
     actor_ids: std::collections::HashMap<String, axiom::actors::Aid>,
 }
 
-impl FrameMsg {
+impl ImageMsg {
     pub fn new(img: DVMatrixGrayscale, ids: std::collections::HashMap<String, axiom::actors::Aid>) -> Self {
         Self {
             frame: img,

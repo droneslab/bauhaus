@@ -57,28 +57,12 @@ modules:
                        to: ImageAlignment
                        input: images
                        output: feature vectors
-      -
-       name: FEATURE_EXTRACTOR
-       file: orb
-       actor_message: FrameMsg
-       actor_function: orb_extract
-       address: locahost
-       port: !!str 7777
-       multithreaded: false
-       threads: 1
-       possible_paths:
-                      - 
-                       from: FRAME_LOADER
-                       to: TRACKER
-                       input: images
-                       output: feature vectors
-
 
       -
-       name: TRACKER
-       file: tracker
-       actor_message: TrackerMsg
-       actor_function: tracker
+       name: VISUALIZER
+       file: vis
+       actor_message: VisMsg
+       actor_function: vis
        address: localhost
        port: !!str 7778
        multithreaded: false
@@ -91,18 +75,22 @@ modules:
                       output: frame, feature points
 
       -
-       name: VISUALIZER
-       file: vis
-       actor_message: VisMsg
-       actor_function: vis
+       name: TRACKER_FRONTEND
+       file: tracking_frontend
+       actor_message: ImageMsg
+       actor_function: track
        address: localhost
        port: !!str 7779
        multithreaded: false
        threads: 1
-       possible_paths:
-                     -
-                      from: FeatureDetection
-                      to: KFDecision
-                      input: feature vectors
-                      output: frame, feature points
-  
+
+      -
+       name: TRACKER_BACKEND
+       file: tracking_backend
+       actor_message: FramePoseMsg
+       actor_function: track
+       address: localhost
+       port: !!str 7780
+       multithreaded: false
+       threads: 1
+
