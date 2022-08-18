@@ -13,7 +13,7 @@ use crate::{
     modules::{
         tracker_klt::*,
         messages::{
-            framepose_msg::FramePoseMsg, image_msg::ImageMsg
+            feature_msg::FeatureMsg, image_msg::ImageMsg
         },
     },
     registered_modules::TRACKER
@@ -49,8 +49,8 @@ impl DarvisFast {
 
             match traker_msg.as_ref()
             {
-                "FramePoseMsg" => {
-                    align_id.send_new(FramePoseMsg::new(
+                "FeatureMsg" => {
+                    align_id.send_new(FeatureMsg::new(
                         kp1.darvis_vector_of_keypoint(),
                         des1.grayscale_mat(),
                         img1.cols(),
@@ -67,8 +67,8 @@ impl DarvisFast {
                 //     )).unwrap();
                 // },
                 _ => {
-                    println!("Invalid Message type: selecting FramePoseMsg");
-                    align_id.send_new(FramePoseMsg::new(
+                    println!("Invalid Message type: selecting FeatureMsg");
+                    align_id.send_new(FeatureMsg::new(
                         kp1.darvis_vector_of_keypoint(),
                         des1.grayscale_mat(),
                         img1.cols(),
