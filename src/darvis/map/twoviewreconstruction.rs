@@ -51,7 +51,7 @@ impl TwoViewReconstruction {
     }
     
 
-    pub fn reconstruct(&mut self, vKeys1: &VectorOfKeyPoint, vKeys2: &VectorOfKeyPoint,  matches12: &Vec<i64>, T21: &mut Pose, vP3D: &mut opencv::types::VectorOfPoint3f, vbTriangulated: &mut Vec<bool>) -> bool
+    pub fn reconstruct(&mut self, vKeys1: &VectorOfKeyPoint, vKeys2: &VectorOfKeyPoint,  matches12: &Vec<i32>, T21: &mut Pose, vP3D: &mut opencv::types::VectorOfPoint3f, vbTriangulated: &mut Vec<bool>) -> bool
     {
         self.key_points1.clear();
         self.key_points2.clear();

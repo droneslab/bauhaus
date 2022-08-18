@@ -37,11 +37,11 @@ pub struct DarvisTracker {
     reference_keyframe_id: Option<Id>,
     current_frame: Option<Frame>,
     initial_frame: Option<Frame>,
-
+    reference_frame: Option<Frame>, //Redundant hence will remove once frame database is established.
 
     // Initialization Variables (Monocular)
     // std::vector<int> mvIniLastMatches;
-    ini_matches: Vec<i64>,// std::vector<int> mvIniMatches;
+    ini_matches: Vec<i32>,// std::vector<int> mvIniMatches;
     prev_matched: Vec<Point2f>,// std::vector<cv::Point2f> mvbPrevMatched;
     ini_p3d: VectorOfPoint3f,// std::vector<cv::Point3f> mvIniP3D;
     // Frame mInitialFrame;
@@ -106,6 +106,7 @@ impl DarvisTracker {
             reference_keyframe_id: None,
             current_frame: None,
             initial_frame: None,
+            reference_frame: None,
 
             // Initialization Variables (Monocular)
             // std::vector<int> mvIniLastMatches;
@@ -563,7 +564,7 @@ impl DarvisTracker {
         // We perform first an ORB matching with the reference keyframe
         // If enough matches are found we setup a PnP solver
         
-        let mut matcher = ORBmatcher::new(0.7, true);
+        let matcher = ORBmatcher::new(0.7, true);
         let mut vpMapPointMatches = Vec::<Id>::new();
         
         //ORBmatcher matcher(0.7,true);
@@ -572,12 +573,32 @@ impl DarvisTracker {
         let mut nmatches = 0;
         if self.mpReferenceKF.is_some()
         {
+
+            //TODO: CHECK if we really need to use "KeyFrame" object for below code for BoW search,
+            // For now just using current and ref "Frame" object.
+            // let map_read_lock = self.map.read();
+            // let ref_kf = map_read_lock.get_keyframe(&self.mpReferenceKF.unwrap());
+            // let cur_kf = map_read_lock.get_keyframe(&self.current_frame.as_ref().unwrap().id);
+            // if ref_kf.is_some()
+            // {
+            //     nmatches = matcher.search_by_bow(ref_kf.unwrap(), cur_kf.unwrap(), &mut vpMapPointMatches);
+            // }
+            // else
+            // {
+            //     todo!("fix invalid ref KF assignment");
+            // }
+
             let map_read_lock = self.map.read();
             let ref_kf = map_read_lock.get_keyframe(&self.mpReferenceKF.unwrap());
-            let cur_kf = map_read_lock.get_keyframe(&self.current_frame.as_ref().unwrap().id);
-            if ref_kf.is_none()
+
+            let cur_f = self.current_frame.as_ref().unwrap();
+
+            if self.reference_frame.is_some()
             {
-                nmatches = matcher.SearchByBoW(ref_kf.unwrap(), cur_kf.unwrap(), &vpMapPointMatches);
+                //TODO: Use BoW for searching with mappoints, right now not using any mappoint.
+                //nmatches = matcher.search_by_bow(self.reference_frame.as_ref().unwrap(), cur_f, &mut vpMapPointMatches);
+            
+                nmatches = matcher.search_for_initialization(self.reference_frame.as_ref().unwrap(), cur_f, &mut self.prev_matched, &mut vpMapPointMatches, 100);
             }
             else
             {
@@ -600,9 +621,8 @@ impl DarvisTracker {
         self.current_frame.as_mut().unwrap().SetPose(&self.last_frame.as_ref().unwrap().GetPose());
 
         //mCurrentFrame.PrintPointDistribution();
-
-
         // cout << " TrackReferenceKeyFrame mLastFrame.mTcw:  " << mLastFrame.mTcw << endl;
+
         //TODO: (Optimization) Implement pose optimization
         //Optimizer::PoseOptimization(&mCurrentFrame);
 
@@ -625,6 +645,7 @@ impl DarvisTracker {
                     self.current_frame.as_mut().unwrap().mvbOutlier[i]=false;
 
 
+                    //TODO:[Stereo] check for Stereo camera flow
                     // pMP.mbTrackInView= false;      
                     // pMP.mnLastFrameSeen = self.current_frame.unwrap().id;                 
 
