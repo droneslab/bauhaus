@@ -22,7 +22,7 @@ use crate::{
     registered_modules::VISUALIZER,
     modules::messages::{
         vis_msg::VisMsg,
-        framepose_msg::FramePoseMsg,
+        feature_msg::FeatureMsg,
     },
 };
 
@@ -181,7 +181,7 @@ impl DarvisTrackingBack {
 
     }
 
-    fn track(&mut self, _context: Context, msg: Arc<FramePoseMsg>) {
+    fn track(&mut self, _context: Context, msg: Arc<FeatureMsg>) {
         let map_actor = msg.actor_ids.get(MAP_ACTOR).unwrap();
 
         self.map_actor = Some(map_actor.clone());
@@ -770,7 +770,7 @@ impl DarvisTrackingBack {
 impl Function for DarvisTrackingBack {
     fn handle(&mut self, context: axiom::prelude::Context, message: Message) -> ActorResult<()>
     {
-        if let Some(msg) = message.content_as::<FramePoseMsg>() {
+        if let Some(msg) = message.content_as::<FeatureMsg>() {
             self.track(context, msg);
         }
 

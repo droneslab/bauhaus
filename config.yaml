@@ -87,7 +87,7 @@ modules:
       -
        name: TRACKER_BACKEND
        file: tracking_backend
-       actor_message: FramePoseMsg
+       actor_message: FeatureMsg
        actor_function: track
        address: localhost
        port: !!str 7780
