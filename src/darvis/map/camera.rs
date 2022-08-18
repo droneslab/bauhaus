@@ -45,7 +45,7 @@ impl DVCamera {
     }
 
     //bool Pinhole::ReconstructWithTwoViews(const std::vector<cv::KeyPoint>& vKeys1, const std::vector<cv::KeyPoint>& vKeys2, const std::vector<int> &vMatches12, Sophus::SE3f &T21, std::vector<cv::Point3f> &vP3D, std::vector<bool> &vbTriangulated)
-    pub fn reconstruct_with_two_views(&mut self, vKeys1: &VectorOfKeyPoint, vKeys2: &VectorOfKeyPoint,  vMatches12: &Vec<i64>, T21: &mut Pose, vP3D: &mut VectorOfPoint3f, vbTriangulated: &mut Vec<bool>) -> bool
+    pub fn reconstruct_with_two_views(&mut self, vKeys1: &VectorOfKeyPoint, vKeys2: &VectorOfKeyPoint,  vMatches12: &Vec<i32>, T21: &mut Pose, vP3D: &mut VectorOfPoint3f, vbTriangulated: &mut Vec<bool>) -> bool
     {
         if self.tvr.is_none()
         {
