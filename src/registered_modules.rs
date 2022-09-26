@@ -7,7 +7,8 @@ use darvis::{
 
 // REGISTER MODULE: add a string to refer to your module here
 pub static FRAME_LOADER: &str = "FRAME_LOADER";
-pub static FEATURE_EXTRACTOR: &str = "FEATURE_EXTRACTOR";
+pub static TRACKING_FRONTEND: &str = "TRACKING_FRONTEND";
+pub static TRACKING_BACKEND: &str = "TRACKING_BACKEND";
 pub static TRACKER: &str = "TRACKER";
 pub static VISUALIZER: &str = "VISUALIZER";
 

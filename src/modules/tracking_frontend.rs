@@ -17,7 +17,7 @@ use darvis::{
     global_params::*,
 };
 use crate::{
-    registered_modules::{TRACKER},
+    registered_modules::{TRACKING_BACKEND},
     modules::{
         messages::{
             image_msg::ImageMsg,
@@ -39,7 +39,6 @@ impl DarvisTrackingFront {
     }
 
     pub fn tracking_frontend(&mut self, _context: Context, message: Arc<ImageMsg>) {
-        // Extract features
         let image = message.get_frame().grayscale_to_cv_mat();
         let (keypoints, descriptors) = self.extract_features(&image);
 
@@ -69,8 +68,8 @@ impl DarvisTrackingFront {
         &mut self, message: Arc<ImageMsg>, 
         image: Mat, keypoints: VectorOfKeyPoint, descriptors: Mat
     ) {
-        let align_id = message.get_actor_ids().get(TRACKER).unwrap();
-        let new_message: String = GLOBAL_PARAMS.get(TRACKER, "actor_message");
+        let align_id = message.get_actor_ids().get(TRACKING_BACKEND).unwrap();
+        let new_message: String = GLOBAL_PARAMS.get(TRACKING_BACKEND, "actor_message");
         match new_message.as_ref() {
             "FeatureMsg" => {
                 align_id.send_new(FeatureMsg::new(

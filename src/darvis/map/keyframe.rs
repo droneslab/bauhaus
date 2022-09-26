@@ -37,7 +37,7 @@ pub struct KeyFrame {
     pub id: Id,
     pub frame_id: u64,
 
-    pub grid: Grid, // Grid (to speed up feature matching)
+    pub grid: Grid, // Grid to speed up feature matching
 
     pub f_scale: f32, //?
     pub origin_map_id: u32, //?

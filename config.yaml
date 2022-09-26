@@ -5,9 +5,9 @@ master:
 
 system_settings:
        show_ui: false
+       localization_only_mode: false
 
        sensor: Mono
-
       # CAMERA CALIBRATION
        camera_fx: 718.856
        camera_fy: 718.856
@@ -33,7 +33,6 @@ system_settings:
        frames_to_reset_IMU: 30
        insert_KFs_when_lost: true
        min_num_features: 2000
-       localization_only_mode: false
 
 
 modules:
@@ -75,22 +74,34 @@ modules:
                       output: frame, feature points
 
       -
-       name: TRACKER_FRONTEND
+       name: TRACKING_FRONTEND
        file: tracking_frontend
        actor_message: ImageMsg
-       actor_function: track
+       actor_function: tracking_frontend
        address: localhost
        port: !!str 7779
        multithreaded: false
        threads: 1
+       possible_paths:
+                     -
+                      from: frameloader
+                      to: tracking_backend
+                      input: image
+                      output: keypoints, descriptors
 
       -
-       name: TRACKER_BACKEND
+       name: TRACKING_BACKEND
        file: tracking_backend
        actor_message: FeatureMsg
-       actor_function: track
+       actor_function: tracking_backend
        address: localhost
        port: !!str 7780
        multithreaded: false
        threads: 1
+       possible_paths:
+                     -
+                      from: tracking_frontend
+                      to: localmapping
+                      input: keypoints, descriptors
+                      output: newkeyframe
 

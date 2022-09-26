@@ -8,8 +8,6 @@ use crate::{
     }
 };
 
-use super::map::Id;
-
 pub static MAP_ACTOR: &str = "MAP_ACTOR"; 
 
 pub struct MapActor {
@@ -28,12 +26,6 @@ impl MapActor {
             println!("received map edit msg");
 
 
-            // if let MapEditTarget::KeyFrame_New(target) = msg.target {
-            //     let mut write_lock = self.map.write();
-            //     write_lock.insert_kf(target, msg.id);
-            // }
-
-            // write_lock.insert_kf(msg.)
             match _msg.target{
                 MapEditTarget::MapPoint__Discard { id } => {
                     let mut write_lock = self.map.write();
@@ -49,9 +41,6 @@ impl MapActor {
 
         Ok(Status::done(self))
     }
-
-
-
 }
 
 /// *** Message to send map actor an edit request *** ///
@@ -60,24 +49,15 @@ impl MapActor {
 enum MapEditTarget {
     KeyFrame__New(),
     Map__ResetActive(),
-    // KeyFrame__Delete(),
-    // KeyFrame__Pose(Pose),
     Frame__Pose(Id, Pose),
     Frame__MapPoint(Id, Id, bool),
-    // KeyFrame__MapPoints(Vec<MapPoint>),
-    // KeyFrame__BoW(abow::BoW),
-    MapPoint__Position{ id: u64, pos: Vector3<f32> }, //na::Matrix<f64, na::U3, na::U1, na::base::storage::Owned<f64, na::U3, na::U1>>),
+    MapPoint__Position{ id: u64, pos: Vector3<f32> },
     MapPoint__Discard{id: Id},
-    // MapPoint__KeyFrameRef(Vec<KeyFrame>),
-    // MapPoint__KeyFrameList(Vec<KeyFrame>),
-    // test(i32)
-    // State(State)
 }
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MapWriteMsg {
     target: MapEditTarget,
 }
-// TODO: Finalize format for map write messages
 impl MapWriteMsg {
     pub fn new_keyframe(_kf_id: u64, _kf: Box<KeyFrame>) -> Self {
         Self {
@@ -101,12 +81,14 @@ impl MapWriteMsg {
         Self {
             target: MapEditTarget::MapPoint__Discard {id : mp_id.clone()},
         }
+    }
+
     pub fn set_pose(frame_id: Id, pose: Pose) -> Self {
         Self {
             target: MapEditTarget::Frame__Pose(frame_id, pose)
         }
     }
-    
+
     pub fn delete_mappoint_match(frame_id: Id, mappoint_id: Id, is_outlier: bool) -> Self {
         Self {
             target: MapEditTarget::Frame__MapPoint(frame_id, mappoint_id, is_outlier)

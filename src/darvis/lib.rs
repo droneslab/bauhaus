@@ -21,3 +21,6 @@ pub mod dvutils;
 // Map implementation
 // Contains map data structures + logic for reading/writing and the map actor
 pub mod map;
+
+
+pub mod utils;

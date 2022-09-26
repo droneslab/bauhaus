@@ -61,12 +61,12 @@ impl DarvisVis {
         if let Some(msg) = message.content_as::<VisMsg>() {
             // rotate and translate matrices from pose to track trajectory (R and t from pose)
             if self.traj_pos == DVVector3::zeros() && self.traj_rot == DVMatrix3::zeros() {
-                self.traj_pos = msg.new_pose.pos();
-                self.traj_rot = msg.new_pose.rot();
+                self.traj_pos = msg.new_pose.get_translation();
+                self.traj_rot = msg.new_pose.get_rotation();
             }
             else {
-                self.traj_pos = self.traj_pos + self.traj_rot*&msg.new_pose.pos();
-                self.traj_rot = &msg.new_pose.rot() * self.traj_rot;
+                self.traj_pos = self.traj_pos + self.traj_rot*&msg.new_pose.get_translation();
+                self.traj_rot = &msg.new_pose.get_rotation() * self.traj_rot;
             }
 
             // Draw new circle on image and show
