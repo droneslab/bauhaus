@@ -7,8 +7,8 @@ use opencv::{
 use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
 extern crate nalgebra as na;
-//use na::*;
 use opencv::core::Mat;
+use abow::Desc;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct DarvisKeyPoint {
@@ -174,16 +174,11 @@ impl DarvisVectorOfKeyPoint for DVVectorOfKeyPoint {
 // }
 
 
-pub struct Converter{
-
-}
-
-use abow::Desc;
+pub struct Converter {}
 
 impl Converter {
     //std::vector<cv::Mat> Converter::toDescriptorVector(const cv::Mat &Descriptors)
-    pub fn toDescriptorVector(Descriptors : &Mat) -> Vec<Desc>
-    {
+    pub fn toDescriptorVector(Descriptors : &Mat) -> Vec<Desc> {
         let mut vDesc = vec![];
         vDesc.reserve(Descriptors.rows() as usize);
 

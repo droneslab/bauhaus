@@ -1,35 +1,21 @@
 extern crate g2orust;
-use cxx::{let_cxx_string};
-use std::convert::TryInto;
 
 use darvis::{
-    map::{
-        frame::Frame, pose::Pose, map::Map
-    },
+    map::{frame::Frame, pose::Pose, map::Map},
     lockwrap::ReadOnlyWrapper,
-    dvutils::{DVVector3, DVMatrix3, DVVector3_to_array}
+    dvutils::{DVVector3_to_array}
 };
-
-// Note: can't implement From trait because 
-// g2orust::ffi::Pose isn't defined in this crate
-fn pose_to_bridgepose(pose: &Pose) -> g2orust::ffi::Pose {
-    g2orust::ffi::Pose {
-        translation: pose.t_to_array(),
-        rotation: pose.r_quaternion_to_array()
-    }
-}
 
 pub fn optimize_pose(
     frame: &mut Frame, map: &ReadOnlyWrapper<Map>
 ) -> (Option<Pose>, i32) {
     let optimizer = g2orust::ffi::new_sparse_optimizer();
 
-    // let_cxx_string!(vertex_name = "VertexSE3Expmap"); // Don't need this but saving here for reference
+    // Don't need this but saving here for reference
+    // example of how to send a string to C++
+    // let_cxx_string!(vertex_name = "VertexSE3Expmap");
 
-    let vertex = optimizer.create_frame_vertex(
-        1,
-        pose_to_bridgepose(&(frame.pose.as_ref().unwrap()))
-    );
+    let vertex = optimizer.create_frame_vertex(1, frame.pose.as_ref().unwrap().convert_to_bridgepose());
 
     if frame.mappoint_matches.len() < 3 {
         return (None, 0);
@@ -39,7 +25,6 @@ pub fn optimize_pose(
 
     let mut initial_correspondences = 0;
     for i in 0..frame.N {
-    // for (index, mp_id) in &frame.mappoint_matches {
         match frame.mappoint_matches.get(&(i as i32)) {
             Some(mp_id) => {
                 let keypoint = &frame.key_points_un.get(i).unwrap();
@@ -49,16 +34,13 @@ pub fn optimize_pose(
                 );
                 // Sofiya TODO; uncomment this
                 // edge->pCamera = pFrame->mpCamera;
-
-                let position;
                 {
                     let map_read_lock = map.read();
-                    let mappoint = map_read_lock.mappoints.get(mp_id).unwrap();
-                    position = mappoint.position;
+                    let position = map_read_lock.mappoints.get(mp_id).unwrap().position;
+                    optimizer.add_edge_monocular(
+                        i as i32, edge.clone(), DVVector3_to_array(position)
+                    );
                 }
-
-                optimizer.add_edge_monocular(
-                    i as i32, edge.clone(), DVVector3_to_array(position));
 
                 edges.push((i as i32, edge));
 
@@ -74,21 +56,21 @@ pub fn optimize_pose(
 
     // We perform 4 optimizations, after each optimization we classify observation as inlier/outlier
     // At the next optimization, outliers are not included, but at the end they can be classified as inliers again.
-    let chi2Mono = vec![5.991,5.991,5.991,5.991];
-    let chi2Stereo = vec![7.815,7.815,7.815, 7.815];
+    let chi2_mono = vec![5.991,5.991,5.991,5.991];
+    let _chi2_stereo = vec![7.815,7.815,7.815, 7.815];
     let iterations = vec![10,10,10,10];
 
     let mut num_bad = 0;
     for iteration in 0..4 {
-        optimizer.set_vertex_estimate(
-            vertex.clone(), 
-            pose_to_bridgepose(&(frame.pose.as_ref().unwrap()))
-        );
         // Note: re: vertex.clone() ... 
         // Creates a second shared_ptr holding shared ownership of the same
         // object. There is still only one Object but two SharedPtr<Object>.
         // Both pointers point to the same object on the heap.
         // see https://cxx.rs/binding/sharedptr.html
+        optimizer.set_vertex_estimate(
+            vertex.clone(), 
+            frame.pose.as_ref().unwrap().convert_to_bridgepose()
+        );
 
         optimizer.optimize(iterations[iteration]);
 
@@ -100,7 +82,7 @@ pub fn optimize_pose(
 
             let chi2 = edge.chi2();
 
-            if chi2 > chi2Mono[iteration] {
+            if chi2 > chi2_mono[iteration] {
                 *frame.mappoint_outliers.get_mut(index).unwrap() = true;
                 edge.set_level(1);
                 num_bad += 1;
@@ -132,7 +114,7 @@ pub fn optimize_pose(
 
         //     const float chi2 = e->chi2();
 
-        //     if(chi2>chi2Mono[it])
+        //     if(chi2>chi2_mono[it])
         //     {
         //         pFrame->mvbOutlier[idx]=true;
         //         e->setLevel(1);
@@ -162,7 +144,7 @@ pub fn optimize_pose(
 
         //     const float chi2 = e->chi2();
 
-        //     if(chi2>chi2Stereo[it])
+        //     if(chi2>chi2_stereo[it])
         //     {
         //         pFrame->mvbOutlier[idx]=true;
         //         e->setLevel(1);
@@ -185,9 +167,6 @@ pub fn optimize_pose(
 
     // Recover optimized pose
     let pose = optimizer.recover_optimized_pose();
-
-    //     let map_msg = MapWriteMsg::set_pose(frame, pose);
-    // map_actor.send_new(map_msg).unwrap();
 
     // Return pose and number of inliers
     return (Some(Pose::new_from_bridgepose(pose)), initial_correspondences - num_bad);

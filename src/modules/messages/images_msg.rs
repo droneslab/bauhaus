@@ -9,10 +9,10 @@ pub struct ImagesMsg {
 }
 
 impl ImagesMsg {
-    pub fn new(vec: Vec<String>, ids: std::collections::HashMap<String, axiom::actors::Aid>) -> Self {
+    pub fn new(img_paths: Vec<String>, actor_ids: std::collections::HashMap<String, axiom::actors::Aid>) -> Self {
         Self {
-            img_paths: vec,
-            actor_ids: ids,
+            img_paths: img_paths,
+            actor_ids: actor_ids,
         }
     }
 

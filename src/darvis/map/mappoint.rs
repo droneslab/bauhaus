@@ -3,20 +3,16 @@ use serde::{Deserialize, Serialize};
 extern crate nalgebra as na;
 use crate::{
     map::map::Id,
-    dvutils::DVVector3
 };
-
-use super::{keyframe::KeyFrame, map::Map};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MapPoint {
     id: Id,
     first_keyframe_id: Id,
     // 3-Vector
-    // position: Vector3<f32>, // na::Matrix<f64, na::U3, na::U1, na::base::storage::Owned<f64, na::U3, na::U1>>,
     pub mbTrackInView: bool,
 
-    pub position: DVVector3, //na::Matrix<f64, na::U3, na::U1, na::base::storage::Owned<f64, na::U3, na::U1>>,
+    pub position: Vector3<f64>, //na::Matrix<f64, na::U3, na::U1, na::base::storage::Owned<f64, na::U3, na::U1>>,
     ref_keyframe: u64,
     seen_by_keyframes: Vec<Id>,
     depth_threshold: f64,
@@ -48,7 +44,7 @@ impl MapPoint
 //     mnId=nNextId++;
 // }
 
-    pub fn new(id: i32, first_keyframe_id: i32, pos: &Vector3<f32>, ref_keyframe: u64) -> Self
+    pub fn new(id: i32, first_keyframe_id: i32, pos: &Vector3<f64>, ref_keyframe: u64) -> Self
     {
         Self {
             id: id,
@@ -58,7 +54,8 @@ impl MapPoint
             seen_by_keyframes: Vec::new(),
             depth_threshold: 0.0,
             mbTrackInView: false,
-            mnLastFrameSeen: first_keyframe_id,
+            last_frame_seen: first_keyframe_id,
+            num_observations: 0
         }
         // SetWorldPos(Pos);
 
@@ -77,7 +74,7 @@ impl MapPoint
     //     unique_lock<mutex> lock(mMutexPos);
     //     mWorldPos = Pos;
     // }
-    pub fn set_world_pos(&mut self, pos : &Vector3<f32>) 
+    pub fn set_world_pos(&mut self, pos : &Vector3<f64>) 
     {
         //unique_lock<mutex> lock2(mGlobalMutex);
         //unique_lock<mutex> lock(mMutexPos);
@@ -88,7 +85,7 @@ impl MapPoint
     //     unique_lock<mutex> lock(mMutexPos);
     //     return mWorldPos;
     // }
-    pub fn get_world_pos(&self) -> &Vector3<f32> 
+    pub fn get_world_pos(&self) -> &Vector3<f64> 
     {
         &self.position
     }
@@ -96,7 +93,7 @@ impl MapPoint
     pub fn observations(&self) -> u32
     {
         todo!("Add Observation field");
-        0
+        
     }
 
 }

@@ -38,11 +38,32 @@ fn load_config(config_file: String) -> Vec<base::ActorConf> {
     let yaml = &yaml::YamlLoader::load_from_str(&config_string).unwrap()[0]["system_settings"];
     println!("SYSTEM SETTINGS");
     add_system_setting_bool(yaml, "show_ui");
+    add_system_setting_bool(yaml, "localization_only_mode");
+    add_system_setting_sensor(yaml);
+    // camera calibration
+    add_system_setting_f64(yaml, "camera_fx");
+    add_system_setting_f64(yaml, "camera_fy");
+    add_system_setting_f64(yaml, "camera_cx");
+    add_system_setting_f64(yaml, "camera_cy");
+    add_system_setting_f64(yaml, "camera_k1");
+    add_system_setting_f64(yaml, "camera_k2");
+    add_system_setting_f64(yaml, "camera_p1");
+    add_system_setting_f64(yaml, "camera_p2");
+    add_system_setting_i32(yaml, "camera_width");
+    add_system_setting_i32(yaml, "camera_height");
+    add_system_setting_f64(yaml, "fps");
+    add_system_setting_f64(yaml, "camera_bf");
+    add_system_setting_i32(yaml, "thdepth");
+    // feature detection
     add_system_setting_i32(yaml, "max_features");
     add_system_setting_f64(yaml, "scale_factor");
     add_system_setting_i32(yaml, "n_levels");
     add_system_setting_i32(yaml, "fast_threshold");
-    add_system_setting_sensor(yaml);
+    // tracking
+    add_system_setting_i32(yaml, "recently_lost_cutoff");
+    add_system_setting_i32(yaml, "frames_to_reset_IMU");
+    add_system_setting_bool(yaml, "insert_KFs_when_lost");
+    add_system_setting_i32(yaml, "min_num_features");
 
     module_info
 }

@@ -26,7 +26,6 @@ impl DarvisFast {
         DarvisFast {}
     }
 
-    // This is the handler that will be used by the actor.
     pub fn fast_extract(&mut self, _context: Context, message: Message) -> ActorResult<()> {
         if let Some(msg) = message.content_as::<ImageMsg>() {
             let mut kp1 = VectorOfKeyPoint::new();
@@ -44,8 +43,6 @@ impl DarvisFast {
             let align_id = msg.get_actor_ids().get(TRACKER).unwrap();
             let traker_msg: String = GLOBAL_PARAMS.get(TRACKER, "actor_message");
 
-            //align_id.send_new(TrackerMsgKLT::new(msg.get_frame().clone(), kp1.darvis_vector_of_keypoint(), des1.grayscale_mat(), msg.get_actor_ids().clone())).unwrap();
-
             match traker_msg.as_ref()
             {
                 "FeatureMsg" => {
@@ -57,14 +54,6 @@ impl DarvisFast {
                         msg.get_actor_ids().clone()
                     )).unwrap();
                 },
-                // "TrackerMsgKLT" => {
-                //     align_id.send_new(TrackerMsgKLT::new(
-                //         msg.get_frame().clone(),
-                //         kp1.darvis_vector_of_keypoint(),
-                //         des1.grayscale_mat(),
-                //         msg.get_actor_ids().clone()
-                //     )).unwrap();
-                // },
                 _ => {
                     println!("Invalid Message type: selecting FeatureMsg");
                     align_id.send_new(FeatureMsg::new(

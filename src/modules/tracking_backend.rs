@@ -1,10 +1,12 @@
 use std::sync::Arc;
+use std::collections::HashMap;
+
 use axiom::prelude::*;
 use chrono::{prelude::*, Duration};
 use nalgebra::Matrix3;
 use opencv::{
     prelude::*,
-    core::{Point2f, CV_32F},
+    core::Point2f,
     types::{VectorOfPoint3f},
 };
 use darvis::{
@@ -13,26 +15,28 @@ use darvis::{
         pose::Pose, map::Map, map_actor::MapWriteMsg, map_actor::MAP_ACTOR,
         // keyframe::KeyFrame, 
         frame::Frame, map::Id, misc::IMUBias, 
-        mappoint::MapPoint, orbmatcher::ORBmatcher, 
-        camera::DVCamera
+        mappoint::MapPoint
+    },
+    utils::{
+        camera::DVCamera,
+        orbmatcher::ORBmatcher
     },
     lockwrap::ReadOnlyWrapper,
     plugin_functions::Function,
     global_params::*,
 };
 use crate::{
-    // registered_modules::VISUALIZER,
     modules::optimizer::optimize_pose,
-    modules::messages::{
-        // vis_msg::VisMsg,
-        feature_msg::FeatureMsg,
-    },
+    modules::messages::feature_msg::FeatureMsg
 };
 
 #[derive(Debug, Clone)]
 pub struct DarvisTrackingBack {
-    map: ReadOnlyWrapper<Map>,
     state: TrackingState,
+
+    // Map
+    map: ReadOnlyWrapper<Map>,
+    map_actor: Option<Aid>, //QUICK FIX to get going with the message communication 
 
     // Frames
     first_frame: bool,
@@ -53,14 +57,13 @@ pub struct DarvisTrackingBack {
 
     // Initialization (Monocular)
     // std::vector<int> mvIniLastMatches;
-    ini_matches: Vec<i32>,// std::vector<int> mvIniMatches;
+    ini_matches: HashMap<i32, Id>,// std::vector<int> mvIniMatches;
     prev_matched: Vec<Point2f>,// std::vector<cv::Point2f> mvbPrevMatched;
     ini_p3d: VectorOfPoint3f,// std::vector<cv::Point3f> mvIniP3D;
-    // Frame mInitialFrame;
     ready_to_initializate: bool,
 
     // IMU 
-    velocity: Option<Pose>, // Note: ORB_SLAM3 uses C++ package Sophus
+    velocity: Option<Pose>,
     last_bias: Option<IMUBias>,
 
     // Relocalization
@@ -77,21 +80,16 @@ pub struct DarvisTrackingBack {
     min_num_features: i32,
 
     //Camera
-    camera: Option<DVCamera>,
-
-    K: Option<Mat>, // Might be redundant
-    K_: Option<Matrix3<f32>>,
+    camera: DVCamera,
+    camera_calibration_matrix: Matrix3<f32>,
 
     // Reference Keyframe.
-    mpReferenceKF: Option<Id>,//,*mut KeyFrame,//KeyFrame* mpReferenceKF;
-
-    map_actor: Option<Aid>, //QUICK FIX to get going with the message communication 
+    reference_keyframe: Option<Id>,
 }
 
 #[derive(Debug, Clone)]
 enum TrackingState {
     NotInitialized,
-    NoImagesYet,
     Lost,
     RecentlyLost,
     Ok
@@ -106,11 +104,24 @@ impl DarvisTrackingBack {
         let insert_kfs_when_lost: bool = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "insert_KFs_when_lost");
         let min_num_features: i32 = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "min_num_features");
 
+        // Camera initialization
+        let fx: f64 = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "camera_fx");
+        let fy: f64 = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "camera_fy");
+        let cx: f64 = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "camera_cx");
+        let cy: f64 = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "camera_cy");
+        let mut camera = DVCamera::new(&vec![fx as f32, fy as f32, cx as f32, cy as f32]);
+        let mut camera_calibration_matrix = Matrix3::<f32>::zeros();
+        camera_calibration_matrix.fill_with_identity();
+        camera_calibration_matrix[(0,0)] = fx as f32;
+        camera_calibration_matrix[(1,1)] = fy as f32;
+        camera_calibration_matrix[(0,2)] = cx as f32;
+        camera_calibration_matrix[(1,2)] = cy as f32;
+
         let mut tracker = DarvisTrackingBack {
             first_frame: true,
             last_frame: None,
             map: map,
-            state: TrackingState::NoImagesYet,
+            state: TrackingState::NotInitialized,
             last_frame_id: -1,
             temporal_points: Vec::new(),
             reference_keyframe_id: -1,
@@ -125,12 +136,11 @@ impl DarvisTrackingBack {
 
             // Initialization Variables (Monocular)
             // std::vector<int> mvIniLastMatches;
-            ini_matches: Vec::new(),// std::vector<int> mvIniMatches;
+            ini_matches: HashMap::new(),// std::vector<int> mvIniMatches;
             prev_matched: Vec::new(),// std::vector<cv::Point2f> mvbPrevMatched;
             ini_p3d: VectorOfPoint3f::new(),// std::vector<cv::Point3f> mvIniP3D;
             // Frame mInitialFrame;
             ready_to_initializate: false,
-
 
             // Defaults set from global variables
             recently_lost_cutoff: Duration::seconds(recently_lost_cutoff.into()),
@@ -149,53 +159,18 @@ impl DarvisTrackingBack {
             last_reloc_frame_id: 0,
 
             //Camera
-            camera: None,
-            K: None,
-            K_: None,
-            mpReferenceKF: None,
+            camera: camera,
+            camera_calibration_matrix: camera_calibration_matrix,
+
+            reference_keyframe: None,
             map_actor: None,
         };
-
-        // camera_fx: 718.856
-        // camera_fy: 718.856
-        // camera_cx: 607.1928
-        // camera_cy: 185.2157
-
-        tracker.init_camera();
 
         tracker
     }
 
-    pub fn init_camera(&mut self)
-    {
-        let fx: f64 = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "camera_fx");
-        let fy: f64 = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "camera_fy");
-        let cx: f64 = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "camera_cx");
-        let cy: f64 = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "camera_cy");
-        
-        self.camera = Some(DVCamera::new(&vec![fx as f32, fy as f32, cx as f32, cy as f32]));
-
-
-        let mut K = Mat::eye(3,3,CV_32F).unwrap().to_mat().unwrap();
-
-        *K.at_2d_mut::<f32>(0,0).unwrap() = fx as f32;
-        *K.at_2d_mut::<f32>(1,1).unwrap() = fy as f32;
-        *K.at_2d_mut::<f32>(0,2).unwrap() = cx as f32;
-        *K.at_2d_mut::<f32>(1,2).unwrap() = cy as f32;
-
-        self.K = Some(K.clone());
-
-        self.K_.unwrap().fill_with_identity();
-        self.K_.unwrap()[(0,0)] = fx as f32;
-        self.K_.unwrap()[(1,1)] = fy as f32;
-        self.K_.unwrap()[(0,2)] = cx as f32;
-        self.K_.unwrap()[(1,2)] = cy as f32;
-
-    }
-
-    fn track(&mut self, _context: Context, msg: Arc<FeatureMsg>) {
+    fn tracking_backend(&mut self, _context: Context, msg: Arc<FeatureMsg>) {
         let map_actor = msg.actor_ids.get(MAP_ACTOR).unwrap();
-
         self.map_actor = Some(map_actor.clone());
 
         self.last_frame_id += 1;
@@ -204,8 +179,8 @@ impl DarvisTrackingBack {
             Utc::now(), 
             msg.keypoints.cv_vector_of_keypoint(),
             msg.descriptors.grayscale_to_cv_mat(),
-            msg.im_width,
-            msg.im_height
+            msg.image_width,
+            msg.image_height
         ));
 
         // TODO (reset): Reset map because local mapper set the bad imu flag
@@ -306,9 +281,6 @@ impl DarvisTrackingBack {
 
                 self.last_frame = None;
                 return;
-            },
-            TrackingState::NoImagesYet => {
-                panic!("Should not be possible to get here!");
             }
         };
 
@@ -318,6 +290,7 @@ impl DarvisTrackingBack {
         // Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Tracking.cc#L1933
         // Look for "mbOnlyTracking" in Track() function
 
+        println!("after big block");
         // Track Local Map
         if success {
             success = self.track_local_map();
@@ -474,27 +447,19 @@ impl DarvisTrackingBack {
     }
 
     fn monocular_initialization(&mut self) -> bool {
-        // TODO
         // Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Tracking.cc#L2448
-        if !self.ready_to_initializate
-        {
+        if !self.ready_to_initializate {
             // Set Reference Frame
-            if self.current_frame.as_ref().unwrap().key_points.len()>100
-            {
-    
+            if self.current_frame.as_ref().unwrap().key_points.len() > 100 {
                 self.initial_frame = self.current_frame.clone();
                 self.last_frame = self.current_frame.clone();
                 self.prev_matched.resize(self.current_frame.as_ref().unwrap().key_points_un.len(), Point2f::default());
 
-                for i in 0..self.current_frame.as_ref().unwrap().key_points_un.len()
-                {
+                for i in 0..self.current_frame.as_ref().unwrap().key_points_un.len() {
                     self.prev_matched[i] = self.current_frame.as_ref().unwrap().key_points_un.get(i).unwrap().pt.clone();
                 }
-    
-                self.ini_matches.iter_mut().map(|x| *x = -1).count();
-    
-                if self.sensor.is_mono() && self.sensor.is_imu()
-                {
+
+                if self.sensor.is_mono() && self.sensor.is_imu() {
                     //TODO: (IMU) 
                     //Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/4452a3c4ab75b1cde34e5505a36ec3f9edcdc4c4/src/Tracking.cc#L2467
 
@@ -505,49 +470,57 @@ impl DarvisTrackingBack {
                     // mpImuPreintegratedFromLastKF = new IMU::Preintegrated(IMU::Bias(),*mpImuCalib);
                     // mCurrentFrame.mpImuPreintegrated = mpImuPreintegratedFromLastKF;    
                 }
-    
+
                 self.ready_to_initializate = true;
-    
                 return true;
             }
-        }
-        else
-        {
-            if (self.current_frame.as_ref().unwrap().key_points.len() <=100)||((self.sensor.is_mono() && self.sensor.is_imu() )&&(self.last_frame.as_ref().unwrap().timestamp - self.initial_frame.as_ref().unwrap().timestamp> Duration::seconds(1)))
-            {
+        } else {
+            if (self.current_frame.as_ref().unwrap().key_points.len() <=100)||((self.sensor.is_mono() && self.sensor.is_imu() )&&(self.last_frame.as_ref().unwrap().timestamp - self.initial_frame.as_ref().unwrap().timestamp> Duration::seconds(1))) {
                 self.ready_to_initializate  = false;
                 return false;
             }
 
             // Find correspondences
-            let mut nmatches = self.orb_matcher.search_for_initialization(&self.initial_frame.as_ref().unwrap(), &self.current_frame.as_ref().unwrap(), &mut self.prev_matched,&mut self.ini_matches, 100);
+            let mut nmatches = self.orb_matcher.search_for_initialization(
+                &self.initial_frame.as_ref().unwrap(), 
+                &self.current_frame.as_ref().unwrap(), 
+                &mut self.prev_matched,
+                &mut self.ini_matches,
+                100
+            );
 
             // Check if there are enough correspondences
-            if nmatches<100
-            {
+            if nmatches < 100 {
                 self.ready_to_initializate  = false;
                 return false;
             }
 
-            let mut Tcw = Pose::default(); //Sophus::SE3f Tcw;
+            let mut Tcw = Pose::default();
             let mut vb_triangulated = Vec::<bool>::new();
             //vector<bool> vb_triangulated; // Triangulated Correspondences (mvIniMatches)
 
-            if self.camera.as_mut().unwrap().reconstruct_with_two_views(&self.initial_frame.as_ref().unwrap().key_points_un, &self.current_frame.as_ref().unwrap().key_points_un, &self.ini_matches, &mut Tcw, &mut self.ini_p3d,&mut vb_triangulated)
-            {
-                for i in 0..self.ini_matches.len()
-                {
-                    if self.ini_matches[i]>=0 && !vb_triangulated[i]
-                    {
-                        self.ini_matches[i]=-1;
+            let reconstruct_success = self.camera.reconstruct_with_two_views(
+                &self.initial_frame.as_ref().unwrap().key_points_un,
+                &self.current_frame.as_ref().unwrap().key_points_un,
+                &self.ini_matches,
+                &mut Tcw,
+                &mut self.ini_p3d,
+                &mut vb_triangulated
+            );
+
+            if reconstruct_success {
+                let keys = self.ini_matches.keys().cloned().collect::<Vec<_>>();
+                for index in keys {
+                    if !vb_triangulated[index as usize] {
+                        self.ini_matches.remove(&index);
                         nmatches-=1;
                     }
                 }
-    
+
                 // Set Frame Poses
-                self.initial_frame.as_mut().unwrap().SetPose(&Pose::default());//.SetPose(Sophus::SE3f());
-                self.current_frame.as_mut().unwrap().SetPose(&Tcw);
-    
+                self.initial_frame.as_mut().unwrap().set_pose(&Pose::default());//.SetPose(Sophus::SE3f());
+                self.current_frame.as_mut().unwrap().set_pose(&Tcw);
+
                 self.create_initial_map_monocular();
             }
         }
@@ -556,35 +529,32 @@ impl DarvisTrackingBack {
     }
 
     //void Tracking::CreateInitialMapMonocular()
-    pub fn create_initial_map_monocular(&mut self)
-    {
+    pub fn create_initial_map_monocular(&mut self) {
         todo!("Implement create_initial_map_monocular");
     }
 
 
     fn track_reference_keyframe(&mut self) -> bool {
         // Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Tracking.cc#L2720
-    
+
         // Compute Bag of Words vector
-        self.current_frame.as_mut().unwrap().ComputeBoW();// mCurrentFrame.ComputeBoW();
+        self.current_frame.as_mut().unwrap().compute_BoW();
 
         // We perform first an ORB matching with the reference keyframe
         // If enough matches are found we setup a PnP solver
-        
+
         let matcher = ORBmatcher::new(0.7, true);
-        let mut vpMapPointMatches = Vec::<Id>::new();
-        
+        let mut vpMapPointMatches = HashMap::<i32, Id>::new();
+
         //ORBmatcher matcher(0.7,true);
         //vector<MapPoint*> vpMapPointMatches;
 
-        let mut nmatches = 0;
-        if self.mpReferenceKF.is_some()
-        {
-
+        let mut nmatches;
+        if self.reference_keyframe.is_some() {
             //TODO: CHECK if we really need to use "KeyFrame" object for below code for BoW search,
             // For now just using current and ref "Frame" object.
             // let map_read_lock = self.map.read();
-            // let ref_kf = map_read_lock.get_keyframe(&self.mpReferenceKF.unwrap());
+            // let ref_kf = map_read_lock.get_keyframe(&self.reference_keyframe.unwrap());
             // let cur_kf = map_read_lock.get_keyframe(&self.current_frame.as_ref().unwrap().id);
             // if ref_kf.is_some()
             // {
@@ -596,36 +566,30 @@ impl DarvisTrackingBack {
             // }
 
             let map_read_lock = self.map.read();
-            let ref_kf = map_read_lock.get_keyframe(&self.mpReferenceKF.unwrap());
+            let _ref_kf = map_read_lock.get_keyframe(&self.reference_keyframe.unwrap());
 
             let cur_f = self.current_frame.as_ref().unwrap();
 
-            if self.reference_frame.is_some()
-            {
+            if self.reference_frame.is_some() {
                 //TODO: Use BoW for searching with mappoints, right now not using any mappoint.
                 //nmatches = matcher.search_by_bow(self.reference_frame.as_ref().unwrap(), cur_f, &mut vpMapPointMatches);
             
                 nmatches = matcher.search_for_initialization(self.reference_frame.as_ref().unwrap(), cur_f, &mut self.prev_matched, &mut vpMapPointMatches, 100);
-            }
-            else
-            {
+            } else {
                 todo!("fix invalid ref KF assignment");
             }
 
-        }
-        else
-        {
+        } else {
             todo!("fix ref KF assignment");
         }
 
-        if nmatches<15
-        {
+        if nmatches<15 {
             println!("TRACK_REF_KF: Less than 15 matches!!\n");
             return false;
         }
 
-        self.current_frame.as_mut().unwrap().mvpMapPoints = vpMapPointMatches.clone();
-        self.current_frame.as_mut().unwrap().SetPose(&self.last_frame.as_ref().unwrap().GetPose());
+        self.current_frame.as_mut().unwrap().mappoint_matches = vpMapPointMatches.clone();
+        self.current_frame.as_mut().unwrap().set_pose(&self.last_frame.as_ref().unwrap().get_pose());
 
         //mCurrentFrame.PrintPointDistribution();
         // cout << " TrackReferenceKeyFrame mLastFrame.mTcw:  " << mLastFrame.mTcw << endl;
@@ -634,64 +598,41 @@ impl DarvisTrackingBack {
         //Optimizer::PoseOptimization(&mCurrentFrame);
 
         // Discard outliers
-        let mut nmatchesMap = 0;
-        //for(int i =0; i<mCurrentFrame.N; i++)
-        for i in 0..self.current_frame.as_ref().unwrap().mvpMapPoints.len()
-        {
+        let mut nmatches_map = 0;
+        let matches = &self.current_frame.as_ref().unwrap().mappoint_matches;
+        for (index, mp_id) in matches {
+            if self.current_frame.as_ref().unwrap().mappoint_outliers.contains_key(index) {
+                let map_msg = MapWriteMsg::delete_mappoint_match(self.current_frame.as_ref().unwrap().id, *mp_id, true);
+                self.map_actor.as_ref().unwrap().send_new(map_msg).unwrap();
 
-            if self.current_frame.as_ref().unwrap().mvpMapPoints[i] !=-1  // if invalid kf id
-            {
-                if self.current_frame.as_ref().unwrap().mvbOutlier[i]
-                {
-                    let pMP = self.current_frame.as_ref().unwrap().mvpMapPoints[i];
-                    
-                    let map_msg = MapWriteMsg::discard_mappoint(&pMP);
-                    self.map_actor.as_ref().unwrap().send_new(map_msg).unwrap();
+                //TODO:[Stereo] check for Stereo camera flow
+                // pMP.mbTrackInView= false;      
+                // pMP.mnLastFrameSeen = self.current_frame.unwrap().id;                 
 
-                    self.current_frame.as_mut().unwrap().mvpMapPoints[i]=-1; // static_cast<MapPoint*>(NULL);
-                    self.current_frame.as_mut().unwrap().mvbOutlier[i]=false;
+                // if(i < mCurrentFrame.Nleft){
+                //     pMP->mbTrackInView = false;
+                // }
+                // else{
+                //     pMP->mbTrackInViewR = false;
+                // }
+                //pMP->mbTrackInView = false;
 
+                nmatches-=1;
+            } else {
+                let map_lock = self.map.read();
+                let mappoint_observations = map_lock.mappoints.get(mp_id).unwrap().num_observations;
 
-                    //TODO:[Stereo] check for Stereo camera flow
-                    // pMP.mbTrackInView= false;      
-                    // pMP.mnLastFrameSeen = self.current_frame.unwrap().id;                 
-
-                    // if(i < mCurrentFrame.Nleft){
-                    //     pMP->mbTrackInView = false;
-                    // }
-                    // else{
-                    //     pMP->mbTrackInViewR = false;
-                    // }
-                    //pMP->mbTrackInView = false;
-
-                    nmatches-=1;
-                }
-                else 
-                {
-                    
-                    if self.current_frame.as_ref().unwrap().mvpMapPoints[i] !=-1
-                    {
-                        let map_read_lock = self.map.read();
-                        let ref_kf = map_read_lock.get_mappoint(&self.current_frame.as_ref().unwrap().mvpMapPoints[i]);
-    
-                        if ref_kf.unwrap().observations()>0
-                        {
-                            nmatchesMap+=1;
-                        }
-                    }
-
+                if mappoint_observations > 0 {
+                    nmatches_map+=1;
                 }
 
             }
         }
 
-        if self.sensor.is_imu() //if (mSensor == System::IMU_MONOCULAR || mSensor == System::IMU_STEREO || mSensor == System::IMU_RGBD)
-        {
+        if self.sensor.is_imu() {
             return true;
-        }
-        else
-        {
-            return nmatchesMap>=10;
+        } else {
+            return nmatches_map>=10;
         }
 
     }
@@ -757,28 +698,32 @@ impl DarvisTrackingBack {
 
         // Optimize frame pose with all matches
         let (pose, inliers) = optimize_pose(&mut self.current_frame.as_mut().unwrap(), &self.map);
+        if inliers != 0 {
+            let map_msg = MapWriteMsg::set_pose(self.current_frame.as_ref().unwrap().id, pose.unwrap());
+            map_actor.send_new(map_msg).unwrap();
+        }
 
         // Discard outliers
         let mut nmatches_map = 0;
         let matches = &self.current_frame.as_ref().unwrap().mappoint_matches; // Sofiya: honestly don't know why I need to borrow (&) here...
-        for (index, mp_id) in matches {
-            {
+        for (_index, mp_id) in matches {
+            if self.current_frame.as_ref().unwrap().mappoint_outliers.contains_key(mp_id) {
+                {
+                    let map_msg = MapWriteMsg::delete_mappoint_match(self.current_frame.as_ref().unwrap().id, *mp_id, true);
+                    map_actor.send_new(map_msg).unwrap();
+                }
+
+                // if(i < mCurrentFrame.Nleft){
+                //     pMP->mbTrackInView = false;
+                // }
+                // else{
+                //     pMP->mbTrackInViewR = false;
+                // }
+            } else {
                 let map_lock = self.map.read();
                 let mappoint_observations = map_lock.mappoints.get(mp_id).unwrap().num_observations;
-                
-                if self.current_frame.as_ref().unwrap().mappoint_outliers.contains_key(mp_id) {
-                    {
-                        let map_msg = MapWriteMsg::delete_mappoint_match(self.current_frame.as_ref().unwrap().id, *mp_id, true);
-                        map_actor.send_new(map_msg).unwrap();
-                    }
 
-                    // if(i < mCurrentFrame.Nleft){
-                    //     pMP->mbTrackInView = false;
-                    // }
-                    // else{
-                    //     pMP->mbTrackInViewR = false;
-                    // }
-                } else if mappoint_observations > 0 {
+                if mappoint_observations > 0 {
                     nmatches_map += 1;
                 }
             }
@@ -957,7 +902,7 @@ impl Function for DarvisTrackingBack {
     fn handle(&mut self, context: axiom::prelude::Context, message: Message) -> ActorResult<()>
     {
         if let Some(msg) = message.content_as::<FeatureMsg>() {
-            self.track(context, msg);
+            self.tracking_backend(context, msg);
         }
 
         Ok(Status::done(()))

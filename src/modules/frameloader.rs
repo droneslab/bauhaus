@@ -1,5 +1,4 @@
 use axiom::prelude::*;
-// Accepts a message of two image extracted data (kps, des), computes homography
 use opencv::{
     imgcodecs,
 };
@@ -10,7 +9,7 @@ use darvis::{
 };
 use crate::{
     modules::vis::*,
-    registered_modules::{VISUALIZER, FEATURE_EXTRACTOR},
+    registered_modules::{VISUALIZER, TRACKING_FRONTEND},
     modules::messages::{
         image_msg::ImageMsg,
         images_msg::ImagesMsg,
@@ -24,19 +23,16 @@ pub struct DarvisFrameLoader {
 
 impl DarvisFrameLoader {
     pub fn new() -> DarvisFrameLoader {
-        DarvisFrameLoader {
-            fps: 20
-        }
+        DarvisFrameLoader {fps: 20}
     }
 
-    // This is the handler that will be used by the actor.
     pub fn load_frames(&mut self, _context: Context, message: Message) -> ActorResult<()> {
         if let Some(msg) = message.content_as::<ImagesMsg>() {
             let use_visualizer = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "show_ui");
             for path in msg.get_img_paths() {
                 let img = imgcodecs::imread(&path, imgcodecs::IMREAD_GRAYSCALE)?;
                 let vis_id = msg.get_actor_ids().get(VISUALIZER).unwrap();
-                let feat_aid = msg.actor_ids.get(FEATURE_EXTRACTOR).unwrap();
+                let feat_aid = msg.actor_ids.get(TRACKING_FRONTEND).unwrap();
                 println!("Processed image: {}", path);
                 if use_visualizer {
                     vis_id.send_new(VisPathMsg::new(path.to_string())).unwrap();

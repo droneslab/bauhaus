@@ -1,4 +1,5 @@
-
+use std::collections::HashMap;
+use std::convert::TryInto;
 use opencv::core::{Point2f, KeyPoint};
 use opencv::{
     prelude::*,
@@ -6,13 +7,11 @@ use opencv::{
 use crate::{
     map::{
     frame::Frame,
-    mappoint::MapPoint
+    mappoint::MapPoint,
+    map::Id
     },
 };
 
-use super::keyframe::KeyFrame;
-use super::map::Id;
-use super::mappoint::MapPoint;
 
 unsafe impl Sync for ORBmatcher {}
 
@@ -71,11 +70,10 @@ impl ORBmatcher {
         return dist;
     }
 
-    pub fn search_for_initialization(&self, F1: &Frame , F2: &Frame, prev_matched: &mut Vec<Point2f>, matches12: &mut Vec<i32>, window_size : i64 ) -> i32
+    pub fn search_for_initialization(&self, F1: &Frame , F2: &Frame, prev_matched: &mut Vec<Point2f>, matches12: &mut HashMap<i32, Id>, window_size : i64 ) -> i32
     {   
         //ref code : https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/0df83dde1c85c7ab91a0d47de7a29685d046f637/src/ORBmatcher.cc#L648
         let mut nmatches: i32=0;
-        matches12.resize(F1.key_points_un.len(), -1);
 
 
         let mut rotHist = Vec::<Vec<i32>>::new();
@@ -143,10 +141,10 @@ impl ORBmatcher {
                 {
                     if matches21[bestIdx2 as usize]>=0 
                     {
-                        matches12[matches21[bestIdx2 as usize] as usize] = -1;
+                        matches12.remove(&bestIdx2);
                         nmatches-=1;
                     }
-                    matches12[i1]=bestIdx2;
+                    matches12.insert(i1.try_into().unwrap(), bestIdx2);
                     matches21[bestIdx2 as usize]=i1 as i32;
                     matched_distance[bestIdx2 as usize]=bestDist;
                     nmatches+=1;
@@ -193,9 +191,9 @@ impl ORBmatcher {
                 for j in 0..rotHist[i as usize].len()
                 {
                     let idx1: usize = rotHist[i as usize][j] as usize;
-                    if matches12[idx1]>=0
+                    if matches12.contains_key(&(idx1 as i32))
                     {
-                        matches12[idx1]=-1;
+                        matches12.remove(&(idx1 as i32));
                         nmatches-=1;
                     }
                 }
@@ -206,9 +204,9 @@ impl ORBmatcher {
         //Update prev matched
         for i1 in 0..matches12.len()
         {
-            if matches12[i1]>=0
+            if matches12.contains_key(&(i1 as i32))
             {
-                prev_matched[i1]= F2.key_points_un.get(matches12[i1] as usize).unwrap().pt.clone();
+                prev_matched[i1]= F2.key_points_un.get(*matches12.get(&(i1 as i32)).unwrap() as usize).unwrap().pt.clone();
             }                
         }
 
@@ -261,8 +259,6 @@ impl ORBmatcher {
     pub fn search_by_projection(&self) -> Vec<MapPoint> {
         //TODO
         todo!("TRACK: motion model");
-        let vec = vec![];
-        return vec;
     } 
 
 
@@ -277,15 +273,14 @@ impl ORBmatcher {
 
         let vKeysUn1 = &pKF1.key_points_un;
         let vFeatVec1 = &pKF1.featvec.as_ref().unwrap();
-        let  vpMapPoints1 = pKF1.GetMapPointMatches();
+        let vpMapPoints1 = pKF1.get_mappoint_matches();
         let Descriptors1 = &pKF1.descriptors;
 
         let vKeysUn2 = &pKF2.key_points_un;
         let vFeatVec2 = &pKF2.featvec.as_ref().unwrap();
-        let  vpMapPoints2 = pKF2.GetMapPointMatches();
+        let  vpMapPoints2 = pKF2.get_mappoint_matches();
         let Descriptors2 = &pKF2.descriptors;
 
-        
         let mut vbMatched2 = vec![false; vpMapPoints2.len()];
 
 
