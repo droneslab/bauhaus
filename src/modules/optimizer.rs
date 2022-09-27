@@ -27,7 +27,7 @@ pub fn optimize_pose(
     for i in 0..frame.N {
         match frame.mappoint_matches.get(&(i as i32)) {
             Some(mp_id) => {
-                let keypoint = &frame.key_points_un.get(i).unwrap();
+                let keypoint = &frame.keypoints_un.get(i).unwrap();
                 let edge = optimizer.create_edge_monocular(
                     keypoint.octave, keypoint.pt.x, keypoint.pt.y,
                     frame.mvInvLevelSigma2[keypoint.octave as usize]
@@ -96,7 +96,7 @@ pub fn optimize_pose(
             }
         }
 
-        // Sofiya TODO
+        // Sofiya TODO one day
         // vpEdgesMono_FHR comes from "SLAM with respect to a rigid body"
         // which I didn't implement...
         // see add_edge_monocular in rust_helper.cpp

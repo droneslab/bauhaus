@@ -1,19 +1,6 @@
-use crate::map::map::Id;
+use crate::map::{map::Id, pose::Pose};
 use crate::dvutils::*;
 use opencv::core::Mat;
-
-#[derive(Debug, Clone)]
-pub struct CalibParam {
-    pub fx: f32,
-    pub fy: f32,
-    pub cx: f32,
-    pub cy: f32,
-    pub inv_fx: f32,
-    pub inv_fy: f32,
-    pub mbf: f32,
-    pub mb: f32,
-    pub th_depth: f32,
-}
 
 #[derive(Debug, Clone)]
 pub struct Grid {
@@ -41,9 +28,6 @@ pub struct KeyFrame {
 
     pub f_scale: f32, //?
     pub origin_map_id: u32, //?
-
-    // Calibration parameters
-    pub calibration_params: CalibParam,
 
     // KeyPoints, stereo coordinate and descriptors (all associated by an index)
     pub num_keypoints: i32,
@@ -91,8 +75,8 @@ pub struct KeyFrame {
     pub place_recognition_score: f32,
 
     // Variables used by loop closing
-    // pub mTcwGBA: SophusSE3f, // Sofiya: Sophus?
-    // pub mTcwBefGBA: SophusSE3f, // Sofiya: Sophus?
+    // pub mTcwGBA: SophusSE3f,
+    // pub mTcwBefGBA: SophusSE3f,
     // pub mVwbGBA: EigenVector3f, // eigen
     // pub mVwbBefGBA: EigenVector3f, // eigen
     // pub mBiasGBA: IMUBias, 
@@ -115,7 +99,7 @@ pub struct KeyFrame {
     timestamp: u64,
     // map_points: Arc<Vec<MapPoint>>,
     // bow: abow::BoW,
-    // pose: Pose,
+    pub pose: Pose,
     // bow_db: Arc<BowDB>,
     // scale: f64,
     // depth_threshold: f64,

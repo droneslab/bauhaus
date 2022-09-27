@@ -24,14 +24,19 @@ impl MapActor {
     async fn handle(self, _context: Context, message: Message) -> ActorResult<Self> {
         if let Some(_msg) = message.content_as::<MapWriteMsg>() {
             println!("received map edit msg");
-
+            let mut write_lock = self.map.write();
 
             match _msg.target{
                 MapEditTarget::MapPoint__Discard { id } => {
-                    let mut write_lock = self.map.write();
                     write_lock.discard_mappoint(&id);
                 },
+                MapEditTarget::Frame__DeleteMapPointMatch { frame_id, mp_id, is_outlier } => {
+                    // TODO Sofiya ... move out of actor, probably safe to do in tracking
+                    // delete mappoint in frame's mappoint list
+                    // if is_outlier is true, should also delete the mappoint in mappoint_outliers
+                    // set mappoint's last_frame_seen to the frame ID
 
+                },
                 _ => {
                     println!("Invalid Message type:");
                 },
@@ -49,8 +54,8 @@ impl MapActor {
 enum MapEditTarget {
     KeyFrame__New(),
     Map__ResetActive(),
-    Frame__Pose(Id, Pose),
-    Frame__MapPoint(Id, Id, bool),
+    Frame__Pose{frame_id: Id, pose: Pose},
+    Frame__DeleteMapPointMatch{frame_id: Id, mp_id: Id, is_outlier: bool},
     MapPoint__Position{ id: u64, pos: Vector3<f32> },
     MapPoint__Discard{id: Id},
 }
@@ -85,18 +90,16 @@ impl MapWriteMsg {
 
     pub fn set_pose(frame_id: Id, pose: Pose) -> Self {
         Self {
-            target: MapEditTarget::Frame__Pose(frame_id, pose)
+            target: MapEditTarget::Frame__Pose{frame_id: frame_id, pose: pose}
         }
     }
 
     pub fn delete_mappoint_match(frame_id: Id, mappoint_id: Id, is_outlier: bool) -> Self {
         Self {
-            target: MapEditTarget::Frame__MapPoint(frame_id, mappoint_id, is_outlier)
+            target: MapEditTarget::Frame__DeleteMapPointMatch{
+                frame_id: frame_id, mp_id: mappoint_id, is_outlier: is_outlier
+            }
         }
-        // Sofiya: 
-        // delete mappoint in frame's mappoint list
-        // if is_outlier is true, should also delete the mappoint in mappoint_outliers
-        // set mappoint's last_frame_seen to the frame ID
     }
 
     // pub fn delete_keyframe(kf_id: u64) -> Self {

@@ -84,8 +84,9 @@ impl Map {
         self.mappoints.get(id)
     }
 
-    pub fn discard_mappoint(&mut self, id: &Id)
-    {
+    //* BEHIND MAP ACTOR *//
+    pub(in crate::map) fn discard_mappoint(&mut self, id: &Id) {
+        //Note: pub(in crate::map) says that only map can access this function
         self.mappoints.remove(id);
         println!("MapPoint removed {}", id);
         // Following is done in ORB SLAM , check if this is need to be done.

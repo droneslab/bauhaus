@@ -11,26 +11,52 @@ pub enum CameraType {
 }
 
 #[derive(Debug, Clone)]
+pub struct CalibParam {
+    pub fx: f64,
+    pub fy: f64,
+    pub cx: f64,
+    pub cy: f64,
+    pub inv_fx: f64,
+    pub inv_fy: f64,
+    pub bf: f64,
+    pub baseline: f64,
+    pub th_depth: i32,
+}
+
+#[derive(Debug, Clone)]
 pub struct DVCamera {
-    pub parameters: Vec<f32>,
     pub cam_type: CameraType,
+    pub calibration_params: CalibParam,
     tvr: Option<TwoViewReconstruction>,
 }
 
 impl DVCamera {
-    pub fn default() -> DVCamera {
+    pub fn default(fx: f64, fy: f64, cx: f64, cy: f64, th_depth: i32, bf: f64) -> DVCamera {
+        let inv_fx = 1.0 / fx;
+        let inv_fy = 1.0 / fy;
+        let baseline = bf / fx;
+        let calibration_params = CalibParam {
+            fx, fy, cx, cy, inv_fx, inv_fy, bf, baseline, th_depth
+        };
+
         DVCamera {
-            parameters : vec![0.0;4],
             cam_type: CameraType::CamPinhole,
+            calibration_params: calibration_params,
             tvr: None,
         }
     }
 
-    pub fn new(parameter : &Vec<f32>) -> DVCamera {
-        assert!(parameter.len() ==4);
+    pub fn new(fx: f64, fy: f64, cx: f64, cy: f64, th_depth: i32, bf: f64) -> DVCamera {
+        let inv_fx = 1.0 / fx;
+        let inv_fy = 1.0 / fy;
+        let baseline = bf / fx;
+        let calibration_params = CalibParam {
+            fx, fy, cx, cy, inv_fx, inv_fy, bf, baseline, th_depth
+        };
+
         DVCamera {
-            parameters : parameter.clone(),
             cam_type: CameraType::CamPinhole,
+            calibration_params: calibration_params,
             tvr: None,
         }
     }

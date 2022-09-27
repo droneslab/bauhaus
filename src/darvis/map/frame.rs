@@ -29,8 +29,10 @@ pub struct Frame {
     pub max_y: f64,//static float mnMaxY;
 
     // Keypoints //
-    pub key_points: opencv::types::VectorOfKeyPoint,
-    pub key_points_un: opencv::types::VectorOfKeyPoint,
+    pub keypoints: opencv::types::VectorOfKeyPoint, // == mvkeys
+    pub keypoints_right: opencv::types::VectorOfKeyPoint, // == mvkeysright
+    pub keypoints_un: opencv::types::VectorOfKeyPoint,
+    pub mv_depth: HashMap<i32, f32>, // negative value for monocular points
     // Keypoints are assigned to cells in a grid to reduce matching complexity when projecting MapPoints.
     pub grid_element_width_inv: f64, //static float mfGridElementWidthInv;
     pub grid_element_height_inv: f64,//static float mfGridElementHeightInv;
@@ -48,13 +50,18 @@ pub struct Frame {
     pub imu_bias: Option<IMUBias>,
     pub reference_keyframe_id: Option<Id>,
 
+    // Stereo //
+    pub stereo_baseline: f64,
+
     // Idk where to put this
     // depth_threshold: u64,
     // cam_params: opencv::core::Mat,
     pub N: usize,
+    pub Nleft: usize, // TODO (Stereo)
     pub mvInvLevelSigma2: Vec<f32>,
     pub dist_coef: Vec<f64>,//mDistCoef
     pub featvec: Option<(BoW, DirectIdx)>, //pub bow: Option<BoW>,
+    pub scale_factors: Vec<f64>,
 }
 
 impl Frame {
@@ -65,18 +72,21 @@ impl Frame {
         let mut frame = Frame{
             id: id,
             timestamp: timestamp,
-            key_points: keypoints.clone(),
+            keypoints: keypoints.clone(),
+            keypoints_right: opencv::types::VectorOfKeyPoint::new(), //TODO (Stereo) this needs to be filled with actual keypoints
             descriptors: descriptors,
             pose: None,
             imu_bias: None,
             reference_keyframe_id: None,
 
+            scale_factors: Vec::new(), // == mvScaleFactors
             mappoint_matches: HashMap::new(),
             mappoint_outliers: HashMap::new(),
 
             // depth_threshold:
             // cam_params: 
-            key_points_un: keypoints.clone(), //TODO : need to compute undistorted keypoints
+            keypoints_un: keypoints.clone(), //TODO : need to compute undistorted keypoints
+            mv_depth: HashMap::new(),
 
             min_x: 0.0,
             max_x: 0.0,
@@ -95,7 +105,10 @@ impl Frame {
             featvec: None,
             mvInvLevelSigma2: vec![], //TODO: should be this: mvInvLevelSigma2 = mpORBextractorLeft->GetInverseScaleSigmaSquares();
 
-            N: keypoints.len() //TODO: [Stereo] Need to update this if stereo images are processed
+            N: keypoints.len(), //TODO: [Stereo] Need to update this if stereo images are processed
+            Nleft: 0, // TODO (STEREO) ... should be 0 if not stereo
+
+            stereo_baseline: 0.0,
         };
 
         // frame.calculate_pose();
@@ -142,7 +155,7 @@ impl Frame {
         let grid_element_height_inv = FRAME_GRID_COLS as f64/(self.max_y - self.min_y) as f64;
 
         let mut indices = Vec::<usize>::new();
-        indices.reserve(self.key_points.len());
+        indices.reserve(self.keypoints.len());
 
         let factorX = *r;
         let factorY = *r;
@@ -169,7 +182,7 @@ impl Frame {
 
                 for j in 0..v_cell.len() {
                     //TODO: [Stereo] Need to update this if stereo images are processed
-                    let kpUn = &self.key_points_un.get(v_cell[j]).unwrap();
+                    let kpUn = &self.keypoints_un.get(v_cell[j]).unwrap();
                     //const cv::KeyPoint &kpUn = (Nleft == -1) ? mvKeysUn[v_cell[j]]
                     //                                         : (!bRight) ? mvKeys[v_cell[j]]
                     //                                                     : mvKeysRight[v_cell[j]];
@@ -200,14 +213,14 @@ impl Frame {
         // Fill matrix with points
         for (index, mp_id) in &self.mappoint_matches {
             //TODO: [Stereo] Need to update this if stereo images are processed
-            let kp = &self.key_points_un.get(*index as usize).unwrap();
+            let kp = &self.keypoints_un.get(*index as usize).unwrap();
             // const cv::KeyPoint &kp = (Nleft == -1) ? mvKeysUn[i]
             //                                          : (i < Nleft) ? mvKeys[i]
             //                                                          : mvKeysRight[i - Nleft]; 
 
             let (mut grid_pos_x, mut grid_pos_y) = (0i64,0i64);
             if self.pos_in_grid(kp,&mut grid_pos_x,&mut grid_pos_y) {
-                self.grid[(grid_pos_x as usize, grid_pos_y as usize)] = (*index as usize);
+                self.grid[(grid_pos_x as usize, grid_pos_y as usize)] = *index as usize;
 
                 //TODO: [Stereo] Need to update this if stereo images are processed
                 // if(Nleft == -1 || i < Nleft)
@@ -255,7 +268,7 @@ impl Frame {
     }
 
     pub fn clear_mappoints(&mut self) {
-        // TODO Sofiya .. .these shouldn't be public. should be done through map actor
+        // TODO Sofiya ... move to map actor
         self.mappoint_matches = HashMap::new();
     }
 
@@ -264,13 +277,13 @@ impl Frame {
     // when these functions are called
     #[allow(non_snake_case)]
     pub fn clean_VO_matches(&self) {
-        // TODO Sofiya .. .these shouldn't be public. should be done through map actor
+        // TODO Sofiya ... move to map actor
         // For each mappoint in mvpmappoints vector, delete it if the num of observations is < 1
     }
 
     #[allow(non_snake_case)]
     pub fn delete_VO_matches_if_not_outliers(&self) {
-        // TODO Sofiya .. .these shouldn't be public. should be done through map actor
+        // TODO Sofiya ... move to map actor
         // for(int i=0; i<mCurrentFrame.N;i++)
         // {
         //     if(mCurrentFrame.mvpMapPoints[i] && mCurrentFrame.mvbOutlier[i])
