@@ -16,7 +16,8 @@ pub struct MapPoint {
     seen_by_keyframes: Vec<Id>,
     depth_threshold: f64,
     pub last_frame_seen: Id,
-
+    pub mbTrackInView: bool,
+    pub mnFound: i32,
     pub num_observations: i32
 }
 
@@ -33,6 +34,7 @@ impl MapPoint {
             mbTrackInView: false,
             last_frame_seen: first_keyframe_id,
             num_observations: 0
+            mnFound: 1,
         }
         // SetWorldPos(Pos);
 
