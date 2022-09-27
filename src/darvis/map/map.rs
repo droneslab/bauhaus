@@ -92,4 +92,10 @@ impl Map {
         // pMP.mbTrackInView= false;      
         // pMP.mnLastFrameSeen = self.current_frame.unwrap().id;     
     }
+
+    pub fn increase_found(&mut self, id: &Id, n : i32)
+    {
+        self.mappoints[id].mnFound+=n;
+        println!("MapPoint founc increased {}", id);    
+    }
 }

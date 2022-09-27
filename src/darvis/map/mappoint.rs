@@ -17,6 +17,7 @@ pub struct MapPoint {
     depth_threshold: f64,
     pub mbTrackInView: bool,
     pub mnLastFrameSeen: Id,
+    pub mnFound: i32,
 }
 
 
@@ -53,6 +54,7 @@ impl MapPoint
             depth_threshold: 0.0,
             mbTrackInView: false,
             mnLastFrameSeen: first_keyframe_id,
+            mnFound: 1,
         }
         // SetWorldPos(Pos);
 
