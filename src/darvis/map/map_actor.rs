@@ -37,7 +37,10 @@ impl MapActor {
                     let mut write_lock = self.map.write();
                     write_lock.discard_mappoint(&id);
                 },
-
+                MapEditTarget::MapPoint_IncreaseFound { id, n } => {
+                    let mut write_lock = self.map.write();
+                    write_lock.increase_found(&id, n);
+                },
                 _ => {
                     println!("Invalid Message type:");
                 },
@@ -64,6 +67,7 @@ enum MapEditTarget {
     // KeyFrame__BoW(abow::BoW),
     MapPoint__Position{ id: u64, pos: Vector3<f32> }, //na::Matrix<f64, na::U3, na::U1, na::base::storage::Owned<f64, na::U3, na::U1>>),
     MapPoint__Discard{id: Id},
+    MapPoint_IncreaseFound{id : Id, n : i32},
     // MapPoint__KeyFrameRef(Vec<KeyFrame>),
     // MapPoint__KeyFrameList(Vec<KeyFrame>),
     // test(i32)
@@ -99,6 +103,12 @@ impl MapWriteMsg {
         }
     }
 
+    pub fn increase_found(mp_id: &Id, n : i32) -> Self
+    {
+        Self {
+            target: MapEditTarget::MapPoint_IncreaseFound {id : mp_id.clone(), n : n},
+        }
+    }
     // pub fn delete_keyframe(kf_id: u64) -> Self {
     //     Self {
     //         target: MapEditTarget::KeyFrame_Delete(),

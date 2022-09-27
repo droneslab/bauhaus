@@ -10,3 +10,4 @@ pub mod misc; //BowDB
 pub mod orbmatcher;
 pub mod camera;
 pub mod twoviewreconstruction;
+pub mod localmapping;
