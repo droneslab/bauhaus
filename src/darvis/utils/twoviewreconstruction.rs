@@ -27,8 +27,8 @@ use crate::map::{
 
 #[derive(Debug, Clone)]
 pub struct TwoViewReconstruction {
-    pub key_points1: VectorOfKeyPoint,
-    pub key_points2: VectorOfKeyPoint,
+    pub keypoints1: VectorOfKeyPoint,
+    pub keypoints2: VectorOfKeyPoint,
     matches12: Vec<(usize, usize)>,
     matched1: Vec<bool>,
 
@@ -41,8 +41,8 @@ pub struct TwoViewReconstruction {
 impl TwoViewReconstruction {
     pub fn default() -> TwoViewReconstruction {
         TwoViewReconstruction {
-            key_points1: VectorOfKeyPoint::new(),
-            key_points2: VectorOfKeyPoint::new(),
+            keypoints1: VectorOfKeyPoint::new(),
+            keypoints2: VectorOfKeyPoint::new(),
             matches12: Vec::new(),
             matched1: Vec::new(),
             sets: Vec::new(),
@@ -61,17 +61,17 @@ impl TwoViewReconstruction {
         vP3D: &mut opencv::types::VectorOfPoint3f,
         vbTriangulated: &mut Vec<bool>
     ) -> bool {
-        self.key_points1.clear();
-        self.key_points2.clear();
+        self.keypoints1.clear();
+        self.keypoints2.clear();
 
-        self.key_points1 = vKeys1.clone();
-        self.key_points2 = vKeys2.clone();
+        self.keypoints1 = vKeys1.clone();
+        self.keypoints2 = vKeys2.clone();
 
         // Fill structures with current keypoints and matches with reference frame
         // Reference Frame: 1, Current Frame: 2
         self.matches12.clear();
-        self.matches12.reserve(self.key_points2.len());
-        self.matched1.resize(self.key_points1.len(), false);
+        self.matches12.reserve(self.keypoints2.len());
+        self.matched1.resize(self.keypoints1.len(), false);
 
         for i in 0..self.matches12.len() {
             if matches_hashmap.contains_key(&(i as i32)) {
@@ -122,10 +122,10 @@ impl TwoViewReconstruction {
 
         let mut pt_indx = opencv::types::VectorOfi32::new();
         let mut pn1 = VectorOfPoint2f::new();
-        opencv::core::KeyPoint::convert(&self.key_points1, &mut pn1, &pt_indx).unwrap();
+        opencv::core::KeyPoint::convert(&self.keypoints1, &mut pn1, &pt_indx).unwrap();
 
         let mut pn2 = VectorOfPoint2f::new();
-        opencv::core::KeyPoint::convert(&self.key_points2, &mut pn2, &pt_indx).unwrap();
+        opencv::core::KeyPoint::convert(&self.keypoints2, &mut pn2, &pt_indx).unwrap();
 
         let mut mask = Mat::default();
 
@@ -220,8 +220,8 @@ impl TwoViewReconstruction {
         for i in 0..N {
             let mut bIn = true;
 
-            let kp1 = &self.key_points1.get(self.matches12[i].0).unwrap();
-            let kp2 = &self.key_points1.get(self.matches12[i].1).unwrap();
+            let kp1 = &self.keypoints1.get(self.matches12[i].0).unwrap();
+            let kp2 = &self.keypoints1.get(self.matches12[i].1).unwrap();
 
             let u1 = kp1.pt.x;
             let v1 = kp1.pt.y;
@@ -302,8 +302,8 @@ impl TwoViewReconstruction {
         for i in 0..N {
             let mut bIn = true;
 
-            let kp1 = &self.key_points1.get(self.matches12[i].0).unwrap();
-            let kp2 = &self.key_points1.get(self.matches12[i].1).unwrap();
+            let kp1 = &self.keypoints1.get(self.matches12[i].0).unwrap();
+            let kp2 = &self.keypoints1.get(self.matches12[i].1).unwrap();
 
             let u1 = kp1.pt.x;
             let v1 = kp1.pt.y;
@@ -493,7 +493,7 @@ impl TwoViewReconstruction {
             let mut vP3Di = VectorOfPoint3f::new();
             let mut vbTriangulatedi = Vec::<bool>::new();
 
-            let nGood = self.CheckRT(&vR[i],&vt[i],&self.key_points1 ,&self.key_points2,&self.matches12,vbMatchesInliers,K,&mut vP3Di, 4.0*self.sigma2, &mut vbTriangulatedi, &mut parallaxi);
+            let nGood = self.CheckRT(&vR[i],&vt[i],&self.keypoints1 ,&self.keypoints2,&self.matches12,vbMatchesInliers,K,&mut vP3Di, 4.0*self.sigma2, &mut vbTriangulatedi, &mut parallaxi);
 
             if nGood>bestGood {
                 secondBestGood = bestGood;
@@ -552,10 +552,10 @@ impl TwoViewReconstruction {
         let (mut vbTriangulated1, mut vbTriangulated2, mut vbTriangulated3, mut vbTriangulated4) = (Vec::<bool>::new(), Vec::<bool>::new(), Vec::<bool>::new(), Vec::<bool>::new());
         let (mut parallax1, mut parallax2, mut parallax3, mut parallax4) = (0.0, 0.0, 0.0, 0.0);
 
-        let nGood1 = self.CheckRT(&R1,&t1,&self.key_points1,&self.key_points2,&self.matches12,vbMatchesInliers,K, &mut vP3D1, 4.0*self.sigma2, &mut vbTriangulated1, &mut parallax1);
-        let nGood2 = self.CheckRT(&R2,&t1,&self.key_points1,&self.key_points2,&self.matches12,vbMatchesInliers,K, &mut vP3D2, 4.0*self.sigma2, &mut vbTriangulated2, &mut parallax2);
-        let nGood3 = self.CheckRT(&R1,&t2,&self.key_points1,&self.key_points2,&self.matches12,vbMatchesInliers,K, &mut vP3D3, 4.0*self.sigma2, &mut vbTriangulated3, &mut parallax3);
-        let nGood4 = self.CheckRT(&R2,&t2,&self.key_points1,&self.key_points2,&self.matches12,vbMatchesInliers,K, &mut vP3D4, 4.0*self.sigma2, &mut vbTriangulated4, &mut parallax4);
+        let nGood1 = self.CheckRT(&R1,&t1,&self.keypoints1,&self.keypoints2,&self.matches12,vbMatchesInliers,K, &mut vP3D1, 4.0*self.sigma2, &mut vbTriangulated1, &mut parallax1);
+        let nGood2 = self.CheckRT(&R2,&t1,&self.keypoints1,&self.keypoints2,&self.matches12,vbMatchesInliers,K, &mut vP3D2, 4.0*self.sigma2, &mut vbTriangulated2, &mut parallax2);
+        let nGood3 = self.CheckRT(&R1,&t2,&self.keypoints1,&self.keypoints2,&self.matches12,vbMatchesInliers,K, &mut vP3D3, 4.0*self.sigma2, &mut vbTriangulated3, &mut parallax3);
+        let nGood4 = self.CheckRT(&R2,&t2,&self.keypoints1,&self.keypoints2,&self.matches12,vbMatchesInliers,K, &mut vP3D4, 4.0*self.sigma2, &mut vbTriangulated4, &mut parallax4);
 
         let maxGood = i32::max(nGood1,i32::max(nGood2,i32::max(nGood3,nGood4)));
 

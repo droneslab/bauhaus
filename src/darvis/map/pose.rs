@@ -6,7 +6,7 @@ use nalgebra::{
 use serde::{Deserialize, Serialize};
 use crate::dvutils::*;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Copy)]
 pub struct Pose {
     pose: Isometry3<f64>
 }
@@ -42,6 +42,7 @@ impl Pose {
     }
 
     pub fn convert_to_bridgepose(&self) -> g2orust::ffi::Pose {
+        // g2orust::ffi:Pose needed to send pose to C++ bindings to g2os
         // Note: can't implement From trait because 
         // g2orust::ffi::Pose isn't defined in this crate
         g2orust::ffi::Pose {
@@ -77,11 +78,6 @@ impl Pose {
     }
 
     pub fn inverse(&self) -> Pose{
-        // TODO: what is inverse?
-        //let mut pose = Isometry3::new(self.pos, Rotation3::<f64>::from_matrix(&self.rot).scaled_axis());
-        //pose = pose.inverse();
-        //Pose{pos : pose.translation.vector, rot: pose.rotation.to_rotation_matrix().matrix().clone(), pose: pose.clone()}
-
         Pose{pose: self.pose.inverse()}
     }
 }
@@ -93,6 +89,6 @@ impl Mul for Pose {
         // TODO
         // implement this, used by tracker
         // (look for current_frame.pose.unwrap() * last_twc)
-        Pose{pose: self.pose* _other.pose}
+        Pose{pose: self.pose * _other.pose}
     }
 }
