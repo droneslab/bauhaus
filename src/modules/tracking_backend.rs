@@ -8,7 +8,7 @@ use darvis::{
     dvutils::*,
     map::{
         pose::Pose, map::Map, map_actor::MapWriteMsg, map_actor::MAP_ACTOR,
-        frame::Frame, map::Id, misc::IMUBias, mappoint::MapPoint
+        keyframe::KeyFrame, frame::Frame, map::Id, misc::IMUBias, mappoint::MapPoint, orbmatcher::ORBmatcher, camera::DVCamera, localmapping::LocalMapping
     },
     utils::{camera::DVCamera, orbmatcher::ORBmatcher},
     lockwrap::ReadOnlyWrapper,
@@ -75,6 +75,27 @@ pub struct DarvisTrackingBack {
     frames_to_reset_imu: i32,
     insert_kfs_when_lost: bool,
     min_num_features: i32,
+
+    //Camera
+    camera: Option<DVCamera>,
+
+    K: Option<Mat>, // Might be redundant
+    K_: Option<Matrix3<f32>>,
+
+    // Reference Keyframe.
+    mpReferenceKF: Option<Id>,//,*mut KeyFrame,//KeyFrame* mpReferenceKF;
+
+    map_actor: Option<Aid>, //QUICK FIX to get going with the message communication,
+
+    //mTrackedFr: i32, // frames with estimated pose
+    //IMU related variables
+    mnLastRelocFrameId : i32, 
+    mnFramesToResetIMU : i32,
+    mbMapUpdated : bool, 
+    //Current matches in frame
+    mnMatchesInliers : i32, 
+    mMaxFrames : i32 , //fps
+    mpLocalMapper : Option<LocalMapping>,
 }
 
 #[derive(Debug, Clone)]
@@ -134,6 +155,13 @@ impl DarvisTrackingBack {
             camera: camera,
             reference_keyframe: None,
             map_actor: None,
+            //mTrackedFr: 0, // unused
+            mnLastRelocFrameId: 0, 
+            mnFramesToResetIMU: 0,
+            mbMapUpdated: false,
+            mnMatchesInliers: 0,
+            mMaxFrames: 30, // fps set default as 30
+            mpLocalMapper: None,
         };
         tracking
     }
@@ -697,10 +725,284 @@ impl DarvisTrackingBack {
         }
     }
 
-    fn track_local_map(&self) -> bool {
-        // SOFIYA 9/26 TODO
-        todo!("TRACK: local map");
-        // return false;
+    //void Tracking::UpdateLocalMap()
+    fn update_local_map(&mut self)
+    {
+        todo!("update_local_map");
+        // // This is for visualization
+        // mpAtlas->SetReferenceMapPoints(mvpLocalMapPoints);
+
+        // // Update
+        // UpdateLocalKeyFrames();
+        // UpdateLocalPoints();
+    }
+
+    //void Tracking::SearchLocalPoints()
+    fn search_local_points(&mut self)
+    {
+        todo!("search_local_points");
+        // // Do not search map points already matched
+        // for(vector<MapPoint*>::iterator vit=mCurrentFrame.mvpMapPoints.begin(), vend=mCurrentFrame.mvpMapPoints.end(); vit!=vend; vit++)
+        // {
+        //     MapPoint* pMP = *vit;
+        //     if(pMP)
+        //     {
+        //         if(pMP->isBad())
+        //         {
+        //             *vit = static_cast<MapPoint*>(NULL);
+        //         }
+        //         else
+        //         {
+        //             pMP->IncreaseVisible();
+        //             pMP->last_frame_seen = mCurrentFrame.mnId;
+        //             pMP->mbTrackInView = false;
+        //             pMP->mbTrackInViewR = false;
+        //         }
+        //     }
+        // }
+
+        // int nToMatch=0;
+
+        // // Project points in frame and check its visibility
+        // for(vector<MapPoint*>::iterator vit=mvpLocalMapPoints.begin(), vend=mvpLocalMapPoints.end(); vit!=vend; vit++)
+        // {
+        //     MapPoint* pMP = *vit;
+
+        //     if(pMP->last_frame_seen == mCurrentFrame.mnId)
+        //         continue;
+        //     if(pMP->isBad())
+        //         continue;
+        //     // Project (this fills MapPoint variables for matching)
+        //     if(mCurrentFrame.isInFrustum(pMP,0.5))
+        //     {
+        //         pMP->IncreaseVisible();
+        //         nToMatch++;
+        //     }
+        //     if(pMP->mbTrackInView)
+        //     {
+        //         mCurrentFrame.mmProjectPoints[pMP->mnId] = cv::Point2f(pMP->mTrackProjX, pMP->mTrackProjY);
+        //     }
+        // }
+
+        // if(nToMatch>0)
+        // {
+        //     ORBmatcher matcher(0.8);
+        //     int th = 1;
+        //     if(mSensor==System::RGBD || mSensor==System::IMU_RGBD)
+        //         th=3;
+        //     if(mpAtlas->isImuInitialized())
+        //     {
+        //         if(mpAtlas->GetCurrentMap()->GetIniertialBA2())
+        //             th=2;
+        //         else
+        //             th=6;
+        //     }
+        //     else if(!mpAtlas->isImuInitialized() && (mSensor==System::IMU_MONOCULAR || mSensor==System::IMU_STEREO || mSensor == System::IMU_RGBD))
+        //     {
+        //         th=10;
+        //     }
+
+        //     // If the camera has been relocalised recently, perform a coarser search
+        //     if(mCurrentFrame.mnId<mnLastRelocFrameId+2)
+        //         th=5;
+
+        //     if(mState==LOST || mState==RECENTLY_LOST) // Lost for less than 1 second
+        //         th=15; // 15
+
+        //     int matches = matcher.SearchByProjection(mCurrentFrame, mvpLocalMapPoints, th, mpLocalMapper->mbFarPoints, mpLocalMapper->mThFarPoints);
+        // }
+
+    }
+
+    fn track_local_map(&mut self) -> bool {
+        // TODO
+        // Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Tracking.cc#L2949
+        //todo!("TRACK: local map");
+
+        //self.mTrackedFr+=1; unused
+        self.update_local_map();
+        self.search_local_points();
+
+        // TOO check outliers before PO
+        let (mut aux1, mut aux2) = (0,0);
+
+
+        for i in 0..self.current_frame.as_ref().unwrap().mvpMapPoints.len()
+        {
+            if self.current_frame.as_ref().unwrap().mvpMapPoints[i] !=-1
+            {
+                aux1+=1;
+                if self.current_frame.as_ref().unwrap().mvbOutlier[i]
+                {
+                    aux2+=1;
+                }
+
+            }
+        }
+
+        let mut inliers = 0;
+        if !self.is_imu_initialized()
+        {
+            //Optimizer::PoseOptimization(&mCurrentFrame);
+            
+            //todo!("Optimizer::PoseOptimization(&mCurrentFrame)");
+        }
+        else
+        {
+            if self.current_frame.as_ref().unwrap().id <= self.mnLastRelocFrameId+self.mnFramesToResetIMU
+            {
+                //Verbose::PrintMess("TLM: PoseOptimization ", Verbose::VERBOSITY_DEBUG);
+                //Optimizer::PoseOptimization(&mCurrentFrame);
+                todo!("Optimizer::PoseOptimization(&mCurrentFrame)");
+            }
+            else
+            {
+                // if(!mbMapUpdated && mState == OK) //  && (mnMatchesInliers>30))
+                if !self.mbMapUpdated //  && (mnMatchesInliers>30))
+                {
+                    //Verbose::PrintMess("TLM: PoseInertialOptimizationLastFrame ", Verbose::VERBOSITY_DEBUG);
+                    //inliers = Optimizer::PoseInertialOptimizationLastFrame(&mCurrentFrame); // , !mpLastKeyFrame->GetMap()->GetIniertialBA1());
+                    todo!("Optimizer::PoseInertialOptimizationLastFrame(&mCurrentFrame)");
+                }
+                else
+                {
+                    //Verbose::PrintMess("TLM: PoseInertialOptimizationLastKeyFrame ", Verbose::VERBOSITY_DEBUG);
+                    //inliers = Optimizer::PoseInertialOptimizationLastKeyFrame(&mCurrentFrame); // , !mpLastKeyFrame->GetMap()->GetIniertialBA1());                    
+                    todo!("Optimizer::PoseInertialOptimizationLastKeyFrame(&mCurrentFrame)");
+                }
+            }
+        }
+
+        aux1 = 0;
+        aux2 = 0;
+
+        for i in 0..self.current_frame.as_ref().unwrap().mvpMapPoints.len()
+        {
+            if self.current_frame.as_ref().unwrap().mvpMapPoints[i] !=-1
+            {
+                aux1+=1;
+                if self.current_frame.as_ref().unwrap().mvbOutlier[i]
+                {
+                    aux2+=1;
+                }
+
+            }          
+        }
+
+
+        self.mnMatchesInliers = 0;
+
+        // Update MapPoints Statistics
+        for i in 0..self.current_frame.as_ref().unwrap().mvpMapPoints.len()
+        {
+            if self.current_frame.as_ref().unwrap().mvpMapPoints[i] !=-1
+            {
+                aux1+=1;
+                if self.current_frame.as_ref().unwrap().mvbOutlier[i]
+                {
+                    aux2+=1;
+                }
+
+            }          
+        }
+
+        for i in 0..self.current_frame.as_ref().unwrap().mvpMapPoints.len()
+        {
+            if self.current_frame.as_ref().unwrap().mvpMapPoints[i] !=-1
+            {
+                if !self.current_frame.as_ref().unwrap().mvbOutlier[i]
+                {
+                    let pMP = self.current_frame.as_ref().unwrap().mvpMapPoints[i];
+
+                    //mCurrentFrame.mvpMapPoints[i]->IncreaseFound();
+                    let map_msg = MapWriteMsg::increase_found(&pMP, 1);
+                    self.map_actor.as_ref().unwrap().send_new(map_msg).unwrap();
+
+                    //TODO: need to implemented mbOnlyTracking mode, for now setting as false
+                    if !false //(!mbOnlyTracking)
+                    {
+                        let map_read_lock = self.map.read();
+                        let curr_map_pt = map_read_lock.get_mappoint(&self.current_frame.as_ref().unwrap().mvpMapPoints[i]);
+    
+                        if curr_map_pt.unwrap().observations()>0
+                        {
+                            self.mnMatchesInliers+=1;
+                        }
+
+                    }
+                    else
+                    {
+                        self.mnMatchesInliers+=1;
+                    }
+
+                }
+                else if  !self.sensor.is_mono()// (mSensor==System::STEREO)
+                {
+                    //TODO: [Stereo] Handle Stereo Case
+                    //mCurrentFrame.mvpMapPoints[i] = static_cast<MapPoint*>(NULL);
+                    self.current_frame.as_mut().unwrap().mvpMapPoints[i] = -1;
+                    todo!("Handle stereo case");
+
+                }
+
+            }
+        }
+
+        // Decide if the tracking was succesful
+        // More restrictive if there was a relocalization recently
+        self.mpLocalMapper.unwrap().mnMatchesInliers = self.mnMatchesInliers;
+
+
+        if self.current_frame.as_ref().unwrap().id < self.mnLastRelocFrameId +self.mMaxFrames && self.mnMatchesInliers<50
+        {
+            return false;
+        }
+
+        if self.mnMatchesInliers>10 
+        {
+            match self.state {
+                TrackingState::RecentlyLost =>  return true,
+                _ => {}
+            }
+        }
+
+
+        if self.sensor.is_imu() && self.sensor.is_mono() //(mSensor == System::IMU_MONOCULAR)
+        {
+            if((self.mnMatchesInliers<15 && self.is_imu_initialized())||(self.mnMatchesInliers<50 && !self.is_imu_initialized()))
+            {
+                return false;
+            }
+            else
+            {
+                return true;
+            }
+
+        }
+        else if self.sensor.is_imu() && !self.sensor.is_mono() //(mSensor == System::IMU_STEREO || mSensor == System::IMU_RGBD)
+        {
+            if(self.mnMatchesInliers<15)
+            {
+                return false;
+            }
+            else
+            {
+                return true;
+            }
+
+        }
+        else
+        {
+            if self.mnMatchesInliers<30 // (mnMatchesInliers<30)
+            {
+                return false;
+            }
+            else
+            {
+                return true;
+            }
+        }        
+
     }
 
     fn create_new_keyframe(&self) {
@@ -771,7 +1073,7 @@ impl DarvisTrackingBack {
 
                 //TODO:[Stereo] check for Stereo camera flow
                 // pMP.mbTrackInView= false;      
-                // pMP.mnLastFrameSeen = self.current_frame.unwrap().id;
+                // pMP.last_frame_seen = self.current_frame.unwrap().id;
                 // if(i < mCurrentFrame.Nleft){
                 //     pMP->mbTrackInView = false;
                 // }

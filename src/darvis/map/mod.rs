@@ -6,3 +6,4 @@ pub mod mappoint;
 pub mod frame;
 pub mod pose;
 pub mod misc; //BowDB
+pub mod localmapping;

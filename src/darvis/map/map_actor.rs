@@ -36,6 +36,9 @@ impl MapActor {
                     // if is_outlier is true, should also delete the mappoint in mappoint_outliers
                     // set mappoint's last_frame_seen to the frame ID
 
+                MapEditTarget::MapPoint_IncreaseFound { id, n } => {
+                    let mut write_lock = self.map.write();
+                    write_lock.increase_found(&id, n);
                 },
                 _ => {
                     println!("Invalid Message type:");
@@ -58,6 +61,11 @@ enum MapEditTarget {
     Frame__DeleteMapPointMatch{frame_id: Id, mp_id: Id, is_outlier: bool},
     MapPoint__Position{ id: u64, pos: Vector3<f32> },
     MapPoint__Discard{id: Id},
+    MapPoint_IncreaseFound{id : Id, n : i32},
+    // MapPoint__KeyFrameRef(Vec<KeyFrame>),
+    // MapPoint__KeyFrameList(Vec<KeyFrame>),
+    // test(i32)
+    // State(State)
 }
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MapWriteMsg {
@@ -102,6 +110,12 @@ impl MapWriteMsg {
         }
     }
 
+    pub fn increase_found(mp_id: &Id, n : i32) -> Self
+    {
+        Self {
+            target: MapEditTarget::MapPoint_IncreaseFound {id : mp_id.clone(), n : n},
+        }
+    }
     // pub fn delete_keyframe(kf_id: u64) -> Self {
     //     Self {
     //         target: MapEditTarget::KeyFrame_Delete(),
