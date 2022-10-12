@@ -1,14 +1,17 @@
+use std::marker::PhantomData;
 use axiom::prelude::*;
 use darvis::{
     plugin_functions::*,
     lockwrap::ReadOnlyWrapper,
     map::map::Map,
+    utils::sensor::SensorType,
 };
 
 // REGISTER MODULE: add a string to refer to your module here
 pub static FRAME_LOADER: &str = "FRAME_LOADER";
 pub static TRACKING_FRONTEND: &str = "TRACKING_FRONTEND";
 pub static TRACKING_BACKEND: &str = "TRACKING_BACKEND";
+pub static LOCAL_MAPPING: &str = "LOCAL_MAPPING";
 pub static TRACKER: &str = "TRACKER";
 pub static VISUALIZER: &str = "VISUALIZER";
 
@@ -29,13 +32,14 @@ pub static VISUALIZER: &str = "VISUALIZER";
 /// let orb_extract_fn = getmethod("orb_extract".to_string(), "orb_extract".to_string());
 /// ```
 /// 
-pub fn getmethod(fnname: &String, id: &String, map: ReadOnlyWrapper<Map>) -> FunctionProxy
+pub fn getmethod<S: SensorType + 'static>(fnname: &String, id: &String, map: ReadOnlyWrapper<Map<S>>) -> FunctionProxy
 {
     match fnname.as_ref()
     {
         "frameloader" => FunctionProxy {function: Box::new(crate::modules::frameloader::DarvisFrameLoader::new())},
         "tracking_frontend" => FunctionProxy {function: Box::new(crate::modules::tracking_frontend::DarvisTrackingFront::new(map))},
         "tracking_backend" => FunctionProxy {function: Box::new(crate::modules::tracking_backend::DarvisTrackingBack::new(map))},
+        "local_mapping" => FunctionProxy {function: Box::new(crate::modules::localmapping::DarvisLocalMapping::new(map))},
         "vis" => FunctionProxy {function: Box::new(crate::modules::vis::DarvisVis::new(id.clone()))},
         "fast_extract" => FunctionProxy {function: Box::new(crate::modules::fast::DarvisFast::new())},
         // "tracker_klt" => FunctionProxy {function: Box::new(crate::modules::tracker_klt::DarvisTrackerKLT::new())}, /// Commented out, see note in file
@@ -43,14 +47,14 @@ pub fn getmethod(fnname: &String, id: &String, map: ReadOnlyWrapper<Map>) -> Fun
     }
 }
 
-pub struct FeatureManager {
+pub struct FeatureManager<S: SensorType> {
     pub object: FunctionProxy,
+    _pd: PhantomData<S>
 }
 
-impl FeatureManager
-{
-    pub fn new(fnname: &String, id: &String, map: ReadOnlyWrapper<Map>) -> FeatureManager {
-        FeatureManager { object: getmethod(fnname, id, map)}
+impl<S: SensorType + 'static> FeatureManager<S> {
+    pub fn new(fnname: &String, id: &String, map: ReadOnlyWrapper<Map<S>>) -> FeatureManager<S> {
+        FeatureManager { object: getmethod(fnname, id, map), _pd: PhantomData }
     }
 
     pub async fn handle(mut self, _context: axiom::prelude::Context, message: Message) -> ActorResult<Self> {

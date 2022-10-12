@@ -14,14 +14,16 @@ use opencv::{
     imgproc,
     videoio,
     imgcodecs,
-    types::{PtrOfORB, VectorOfKeyPoint},
+    types::{PtrOfORB},
 };
 use darvis::{
     base,
     map::map_actor::{MapActor, MAP_ACTOR},
+    utils::sensor::*,
     lockwrap::ReadWriteWrapper,
     map::map::Map,
     load_config::*,
+    global_params::{GLOBAL_PARAMS, SYSTEM_SETTINGS},
 };
 mod modules;
 mod registered_modules;
@@ -85,13 +87,15 @@ fn generate_image_paths(img_dir: String) -> Vec<String> {
     img_paths
 }
 
-fn initialize_actor_system(
-    modules: Vec::<base::ActorConf>, writeable_map: &ReadWriteWrapper<Map>
+fn initialize_actor_system<S: SensorType + 'static>(
+    modules: Vec::<base::ActorConf>, writeable_map: &ReadWriteWrapper<Map<S>>
 ) -> (HashMap::<String, ActorSystem>, HashMap::<String, Aid>) {
     let mut systems  = HashMap::<String, ActorSystem>::new();
     let mut aids = HashMap::new();
 
-    //TODO: Use Cluster manager to do remote agent calls
+    //TODO (one day): Use Cluster manager to do remote agent calls
+
+    let sensor: Sensor = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "sensor");
 
     // Loop through the config to initialize actor system using the default config
     for actor_conf in modules {
@@ -111,7 +115,7 @@ fn initialize_actor_system(
         ).unwrap();
         aids.insert(actname.clone(), c_aid.clone());
 
-        // TODO: Identify the role of using connect_with_channels, as the system communications are working without doing the following.
+        // TODO (one day): Identify the role of using connect_with_channels, as the system communications are working without doing the following.
         //features.push(actname.clone());
         // if i > 0 { 
         //     ActorSystem::connect_with_channels(&systems.get(&features[0]).unwrap(), &system_current);            
@@ -140,14 +144,34 @@ fn main() {
 
     // Load config, including custom settings and actor information
     let module_info = load_config(config_file);
+
+    // Note: This is so annoying but the map initialization needs to be in 
+    // its own function, otherwise the compiler complains that it doesn't
+    // know the type of S in the map. This way it generates duplicate
+    // version of init() for each SensorType. Another option is to use
+    // dyn, but this allows us to keep static dispatching. The map and S
+    // are used quite a few times so it seems like a huge slowdown to use
+    // dynamic dispatch.
+    let sensor: Sensor = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "sensor");
+    match GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "sensor") {
+        Sensor::Mono => init::<MonoSensor>(module_info, img_dir),
+        Sensor::ImuMono => init::<ImuMonoSensor>(module_info, img_dir),
+        Sensor::Stereo => init::<StereoSensor>(module_info, img_dir),
+        Sensor::ImuStereo => init::<ImuStereoSensor>(module_info, img_dir),
+        Sensor::Rgbd => init::<RgbdSensor>(module_info, img_dir),
+        Sensor::ImuRgbd => init::<ImuRgbdSensor>(module_info, img_dir),
+    }
+}
+
+fn init<S: SensorType + 'static> (module_info: Vec<base::ActorConf>, img_dir: String) {
     // Get image paths from directory
     let img_paths = generate_image_paths(img_dir);
     // Create the global map
-    let writeable_map = ReadWriteWrapper::new(Map::new());
+    let writeable_map: ReadWriteWrapper<darvis::map::map::Map<S>> = ReadWriteWrapper::new(Map::new::<S>());
     // Initialize actor system from config
     let (systems, mut aids) = initialize_actor_system(module_info, &writeable_map);
     // Create map actor
-    let map_actor_aid = MapActor::spawn(writeable_map);
+    let map_actor_aid = MapActor::<S>::spawn(writeable_map);
     aids.insert(MAP_ACTOR.to_string(), map_actor_aid);
 
     // Kickoff the pipeline by sending the feature extraction module images

@@ -19,7 +19,7 @@ opencv = "0.63.0"
 nalgebra = {version = "*", features = ["serde-serialize"]}
 cv-convert = {version = '0.19.0', features = ['opencv_0-63','nalgebra_0-31']}
 abow = {version = "*", default-features = false, features = ["bincode"]}
-chrono = "0.4"
+chrono = { version = "0.4", features = ["serde"] }
 glob = "*"
 serde = "*"
 axiom = "*"
@@ -33,3 +33,5 @@ rand = "0.7.3"
 g2orust = { path = "../g2o-bindings/g2orust" }
 cxx = "1.0"
 array2d = "*"
+num-traits = "0.2"
+simba = "*"

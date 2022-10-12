@@ -47,8 +47,8 @@ impl DarvisFast {
             {
                 "FeatureMsg" => {
                     align_id.send_new(FeatureMsg::new(
-                        kp1.darvis_vector_of_keypoint(),
-                        des1.grayscale_mat(),
+                        DVVectorOfKeyPoint::new(kp1),
+                        DVMatrix::new(des1),
                         img1.cols(),
                         img1.rows(),
                         msg.get_actor_ids().clone()
@@ -57,8 +57,8 @@ impl DarvisFast {
                 _ => {
                     println!("Invalid Message type: selecting FeatureMsg");
                     align_id.send_new(FeatureMsg::new(
-                        kp1.darvis_vector_of_keypoint(),
-                        des1.grayscale_mat(),
+                        DVVectorOfKeyPoint::new(kp1),
+                        DVMatrix::new(des1),
                         img1.cols(),
                         img1.rows(),
                         msg.get_actor_ids().clone()
