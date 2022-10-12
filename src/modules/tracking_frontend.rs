@@ -15,6 +15,7 @@ use darvis::{
     lockwrap::ReadOnlyWrapper,
     plugin_functions::Function,
     global_params::*,
+    utils::sensor::*,
 };
 use crate::{
     registered_modules::{TRACKING_BACKEND},
@@ -27,12 +28,13 @@ use crate::{
 };
 
 #[derive(Debug, Clone)]
-pub struct DarvisTrackingFront {
-    map: ReadOnlyWrapper<Map>
+pub struct DarvisTrackingFront<S: SensorType>  {
+    map: ReadOnlyWrapper<Map<S>>
 }
 
-impl DarvisTrackingFront {
-    pub fn new(map: ReadOnlyWrapper<Map>) -> DarvisTrackingFront {
+impl<S: SensorType + 'static> DarvisTrackingFront<S> {
+    pub fn new(map: ReadOnlyWrapper<Map<S>>) -> DarvisTrackingFront<S> {
+        let sensor: Sensor = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "sensor");
         DarvisTrackingFront {
             map: map
         }
@@ -73,8 +75,8 @@ impl DarvisTrackingFront {
         match new_message.as_ref() {
             "FeatureMsg" => {
                 align_id.send_new(FeatureMsg::new(
-                    keypoints.darvis_vector_of_keypoint(),
-                    descriptors.grayscale_mat(),
+                    DVVectorOfKeyPoint::new(keypoints),
+                    DVMatrix::new(descriptors),
                     image.cols(),
                     image.rows(),
                     message.get_actor_ids().clone()
@@ -83,8 +85,8 @@ impl DarvisTrackingFront {
             _ => {
                 println!("Invalid Message type: selecting FeatureMsg");
                 align_id.send_new(FeatureMsg::new(
-                    keypoints.darvis_vector_of_keypoint(),
-                    descriptors.grayscale_mat(),
+                    DVVectorOfKeyPoint::new(keypoints),
+                    DVMatrix::new(descriptors),
                     image.cols(),
                     image.rows(),
                     message.get_actor_ids().clone()
@@ -111,7 +113,7 @@ impl DarvisTrackingFront {
     }
 }
 
-impl Function for DarvisTrackingFront {
+impl<S: SensorType + 'static> Function for DarvisTrackingFront<S> {
     fn handle(&mut self, _context: axiom::prelude::Context, message: Message) -> ActorResult<()> {
         if let Some(image_msg) = message.content_as::<ImageMsg>() {
             self.tracking_frontend(_context, image_msg);

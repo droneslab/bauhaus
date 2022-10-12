@@ -8,11 +8,11 @@ use rand::{
     rngs::StdRng
 };
 use nalgebra::{
-    Matrix3, Matrix3x4, Matrix4, Vector4, Vector3, 
+    Matrix3x4, Matrix4, Vector4, Matrix, Matrix3, Vector3
 };
 use opencv::{
     prelude::Mat,
-    types::{VectorOfKeyPoint, VectorOfPoint3f, VectorOfPoint2f},
+    types::{VectorOfPoint3f, VectorOfPoint2f, VectorOfKeyPoint},
     core::*
 };
 use cv_convert::{
@@ -20,15 +20,18 @@ use cv_convert::{
     TryFromCv
 };
 
-use crate::map::{
-    pose::Pose, map::Id
+use crate::{
+    map::{
+        pose::Pose, map::Id
+    },
+    dvutils::{DVVectorOfKeyPoint, DVVector3, DVMatrix3, DVMatrix},
 };
 
 
 #[derive(Debug, Clone)]
 pub struct TwoViewReconstruction {
-    pub keypoints1: VectorOfKeyPoint,
-    pub keypoints2: VectorOfKeyPoint,
+    pub keypoints1: DVVectorOfKeyPoint,
+    pub keypoints2: DVVectorOfKeyPoint,
     matches12: Vec<(usize, usize)>,
     matched1: Vec<bool>,
 
@@ -41,8 +44,8 @@ pub struct TwoViewReconstruction {
 impl TwoViewReconstruction {
     pub fn default() -> TwoViewReconstruction {
         TwoViewReconstruction {
-            keypoints1: VectorOfKeyPoint::new(),
-            keypoints2: VectorOfKeyPoint::new(),
+            keypoints1: DVVectorOfKeyPoint::empty(),
+            keypoints2: DVVectorOfKeyPoint::empty(),
             matches12: Vec::new(),
             matched1: Vec::new(),
             sets: Vec::new(),
@@ -54,9 +57,9 @@ impl TwoViewReconstruction {
 
     pub fn reconstruct(
         &mut self, 
-        vKeys1: &VectorOfKeyPoint, 
-        vKeys2: &VectorOfKeyPoint,
-        matches_hashmap: &HashMap<i32, Id>,
+        vKeys1: &DVVectorOfKeyPoint, 
+        vKeys2: &DVVectorOfKeyPoint,
+        matches_hashmap: &HashMap<u32, Id>,
         T21: &mut Pose,
         vP3D: &mut opencv::types::VectorOfPoint3f,
         vbTriangulated: &mut Vec<bool>
@@ -70,13 +73,13 @@ impl TwoViewReconstruction {
         // Fill structures with current keypoints and matches with reference frame
         // Reference Frame: 1, Current Frame: 2
         self.matches12.clear();
-        self.matches12.reserve(self.keypoints2.len());
-        self.matched1.resize(self.keypoints1.len(), false);
+        self.matches12.reserve(self.keypoints2.len() as usize);
+        self.matched1.resize(self.keypoints1.len() as usize, false);
 
-        for i in 0..self.matches12.len() {
-            if matches_hashmap.contains_key(&(i as i32)) {
-                self.matches12.push((i as usize, *matches_hashmap.get(&(i as i32)).unwrap() as usize));
-                self.matched1[i] = true;
+        for i in 0..self.matches12.len() as u32 {
+            if matches_hashmap.contains_key(&i) {
+                self.matches12.push((i as usize, *matches_hashmap.get(&i).unwrap() as usize));
+                self.matched1[i as usize] = true;
             }
         }
 
@@ -122,10 +125,13 @@ impl TwoViewReconstruction {
 
         let mut pt_indx = opencv::types::VectorOfi32::new();
         let mut pn1 = VectorOfPoint2f::new();
-        opencv::core::KeyPoint::convert(&self.keypoints1, &mut pn1, &pt_indx).unwrap();
+        self.keypoints1.convert(&mut pn1, &pt_indx);
+        // opencv::core::KeyPoint::convert(self.keypoints1.into(), &mut pn1, &pt_indx).unwrap();
 
         let mut pn2 = VectorOfPoint2f::new();
-        opencv::core::KeyPoint::convert(&self.keypoints2, &mut pn2, &pt_indx).unwrap();
+        self.keypoints2.convert(&mut pn2, &pt_indx);
+
+        // opencv::core::KeyPoint::convert(self.keypoints2.into(), &mut pn2, &pt_indx).unwrap();
 
         let mut mask = Mat::default();
 
@@ -432,14 +438,14 @@ impl TwoViewReconstruction {
             vR.push(R);
 
             let mut tp = Vector3::<f32>::new(x1[i], 0.0, -x3[i]);
-            tp *= d1-d3;
+            tp *= d1 - d3;
 
-            let t = U*tp;
+            let t = U * tp;
             vt.push(t / t.norm());
 
             let np = Vector3::<f32>::new(x1[i], 0.0, x3[i]);
 
-            let mut n = V*np;
+            let mut n = V * np;
             if n[2] < 0.0 {
                 n = -n;
             }
@@ -467,12 +473,12 @@ impl TwoViewReconstruction {
             let mut tp = Vector3::<f32>::new(x1[i], 0.0, x3[i]);
             tp *= d1+d3;
 
-            let t = U*tp;
+            let t = U * tp;
             vt.push(t / t.norm());
 
             let np= Vector3::<f32>::new(x1[i], 0.0, x3[i]);
 
-            let mut n = V*np;
+            let mut n = V * np;
             if n[2] < 0.0 {
                 n = -n;
             }
@@ -508,7 +514,9 @@ impl TwoViewReconstruction {
         }
 
         if secondBestGood<(0.75*bestGood as f32) as i32 && bestParallax>=minParallax && bestGood>minTriangulated && bestGood>(0.9*N as f32) as i32  {
-            *T21 = Pose::new_from_vector(&nalgebra::convert(vt[bestSolutionIdx as usize]), &nalgebra::convert(vR[bestSolutionIdx as usize]));
+            *T21 = Pose::new_from_opencv_vector(
+                &nalgebra::convert(vt[bestSolutionIdx as usize]), &nalgebra::convert(vR[bestSolutionIdx as usize])
+            );
             *vbTriangulated = bestTriangulated;
             return true;
         }
@@ -587,21 +595,21 @@ impl TwoViewReconstruction {
                 *vP3D = vP3D1.clone();
                 *vbTriangulated = vbTriangulated1;
 
-                *T21 = Pose::new_from_vector(&nalgebra::convert(t1), &nalgebra::convert(R1)); //Sophus::SE3f(R1, t1);
+                *T21 = Pose::new_from_opencv_vector(&nalgebra::convert(t1), &nalgebra::convert(R1)); //Sophus::SE3f(R1, t1);
                 return true;
             }
         } else if maxGood==nGood2 && parallax2>minParallax {
             *vP3D = vP3D2.clone();
             *vbTriangulated = vbTriangulated2;
 
-            *T21 = Pose::new_from_vector(&nalgebra::convert(t1), &nalgebra::convert(R2)); //Sophus::SE3f(R1, t1);
+            *T21 = Pose::new_from_opencv_vector(&nalgebra::convert(t1), &nalgebra::convert(R2)); //Sophus::SE3f(R1, t1);
             return true;
         } else if maxGood==nGood3 {
             if parallax3>minParallax {
                 *vP3D = vP3D3.clone();
                 *vbTriangulated = vbTriangulated3;
 
-                *T21 = Pose::new_from_vector(&nalgebra::convert(t2), &nalgebra::convert(R1)); //Sophus::SE3f(R1, t1);
+                *T21 = Pose::new_from_opencv_vector(&nalgebra::convert(t2), &nalgebra::convert(R1)); //Sophus::SE3f(R1, t1);
                 return true;
             }
 
@@ -610,7 +618,7 @@ impl TwoViewReconstruction {
                 *vP3D = vP3D4.clone();
                 *vbTriangulated = vbTriangulated4;
 
-                *T21 = Pose::new_from_vector(&nalgebra::convert(t2), &nalgebra::convert(R2)); //Sophus::SE3f(R1, t1);
+                *T21 = Pose::new_from_opencv_vector(&nalgebra::convert(t2), &nalgebra::convert(R2)); //Sophus::SE3f(R1, t1);
                 return true;
             }
         }
@@ -622,8 +630,8 @@ impl TwoViewReconstruction {
         &self, 
         R: &Matrix3<f32>, 
         t: &Vector3<f32>,
-        vKeys1: &VectorOfKeyPoint,
-        vKeys2: &VectorOfKeyPoint,
+        vKeys1: &DVVectorOfKeyPoint,
+        vKeys2: &DVVectorOfKeyPoint,
         vMatches12: &Vec<(usize,usize)>, 
         vbMatchesInliers: &Vec<bool>,
         K: &Matrix3<f32>, 
@@ -638,13 +646,13 @@ impl TwoViewReconstruction {
         let cx = K[(0,2)];
         let cy = K[(1,2)];
 
-        let mut vbGood = vec![false; vKeys1.len()];
+        let mut vbGood = vec![false; vKeys1.len() as usize];
 
         let mut  vP3D = Vec::<Point3f>::new();
-        vP3D.reserve(vKeys1.len());
+        vP3D.reserve(vKeys1.len() as usize);
 
         let mut vCosParallax = Vec::<f32>::new();
-        vCosParallax.reserve(vKeys1.len());
+        vCosParallax.reserve(vKeys1.len() as usize);
 
         // Camera 1 Projection Matrix K[I|0]
         let mut P1 = Matrix3x4::<f32>::zeros();
@@ -729,10 +737,9 @@ impl TwoViewReconstruction {
             }
 
             // Check reprojection error in first image
-            let (mut im1x, mut im1y) = (0.0,0.0);
             let invZ1 = 1.0/p3dC1[2];
-            im1x = fx*p3dC1[0]*invZ1+cx;
-            im1y = fy*p3dC1[1]*invZ1+cy;
+            let im1x = fx*p3dC1[0]*invZ1+cx;
+            let im1y = fy*p3dC1[1]*invZ1+cy;
 
             let squareError1 = (im1x-kp1.pt.x)*(im1x-kp1.pt.x)+(im1y-kp1.pt.y)*(im1y-kp1.pt.y);
 
@@ -741,10 +748,9 @@ impl TwoViewReconstruction {
             }
 
             // Check reprojection error in second image
-            let (mut im2x, mut im2y) = (0.0, 0.0);
             let invZ2 = 1.0/p3dC2[2];
-            im2x = fx*p3dC2[0]*invZ2+cx;
-            im2y = fy*p3dC2[1]*invZ2+cy;
+            let im2x = fx*p3dC2[0]*invZ2+cx;
+            let im2y = fy*p3dC2[1]*invZ2+cy;
 
             let squareError2 = (im2x-kp2.pt.x)*(im2x-kp2.pt.x)+(im2y-kp2.pt.y)*(im2y-kp2.pt.y);
 

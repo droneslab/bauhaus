@@ -8,6 +8,7 @@ use yaml_rust::yaml::Yaml;
 use crate::{
     global_params::*,
     base::ActorConf,
+    utils::sensor::Sensor,
 };
 
 pub fn read_config_file(file_name: &String) -> String {

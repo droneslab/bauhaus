@@ -1,13 +1,13 @@
 use serde::{Deserialize, Serialize};
 use darvis::dvutils::{
     DVVectorOfKeyPoint,
-    DVMatrixGrayscale
+    DVMatrix
 };
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FeatureMsg {
     pub keypoints: DVVectorOfKeyPoint,
-    pub descriptors: DVMatrixGrayscale,
+    pub descriptors: DVMatrix,
     pub actor_ids: std::collections::HashMap<String, axiom::actors::Aid>,
     pub image_width: i32,
     pub image_height: i32,
@@ -15,7 +15,7 @@ pub struct FeatureMsg {
 impl FeatureMsg {
     pub fn new(
         keypoints: DVVectorOfKeyPoint,
-        descriptors: DVMatrixGrayscale,
+        descriptors: DVMatrix,
         image_width: i32,
         image_height: i32,
         actor_ids: std::collections::HashMap<String, axiom::actors::Aid>

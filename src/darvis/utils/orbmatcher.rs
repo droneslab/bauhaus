@@ -5,8 +5,8 @@ use opencv::{
     prelude::*,
 };
 use crate::{
-    map::{frame::Frame, mappoint::MapPoint, map::Id, map::Map},
-    utils::camera::DVCamera,
+    map::{frame::Frame, mappoint::MapPoint, map::Id, map::Map, keypoints::KeyPointsData},
+    utils::{camera::Camera, sensor::SensorType},
     lockwrap::ReadOnlyWrapper,
 };
 
@@ -66,8 +66,8 @@ impl ORBmatcher {
         return dist;
     }
 
-    pub fn search_for_initialization(
-        &self, F1: &Frame , F2: &Frame, prev_matched: &mut Vec<Point2f>, matches12: &mut HashMap<i32, Id>, window_size : i64
+    pub fn search_for_initialization<S: SensorType>(
+        &self, F1: &Frame<S> , F2: &Frame<S>, prev_matched: &mut Vec<Point2f>, matches12: &mut HashMap<u32, Id>, window_size : i64
     ) -> i32 {
         //ref code : https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/0df83dde1c85c7ab91a0d47de7a29685d046f637/src/ORBmatcher.cc#L648
         let mut nmatches: i32=0;
@@ -77,24 +77,24 @@ impl ORBmatcher {
 
         const FACTOR: f64 = 1.0 as f64 / HISTO_LENGTH as f64;
 
-        let mut matched_distance = vec![std::i32::MAX; F2.keypoints_un.len()]; 
-        let mut matches21 = vec![-1 as i32; F2.keypoints_un.len()];  
-        let iend1 = F1.keypoints_un.len();
-        for i1 in 0..iend1 {
-            let kp1: KeyPoint = F1.keypoints_un.get(i1).unwrap().clone();
+        let mut matched_distance = vec![std::i32::MAX; F2.keypoints_data.num_keypoints().try_into().unwrap()]; 
+        let mut matches21 = vec![-1 as i32; F2.keypoints_data.num_keypoints().try_into().unwrap()];
+        let iend1 = F1.keypoints_data.num_keypoints();
+        for i1 in 0..iend1 as usize{
+            let kp1: KeyPoint = F1.keypoints_data.keypoints_un().get(i1).unwrap().clone();
             let level1 = kp1.octave;
             if level1>0 {
                 continue;
             }
 
-            let indices2 = F2.GetFeaturesInArea(&(prev_matched.get(i1).unwrap().x as f64), &(prev_matched.get(i1).unwrap().y as f64), &(window_size as f64), &(level1 as i64), &(level1 as i64), false);
-            //vector<size_t> vIndices2 = F2.GetFeaturesInArea(vbPrevMatched[i1].x,vbPrevMatched[i1].y, windowSize,level1,level1);
+            let indices2 = F2.get_features_in_area(&(prev_matched.get(i1).unwrap().x as f64), &(prev_matched.get(i1).unwrap().y as f64), &(window_size as f64), &(level1 as i64), &(level1 as i64), false);
+            //vector<size_t> vIndices2 = F2.get_features_in_area(vbPrevMatched[i1].x,vbPrevMatched[i1].y, windowSize,level1,level1);
 
             if indices2.is_empty() {
                 continue;
             }
 
-            let mut d1 = F1.descriptors.row(i1 as i32).unwrap();
+            let d1 = F1.keypoints_data.descriptors().row(i1 as i32).unwrap();
 
             let mut bestDist = i32::MAX;
             let mut bestDist2 = i32::MAX;
@@ -102,8 +102,8 @@ impl ORBmatcher {
 
             for i in 0..indices2.len() {
                 let i2 = i;
-                let mut d2 = F2.descriptors.row(i2 as i32).unwrap();
-                let mut dist = self.descriptor_distance(&d1,&d2);
+                let d2 = F2.keypoints_data.descriptors().row(i2 as i32).unwrap();
+                let dist = self.descriptor_distance(&d1,&d2);
 
                 if matched_distance[i2]<=dist {
                     continue;
@@ -121,7 +121,7 @@ impl ORBmatcher {
             if bestDist<=TH_LOW {
                 if bestDist< bestDist2* (self.nnratio  as i32) {
                     if matches21[bestIdx2 as usize]>=0 {
-                        matches12.remove(&bestIdx2);
+                        matches12.remove(&(bestIdx2 as u32));
                         nmatches-=1;
                     }
                     matches12.insert(i1.try_into().unwrap(), bestIdx2);
@@ -130,7 +130,7 @@ impl ORBmatcher {
                     nmatches+=1;
 
                     if self.check_orientation {
-                        let mut rot = F1.keypoints_un.get(i1).unwrap().angle-F2.keypoints_un.get(bestIdx2 as usize).unwrap().angle;
+                        let mut rot = F1.keypoints_data.keypoints_un().get(i1).unwrap().angle-F2.keypoints_data.keypoints_un().get(bestIdx2 as usize).unwrap().angle;
                         if rot<0.0 {
                             rot+=360.0;
                         }
@@ -166,9 +166,9 @@ impl ORBmatcher {
                 for j in 0..rotHist[i as usize].len()
                 {
                     let idx1: usize = rotHist[i as usize][j] as usize;
-                    if matches12.contains_key(&(idx1 as i32))
+                    if matches12.contains_key(&(idx1 as u32))
                     {
-                        matches12.remove(&(idx1 as i32));
+                        matches12.remove(&(idx1 as u32));
                         nmatches-=1;
                     }
                 }
@@ -179,9 +179,9 @@ impl ORBmatcher {
         //Update prev matched
         for i1 in 0..matches12.len()
         {
-            if matches12.contains_key(&(i1 as i32))
+            if matches12.contains_key(&(i1 as u32))
             {
-                prev_matched[i1]= F2.keypoints_un.get(*matches12.get(&(i1 as i32)).unwrap() as usize).unwrap().pt.clone();
+                prev_matched[i1]= F2.keypoints_data.keypoints_un().get(*matches12.get(&(i1 as u32)).unwrap() as usize).unwrap().pt.clone();
             }                
         }
 
@@ -233,13 +233,11 @@ impl ORBmatcher {
 
     // Project MapPoints tracked in last frame into the current frame and search matches.
     // Used to track from previous frame (Tracking)
-    pub fn search_by_projection_with_threshold(
-        &self, current_frame: &Frame, last_frame: &Frame, threshold: i32, is_mono: bool,
-        camera: &DVCamera, map: &ReadOnlyWrapper<Map>
+    pub fn search_by_projection_with_threshold<S: SensorType> (
+        &self, current_frame: &Frame<S>, last_frame: &Frame<S>, threshold: i32, is_mono: bool,
+        camera: &Camera, map: &ReadOnlyWrapper<Map<S>>
     ) -> Vec<MapPoint> {
         let nmatches = 0;
-
-        //sofiya
 
         // Rotation Histogram (to check rotation consistency)
         let mut rotHist = Vec::<Vec<i32>>::new();
@@ -258,24 +256,24 @@ impl ORBmatcher {
         // is doing, especially around the matrix multiplications
         let Rcw = current_frame.get_pose().get_rotation();
         let tcw = current_frame.get_pose().get_translation();
-        let twc = -Rcw.transpose() * tcw;
+        let twc = -Rcw.transpose() * tcw.vec();
 
         let Rlw = last_frame.get_pose().get_rotation();
         let tlw = current_frame.get_pose().get_translation();
-        let tlc = Rlw * twc + tlw;
+        let tlc = Rlw.vec() * twc + tlw.vec();
 
         let forward = tlc[2] >current_frame.stereo_baseline && !is_mono;
         let backward = -tlc[2] > current_frame.stereo_baseline && !is_mono;
 
-        for i in 0..last_frame.N as i32 {
-            if last_frame.mappoint_matches.contains_key(&i) && !last_frame.mappoint_outliers.contains_key(&i) {
+        for i in 0..last_frame.keypoints_data.num_keypoints() as u32 {
+            if last_frame.mappoint_matches.contains_key(&i) && !last_frame.mappoint_is_outlier(&i) {
                 // Project
                 let x3Dc;
                 {
                     let map_read_lock = map.read();
                     let mappoint = map_read_lock.get_mappoint(last_frame.mappoint_matches.get(&i).unwrap());
                     let x3Dw = mappoint.unwrap().get_world_pos();
-                    x3Dc = Rcw * x3Dw + tcw;
+                    x3Dc = Rcw.vec() * x3Dw.vec() + tcw.vec();
                 }
 
                 let xc = x3Dc[0];
@@ -285,14 +283,17 @@ impl ORBmatcher {
                     continue;
                 }
 
-                let u = camera.calibration_params.fx * xc * invzc + camera.calibration_params.cx;
-                let v = camera.calibration_params.fy * yc * invzc + camera.calibration_params.cy;
-                if u < current_frame.min_x || u > current_frame.max_x {
+                let u = camera.fx * xc * invzc + camera.cx;
+                let v = camera.fy * yc * invzc + camera.cy;
+                if u < current_frame.image_bounds.min_x || u > current_frame.image_bounds.max_x {
                     continue;
                 }
-                if v < current_frame.min_y || v > current_frame.max_y {
+                if v < current_frame.image_bounds.min_y || v > current_frame.image_bounds.max_y {
                     continue;
                 }
+
+                //sofiya currently working on this
+                todo!("search by projection");
 
                 // let last_octave = last_frame.keypoints.get(i as usize).unwrap().octave;
                 // let n_last_octave;
@@ -308,11 +309,11 @@ impl ORBmatcher {
                 // let vIndices2;
                 // // TODO (Stereo): last argument should be true if stereo
                 // if forward {
-                //     vIndices2 = current_frame.GetFeaturesInArea(u,v, radius, n_last_octave, false);
+                //     vIndices2 = current_frame.get_features_in_area(u,v, radius, n_last_octave, false);
                 // } else if backward {
-                //     vIndices2 = current_frame.GetFeaturesInArea(u,v, radius, 0, n_last_octave, false);
+                //     vIndices2 = current_frame.get_features_in_area(u,v, radius, 0, n_last_octave, false);
                 // } else {
-                //     vIndices2 = current_frame.GetFeaturesInArea(u,v, radius, n_last_octave-1, n_last_octave+1, false);
+                //     vIndices2 = current_frame.get_features_in_area(u,v, radius, n_last_octave-1, n_last_octave+1, false);
                 // }
                 // if vIndices2.is_empty() {
                 //     continue;
@@ -328,8 +329,8 @@ impl ORBmatcher {
         //             {
         //                 const size_t i2 = *vit;
 
-        //                 if(current_frame.mvpMapPoints[i2])
-        //                     if(current_frame.mvpMapPoints[i2]->Observations()>0)
+        //                 if(current_frame.mappoint_matches[i2])
+        //                     if(current_frame.mappoint_matches[i2]->Observations()>0)
         //                         continue;
 
         //                 if(current_frame.Nleft == -1 && current_frame.mvuRight[i2]>0)
@@ -353,7 +354,7 @@ impl ORBmatcher {
 
         //             if(bestDist<=TH_HIGH)
         //             {
-        //                 current_frame.mvpMapPoints[bestIdx2]=pMP;
+        //                 current_frame.mappoint_matches[bestIdx2]=pMP;
         //                 nmatches++;
 
         //                 if(mbCheckOrientation)
@@ -388,11 +389,11 @@ impl ORBmatcher {
         //                 vector<size_t> vIndices2;
 
         //                 if(bForward)
-        //                     vIndices2 = current_frame.GetFeaturesInArea(uv(0),uv(1), radius, nLastOctave, -1,true);
+        //                     vIndices2 = current_frame.get_features_in_area(uv(0),uv(1), radius, nLastOctave, -1,true);
         //                 else if(bBackward)
-        //                     vIndices2 = current_frame.GetFeaturesInArea(uv(0),uv(1), radius, 0, nLastOctave, true);
+        //                     vIndices2 = current_frame.get_features_in_area(uv(0),uv(1), radius, 0, nLastOctave, true);
         //                 else
-        //                     vIndices2 = current_frame.GetFeaturesInArea(uv(0),uv(1), radius, nLastOctave-1, nLastOctave+1, true);
+        //                     vIndices2 = current_frame.get_features_in_area(uv(0),uv(1), radius, nLastOctave-1, nLastOctave+1, true);
 
         //                 const cv::Mat dMP = pMP->GetDescriptor();
 
@@ -402,8 +403,8 @@ impl ORBmatcher {
         //                 for(vector<size_t>::const_iterator vit=vIndices2.begin(), vend=vIndices2.end(); vit!=vend; vit++)
         //                 {
         //                     const size_t i2 = *vit;
-        //                     if(current_frame.mvpMapPoints[i2 + current_frame.Nleft])
-        //                         if(current_frame.mvpMapPoints[i2 + current_frame.Nleft]->Observations()>0)
+        //                     if(current_frame.mappoint_matches[i2 + current_frame.Nleft])
+        //                         if(current_frame.mappoint_matches[i2 + current_frame.Nleft]->Observations()>0)
         //                             continue;
 
         //                     const cv::Mat &d = current_frame.mDescriptors.row(i2 + current_frame.Nleft);
@@ -419,7 +420,7 @@ impl ORBmatcher {
 
         //                 if(bestDist<=TH_HIGH)
         //                 {
-        //                     current_frame.mvpMapPoints[bestIdx2 + current_frame.Nleft]=pMP;
+        //                     current_frame.mappoint_matches[bestIdx2 + current_frame.Nleft]=pMP;
         //                     nmatches++;
         //                     if(mbCheckOrientation)
         //                     {
@@ -456,7 +457,7 @@ impl ORBmatcher {
         //         {
         //             for(size_t j=0, jend=rotHist[i].size(); j<jend; j++)
         //             {
-        //                 current_frame.mvpMapPoints[rotHist[i][j]]=static_cast<MapPoint*>(NULL);
+        //                 current_frame.mappoint_matches[rotHist[i][j]]=static_cast<MapPoint*>(NULL);
         //                 nmatches--;
         //             }
         //         }
@@ -486,19 +487,19 @@ impl ORBmatcher {
     // int SearchByProjection(KeyFrame* pKF, Sophus::Sim3<float> &Scw, const std::vector<MapPoint*> &vpPoints, const std::vector<KeyFrame*> &vpPointsKFs, std::vector<MapPoint*> &vpMatched, std::vector<KeyFrame*> &vpMatchedKF, int th, float ratioHamming=1.0);
 
 
-    pub fn search_by_bow(&self, pKF1 : &Frame, pKF2 : &Frame, vpMatches12: &mut Vec<Id>) -> i32
+    pub fn search_by_bow<S: SensorType>(&self, pKF1 : &Frame<S>, pKF2 : &Frame<S>, vpMatches12: &mut Vec<Id>) -> i32
     {
         todo!("ORBmatcher: search_by_bow");
 
-        let vKeysUn1 = &pKF1.keypoints_un;
-        let vFeatVec1 = &pKF1.featvec.as_ref().unwrap();
+        let vKeysUn1 = &pKF1.keypoints_data.keypoints_un();
+        let vfeature_vec1 = &pKF1.feature_vec.as_ref().unwrap();
         let vpMapPoints1 = pKF1.get_mappoint_matches();
-        let Descriptors1 = &pKF1.descriptors;
+        let Descriptors1 = &pKF1.keypoints_data.descriptors();
 
-        let vKeysUn2 = &pKF2.keypoints_un;
-        let vFeatVec2 = &pKF2.featvec.as_ref().unwrap();
+        let vKeysUn2 = &pKF2.keypoints_data.keypoints_un();
+        let vfeature_vec2 = &pKF2.feature_vec.as_ref().unwrap();
         let  vpMapPoints2 = pKF2.get_mappoint_matches();
-        let Descriptors2 = &pKF2.descriptors;
+        let Descriptors2 = &pKF2.keypoints_data.descriptors();
 
         let mut vbMatched2 = vec![false; vpMapPoints2.len()];
 
@@ -516,20 +517,20 @@ impl ORBmatcher {
         let mut nmatches = 0;
         //int nmatches = 0;
 
-        let vecfeat1 = &vFeatVec1.1;
-        let vecfeat2 = &vFeatVec2.1;
+        let vecfeat1 = &vfeature_vec1.1;
+        let vecfeat2 = &vfeature_vec2.1;
 
         let word_id1 = vecfeat1[0].last().unwrap();
         
-        let bow1 = &vFeatVec1.0;
+        let bow1 = &vfeature_vec1.0;
         bow1.0[0];
         
-        let l1_score = vFeatVec1.0.l1(&vFeatVec2.0);
+        let l1_score = vfeature_vec1.0.l1(&vfeature_vec2.0);
 
-        // DBoW2::FeatureVector::const_iterator f1it = vFeatVec1.begin();
-        // DBoW2::FeatureVector::const_iterator f2it = vFeatVec2.begin();
-        // DBoW2::FeatureVector::const_iterator f1end = vFeatVec1.end();
-        // DBoW2::FeatureVector::const_iterator f2end = vFeatVec2.end();
+        // DBoW2::FeatureVector::const_iterator f1it = vfeature_vec1.begin();
+        // DBoW2::FeatureVector::const_iterator f2it = vfeature_vec2.begin();
+        // DBoW2::FeatureVector::const_iterator f1end = vfeature_vec1.end();
+        // DBoW2::FeatureVector::const_iterator f2end = vfeature_vec2.end();
 
 
         //f1it->first  :  vecfeat1
@@ -628,11 +629,11 @@ impl ORBmatcher {
         //     }
         //     else if(f1it->first < f2it->first)
         //     {
-        //         f1it = vFeatVec1.lower_bound(f2it->first);
+        //         f1it = vfeature_vec1.lower_bound(f2it->first);
         //     }
         //     else
         //     {
-        //         f2it = vFeatVec2.lower_bound(f1it->first);
+        //         f2it = vfeature_vec2.lower_bound(f1it->first);
         //     }
         // }
 

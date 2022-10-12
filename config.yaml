@@ -13,14 +13,16 @@ system_settings:
        camera_fy: 718.856
        camera_cx: 607.1928
        camera_cy: 185.2157
+       # Distortion
        camera_k1: 0.0
        camera_k2: 0.0
        camera_p1: 0.0
        camera_p2: 0.0
+       camera_k3: 0.0
        camera_width: 1241
        camera_height: 376
        fps: 10.0
-       bf: 386.1448 #stereo baseline times fx
+       stereo_baseline_times_fx: 386.1448 #stereo baseline times fx
        thdepth: 35
       #  depth_map_factor:
       #  ORB FEATURE DETECTION

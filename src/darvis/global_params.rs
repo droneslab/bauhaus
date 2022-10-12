@@ -12,34 +12,9 @@
 use std::collections::HashMap;
 use lazy_static::*;
 use parking_lot::RwLock;
+use crate::utils::sensor::Sensor;
 
 pub static SYSTEM_SETTINGS: &str = "SYSTEM_SETTINGS"; 
-
-#[derive(Clone, Copy, Debug)]
-pub enum Sensor {
-    Mono,
-    ImuMono,
-    Stereo,
-    ImuStereo,
-    Rgbd,
-    ImuRgbd
-}
-
-impl Sensor {
-    pub fn is_imu(&self) -> bool {
-        match *self {
-            Sensor::ImuMono | Sensor::ImuStereo | Sensor::ImuRgbd => true,
-            _ => false
-        }
-    }
-
-    pub fn is_mono(&self) -> bool {
-        match *self {
-            Sensor::ImuMono | Sensor::Mono => true,
-            _ => false
-        }
-    }
-}
 
 pub struct GlobalParams {
     // Lock is necessary because GLOBAL_PARAMS is a static variable

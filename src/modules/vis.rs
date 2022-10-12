@@ -35,9 +35,9 @@ pub struct DarvisVis {
     /// Camera image for visualization
     cam_img: Mat,
     /// Built up trajectory translation 
-    traj_pos: DVVector3, 
+    traj_pos: DVVector3<f64>, 
     /// Built up trajectory rotation
-    traj_rot: DVMatrix3, 
+    traj_rot: DVMatrix3<f64>, 
     /// actor_ids: std::collections::HashMap<String, axiom::actors::Aid>, // Collection of all spawned actor ids
     id: String
     }
@@ -49,8 +49,8 @@ impl DarvisVis {
             //traj_img: Mat::new_rows_cols_with_default(750, 1000, core::CV_8UC3, core::Scalar::all(0.0)).unwrap(),
             traj_img: Mat::new_rows_cols_with_default(376, 500, core::CV_8UC3, core::Scalar::all(0.0)).unwrap(),
             cam_img: Mat::default(),
-            traj_pos: DVVector3::zeros(),
-            traj_rot: DVMatrix3::zeros(),
+            traj_pos: DVVector3::zeros::<f64>(),
+            traj_rot: DVMatrix3::zeros::<f64>(),
             id: id
             // actor_ids: ids,
         }
@@ -60,13 +60,13 @@ impl DarvisVis {
     pub fn visualize(&mut self, _context: Context, message: Message) -> ActorResult<()> {
         if let Some(msg) = message.content_as::<VisMsg>() {
             // rotate and translate matrices from pose to track trajectory (R and t from pose)
-            if self.traj_pos == DVVector3::zeros() && self.traj_rot == DVMatrix3::zeros() {
+            if self.traj_pos.is_zero() && self.traj_rot.is_zero() {
                 self.traj_pos = msg.new_pose.get_translation();
                 self.traj_rot = msg.new_pose.get_rotation();
             }
             else {
-                self.traj_pos = self.traj_pos + self.traj_rot*&msg.new_pose.get_translation();
-                self.traj_rot = &msg.new_pose.get_rotation() * self.traj_rot;
+                self.traj_pos = DVVector3::new(self.traj_pos.vec() + self.traj_rot.vec() * msg.new_pose.get_translation().vec());
+                self.traj_rot = DVMatrix3::new(msg.new_pose.get_rotation().vec() * self.traj_rot.vec());
             }
 
             // Draw new circle on image and show
