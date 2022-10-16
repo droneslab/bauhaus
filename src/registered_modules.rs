@@ -1,11 +1,7 @@
 use std::marker::PhantomData;
 use axiom::prelude::*;
-use darvis::{
-    plugin_functions::*,
-    lockwrap::ReadOnlyWrapper,
-    map::map::Map,
-    utils::sensor::SensorType,
-};
+use dvcore::{plugin_functions::*, lockwrap::ReadOnlyWrapper};
+use crate::dvmap::{sensor::SensorType, map::Map};
 
 // REGISTER MODULE: add a string to refer to your module here
 pub static FRAME_LOADER: &str = "FRAME_LOADER";
@@ -42,8 +38,7 @@ pub fn getmethod<S: SensorType + 'static>(fnname: &String, id: &String, map: Rea
         "local_mapping" => FunctionProxy {function: Box::new(crate::modules::localmapping::DarvisLocalMapping::new(map))},
         "vis" => FunctionProxy {function: Box::new(crate::modules::vis::DarvisVis::new(id.clone()))},
         "fast_extract" => FunctionProxy {function: Box::new(crate::modules::fast::DarvisFast::new())},
-        // "tracker_klt" => FunctionProxy {function: Box::new(crate::modules::tracker_klt::DarvisTrackerKLT::new())}, /// Commented out, see note in file
-        _ => FunctionProxy {function: Box::new(darvis::plugin_functions::DarvisNone)},
+        _ => FunctionProxy {function: Box::new(dvcore::plugin_functions::DarvisNone)},
     }
 }
 

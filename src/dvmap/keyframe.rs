@@ -1,13 +1,10 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, iter::FromIterator};
 use chrono::{DateTime, Utc};
 use abow::{BoW, DirectIdx};
 use serde::{Deserialize, Serialize};
 use crate::{
-    map::{
-        map::Id, pose::Pose, 
-        frame::{Frame, ImageBounds,},
-    },
-    utils::{imu::*, sensor::SensorType},
+    dvmap::{map::Id, pose::Pose, frame::*, sensor::SensorType},
+    utils::{imu::*},
 };
 
 unsafe impl<S: SensorType> Sync for KeyFrame<S> {}
@@ -18,6 +15,11 @@ pub struct KeyFrame<S: SensorType> {
     pub frame_id: Id, // Id of frame it is based on
     pub origin_map_id: Id, // mnOriginMapId
     pub pose: Pose,
+
+    // Map connections ... Parent, children, neighbors
+    pub parent: Option<Id>,
+    pub children: Vec<Id>,
+    neighbors: Vec<Id>, // also sometimes called covisibility keyframes in ORBSLAM3
 
     // Image //
     pub image_bounds: ImageBounds,
@@ -58,7 +60,7 @@ pub struct KeyFrame<S: SensorType> {
     // Stereo //
     pub stereo_baseline: f64,
 
-    // Sofiya TODO: I think we can clean this up and get rid of these
+    // Sofiya: I think we can clean this up and get rid of these
     // Variables used by KF database
     pub loop_query: u64, //mnLoopQuery
     pub loop_words: i32, //mnLoopWords
@@ -74,12 +76,24 @@ pub struct KeyFrame<S: SensorType> {
     // Variables used by merging
     pub mnMergeCorrectedForKF: u64,
     pub mnBALocalForMerge: u64,
+
+    // Don't add these in!! read explanations below
+    // mnTrackReferenceForFrame ... used in tracking to decide whether to add a kf/mp into tracking's local map. redundant and easy to mess up/get out of sync. Search for this globally to see an example of how to avoid using it.
 }
 
 impl<S: SensorType> KeyFrame<S> {
-    pub fn new(frame: &Frame<S>, current_map_id: Id) -> KeyFrame<S> {
+    pub fn new(frame: &Frame<S>, origin_map_id: Id) -> KeyFrame<S> {
+        Self::hidden_new(frame, origin_map_id, -1)
+    }
+
+    pub(super) fn new_with_id(frame: &Frame<S>, origin_map_id: Id, kf_id: Id) -> KeyFrame<S> {
+        // Note: Only callable from the map actor, who assigns a non-conflicting kf id
+        Self::hidden_new(frame, origin_map_id, kf_id)
+    }
+
+    pub fn hidden_new(frame: &Frame<S>, origin_map_id: Id, kf_id: Id) -> KeyFrame<S> {
         // let grid = frame.grid.clone();
-        // sofiya todo: do I have to set these?
+        // sofiya: do I have to set these?
         // mGrid.resize(mnGridCols);
         // if(F.Nleft != -1)  mGridRight.resize(mnGridCols);
         // for(int i=0; i<mnGridCols;i++)
@@ -103,14 +117,17 @@ impl<S: SensorType> KeyFrame<S> {
         //     mbHasVelocity = true;
         // }
 
-        KeyFrame {
+        let kf = KeyFrame {
             id: -1, // id assigned when putting in map
             timestamp: frame.timestamp,
             frame_id: frame.id,
             mappoint_matches: frame.mappoint_matches.clone(),
-            pose: frame.pose.unwrap(), // sofiya...should call set_pose()?
+            pose: frame.pose.unwrap(), // sofiya: should call set_pose()?
+            parent: None,
+            children: Vec::new(),
+            neighbors: Vec::new(),
             keypoints_data: frame.keypoints_data.clone(),
-            origin_map_id: current_map_id,
+            origin_map_id,
             bow_vec: frame.bow_vec.as_ref().unwrap().clone(),
             feature_vec: Some(frame.feature_vec.as_ref().unwrap().clone()),
             num_scale_levels: frame.num_scale_levels,
@@ -135,12 +152,16 @@ impl<S: SensorType> KeyFrame<S> {
             mnBAGlobalForKF: 0,
             mnMergeCorrectedForKF: 0,
             mnBALocalForMerge: 0,
-        }
+        };
+
+        kf.compute_bow();
+
+        kf
     }
 
     pub fn set_pose(&mut self, pose: Pose) {
         self.pose = pose.clone();
-        // Sofiya todo... what is this stuff?
+        // TODO IMPORTANT: what is this stuff?
         // mRcw = mTcw.rotationMatrix();
         // mTwc = mTcw.inverse();
         // mRwc = mTwc.rotationMatrix();
@@ -150,4 +171,24 @@ impl<S: SensorType> KeyFrame<S> {
         //     mOwb = mRwc * mImuCalib.mTcb.translation() + mTwc.translation();
         // }
     }
+
+    pub fn get_neighbors(&self, N: i32) -> Vec<Id> {
+        Vec::from_iter(self.neighbors[0..(N as usize)].iter().cloned())
+    }
+
+    pub fn compute_bow(&self) {
+        todo!("IMPORTANT compute bow"); // sofiya...this is identical to the frame one, can we combine?
+        // if(mBowVec.empty() || mFeatVec.empty())
+        // {
+        //     vector<cv::Mat> vCurrentDesc = Converter::toDescriptorVector(mDescriptors);
+        //     // Feature vector associate features with nodes in the 4th level (from leaves up)
+        //     // We assume the vocabulary tree has 6 levels, change the 4 otherwise
+        //     mpORBvocabulary->transform(vCurrentDesc,mBowVec,mFeatVec,4);
+        // }
+    }
+
+    pub fn add_mappoint_match(&mut self, index: u32, mp_id: Id) {
+        self.mappoint_matches.insert(index, mp_id);
+    }
+
 }

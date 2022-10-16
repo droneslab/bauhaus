@@ -7,11 +7,11 @@ use opencv::{
 };
 use axiom::prelude::*;
 use serde::{Deserialize, Serialize};
-use darvis::{
+use dvcore::{
     plugin_functions::Function,
-    dvutils::*,
+    matrix::*,
 };
-use crate::modules::messages::vis_msg::VisMsg;
+use crate::modules::messages::VisMsg;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct VisPathMsg {

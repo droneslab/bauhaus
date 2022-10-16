@@ -1,19 +1,10 @@
 use axiom::prelude::*;
-use opencv::{
-    imgcodecs,
-};
-use darvis::{
-    global_params::*,
-    dvutils::*,
-    plugin_functions::Function
-};
+use opencv::imgcodecs;
+use dvcore::{global_params::*, matrix::*, plugin_functions::Function};
 use crate::{
     modules::vis::*,
     registered_modules::{VISUALIZER, TRACKING_FRONTEND},
-    modules::messages::{
-        image_msg::ImageMsg,
-        images_msg::ImagesMsg,
-    }
+    modules::messages::{ImageMsg, ImagesMsg,}
 };
 
 #[derive(Debug, Clone)]
@@ -28,10 +19,10 @@ impl DarvisFrameLoader {
 
     pub fn load_frames(&mut self, _context: Context, message: Message) -> ActorResult<()> {
         if let Some(msg) = message.content_as::<ImagesMsg>() {
-            let use_visualizer = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "show_ui");
-            for path in msg.get_img_paths() {
+            let use_visualizer = GLOBAL_PARAMS.get::<bool>(SYSTEM_SETTINGS, "show_ui");
+            for path in &msg.img_paths {
                 let img = imgcodecs::imread(&path, imgcodecs::IMREAD_GRAYSCALE)?;
-                let vis_id = msg.get_actor_ids().get(VISUALIZER).unwrap();
+                let vis_id = msg.actor_ids.get(VISUALIZER).unwrap();
                 let feat_aid = msg.actor_ids.get(TRACKING_FRONTEND).unwrap();
                 println!("Processed image: {}", path);
                 if use_visualizer {
@@ -42,7 +33,10 @@ impl DarvisFrameLoader {
                 // https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/Examples/RGB-D/rgbd_tum.cc#L89
 
                 // Kickoff the pipeline by sending the feature extraction module images
-                feat_aid.send_new(ImageMsg::new(img.grayscale_mat(), msg.actor_ids.clone())).unwrap();
+                feat_aid.send_new(ImageMsg{
+                    frame: img.grayscale_mat(),
+                    actor_ids: msg.actor_ids.clone()
+                }).unwrap();
             }
         }
         Ok(Status::done(()))

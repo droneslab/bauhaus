@@ -1,15 +1,12 @@
 use std::sync::Arc;
 use axiom::prelude::*;
-use nalgebra::Vector3;
-use serde::{Serialize, Deserialize};
 
-use darvis::{
+use dvcore::{
     plugin_functions::Function,
-    map::{map::Id, map::Map, map_actor::MAP_ACTOR},
     lockwrap::ReadOnlyWrapper,
-    utils::sensor::SensorType,
 };
-use crate::modules::messages::keyframe_msg::KeyFrameMsg;
+use crate::dvmap::{map::Map, map_actor::MAP_ACTOR, sensor::SensorType};
+use crate::modules::messages::KeyFrameMsg;
 
 #[derive(Debug, Clone)]
 pub struct DarvisLocalMapping<S: SensorType> {
@@ -29,9 +26,14 @@ impl<S: SensorType + 'static> DarvisLocalMapping<S> {
             matches_inliers: 0
         }
     }
-    fn local_mapping(&mut self, _context: Context, msg: Arc<KeyFrameMsg>) {
+    fn local_mapping(&mut self, _context: Context, msg: Arc<KeyFrameMsg<S>>) {
         let map_actor = msg.actor_ids.get(MAP_ACTOR).unwrap();
         self.map_actor = Some(map_actor.clone());
+
+
+        // code to actually insert the kf into the map
+        // let map_actor = self.map_actor.as_ref().unwrap();
+        // map_actor.send_new(MapWriteMsg::<S>::new_keyframe(new_kf)).unwrap();
 
     //     mbFinished = false;
 
@@ -255,7 +257,7 @@ impl<S: SensorType + 'static> DarvisLocalMapping<S> {
 impl<S: SensorType + 'static> Function for DarvisLocalMapping<S> {
     fn handle(&mut self, context: axiom::prelude::Context, message: Message) -> ActorResult<()>
     {
-        if let Some(msg) = message.content_as::<KeyFrameMsg>() {
+        if let Some(msg) = message.content_as::<KeyFrameMsg<S>>() {
             self.local_mapping(context, msg);
         }
 
