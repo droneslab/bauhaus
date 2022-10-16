@@ -1,34 +1,20 @@
-use std::collections::HashMap;
-use std::env;
+use std::{collections::HashMap, env};
 use axiom::prelude::*;
+use dvmap::map_actor::{MAP_ACTOR, MapActor};
 use glob::glob;
 use log::LevelFilter;
 use yaml_rust::yaml;
-#[allow(unused_imports)]
-use opencv::{
-    prelude::*,
-    core::*,
-    features2d,
-    features2d::{Feature2DTrait, ORB},
-    highgui,
-    imgproc,
-    videoio,
-    imgcodecs,
-    types::{PtrOfORB},
-};
-use darvis::{
-    base,
-    map::map_actor::{MapActor, MAP_ACTOR},
-    utils::sensor::*,
-    lockwrap::ReadWriteWrapper,
-    map::map::Map,
-    load_config::*,
-    global_params::{GLOBAL_PARAMS, SYSTEM_SETTINGS},
-};
+use dvcore::{*, lockwrap::ReadWriteWrapper, global_params::*};
+
 mod modules;
 mod registered_modules;
-use registered_modules::*;
-use crate::modules::messages::images_msg::ImagesMsg;
+mod dvmap;
+mod utils;
+
+use crate::modules::messages::ImagesMsg;
+use crate::dvmap::{sensor::*, map::Map};
+use registered_modules::{FeatureManager, FRAME_LOADER};
+
 
 fn load_config(config_file: String) -> Vec<base::ActorConf> {
     let mut module_info = Vec::<base::ActorConf>::new();
@@ -93,9 +79,7 @@ fn initialize_actor_system<S: SensorType + 'static>(
     let mut systems  = HashMap::<String, ActorSystem>::new();
     let mut aids = HashMap::new();
 
-    //TODO (one day): Use Cluster manager to do remote agent calls
-
-    let sensor: Sensor = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "sensor");
+    //TODO (low priority): Use Cluster manager to do remote agent calls
 
     // Loop through the config to initialize actor system using the default config
     for actor_conf in modules {
@@ -115,7 +99,7 @@ fn initialize_actor_system<S: SensorType + 'static>(
         ).unwrap();
         aids.insert(actname.clone(), c_aid.clone());
 
-        // TODO (one day): Identify the role of using connect_with_channels, as the system communications are working without doing the following.
+        // TODO (low priority): Identify the role of using connect_with_channels, as the system communications are working without doing the following.
         //features.push(actname.clone());
         // if i > 0 { 
         //     ActorSystem::connect_with_channels(&systems.get(&features[0]).unwrap(), &system_current);            
@@ -167,7 +151,7 @@ fn init<S: SensorType + 'static> (module_info: Vec<base::ActorConf>, img_dir: St
     // Get image paths from directory
     let img_paths = generate_image_paths(img_dir);
     // Create the global map
-    let writeable_map: ReadWriteWrapper<darvis::map::map::Map<S>> = ReadWriteWrapper::new(Map::new::<S>());
+    let writeable_map: ReadWriteWrapper<Map<S>> = ReadWriteWrapper::new(Map::new::<S>());
     // Initialize actor system from config
     let (systems, mut aids) = initialize_actor_system(module_info, &writeable_map);
     // Create map actor
@@ -177,7 +161,7 @@ fn init<S: SensorType + 'static> (module_info: Vec<base::ActorConf>, img_dir: St
     // Kickoff the pipeline by sending the feature extraction module images
     let system = systems.get(FRAME_LOADER).unwrap();
     let feat_aid = system.find_aid_by_name(FRAME_LOADER).unwrap();
-    feat_aid.send_new(ImagesMsg::new(img_paths, aids.clone())).unwrap();
+    feat_aid.send_new(ImagesMsg{ img_paths, actor_ids: aids.clone() }).unwrap();
 
     system.await_shutdown(None);
 }

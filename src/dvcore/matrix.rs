@@ -1,23 +1,31 @@
-// Structs to wrap opencv functions, so we can implement traits on them.
-// Watch out for thread safety here, opencv::core::Mat is not 
-// inherently thread-safe so we have to be careful how we deal with it.
+/// *** Structs to wrap opencv/nalgebra objects, so we can implement traits on them. *** ///
+///
+/// Watch out for thread safety here, opencv::core::Mat is not 
+/// inherently thread-safe so we have to be careful how we deal with it.
+/// Current strategy is to hide the inner matrices and require creation
+/// of the struct to go through a new() constructor, which clones the
+/// incoming matrix so it definitely won't point to the same underlying data.
+///
+/// Note: multiplication/addition/etc doesn't work on these objects.
+/// Currently two options:
+/// 1 - struct.vec() + struct2.vec()
+/// 2 - do operations on interim opencv/nalgebra structs, then save to DV struct.
+/// Currently using option 2 more. First option doesn't work when it requires
+/// that the shape constraint trait is satisfied, which is private in nalgebra...
+/// We can fix this but honestly I don't think it's worth it.
 
-// Todo (one day): matrix multiplication/addition/etc doesn't work on these objects.
-// Currently need to get struct.vec() and do the operations on that, ie
-// struct.vec() + struct2.vec()
-use std::{
-    fmt::Debug, convert::TryInto, ops::{Add, Neg, Index}
-};
+use std::{fmt::Debug, convert::TryInto, ops::Index};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+use abow::Desc;
 use na::{DMatrix, ComplexField};
 use opencv::{
     prelude::*, core::*,
-    types::{VectorOfKeyPoint, VectorOfi32, VectorOfPoint2f},
+    types::{VectorOfKeyPoint, VectorOfi32, VectorOfPoint2f, VectorOfPoint3f},
 };
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
 extern crate nalgebra as na;
-use opencv::core::Mat;
-use abow::Desc;
 
+//////////////////////////* OPENCV TYPES //////////////////////////
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct DVKeyPoint {
@@ -29,16 +37,15 @@ pub struct DVKeyPoint {
     class_id: i32
 }
 
-
-// Note: only thread-safe because of clone in new() below.
-// vec is private to prevent making this struct without
-// using the constructor
 #[derive(Clone, Debug)]
 pub struct DVMatrix {
     mat: opencv::core::Mat
 }
 unsafe impl Sync for DVMatrix {}
 impl DVMatrix {
+    pub fn empty() -> Self {
+        Self { mat: Mat::default() }
+    }
     pub fn new(mat: opencv::core::Mat) -> Self {
         Self { mat: mat.clone() }
     }
@@ -46,78 +53,38 @@ impl DVMatrix {
     pub fn row(&self, index: i32) -> Result<Mat, opencv::Error> { self.mat.row(index) }
 }
 impl Serialize for DVMatrix {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        // let helper = MatrixGrid { 
-        //     width: self.cols(),
-        //     height: self.rows(),
-        // }
-
-        // let mut rows = serializer.serialize_seq(Some(helper.height))?;
-        // for idx in 0..self.height {
-        //     rows.serialize_element(
-        //         &Row { grid: self, start_idx: idx * self.width }
-        //     )?;
-        // }
-        // rows.end()
-
-        // let mut dmat = DMatrix::from_element(self.rows().try_into().unwrap(), self.cols().try_into().unwrap(), 0u8);
-        // for i in 0..self.rows() {
-        //     for j in 0..self.cols() {
-        //         let val = *self.at_2d::<u8>(i, j).unwrap(); // Grayscale 1 channel uint8
-        //         let r: usize = i.try_into().unwrap();
-        //         let c: usize = j.try_into().unwrap();
-        //         seq.serialize_element(val);
-        //         dmat[(r, c)] = val;
-        //     }
-        // }
-        // dmat
-
-
-        // let mut seq = serializer.serialize_seq(Some(self.len()))?;
-        // for e in self {
-        //     seq.serialize_element(e)?;
-        // }
-        // seq.end()
-
-
-        // serializer.serialize_i32(*self)
-        todo!("immediate: serialization for opencv matrix");
-    }
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer {
+        todo!("(low priority) serialize");
+        }
 }
 impl<'de> Deserialize<'de> for DVMatrix {
     fn deserialize<D>(deserializer: D) -> Result<DVMatrix, D::Error>
     where
         D: Deserializer<'de>,
     {
-        // deserializer.deserialize_i32(I32Visitor)
-        todo!("immediate: deserialization for opencv matrix");
+        todo!("(low priority) deserialize");
     }
 }
 
 
-// Note: only thread-safe because of clone in new() below.
-// vec is private to prevent making this struct without
-// using the constructor
 #[derive(Clone, Debug)]
 pub struct DVVectorOfKeyPoint {
     vec: opencv::types::VectorOfKeyPoint
 }
 unsafe impl Sync for DVVectorOfKeyPoint {}
 impl DVVectorOfKeyPoint {
+    // Constructors
     pub fn empty() -> Self {
         Self { vec: VectorOfKeyPoint::new() }
     }
     pub fn new(vec: opencv::types::VectorOfKeyPoint) -> Self {
         Self { vec: vec.clone() }
     }
-
-    pub fn len(&self) -> i32 { self.vec.len() as i32 }
     pub fn clone(&self) -> DVVectorOfKeyPoint {
         Self { vec: self.vec.clone() }
     }
+
+    pub fn len(&self) -> i32 { self.vec.len() as i32 }
     pub fn get(&self, index: usize) -> Result<KeyPoint, opencv::Error> { self.vec.get(index) }
     pub fn convert(&self, vec_of_points: &mut VectorOfPoint2f, index: &VectorOfi32) -> Result<(), opencv::Error> {
         opencv::core::KeyPoint::convert(&self.vec, vec_of_points, index)
@@ -125,51 +92,16 @@ impl DVVectorOfKeyPoint {
 
     pub fn clear(&mut self) { self.vec.clear() }
 }
+// From implementations to make it easier to pass this into opencv functions
 impl From<DVVectorOfKeyPoint> for opencv::types::VectorOfKeyPoint {
-    fn from(vec: DVVectorOfKeyPoint) -> opencv::types::VectorOfKeyPoint {
-        vec.vec
-    }
+    fn from(vec: DVVectorOfKeyPoint) -> opencv::types::VectorOfKeyPoint { vec.vec }
 }
 impl Serialize for DVVectorOfKeyPoint {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        // let helper = MatrixGrid { 
-        //     width: self.cols(),
-        //     height: self.rows(),
-        // }
-
-        // let mut rows = serializer.serialize_seq(Some(helper.height))?;
-        // for idx in 0..self.height {
-        //     rows.serialize_element(
-        //         &Row { grid: self, start_idx: idx * self.width }
-        //     )?;
-        // }
-        // rows.end()
-
-        // let mut dmat = DMatrix::from_element(self.rows().try_into().unwrap(), self.cols().try_into().unwrap(), 0u8);
-        // for i in 0..self.rows() {
-        //     for j in 0..self.cols() {
-        //         let val = *self.at_2d::<u8>(i, j).unwrap(); // Grayscale 1 channel uint8
-        //         let r: usize = i.try_into().unwrap();
-        //         let c: usize = j.try_into().unwrap();
-        //         seq.serialize_element(val);
-        //         dmat[(r, c)] = val;
-        //     }
-        // }
-        // dmat
-
-
-        // let mut seq = serializer.serialize_seq(Some(self.len()))?;
-        // for e in self {
-        //     seq.serialize_element(e)?;
-        // }
-        // seq.end()
-
-
-        // serializer.serialize_i32(*self)
-        todo!("immediate: serialization for opencv matrix");
+        todo!("(low priority) serialize");
     }
 }
 impl<'de> Deserialize<'de> for DVVectorOfKeyPoint {
@@ -177,18 +109,39 @@ impl<'de> Deserialize<'de> for DVVectorOfKeyPoint {
     where
         D: Deserializer<'de>,
     {
-        // deserializer.deserialize_i32(I32Visitor)
-        todo!("immediate: deserialization for opencv matrix");
+        todo!("(low priority) deserialize");
     }
 }
 
 
-// Used to handle 3 dimensional column vector
+#[derive(Clone, Debug)]
+pub struct DVVectorOfPoint3f {
+    vec: opencv::types::VectorOfPoint3f
+}
+unsafe impl Sync for DVVectorOfPoint3f {}
+impl DVVectorOfPoint3f {
+    // Constructors
+    pub fn empty() -> Self {
+        Self { vec: VectorOfPoint3f::new() }
+    }
+    pub fn new(vec: VectorOfPoint3f) -> Self {
+        Self { vec: vec.clone() }
+    }
+    pub fn clone(&self) -> DVVectorOfPoint3f {
+        Self { vec: self.vec.clone() }
+    }
+
+    pub fn clear(&mut self) { self.vec.clear() }
+}
+
+
+//////////////////////////* Nalgebra TYPES //////////////////////////
+
 #[derive(Clone, Debug)]
 pub struct DVVector3<T> {
-    vec: na::Vector3<T>
+    vec: na::Vector3<T> // 3 dimensional column vector
 }
-impl<T: Debug + Clone + Copy + na::Scalar + num_traits::identities::Zero + ComplexField> DVVector3<T> {
+impl<T: Debug + Clone + na::Scalar + num_traits::identities::Zero + ComplexField> DVVector3<T> {
     // Constructors
     pub fn new(vec: na::Vector3<T>) -> Self {
         DVVector3 { vec: vec.clone() }
@@ -196,7 +149,7 @@ impl<T: Debug + Clone + Copy + na::Scalar + num_traits::identities::Zero + Compl
     pub fn new_with(x: T, y: T, z: T) -> Self {
         DVVector3 { vec: na::Vector3::<T>::new(x,y,z) }
     }
-    pub fn zeros<T2: Debug + Copy + Clone + na::Scalar + num_traits::identities::Zero>() -> Self {
+    pub fn zeros<T2: Debug + Clone + na::Scalar + num_traits::identities::Zero>() -> Self {
         DVVector3 { vec: na::Vector3::<T>::zeros() }
     }
     pub fn clone(&self) -> Self {
@@ -207,7 +160,7 @@ impl<T: Debug + Clone + Copy + na::Scalar + num_traits::identities::Zero + Compl
 
     pub fn vec(&self) -> &na::Vector3<T> { &self.vec }
 
-    // Sofiya note: I have no idea why the compiler hates these
+    // Note: I have no idea why the compiler hates these
     // Getting around it rn by calling struct.vec().norm() and 
     // struct.vec().div_assign()
     // pub fn norm(&self) -> T { self.vec.norm() }
@@ -227,19 +180,17 @@ impl<T: Debug + Clone + na::Scalar + num_traits::identities::Zero> From<DVVector
 impl<T: Debug + Clone + na::Scalar + num_traits::identities::Zero> From<&DVVector3<T>> for na::Vector3<T> {
     fn from(vec: &DVVector3<T>) -> na::Vector3<T> { vec.vec.clone() }
 }
+// So we can do vector3[i] without having to call a getter or setter function
 impl<T> Index<usize> for DVVector3<T> {
     type Output = T;
-
-    fn index(&self, i: usize) -> &Self::Output {
-        &self.vec[i]
-    }
+    fn index(&self, i: usize) -> &Self::Output { &self.vec[i] }
 }
 impl<T> Serialize for DVVector3<T> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        todo!("immediate: serialization for opencv matrix");
+        todo!("(low priority) serialize");
     }
 }
 impl<'de, T> Deserialize<'de> for DVVector3<T> {
@@ -247,17 +198,17 @@ impl<'de, T> Deserialize<'de> for DVVector3<T> {
     where
         D: Deserializer<'de>,
     {
-        todo!("immediate: deserialization for opencv matrix");
+        todo!("(low priority) deserialize");
     }
 }
 
 
-/// Used to handle 3x3 matrix 
 #[derive(Clone, Debug)]
 pub struct DVMatrix3<T> {
-    vec: na::Matrix3<T>
+    vec: na::Matrix3<T> // 3x3 matrix
 }
 impl<T: Debug + Clone + na::Scalar + num_traits::identities::Zero + num_traits::One + ComplexField> DVMatrix3<T> {
+    // Constructors
     pub fn new(vec: na::Matrix3<T>) -> Self {
         DVMatrix3 { vec: vec.clone() }
     }
@@ -267,6 +218,7 @@ impl<T: Debug + Clone + na::Scalar + num_traits::identities::Zero + num_traits::
     pub fn identity() -> Self { 
         DVMatrix3::new(na::Matrix3::<T>::identity())
     }
+
     pub fn is_zero(&self) -> bool { self.vec == na::Matrix3::<T>::zeros() }
 
     pub fn vec(&self) -> &na::Matrix3<T> { &self.vec }
@@ -274,20 +226,15 @@ impl<T: Debug + Clone + na::Scalar + num_traits::identities::Zero + num_traits::
     pub fn determinant(&self) -> T { self.vec.determinant() }
 
     pub fn neg_mut(&mut self) { self.vec.neg_mut() }
-    // pub fn div_assign(&mut self, divisor: T) { self.vec.div_assign(divisor) }
 }
-// impl<T> Eq for DVMatrix3<T> {}
-// impl<T> PartialEq for DVMatrix3<T> {
-//     fn eq(&self, other: &Self) -> bool {
-//         self.vec == other.vec
-//     }
-// }
+// From implementations...
 impl<T: Clone> From<DVMatrix3<T>> for na::Matrix3<T> {
     fn from(vec: DVMatrix3<T>) -> na::Matrix3<T> { vec.vec.clone() }
 }
 impl<T: Clone> From<&DVMatrix3<T>> for na::Matrix3<T> {
     fn from(vec: &DVMatrix3<T>) -> na::Matrix3<T> { vec.vec.clone() }
 }
+// Two index implementations, one for matrix3[(x,y)] and one for [(x)]
 impl<T> Index<(usize, usize)> for DVMatrix3<T> {
     type Output = T;
 
@@ -307,7 +254,7 @@ impl<T> Serialize for DVMatrix3<T> {
     where
         S: Serializer,
     {
-        todo!("immediate: serialization for opencv matrix");
+        todo!("(low priority) serialize");
     }
 }
 impl<'de, T> Deserialize<'de> for DVMatrix3<T> {
@@ -315,7 +262,7 @@ impl<'de, T> Deserialize<'de> for DVMatrix3<T> {
     where
         D: Deserializer<'de>,
     {
-        todo!("immediate: deserialization for opencv matrix");
+        todo!("(low priority) deserialize");
     }
 }
 
@@ -325,7 +272,7 @@ impl<'de, T> Deserialize<'de> for DVMatrix3<T> {
 
 
 /// Used to handle Grayscale images 
-// TODO immediate: convert old code for darvismatrix below
+// TODO (mid priority) convert old code for darvismatrix below
 // into the same structure as code above
 
 // #[derive(Clone, Debug)]

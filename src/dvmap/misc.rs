@@ -1,7 +1,5 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct BowDB {
-
-}
+pub struct BowDB { }
 

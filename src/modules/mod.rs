@@ -17,7 +17,3 @@ pub mod fast;
 
 // Messages sent to/from actors
 pub mod messages;
-
-// Optimization code, uses g2orust crate to call g2o in C++
-pub mod optimizer; 
-

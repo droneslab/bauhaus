@@ -4,17 +4,9 @@ use opencv::{
     features2d::{Feature2DTrait},
     types::{PtrOfBRISK, VectorOfKeyPoint},
 };
-use darvis::{
-    global_params::*,
-    dvutils::*,
-    plugin_functions::Function
-};
+use dvcore::{global_params::*, matrix::*, plugin_functions::Function};
 use crate::{
-    modules::{
-        messages::{
-            feature_msg::FeatureMsg, image_msg::ImageMsg
-        },
-    },
+    modules::messages::{FeatureMsg, ImageMsg},
     registered_modules::TRACKER
 };
 
@@ -30,7 +22,7 @@ impl DarvisFast {
         if let Some(msg) = message.content_as::<ImageMsg>() {
             let mut kp1 = VectorOfKeyPoint::new();
             let mut des1 = Mat::default();
-            let img1 = msg.get_frame().grayscale_to_cv_mat();
+            let img1 = msg.frame.grayscale_to_cv_mat();
 
             let fast_threshold: i32 = 20;
             let non_max_suppression: bool = true;
@@ -40,29 +32,29 @@ impl DarvisFast {
             let mut brisk : PtrOfBRISK = opencv::features2d::BRISK::create(30, 3, 1.0)?;
             brisk.compute(&img1, &mut kp1, &mut des1).unwrap();
 
-            let align_id = msg.get_actor_ids().get(TRACKER).unwrap();
-            let traker_msg: String = GLOBAL_PARAMS.get(TRACKER, "actor_message");
+            let align_id = msg.actor_ids.get(TRACKER).unwrap();
+            let traker_msg = GLOBAL_PARAMS.get::<String>(TRACKER, "actor_message");
 
             match traker_msg.as_ref()
             {
                 "FeatureMsg" => {
-                    align_id.send_new(FeatureMsg::new(
-                        DVVectorOfKeyPoint::new(kp1),
-                        DVMatrix::new(des1),
-                        img1.cols(),
-                        img1.rows(),
-                        msg.get_actor_ids().clone()
-                    )).unwrap();
+                    align_id.send_new(FeatureMsg {
+                        keypoints: DVVectorOfKeyPoint::new(kp1),
+                        descriptors: DVMatrix::new(des1),
+                        image_width: img1.cols(),
+                        image_height: img1.rows(),
+                        actor_ids: msg.actor_ids.clone()
+                    }).unwrap();
                 },
                 _ => {
                     println!("Invalid Message type: selecting FeatureMsg");
-                    align_id.send_new(FeatureMsg::new(
-                        DVVectorOfKeyPoint::new(kp1),
-                        DVMatrix::new(des1),
-                        img1.cols(),
-                        img1.rows(),
-                        msg.get_actor_ids().clone()
-                    )).unwrap();
+                    align_id.send_new(FeatureMsg {
+                        keypoints: DVVectorOfKeyPoint::new(kp1),
+                        descriptors: DVMatrix::new(des1),
+                        image_width: img1.cols(),
+                        image_height: img1.rows(),
+                        actor_ids: msg.actor_ids.clone()
+                    }).unwrap();
                 },
             }
         }

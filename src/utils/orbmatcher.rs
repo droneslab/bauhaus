@@ -1,12 +1,10 @@
 use std::collections::HashMap;
 use std::convert::TryInto;
 use opencv::core::{Point2f, KeyPoint};
-use opencv::{
-    prelude::*,
-};
+use opencv::prelude::*;
 use crate::{
-    map::{frame::Frame, mappoint::MapPoint, map::Id, map::Map, keypoints::KeyPointsData},
-    utils::{camera::Camera, sensor::SensorType},
+    dvmap::{frame::Frame, mappoint::MapPoint, map::Id, map::Map, keypoints::KeyPointsData, sensor::SensorType},
+    utils::{camera::Camera},
     lockwrap::ReadOnlyWrapper,
 };
 
@@ -87,7 +85,7 @@ impl ORBmatcher {
                 continue;
             }
 
-            let indices2 = F2.get_features_in_area(&(prev_matched.get(i1).unwrap().x as f64), &(prev_matched.get(i1).unwrap().y as f64), &(window_size as f64), &(level1 as i64), &(level1 as i64), false);
+            let indices2 = F2.get_features_in_area(&(prev_matched.get(i1).unwrap().x as f64), &(prev_matched.get(i1).unwrap().y as f64), &(window_size as f64), &(level1 as i64), &(level1 as i64));
             //vector<size_t> vIndices2 = F2.get_features_in_area(vbPrevMatched[i1].x,vbPrevMatched[i1].y, windowSize,level1,level1);
 
             if indices2.is_empty() {
@@ -247,7 +245,7 @@ impl ORBmatcher {
         }
         let factor = 1.0 / (HISTO_LENGTH as f32);
 
-        // Sofiya note: this code copied from ORBSLAM2, not ORBSLAM3
+        // Note: this code copied from ORBSLAM2, not ORBSLAM3
         // 2 : https://github.com/raulmur/ORB_SLAM2/blob/master/src/ORBmatcher.cc#L1328
         // 3 : https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/ORBmatcher.cc#L1676
         // I think it is doing the same thing, just that orbslam3 uses Sophus SE3 objects
@@ -272,7 +270,7 @@ impl ORBmatcher {
                 {
                     let map_read_lock = map.read();
                     let mappoint = map_read_lock.get_mappoint(last_frame.mappoint_matches.get(&i).unwrap());
-                    let x3Dw = mappoint.unwrap().get_world_pos();
+                    let x3Dw = mappoint.unwrap().get_position();
                     x3Dc = Rcw.vec() * x3Dw.vec() + tcw.vec();
                 }
 
@@ -292,7 +290,6 @@ impl ORBmatcher {
                     continue;
                 }
 
-                //sofiya currently working on this
                 todo!("search by projection");
 
                 // let last_octave = last_frame.keypoints.get(i as usize).unwrap().octave;
@@ -468,7 +465,7 @@ impl ORBmatcher {
         return Vec::new();
     } 
 
-    // Sofiya: Note... other searchbyprojection functions we will have to implement later:
+    // Sofiya: other searchbyprojection functions we will have to implement later:
 
     // Search matches between Frame keypoints and projected MapPoints. Returns number of matches
     // Used to track the local map (Tracking)
@@ -493,12 +490,12 @@ impl ORBmatcher {
 
         let vKeysUn1 = &pKF1.keypoints_data.keypoints_un();
         let vfeature_vec1 = &pKF1.feature_vec.as_ref().unwrap();
-        let vpMapPoints1 = pKF1.get_mappoint_matches();
+        let vpMapPoints1 = pKF1.mappoint_matches;
         let Descriptors1 = &pKF1.keypoints_data.descriptors();
 
         let vKeysUn2 = &pKF2.keypoints_data.keypoints_un();
         let vfeature_vec2 = &pKF2.feature_vec.as_ref().unwrap();
-        let  vpMapPoints2 = pKF2.get_mappoint_matches();
+        let  vpMapPoints2 = pKF2.mappoint_matches;
         let Descriptors2 = &pKF2.keypoints_data.descriptors();
 
         let mut vbMatched2 = vec![false; vpMapPoints2.len()];

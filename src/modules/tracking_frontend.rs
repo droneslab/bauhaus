@@ -7,23 +7,19 @@ use opencv::{
     features2d::{Feature2DTrait, ORB},
     types::{PtrOfORB, VectorOfKeyPoint},
 };
-use darvis::{
-    dvutils::*,
-    map::{
-        map::Map,
-    },
+use dvcore::{
+    matrix::*,
     lockwrap::ReadOnlyWrapper,
     plugin_functions::Function,
     global_params::*,
-    utils::sensor::*,
 };
 use crate::{
     registered_modules::{TRACKING_BACKEND},
     modules::{
-        messages::{
-            image_msg::ImageMsg,
-            feature_msg::FeatureMsg,
-        },
+        messages::{ImageMsg, FeatureMsg,},
+    },
+    dvmap::{
+        map::Map, sensor::*,
     },
 };
 
@@ -34,14 +30,14 @@ pub struct DarvisTrackingFront<S: SensorType>  {
 
 impl<S: SensorType + 'static> DarvisTrackingFront<S> {
     pub fn new(map: ReadOnlyWrapper<Map<S>>) -> DarvisTrackingFront<S> {
-        let sensor: Sensor = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "sensor");
+        let sensor = GLOBAL_PARAMS.get::<Sensor>(SYSTEM_SETTINGS, "sensor");
         DarvisTrackingFront {
             map: map
         }
     }
 
     pub fn tracking_frontend(&mut self, _context: Context, message: Arc<ImageMsg>) {
-        let image = message.get_frame().grayscale_to_cv_mat();
+        let image = message.frame.grayscale_to_cv_mat();
         let (keypoints, descriptors) = self.extract_features(&image);
 
         self.send_message_to_backend(
@@ -70,36 +66,36 @@ impl<S: SensorType + 'static> DarvisTrackingFront<S> {
         &mut self, message: Arc<ImageMsg>, 
         image: Mat, keypoints: VectorOfKeyPoint, descriptors: Mat
     ) {
-        let align_id = message.get_actor_ids().get(TRACKING_BACKEND).unwrap();
-        let new_message: String = GLOBAL_PARAMS.get(TRACKING_BACKEND, "actor_message");
+        let align_id = message.actor_ids.get(TRACKING_BACKEND).unwrap();
+        let new_message = GLOBAL_PARAMS.get::<String>(TRACKING_BACKEND, "actor_message");
         match new_message.as_ref() {
             "FeatureMsg" => {
-                align_id.send_new(FeatureMsg::new(
-                    DVVectorOfKeyPoint::new(keypoints),
-                    DVMatrix::new(descriptors),
-                    image.cols(),
-                    image.rows(),
-                    message.get_actor_ids().clone()
-                )).unwrap();
+                align_id.send_new(FeatureMsg {
+                    keypoints: DVVectorOfKeyPoint::new(keypoints),
+                    descriptors: DVMatrix::new(descriptors),
+                    image_width: image.cols(),
+                    image_height: image.rows(),
+                    actor_ids: message.actor_ids.clone()
+                }).unwrap();
             },
             _ => {
                 println!("Invalid Message type: selecting FeatureMsg");
-                align_id.send_new(FeatureMsg::new(
-                    DVVectorOfKeyPoint::new(keypoints),
-                    DVMatrix::new(descriptors),
-                    image.cols(),
-                    image.rows(),
-                    message.get_actor_ids().clone()
-                )).unwrap();
+                align_id.send_new(FeatureMsg {
+                    keypoints: DVVectorOfKeyPoint::new(keypoints),
+                    descriptors: DVMatrix::new(descriptors),
+                    image_width: image.cols(),
+                    image_height: image.rows(),
+                    actor_ids: message.actor_ids.clone()
+                }).unwrap();
             },
         }
     }
 
     fn set_extractor_settings(&mut self, orb: &mut PtrOfORB) {
-        let max_features: i32 = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "max_features");
-        let scale_factor: f64 = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "scale_factor");
-        let n_levels: i32 = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "n_levels");
-        let fast_threshold: i32 = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "fast_threshold");
+        let max_features = GLOBAL_PARAMS.get::<i32>(SYSTEM_SETTINGS, "max_features");
+        let scale_factor = GLOBAL_PARAMS.get::<f64>(SYSTEM_SETTINGS, "scale_factor");
+        let n_levels = GLOBAL_PARAMS.get::<i32>(SYSTEM_SETTINGS, "n_levels");
+        let fast_threshold = GLOBAL_PARAMS.get::<i32>(SYSTEM_SETTINGS, "fast_threshold");
 
         let res1 = orb.set_max_features(max_features);
         let res2 = orb.set_max_features(max_features);

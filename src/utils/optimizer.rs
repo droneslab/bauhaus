@@ -1,16 +1,14 @@
 extern crate g2orust;
-use axiom::prelude::Aid;
 
-use darvis::{
-    map::{frame::Frame, pose::Pose, map::Map, keypoints::*},
+use dvcore::{
     lockwrap::ReadOnlyWrapper,
     global_params::{GLOBAL_PARAMS, SYSTEM_SETTINGS},
-    utils::sensor::SensorType
 };
+use crate::dvmap::{frame::Frame, pose::Pose, map::{Map, Id}, keypoints::*, sensor::SensorType};
 
 #[derive(Debug, Clone)]
 pub struct Optimizer {
-    // Sofiya note: Does not change, so can have multiple copies of this.
+    // Note: Does not change, so can have multiple copies of this.
     // ORBSLAM3 duplicates this var at every frame and keyframe,
     // but I'm pretty sure that it's set once per-system when the ORBExtractor
     // is created and only ever used by Optimizer.
@@ -24,9 +22,9 @@ impl Optimizer {
     pub fn new() -> Optimizer {
         // See ORBExtractor constructor: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/ORBextractor.cc#L409
         // and note above about inv_level_sigma2
-        let scale_factor: f64 = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "scale_factor");
-        let max_features: i32 = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "max_features");
-        let n_levels: i32 = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "n_levels");
+        let scale_factor= GLOBAL_PARAMS.get::<f64>(SYSTEM_SETTINGS, "scale_factor");
+        let max_features = GLOBAL_PARAMS.get::<i32>(SYSTEM_SETTINGS, "max_features");
+        let n_levels = GLOBAL_PARAMS.get::<i32>(SYSTEM_SETTINGS, "n_levels");
 
         let mut scale_factors = vec![1.0];
         let mut level_sigma2 = vec![1.0];
@@ -47,33 +45,24 @@ impl Optimizer {
 
     // int Optimizer::PoseInertialOptimizationLastFrame(Frame *pFrame, bool bRecInit)
     // but bRecInit is always set to false
-    pub fn pose_inertial_optimization_last_frame<S: SensorType>(
-        &self,
-        frame: &mut Frame<S>, map: &ReadOnlyWrapper<Map<S>>
-    ) -> i32 {
+    pub fn pose_inertial_optimization_last_frame<S: SensorType>(&self, frame: &mut Frame<S>) -> i32 {
         todo!("Optimizer::PoseInertialOptimizationLastFrame(&mCurrentFrame)");
     }
 
     //int Optimizer::PoseInertialOptimizationLastKeyFrame(Frame *pFrame, bool bRecInit)
     // but bRecInit is always set to false
-    pub fn pose_inertial_optimization_last_keyframe<S: SensorType>(
-        &self,
-        frame: &mut Frame<S>, map: &ReadOnlyWrapper<Map<S>>
-    ) -> i32 {
+    pub fn pose_inertial_optimization_last_keyframe<S: SensorType>(&self, frame: &mut Frame<S>) -> i32 {
         todo!("Optimizer::PoseInertialOptimizationLastKeyFrame(&mCurrentFrame)");
     }
 
-    pub fn optimize_pose<S: SensorType + 'static>(
-        &self,
-        frame: &mut Frame<S>, map: &ReadOnlyWrapper<Map<S>>
-    ) -> (i32, Option<Pose>) {
+    pub fn optimize_pose<S: SensorType + 'static>(&self, frame: &mut Frame<S>, map: &ReadOnlyWrapper<Map<S>>) -> (i32, Option<Pose>) {
         let optimizer = g2orust::ffi::new_sparse_optimizer();
 
         // Don't need this but saving here for reference
         // example of how to send a string to C++
         // let_cxx_string!(vertex_name = "VertexSE3Expmap");
 
-        let vertex = optimizer.create_frame_vertex(1, frame.pose.as_ref().unwrap().convert_to_bridgepose());
+        let vertex = optimizer.create_frame_vertex(1, (*frame.pose.as_ref().unwrap()).into());
 
         if frame.mappoint_matches.len() < 3 {
             return (0, None);
@@ -90,14 +79,14 @@ impl Optimizer {
                         keypoint.octave, keypoint.pt.x, keypoint.pt.y,
                         self.inv_level_sigma2[keypoint.octave as usize]
                     );
-                    // Sofiya note; below code sets edge's camera to the frame's camera
+                    // Sofiya: below code sets edge's camera to the frame's camera
                     // but are we sure we need it?
                     // edge->pCamera = pFrame->mpCamera;
                     {
                         let map_read_lock = map.read();
-                        let position = &map_read_lock.mappoints.get(mp_id).unwrap().position;
+                        let position = &map_read_lock.get_mappoint(mp_id).unwrap().get_position();
                         optimizer.add_edge_monocular(
-                            i as i32, edge.clone(), position.into()
+                            i as i32, edge.clone(), (*position).into()
                         );
                     }
 
@@ -128,7 +117,7 @@ impl Optimizer {
             // see https://cxx.rs/binding/sharedptr.html
             optimizer.set_vertex_estimate(
                 vertex.clone(), 
-                frame.pose.as_ref().unwrap().convert_to_bridgepose()
+                (*frame.pose.as_ref().unwrap()).into()
             );
 
             optimizer.optimize(iterations[iteration]);
@@ -155,7 +144,7 @@ impl Optimizer {
                 }
             }
 
-            todo!("SLAM with respect to a rigid body...probably don't have to do this rn?");
+            // TODO SLAM with respect to a rigid body...probably don't have to do this rn?
             // vpEdgesMono_FHR comes from "SLAM with respect to a rigid body"
             // which I didn't implement...
             // see add_edge_monocular in rust_helper.cpp
@@ -230,4 +219,9 @@ impl Optimizer {
         // Return number of inliers
         return (initial_correspondences - num_bad, Some(pose.into()));
     }
+
+    pub fn global_bundle_adjustment(&self, current_map: Id, iterations: i32) {
+        todo!("important: global bundle adjustment");
+    }
+    // void Optimizer::GlobalBundleAdjustemnt(Map* pMap, int nIterations, bool* pbStopFlag, const unsigned long nLoopKF, const bool bRobust)
 }

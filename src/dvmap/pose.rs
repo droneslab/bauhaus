@@ -5,10 +5,13 @@ use nalgebra::{
     Vector3, Matrix3
 };
 use serde::{Deserialize, Serialize};
-use crate::dvutils::*;
+use crate::matrix::*;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Copy)]
 pub struct Pose {
+    // Sofiya: I'm not sure that Isometry3 is thread safe, could be the same problem
+    // as with opencv matrices pointing to the same underlying memory even though
+    // it looks like different objects in Rust. I think we need to be careful here.
     pose: Isometry3<f64>
 }
 
@@ -17,8 +20,7 @@ impl Pose {
         Pose { pose : Isometry3::identity() }
     }
 
-    // sofiya...need to get rid of this
-    pub fn new_from_opencv_vector(translation : &Vector3<f64>, rotation: &Matrix3<f64>) -> Pose {
+    pub fn new_from_opencv(translation : &Vector3<f64>, rotation: &Matrix3<f64>) -> Pose {
         let pose = Isometry3::new( // why not use from_rotation_matrix() ?
             translation.clone(),
             Rotation3::<f64>::from_matrix(&rotation).scaled_axis()
@@ -26,40 +28,6 @@ impl Pose {
         Pose { pose: pose }
     }
 
-    pub fn new_from_vector(translation : &DVVector3<f64>, rotation: &DVMatrix3<f64>) -> Pose {
-        let pose = Isometry3::new( // why not use from_rotation_matrix() ?
-            translation.into(),
-            Rotation3::<f64>::from_matrix(&rotation.into()).scaled_axis()
-        );
-        Pose { pose: pose }
-    }
-
-    pub fn new_from_bridgepose(pose: g2orust::ffi::Pose) -> Pose {
-        // g2orust::ffi:Pose needed to send pose to C++ bindings to g2o
-        let translation = Translation3::new(
-            pose.translation[0],
-            pose.translation[1],
-            pose.translation[2]
-        );
-        let quaternion = Quaternion::<f64>::new(
-            pose.rotation[0],
-            pose.rotation[1],
-            pose.rotation[2],
-            pose.rotation[3],
-        );
-        let rotation = UnitQuaternion::<f64>::from_quaternion(quaternion);
-        Pose { pose: Isometry3::from_parts(translation,rotation) }
-    }
-
-    pub fn convert_to_bridgepose(&self) -> g2orust::ffi::Pose {
-        // g2orust::ffi:Pose needed to send pose to C++ bindings to g2os
-        // Note: can't implement From trait because 
-        // g2orust::ffi::Pose isn't defined in this crate
-        g2orust::ffi::Pose {
-            translation: self.translation_to_array(),
-            rotation: self.rotation_quaternion_to_array()
-        }
-    }
 
     pub fn translation_to_array(&self) -> [f64; 3] {
         [self.pose.translation.x, self.pose.translation.y, self.pose.translation.z]
@@ -118,11 +86,11 @@ impl From<g2orust::ffi::Pose> for Pose {
         Pose { pose: Isometry3::from_parts(translation,rotation) }
     }
 }
-// impl Into<Pose> for g2orust::ffi::Pose {
-//     fn into(&self) -> g2orust::ffi::Pose { 
-//         g2orust::ffi::Pose {
-//             translation: self.translation_to_array(),
-//             rotation: self.rotation_quaternion_to_array()
-//         }
-//     }
-// }
+impl From<Pose> for g2orust::ffi::Pose {
+    fn from(pose: Pose) -> Self { 
+        g2orust::ffi::Pose {
+            translation: pose.translation_to_array(),
+            rotation: pose.rotation_quaternion_to_array()
+        }
+    }
+}

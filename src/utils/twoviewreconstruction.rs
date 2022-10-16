@@ -1,30 +1,14 @@
-use std::{
-    ops::DivAssign,
-    f32,
-    collections::HashMap
-};
-use rand::{
-    Rng, SeedableRng,
-    rngs::StdRng
-};
-use nalgebra::{
-    Matrix3x4, Matrix4, Vector4, Matrix, Matrix3, Vector3
-};
-use opencv::{
-    prelude::Mat,
-    types::{VectorOfPoint3f, VectorOfPoint2f, VectorOfKeyPoint},
-    core::*
-};
-use cv_convert::{
-    opencv::core::Point3f,
-    TryFromCv
-};
+use std::{ops::DivAssign, f32, collections::HashMap};
+use rand::{Rng, SeedableRng, rngs::StdRng};
+use nalgebra::{Matrix3x4, Matrix4, Vector4, Matrix3, Vector3};
+use opencv::{core::*, prelude::Mat, types::{VectorOfPoint3f, VectorOfPoint2f}};
+use cv_convert::{opencv::core::Point3f, TryFromCv};
 
 use crate::{
-    map::{
+    dvmap::{
         pose::Pose, map::Id
     },
-    dvutils::{DVVectorOfKeyPoint, DVVector3, DVMatrix3, DVMatrix},
+    matrix::{DVVectorOfKeyPoint},
 };
 
 
@@ -57,18 +41,18 @@ impl TwoViewReconstruction {
 
     pub fn reconstruct(
         &mut self, 
-        vKeys1: &DVVectorOfKeyPoint, 
-        vKeys2: &DVVectorOfKeyPoint,
+        v_keys1: &DVVectorOfKeyPoint, 
+        v_keys2: &DVVectorOfKeyPoint,
         matches_hashmap: &HashMap<u32, Id>,
-        T21: &mut Pose,
-        vP3D: &mut opencv::types::VectorOfPoint3f,
-        vbTriangulated: &mut Vec<bool>
+        t21: &mut Pose,
+        v_p3_d: &mut opencv::types::VectorOfPoint3f,
+        vb_triangulated: &mut Vec<bool>
     ) -> bool {
         self.keypoints1.clear();
         self.keypoints2.clear();
 
-        self.keypoints1 = vKeys1.clone();
-        self.keypoints2 = vKeys2.clone();
+        self.keypoints1 = v_keys1.clone();
+        self.keypoints2 = v_keys2.clone();
 
         // Fill structures with current keypoints and matches with reference frame
         // Reference Frame: 1, Current Frame: 2
@@ -86,13 +70,13 @@ impl TwoViewReconstruction {
         let N = self.matches12.len();
 
         // Indices for minimum set selection
-        let mut vAllIndices = Vec::<usize>::new();
-        vAllIndices.reserve(N);
+        let mut v_all_indices = Vec::<usize>::new();
+        v_all_indices.reserve(N);
 
-        let mut vAvailableIndices = Vec::<usize>::new();
+        let mut v_available_indices = Vec::<usize>::new();
 
         for i in 0..N {
-            vAllIndices.push(i);
+            v_available_indices.push(i);
         }
 
         // Generate sets of 8 points for each RANSAC iteration
@@ -103,27 +87,27 @@ impl TwoViewReconstruction {
         // DUtils::Random::SeedRandOnce(0);
 
         for it in 0..self.max_iterations {
-            vAvailableIndices = vAllIndices.clone();
+            v_available_indices = v_all_indices.clone();
 
             // Select a minimum set
             for j in 0..8
             {
-                let randi = r.gen_range(0, vAvailableIndices.len()-1); //int randi = DUtils::Random::RandomInt(0,vAvailableIndices.size()-1);
+                let randi = r.gen_range(0, v_available_indices.len()-1); //int randi = DUtils::Random::RandomInt(0,v_available_indices.size()-1);
 
-                let idx = vAvailableIndices[randi];
+                let idx = v_available_indices[randi];
 
                 self.sets[it][j] = idx;
 
-                vAvailableIndices[randi] = *vAvailableIndices.last().unwrap();
-                vAvailableIndices.pop();
+                v_available_indices[randi] = *v_available_indices.last().unwrap();
+                v_available_indices.pop();
             }
         }
 
         // Launch threads to compute in parallel a fundamental matrix and a homography
-        let vbMatchesInliersH = Vec::<bool>::new();
-        let vbMatchesInliersF = Vec::<bool>::new();
+        let vb_matches_inliers_h = Vec::<bool>::new();
+        let vb_matches_inliers_f = Vec::<bool>::new();
 
-        let mut pt_indx = opencv::types::VectorOfi32::new();
+        let pt_indx = opencv::types::VectorOfi32::new();
         let mut pn1 = VectorOfPoint2f::new();
         self.keypoints1.convert(&mut pn1, &pt_indx);
         // opencv::core::KeyPoint::convert(self.keypoints1.into(), &mut pn1, &pt_indx).unwrap();
@@ -135,20 +119,20 @@ impl TwoViewReconstruction {
 
         let mut mask = Mat::default();
 
-        let H = opencv::calib3d::find_homography(&pn2, 
+        let homography = opencv::calib3d::find_homography(&pn2, 
             &pn1,
             &mut mask,
             opencv::calib3d::RANSAC,
             3.0
         ).unwrap();
 
-        let H21: Matrix3<f32> = nalgebra::Matrix3::<f32>::try_from_cv(&H).unwrap();
-        let H12 = H21.try_inverse().unwrap();
+        let homography_21 : Matrix3<f32> = nalgebra::Matrix3::<f32>::try_from_cv(&homography).unwrap();
+        let homography_12 = homography_21.try_inverse().unwrap();
 
         //let H12 = H.inv(opencv::core::DECOMP_LU).unwrap().to_mat().unwrap();
 
         let mut vbMatchesInliers = Vec::new();
-        let SH = self.check_homography(&H21, &H12, &mut vbMatchesInliers, self.sigma);
+        let SH = self.check_homography(&homography_21, &homography_12, &mut vbMatchesInliers, self.sigma);
 
         let F = opencv::calib3d::find_fundamental_mat(
             &pn2, &pn1, 
@@ -181,10 +165,10 @@ impl TwoViewReconstruction {
         let mK = Matrix3::<f32>::default();
         // Try to reconstruct from homography or fundamental depending on the ratio (0.40-0.45)
         if RH > 0.50 {
-            return self.reconstruct_from_homography(&vbMatchesInliersH,&H21, &mK, T21, vP3D, vbTriangulated, minParallax,50);
+            return self.reconstruct_from_homography(&vb_matches_inliers_h,&homography_21, &mK, t21, v_p3_d, vb_triangulated, minParallax,50);
         } else //if(pF_HF>0.6)
         {
-            return self.reconstruct_from_fundamental(&vbMatchesInliersF,&F21,&mK, T21,vP3D, vbTriangulated, minParallax,50);
+            return self.reconstruct_from_fundamental(&vb_matches_inliers_f,&F21,&mK, t21,v_p3_d, vb_triangulated, minParallax,50);
         }
     }
 
@@ -192,7 +176,7 @@ impl TwoViewReconstruction {
     pub fn check_homography(
         &self, 
         H21: &Matrix3<f32>, H12: &Matrix3<f32>, 
-        vbMatchesInliers: &mut Vec<bool>, sigma: f32
+        matches_inliers: &mut Vec<bool>, sigma: f32
     ) -> f32 {
         let N = self.matches12.len();
 
@@ -216,12 +200,12 @@ impl TwoViewReconstruction {
         let h32inv = H12[(2,1)];
         let h33inv = H12[(2,2)];
 
-        vbMatchesInliers.resize(N, false);
+        matches_inliers.resize(N, false);
 
         let mut score = 0.0f32;
         let th = 5.991;
 
-        let invSigmaSquare = 1.0/(sigma*sigma);
+        let inv_sigma_square = 1.0/(sigma*sigma);
 
         for i in 0..N {
             let mut bIn = true;
@@ -241,14 +225,14 @@ impl TwoViewReconstruction {
             let u2in1 = (h11inv*u2+h12inv*v2+h13inv)*w2in1inv;
             let v2in1 = (h21inv*u2+h22inv*v2+h23inv)*w2in1inv;
 
-            let squareDist1 = (u1-u2in1)*(u1-u2in1)+(v1-v2in1)*(v1-v2in1);
+            let square_dist1 = (u1-u2in1)*(u1-u2in1)+(v1-v2in1)*(v1-v2in1);
 
-            let chiSquare1 = squareDist1*invSigmaSquare;
+            let chi_square1 = square_dist1*inv_sigma_square;
 
-            if chiSquare1>th {
+            if chi_square1>th {
                 bIn = false;
             }  else {
-                score += th - chiSquare1;
+                score += th - chi_square1;
             }
 
             // Reprojection error in second image
@@ -258,21 +242,21 @@ impl TwoViewReconstruction {
             let u1in2 = (h11*u1+h12*v1+h13)*w1in2inv;
             let v1in2 = (h21*u1+h22*v1+h23)*w1in2inv;
 
-            let squareDist2 = (u2-u1in2)*(u2-u1in2)+(v2-v1in2)*(v2-v1in2);
+            let square_dist2 = (u2-u1in2)*(u2-u1in2)+(v2-v1in2)*(v2-v1in2);
 
-            let chiSquare2 = squareDist2*invSigmaSquare;
+            let chi_square2 = square_dist2*inv_sigma_square;
 
-            if chiSquare2>th {
+            if chi_square2>th {
                 bIn = false;
             } else {
-                score += th - chiSquare2;
+                score += th - chi_square2;
             }
 
 
             if bIn {
-                vbMatchesInliers[i]=true;
+                matches_inliers[i]=true;
             } else {
-                vbMatchesInliers[i]=false;
+                matches_inliers[i]=false;
             }
         }
 
@@ -282,7 +266,7 @@ impl TwoViewReconstruction {
     //float TwoViewReconstruction::CheckFundamental(const Eigen::Matrix3f &F21, vector<bool> &vbMatchesInliers, float sigma)
     pub fn check_fundamental(
         &self, 
-        F21: &Matrix3<f32>, vbMatchesInliers: &mut Vec<bool>, sigma: f32
+        F21: &Matrix3<f32>, matches_inliers: &mut Vec<bool>, sigma: f32
     ) -> f32 {
         let N = self.matches12.len();
 
@@ -296,14 +280,14 @@ impl TwoViewReconstruction {
         let f32 = F21[(2,1)];
         let f33 = F21[(2,2)];
 
-        vbMatchesInliers.resize(N, false);
+        matches_inliers.resize(N, false);
 
         let mut score = 0.0f32;
 
         let th = 3.841f32;
-        let thScore = 5.991;
+        let th_score = 5.991;
 
-        let invSigmaSquare = 1.0/(sigma*sigma);
+        let inv_sigma_square = 1.0/(sigma*sigma);
 
         for i in 0..N {
             let mut bIn = true;
@@ -325,14 +309,14 @@ impl TwoViewReconstruction {
 
             let num2 = a2*u2+b2*v2+c2;
 
-            let squareDist1 = num2*num2/(a2*a2+b2*b2);
+            let square_dist1 = num2*num2/(a2*a2+b2*b2);
 
-            let chiSquare1 = squareDist1*invSigmaSquare;
+            let chi_square1 = square_dist1*inv_sigma_square;
 
-            if chiSquare1>th{
+            if chi_square1>th{
                 bIn = false;
             } else {
-                score += thScore - chiSquare1;                
+                score += th_score - chi_square1;
             }
 
             // Reprojection error in second image
@@ -344,21 +328,21 @@ impl TwoViewReconstruction {
 
             let num1 = a1*u1+b1*v1+c1;
 
-            let squareDist2 = num1*num1/(a1*a1+b1*b1);
+            let square_dist2 = num1*num1/(a1*a1+b1*b1);
 
-            let chiSquare2 = squareDist2*invSigmaSquare;
+            let chi_square2 = square_dist2*inv_sigma_square;
 
-            if chiSquare2>th {
+            if chi_square2>th {
                 bIn = false;
             } else {
-                score += thScore - chiSquare2;
+                score += th_score - chi_square2;
             }
 
 
             if bIn {
-                vbMatchesInliers[i]=true;
+                matches_inliers[i]=true;
             } else {
-                vbMatchesInliers[i]=false;
+                matches_inliers[i]=false;
             }
 
         }
@@ -368,19 +352,19 @@ impl TwoViewReconstruction {
 
     pub fn reconstruct_from_homography(
         &self,
-        vbMatchesInliers: &Vec<bool>, 
+        matches_inliers: &Vec<bool>, 
         H21: &Matrix3<f32>, 
         K: &Matrix3<f32>, 
         T21: &mut Pose, 
         vP3D: &mut VectorOfPoint3f, 
-        vbTriangulated: &mut Vec<bool>,
-        minParallax: f32 , 
-        minTriangulated: i32
+        triangulated: &mut Vec<bool>,
+        min_parallax: f32 , 
+        min_triangulated: i32
     ) -> bool {
         let mut N=0;
 
-        for i in 0..vbMatchesInliers.len() {
-            if vbMatchesInliers[i] {
+        for i in 0..matches_inliers.len() {
+            if matches_inliers[i] {
                 N+=1;
             }
         }
@@ -408,11 +392,11 @@ impl TwoViewReconstruction {
             return false;
         }
 
-        let mut vR = Vec::<Matrix3<f32>>::new();
+        let mut vr = Vec::<Matrix3<f32>>::new();
         let mut vt = Vec::<Vector3<f32>>::new();
         let mut vn = Vec::<Vector3<f32>>::new();
 
-        vR.reserve(8);
+        vr.reserve(8);
         vt.reserve(8);
         vn.reserve(8);
 
@@ -435,7 +419,7 @@ impl TwoViewReconstruction {
             Rp[(2,2)] = ctheta;
 
             let R = s*U*Rp*Vt;
-            vR.push(R);
+            vr.push(R);
 
             let mut tp = Vector3::<f32>::new(x1[i], 0.0, -x3[i]);
             tp *= d1 - d3;
@@ -468,7 +452,7 @@ impl TwoViewReconstruction {
             Rp[(2,2)] = -cphi;
 
             let R = s*U*Rp*Vt;
-            vR.push(R);
+            vr.push(R);
 
             let mut tp = Vector3::<f32>::new(x1[i], 0.0, x3[i]);
             tp *= d1+d3;
@@ -485,12 +469,12 @@ impl TwoViewReconstruction {
             vn.push(n);
         }
 
-        let mut bestGood = 0;
-        let mut secondBestGood = 0;
-        let mut bestSolutionIdx = -1i64;
-        let mut  bestParallax = -1.0;
-        let mut bestP3D = VectorOfPoint3f::new();
-        let mut bestTriangulated = Vec::<bool>::new();
+        let mut best_good = 0;
+        let mut second_best_good = 0;
+        let mut best_solution_idx = -1i64;
+        let mut  best_parallax = -1.0;
+        let mut best_P3D = VectorOfPoint3f::new();
+        let mut best_triangulated = Vec::<bool>::new();
 
         // Instead of applying the visibility constraints proposed in the Faugeras' paper (which could fail for points seen with low parallax)
         // We reconstruct all hypotheses and check in terms of triangulated points and parallax
@@ -499,25 +483,25 @@ impl TwoViewReconstruction {
             let mut vP3Di = VectorOfPoint3f::new();
             let mut vbTriangulatedi = Vec::<bool>::new();
 
-            let nGood = self.CheckRT(&vR[i],&vt[i],&self.keypoints1 ,&self.keypoints2,&self.matches12,vbMatchesInliers,K,&mut vP3Di, 4.0*self.sigma2, &mut vbTriangulatedi, &mut parallaxi);
+            let nGood = self.CheckRT(&vr[i],&vt[i],&self.keypoints1 ,&self.keypoints2,&self.matches12,matches_inliers,K,&mut vP3Di, 4.0*self.sigma2, &mut vbTriangulatedi, &mut parallaxi);
 
-            if nGood>bestGood {
-                secondBestGood = bestGood;
-                bestGood = nGood;
-                bestSolutionIdx = i as i64;
-                bestParallax = parallaxi;
-                bestP3D = vP3Di;
-                bestTriangulated = vbTriangulatedi;
-            } else if nGood>secondBestGood  {
-                secondBestGood = nGood;
+            if nGood>best_good {
+                second_best_good = best_good;
+                best_good = nGood;
+                best_solution_idx = i as i64;
+                best_parallax = parallaxi;
+                best_P3D = vP3Di;
+                best_triangulated = vbTriangulatedi;
+            } else if nGood>second_best_good  {
+                second_best_good = nGood;
             }
         }
 
-        if secondBestGood<(0.75*bestGood as f32) as i32 && bestParallax>=minParallax && bestGood>minTriangulated && bestGood>(0.9*N as f32) as i32  {
-            *T21 = Pose::new_from_opencv_vector(
-                &nalgebra::convert(vt[bestSolutionIdx as usize]), &nalgebra::convert(vR[bestSolutionIdx as usize])
+        if second_best_good<(0.75*best_good as f32) as i32 && best_parallax>=min_parallax && best_good>min_triangulated && best_good>(0.9*N as f32) as i32  {
+            *T21 = Pose::new_from_opencv(
+                &nalgebra::convert(vt[best_solution_idx as usize]), &nalgebra::convert(vr[best_solution_idx as usize])
             );
-            *vbTriangulated = bestTriangulated;
+            *triangulated = best_triangulated;
             return true;
         }
 
@@ -595,21 +579,21 @@ impl TwoViewReconstruction {
                 *vP3D = vP3D1.clone();
                 *vbTriangulated = vbTriangulated1;
 
-                *T21 = Pose::new_from_opencv_vector(&nalgebra::convert(t1), &nalgebra::convert(R1)); //Sophus::SE3f(R1, t1);
+                *T21 = Pose::new_from_opencv(&nalgebra::convert(t1), &nalgebra::convert(R1)); //Sophus::SE3f(R1, t1);
                 return true;
             }
         } else if maxGood==nGood2 && parallax2>minParallax {
             *vP3D = vP3D2.clone();
             *vbTriangulated = vbTriangulated2;
 
-            *T21 = Pose::new_from_opencv_vector(&nalgebra::convert(t1), &nalgebra::convert(R2)); //Sophus::SE3f(R1, t1);
+            *T21 = Pose::new_from_opencv(&nalgebra::convert(t1), &nalgebra::convert(R2)); //Sophus::SE3f(R1, t1);
             return true;
         } else if maxGood==nGood3 {
             if parallax3>minParallax {
                 *vP3D = vP3D3.clone();
                 *vbTriangulated = vbTriangulated3;
 
-                *T21 = Pose::new_from_opencv_vector(&nalgebra::convert(t2), &nalgebra::convert(R1)); //Sophus::SE3f(R1, t1);
+                *T21 = Pose::new_from_opencv(&nalgebra::convert(t2), &nalgebra::convert(R1)); //Sophus::SE3f(R1, t1);
                 return true;
             }
 
@@ -618,7 +602,7 @@ impl TwoViewReconstruction {
                 *vP3D = vP3D4.clone();
                 *vbTriangulated = vbTriangulated4;
 
-                *T21 = Pose::new_from_opencv_vector(&nalgebra::convert(t2), &nalgebra::convert(R2)); //Sophus::SE3f(R1, t1);
+                *T21 = Pose::new_from_opencv(&nalgebra::convert(t2), &nalgebra::convert(R2)); //Sophus::SE3f(R1, t1);
                 return true;
             }
         }
@@ -631,7 +615,7 @@ impl TwoViewReconstruction {
         R: &Matrix3<f32>, 
         t: &Vector3<f32>,
         vKeys1: &DVVectorOfKeyPoint,
-        vKeys2: &DVVectorOfKeyPoint,
+        v_keys2: &DVVectorOfKeyPoint,
         vMatches12: &Vec<(usize,usize)>, 
         vbMatchesInliers: &Vec<bool>,
         K: &Matrix3<f32>, 
@@ -656,7 +640,7 @@ impl TwoViewReconstruction {
 
         // Camera 1 Projection Matrix K[I|0]
         let mut P1 = Matrix3x4::<f32>::zeros();
-        //P1.block<3,3>(0,0) = K; // TODO : try find api to assign 3x3 to 3x4 matrix
+        //P1.block<3,3>(0,0) = K; // TODO (low priority) try find api to assign 3x3 to 3x4 matrix
         P1[(0,0)] =  K[(0,0)];
         P1[(0,1)] =  K[(0,1)];
         P1[(0,2)] =  K[(0,2)];
@@ -698,7 +682,7 @@ impl TwoViewReconstruction {
             }
 
             let kp1 = vKeys1.get(vMatches12[i].0).unwrap();
-            let kp2 = vKeys2.get(vMatches12[i].1).unwrap();
+            let kp2 = v_keys2.get(vMatches12[i].1).unwrap();
             // const cv::KeyPoint &kp1 = vKeys1[vMatches12[i].first];
             // const cv::KeyPoint &kp2 = vKeys2[vMatches12[i].second];
 

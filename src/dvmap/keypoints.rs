@@ -1,10 +1,17 @@
+// There are a lot of extra variables that are set to 0 or null
+// because they are only used in stereo or IMU cases. This encapsulates 
+// "all keypoint data" into a struct that has different variables depending
+// on the type of sensor, and then implements functions on that struct so we 
+// don't have to think about copying the logic of interacting with keypoints
+// each time.
+
 use std::collections::HashMap;
 use std::fmt::Debug;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
-use opencv::{core::KeyPoint};
+use opencv::core::KeyPoint;
 use crate::{
-    dvutils::{DVMatrix, DVVectorOfKeyPoint},
-    map::{frame::ImageBounds, map::Id},
+    matrix::{DVMatrix, DVVectorOfKeyPoint},
+    dvmap::{frame::ImageBounds, map::Id},
 };
 
 pub const FRAME_GRID_ROWS :usize = 48;
@@ -57,12 +64,6 @@ impl Grid {
     }
 }
 
-// Sofiya note: there are a lot of extra variables that are set to 0 or null
-// because they are only used in stereo or IMU cases. This encapsulates 
-// "all keypoint data" into a struct that has different variables depending
-// on the type of sensor, and then implements functions on that struct so we 
-// don't have to think about copying the logic of interacting with keypoints
-// each time.
 pub trait KeyPointsData: Serialize + DeserializeOwned + Send + Sync + Clone + Debug {
     // Constructors
     fn new(keypoints: &DVVectorOfKeyPoint, descriptors: &DVMatrix, image_bounds: &ImageBounds) -> Self;
@@ -82,9 +83,6 @@ pub trait KeyPointsData: Serialize + DeserializeOwned + Send + Sync + Clone + De
         mappoint_matches: &HashMap::<u32, Id>,
         mappoint_outliers: &HashMap::<u32, bool>
     ) -> (i32, i32);
-
-    // Modifiers
-    fn assign_features_to_grid(&mut self, image_bounds: &ImageBounds, mappoint_matches: &HashMap::<u32, Id>);
 }
 
 //* Mono *//
@@ -108,20 +106,38 @@ pub struct KeyPointsMono {
 }
 impl KeyPointsData for KeyPointsMono {
     fn empty() -> Self {
-        todo!("empty");
+        KeyPointsMono {
+            num_keypoints: 0,
+            keypoints: DVVectorOfKeyPoint::empty(), 
+            keypoints_un: DVVectorOfKeyPoint::empty(), 
+            descriptors: DVMatrix::empty(),
+            grid: Grid::empty()
+        }
     }
     fn new(
         keypoints: &DVVectorOfKeyPoint,
         descriptors: &DVMatrix,
         image_bounds: &ImageBounds
     ) -> Self {
-        KeyPointsMono {
+        let mut kpdata = KeyPointsMono {
             num_keypoints: keypoints.len(),
             keypoints: keypoints.clone(), 
-            keypoints_un: keypoints.clone(), //TODO : need to compute undistorted keypoints
+            keypoints_un: keypoints.clone(), //TODO IMPORTANT : need to compute undistorted keypoints
             descriptors: descriptors.clone(),
             grid: Grid::default(&image_bounds)
+        };
+
+        // assign features to grid
+        for i in 0..kpdata.num_keypoints() as usize {
+            let kp = &kpdata.keypoints_un.get(i).unwrap();
+            let pos_in_grid = kpdata.grid.pos_in_grid(&image_bounds, kp);
+            match pos_in_grid {
+                Some((pos_x, pos_y)) => kpdata.grid.grid[pos_x as usize][pos_y as usize] = i,
+                None => {}
+            }
         }
+
+        kpdata
     }
     fn grid(&self) -> &Grid { & self.grid }
     fn keypoints_un(&self) -> &DVVectorOfKeyPoint { & self.keypoints_un }
@@ -134,17 +150,6 @@ impl KeyPointsData for KeyPointsMono {
         mappoint_matches: &HashMap::<u32, Id>,
         mappoint_outliers: &HashMap::<u32, bool>
     ) -> (i32, i32) { (0, 0) }
-
-    fn assign_features_to_grid(&mut self, image_bounds: &ImageBounds, mappoint_matches: &HashMap::<u32, Id>) {
-        for (index, mp_id) in mappoint_matches {
-            let kp = &self.keypoints_un.get(*index as usize).unwrap();
-            let pos_in_grid = self.grid.pos_in_grid(image_bounds, kp);
-            match pos_in_grid {
-                Some((pos_x, pos_y)) => self.grid.grid[pos_x as usize][pos_y as usize] = *index as usize,
-                None => {}
-            }
-        }
-    }
 }
 
 //* Stereo *//
@@ -171,10 +176,30 @@ pub struct KeyPointsStereo {
 }
 impl KeyPointsData for KeyPointsStereo {
     fn new(keypoints: &DVVectorOfKeyPoint, descriptors: &DVMatrix, image_bounds: &ImageBounds) -> Self {
-        todo!("empty");
+        todo!("stereo");
+        // assign features to grid
+        // uncomment when this section is done
+        // for i in 0..self.num_keypoints() as usize {
+            //TODO: [Stereo] Need to update this if stereo images are processed
+            // let kp = &self.keypoints_un.get(*index as usize).unwrap();
+            // const cv::KeyPoint &kp = (Nleft == -1) ? mvKeysUn[i]
+            //                                          : (i < Nleft) ? mvKeys[i]
+            //                                                          : mvKeysRight[i - Nleft]; 
+
+            // let (mut grid_pos_x, mut grid_pos_y) = (0i64,0i64);
+            // if self.grid.pos_in_grid(kp,&mut grid_pos_x,&mut grid_pos_y) {
+                // self.grid.grid[grid_pos_x as usize][grid_pos_y as usize] = *index;
+
+                //TODO: [Stereo] Need to update this if stereo images are processed
+                // if(Nleft == -1 || i < Nleft)
+                //     mGrid[grid_pos_x][grid_pos_y].push_back(i);
+                // else
+                //     mGridRight[grid_pos_x][grid_pos_y].push_back(i - Nleft);
+            // }
+        // }
     }
     fn empty() -> Self {
-        todo!("empty");
+        todo!("stereo");
     }
     fn keypoints_un(&self) -> &DVVectorOfKeyPoint {
         todo!("stereo");
@@ -210,28 +235,6 @@ impl KeyPointsData for KeyPointsStereo {
             }
         }
         (tracked_close, non_tracked_close)
-    }
-
-    fn assign_features_to_grid(&mut self, image_bounds: &ImageBounds, mappoint_matches: &HashMap::<u32, Id>) {
-        todo!("stereo");
-        // for (index, mp_id) in mappoint_matches {
-            //TODO: [Stereo] Need to update this if stereo images are processed
-            // let kp = &self.keypoints_un.get(*index as usize).unwrap();
-            // const cv::KeyPoint &kp = (Nleft == -1) ? mvKeysUn[i]
-            //                                          : (i < Nleft) ? mvKeys[i]
-            //                                                          : mvKeysRight[i - Nleft]; 
-
-            // let (mut grid_pos_x, mut grid_pos_y) = (0i64,0i64);
-            // if self.grid.pos_in_grid(kp,&mut grid_pos_x,&mut grid_pos_y) {
-                // self.grid.grid[grid_pos_x as usize][grid_pos_y as usize] = *index;
-
-                //TODO: [Stereo] Need to update this if stereo images are processed
-                // if(Nleft == -1 || i < Nleft)
-                //     mGrid[grid_pos_x][grid_pos_y].push_back(i);
-                // else
-                //     mGridRight[grid_pos_x][grid_pos_y].push_back(i - Nleft);
-            // }
-        // }
     }
 }
 
@@ -261,6 +264,16 @@ pub struct KeyPointsRgbd {
 impl KeyPointsData for KeyPointsRgbd {
     fn new(keypoints: &DVVectorOfKeyPoint, descriptors: &DVMatrix, image_bounds: &ImageBounds) -> Self {
         todo!("rgbd");
+        // assign features to grid
+        // uncomment when this section is done
+        // for i in 0..self.num_keypoints() as usize {
+        //     let kp = &self.keypoints_un.get(i).unwrap();
+        //     let pos_in_grid = self.grid.pos_in_grid(image_bounds, kp);
+        //     match pos_in_grid {
+        //         Some((pos_x, pos_y)) => self.grid.grid[pos_x as usize][pos_y as usize] = i,
+        //         None => {}
+        //     }
+        // }
     }
     fn empty() -> Self {
         todo!("rgbd");
@@ -299,16 +312,5 @@ impl KeyPointsData for KeyPointsRgbd {
             }
         }
         (tracked_close, non_tracked_close)
-    }
-
-    fn assign_features_to_grid(&mut self, image_bounds: &ImageBounds, mappoint_matches: &HashMap::<u32, Id>) {
-        for (index, mp_id) in mappoint_matches {
-            let kp = &self.keypoints_un.get(*index as usize).unwrap();
-            let pos_in_grid = self.grid.pos_in_grid(image_bounds, kp);
-            match pos_in_grid {
-                Some((pos_x, pos_y)) => self.grid.grid[pos_x as usize][pos_y as usize] = *index as usize,
-                None => {}
-            }
-        }
     }
 }
