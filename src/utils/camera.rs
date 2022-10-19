@@ -84,6 +84,7 @@ impl Camera {
         triangulated: &mut Vec<bool>
     ) -> bool {
         let mut tvr = TwoViewReconstruction::default();
+        todo!("TODO 10/17 BINDINGS reconstruct");
         return tvr.reconstruct(
             v_keys1,v_keys2,v_matches12,t21, v_p3_d,triangulated
         );

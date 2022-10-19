@@ -6,6 +6,7 @@ master:
 system_settings:
        show_ui: false
        localization_only_mode: false
+       vocabulary_file: "Vocabulary/ORBvoc.txt"
 
        sensor: Mono
       # CAMERA CALIBRATION

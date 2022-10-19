@@ -8,7 +8,7 @@ use crate::{
     registered_modules::LOCAL_MAPPING,
     dvmap::{
         map::Map, map_actor::MapWriteMsg, map_actor::MAP_ACTOR, map::Id,
-        keyframe::KeyFrame, frame::Frame, pose::Pose, mappoint::MapPoint,
+        keyframe::KeyFrame, frame::Frame, pose::Pose, mappoint::{MapPoint, FullMapPoint},
         keypoints::KeyPointsData, sensor::*
     },
     utils::{camera::Camera, camera::CameraType, orbmatcher::ORBmatcher, imu::IMUBias, optimizer::*},
@@ -51,7 +51,7 @@ pub struct DarvisTrackingBack<S: SensorType> {
 
     // Feature matching
     orb_matcher: ORBmatcher,
-    temporal_points: Vec<MapPoint>,
+    temporal_points: Vec<MapPoint<FullMapPoint>>,
     matches_in_frame : i32, // Current matches in frame
     prev_matched: Vec<Point2f>,// std::vector<cv::Point2f> mvbPrevMatched;
 
@@ -191,12 +191,13 @@ impl<S: SensorType + 'static> DarvisTrackingBack<S> {
         // Initial estimation of camera pose and matching
         let mut success = match self.state {
             TrackingState::NotInitialized => {
-                // Sofiya: move these into sensor implementations
-                if !self.initialization.initialize(&self.current_frame) {
-                    self.last_frame = Some(self.current_frame.clone());
-                    return;
-                }
-                true
+                let should_send_to_map = self.initialization.initialize(&self.current_frame, &self.orb_matcher, &self.camera);
+                self.map_actor.as_ref().unwrap().send_new(
+                    MapWriteMsg::<S>::create_initial_map_monocular(self.initialization.clone())
+                ).unwrap();
+
+                self.last_frame = Some(self.current_frame.clone());
+                return;
             },
             TrackingState::Ok => {
                 let mut ok;
@@ -323,10 +324,17 @@ impl<S: SensorType + 'static> DarvisTrackingBack<S> {
                 self.velocity = None;
             }
 
-            for (index, mp_id) in &mut self.current_frame.mappoint_matches {
+            {
+                // Sofiya: would like to move this into frame but don't want to pass a map read lock into it
                 let map_lock = self.map.read();
-                if map_lock.get_mappoint(&mp_id).unwrap().observations.len() > 0 {
-                    self.current_frame.delete_mappoint_match(*index);
+                let mut to_remove = Vec::new();
+                for (index, mp_id) in &self.current_frame.mappoint_matches {
+                    if map_lock.get_mappoint(&mp_id).unwrap().observations().len() > 0 {
+                        to_remove.push(*index);
+                    }
+                }
+                for mp_id in to_remove {
+                    self.current_frame.delete_mappoint_match(mp_id);
                 }
             }
 
@@ -382,34 +390,30 @@ impl<S: SensorType + 'static> DarvisTrackingBack<S> {
     fn track_reference_keyframe(&mut self) -> bool {
         // Tracking::TrackReferenceKeyFrame()
         // Compute Bag of Words vector
-        self.current_frame.compute_bow();
+        let map_read_lock = self.map.read();
+        self.current_frame.compute_bow(&map_read_lock.vocabulary);
 
         // We perform first an ORB matching with the reference keyframe
         // If enough matches are found we setup a PnP solver
         let matcher = ORBmatcher::new(0.7, true);
         let mut vp_mappoint_matches = HashMap::<u32, Id>::new();
 
-        let nmatches;
+        let mut nmatches;
         if self.ref_kf_id.is_some() {
-            //TODO: CHECK if we really need to use "KeyFrame" object for below code for BoW search,
-            // For now just using current and ref "Frame" object.
-            // let map_read_lock = self.map.read();
-            // let ref_kf = map_read_lock.get_keyframe(&self.reference_keyframe.unwrap());
-            // let cur_kf = map_read_lock.get_keyframe(&self.current_frame.as_ref().unwrap().id);
-            // if ref_kf.is_some()
-            // {
-            //     nmatches = matcher.search_by_bow(ref_kf.unwrap(), cur_kf.unwrap(), &mut vpMapPointMatches);
-            // }
-            // else
-            // {
-            //     todo!("fix invalid ref KF assignment");
-            // }
+            let map_read_lock = self.map.read();
+            let ref_kf = map_read_lock.get_keyframe(&self.ref_kf_id.unwrap());
+            let cur_kf = map_read_lock.get_keyframe(&self.current_frame.id);
+            if ref_kf.is_some() {
+                nmatches = matcher.search_by_bow_f(ref_kf.unwrap(), &self.current_frame, &mut vp_mappoint_matches);
+            } else {
+                todo!("fix invalid ref KF assignment");
+            }
 
             let map_read_lock = self.map.read();
             let _ref_kf = map_read_lock.get_keyframe(&self.ref_kf_id.unwrap());
 
             if self.reference_frame.is_some() {
-                //TODO: Use BoW for searching with mappoints, right now not using any mappoint.
+                //TODO 10/17: uncomment when bindings are done
                 //nmatches = matcher.search_by_bow(self.reference_frame.as_ref().unwrap(), cur_f, &mut vpMapPointMatches);
 
                 nmatches = matcher.search_for_initialization(self.reference_frame.as_ref().unwrap(), &self.current_frame, &mut self.prev_matched, &mut vp_mappoint_matches, 100);
@@ -444,7 +448,7 @@ impl<S: SensorType + 'static> DarvisTrackingBack<S> {
         {
             for mp_id in leftover_mps {
                 let map_lock = self.map.read();
-                if map_lock.get_mappoint(&mp_id).unwrap().observations.len() > 0 {
+                if map_lock.get_mappoint(&mp_id).unwrap().observations().len() > 0 {
                     nmatches_map += 1;
                 }
             }
@@ -532,7 +536,7 @@ impl<S: SensorType + 'static> DarvisTrackingBack<S> {
         {
             for mp_id in leftover_mps {
                 let map_lock = self.map.read();
-                if map_lock.get_mappoint(&mp_id).unwrap().observations.len() > 0 {
+                if map_lock.get_mappoint(&mp_id).unwrap().observations().len() > 0 {
                     nmatches_map += 1;
                 }
             }
@@ -666,7 +670,7 @@ impl<S: SensorType + 'static> DarvisTrackingBack<S> {
         for (_index, mp_id) in &frame.mappoint_matches {
             let map_read_lock = self.map.read();
             let mp = map_read_lock.get_mappoint(&mp_id).unwrap();
-            for (observing_kf, _index) in &mp.observations {
+            for (observing_kf, _index) in mp.observations() {
                 if kf_counter.get(observing_kf).is_none() {
                     kf_counter.insert(*observing_kf, 1);
                 } else {
@@ -761,7 +765,7 @@ impl<S: SensorType + 'static> DarvisTrackingBack<S> {
     fn search_local_points(&mut self) {
         //void Tracking::SearchLocalPoints()
 
-        todo!("search_local_points");
+        todo!("TODO 10/17 fill");
         // // Do not search map points already matched
         // for(vector<MapPoint*>::iterator vit=self.current_frame.mappoint_matches.begin(), vend=self.current_frame.mappoint_matches.end(); vit!=vend; vit++)
         // {
@@ -867,7 +871,7 @@ impl<S: SensorType + 'static> DarvisTrackingBack<S> {
                     let map_read_lock = self.map.read();
                     let mappoint = map_read_lock.get_mappoint(&mp_id).unwrap();
 
-                    if mappoint.observations.len() > 0 {
+                    if mappoint.observations().len() > 0 {
                         self.matches_in_frame+=1;
                     }
                 } else {
@@ -911,8 +915,9 @@ impl<S: SensorType + 'static> DarvisTrackingBack<S> {
         {
             let map_read_lock = self.map.read();
             let map_id = map_read_lock.id;
+            let vocabulary = &map_read_lock.vocabulary;
 
-            new_kf = KeyFrame::new(&self.current_frame, map_id);
+            new_kf = KeyFrame::new(&self.current_frame, map_id, &vocabulary);
         }
 
         self.current_frame.ref_kf_id = Some(new_kf.id);
@@ -1034,8 +1039,6 @@ impl<S: SensorType + 'static> DarvisTrackingBack<S> {
     fn need_new_keyframe(&self) -> bool {
         //NeedNewKeyFrame
 
-        // Sofiya: this could def be cleaned up and I'm not too confident that their kf selection is good
-        // but that's like a slam design thing, not an us-code thing
         let kfs_in_map = self.kfs_in_map();
         {
             let not_enough_frames_since_last_reloc = (self.current_frame.id < self.last_reloc_frame_id + (self.global_defaults.max_frames as i32)) && (kfs_in_map > (self.global_defaults.max_frames as u32));
@@ -1064,7 +1067,10 @@ impl<S: SensorType + 'static> DarvisTrackingBack<S> {
         {
             let map_lock = self.map.read();
             tracked_mappoints = match self.ref_kf_id {
-                Some(kf_id) => map_lock.tracked_mappoints_for_keyframe(kf_id, min_observations) as f32,
+                Some(kf_id) => {
+                    let kf = map_lock.get_keyframe(&kf_id).unwrap();
+                    map_lock.tracked_mappoints_for_keyframe(kf, min_observations) as f32
+                },
                 None => 0.0
             };
         }
@@ -1195,14 +1201,14 @@ impl<S: SensorType + 'static> Function for DarvisTrackingBack<S> {
 
 #[derive(Debug, Clone)]
 pub struct Initialization<S: SensorType> {
-    // Todo: have different struct vars depending on sensor type
     // Initialization (Monocular)
-    mp_matches: HashMap<u32, Id>,// ini_matches .. mvIniMatches;
-    prev_matched: Vec<Point2f>,// std::vector<cv::Point2f> mvbPrevMatched;
-    p3d: DVVectorOfPoint3f,// std::vector<cv::Point3f> mvIniP3D;
-    ready_to_initializate: bool,
-    initial_frame: Option<Frame<S>>,
-    current_frame: Option<Frame<S>>
+    pub mp_matches: HashMap<u32, u32>,// ini_matches .. mvIniMatches;
+    pub prev_matched: Vec<Point2f>,// std::vector<cv::Point2f> mvbPrevMatched;
+    pub p3d: DVVectorOfPoint3f,// std::vector<cv::Point3f> mvIniP3D;
+    pub ready_to_initializate: bool,
+    pub initial_frame: Option<Frame<S>>,
+    pub last_frame: Option<Frame<S>>,
+    pub current_frame: Option<Frame<S>>
 }
 
 impl<S: SensorType> Initialization<S> {
@@ -1213,114 +1219,108 @@ impl<S: SensorType> Initialization<S> {
             p3d: DVVectorOfPoint3f::empty(),
             ready_to_initializate: false,
             initial_frame: None,
+            last_frame: None,
             current_frame: None
         }
     }
 
-    pub fn initialize(&mut self, current_frame: &Frame<S>) -> bool {
+    pub fn initialize(&mut self, current_frame: &Frame<S>, orb_matcher: &ORBmatcher, camera: &Camera) -> bool {
+        // Only set once at beginning
+        if self.initial_frame.is_none() {
+            self.initial_frame = Some(current_frame.clone());
+        }
+        // If we never did initialization (ie, only 1 frame passed): initial, current, and last frame will all be set to the 1st frame.
+        // If we've done the first step of initialization, update last frame and current frame.
+        self.last_frame = match &self.current_frame {
+            Some(frame) => Some(frame.clone()),
+            None => Some(current_frame.clone())
+        };
+        self.current_frame = Some(current_frame.clone());
+
         match S::sensor_type() {
-            Sensor::Mono | Sensor::ImuMono => self.monocular_initialization(current_frame),
+            Sensor::Mono | Sensor::ImuMono => self.monocular_initialization(orb_matcher, camera),
             _ => self.stereo_initialization()
         }
     }
 
-    fn is_ready(&self) -> bool{
-        todo!("is_ready");
-        // let has_initial_frame = self.initial_frame.is_some();
-        // let has_current_frame = self.current_frame.is_some();
-        // let enough_keypoints = self.current_frame.keypoints_data.num_keypoints() <=100
-        // let bla = (S::is_mono() && S::is_imu()) && (self.last_frame.as_ref().unwrap().timestamp - self.initial_frame.timestamp> Duration::seconds(1);
-    }
+    fn monocular_initialization(&mut self, orb_matcher: &ORBmatcher, camera: &Camera) -> bool {
+        // Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Tracking.cc#L2448
+        if !self.ready_to_initializate && self.current_frame.as_ref().unwrap().keypoints_data.num_keypoints() > 100 {
+            // Set Reference Frame
+             self.prev_matched.resize(self.current_frame.as_ref().unwrap().keypoints_data.num_keypoints() as usize, Point2f::default());
 
-    // SOFIYA: WORKING ON THIS STUFF RIGHT NOW
-    // SAME CODE AS BEFORE JUST REDOING IT A BIT SO IT CAN BE PASSED INTO THE MAP EASIER
-    fn monocular_initialization(&mut self, current_frame: &Frame<S>) -> bool {
-        todo!("monocular initialization");
-        // // Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Tracking.cc#L2448
-        // if !self.is_ready() {
-        //     // Set Reference Frame
-        //     if current_frame.keypoints_data.num_keypoints() > 100 {
-        //         self.initial_frame = Some(self.current_frame.clone());
-        //         self.last_frame = Some(self.current_frame.clone());
-        //         self.prev_matched.resize(self.current_frame.keypoints_data.num_keypoints() as usize, Point2f::default());
+            for i in 0..self.current_frame.as_ref().unwrap().keypoints_data.num_keypoints() as usize {
+                self.prev_matched[i] = self.current_frame.as_ref().unwrap().keypoints_data.keypoints_un().get(i).unwrap().pt.clone();
+            }
 
-        //         for i in 0..self.current_frame.keypoints_data.num_keypoints() as usize {
-        //             self.initialization_data.prev_matched[i] = self.current_frame.keypoints_data.keypoints_un().get(i).unwrap().pt.clone();
-        //         }
+            match S::sensor_type() {
+                Sensor::ImuMono => {
+                    //TODO: (IMU) 
+                    //Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/4452a3c4ab75b1cde34e5505a36ec3f9edcdc4c4/src/Tracking.cc#L2467
 
-        //         match S::sensor_type() {
-        //             Sensor::ImuMono => {
-        //                 //TODO: (IMU) 
-        //                 //Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/4452a3c4ab75b1cde34e5505a36ec3f9edcdc4c4/src/Tracking.cc#L2467
+                    // if(mpImuPreintegratedFromLastKF)
+                    // {
+                    //     delete mpImuPreintegratedFromLastKF;
+                    // }
+                    // mpImuPreintegratedFromLastKF = new IMU::Preintegrated(IMU::Bias(),*mpImuCalib);
+                    // self.current_frame.mpImuPreintegrated = mpImuPreintegratedFromLastKF;
+                },
+                _ => {}
+            }
+            self.ready_to_initializate = true;
+            return false;
+        } else {
+            if self.current_frame.as_ref().unwrap().keypoints_data.num_keypoints() <=100 || matches!(S::sensor_type(), Sensor::ImuMono) && self.last_frame.as_ref().unwrap().timestamp - self.initial_frame.as_ref().unwrap().timestamp > Duration::seconds(1) {
+                self.ready_to_initializate = false;
+                return false;
+            }
 
-        //                 // if(mpImuPreintegratedFromLastKF)
-        //                 // {
-        //                 //     delete mpImuPreintegratedFromLastKF;
-        //                 // }
-        //                 // mpImuPreintegratedFromLastKF = new IMU::Preintegrated(IMU::Bias(),*mpImuCalib);
-        //                 // self.current_frame.mpImuPreintegrated = mpImuPreintegratedFromLastKF;
-        //             },
-        //             _ => {}
-        //         }
-        //         self.initialization_data.ready_to_initializate = true;
+            // Find correspondences
+            // TODO 10/17: uncomment when bindings are done
+            let mut nmatches =10; //orb_matcher.search_for_initialization(
+            //     &self.initial_frame.unwrap(), 
+            //     &self.current_frame.unwrap(), 
+            //     &mut self.prev_matched,
+            //     &mut self.mp_matches,
+            //     100
+            // );
 
+            // Check if there are enough correspondences
+            if nmatches < 100 {
+                self.ready_to_initializate = false;
+                return false;
+            }
 
+            let mut tcw = Pose::default();
+            let mut vb_triangulated = Vec::<bool>::new();
 
-        //         return true;
-        //     }
-        // } else {
-        //     if (self.current_frame.keypoints_data.num_keypoints() <=100)||((S::is_mono() && S::is_imu())&&(self.last_frame.as_ref().unwrap().timestamp - self.initial_frame.timestamp> Duration::seconds(1))) {
-        //         self.initialization_data.ready_to_initializate  = false;
-        //         return false;
-        //     }
+            // TODO 10/17: uncomment when bindings are done
+            let reconstruct_success = false;//camera.reconstruct_with_two_views(
+            //     self.initial_frame.unwrap().keypoints_data.keypoints_un(),
+            //     self.current_frame.unwrap().keypoints_data.keypoints_un(),
+            //     &self.mp_matches,
+            //     &mut tcw,
+            //     &mut self.p3d,
+            //     &mut vb_triangulated
+            // );
 
-        //     // Find correspondences
-        //     let mut nmatches = self.orb_matcher.search_for_initialization(
-        //         &self.initial_frame, 
-        //         &self.current_frame, 
-        //         &mut self.prev_matched,
-        //         &mut self.ini_matches,
-        //         100
-        //     );
+            if reconstruct_success {
+                let keys = self.mp_matches.keys().cloned().collect::<Vec<_>>();
+                for index in keys {
+                    if !vb_triangulated[index as usize] {
+                        self.mp_matches.remove(&index);
+                        nmatches-=1;
+                    }
+                }
 
-        //     // Check if there are enough correspondences
-        //     if nmatches < 100 {
-        //         self.initialization_data.ready_to_initializate  = false;
-        //         return false;
-        //     }
+                self.initial_frame.as_mut().unwrap().set_pose(Pose::default());
+                self.current_frame.as_mut().unwrap().set_pose(tcw);
 
-        //     let mut tcw = Pose::default();
-        //     let mut vb_triangulated = Vec::<bool>::new();
-        //     //vector<bool> vb_triangulated; // Triangulated Correspondences (mvIniMatches)
-
-        //     let reconstruct_success = self.camera.reconstruct_with_two_views(
-        //         self.initialization_data.initial_frame.unwrap().keypoints_data.keypoints_un(),
-        //         self.current_frame.keypoints_data.keypoints_un(),
-        //         &self.initialization_data.mp_matches,
-        //         &mut tcw,
-        //         &mut self.initialization_data.p3d,
-        //         &mut vb_triangulated
-        //     );
-
-        //     if reconstruct_success {
-        //         let keys = self.initialization_data.mp_matches.keys().cloned().collect::<Vec<_>>();
-        //         for index in keys {
-        //             if !vb_triangulated[index as usize] {
-        //                 self.initialization_data.mp_matches.remove(&index);
-        //                 nmatches-=1;
-        //             }
-        //         }
-
-        //         self.initial_frame.unwrap().set_pose(Pose::default());
-        //         self.current_frame.set_pose(tcw);
-
-        //         // Set Frame Poses
-        //         let initialize_map_msg: MapWriteMsg<S> = MapWriteMsg::<S>::create_initial_map_monocular(self.initialization_data);
-        //         self.map_actor.as_ref().unwrap().send_new(initialize_map_msg).unwrap();
-        //     }
-        // }
-
-        // return false;
+                return true;
+            } else {
+                return false;
+            }
+        }
     }
 
     fn stereo_initialization(&mut self) -> bool {

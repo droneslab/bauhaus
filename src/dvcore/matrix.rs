@@ -17,7 +17,7 @@
 use std::{fmt::Debug, convert::TryInto, ops::Index};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use abow::Desc;
+use abow::{Desc, Vocabulary};
 use na::{DMatrix, ComplexField};
 use opencv::{
     prelude::*, core::*,
@@ -25,6 +25,33 @@ use opencv::{
 };
 extern crate nalgebra as na;
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct DVVocabulary {
+    vocabulary: Vocabulary
+}
+impl DVVocabulary {
+    pub fn load(filename: String) -> Self {
+        Self {
+            vocabulary: Vocabulary::load(filename).unwrap()
+        }
+    }
+    pub fn transform_with_direct_idx(&self, features: &DVMatrix) -> (abow::BoW, abow::DirectIdx) {
+        let mut v_desc = Vec::new();
+        let desc_vec = features.mat().to_vec_2d::<u8>().unwrap();
+
+        for j in 0..features.mat().rows() {
+            let desc_j = desc_vec.get(j as usize).unwrap();
+            let mut desc_val : Desc = [0; 32];
+            for (&x, p) in desc_j.iter().zip(desc_val.iter_mut()) {
+                *p = x;
+            }
+            v_desc.push(desc_val);
+
+        }
+
+        self.vocabulary.transform_with_direct_idx(&v_desc).unwrap()
+    }
+}
 //////////////////////////* OPENCV TYPES //////////////////////////
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -52,6 +79,7 @@ impl DVMatrix {
     pub fn mat(&self) -> &opencv::core::Mat { &self.mat }
     pub fn row(&self, index: i32) -> Result<Mat, opencv::Error> { self.mat.row(index) }
 }
+
 impl Serialize for DVMatrix {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer {
         todo!("(low priority) serialize");
@@ -130,6 +158,9 @@ impl DVVectorOfPoint3f {
     pub fn clone(&self) -> DVVectorOfPoint3f {
         Self { vec: self.vec.clone() }
     }
+    pub fn get(&self, i: usize) -> Result<opencv::core::Point3f, opencv::Error> {
+        self.vec.get(i)
+    }
 
     pub fn clear(&mut self) { self.vec.clear() }
 }
@@ -137,7 +168,7 @@ impl DVVectorOfPoint3f {
 
 //////////////////////////* Nalgebra TYPES //////////////////////////
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct DVVector3<T> {
     vec: na::Vector3<T> // 3 dimensional column vector
 }
@@ -179,6 +210,9 @@ impl<T: Debug + Clone + na::Scalar + num_traits::identities::Zero> From<DVVector
 }
 impl<T: Debug + Clone + na::Scalar + num_traits::identities::Zero> From<&DVVector3<T>> for na::Vector3<T> {
     fn from(vec: &DVVector3<T>) -> na::Vector3<T> { vec.vec.clone() }
+}
+impl From<DVVector3<f32>> for [f64; 3] {
+    fn from(vec: DVVector3<f32>) -> [f64; 3] { [vec[0] as f64, vec[1] as f64, vec[2] as f64] }
 }
 // So we can do vector3[i] without having to call a getter or setter function
 impl<T> Index<usize> for DVVector3<T> {
@@ -336,7 +370,7 @@ impl DarvisMatrix for DVMatrixGrayscale {
     }
 }
 
-/// Trait implementation for OpenCV vector of KeyPoint
+// Trait implementation for OpenCV vector of KeyPoint
 // impl DarvisVectorOfKeyPoint for VectorOfKeyPoint {
 //     /// get OpenCV vector of KeyPoint
 //     fn cv_vector_of_keypoint(&self) -> VectorOfKeyPoint {
@@ -363,7 +397,7 @@ impl DarvisMatrix for DVMatrixGrayscale {
 //     }
 // }
 
-/// Trait implementation for Darvis vector of KeyPoint
+// Trait implementation for Darvis vector of KeyPoint
 // impl DarvisVectorOfKeyPoint for DVVectorOfKeyPoint {
 //     /// Convert Darvis to opencv vector of KeyPoint
 //     fn cv_vector_of_keypoint(&self) -> VectorOfKeyPoint {
@@ -417,28 +451,3 @@ impl DarvisMatrix for DVMatrixGrayscale {
 //     wall_time: Duration,
 // }
 
-
-pub struct Converter {}
-
-impl Converter {
-    //std::vector<cv::Mat> Converter::toDescriptorVector(const cv::Mat &Descriptors)
-    pub fn toDescriptorVector(Descriptors : &Mat) -> Vec<Desc> {
-        let mut vDesc = vec![];
-        vDesc.reserve(Descriptors.rows() as usize);
-
-        let desc_vec = Descriptors.to_vec_2d::<u8>().unwrap();
-
-        for j in 0..Descriptors.rows()
-        {
-            let desc_j = desc_vec.get(j as usize).unwrap();
-            let mut desc_val : Desc = [0; 32];
-            for (&x, p) in desc_j.iter().zip(desc_val.iter_mut()) {
-                *p = x;
-            }
-            vDesc.push(desc_val);
-
-        }
-
-        return vDesc;
-    }
-}

@@ -2,6 +2,8 @@ use std::collections::HashMap;
 use std::convert::TryInto;
 use opencv::core::{Point2f, KeyPoint};
 use opencv::prelude::*;
+use crate::dvmap::keyframe::KeyFrame;
+use crate::dvmap::mappoint::FullMapPoint;
 use crate::{
     dvmap::{frame::Frame, mappoint::MapPoint, map::Id, map::Map, keypoints::KeyPointsData, sensor::SensorType},
     utils::{camera::Camera},
@@ -67,6 +69,7 @@ impl ORBmatcher {
     pub fn search_for_initialization<S: SensorType>(
         &self, F1: &Frame<S> , F2: &Frame<S>, prev_matched: &mut Vec<Point2f>, matches12: &mut HashMap<u32, Id>, window_size : i64
     ) -> i32 {
+        todo!("TODO 10/17 BINDINGS search_for_initialization");
         //ref code : https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/0df83dde1c85c7ab91a0d47de7a29685d046f637/src/ORBmatcher.cc#L648
         let mut nmatches: i32=0;
 
@@ -234,7 +237,8 @@ impl ORBmatcher {
     pub fn search_by_projection_with_threshold<S: SensorType> (
         &self, current_frame: &Frame<S>, last_frame: &Frame<S>, threshold: i32, is_mono: bool,
         camera: &Camera, map: &ReadOnlyWrapper<Map<S>>
-    ) -> Vec<MapPoint> {
+    ) -> Vec<MapPoint<FullMapPoint>> {
+        todo!("TODO 10/17 BINDINGS search_by_projection");
         let nmatches = 0;
 
         // Rotation Histogram (to check rotation consistency)
@@ -270,7 +274,7 @@ impl ORBmatcher {
                 {
                     let map_read_lock = map.read();
                     let mappoint = map_read_lock.get_mappoint(last_frame.mappoint_matches.get(&i).unwrap());
-                    let x3Dw = mappoint.unwrap().get_position();
+                    let x3Dw = mappoint.unwrap().position;
                     x3Dc = Rcw.vec() * x3Dw.vec() + tcw.vec();
                 }
 
@@ -290,7 +294,6 @@ impl ORBmatcher {
                     continue;
                 }
 
-                todo!("search by projection");
 
                 // let last_octave = last_frame.keypoints.get(i as usize).unwrap().octave;
                 // let n_last_octave;
@@ -483,10 +486,16 @@ impl ORBmatcher {
     // Used in Place Recognition (Loop Closing and Merging)
     // int SearchByProjection(KeyFrame* pKF, Sophus::Sim3<float> &Scw, const std::vector<MapPoint*> &vpPoints, const std::vector<KeyFrame*> &vpPointsKFs, std::vector<MapPoint*> &vpMatched, std::vector<KeyFrame*> &vpMatchedKF, int th, float ratioHamming=1.0);
 
+    pub fn search_by_bow_f<S: SensorType>(&self, pKF1 : &KeyFrame<S>, pKF2 : &Frame<S>, vpMatches12: &mut HashMap<u32, Id>) -> i32 {
+        todo!("TODO 10/17 BINDINGS: search_by_bow");
+        //        int SearchByBoW(KeyFrame *pKF, Frame &F, std::vector<MapPoint*> &vpMapPointMatches);
+    }
 
-    pub fn search_by_bow<S: SensorType>(&self, pKF1 : &Frame<S>, pKF2 : &Frame<S>, vpMatches12: &mut Vec<Id>) -> i32
+    pub fn search_by_bow_kf<S: SensorType>(&self, pKF1 : &KeyFrame<S>, pKF2 : &KeyFrame<S>, vpMatches12: &mut Vec<Id>) -> i32
     {
-        todo!("ORBmatcher: search_by_bow");
+        //        int SearchByBoW(KeyFrame *pKF1, KeyFrame* pKF2, std::vector<MapPoint*> &vpMatches12);
+
+        todo!("TODO 10/17 BINDINGS: search_by_bow");
 
         let vKeysUn1 = &pKF1.keypoints_data.keypoints_un();
         let vfeature_vec1 = &pKF1.feature_vec.as_ref().unwrap();
