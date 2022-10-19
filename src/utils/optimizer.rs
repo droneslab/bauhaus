@@ -46,13 +46,13 @@ impl Optimizer {
     // int Optimizer::PoseInertialOptimizationLastFrame(Frame *pFrame, bool bRecInit)
     // but bRecInit is always set to false
     pub fn pose_inertial_optimization_last_frame<S: SensorType>(&self, frame: &mut Frame<S>) -> i32 {
-        todo!("Optimizer::PoseInertialOptimizationLastFrame(&mCurrentFrame)");
+        todo!("TODO 10/17 BINDINGS Optimizer::PoseInertialOptimizationLastFrame(&mCurrentFrame)");
     }
 
     //int Optimizer::PoseInertialOptimizationLastKeyFrame(Frame *pFrame, bool bRecInit)
     // but bRecInit is always set to false
     pub fn pose_inertial_optimization_last_keyframe<S: SensorType>(&self, frame: &mut Frame<S>) -> i32 {
-        todo!("Optimizer::PoseInertialOptimizationLastKeyFrame(&mCurrentFrame)");
+        todo!("TODO 10/17 BINDINGS Optimizer::PoseInertialOptimizationLastKeyFrame(&mCurrentFrame)");
     }
 
     pub fn optimize_pose<S: SensorType + 'static>(&self, frame: &mut Frame<S>, map: &ReadOnlyWrapper<Map<S>>) -> (i32, Option<Pose>) {
@@ -84,9 +84,9 @@ impl Optimizer {
                     // edge->pCamera = pFrame->mpCamera;
                     {
                         let map_read_lock = map.read();
-                        let position = &map_read_lock.get_mappoint(mp_id).unwrap().get_position();
+                        let position = &map_read_lock.get_mappoint(mp_id).unwrap().position;
                         optimizer.add_edge_monocular(
-                            i as i32, edge.clone(), (*position).into()
+                            i as i32, edge.clone(), (position).into()
                         );
                     }
 
@@ -144,7 +144,7 @@ impl Optimizer {
                 }
             }
 
-            // TODO SLAM with respect to a rigid body...probably don't have to do this rn?
+            // TODO (mid priority) SLAM with respect to a rigid body...probably don't have to do this rn?
             // vpEdgesMono_FHR comes from "SLAM with respect to a rigid body"
             // which I didn't implement...
             // see add_edge_monocular in rust_helper.cpp
@@ -221,7 +221,7 @@ impl Optimizer {
     }
 
     pub fn global_bundle_adjustment(&self, current_map: Id, iterations: i32) {
-        todo!("important: global bundle adjustment");
+        todo!("TODO 10/17 BINDINGS important: global bundle adjustment");
     }
     // void Optimizer::GlobalBundleAdjustemnt(Map* pMap, int nIterations, bool* pbStopFlag, const unsigned long nLoopKF, const bool bRobust)
 }

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use chrono::{DateTime, Utc};
-use abow::{BoW, DirectIdx};
+use abow::{BoW, DirectIdx, Vocabulary};
 use dvcore::global_params::GLOBAL_PARAMS;
 use serde::{Deserialize, Serialize};
 
@@ -260,16 +260,11 @@ impl<S: SensorType> Frame<S> {
         self.pose.as_ref().unwrap().clone()
     }
 
-    pub fn compute_bow(&mut self) {
+    pub fn compute_bow(&mut self, voc: &DVVocabulary) {
         //Ref code : https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Frame.cc#L740
-        todo!("IMPORTANT Implement : ComputeBoW");
-        // if self.feature_vec.is_none() {
-        //     let features = Converter::toDescriptorVector(&self.descriptors);
-        //     let k=10;
-        //     let l =4;
-        //     let voc = Vocabulary::create(&features, k, l);
-        //     self.feature_vec = Some(voc.transform_with_direct_idx(&features).unwrap());
-        // }
+        if self.feature_vec.is_none() {
+            self.feature_vec = Some(voc.transform_with_direct_idx(&self.keypoints_data.descriptors()));
+        }
     }
 
     //* MapPoints */
@@ -282,14 +277,21 @@ impl<S: SensorType> Frame<S> {
     pub fn discard_outliers(&mut self) -> (i32, Vec<Id>) {
         let mut num_deleted = 0;
         let mut all_left = Vec::new();
-        for (index, mp_id) in &mut self.mappoint_matches {
+
+        let mut to_remove = Vec::new();
+        for (index, id) in &self.mappoint_matches  {
             if self.mappoint_outliers.contains_key(&index) {
-                self.delete_mappoint_match(*index);
+                self.mappoint_outliers.remove(index);
                 num_deleted += 1;
+                to_remove.push(*index);
             } else {
-                all_left.push(*mp_id);
+                all_left.push(*id);
             }
         }
+        for index in to_remove {
+            self.mappoint_matches.remove(&index);
+        }
+
         (num_deleted, all_left)
     }
 
@@ -300,7 +302,6 @@ impl<S: SensorType> Frame<S> {
     pub fn add_mappoint_match(&mut self, index: u32, mp_id: Id) {
         self.mappoint_matches.insert(index, mp_id);
     }
-
     pub fn delete_mappoint_match(&mut self, index: u32) {
         self.mappoint_matches.remove(&index);
         self.mappoint_outliers.remove(&index);

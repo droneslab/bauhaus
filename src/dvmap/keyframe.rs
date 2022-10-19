@@ -1,11 +1,15 @@
 use std::{collections::HashMap, iter::FromIterator};
 use chrono::{DateTime, Utc};
-use abow::{BoW, DirectIdx};
+use abow::{BoW, DirectIdx, Vocabulary};
+use dvcore::{matrix::{DVVocabulary}, lockwrap::ReadOnlyWrapper};
+use nalgebra::{Vector3, RowVector3};
 use serde::{Deserialize, Serialize};
 use crate::{
     dvmap::{map::Id, pose::Pose, frame::*, sensor::SensorType},
     utils::{imu::*},
 };
+
+use super::{mappoint::{MapPoint, FullMapPoint}, keypoints::KeyPointsData, map::{Map}};
 
 unsafe impl<S: SensorType> Sync for KeyFrame<S> {}
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -82,16 +86,7 @@ pub struct KeyFrame<S: SensorType> {
 }
 
 impl<S: SensorType> KeyFrame<S> {
-    pub fn new(frame: &Frame<S>, origin_map_id: Id) -> KeyFrame<S> {
-        Self::hidden_new(frame, origin_map_id, -1)
-    }
-
-    pub(super) fn new_with_id(frame: &Frame<S>, origin_map_id: Id, kf_id: Id) -> KeyFrame<S> {
-        // Note: Only callable from the map actor, who assigns a non-conflicting kf id
-        Self::hidden_new(frame, origin_map_id, kf_id)
-    }
-
-    pub fn hidden_new(frame: &Frame<S>, origin_map_id: Id, kf_id: Id) -> KeyFrame<S> {
+    pub fn new(frame: &Frame<S>, origin_map_id: Id, vocabulary: &DVVocabulary) -> KeyFrame<S> {
         // let grid = frame.grid.clone();
         // sofiya: do I have to set these?
         // mGrid.resize(mnGridCols);
@@ -117,7 +112,7 @@ impl<S: SensorType> KeyFrame<S> {
         //     mbHasVelocity = true;
         // }
 
-        let kf = KeyFrame {
+        let mut kf = KeyFrame {
             id: -1, // id assigned when putting in map
             timestamp: frame.timestamp,
             frame_id: frame.id,
@@ -154,19 +149,14 @@ impl<S: SensorType> KeyFrame<S> {
             mnBALocalForMerge: 0,
         };
 
-        kf.compute_bow();
+        kf.compute_bow(vocabulary);
 
         kf
     }
 
     pub fn set_pose(&mut self, pose: Pose) {
         self.pose = pose.clone();
-        // TODO IMPORTANT: what is this stuff?
-        // mRcw = mTcw.rotationMatrix();
-        // mTwc = mTcw.inverse();
-        // mRwc = mTwc.rotationMatrix();
-
-        // if (mImuCalib.mbIsSet) // TODO Use a flag instead of the OpenCV matrix
+        // if (mImuCalib.mbIsSet) // TODO IMU Use a flag instead of the OpenCV matrix
         // {
         //     mOwb = mRwc * mImuCalib.mTcb.translation() + mTwc.translation();
         // }
@@ -176,19 +166,112 @@ impl<S: SensorType> KeyFrame<S> {
         Vec::from_iter(self.neighbors[0..(N as usize)].iter().cloned())
     }
 
-    pub fn compute_bow(&self) {
-        todo!("IMPORTANT compute bow"); // sofiya...this is identical to the frame one, can we combine?
-        // if(mBowVec.empty() || mFeatVec.empty())
+    pub fn compute_bow(&mut self, voc: &DVVocabulary) {
+        // sofiya...this is identical to the frame one, can we combine?
+        if self.feature_vec.is_none() {
+            self.feature_vec = Some(voc.transform_with_direct_idx(self.keypoints_data.descriptors()));
+        }
+    }
+
+    pub fn add_mappoint(&mut self, mp: &MapPoint<FullMapPoint>, index: u32) {
+        // KeyFrame::AddMapPoint(MapPoint *pMP, const size_t &idx)
+        self.mappoint_matches.insert(index, mp.map_data.id);
+    }
+
+    pub fn update_connections(&mut self) {
+        todo!("TODO 10/17 fill");
+        // map<KeyFrame*,int> KFcounter;
+
+        // vector<MapPoint*> vpMP;
+
         // {
-        //     vector<cv::Mat> vCurrentDesc = Converter::toDescriptorVector(mDescriptors);
-        //     // Feature vector associate features with nodes in the 4th level (from leaves up)
-        //     // We assume the vocabulary tree has 6 levels, change the 4 otherwise
-        //     mpORBvocabulary->transform(vCurrentDesc,mBowVec,mFeatVec,4);
+        //     unique_lock<mutex> lockMPs(mMutexFeatures);
+        //     vpMP = mvpMapPoints;
+        // }
+
+        // //For all map points in keyframe check in which other keyframes are they seen
+        // //Increase counter for those keyframes
+        // for(vector<MapPoint*>::iterator vit=vpMP.begin(), vend=vpMP.end(); vit!=vend; vit++)
+        // {
+        //     MapPoint* pMP = *vit;
+
+        //     if(!pMP)
+        //         continue;
+
+        //     if(pMP->isBad())
+        //         continue;
+
+        //     map<KeyFrame*,tuple<int,int>> observations = pMP->GetObservations();
+
+        //     for(map<KeyFrame*,tuple<int,int>>::iterator mit=observations.begin(), mend=observations.end(); mit!=mend; mit++)
+        //     {
+        //         if(mit->first->mnId==mnId || mit->first->isBad() || mit->first->GetMap() != mpMap)
+        //             continue;
+        //         KFcounter[mit->first]++;
+
+        //     }
+        // }
+
+        // // This should not happen
+        // if(KFcounter.empty())
+        //     return;
+
+        // //If the counter is greater than threshold add connection
+        // //In case no keyframe counter is over threshold add the one with maximum counter
+        // int nmax=0;
+        // KeyFrame* pKFmax=NULL;
+        // int th = 15;
+
+        // vector<pair<int,KeyFrame*> > vPairs;
+        // vPairs.reserve(KFcounter.size());
+        // if(!upParent)
+        //     cout << "UPDATE_CONN: current KF " << mnId << endl;
+        // for(map<KeyFrame*,int>::iterator mit=KFcounter.begin(), mend=KFcounter.end(); mit!=mend; mit++)
+        // {
+        //     if(!upParent)
+        //         cout << "  UPDATE_CONN: KF " << mit->first->mnId << " ; num matches: " << mit->second << endl;
+        //     if(mit->second>nmax)
+        //     {
+        //         nmax=mit->second;
+        //         pKFmax=mit->first;
+        //     }
+        //     if(mit->second>=th)
+        //     {
+        //         vPairs.push_back(make_pair(mit->second,mit->first));
+        //         (mit->first)->AddConnection(this,mit->second);
+        //     }
+        // }
+
+        // if(vPairs.empty())
+        // {
+        //     vPairs.push_back(make_pair(nmax,pKFmax));
+        //     pKFmax->AddConnection(this,nmax);
+        // }
+
+        // sort(vPairs.begin(),vPairs.end());
+        // list<KeyFrame*> lKFs;
+        // list<int> lWs;
+        // for(size_t i=0; i<vPairs.size();i++)
+        // {
+        //     lKFs.push_front(vPairs[i].second);
+        //     lWs.push_front(vPairs[i].first);
+        // }
+
+        // {
+        //     unique_lock<mutex> lockCon(mMutexConnections);
+
+        //     mConnectedKeyFrameWeights = KFcounter;
+        //     mvpOrderedConnectedKeyFrames = vector<KeyFrame*>(lKFs.begin(),lKFs.end());
+        //     mvOrderedWeights = vector<int>(lWs.begin(), lWs.end());
+
+
+        //     if(mbFirstConnection && mnId!=mpMap->GetInitKFid())
+        //     {
+        //         mpParent = mvpOrderedConnectedKeyFrames.front();
+        //         mpParent->AddChild(this);
+        //         mbFirstConnection = false;
+        //     }
+
         // }
     }
-
-    pub fn add_mappoint_match(&mut self, index: u32, mp_id: Id) {
-        self.mappoint_matches.insert(index, mp_id);
-    }
-
 }

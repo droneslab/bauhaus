@@ -202,6 +202,12 @@ pub fn add_system_setting_f64(yaml: &Yaml, param_name: &str) {
     println!("\t {}: {}", param_name, value);
 }
 
+pub fn add_system_setting_string(yaml: &Yaml, param_name: &str) {
+    let value: &str = yaml[param_name].as_str().unwrap();
+    GLOBAL_PARAMS.insert(SYSTEM_SETTINGS, param_name, value.to_string());
+    println!("\t {}: {}", param_name, value);
+}
+
 pub fn add_system_setting_sensor(yaml: &Yaml) {
     let param_name = "sensor";
     let value_str = yaml["sensor"].as_str().unwrap();

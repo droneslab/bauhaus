@@ -28,6 +28,7 @@ fn load_config(config_file: String) -> Vec<base::ActorConf> {
     add_system_setting_bool(yaml, "show_ui");
     add_system_setting_bool(yaml, "localization_only_mode");
     add_system_setting_sensor(yaml);
+    add_system_setting_string(yaml, "vocabulary_file");
     // camera calibration
     add_system_setting_f64(yaml, "camera_fx");
     add_system_setting_f64(yaml, "camera_fy");
