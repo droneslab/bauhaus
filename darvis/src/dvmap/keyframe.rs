@@ -1,0 +1,319 @@
+use std::{collections::{HashMap}, iter::FromIterator};
+use chrono::{DateTime, Utc};
+use abow::{BoW, DirectIdx};
+use dvcore::{matrix::{DVVocabulary, DVVector3}};
+use log::error;
+use serde::{Deserialize, Serialize};
+use crate::{dvmap::{map::Id, pose::Pose, frame::*, sensor::SensorType},modules::{imu::*},};
+use super::{mappoint::{MapPoint, FullMapPoint}, map::{Map}, keypoints::KeyPointsData};
+
+// Typestate...Keyframe information that is ALWAYS available, regardless of keyframe state.
+// Uncomment this if doing serialization/deserialization: unsafe impl<S: SensorType> Sync for KeyFrame<S> {}
+#[derive(Debug, Serialize, Clone)]
+pub struct KeyFrame<K: KeyFrameState, S: SensorType> {
+    pub timestamp: DateTime<Utc>,
+    pub frame_id: Id, // Id of frame it is based on
+    pub pose: Pose,
+
+    // Image //
+    pub image_bounds: ImageBounds,
+
+    // KeyPoints, stereo coordinate and descriptors (all associated by an index) //
+    pub keypoints_data: S::KeyPointsData,
+
+    // Mappoints
+    // Note: u32 is index in array, Id is mappoint Id ... equal to vector in ORBSLAM3
+    // because it just allocates an N-size vector and has a bunch of empty entries
+    pub mappoint_matches: HashMap::<u32, (Id, bool)>, // mvpmappoints 
+
+    // BoW
+    pub bow_vec: Vec<abow::BoW>, // mBowVec, Bow and featurevector from dbow2
+    pub feature_vec: (BoW, DirectIdx), // mFeatVec
+    // bow: abow::BoW,
+    // bow_db: Arc<BowDB>,
+    // scale: f64,
+    // depth_threshold: f64,
+
+    // Scale //
+    pub num_scale_levels: i32, // mnScaleLevels
+    pub scale_factor: f64, // mfScaleFactor
+    pub log_scale_factor: f64, // mfLogScaleFactor
+    pub scale_factors: Vec<f32>, // mvScaleFactors
+    // Used in ORBExtractor, which we haven't implemented
+    // we're using detect_and_compute from opencv instead
+    // pub level_sigma2: Vec<f32>, // mvLevelSigma2
+
+    // IMU //
+    // Preintegrated IMU measurements from previous keyframe
+    pub imu_bias: Option<IMUBias>,
+    pub imu_preintegrated: Option<IMUPreIntegrated>,
+    // pub imu_calib: IMUCalib,
+
+    // Stereo //
+    pub stereo_baseline: f64,
+
+    pub full_kf_info: K,
+
+    // Don't add these in!! read explanations below
+    // mnTrackReferenceForFrame ... used in tracking to decide whether to add a kf/mp into tracking's local map. redundant and easy to mess up/get out of sync. Search for this globally to see an example of how to avoid using it.
+}
+
+// Typestate...State options.
+#[derive(Clone, Debug, Default)]
+pub struct PrelimKeyFrame {} // prelimary map item created locally but not inserted into the map yet
+#[derive(Clone, Debug, Default)]
+pub struct FullKeyFrame { // Full map item inserted into the map with the following additional fields
+    pub id: Id,
+    pub origin_map_id: Id, // mnOriginMapId
+
+    // Map connections ... Parent, children, neighbors
+    pub parent: Option<Id>,
+    pub children: Vec<Id>,
+    neighbors: Vec<Id>, // also sometimes called covisibility keyframes in ORBSLAM3
+    connected_keyframes: ConnectedKeyFrames,
+
+    // IMU
+    pub prev_kf_id: Option<Id>,
+    pub next_kf_id: Option<Id>,
+
+    // Sofiya: I think we can clean this up and get rid of these
+    // Variables used by KF database
+    pub loop_query: u64, //mnLoopQuery
+    pub loop_words: i32, //mnLoopWords
+    pub reloc_query: u64, //mnRelocQuery
+    pub reloc_words: i32, //mnRelocWords
+    pub merge_query: u64, //mnMergeQuery
+    pub merge_words: i32, //mnMergeWords
+    pub place_recognition_query: u64, //mnPlaceRecognitionQuery
+    pub place_recognition_words: i32, //mnPlaceRecognitionWords
+    pub place_recognition_score: f32, //mPlaceRecognitionScore
+    // Variables used by loop closing
+    pub mnBAGlobalForKF: u64,
+    // Variables used by merging
+    pub mnMergeCorrectedForKF: u64,
+    pub mnBALocalForMerge: u64,
+}
+
+pub trait KeyFrameState {}
+impl KeyFrameState for PrelimKeyFrame {}
+impl KeyFrameState for FullKeyFrame {}
+
+
+impl<S: SensorType> KeyFrame<PrelimKeyFrame, S> {
+    pub fn new(frame: &Frame<S>, vocabulary: &DVVocabulary) -> KeyFrame<PrelimKeyFrame, S> {
+        let mut kf = KeyFrame {
+            timestamp: frame.timestamp,
+            frame_id: frame.id,
+            mappoint_matches: frame.mappoint_matches.clone(),
+            pose: frame.pose.unwrap(),
+            keypoints_data: frame.keypoints_data.clone(),
+            bow_vec: frame.bow_vec.as_ref().unwrap().clone(),
+            feature_vec: frame.feature_vec.as_ref().unwrap().clone(),
+            num_scale_levels: frame.num_scale_levels,
+            scale_factor: frame.scale_factor,
+            log_scale_factor: frame.log_scale_factor,
+            scale_factors: frame.scale_factors.clone(),
+            image_bounds: frame.image_bounds.clone(),
+            imu_bias: frame.imu_bias,
+            imu_preintegrated: frame.imu_preintegrated,
+            stereo_baseline: 0.0, // TODO Stereo
+            full_kf_info: PrelimKeyFrame{},
+        };
+
+        kf.compute_bow(vocabulary);
+
+        kf
+    }
+
+    pub fn compute_bow(&mut self, voc: &DVVocabulary) {
+        self.feature_vec = voc.transform_with_direct_idx(self.keypoints_data.descriptors());
+    }
+}
+
+impl<S: SensorType> KeyFrame<FullKeyFrame, S> {
+    pub(super) fn new(prelim_keyframe: KeyFrame<PrelimKeyFrame, S>, origin_map_id: Id, id: Id) -> Self {
+        Self {
+            timestamp: prelim_keyframe.timestamp,
+            frame_id: prelim_keyframe.frame_id,
+            mappoint_matches: prelim_keyframe.mappoint_matches,
+            pose: prelim_keyframe.pose,
+            keypoints_data: prelim_keyframe.keypoints_data,
+            bow_vec: prelim_keyframe.bow_vec,
+            feature_vec: prelim_keyframe.feature_vec,
+            num_scale_levels: prelim_keyframe.num_scale_levels,
+            scale_factor: prelim_keyframe.scale_factor,
+            log_scale_factor: prelim_keyframe.log_scale_factor,
+            scale_factors: prelim_keyframe.scale_factors,
+            image_bounds: prelim_keyframe.image_bounds,
+            imu_bias: prelim_keyframe.imu_bias,
+            imu_preintegrated: prelim_keyframe.imu_preintegrated,
+            stereo_baseline: prelim_keyframe.stereo_baseline,
+            full_kf_info: FullKeyFrame{
+                id,
+                origin_map_id,
+                prev_kf_id: todo!(),
+                next_kf_id: todo!(),
+                parent: todo!(),
+                children: todo!(),
+                neighbors: todo!(),
+                connected_keyframes: todo!(),
+                loop_query: todo!(),
+                loop_words: todo!(),
+                reloc_query: todo!(),
+                reloc_words: todo!(),
+                merge_query: todo!(),
+                merge_words: todo!(),
+                place_recognition_query: todo!(),
+                place_recognition_words: todo!(),
+                place_recognition_score: todo!(),
+                mnBAGlobalForKF: todo!(),
+                mnMergeCorrectedForKF: todo!(),
+                mnBALocalForMerge: todo!(),
+            },
+        }
+    }
+
+    pub fn id(&self) -> Id { self.full_kf_info.id }
+
+    pub fn get_neighbors(&self, num: i32) -> Vec<Id> {
+        Vec::from_iter(self.full_kf_info.neighbors[0..(num as usize)].iter().cloned())
+    }
+
+    pub fn add_mappoint(&mut self, mp: &MapPoint<FullMapPoint<S>>, index: u32, is_outlier: bool) {
+        // KeyFrame::AddMapPoint(MapPoint *pMP, const size_t &idx)
+        self.mappoint_matches.insert(index, (mp.id(), is_outlier));
+    }
+
+    pub fn add_connection(&mut self, kf_id: &Id, weight: i32) {
+        self.full_kf_info.connected_keyframes.add_connection(kf_id, weight);
+    }
+
+    pub fn insert_all_connections(&mut self, new_connections: HashMap::<Id, i32>, is_init_kf: bool) -> Option<Id> {
+        self.full_kf_info.connected_keyframes.insert_all_connections(new_connections);
+        if self.full_kf_info.parent.is_none() && !is_init_kf { 
+            self.change_parent(self.full_kf_info.connected_keyframes.first());
+            Some(self.full_kf_info.connected_keyframes.first())
+        } else {
+            None
+        }
+    }
+
+    pub fn change_parent(&mut self, id: Id) {
+        if id == self.full_kf_info.id {
+            error!("keyframe::change_parent;parent and child are the same KF");
+        }
+        self.full_kf_info.parent = Some(id);
+    }
+
+    pub fn add_child(&mut self, id: Id) {
+        self.full_kf_info.children.push(id);
+    }
+
+    pub fn get_camera_center(&self) -> DVVector3<f64> {
+        self.pose.inverse().translation()
+        // Note: In Orbslam, this is: mTwc.translation()
+        // and mTwc is inverse of the pose
+    }
+
+    pub fn get_right_camera_center(&self) -> DVVector3<f64> {
+        todo!("TODO IMU");
+        // NOt sure what mTlr is, it comes from the settings but might get updated somewhere.
+        //    return (mTwc * mTlr).translation();
+        // this needs to be generic on sensor, so it can't be called if the sensor doesn't have a right camera
+    }
+
+
+    /* Below is stuff that requires info from map, usually because of needing inner fields of observed mappoints.
+        For now, calling a passthrough function in map that aggregates the relevant mappoints and call these functions.
+        Hence why these functions are set public only to super (dvmap).
+     */
+
+    pub fn compute_scene_median_depth(&self, map: &Map<S>, q: i32) -> f64 {
+        if self.keypoints_data.num_keypoints() == 0 {
+            return -1.0;
+        }
+
+        let mut depths = Vec::new();
+        // depths.reserve(self.keypoints_data.num_keypoints() as usize); // probably unnecessary?
+        let rot = self.pose.rotation();
+        let rcw2 = rot.row(2);
+        let zcw = self.pose.translation()[2];
+
+        for (_, (mp_id, _)) in &self.mappoint_matches {
+            let world_pos = *(map.get_mappoint(mp_id).unwrap().position);
+            let z = (rcw2 * world_pos)[0] + zcw; // first part of this term is scalar but still need to get it from Matrix<1,1> to f64
+            depths.push(z);
+        }
+
+        depths.sort_by(|a, b| a.total_cmp(&b));
+        depths[(depths.len()-1) / q as usize]
+    }
+
+    pub fn tracked_mappoints(&self, map: &Map<S>, min_observations: u32) -> i32{
+        // KeyFrame::TrackedMapPoints(const int &minObs)
+        if min_observations > 0 {
+            return self.mappoint_matches.len() as i32;
+        }
+
+        let mut num_points = 0;
+        for (_, (mp_id, _)) in &self.mappoint_matches {
+            let mappoint = map.get_mappoint(&mp_id).unwrap();
+            if mappoint.observations().len() >= (min_observations as usize) {
+                num_points += 1;
+            }
+        }
+
+        num_points
+    }
+
+    pub fn erase_mappoint_match(&mut self, (left_index, right_index): (i32, i32)) {
+        // self.mappoint_matches.remove(id);
+        if left_index != -1 {
+            self.mappoint_matches.remove(&(left_index as u32));
+        }
+        if right_index != -1 {
+            self.mappoint_matches.remove(&(right_index as u32));
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+struct ConnectedKeyFrames {
+    // Note: Two ways of storing this data ...
+    // `ordered` is an ordered list of kf IDs based on weight, for fast lookup of the top N connected KFs
+    // `map` is a hashmap of kf id to weight, for fast lookup of a kf's weight
+    // This is essentially the setup in ORBSLAM3, with the additional optimization that
+    // `ordered` is only sorted when a KF with a weight > cutoff_weight is inserted
+    // (because `ordered` is only ever used for the top 30 keyframes in the vector)
+    ordered: Vec<(Id, i32)>, // mvpOrderedConnectedKeyFrames and mvOrderedWeights
+    map: HashMap<Id, i32>, // mConnectedKeyFrameWeights
+    cutoff_weight: i32,
+}
+impl ConnectedKeyFrames {
+    pub(super) fn add_connection(&mut self, kf_id: &Id, weight: i32) {
+        *self.map.entry(*kf_id).or_insert(weight) = weight;
+        // TODO verify: Sorting might be backwards? Not quite clear whether low weight = earlier index or vice versa
+        if weight > self.cutoff_weight { self.sort_ordered(); }
+    }
+
+    pub fn insert_all_connections(&mut self, new_connections: HashMap::<Id, i32>) {
+        // Turn hashmap into vector and sort by weights
+        self.ordered = new_connections.iter()
+            .map(|(key, value)| { (key.clone(), value.clone()) })
+            .collect::<Vec<(Id, i32)>>(); 
+        self.sort_ordered();
+
+        self.map = new_connections;
+    }
+
+    pub fn  first(&self) -> Id {
+        self.ordered[0].1
+    }
+
+    fn sort_ordered(&mut self) {
+        // TODO verify: Sorting might be backwards? Not quite clear whether low weight = earlier index or vice versa
+        //KeyFrame::UpdateBestCovisibles
+        self.ordered.sort_by(|(_,w1), (_,w2)| w2.cmp(&w1));
+        self.cutoff_weight = self.ordered[30].1;
+    }
+}
