@@ -1,0 +1,112 @@
+master:
+       name: manager
+       address: localhost
+       file: main.rs
+
+system_settings:
+       show_ui: false
+       localization_only_mode: false
+       vocabulary_file: "../vocabulary/ORBvoc.txt"
+
+       sensor: Mono
+      # CAMERA CALIBRATION
+       camera_fx: 718.856
+       camera_fy: 718.856
+       camera_cx: 607.1928
+       camera_cy: 185.2157
+       # Distortion
+       camera_k1: 0.0
+       camera_k2: 0.0
+       camera_p1: 0.0
+       camera_p2: 0.0
+       camera_k3: 0.0
+       camera_width: 1241
+       camera_height: 376
+       fps: 10.0
+       stereo_baseline_times_fx: 386.1448 #stereo baseline times fx
+       thdepth: 35
+      #  depth_map_factor:
+      #  ORB FEATURE DETECTION
+       max_features: 2000
+       scale_factor: 1.2
+       n_levels: 8
+       fast_threshold: 20
+       # TRACKING
+       recently_lost_cutoff: 5
+       frames_to_reset_IMU: 30
+       insert_KFs_when_lost: true
+       min_num_features: 2000
+       # LOCAL MAPPING
+       far_points_threshold: 20.0
+
+
+modules:
+      -
+       name: FRAME_LOADER
+       file: frameloader
+       actor_message: ImagesMsg
+       actor_function: frameloader
+       address: locahost
+       port: !!str 7777
+       multithreaded: false
+       threads: 1
+       possible_paths:
+                      - 
+                       from: ImageRead
+                       to: Initilization
+                       input: images
+                       output: feature vectors
+                      -
+                       from: ImageRead
+                       to: ImageAlignment
+                       input: images
+                       output: feature vectors
+
+      -
+       name: VISUALIZER
+       file: vis
+       actor_message: VisMsg
+       actor_function: vis
+       address: localhost
+       port: !!str 7778
+       multithreaded: false
+       threads: 1
+       possible_paths:
+                     -
+                      from: FeatureDetection
+                      to: KFDecision
+                      input: feature vectors
+                      output: frame, feature points
+
+      -
+       name: TRACKING_FRONTEND
+       file: tracking_frontend
+       actor_message: ImageMsg
+       actor_function: tracking_frontend
+       address: localhost
+       port: !!str 7779
+       multithreaded: false
+       threads: 1
+       possible_paths:
+                     -
+                      from: frameloader
+                      to: tracking_backend
+                      input: image
+                      output: keypoints, descriptors
+
+      -
+       name: TRACKING_BACKEND
+       file: tracking_backend
+       actor_message: FeatureMsg
+       actor_function: tracking_backend
+       address: localhost
+       port: !!str 7780
+       multithreaded: false
+       threads: 1
+       possible_paths:
+                     -
+                      from: tracking_frontend
+                      to: localmapping
+                      input: keypoints, descriptors
+                      output: newkeyframe
+

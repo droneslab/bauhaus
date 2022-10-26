@@ -1,0 +1,19 @@
+[package]
+name = "dvos3binding"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "dvos3binding"
+path = "src/lib.rs"
+#crate_type = ["staticlib"]
+
+[dependencies]
+opencv = "0.63.0"
+cxx = "1.0"
+nalgebra = {version = "*", features = ["serde-serialize"]}
+
+[build-dependencies]
+cxx-build = "1.0"
+cmake = "0.1.48"
+opencv = "0.63.0"

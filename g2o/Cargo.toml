@@ -1,0 +1,18 @@
+[package]
+name = "g2o"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+name = "g2o"
+path = "src/lib.rs"
+
+[dependencies]
+cxx = "1.0.80"
+nalgebra = {version = "*", features = ["serde-serialize"]}
+
+[build-dependencies]
+cxx-build = "1.0.80"
+cmake = "0.1.48"
