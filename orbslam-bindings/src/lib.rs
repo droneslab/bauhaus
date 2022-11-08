@@ -85,7 +85,7 @@ pub mod ffi {
 
         pub vec: Vec<VectorOfVecusize>
     }
-
+    
     unsafe extern "C++" {
         // Opaque types which both languages can pass around
         // but only C++ can see the fields.
@@ -97,7 +97,6 @@ pub mod ffi {
         type TwoViewReconstruction;
         type ORBmatcher;
         type DVMat;
-        
 
         fn new_two_view_reconstruction(
             fx: f32,
@@ -119,8 +118,7 @@ pub mod ffi {
             checkOri: bool
         ) -> UniquePtr<ORBmatcher>;
 
-
-         fn Reconstruct_1(
+        fn Reconstruct_1(
             self: Pin<&mut TwoViewReconstruction>,
             vKeys1: &CxxVector<DVKeyPoint>,
             vKeys2:  &CxxVector<DVKeyPoint>,
@@ -129,7 +127,6 @@ pub mod ffi {
             vP3D: &mut VectorOfDVPoint3f,
             vbTriangulated: &mut VectorOfDVBool
         )-> bool;
-
 
         fn SearchForInitialization_1(
             self: Pin<&mut ORBmatcher>,
@@ -154,8 +151,46 @@ pub mod ffi {
         //     int windowSize=10)
 
     }
+
+    #[namespace = "DBoW2"]
+    unsafe extern "C++" {
+        include!("orb_slam3/DBoW2/DBoW2/ORBVocabulary.h");
+
+        type ORBVocabulary;
+        type BowVector;
+        type FeatureVector;
+
+        fn new_bow_vec() -> UniquePtr<BowVector>;
+        fn clone(self: &BowVector) -> UniquePtr<BowVector>;
+
+        fn new_feat_vec() -> UniquePtr<FeatureVector>;
+        fn clone(self: &FeatureVector) -> UniquePtr<FeatureVector>;
+
+        fn load_vocabulary_from_text_file(file: &CxxString) -> UniquePtr<ORBVocabulary>;
+        fn transform(
+            self: &ORBVocabulary,
+            descriptors: &DVMat,
+            bow_vector: Pin<&mut BowVector>,
+            feature_vector: Pin<&mut FeatureVector>,
+            levelsup: i32
+        );
+
+    }
 }
 
-
-
-
+// Sofiya: Need to make sure these are actually safe
+// They should be ok as long as they are only used within a UniquePtr.
+// But can we enforce using them in a UniquePtr?
+// These are needed because:
+// ORBVocabulary ...
+//    - used in map, which is owned by map actor, and cxx requires state
+//    - in actor to be send + sync
+// ORBBowVector, ORBFeatureVector ... 
+//    - used in KeyFrame, which is sent to/from map actor, and cxx requires
+//    - messages to be send + sync
+unsafe impl Send for ffi::ORBVocabulary {}
+unsafe impl Sync for ffi::ORBVocabulary {}
+unsafe impl Send for ffi::BowVector {}
+unsafe impl Sync for ffi::BowVector {}
+unsafe impl Send for ffi::FeatureVector {}
+unsafe impl Sync for ffi::FeatureVector {}

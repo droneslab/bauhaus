@@ -1,45 +1,50 @@
 use std::sync::Arc;
 use axiom::prelude::*;
 
-use dvcore::global_params::{Sensor, GLOBAL_PARAMS};
+use dvcore::global_params::{Sensor, GLOBAL_PARAMS, SYSTEM_SETTINGS};
 use dvcore::{
     plugin_functions::Function,
     lockwrap::ReadOnlyWrapper,
 };
 use log::warn;
-use crate::dvmap::{map::Map, map_actor::MAP_ACTOR, sensor::SensorType};
-use crate::actors::messages::KeyFrameMsg;
-use crate::modules::imu::ImuModule;
+use crate::dvmap::map_actor::MapWriteMsg;
+use crate::dvmap::{map::Map, map_actor::MAP_ACTOR, keyframe::{KeyFrame, PrelimKeyFrame}};
+use crate::modules::{imu::ImuModule, optimizer::Optimizer};
 use crate::registered_modules::LOOP_CLOSING;
 
-use super::messages::Reset;
+use super::messages::{Reset, KeyFrameMsg};
 
 #[derive(Debug, Clone, Default)]
-pub struct DarvisLocalMapping<S: SensorType> {
-    // Map
-    map: ReadOnlyWrapper<Map<S>>,
+pub struct DarvisLocalMapping {
+    map: ReadOnlyWrapper<Map>,
+    sensor: Sensor,
 
-    // IMU
-    imu: ImuModule<S>,
-
+    current_keyframe: KeyFrame<PrelimKeyFrame>,
     matches_inliers: i32,
+
+    // Modules
+    imu: ImuModule,
+    optimizer: Optimizer,
 }
 
+impl DarvisLocalMapping {
+    pub fn new(map: ReadOnlyWrapper<Map>) -> DarvisLocalMapping {
+        let sensor: Sensor = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "sensor");
 
-impl<S: SensorType + 'static> DarvisLocalMapping<S> {
-    pub fn new(map: ReadOnlyWrapper<Map<S>>) -> DarvisLocalMapping<S> {
         DarvisLocalMapping {
-            map: map,
+            map,
+            sensor,
+            optimizer: Optimizer::new(),
             ..Default::default()
         }
     }
 
-    fn local_mapping(&mut self, context: Context, msg: Arc<KeyFrameMsg<S>>) {
+    fn local_mapping_prelim(&mut self, context: Context, msg: Arc<KeyFrameMsg<PrelimKeyFrame>>) {
         let map_actor = Some(context.system.find_aid_by_name(MAP_ACTOR).unwrap());
+        self.current_keyframe = msg.keyframe.clone();
 
-        // code to actually insert the kf into the map
-        // let map_actor = self.map_actor.as_ref().unwrap();
-        // map_actor.send_new(MapWriteMsg::<S>::new_keyframe(new_kf)).unwrap();
+        // let map_actor = map_actor.as_ref().unwrap();
+        // map_actor.send_new(MapWriteMsg::new_keyframe(self.current_keyframe)).unwrap();
 
 
         // BoW conversion and insertion in Map
@@ -62,10 +67,8 @@ impl<S: SensorType + 'static> DarvisLocalMapping<S> {
 
 
         let b_doneLBA = false;
-        let num_FixedKF_BA = 0;
-        let num_OptKF_BA = 0;
-        let num_MPs_BA = 0;
-        let num_edges_BA = 0;
+
+        let t_init = 0.0; // Sofiya: idk what this is for but it's used all over the place
 
         // TODO (important): ORBSLAM will abort additional work if there are too many keyframes in the msg queue (CheckNewKeyFrames)
         // Additionally it will abort if a stop or reset is requested (stopRequested)
@@ -75,17 +78,17 @@ impl<S: SensorType + 'static> DarvisLocalMapping<S> {
         // if(!CheckNewKeyFrames() && !stopRequested())
         // {
         if self.kfs_in_map() > 2 {
-            match S::is_imu() {
+            match self.sensor.is_imu() {
                 true => { // and self.map.read().imu_initialized
                     // TODO IMU
                     // float dist = (mpCurrentKeyFrame->mPrevKF->GetCameraCenter() - mpCurrentKeyFrame->GetCameraCenter()).norm() +
                     //         (mpCurrentKeyFrame->mPrevKF->mPrevKF->GetCameraCenter() - mpCurrentKeyFrame->mPrevKF->GetCameraCenter()).norm();
 
                     // if(dist>0.05)
-                    //     mTinit += mpCurrentKeyFrame->mTimeStamp - mpCurrentKeyFrame->mPrevKF->mTimeStamp;
+                    //     t_init += mpCurrentKeyFrame->mTimeStamp - mpCurrentKeyFrame->mPrevKF->mTimeStamp;
                     // if(!mpCurrentKeyFrame->GetMap()->GetIniertialBA2())
                     // {
-                    //     if((mTinit<10.f) && (dist<0.02))
+                    //     if((t_init<10.f) && (dist<0.02))
                     //     {
                     //         cout << "Not enough motion for initializing. Reseting..." << endl;
                     //         unique_lock<mutex> lock(mMutexReset);
@@ -99,79 +102,75 @@ impl<S: SensorType + 'static> DarvisLocalMapping<S> {
                     // Optimizer::LocalInertialBA(mpCurrentKeyFrame, &mbAbortBA, mpCurrentKeyFrame->GetMap(),num_FixedKF_BA,num_OptKF_BA,num_MPs_BA,num_edges_BA, bLarge, !mpCurrentKeyFrame->GetMap()->GetIniertialBA2());
                 },
                 false => {
-                    // Optimizer::LocalBundleAdjustment(mpCurrentKeyFrame,&mbAbortBA, mpCurrentKeyFrame->GetMap(),num_FixedKF_BA,num_OptKF_BA,num_MPs_BA,num_edges_BA);
+                    // TODO (important): ORBSLAM will abort additional work if there are too many keyframes in the msg queue.
+                    let force_stop_flag = false; // mbAbortBA
+                    self.optimizer.local_bundle_adjustment(&self.map.read(), &self.current_keyframe, force_stop_flag, 0, 0,0, 0);
                 }
             }
         }
 
         // Initialize IMU
-        // SOFIYA TODO Sensor restructuring
-        // if !self.map.read().imu_initialized {
-        //     self.imu.initialize();
-        // }
+        if self.sensor.is_imu() && !self.map.read().imu_initialized {
+            self.imu.initialize();
+        }
 
         // Check redundant local Keyframes
         self.keyframe_culling();
 
-        // if ((mTinit<50.0f) && mbInertial)
-        // {
-        //     if(mpCurrentKeyFrame->GetMap()->isImuInitialized() && mpTracker->mState==Tracking::OK) // Enter here everytime local-mapping is called
-        //     {
-        //         if(!mpCurrentKeyFrame->GetMap()->GetIniertialBA1()){
-        //             if (mTinit>5.0f)
-        //             {
-        //                 cout << "start VIBA 1" << endl;
-        //                 mpCurrentKeyFrame->GetMap()->SetIniertialBA1();
-        //                 if (mbMonocular)
-        //                     InitializeIMU(1.f, 1e5, true);
-        //                 else
-        //                     InitializeIMU(1.f, 1e5, true);
+        if self.sensor.is_imu() && t_init < 50.0 {
+            // TODO IMU
+            // if(mpCurrentKeyFrame->GetMap()->isImuInitialized() && mpTracker->mState==Tracking::OK) // Enter here everytime local-mapping is called
+            // {
+            //     if(!mpCurrentKeyFrame->GetMap()->GetIniertialBA1()){
+            //         if (t_init>5.0f)
+            //         {
+            //             cout << "start VIBA 1" << endl;
+            //             mpCurrentKeyFrame->GetMap()->SetIniertialBA1();
+            //             if (mbMonocular)
+            //                 InitializeIMU(1.f, 1e5, true);
+            //             else
+            //                 InitializeIMU(1.f, 1e5, true);
 
-        //                 cout << "end VIBA 1" << endl;
-        //             }
-        //         }
-        //         else if(!mpCurrentKeyFrame->GetMap()->GetIniertialBA2()){
-        //             if (mTinit>15.0f){
-        //                 cout << "start VIBA 2" << endl;
-        //                 mpCurrentKeyFrame->GetMap()->SetIniertialBA2();
-        //                 if (mbMonocular)
-        //                     InitializeIMU(0.f, 0.f, true);
-        //                 else
-        //                     InitializeIMU(0.f, 0.f, true);
+            //             cout << "end VIBA 1" << endl;
+            //         }
+            //     }
+            //     else if(!mpCurrentKeyFrame->GetMap()->GetIniertialBA2()){
+            //         if (t_init>15.0f){
+            //             cout << "start VIBA 2" << endl;
+            //             mpCurrentKeyFrame->GetMap()->SetIniertialBA2();
+            //             if (mbMonocular)
+            //                 InitializeIMU(0.f, 0.f, true);
+            //             else
+            //                 InitializeIMU(0.f, 0.f, true);
 
-        //                 cout << "end VIBA 2" << endl;
-        //             }
-        //         }
+            //             cout << "end VIBA 2" << endl;
+            //         }
+            //     }
 
-        //         // scale refinement
-        //         if (((mpAtlas->KeyFramesInMap())<=200) &&
-        //                 ((mTinit>25.0f && mTinit<25.5f)||
-        //                 (mTinit>35.0f && mTinit<35.5f)||
-        //                 (mTinit>45.0f && mTinit<45.5f)||
-        //                 (mTinit>55.0f && mTinit<55.5f)||
-        //                 (mTinit>65.0f && mTinit<65.5f)||
-        //                 (mTinit>75.0f && mTinit<75.5f))){
-        //             if (mbMonocular)
-        //                 ScaleRefinement();
-        //         }
-        //     }
-        // }
+            //     // scale refinement
+            //     if (((mpAtlas->KeyFramesInMap())<=200) &&
+            //             ((t_init>25.0f && t_init<25.5f)||
+            //             (t_init>35.0f && t_init<35.5f)||
+            //             (t_init>45.0f && t_init<45.5f)||
+            //             (t_init>55.0f && t_init<55.5f)||
+            //             (t_init>65.0f && t_init<65.5f)||
+            //             (t_init>75.0f && t_init<75.5f))){
+            //         if (mbMonocular)
+            //             ScaleRefinement();
+            //     }
+            // }
+        }
 
 
         self.send_to_loop_closing(context);
     }
 
-    fn process_new_keyframe(&self) {
-        // {
-        //     unique_lock<mutex> lock(mMutexNewKFs);
-        //     mpCurrentKeyFrame = mlNewKeyFrames.front();
-        //     mlNewKeyFrames.pop_front();
-        // }
+    fn process_new_keyframe(&mut self) {
+        // Compute Bags of Words structures
+        self.current_keyframe.compute_bow(&self.map.read().vocabulary);
 
-        // // Compute Bags of Words structures
-        // mpCurrentKeyFrame->ComputeBoW();
-
-        // // Associate MapPoints to the new keyframe and update normal and descriptor
+        // Associate MapPoints to the new keyframe and update normal and descriptor
+        // let mappoint_matches = self.map.read().get_keyframe(self.current_keyframe.id);
         // const vector<MapPoint*> vpMapPointMatches = mpCurrentKeyFrame->GetMapPointMatches();
 
         // for(size_t i=0; i<vpMapPointMatches.size(); i++)
@@ -850,11 +849,11 @@ impl<S: SensorType + 'static> DarvisLocalMapping<S> {
         map_read_lock.num_keyframes() as u32
     }
 }
-impl<S: SensorType + 'static> Function for DarvisLocalMapping<S> {
+impl Function for DarvisLocalMapping {
     fn handle(&mut self, context: axiom::prelude::Context, message: Message) -> ActorResult<()>
     {
-        if let Some(msg) = message.content_as::<KeyFrameMsg<S>>() {
-            self.local_mapping(context, msg);
+        if let Some(msg) = message.content_as::<KeyFrameMsg<PrelimKeyFrame>>() {
+            self.local_mapping_prelim(context, msg);
         } else if let Some(msg) = message.content_as::<Reset>() {
             // TODO: need to think about how reset requests should be propagated
         }

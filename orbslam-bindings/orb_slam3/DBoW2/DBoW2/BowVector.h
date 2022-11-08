@@ -112,8 +112,11 @@ public:
 	 * @param W number of words in the vocabulary
 	 */
 	void saveM(const std::string &filename, size_t W) const;
+
+    std::unique_ptr<BowVector> clone() const; // For rust bindings
 };
 
+std::unique_ptr<BowVector> new_bow_vec();
 } // namespace DBoW2
 
 #endif

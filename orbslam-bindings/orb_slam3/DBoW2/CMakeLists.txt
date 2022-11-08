@@ -14,12 +14,14 @@ set(HDRS_DBOW2
   DBoW2/FClass.h       
   DBoW2/FeatureVector.h
   DBoW2/ScoringObject.h   
-  DBoW2/TemplatedVocabulary.h)
+  DBoW2/TemplatedVocabulary.h
+  DBoW2/ORBVocabulary.h)
 set(SRCS_DBOW2
   DBoW2/BowVector.cpp
   DBoW2/FORB.cpp      
   DBoW2/FeatureVector.cpp
-  DBoW2/ScoringObject.cpp)
+  DBoW2/ScoringObject.cpp
+  DBoW2/ORBVocabulary.cpp)
 
 set(HDRS_DUTILS
   DUtils/Random.h

@@ -57,10 +57,13 @@ public:
    * @param v feature vector
    */
   friend std::ostream& operator<<(std::ostream &out, const FeatureVector &v);
-    
+
+    std::unique_ptr<FeatureVector> clone() const; // For rust bindings...
+
 };
+
+std::unique_ptr<FeatureVector> new_feat_vec();
 
 } // namespace DBoW2
 
 #endif
-

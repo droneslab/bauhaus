@@ -1,8 +1,9 @@
 use std::{collections::HashMap, env};
 use axiom::prelude::*;
 use dvmap::map_actor::{MAP_ACTOR, MapActor};
+use fern::colors::{ColoredLevelConfig, Color};
 use glob::glob;
-use log::LevelFilter;
+use log::{warn, info};
 use yaml_rust::yaml;
 use dvcore::{*, lockwrap::ReadWriteWrapper, global_params::*};
 
@@ -12,7 +13,7 @@ mod dvmap;
 mod modules;
 
 use crate::actors::messages::ImagesMsg;
-use crate::dvmap::{sensor::*, map::Map};
+use crate::dvmap::map::Map;
 use registered_modules::{FeatureManager, FRAME_LOADER};
 
 fn main() {
@@ -30,41 +31,25 @@ fn main() {
     // Load config, including custom settings and actor information
     let module_info = load_config(config_file);
 
-    // Note: This is so annoying but the map initialization needs to be in 
-    // its own function, otherwise the compiler complains that it doesn't
-    // know the type of S in the map. This way it generates duplicate
-    // version of init() for each SensorType. Another option is to use
-    // dyn, but this allows us to keep static dispatching. The map and S
-    // are used quite a few times so it seems like a huge slowdown to use
-    // dynamic dispatch.
-    let sensor: Sensor = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "sensor");
-    match GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "sensor") {
-        Sensor::Mono => init::<MonoSensor>(module_info, img_dir),
-        Sensor::ImuMono => init::<ImuMonoSensor>(module_info, img_dir),
-        Sensor::Stereo => init::<StereoSensor>(module_info, img_dir),
-        Sensor::ImuStereo => init::<ImuStereoSensor>(module_info, img_dir),
-        Sensor::Rgbd => init::<RgbdSensor>(module_info, img_dir),
-        Sensor::ImuRgbd => init::<ImuRgbdSensor>(module_info, img_dir),
-    }
-}
-
-fn init<S: SensorType + 'static> (module_info: Vec<base::ActorConf>, img_dir: String) {
     // Get image paths from directory
     let img_paths = generate_image_paths(img_dir);
     // Create the global map
-    let writeable_map: ReadWriteWrapper<Map<S>> = ReadWriteWrapper::new(Map::new::<S>());
+    let writeable_map: ReadWriteWrapper<Map> = ReadWriteWrapper::new(Map::new());
     // Initialize actor system from config
-    let (systems, mut aids) = initialize_actor_system(module_info, &writeable_map);
+    let actor_system = initialize_actor_system(module_info, &writeable_map);
     // Create map actor
-    let map_actor_aid = MapActor::<S>::spawn(writeable_map);
-    aids.insert(MAP_ACTOR.to_string(), map_actor_aid);
+    let map_actor_aid = MapActor::spawn(&actor_system, writeable_map);
+
+    // aids.insert(MAP_ACTOR.to_string(), map_actor_aid);
+
+    info!("System ready to receive messages");
 
     // Kickoff the pipeline by sending the feature extraction module images
-    let system = systems.get(FRAME_LOADER).unwrap();
-    let feat_aid = system.find_aid_by_name(FRAME_LOADER).unwrap();
+    let feat_aid = actor_system.find_aid_by_name(FRAME_LOADER).unwrap();
+
     feat_aid.send_new(ImagesMsg{ img_paths }).unwrap();
 
-    system.await_shutdown(None);
+    actor_system.await_shutdown(None);
 }
 
 fn load_config(config_file: String) -> Vec<base::ActorConf> {
@@ -127,23 +112,21 @@ fn generate_image_paths(img_dir: String) -> Vec<String> {
     img_paths
 }
 
-fn initialize_actor_system<S: SensorType + 'static>(
-    modules: Vec::<base::ActorConf>, writeable_map: &ReadWriteWrapper<Map<S>>
-) -> (HashMap::<String, ActorSystem>, HashMap::<String, Aid>) {
-    let mut systems  = HashMap::<String, ActorSystem>::new();
-    let mut aids = HashMap::new();
+fn initialize_actor_system(
+    modules: Vec::<base::ActorConf>, writeable_map: &ReadWriteWrapper<Map>
+) -> ActorSystem {
+    let system = ActorSystem::create(ActorSystemConfig::default());
 
     //TODO (low priority): Use Cluster manager to do remote agent calls
 
     // Loop through the config to initialize actor system using the default config
     for actor_conf in modules {
         let actname = actor_conf.name.clone();
-        let system_current = ActorSystem::create(ActorSystemConfig::default());
-        systems.insert(actname.clone(), system_current.clone());
+        info!("Spawning actor;{}", &actor_conf.name);
 
-        // read_only() is important here, otherwise all actors can
+        // Note: read_only() is important here, otherwise all actors can
         // access the write lock of the map
-        let c_aid  = system_current.spawn().name(&actor_conf.name).with(
+        let _ = system.spawn().name(&actor_conf.name).with(
             FeatureManager::new(
                 &actor_conf.actor_function,
                 &actor_conf.actor_function, 
@@ -151,7 +134,6 @@ fn initialize_actor_system<S: SensorType + 'static>(
             ),
             FeatureManager::handle
         ).unwrap();
-        aids.insert(actname.clone(), c_aid.clone());
 
         // TODO (low priority): Identify the role of using connect_with_channels, as the system communications are working without doing the following.
         //features.push(actname.clone());
@@ -160,23 +142,48 @@ fn initialize_actor_system<S: SensorType + 'static>(
         // }
         //i+=1;
     }
-    //println!("{:?}",aids);
 
-    (systems, aids)
+    system
 }
 
 fn setup_logger() -> Result<(), fern::InitError> {
+    let colors = ColoredLevelConfig::new()
+        .info(Color::Green)
+        .warn(Color::Yellow)
+        .error(Color::Red);
+
+    // fern::Dispatch::new()
+    // .format(move |out, message, record| {
+    //     out.finish(format_args!(
+    //         "{color_line}[{date}][{target}][{level}{color_line}] {message}\x1B[0m",
+    //         color_line = format_args!(
+    //             "\x1B[{}m",
+    //             colors.get_color(&record.level()).to_fg_str()
+    //         ),
+    //         date = chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
+    //         target = record.target(),
+    //         level = colors.color(record.level()),
+    //         message = message,
+    //     ));
+    // });
+
+
     fern::Dispatch::new()
-        .format(|out, message, record| {
+        .format(move |out, message, record| {
             out.finish(format_args!(
-                "{}[{}][{}] {}",
-                chrono::Local::now().format("[%H:%M:%S]"),
-                record.target(),
-                record.level(),
-                message
+                "{color_line}[{time}][{target}][{level}{color_line}] {message}\x1B[0m",
+                color_line = format_args!(
+                    "\x1B[{}m",
+                    colors.get_color(&record.level()).to_fg_str()
+                ),
+                level = colors.color(record.level()),
+                time = chrono::Local::now().format("%s%.6f"), // seconds since 1970-01-01 00:00 UTC
+                target = record.target(),
+                message = message
             ))
         })
-        .level(log::LevelFilter::Debug)
+        .level(log::LevelFilter::Info)
+        .level_for("axiom", log::LevelFilter::Warn)
         .chain(std::io::stdout())
         .chain(fern::log_file("output.log")?)
         .apply()?;

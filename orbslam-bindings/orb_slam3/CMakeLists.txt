@@ -81,7 +81,8 @@ DBoW2/DUtils/Random.h
 DBoW2/DUtils/Timestamp.h
 DBoW2/DUtils/Random.cpp
 DBoW2/DUtils/Timestamp.cpp
-
+DBoW2/DBoW2/ORBVocabulary.cpp
+DBoW2/DBoW2/ORBVocabulary.h
 )
 
 target_link_libraries(${PROJECT_NAME}
