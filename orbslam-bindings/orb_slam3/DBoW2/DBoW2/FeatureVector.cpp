@@ -80,6 +80,20 @@ std::ostream& operator<<(std::ostream &out,
   return out;  
 }
 
-// ---------------------------------------------------------------------------
+// --------------------------------------------------------------------------
+// For rust bindings...
+
+std::unique_ptr<FeatureVector> FeatureVector::clone() const {
+    std::unique_ptr<FeatureVector> vec = std::make_unique<FeatureVector>();
+    map<NodeId, std::vector<unsigned int>> new_featvector;
+    new_featvector = *this;
+    return vec;
+}
+
+std::unique_ptr<FeatureVector> new_feat_vec() {
+    std::unique_ptr<FeatureVector> vec = std::make_unique<FeatureVector>();
+    return vec;
+}
 
 } // namespace DBoW2
+

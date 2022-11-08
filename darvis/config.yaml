@@ -6,9 +6,10 @@ master:
 system_settings:
        show_ui: false
        localization_only_mode: false
-       vocabulary_file: "../vocabulary/ORBvoc.txt"
+       vocabulary_file: "/home/sofiya/darvis/vocabulary/ORBvoc.txt" # TODO: This does not work with ~/
 
-       sensor: Mono
+       framesensor: Mono
+       imusensor: None
       # CAMERA CALIBRATION
        camera_fx: 718.856
        camera_fy: 718.856

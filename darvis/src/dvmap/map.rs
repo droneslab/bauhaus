@@ -2,17 +2,16 @@ use std::collections::{HashMap, HashSet};
 use error_chain::bail;
 use log::{info, warn, error};
 
-use dvcore::{matrix::{DVVector3, DVVocabulary}, global_params::{Sensor, GLOBAL_PARAMS, SYSTEM_SETTINGS}};
+use dvcore::{matrix::{DVVector3}, global_params::{Sensor, GLOBAL_PARAMS, SYSTEM_SETTINGS, FrameSensor, ImuSensor}};
 use crate::{
-    dvmap::{keyframe::*, mappoint::*, sensor::SensorType, pose::Pose, observations::Observations},
+    dvmap::{keyframe::*, mappoint::*, pose::Pose, bow::DVVocabulary},
     modules::{map_initialization::Initialization, optimizer::{BAResult, Optimizer}}
 };
 
-use super::keypoints::KeyPointsData;
 pub type Id = i32;
 
 #[derive(Debug, Clone, Default)]
-pub struct Map<S: SensorType> {
+pub struct Map {
     pub id: Id,
 
     // IMU
@@ -20,12 +19,12 @@ pub struct Map<S: SensorType> {
     pub imu_ba2: bool, // mbIMU_BA2
 
     // KeyFrames
-    keyframes: HashMap<Id, KeyFrame<FullKeyFrame, S>>, // = mspKeyFrames
+    keyframes: HashMap<Id, KeyFrame<FullKeyFrame>>, // = mspKeyFrames
     last_kf_id: Id, // = mnMaxKFid
     pub initial_kf_id: Id, // todo (multimaps): this is the initial kf id that was added to this map, when this map is made. should tie together map vesioning better, maybe in a single struct
 
     // MapPoints
-    mappoints: HashMap<Id, MapPoint<FullMapPoint<S>>>, // = mspMapPoints
+    mappoints: HashMap<Id, MapPoint<FullMapPoint>>, // = mspMapPoints
     last_mp_id: Id,
 
     // Utilities from darvis::utils
@@ -35,6 +34,8 @@ pub struct Map<S: SensorType> {
     optimizer: Optimizer,
 
     pub vocabulary: DVVocabulary,
+
+    sensor: Sensor,
     // Sofiya: following are in orbslam3, not sure if we need:
     // mvpKeyFrameOrigins: Vec<KeyFrame>
     // mvBackupKeyFrameOriginsId: Vec<: u32>
@@ -56,23 +57,25 @@ pub struct Map<S: SensorType> {
     // mnBigChangeIdx: i32
 }
 
-impl<S: SensorType> Map<S> {
-    pub fn new<S2: SensorType>() -> Map<S> {
+impl Map {
+    pub fn new() -> Map {
+        let sensor: Sensor = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "sensor");
+
         Map {
             id: 0, // TODO (Multimaps): this should increase when new maps are made
             keyframes: HashMap::new(),
             mappoints: HashMap::new(),
             optimizer: Optimizer::new(),
-            vocabulary: DVVocabulary::load(GLOBAL_PARAMS.get::<String>(SYSTEM_SETTINGS, "vocabulary_file")),
+            sensor,
             ..Default::default()
         }
     }
 
     pub fn num_keyframes(&self) -> i32 { self.keyframes.len() as i32 }
-    pub fn get_keyframe(&self, id: &Id) -> Option<&KeyFrame<FullKeyFrame, S>> { self.keyframes.get(id) }
-    pub fn get_all_keyframes(&self) -> &HashMap<Id, KeyFrame<FullKeyFrame, S>> { &self.keyframes }
-    pub fn get_mappoint(&self, id: &Id) -> Option<&MapPoint<FullMapPoint<S>>> { self.mappoints.get(id) }
-    pub fn get_all_mappoints(&self) -> &HashMap<Id, MapPoint<FullMapPoint<S>>> { &self.mappoints }
+    pub fn get_keyframe(&self, id: &Id) -> Option<&KeyFrame<FullKeyFrame>> { self.keyframes.get(id) }
+    pub fn get_all_keyframes(&self) -> &HashMap<Id, KeyFrame<FullKeyFrame>> { &self.keyframes }
+    pub fn get_mappoint(&self, id: &Id) -> Option<&MapPoint<FullMapPoint>> { self.mappoints.get(id) }
+    pub fn get_all_mappoints(&self) -> &HashMap<Id, MapPoint<FullMapPoint>> { &self.mappoints }
 
     ////* &mut self ... behind map actor */////////////////////////////////////////////////////
 
@@ -86,16 +89,15 @@ impl<S: SensorType> Map<S> {
             .map(|mappoint| {
                 for kf_id in mappoint.observations().keys() {
                     let indexes = mappoint.observations().get_observation(kf_id);
-                    let keyframe = self.keyframes.get_mut(kf_id).unwrap();
-                    keyframe.erase_mappoint_match(indexes);
+                    self.keyframes.get_mut(kf_id).unwrap().erase_mappoint_match(indexes);
                 }
             });
         info!("map::discard_mappoint;{}", id);
     }
 
-    pub fn insert_keyframe_to_map(&mut self, mut kf: KeyFrame<PrelimKeyFrame, S>) -> Id {
+    pub fn insert_keyframe_to_map(&mut self, mut kf: KeyFrame<PrelimKeyFrame>) -> Id {
         self.last_kf_id += 1;
-        let full_keyframe = KeyFrame::<FullKeyFrame, S>::new(kf, self.id, self.last_kf_id);
+        let full_keyframe = KeyFrame::<FullKeyFrame>::new(kf, self.id, self.last_kf_id);
         self.keyframes.insert(self.last_kf_id, full_keyframe);
 
         if self.keyframes.is_empty() {
@@ -110,23 +112,23 @@ impl<S: SensorType> Map<S> {
 
     pub fn insert_mappoint_to_map(&mut self, mp: MapPoint<PrelimMapPoint>) -> Id {
         self.last_mp_id += 1;
-        let full_mappoint = MapPoint::<FullMapPoint<S>>::new(mp, self.last_mp_id);
+        let full_mappoint = MapPoint::<FullMapPoint>::new(mp, self.last_mp_id);
         self.mappoints.insert(self.last_mp_id, full_mappoint);
         info!("insert_mappoint_to_map;{}", self.last_mp_id);
         return self.last_mp_id;
     }
 
-    pub fn create_initial_map_monocular(&mut self, inidata: &Initialization<S>) -> Option<(Pose, i32, i32, HashSet<Id>)> {
+    pub fn create_initial_map_monocular(&mut self, inidata: &Initialization) -> Option<(Pose, i32, i32, HashSet<Id>)> {
         // TODO (IMU)
         // if(mSensor == System::IMU_MONOCULAR)
         //     pKFini->mpImuPreintegrated = (IMU::Preintegrated*)(NULL);
 
         // Create KeyFrames
         let initial_kf_id = self.insert_keyframe_to_map(
-            KeyFrame::<PrelimKeyFrame, S>::new(&inidata.initial_frame.as_ref().unwrap(), &self.vocabulary)
+            KeyFrame::<PrelimKeyFrame>::new(&inidata.initial_frame.as_ref().unwrap(), &self.vocabulary)
         );
         let curr_kf_id = self.insert_keyframe_to_map(
-            KeyFrame::<PrelimKeyFrame, S>::new(&inidata.current_frame.as_ref().unwrap(), &self.vocabulary)
+            KeyFrame::<PrelimKeyFrame>::new(&inidata.current_frame.as_ref().unwrap(), &self.vocabulary)
         );
 
         let mut curr_frame = inidata.current_frame.as_ref().unwrap().clone();
@@ -151,8 +153,8 @@ impl<S: SensorType> Map<S> {
                 initial_kf.add_mappoint(&new_mp, *index, false);
                 curr_kf.add_mappoint(&new_mp, *index2, false);
 
-                new_mp.add_observation(&initial_kf.id(), initial_kf.keypoints_data.num_keypoints_left(), *index);
-                new_mp.add_observation(&curr_kf.id(), curr_kf.keypoints_data.num_keypoints_left(), *index2);
+                new_mp.add_observation(&initial_kf.id(), initial_kf.features.num_keypoints, *index);
+                new_mp.add_observation(&curr_kf.id(), curr_kf.features.num_keypoints, *index2);
             }
 
             // Sofiya: clean up this workflow
@@ -181,8 +183,8 @@ impl<S: SensorType> Map<S> {
         self.update_after_ba(optimized_poses);
 
         let median_depth = initial_kf.compute_scene_median_depth(&self, 2);
-        let inverse_median_depth = match S::sensor_type() {
-            Sensor::ImuMono => 4.0 / median_depth,
+        let inverse_median_depth = match self.sensor {
+            Sensor(FrameSensor::Mono, ImuSensor::Some) => 4.0 / median_depth,
             _ => 1.0 / median_depth
         };
 
@@ -214,8 +216,8 @@ impl<S: SensorType> Map<S> {
         }
 
         // TODO (IMU)
-        match S::sensor_type() {
-            Sensor::ImuMono => {
+        match self.sensor {
+            Sensor(FrameSensor::Mono, ImuSensor::Some) => {
             //     pKFcur->mPrevKF = pKFini;
             //     pKFini->mNextKF = pKFcur;
             //     pKFcur->mpImuPreintegrated = mpImuPreintegratedFromLastKF;
@@ -256,7 +258,7 @@ impl<S: SensorType> Map<S> {
     }
 
 
-    pub fn update_connections(&mut self, main_kf: &mut KeyFrame<FullKeyFrame, S>) {
+    pub fn update_connections(&mut self, main_kf: &mut KeyFrame<FullKeyFrame>) {
         //For all map points in keyframe check in which other keyframes are they seen
         //Increase counter for those keyframes
         let mut kf_counter = HashMap::<Id, i32>::new();

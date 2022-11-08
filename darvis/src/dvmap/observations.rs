@@ -1,19 +1,19 @@
-use dvcore::{matrix::DVVector3, global_params::Sensor};
+use dvcore::{matrix::DVVector3, global_params::{Sensor, FrameSensor}};
 use nalgebra::Vector3;
 use serde::{Serialize, de::DeserializeOwned, Deserialize};
-use std::{fmt::Debug, collections::{HashMap, hash_map::Keys}, marker::PhantomData};
+use std::{fmt::Debug, collections::{HashMap, hash_map::Keys}};
 
-use super::{sensor::SensorType, keyframe::{KeyFrame, FullKeyFrame}, map::{Id, Map}, keypoints::KeyPointsData};
+use super::{keyframe::{KeyFrame, FullKeyFrame}, map::{Id, Map}};
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct Observations<S: SensorType>{
+#[derive(Clone, Debug)]
+pub struct Observations {
     pub obs: HashMap<Id, (i32, i32)>,
-    _pd: PhantomData<S>
+    sensor: Sensor
 }
 
-impl<S: SensorType> Observations<S> {
-    pub fn new() -> Self {
-        Self { obs: HashMap::new(), _pd: PhantomData }
+impl Observations {
+    pub fn new(sensor: Sensor) -> Self {
+        Self { obs: HashMap::new(), sensor }
     }
     pub fn is_empty(&self) -> bool { 
         self.obs.is_empty() 
@@ -35,8 +35,8 @@ impl<S: SensorType> Observations<S> {
             None => (-1, -1)
         };
 
-        match S::sensor_type() {
-            Sensor::ImuStereo | Sensor::Stereo => {
+        match self.sensor.frame() {
+            FrameSensor::Stereo => {
                 if index >= num_keypoints_left_for_kf {
                     right_index = index as i32;
                 } else {
@@ -60,7 +60,7 @@ impl<S: SensorType> Observations<S> {
         self.obs = HashMap::new()
     }
 
-    pub fn get_normal(&self, map: &Map<S>, position: &DVVector3<f64>) -> (i32, nalgebra::Vector3<f64>) { 
+    pub fn get_normal(&self, map: &Map, position: &DVVector3<f64>) -> (i32, nalgebra::Vector3<f64>) { 
         let mut normal = Vector3::<f64>::zeros();
         let mut n = 0;
         let position_opencv = **position;
@@ -72,8 +72,8 @@ impl<S: SensorType> Observations<S> {
             normal = normal + normali / normali.norm();
             n += 1;
 
-            match S::sensor_type() {
-                Sensor::Stereo | Sensor::ImuStereo => {
+            match self.sensor.frame() {
+                FrameSensor::Stereo => {
                     camera_center = kf.get_right_camera_center();
                     let owi = *camera_center;
                     let normali = position_opencv - owi;
@@ -86,28 +86,28 @@ impl<S: SensorType> Observations<S> {
         (n, normal)
     }
 
-    pub fn compute_descriptors(&self, map: &Map<S>) -> Vec::<opencv::core::Mat> {
+    pub fn compute_descriptors(&self, map: &Map) -> Vec::<opencv::core::Mat> {
         let mut descriptors = Vec::<opencv::core::Mat>::new();
         for (id, (index1, index2)) in &self.obs {
             let kf = map.get_keyframe(&id).unwrap();
-            descriptors.push(kf.keypoints_data.descriptors().row(*index1 as u32).unwrap());
-            match S::sensor_type() {
-                Sensor::Stereo | Sensor::ImuStereo => descriptors.push(kf.keypoints_data.descriptors().row(*index2 as u32).unwrap()),
+            descriptors.push(kf.features.descriptors.row(*index1 as u32).unwrap());
+            match self.sensor.frame() {
+                FrameSensor::Stereo => descriptors.push(kf.features.descriptors.row(*index2 as u32).unwrap()),
                 _ => {}
             }
         }
         descriptors
     }
 
-    pub fn get_level(&self, kf: &KeyFrame<FullKeyFrame, S>) -> i32 {
+    pub fn get_level(&self, kf: &KeyFrame<FullKeyFrame>) -> i32 {
         let (left_index, right_index) = self.obs.get(&kf.id()).unwrap();
         // Sofiya: sometimes in orbslam, left index will be -1 even for a stereo
         // camera, if there is no second camera set. I don't know why
         // they would do this though, like then it's not stereo...
         if *left_index != -1 {
-            kf.keypoints_data.get_octave(&(*left_index as u32))
+            kf.features.get_octave(*left_index as usize)
         } else {
-            kf.keypoints_data.get_octave(&((right_index - kf.keypoints_data.num_keypoints_left() as i32) as u32))
+            kf.features.get_octave((right_index - kf.features.num_keypoints as i32) as usize)
         }
     }
 }

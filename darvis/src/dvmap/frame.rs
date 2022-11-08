@@ -1,33 +1,28 @@
 use std::collections::{HashMap, HashSet};
 use chrono::{DateTime, Utc};
-use abow::{BoW, DirectIdx, Vocabulary};
-use dvcore::global_params::{GLOBAL_PARAMS, Sensor};
+use dvcore::global_params::{GLOBAL_PARAMS, Sensor, FrameSensor};
 use serde::{Deserialize, Serialize};
 
 use crate::{global_params::{SYSTEM_SETTINGS}, matrix::*, modules::{imu::IMUBias, imu::IMUPreIntegrated, camera::*,}};
-use super::{sensor::SensorType, pose::Pose, map::{Id, Map}, keypoints::{KeyPointsData, FRAME_GRID_ROWS, FRAME_GRID_COLS}};
+use super::{pose::Pose, map::{Id, Map}, features::{FRAME_GRID_ROWS, FRAME_GRID_COLS, Features}, bow::{DVVocabulary, BoW}};
 
 #[derive(Debug, Clone, Default)]
-pub struct Frame<S: SensorType> {
+pub struct Frame {
     pub id: Id,
     pub timestamp: DateTime<Utc>,
     pub pose: Option<Pose>,
 
     // Image and reference KF //
-    pub image_bounds: ImageBounds, // min_x, max_x, min_y, max_y
     pub ref_kf_id: Option<Id>, //mpReferenceKF
 
-    // KeyPoints, stereo coordinate and descriptors (all associated by an index) //
-    pub keypoints_data: S::KeyPointsData,
+    // Vision //
+    pub features: Features, // KeyPoints, stereo coordinate and descriptors (all associated by an index)
+    pub bow: BoW,
 
     // Mappoints //
     // Note: u32 is index in array, Id is mappoint Id, bool is if it's an oultier
     // equal to the vec in ORBSLAM3 bc it just allocates an N-size vector and has a bunch of empty entries
     pub mappoint_matches: HashMap::<u32, (Id, bool)>, // mvpmappoints , mvbOutlier
-
-    // BoW //
-    pub bow_vec: Option<Vec<abow::BoW>>, // mBowVec, Bow and featurevector from dbow2
-    pub feature_vec: Option<(BoW, DirectIdx)>, // mFeatVec
 
     // Scale //
     pub num_scale_levels: i32, // mnScaleLevels
@@ -47,98 +42,41 @@ pub struct Frame<S: SensorType> {
 
     // Idk where to put this
     // depth_threshold: u64,
-    pub camera: Camera
+    pub camera: Camera,
+
+    pub sensor: Sensor,
 }
 
-impl<S: SensorType> Frame<S> {
+impl Frame {
     pub fn new(
         id: Id, keypoints_vec: &DVVectorOfKeyPoint, descriptors_vec: &DVMatrix,
         im_width: i32, im_height: i32, camera: &Camera
     ) -> Result<Self, Box<dyn std::error::Error>> {
-        let image_bounds = ImageBounds::new(im_width, im_height, &camera.dist_coef);
-        let kpdata = S::KeyPointsData::new(keypoints_vec, descriptors_vec, &image_bounds, camera);
+        let sensor = GLOBAL_PARAMS.get::<Sensor>(SYSTEM_SETTINGS, "sensor");
+
+        let features = Features::new(keypoints_vec, descriptors_vec, im_width, im_height, camera, sensor);
 
         let frame = Frame{
             id,
             timestamp: Utc::now(),
-            image_bounds,
-            keypoints_data: kpdata?,
+            features: features?,
             num_scale_levels: GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "n_levels"),
             scale_factor: GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "scale_factor"),
             log_scale_factor: (GLOBAL_PARAMS.get::<f64>(SYSTEM_SETTINGS, "scale_factor") as f64).log(10.0),
             imu_bias: None, // TODO (IMU)
             camera: camera.clone(),
+            sensor,
             ..Default::default()
         };
 
         Ok(frame)
     }
 
-    pub fn get_features_in_area(&self, x: &f64, y: &f64, r: &f64, min_level: &i64, max_level: &i64) -> Vec<usize> {
-        // Sofiya: I think this needs to be moved into keypoints.rs
-        //GetFeaturesInArea
-        let mut indices = Vec::<usize>::new();
-        indices.reserve(self.keypoints_data.num_keypoints() as usize);
-
-        let frame_grid_rows = FRAME_GRID_ROWS as i64;
-        let frame_grid_cols = FRAME_GRID_COLS as i64;
-        let grid_element_width_inv = self.keypoints_data.grid().grid_element_width_inv;
-        let grid_element_height_inv = self.keypoints_data.grid().grid_element_height_inv;
-
-        let factor_x = *r;
-        let factor_y = *r;
-
-        let min_cell_x = i64::max(0, ((x-self.image_bounds.min_x-factor_x)*grid_element_width_inv).floor() as i64);
-        let max_cell_x = i64::min(frame_grid_cols-1, ((x-self.image_bounds.min_x+factor_x)*grid_element_width_inv).ceil() as i64);
-        let min_cell_y = i64::max(0, ((y-self.image_bounds.min_y-factor_y)*grid_element_height_inv).floor() as i64);
-        let max_cell_y = i64::min(frame_grid_rows-1, ((y-self.image_bounds.min_y+factor_y)*grid_element_height_inv).ceil() as i64);
-
-        if min_cell_x >= frame_grid_cols || max_cell_x < 0 || min_cell_y >= frame_grid_rows || max_cell_y < 0 {
-            return indices;
-        }
-
-        let b_check_levels = *min_level>0 || *max_level>=0;
-
-        for ix in min_cell_x..max_cell_x + 1 {
-            for iy in min_cell_y..max_cell_y + 1 {
-                let v_cell = Vec::<usize>::new();
-                //const vector<size_t> vCell = (!bRight) ? mGrid[ix][iy] : mGridRight[ix][iy];
-
-                if v_cell.is_empty() {
-                    continue;
-                }
-
-                for j in 0..v_cell.len() {
-                    //TODO (Stereo) Need to update this if stereo images are processed
-                    let kp_un = &self.keypoints_data.keypoints_get(v_cell[j]);
-                    if b_check_levels {
-                        if kp_un.octave< *min_level as i32 {
-                            continue;
-                        }
-                        if *max_level>=0 {
-                            if kp_un.octave> *max_level as i32 {
-                                continue;
-                            }
-                        }
-                    }
-
-                    let distx = kp_un.pt.x- (*x as f32);
-                    let disty = kp_un.pt.y- (*y as f32);
-
-                    if distx.abs()<(factor_x as f32) && disty.abs() < (factor_y as f32)  {
-                        indices.push(v_cell[j]);
-                    }
-                }
-            }
-        }
-        return indices;
-    }
-
     pub fn compute_bow(&mut self, voc: &DVVocabulary) {
         //Ref code : https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Frame.cc#L740
-        if self.feature_vec.is_none() {
-            self.feature_vec = Some(voc.transform_with_direct_idx(&self.keypoints_data.descriptors()));
-        }
+        // if self.feature_vec.is_none() {
+            // voc.transform(self.features.descriptors);
+        // }
     }
 
     //* MapPoints */
@@ -171,25 +109,25 @@ impl<S: SensorType> Frame<S> {
         mps_at_start - self.mappoint_matches.len() as i32
     }
 
-    pub fn get_num_mappoints_with_observations(&self, map: &Map<S>) -> i32 {
+    pub fn get_num_mappoints_with_observations(&self, map: &Map) -> i32 {
         (&self.mappoint_matches)
             .into_iter()
             .filter(|(_, (mp_id, _))| map.get_mappoint(mp_id).unwrap().observations().len() > 0)
             .count() as i32
     }
 
-    pub fn delete_mappoints_without_observations(&mut self, map: &Map<S>) {
+    pub fn delete_mappoints_without_observations(&mut self, map: &Map) {
         self.mappoint_matches
             .retain(|_, (mp_id, _)| map.get_mappoint(mp_id).unwrap().observations().len() == 0);
     }
 
     pub fn check_close_tracked_mappoints(&self) -> (i32, i32) {
-        self.keypoints_data.check_close_tracked_mappoints(self.camera.th_depth as f32, &self.mappoint_matches)
+        self.features.check_close_tracked_mappoints(self.camera.th_depth as f32, &self.mappoint_matches)
     }
 
-    pub fn is_in_frustum(&self, mp_id: Id, viewing_cos_limit: f64, map: &Map<S>) -> bool {
-        match S::sensor_type() {
-            Sensor::ImuStereo | Sensor::Stereo => {
+    pub fn is_in_frustum(&self, mp_id: Id, viewing_cos_limit: f64, map: &Map) -> bool {
+        match self.sensor.frame() {
+            FrameSensor::Stereo => {
                 todo!("TODO Stereo");
                 //         pMP -> mnTrackScaleLevel = -1;
                 //         pMP -> mnTrackScaleLevelR = -1;

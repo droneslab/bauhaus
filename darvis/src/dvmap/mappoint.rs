@@ -1,12 +1,12 @@
-use std::{fmt::Debug, marker::PhantomData};
+use std::{fmt::Debug};
 use array2d::Array2D;
-use dvcore::matrix::DVMatrix;
+use dvcore::{matrix::DVMatrix, global_params::{Sensor, GLOBAL_PARAMS, SYSTEM_SETTINGS}};
 use log::{info, error};
 use na::Vector3;
 use serde::{Deserialize, Serialize};
 extern crate nalgebra as na;
 use crate::{matrix::DVVector3, modules::orbmatcher::descriptor_distance};
-use super::{map::{Id, Map}, sensor::{SensorType}, observations::Observations};
+use super::{map::{Id, Map}, observations::Observations};
 
 // Note: Implementing typestate for like here: http://cliffle.com/blog/rust-typestate/#a-simple-example-the-living-and-the-dead
 // This way we can encode mappoints that have been created but not inserted into the map as a separate type than mappoints that are legit.
@@ -50,11 +50,11 @@ pub struct MapPoint<M: MapPointState> {
 #[derive(Clone, Debug)]
 pub struct PrelimMapPoint {} // prelimary map item created locally but not inserted into the map yet
 #[derive(Clone, Debug)]
-pub struct FullMapPoint<S: SensorType> { // Full map item inserted into the map with the following additional fields
+pub struct FullMapPoint { // Full map item inserted into the map with the following additional fields
     id: Id,
 
     // Observations, this is a part of "map connections" but I don't think we can avoid keeping this here.
-    observations: Observations<S>, // mObservations ; Keyframes observing the point and associated index in keyframe
+    observations: Observations, // mObservations ; Keyframes observing the point and associated index in keyframe
 
     // Best descriptor used for fast matching
     best_descriptor: DVMatrix,
@@ -70,12 +70,12 @@ pub struct FullMapPoint<S: SensorType> { // Full map item inserted into the map 
     nvisible: i32, //mnvisible
     nfound: i32, //mnfound
 
-    sensor: PhantomData<S>
+    sensor: Sensor
 }
 
 pub trait MapPointState {}
 impl MapPointState for PrelimMapPoint {}
-impl<S: SensorType> MapPointState for FullMapPoint<S> {}
+impl MapPointState for FullMapPoint {}
 
 impl MapPoint<PrelimMapPoint> {
     pub fn new(position: DVVector3<f64>, ref_kf: Id, origin_map_id: Id) -> Self {
@@ -129,28 +129,30 @@ impl MapPoint<PrelimMapPoint> {
     // }
 }
 
-impl<S: SensorType> MapPoint<FullMapPoint<S>> {
+impl MapPoint<FullMapPoint> {
     pub(super) fn new(prelim_mappoint: MapPoint<PrelimMapPoint>, id: Id) -> Self {
+    let sensor: Sensor = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "sensor");
+
         Self {
             position: prelim_mappoint.position,
             origin_map_id: prelim_mappoint.origin_map_id,
             ref_kf: prelim_mappoint.ref_kf,
             full_mp_info: FullMapPoint{
                 id,
-                observations: Observations::new(),
+                observations: Observations::new(sensor),
                 normal_vector: DVVector3::zeros::<f64>(),
                 max_distance: 0.0,
                 min_distance: 0.0,
                 nvisible: 1,
                 nfound: 1,
                 best_descriptor: DVMatrix::empty(),
-                sensor: PhantomData
+                sensor: sensor
             },
         }
     }
 
     pub fn id(&self) -> Id { self.full_mp_info.id }
-    pub fn observations(&self) -> &Observations<S> { &self.full_mp_info.observations }
+    pub fn observations(&self) -> &Observations { &self.full_mp_info.observations }
 
     pub fn increase_found(&mut self, n: &i32) {
         self.full_mp_info.nfound += n;
@@ -161,7 +163,7 @@ impl<S: SensorType> MapPoint<FullMapPoint<S>> {
         self.full_mp_info.observations.add_observation(kf_id, num_keypoints_left_for_kf, index);
     }
 
-    pub fn get_norm_and_depth(&self, map: &Map<S>) -> Option<(f64, f64, DVVector3<f64>)> {
+    pub fn get_norm_and_depth(&self, map: &Map) -> Option<(f64, f64, DVVector3<f64>)> {
         if self.full_mp_info.observations.is_empty() {
             return None;
         }
@@ -189,7 +191,7 @@ impl<S: SensorType> MapPoint<FullMapPoint<S>> {
         self.full_mp_info.normal_vector = vals.2;
     }
 
-    pub fn compute_distinctive_descriptors(&self, map: &Map<S>) -> Option<DVMatrix> {
+    pub fn compute_distinctive_descriptors(&self, map: &Map) -> Option<DVMatrix> {
         if self.full_mp_info.observations.len() == 0 {
             error!("mappoint::compute_distinctive_descriptors;No observations");
             return None;

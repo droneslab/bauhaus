@@ -8,29 +8,23 @@ use dvcore::{matrix::*,lockwrap::ReadOnlyWrapper,plugin_functions::Function,glob
 use crate::{
     registered_modules::{TRACKING_BACKEND},
     actors::{messages::{ImageMsg, FeatureMsg,},},
-    dvmap::{map::Map, sensor::*,},
+    dvmap::{map::Map},
 };
 
 #[derive(Debug, Clone)]
-pub struct DarvisTrackingFront<S: SensorType>  {
-    map: ReadOnlyWrapper<Map<S>>
+pub struct DarvisTrackingFront {
+    map: ReadOnlyWrapper<Map>,
 }
 
-impl<S: SensorType + 'static> DarvisTrackingFront<S> {
-    pub fn new(map: ReadOnlyWrapper<Map<S>>) -> DarvisTrackingFront<S> {
-        let sensor = GLOBAL_PARAMS.get::<Sensor>(SYSTEM_SETTINGS, "sensor");
-        DarvisTrackingFront {
-            map: map
-        }
+impl DarvisTrackingFront {
+    pub fn new(map: ReadOnlyWrapper<Map>) -> DarvisTrackingFront {
+        DarvisTrackingFront { map }
     }
 
     pub fn tracking_frontend(&mut self, context: Context, message: Arc<ImageMsg>) {
         let image = message.frame.grayscale_to_cv_mat();
         let (keypoints, descriptors) = self.extract_features(&image);
-
-        self.send_message_to_backend(
-            context, message, image, keypoints, descriptors
-        );
+        self.send_message_to_backend(context, image, keypoints, descriptors);
     }
 
     fn extract_features(&mut self, image: &opencv::core::Mat) -> (VectorOfKeyPoint, Mat) {
@@ -51,7 +45,7 @@ impl<S: SensorType + 'static> DarvisTrackingFront<S> {
     }
 
     pub fn send_message_to_backend(
-        &mut self, context: Context, message: Arc<ImageMsg>, 
+        &mut self, context: Context,
         image: Mat, keypoints: VectorOfKeyPoint, descriptors: Mat
     ) {
         let align_id = context.system.find_aid_by_name(TRACKING_BACKEND).unwrap();
@@ -95,7 +89,7 @@ impl<S: SensorType + 'static> DarvisTrackingFront<S> {
     }
 }
 
-impl<S: SensorType + 'static> Function for DarvisTrackingFront<S> {
+impl Function for DarvisTrackingFront {
     fn handle(&mut self, context: axiom::prelude::Context, message: Message) -> ActorResult<()> {
         if let Some(image_msg) = message.content_as::<ImageMsg>() {
             self.tracking_frontend(context, image_msg);

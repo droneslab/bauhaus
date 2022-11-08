@@ -1,4 +1,5 @@
 use axiom::prelude::*;
+use log::info;
 use opencv::imgcodecs;
 use dvcore::{global_params::*, matrix::*, plugin_functions::Function};
 use crate::{
@@ -22,10 +23,12 @@ impl DarvisFrameLoader {
             let use_visualizer = GLOBAL_PARAMS.get::<bool>(SYSTEM_SETTINGS, "show_ui");
             for path in &msg.img_paths {
                 let img = imgcodecs::imread(&path, imgcodecs::IMREAD_GRAYSCALE)?;
-                let vis_id = context.system.find_aid_by_name(VISUALIZER).unwrap();
-                let feat_aid = context.system.find_aid_by_name(TRACKING_FRONTEND).unwrap();
-                println!("Processed image: {}", path);
+                let tracking_frontend = context.system.find_aid_by_name(TRACKING_FRONTEND).unwrap();
+                let feat_aid = context.system.find_aid_by_name(crate::dvmap::map_actor::MAP_ACTOR).unwrap();
+
+                info!("Processed image;{}", path);
                 if use_visualizer {
+                    let vis_id = context.system.find_aid_by_name(VISUALIZER).unwrap();
                     vis_id.send_new(VisPathMsg::new(path.to_string())).unwrap();
                 }
 
@@ -33,7 +36,7 @@ impl DarvisFrameLoader {
                 // https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/Examples/RGB-D/rgbd_tum.cc#L89
 
                 // Kickoff the pipeline by sending the feature extraction module images
-                feat_aid.send_new(ImageMsg{
+                tracking_frontend.send_new(ImageMsg{
                     frame: img.grayscale_mat(),
                 }).unwrap();
             }

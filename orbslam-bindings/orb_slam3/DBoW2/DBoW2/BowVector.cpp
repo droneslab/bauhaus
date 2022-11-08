@@ -125,6 +125,18 @@ void BowVector::saveM(const std::string &filename, size_t W) const
 }
 
 // --------------------------------------------------------------------------
+// For rust bindings...
+
+std::unique_ptr<BowVector> BowVector::clone() const {
+    std::unique_ptr<BowVector> vec = std::make_unique<BowVector>();
+    map<WordId, WordValue> new_bowvector;
+    new_bowvector = *this; // mp3 is also a copy of mp2 (via copy-assignment)
+    return vec;
+}
+
+std::unique_ptr<BowVector> new_bow_vec() {
+    std::unique_ptr<BowVector> vec = std::make_unique<BowVector>();
+    return vec;
+}
 
 } // namespace DBoW2
-

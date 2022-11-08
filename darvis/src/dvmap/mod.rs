@@ -9,7 +9,6 @@ pub mod mappoint;
 pub mod frame;
 pub mod pose;
 pub mod misc; //BowDB
-pub mod keypoints;
+pub mod features;
 pub mod observations;
-
-pub mod sensor;
+pub mod bow;

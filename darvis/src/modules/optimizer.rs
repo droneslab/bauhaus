@@ -5,12 +5,12 @@ use std::collections::{HashSet, HashMap};
 use cxx::SharedPtr;
 use dvcore::{
     lockwrap::ReadOnlyWrapper,
-    global_params::{GLOBAL_PARAMS, SYSTEM_SETTINGS},
+    global_params::{GLOBAL_PARAMS, SYSTEM_SETTINGS, Sensor},
 };
 use g2o::ffi::{VertexSE3Expmap, VertexSBAPointXYZ, BridgeEdgeSE3ProjectXYZ};
 use log::info;
 use nalgebra::Matrix3;
-use crate::dvmap::{frame::Frame, pose::Pose, map::{Map, Id}, keypoints::*, sensor::SensorType};
+use crate::dvmap::{frame::Frame, pose::Pose, map::{Map, Id}, features::*, keyframe::{KeyFrame, PrelimKeyFrame}};
 
 #[derive(Debug, Clone, Default)]
 pub struct Optimizer {
@@ -22,10 +22,13 @@ pub struct Optimizer {
     // frame/keyframe/mappoint implementation and into the object that actually
     // directly uses it.
     pub inv_level_sigma2: Vec<f32>, // mvInvLevelSigma2
+    sensor: Sensor
 }
 
 impl Optimizer {
     pub fn new() -> Optimizer {
+        let sensor: Sensor = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "sensor");
+
         // See ORBExtractor constructor: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/ORBextractor.cc#L409
         // and note above about inv_level_sigma2
         let scale_factor= GLOBAL_PARAMS.get::<f64>(SYSTEM_SETTINGS, "scale_factor");
@@ -44,14 +47,12 @@ impl Optimizer {
             inv_level_sigma2.push(1.0 / level_sigma2[i]);
         }
 
-        Optimizer{
-            inv_level_sigma2: inv_level_sigma2
-        }
+        Optimizer{inv_level_sigma2, sensor}
     }
 
     // int Optimizer::PoseInertialOptimizationLastFrame(Frame *pFrame, bool bRecInit)
     // but bRecInit is always set to false
-    pub fn pose_inertial_optimization_last_frame<S: SensorType>(&self, frame: &mut Frame<S>, map: &ReadOnlyWrapper<Map<S>>) -> i32 {
+    pub fn pose_inertial_optimization_last_frame(&self, frame: &mut Frame, map: &ReadOnlyWrapper<Map>) -> i32 {
         // TODO IMU
         let optimizer = g2o::ffi::new_sparse_optimizer(2);
 
@@ -448,7 +449,7 @@ impl Optimizer {
 
     //int Optimizer::PoseInertialOptimizationLastKeyFrame(Frame *pFrame, bool bRecInit)
     // but bRecInit is always set to false
-    pub fn pose_inertial_optimization_last_keyframe<S: SensorType>(&self, frame: &mut Frame<S>) -> i32 {
+    pub fn pose_inertial_optimization_last_keyframe(&self, frame: &mut Frame) -> i32 {
         // TODO IMU
         let optimizer = g2o::ffi::new_sparse_optimizer(2);
 
@@ -810,7 +811,7 @@ impl Optimizer {
         todo!("TODO 10/17 BINDINGS Optimizer::PoseInertialOptimizationLastKeyFrame(&mCurrentFrame)");
     }
 
-    pub fn optimize_pose<S: SensorType + 'static>(&self, frame: &mut Frame<S>, map: &ReadOnlyWrapper<Map<S>>) -> Option<(i32, Pose)> {
+    pub fn optimize_pose(&self, frame: &mut Frame, map: &ReadOnlyWrapper<Map>) -> Option<(i32, Pose)> {
         //int Optimizer::PoseOptimization(Frame *pFrame)
         let optimizer = g2o::ffi::new_sparse_optimizer(1);
 
@@ -827,13 +828,13 @@ impl Optimizer {
         let mut edges = Vec::new();
 
         let mut initial_correspondences = 0;
-        for i in 0..frame.keypoints_data.num_keypoints() as u32 {
+        for i in 0..frame.features.num_keypoints as u32 {
             match frame.mappoint_matches.get(&i) {
                 Some((mp_id, _)) => {
-                    let keypoint = &frame.keypoints_data.keypoints_get(i as usize);
+                    let keypoint = &frame.features.keypoints_get(i as usize);
 
-                    let edge = match S::sensor_type() {
-                        crate::Sensor::Stereo | crate::Sensor::ImuStereo => {
+                    let edge = match self.sensor.frame() {
+                        crate::FrameSensor::Stereo => {
                             // Stereo observations
                             todo!("TODO stereo");
                             // let edge = optimizer.create_edge_stereo(
@@ -996,7 +997,7 @@ impl Optimizer {
         return Some((initial_correspondences - num_bad, pose.into()));
     }
 
-    pub fn global_bundle_adjustment<S: SensorType>(&self, map: &Map<S>, loop_kf: i32, iterations: i32) -> BAResult {
+    pub fn global_bundle_adjustment(&self, map: &Map, loop_kf: i32, iterations: i32) -> BAResult {
         // void Optimizer::GlobalBundleAdjustemnt(Map* pMap, int nIterations, bool* pbStopFlag, const unsigned long nLoopKF, const bool bRobust)
         let optimizer = g2o::ffi::new_sparse_optimizer(1);
 
@@ -1035,14 +1036,14 @@ impl Optimizer {
             for kf_id in observations.keys() {
                 let (left_index, right_index) = observations.get_observation(kf_id);
 
-                match S::sensor_type() {
-                    crate::Sensor::Stereo | crate::Sensor::ImuStereo => {
+                match self.sensor.frame() {
+                    crate::FrameSensor::Stereo => {
                         todo!("TODO STEREO, Optimizer lines 194-226");
                     },
                     _ => {
                         if left_index != -1 {
                             n_edges += 1;
-                            let keypoint = map.get_keyframe(kf_id).unwrap().keypoints_data.keypoints_get(left_index as usize);
+                            let keypoint = map.get_keyframe(kf_id).unwrap().features.keypoints_get(left_index as usize);
 
                             let _ = optimizer.add_edge_monocular_binary(
                                 false, *mp_id, *kf_id,
@@ -1092,6 +1093,16 @@ impl Optimizer {
             loop_kf_is_first_kf: loop_kf == map.initial_kf_id
         }
     }
+
+    pub fn local_bundle_adjustment(
+        &self, map: &Map, keyframe: &KeyFrame<PrelimKeyFrame>,
+        force_stop_flag: bool,
+        num_OptKF: i32, num_fixedKF: i32, num_MPs: i32, num_edges: i32
+    ) -> BAResult {
+        // void Optimizer::LocalBundleAdjustment(KeyFrame *pKF, bool* pbStopFlag, Map* pMap, int& num_fixedKF, int& num_OptKF, int& num_MPs, int& num_edges)
+        todo!("TODO: Local Mapping, local bundle adjustment");
+    }
+
 }
 
 

@@ -16,9 +16,9 @@
 
 use std::{fmt::Debug, convert::TryInto, ops::Index};
 use std::ops::Deref;
+use cxx::{UniquePtr, let_cxx_string};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use abow::{Desc, Vocabulary};
 use na::{DMatrix, ComplexField};
 use opencv::{
     prelude::*, core::*,
@@ -26,33 +26,6 @@ use opencv::{
 };
 extern crate nalgebra as na;
 
-#[derive(Debug, Serialize, Deserialize, Clone, Default)]
-pub struct DVVocabulary {
-    vocabulary: Vocabulary
-}
-impl DVVocabulary {
-    pub fn load(filename: String) -> Self {
-        Self {
-            vocabulary: Vocabulary::load(filename).unwrap()
-        }
-    }
-    pub fn transform_with_direct_idx(&self, features: &DVMatrix) -> (abow::BoW, abow::DirectIdx) {
-        let mut v_desc = Vec::new();
-        let desc_vec = features.mat().to_vec_2d::<u8>().unwrap();
-
-        for j in 0..features.mat().rows() {
-            let desc_j = desc_vec.get(j as usize).unwrap();
-            let mut desc_val : Desc = [0; 32];
-            for (&x, p) in desc_j.iter().zip(desc_val.iter_mut()) {
-                *p = x;
-            }
-            v_desc.push(desc_val);
-
-        }
-
-        self.vocabulary.transform_with_direct_idx(&v_desc).unwrap()
-    }
-}
 //////////////////////////* OPENCV TYPES //////////////////////////
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

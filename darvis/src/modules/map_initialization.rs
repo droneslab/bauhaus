@@ -1,26 +1,30 @@
 use std::collections::HashMap;
 use chrono::Duration;
+use dvcore::global_params::{GLOBAL_PARAMS, SYSTEM_SETTINGS, FrameSensor, ImuSensor};
 use opencv::core::Point2f;
 use dvcore::{matrix::DVVectorOfPoint3f, global_params::Sensor};
-use crate::dvmap::{sensor::SensorType, frame::Frame, pose::Pose, keypoints::KeyPointsData};
+use crate::dvmap::{frame::Frame, pose::Pose, features::Features};
 
 use crate::modules::camera::Camera;
 
 
 #[derive(Debug, Clone, Default)]
-pub struct Initialization<S: SensorType> {
+pub struct Initialization {
     // Initialization (Monocular)
     pub mp_matches: HashMap<u32, u32>,// ini_matches .. mvIniMatches;
     pub prev_matched: Vec<Point2f>,// std::vector<cv::Point2f> mvbPrevMatched;
     pub p3d: DVVectorOfPoint3f,// std::vector<cv::Point3f> mvIniP3D;
     pub ready_to_initializate: bool,
-    pub initial_frame: Option<Frame<S>>,
-    pub last_frame: Option<Frame<S>>,
-    pub current_frame: Option<Frame<S>>
+    pub initial_frame: Option<Frame>,
+    pub last_frame: Option<Frame>,
+    pub current_frame: Option<Frame>,
+    sensor: Sensor,
 }
 
-impl<S: SensorType> Initialization<S> {
+impl Initialization {
     pub fn new() -> Self {
+        let sensor: Sensor = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "sensor");
+
         Self {
             mp_matches: HashMap::new(),
             prev_matched: Vec::new(),
@@ -28,11 +32,13 @@ impl<S: SensorType> Initialization<S> {
             ready_to_initializate: false,
             initial_frame: None,
             last_frame: None,
-            current_frame: None
+            current_frame: None,
+            sensor
         }
     }
 
-    pub fn try_initialize(&mut self, current_frame: &Frame<S>, camera: &Camera) -> Result<(), String> {
+    pub fn try_initialize(&mut self, current_frame: &Frame, camera: &Camera) -> Result<(), String> {
+        let sensor: Sensor = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "sensor");
         // Only set once at beginning
         if self.initial_frame.is_none() {
             self.initial_frame = Some(current_frame.clone());
@@ -45,24 +51,24 @@ impl<S: SensorType> Initialization<S> {
         };
         self.current_frame = Some(current_frame.clone());
 
-        match S::sensor_type() {
-            Sensor::Mono | Sensor::ImuMono => self.monocular_initialization(camera),
+        match self.sensor.frame() {
+            FrameSensor::Mono => self.monocular_initialization(camera),
             _ => self.stereo_initialization()
         }
     }
 
     fn monocular_initialization(&mut self, camera: &Camera) -> Result<(), String> {
         // Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Tracking.cc#L2448
-        if !self.ready_to_initializate && self.current_frame.as_ref().unwrap().keypoints_data.num_keypoints() > 100 {
+        if !self.ready_to_initializate && self.current_frame.as_ref().unwrap().features.num_keypoints > 100 {
             // Set Reference Frame
-             self.prev_matched.resize(self.current_frame.as_ref().unwrap().keypoints_data.num_keypoints() as usize, Point2f::default());
+             self.prev_matched.resize(self.current_frame.as_ref().unwrap().features.num_keypoints as usize, Point2f::default());
 
-            for i in 0..self.current_frame.as_ref().unwrap().keypoints_data.num_keypoints() as usize {
-                self.prev_matched[i] = self.current_frame.as_ref().unwrap().keypoints_data.keypoints_get(i).pt.clone();
+            for i in 0..self.current_frame.as_ref().unwrap().features.num_keypoints as usize {
+                self.prev_matched[i] = self.current_frame.as_ref().unwrap().features.keypoints_get(i).pt.clone();
             }
 
-            match S::sensor_type() {
-                Sensor::ImuMono => {
+            match self.sensor.imu() {
+                ImuSensor::Some => {
                     //TODO: (IMU) 
                     //Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/4452a3c4ab75b1cde34e5505a36ec3f9edcdc4c4/src/Tracking.cc#L2467
 
@@ -76,11 +82,11 @@ impl<S: SensorType> Initialization<S> {
                 _ => {}
             }
             self.ready_to_initializate = true;
-            return Err("Not ready to initialize yet.".to_string());
+            return Err("Not ready to initialize yet 1.".to_string());
         } else {
-            if self.current_frame.as_ref().unwrap().keypoints_data.num_keypoints() <=100 || matches!(S::sensor_type(), Sensor::ImuMono) && self.last_frame.as_ref().unwrap().timestamp - self.initial_frame.as_ref().unwrap().timestamp > Duration::seconds(1) {
+            if self.current_frame.as_ref().unwrap().features.num_keypoints <=100 || matches!(self.sensor.imu(), ImuSensor::Some) && self.last_frame.as_ref().unwrap().timestamp - self.initial_frame.as_ref().unwrap().timestamp > Duration::seconds(1) {
                 self.ready_to_initializate = false;
-                return Err("Not ready to initialize yet.".to_string());
+                return Err("Not ready to initialize yet 2.".to_string());
             }
 
             // Find correspondences
@@ -96,7 +102,7 @@ impl<S: SensorType> Initialization<S> {
             // Check if there are enough correspondences
             if nmatches < 100 {
                 self.ready_to_initializate = false;
-                return Err("Not ready to initialize yet.".to_string());
+                return Err("Not ready to initialize yet 3.".to_string());
             }
 
             let mut tcw = Pose::default();
@@ -126,7 +132,7 @@ impl<S: SensorType> Initialization<S> {
 
                 return Ok(());
             } else {
-                return Err("Not ready to initialize yet.".to_string());
+                return Err("Not ready to initialize yet 4.".to_string());
             }
         }
     }

@@ -2,7 +2,7 @@ use axiom::message::ActorMessage;
 use dvcore::{
     matrix::{ DVVectorOfKeyPoint, DVMatrix, DVMatrixGrayscale},
 };
-use crate::dvmap::{keyframe::{KeyFrame, PrelimKeyFrame, KeyFrameState}, pose::Pose, sensor::SensorType, map::Id};
+use crate::dvmap::{keyframe::{KeyFrame, PrelimKeyFrame, KeyFrameState, FullKeyFrame}, pose::Pose, map::Id};
 
 // Note: Can avoid having to serialize/deserialize every message 
 // by removing Serialize,Deserialize derives and doing 
@@ -47,15 +47,15 @@ impl ActorMessage for ImagesMsg {}
 
 
 #[derive(Debug)]
-pub struct KeyFrameMsg<S: SensorType> {
+pub struct KeyFrameMsg<S: KeyFrameState> {
     // Note: if using serde to serialize/deserialize, need to
     // uncomment the following line of code. 
     // See https://github.com/serde-rs/serde/issues/1296
     // #[serde(bound = "")]
-    pub kf: KeyFrame<PrelimKeyFrame, S>,
+    pub keyframe: KeyFrame<S>,
 }
 
-impl<S: SensorType + 'static> ActorMessage for KeyFrameMsg<S> {}
+impl<S: KeyFrameState + 'static> ActorMessage for KeyFrameMsg<S> {}
 
 // Sofiya: When KF has been added to the map already, so instead of sending the keyframe data,
 // send the keyframe Id. This is only for initialization, so maybe we can figure out a way to

@@ -209,19 +209,23 @@ pub fn add_system_setting_string(yaml: &Yaml, param_name: &str) {
 }
 
 pub fn add_system_setting_sensor(yaml: &Yaml) {
-    let param_name = "sensor";
-    let value_str = yaml["sensor"].as_str().unwrap();
-    let value = match value_str {
-        "Mono" => Sensor::Mono,
-        "IMU_Mono" => Sensor::ImuMono,
-        "Stereo" => Sensor::Stereo,
-        "IMU_STEREO" => Sensor::ImuStereo,
-        "RGBD" => Sensor::Rgbd,
-        "IMU_RGBD" => Sensor::ImuRgbd,
-        _ => panic!("Incompatible sensor type"),
+    let framesensor_str = yaml["framesensor"].as_str().unwrap();
+    let framesensor = match framesensor_str {
+        "Mono" => FrameSensor::Mono,
+        "Stereo" => FrameSensor::Stereo,
+        "RGBD" => FrameSensor::Rgbd,
+        _ => panic!("Incompatible frame sensor type"),
     };
+    let imusensor_str = yaml["imusensor"].as_str().unwrap();
+    let imusensor = match imusensor_str {
+        "Some" => ImuSensor::Some,
+        "None" => ImuSensor::None,
+        _ => panic!("Incompatible IMU sensor type")
+    };
+    let param_name = "sensor";
+    let value = Sensor(framesensor, imusensor);
     GLOBAL_PARAMS.insert(SYSTEM_SETTINGS, param_name, value);
-    println!("\t {}: {}", param_name, value_str);
+    println!("\t {}: Frame {}, Imu {}", param_name, framesensor_str, imusensor_str);
 }
 
 
@@ -231,29 +235,37 @@ pub fn add_system_setting_sensor(yaml: &Yaml) {
 // Note: sensor has to be in here because ConfigValueBox needs to hold a sensor
 // Tried working with the commented code below which could be close but ran into errors. 
 // Don't think it's worth it to optimize this rn.
-#[derive(Clone, Copy, Debug)]
-pub enum Sensor {
-    Mono,
-    ImuMono,
+#[derive(Clone, Copy, Debug, Default)]
+pub enum FrameSensor {
+    #[default] Mono,
     Stereo,
-    ImuStereo,
     Rgbd,
-    ImuRgbd
 }
 
-impl Sensor {
-    pub fn is_imu(&self) -> bool {
-        match *self {
-            Sensor::ImuMono | Sensor::ImuStereo | Sensor::ImuRgbd => true,
-            _ => false
-        }
-    }
+#[derive(Clone, Copy, Debug, Default)]
+pub enum ImuSensor {
+    #[default] None,
+    Some
+}
 
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Sensor (pub FrameSensor, pub ImuSensor);
+//     pub frame: FrameSensor,
+//     pub imu: ImuSensor
+// }
+
+impl Sensor {
     pub fn is_mono(&self) -> bool {
-        match *self {
-            Sensor::ImuMono | Sensor::Mono => true,
-            _ => false
-        }
+        matches!(self.0, FrameSensor::Mono)
+    }
+    pub fn is_imu(&self) -> bool {
+        matches!(self.1, ImuSensor::Some)
+    }
+    pub fn frame(&self) -> FrameSensor {
+        self.0
+    }
+    pub fn imu(&self) -> ImuSensor {
+        self.1
     }
 }
 // pub static GLOBAL_PARAMS: OnceCell<GlobalParams> = OnceCell::INIT;

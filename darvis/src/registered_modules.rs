@@ -1,7 +1,6 @@
-use std::marker::PhantomData;
 use axiom::prelude::*;
 use dvcore::{plugin_functions::*, lockwrap::ReadOnlyWrapper};
-use crate::dvmap::{sensor::SensorType, map::Map};
+use crate::dvmap::{map::Map};
 
 // REGISTER MODULE: add a string to refer to your module here
 pub static FRAME_LOADER: &str = "FRAME_LOADER";
@@ -29,7 +28,7 @@ pub static VISUALIZER: &str = "VISUALIZER";
 /// let orb_extract_fn = getmethod("orb_extract".to_string(), "orb_extract".to_string());
 /// ```
 /// 
-pub fn getmethod<S: SensorType + 'static>(fnname: &String, id: &String, map: ReadOnlyWrapper<Map<S>>) -> FunctionProxy
+pub fn getmethod(fnname: &String, id: &String, map: ReadOnlyWrapper<Map>) -> FunctionProxy
 {
     match fnname.as_ref()
     {
@@ -44,14 +43,13 @@ pub fn getmethod<S: SensorType + 'static>(fnname: &String, id: &String, map: Rea
     }
 }
 
-pub struct FeatureManager<S: SensorType> {
+pub struct FeatureManager {
     pub object: FunctionProxy,
-    _pd: PhantomData<S>
 }
 
-impl<S: SensorType + 'static> FeatureManager<S> {
-    pub fn new(fnname: &String, id: &String, map: ReadOnlyWrapper<Map<S>>) -> FeatureManager<S> {
-        FeatureManager { object: getmethod(fnname, id, map), _pd: PhantomData }
+impl FeatureManager {
+    pub fn new(fnname: &String, id: &String, map: ReadOnlyWrapper<Map>) -> FeatureManager {
+        FeatureManager { object: getmethod(fnname, id, map) }
     }
 
     pub async fn handle(mut self, _context: axiom::prelude::Context, message: Message) -> ActorResult<Self> {

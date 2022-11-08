@@ -3,10 +3,10 @@ use std::convert::TryInto;
 use opencv::core::{Point2f, KeyPoint};
 use opencv::prelude::*;
 use crate::dvmap::keyframe::KeyFrame;
-use crate::dvmap::keypoints::KeyPointsData;
+use crate::dvmap::features::Features;
 use crate::dvmap::mappoint::FullMapPoint;
 use crate::{
-    dvmap::{frame::Frame, mappoint::MapPoint, map::Id, map::Map, sensor::SensorType},
+    dvmap::{frame::Frame, mappoint::MapPoint, map::Id, map::Map},
     modules::{camera::Camera},
     lockwrap::ReadOnlyWrapper,
 };
@@ -18,9 +18,9 @@ const  HISTO_LENGTH: i32 = 30;
 // Bit set count operation from
 // http://graphics.stanford.edu/~seander/bithacks.html#CountBitsSetParallel
 
-pub fn search_for_initialization<S: SensorType>(
+pub fn search_for_initialization(
     ratio: f64, check_orientation: bool,
-    F1: &Frame<S> , F2: &Frame<S>, prev_matched: &mut Vec<Point2f>, matches12: &mut HashMap<u32, Id>, window_size : i64
+    F1: &Frame, F2: &Frame, prev_matched: &mut Vec<Point2f>, matches12: &mut HashMap<u32, Id>, window_size : i64
 ) -> i32 {
     todo!("TODO 10/17 BINDINGS search_for_initialization");
     // //ref code : https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/0df83dde1c85c7ab91a0d47de7a29685d046f637/src/ORBmatcher.cc#L648
@@ -31,9 +31,9 @@ pub fn search_for_initialization<S: SensorType>(
 
     // const FACTOR: f64 = 1.0 as f64 / HISTO_LENGTH as f64;
 
-    // let mut matched_distance = vec![std::i32::MAX; F2.keypoints_data.num_keypoints().try_into().unwrap()]; 
-    // let mut matches21 = vec![-1 as i32; F2.keypoints_data.num_keypoints().try_into().unwrap()];
-    // let iend1 = F1.keypoints_data.num_keypoints();
+    // let mut matched_distance = vec![std::i32::MAX; F2.keypoints_data.num_keypoints.try_into().unwrap()]; 
+    // let mut matches21 = vec![-1 as i32; F2.keypoints_data.num_keypoints.try_into().unwrap()];
+    // let iend1 = F1.keypoints_data.num_keypoints;
     // for i1 in 0..iend1 as usize{
     //     let kp1: KeyPoint = F1.keypoints_data.keypoints_un().get(i1).unwrap().clone();
     //     let level1 = kp1.octave;
@@ -186,17 +186,17 @@ pub fn compute_three_maxima(
     }
 }
 
-pub fn search_by_projection<S: SensorType>(frame: &Frame<S>, mappoints: Vec<Id>, th: f64, far_points: bool, th_far_points: f64) -> i32 {
+pub fn search_by_projection(frame: &Frame, mappoints: Vec<Id>, th: f64, far_points: bool, th_far_points: f64) -> i32 {
     // int ORBmatcher::SearchByProjection(Frame &F, const vector<MapPoint*> &vpMapPoints, const float th, const bool bFarPoints, const float thFarPoints)
     todo!("TODO 10/17 BINDINGS search_by_projection");
 }
 
 // Project MapPoints tracked in last frame into the current frame and search matches.
 // Used to track from previous frame (Tracking)
-pub fn search_by_projection_with_threshold<S: SensorType> (
-    current_frame: &Frame<S>, last_frame: &Frame<S>, threshold: i32, is_mono: bool,
-    camera: &Camera, map: &ReadOnlyWrapper<Map<S>>
-) -> Vec<MapPoint<FullMapPoint<S>>> {
+pub fn search_by_projection_with_threshold (
+    current_frame: &Frame, last_frame: &Frame, threshold: i32, is_mono: bool,
+    camera: &Camera, map: &ReadOnlyWrapper<Map>
+) -> Vec<MapPoint<FullMapPoint>> {
     todo!("TODO 10/17 BINDINGS search_by_projection");
     // int ORBmatcher::SearchByProjection(Frame &CurrentFrame, const Frame &LastFrame, const float th, const bool bMono)
     let nmatches = 0;
@@ -227,7 +227,7 @@ pub fn search_by_projection_with_threshold<S: SensorType> (
     let forward = tlc[2] >current_frame.stereo_baseline && !is_mono;
     let backward = -tlc[2] > current_frame.stereo_baseline && !is_mono;
 
-    for i in 0..last_frame.keypoints_data.num_keypoints() as u32 {
+    for i in 0..last_frame.features.num_keypoints as u32 {
         if last_frame.mappoint_matches.contains_key(&i) && !last_frame.is_mp_outlier(&i) {
             // Project
             let x3Dc;
@@ -247,10 +247,10 @@ pub fn search_by_projection_with_threshold<S: SensorType> (
 
             let u = camera.fx * xc * invzc + camera.cx;
             let v = camera.fy * yc * invzc + camera.cy;
-            if u < current_frame.image_bounds.min_x || u > current_frame.image_bounds.max_x {
+            if u < current_frame.features.image_bounds.min_x || u > current_frame.features.image_bounds.max_x {
                 continue;
             }
-            if v < current_frame.image_bounds.min_y || v > current_frame.image_bounds.max_y {
+            if v < current_frame.features.image_bounds.min_y || v > current_frame.features.image_bounds.max_y {
                 continue;
             }
 

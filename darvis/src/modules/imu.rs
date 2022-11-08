@@ -1,47 +1,50 @@
-use std::marker::PhantomData;
-
-use dvcore::{lockwrap::ReadOnlyWrapper, global_params::Sensor};
+use dvcore::{lockwrap::ReadOnlyWrapper, global_params::{Sensor, FrameSensor, ImuSensor}};
 use serde::{Deserialize, Serialize};
 
-use crate::dvmap::{pose::Pose, sensor::{SensorType, IMUSensorType}, map::Map};
+use crate::dvmap::{pose::Pose, map::Map};
 
 #[derive(Debug, Clone, Default)]
-pub struct ImuModule<S: SensorType> {
+pub struct ImuModule {
     pub velocity: Option<Pose>,
     last_bias: Option<IMUBias>,
-    _sensor: PhantomData<S>
+    sensor: Sensor
 }
 
-impl<S: SensorType> ImuModule<S> {
-    pub fn ready(&self, map: &ReadOnlyWrapper<Map<S>>) -> bool {
-        S::is_imu() && !self.velocity.is_none() && map.read().imu_initialized
+impl ImuModule {
+    pub fn ready(&self, map: &ReadOnlyWrapper<Map>) -> bool {
+        self.sensor.is_imu() && !self.velocity.is_none() && map.read().imu_initialized
     }
 
     pub fn predict_state(&self) -> bool {
+        self.check_imu_sensor();
         todo!("IMU: PredictStateIMU");
     }
 
     pub fn preintegrate(&self) {
+        self.check_imu_sensor();
         todo!("IMU: PreintegrateIMU");
     }
 
     pub fn initialize(&self) {
-        match S::sensor_type() {
-            Sensor::ImuMono => self.hidden_initialize(1e2, 1e10, true),
-            Sensor::ImuStereo | Sensor::ImuRgbd => self.hidden_initialize(1e2, 1e5, true),
-            _ => {}
-        }
-    }
-
-    fn hidden_initialize(&self, prior_g: f64, prior_a: f64, fiba: bool) {
+        self.check_imu_sensor();
         //void LocalMapping::InitializeIMU(float priorG, float priorA, bool bFIBA)
+        let (prior_g, prior_a, fiba) = match self.sensor.frame() {
+            FrameSensor::Mono => (1e2, 1e10, true),
+            FrameSensor::Stereo | FrameSensor::Rgbd => (1e2, 1e5, true),
+        };
         todo!("IMU: initialize");
     }
 
     pub fn reset_frame_imu(&self) -> bool {
+        self.check_imu_sensor();
         todo!("IMU: ResetFrameIMU");
     }
 
+    fn check_imu_sensor(&self) {
+        if matches!(self.sensor.imu(), ImuSensor::None) {
+            panic!("Should not use IMU module if IMU sensor is not set".to_string());
+        }
+    }
 }
 
 

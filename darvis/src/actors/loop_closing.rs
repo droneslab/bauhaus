@@ -6,26 +6,26 @@ use dvcore::{
     plugin_functions::Function,
     lockwrap::ReadOnlyWrapper,
 };
-use crate::dvmap::{map::Map, map_actor::MAP_ACTOR, sensor::SensorType};
+use crate::dvmap::{map::Map, map_actor::MAP_ACTOR};
 use crate::actors::messages::KeyFrameMsg;
 use crate::modules::imu::ImuModule;
 
 use super::messages::Reset;
 
 #[derive(Debug, Clone, Default)]
-pub struct DarvisLoopClosing<S: SensorType> {
+pub struct DarvisLoopClosing {
     // Map
-    map: ReadOnlyWrapper<Map<S>>,
+    map: ReadOnlyWrapper<Map>,
 
     // IMU
-    imu: ImuModule<S>,
+    imu: ImuModule,
 
     matches_inliers: i32,
 }
 
 
-impl<S: SensorType + 'static> DarvisLoopClosing<S> {
-    pub fn new(map: ReadOnlyWrapper<Map<S>>) -> DarvisLoopClosing<S> {
+impl DarvisLoopClosing {
+    pub fn new(map: ReadOnlyWrapper<Map>) -> DarvisLoopClosing {
         DarvisLoopClosing {
             map: map,
             ..Default::default()
@@ -33,7 +33,7 @@ impl<S: SensorType + 'static> DarvisLoopClosing<S> {
     }
 }
 
-impl<S: SensorType + 'static> Function for DarvisLoopClosing<S> {
+impl Function for DarvisLoopClosing {
     fn handle(&mut self, context: axiom::prelude::Context, message: Message) -> ActorResult<()>
     {
 

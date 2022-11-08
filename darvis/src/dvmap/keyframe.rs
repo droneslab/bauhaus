@@ -1,36 +1,30 @@
 use std::{collections::{HashMap}, iter::FromIterator};
 use chrono::{DateTime, Utc};
-use abow::{BoW, DirectIdx};
-use dvcore::{matrix::{DVVocabulary, DVVector3}};
+use derivative::Derivative;
+use dvcore::{matrix::{DVVector3}};
 use log::error;
-use serde::{Deserialize, Serialize};
-use crate::{dvmap::{map::Id, pose::Pose, frame::*, sensor::SensorType},modules::{imu::*},};
-use super::{mappoint::{MapPoint, FullMapPoint}, map::{Map}, keypoints::KeyPointsData};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use crate::{dvmap::{map::Id, pose::Pose, frame::*, bow::DVVocabulary},modules::{imu::*},};
+use super::{mappoint::{MapPoint, FullMapPoint}, map::{Map}, features::Features, bow::BoW};
 
 // Typestate...Keyframe information that is ALWAYS available, regardless of keyframe state.
 // Uncomment this if doing serialization/deserialization: unsafe impl<S: SensorType> Sync for KeyFrame<S> {}
-#[derive(Debug, Serialize, Clone)]
-pub struct KeyFrame<K: KeyFrameState, S: SensorType> {
+#[derive(Debug, Clone, Derivative)]
+#[derivative(Default)]
+pub struct KeyFrame<K: KeyFrameState> {
     pub timestamp: DateTime<Utc>,
     pub frame_id: Id, // Id of frame it is based on
     pub pose: Pose,
 
-    // Image //
-    pub image_bounds: ImageBounds,
-
-    // KeyPoints, stereo coordinate and descriptors (all associated by an index) //
-    pub keypoints_data: S::KeyPointsData,
+    // Vision //
+    pub features: Features, // KeyPoints, stereo coordinate and descriptors (all associated by an index)
+    pub bow: BoW,
 
     // Mappoints
     // Note: u32 is index in array, Id is mappoint Id ... equal to vector in ORBSLAM3
     // because it just allocates an N-size vector and has a bunch of empty entries
     pub mappoint_matches: HashMap::<u32, (Id, bool)>, // mvpmappoints 
 
-    // BoW
-    pub bow_vec: Vec<abow::BoW>, // mBowVec, Bow and featurevector from dbow2
-    pub feature_vec: (BoW, DirectIdx), // mFeatVec
-    // bow: abow::BoW,
-    // bow_db: Arc<BowDB>,
     // scale: f64,
     // depth_threshold: f64,
 
@@ -59,9 +53,9 @@ pub struct KeyFrame<K: KeyFrameState, S: SensorType> {
 }
 
 // Typestate...State options.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Copy, Serialize, Deserialize)]
 pub struct PrelimKeyFrame {} // prelimary map item created locally but not inserted into the map yet
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct FullKeyFrame { // Full map item inserted into the map with the following additional fields
     pub id: Id,
     pub origin_map_id: Id, // mnOriginMapId
@@ -94,26 +88,23 @@ pub struct FullKeyFrame { // Full map item inserted into the map with the follow
     pub mnBALocalForMerge: u64,
 }
 
-pub trait KeyFrameState {}
+pub trait KeyFrameState: Send + Sync {}
 impl KeyFrameState for PrelimKeyFrame {}
 impl KeyFrameState for FullKeyFrame {}
 
-
-impl<S: SensorType> KeyFrame<PrelimKeyFrame, S> {
-    pub fn new(frame: &Frame<S>, vocabulary: &DVVocabulary) -> KeyFrame<PrelimKeyFrame, S> {
+impl KeyFrame<PrelimKeyFrame> {
+    pub fn new(frame: &Frame, vocabulary: &DVVocabulary) -> KeyFrame<PrelimKeyFrame> {
         let mut kf = KeyFrame {
             timestamp: frame.timestamp,
             frame_id: frame.id,
             mappoint_matches: frame.mappoint_matches.clone(),
             pose: frame.pose.unwrap(),
-            keypoints_data: frame.keypoints_data.clone(),
-            bow_vec: frame.bow_vec.as_ref().unwrap().clone(),
-            feature_vec: frame.feature_vec.as_ref().unwrap().clone(),
+            features: frame.features.clone(),
+            bow: BoW::new(),
             num_scale_levels: frame.num_scale_levels,
             scale_factor: frame.scale_factor,
             log_scale_factor: frame.log_scale_factor,
             scale_factors: frame.scale_factors.clone(),
-            image_bounds: frame.image_bounds.clone(),
             imu_bias: frame.imu_bias,
             imu_preintegrated: frame.imu_preintegrated,
             stereo_baseline: 0.0, // TODO Stereo
@@ -126,25 +117,23 @@ impl<S: SensorType> KeyFrame<PrelimKeyFrame, S> {
     }
 
     pub fn compute_bow(&mut self, voc: &DVVocabulary) {
-        self.feature_vec = voc.transform_with_direct_idx(self.keypoints_data.descriptors());
+        voc.transform(&self.features.descriptors, &mut self.bow);
     }
 }
 
-impl<S: SensorType> KeyFrame<FullKeyFrame, S> {
-    pub(super) fn new(prelim_keyframe: KeyFrame<PrelimKeyFrame, S>, origin_map_id: Id, id: Id) -> Self {
+impl KeyFrame<FullKeyFrame> {
+    pub(super) fn new(prelim_keyframe: KeyFrame<PrelimKeyFrame>, origin_map_id: Id, id: Id) -> Self {
         Self {
             timestamp: prelim_keyframe.timestamp,
             frame_id: prelim_keyframe.frame_id,
             mappoint_matches: prelim_keyframe.mappoint_matches,
             pose: prelim_keyframe.pose,
-            keypoints_data: prelim_keyframe.keypoints_data,
-            bow_vec: prelim_keyframe.bow_vec,
-            feature_vec: prelim_keyframe.feature_vec,
+            features: prelim_keyframe.features,
+            bow: prelim_keyframe.bow,
             num_scale_levels: prelim_keyframe.num_scale_levels,
             scale_factor: prelim_keyframe.scale_factor,
             log_scale_factor: prelim_keyframe.log_scale_factor,
             scale_factors: prelim_keyframe.scale_factors,
-            image_bounds: prelim_keyframe.image_bounds,
             imu_bias: prelim_keyframe.imu_bias,
             imu_preintegrated: prelim_keyframe.imu_preintegrated,
             stereo_baseline: prelim_keyframe.stereo_baseline,
@@ -179,7 +168,7 @@ impl<S: SensorType> KeyFrame<FullKeyFrame, S> {
         Vec::from_iter(self.full_kf_info.neighbors[0..(num as usize)].iter().cloned())
     }
 
-    pub fn add_mappoint(&mut self, mp: &MapPoint<FullMapPoint<S>>, index: u32, is_outlier: bool) {
+    pub fn add_mappoint(&mut self, mp: &MapPoint<FullMapPoint>, index: u32, is_outlier: bool) {
         // KeyFrame::AddMapPoint(MapPoint *pMP, const size_t &idx)
         self.mappoint_matches.insert(index, (mp.id(), is_outlier));
     }
@@ -222,19 +211,13 @@ impl<S: SensorType> KeyFrame<FullKeyFrame, S> {
         // this needs to be generic on sensor, so it can't be called if the sensor doesn't have a right camera
     }
 
-
-    /* Below is stuff that requires info from map, usually because of needing inner fields of observed mappoints.
-        For now, calling a passthrough function in map that aggregates the relevant mappoints and call these functions.
-        Hence why these functions are set public only to super (dvmap).
-     */
-
-    pub fn compute_scene_median_depth(&self, map: &Map<S>, q: i32) -> f64 {
-        if self.keypoints_data.num_keypoints() == 0 {
+    pub fn compute_scene_median_depth(&self, map: &Map, q: i32) -> f64 {
+        if self.features.num_keypoints == 0 {
             return -1.0;
         }
 
         let mut depths = Vec::new();
-        // depths.reserve(self.keypoints_data.num_keypoints() as usize); // probably unnecessary?
+        // depths.reserve(self.keypoints_data.num_keypoints as usize); // probably unnecessary?
         let rot = self.pose.rotation();
         let rcw2 = rot.row(2);
         let zcw = self.pose.translation()[2];
@@ -249,7 +232,7 @@ impl<S: SensorType> KeyFrame<FullKeyFrame, S> {
         depths[(depths.len()-1) / q as usize]
     }
 
-    pub fn tracked_mappoints(&self, map: &Map<S>, min_observations: u32) -> i32{
+    pub fn tracked_mappoints(&self, map: &Map, min_observations: u32) -> i32{
         // KeyFrame::TrackedMapPoints(const int &minObs)
         if min_observations > 0 {
             return self.mappoint_matches.len() as i32;

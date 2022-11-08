@@ -11,7 +11,6 @@ use crate::{
     dvmap::{
         map::Map, map_actor::MapWriteMsg, map_actor::{MAP_ACTOR, MapInitializedMsg}, map::Id,
         keyframe::KeyFrame, frame::Frame, pose::Pose, mappoint::{MapPoint, FullMapPoint},
-        sensor::*
     },
     modules::{camera::Camera, camera::CameraType, imu::{ImuModule}, optimizer::*, orbmatcher, map_initialization::Initialization, relocalization::Relocalization},
 };
@@ -53,24 +52,23 @@ pub enum TrackingState {
 
 #[derive(Debug, Clone, Derivative)]
 #[derivative(Default)]
-pub struct DarvisTrackingBack<S: SensorType> {
+pub struct DarvisTrackingBack {
     state: TrackingState,
 
     // Map
-    map: ReadOnlyWrapper<Map<S>>,
-    // map_actor: Aid,
-    initialization: Initialization<S>, // data sent to map actor to initialize new map
+    map: ReadOnlyWrapper<Map>,
+    initialization: Initialization, // data sent to map actor to initialize new map
 
     // Feature matching
-    temporal_points: Vec<MapPoint<FullMapPoint<S>>>,
+    temporal_points: Vec<MapPoint<FullMapPoint>>,
     matches_in_frame : i32, // Current matches in frame
     prev_matched: Vec<Point2f>, // mvbPrevMatched
 
     // Frames
     last_frame_id: Id,
-    current_frame: Frame<S>,
-    last_frame: Option<Frame<S>>,
-    reference_frame: Option<Frame<S>>, // TODO: Redundant hence will remove once frame database is established.
+    current_frame: Frame,
+    last_frame: Option<Frame>,
+    reference_frame: Option<Frame>, // TODO: Redundant hence will remove once frame database is established.
 
     // KeyFrames
     ref_kf_id: Option<Id>,
@@ -83,7 +81,7 @@ pub struct DarvisTrackingBack<S: SensorType> {
     local_mappoints: HashSet<Id>, //mvpLocalMapPoints
 
     // IMU 
-    imu: Option<ImuModule<S>>,
+    imu: ImuModule,
 
     // Relocalization
     relocalization: Relocalization,
@@ -102,41 +100,25 @@ pub struct DarvisTrackingBack<S: SensorType> {
     trajectory_keyframes: Vec<Id>, //mlpReferences
 
     global_defaults: TrackingDefaults,
+    sensor: Sensor,
 }
 
-impl<S: SensorType + 'static> DarvisTrackingBack<S> {
-    pub fn new(map: ReadOnlyWrapper<Map<S>>) -> DarvisTrackingBack<S> {
-        let sensor = GLOBAL_PARAMS.get::<Sensor>(SYSTEM_SETTINGS, "sensor");
-
-        match sensor {
-            Sensor::Mono => Self::hidden_new::<MonoSensor>(map),
-            Sensor::ImuMono => Self::hidden_new::<ImuMonoSensor>(map),
-            Sensor::Stereo => Self::hidden_new::<StereoSensor>(map),
-            Sensor::ImuStereo => Self::hidden_new::<ImuStereoSensor>(map),
-            Sensor::Rgbd => Self::hidden_new::<RgbdSensor>(map),
-            Sensor::ImuRgbd => Self::hidden_new::<ImuRgbdSensor>(map),
-        }
-    }
-
-    fn hidden_new<S2: SensorType> (map: ReadOnlyWrapper<Map<S>>) -> DarvisTrackingBack<S> {
-        let camera = Camera::new(CameraType::Pinhole);
-
-        let mut bla = DarvisTrackingBack {
-            map,
-            camera,
+impl DarvisTrackingBack {
+    pub fn new(map: ReadOnlyWrapper<Map>) -> DarvisTrackingBack {
+        // Note: This is suuuuuch a specific bug. Default::default() calls the default function 
+        // for every single item in the struct, even if it is explicitly overriden (such as
+        // map, camera, sensor, global_defaults, and optimizer in the below code). This means that
+        // a second map is created, DISCARDED, and then DarvisTrackingBack.map is set to the first map
+        // that we wanted in the first place. So it looks like it duplicates the map, but it doesn't actually
+        // and you shouldn't worry if you see this.
+        DarvisTrackingBack {
+            map: map,
+            camera: Camera::new(CameraType::Pinhole),
+            sensor: GLOBAL_PARAMS.get::<Sensor>(SYSTEM_SETTINGS, "sensor"),
+            global_defaults: TrackingDefaults::new(),
+            optimizer: Optimizer::new(),
             ..Default::default()
-        };
-
-        // SOFIYA TODO Sensor restructuring
-
-        bla.imu = match S::sensor_type() {
-            Sensor::Mono | Sensor::Rgbd | Sensor::Stereo => None,
-            _ => Some(ImuModule::<S>::default()),
-            // Sensor::ImuRgbd => Some(ImuModule::<ImuRgbdSensor>::default()),
-            // Sensor::ImuMono => Some(ImuModule::<ImuMonoSensor>::default()),
-        };
-
-        bla
+        }
     }
 
     fn handle_message(&mut self, context: axiom::prelude::Context, msg: Arc<FeatureMsg>) {
@@ -170,20 +152,9 @@ impl<S: SensorType + 'static> DarvisTrackingBack<S> {
         // TODO: set bias of new frame = to bias of last
         // Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Tracking.cc#L1860
 
-        // SOFIYA TODO Sensor restructuring
-        // if let Some(module) = &self.imu {
-        //     module.preintegrate();
-        // }
-
-        // SOFIYA TODO Sensor restructuring
-        // match S::sensor_type() {
-        //     Sensor::Mono | Sensor::Rgbd | Sensor::Stereo => None,
-        //     _ => self.imu.unwrap().preintegrate()
-        // };
-            // Sensor::ImuRgbd => Some(ImuModule::<ImuRgbdSensor>::default()),
-            // Sensor::ImuMono => Some(ImuModule::<ImuMonoSensor>::default()),
-        // };
-
+        if self.sensor.is_imu() {
+            self.imu.preintegrate();
+        }
 
         // TODO: update map change index. Not sure why this is useful
         // Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Tracking.cc#L1890
@@ -194,8 +165,10 @@ impl<S: SensorType + 'static> DarvisTrackingBack<S> {
             TrackingState::NotInitialized => {
                 match self.initialization.try_initialize(&self.current_frame, &self.camera) {
                     Ok(()) => {
-                        // TODO Stereo: should there be a create_initial_map_stereo ?
-                        let msg = MapWriteMsg::create_initial_map_monocular(self.initialization.clone(), tracking_actor);
+                        let msg = match self.sensor.frame() {
+                            FrameSensor::Mono => MapWriteMsg::create_initial_map_monocular(self.initialization.clone(), tracking_actor),
+                            _ => MapWriteMsg::create_initial_map_stereo(self.initialization.clone(), tracking_actor)
+                        };
                         map_actor.send_new(msg).unwrap();
                         info!("tracking_backend::handle_message;Sent initialization info to map");
                         self.state = TrackingState::WaitForMapResponse;
@@ -206,12 +179,10 @@ impl<S: SensorType + 'static> DarvisTrackingBack<S> {
                 return;
             },
             TrackingState::Ok => {
-                let ok = false;
-                // SOFIYA TODO Sensor restructuring
-                // let ok = match !self.imu.ready(&self.map) || self.relocalization.frames_since_lost(&self.current_frame) < 2 {
-                //     true => self.track_reference_keyframe(),
-                //     false => self.track_with_motion_model() || self.track_reference_keyframe()
-                // };
+                let ok = match !self.imu.ready(&self.map) || self.relocalization.frames_since_lost(&self.current_frame) < 2 {
+                    true => self.track_reference_keyframe(),
+                    false => self.track_with_motion_model() || self.track_reference_keyframe()
+                };
 
                 if !ok {
                     self.relocalization.timestamp_lost = Some(self.current_frame.timestamp);
@@ -224,29 +195,27 @@ impl<S: SensorType + 'static> DarvisTrackingBack<S> {
             },
             TrackingState::RecentlyLost => {
                 warn!("tracking_backend::handle_message;State recently lost");
-                let ok = false;
-                // SOFIYA TODO Sensor restructuring
-                // let (ok, move_to_lost) = match self.imu.unwrap().ready(&self.map) {
-                //     true => (
-                //         self.imu.unwrap().predict_state(),
-                //         self.relocalization.past_cutoff(&self.current_frame)
-                //     ),
-                //     false => {
-                //         let reloc = self.relocalization.run();
-                //         (reloc, !reloc && self.relocalization.sec_since_lost(&self.current_frame) > Duration::seconds(3))
-                //     }
-                // };
-                // if move_to_lost {
-                //     self.state = TrackingState::Lost;
-                //     warn!("tracking_backend::handle_message;Tracking lost...");
-                // }
+                let (ok, move_to_lost) = match self.imu.ready(&self.map) {
+                    true => (
+                        self.imu.predict_state(),
+                        self.relocalization.past_cutoff(&self.current_frame)
+                    ),
+                    false => {
+                        let reloc = self.relocalization.run();
+                        (reloc, !reloc && self.relocalization.sec_since_lost(&self.current_frame) > Duration::seconds(3))
+                    }
+                };
+                if move_to_lost {
+                    self.state = TrackingState::Lost;
+                    warn!("tracking_backend::handle_message;Tracking lost...");
+                }
                 ok
             },
             TrackingState::Lost => {
                 info!("tracking_backend::handle_message;New map...");
                 if self.kfs_in_map() < 10 {
                     info!("tracking_backend::handle_message;Reseting current map...");
-                    map_actor.send_new(MapWriteMsg::<S>::reset_active_map()).unwrap();
+                    map_actor.send_new(MapWriteMsg::reset_active_map()).unwrap();
                 } else {
                     self.create_new_map();
                 }
@@ -266,7 +235,7 @@ impl<S: SensorType + 'static> DarvisTrackingBack<S> {
         self.state = match success {
             true => TrackingState::Ok,
             false => {
-                if S::is_imu() {
+                if self.sensor.is_imu() {
                     info!("tracking_backend::handle_message;Track lost for less than 1 second");
 
                     // TODO (reset) TODO (IMU): Reset map because local mapper set the bad imu flag
@@ -283,7 +252,7 @@ impl<S: SensorType + 'static> DarvisTrackingBack<S> {
         // {
         //     // Save frame if recent relocalization, since they are used for IMU reset (as we are making copy, it shluld be once mCurrFrame is completely modified)
         //     let enough_frames_to_reset_imu = self.current_frame.as_ref().unwrap().id <= self.last_reloc_frame_id + self.frames_to_reset_imu;
-        //     if enough_frames_to_reset_imu && self.current_frame.as_ref().unwrap().id > self.frames_to_reset_imu && S::is_imu() && self.self.map.read().imu_initialized() {
+        //     if enough_frames_to_reset_imu && self.current_frame.as_ref().unwrap().id > self.frames_to_reset_imu && self.sensor.is_imu() && self.self.map.read().imu_initialized() {
         //         // Load preintegration
         //         // This code directly copied from C++, obviously needs to be changed
         //         // pF->mpImuPreintegratedFrame = new IMU::Preintegrated(self.current_frame.mpImuPreintegratedFrame);
@@ -306,9 +275,9 @@ impl<S: SensorType + 'static> DarvisTrackingBack<S> {
                 let last_pose = last_frame.unwrap().pose.as_ref().unwrap();
                 let last_twc = last_pose.inverse();
                 // TODO (IMU)
-                self.imu.as_mut().unwrap().velocity = Some(self.current_frame.pose.as_ref().unwrap().clone() * last_twc);
+                self.imu.velocity = Some(self.current_frame.pose.as_ref().unwrap().clone() * last_twc);
             } else {
-                self.imu.as_mut().unwrap().velocity = None;
+                self.imu.velocity = None;
             }
 
             {
@@ -319,7 +288,7 @@ impl<S: SensorType + 'static> DarvisTrackingBack<S> {
             self.temporal_points.clear();
 
             // Check if we need to insert a new keyframe
-            let insert_if_lost_anyway = self.global_defaults.insert_kfs_when_lost && matches!(self.state, TrackingState::RecentlyLost) && S::is_imu();
+            let insert_if_lost_anyway = self.global_defaults.insert_kfs_when_lost && matches!(self.state, TrackingState::RecentlyLost) && self.sensor.is_imu();
             if self.need_new_keyframe() && (success || insert_if_lost_anyway) {
                 self.create_new_keyframe(context);
             }
@@ -334,13 +303,13 @@ impl<S: SensorType + 'static> DarvisTrackingBack<S> {
         // Reset if the camera get lost soon after initialization
         if matches!(self.state, TrackingState::Lost) {
             if self.kfs_in_map() <= 10 {
-                let map_msg = MapWriteMsg::<S>::reset_active_map();
+                let map_msg = MapWriteMsg::reset_active_map();
                 map_actor.send_new(map_msg).unwrap();
                 return;
             }
-            if S::is_imu() && !self.map.read().imu_initialized {
+            if self.sensor.is_imu() && !self.map.read().imu_initialized {
                 warn!("tracking_backend::handle_message;Track lost before IMU initialisation, resetting...",);
-                let map_msg = MapWriteMsg::<S>::reset_active_map();
+                let map_msg = MapWriteMsg::reset_active_map();
                 map_actor.send_new(map_msg).unwrap();
                 return;
             }
@@ -408,7 +377,7 @@ impl<S: SensorType + 'static> DarvisTrackingBack<S> {
         let deleted_mps = self.current_frame.discard_outliers();
         let nmatches_map = -deleted_mps + self.current_frame.get_num_mappoints_with_observations(&*self.map.read());
 
-        match S::sensor_type().is_imu() {
+        match self.sensor.is_imu() {
             true => { return true; },
             false => { return nmatches_map >= 10; }
         };
@@ -432,18 +401,17 @@ impl<S: SensorType + 'static> DarvisTrackingBack<S> {
         let enough_frames_to_reset_imu = self.current_frame.id <= self.relocalization.last_reloc_frame_id + (self.global_defaults.frames_to_reset_imu as i32);
         if self.map.read().imu_initialized && enough_frames_to_reset_imu {
             // Predict state with IMU if it is initialized and it doesnt need reset
-            // SOFIYA TODO Sensor restructuring
-            // self.imu.predict_state();
+            self.imu.predict_state();
             return true;
         } else {
-            self.current_frame.pose = Some(self.imu.as_ref().unwrap().velocity.unwrap() * self.last_frame.as_ref().unwrap().pose.unwrap());
+            self.current_frame.pose = Some(self.imu.velocity.unwrap() * self.last_frame.as_ref().unwrap().pose.unwrap());
         }
 
         self.current_frame.clear_mappoints();
 
         // Project points seen in previous frame
-        let th = match S::sensor_type() {
-            Sensor::Mono | Sensor::ImuMono => 15,
+        let th = match self.sensor.frame() {
+            FrameSensor::Mono => 15,
             _ => 7
         };
 
@@ -451,7 +419,7 @@ impl<S: SensorType + 'static> DarvisTrackingBack<S> {
             &self.current_frame,
             self.last_frame.as_ref().unwrap(),
             th,
-            S::is_mono(),
+            self.sensor.is_mono(),
             &self.camera,
             &self.map
         ); 
@@ -464,7 +432,7 @@ impl<S: SensorType + 'static> DarvisTrackingBack<S> {
                 &self.current_frame,
                 self.last_frame.as_ref().unwrap(),
                 2 * th,
-                S::is_mono(),
+                self.sensor.is_mono(),
                 &self.camera,
                 &self.map
             );
@@ -472,7 +440,7 @@ impl<S: SensorType + 'static> DarvisTrackingBack<S> {
 
         if matches.len() < 20 {
             warn!("tracking_backend::track_with_motion_model;not enough matches!!");
-            return S::is_imu();
+            return self.sensor.is_imu();
         }
 
         // Optimize frame pose with all matches
@@ -489,7 +457,7 @@ impl<S: SensorType + 'static> DarvisTrackingBack<S> {
             // return nmatches>20;
         }
 
-        match S::sensor_type().is_imu() {
+        match self.sensor.is_imu() {
             true => { return true; },
             false => { return nmatches_map >= 10; }
         };
@@ -532,8 +500,8 @@ impl<S: SensorType + 'static> DarvisTrackingBack<S> {
         }
 
         if to_match > 0 {
-            let mut th = match S::sensor_type() {
-                Sensor::Rgbd | Sensor::ImuRgbd  => 3,
+            let mut th = match self.sensor.frame() {
+                FrameSensor::Rgbd => 3,
                 _ => 1
             };
             // TODO (IMU)
@@ -543,7 +511,7 @@ impl<S: SensorType + 'static> DarvisTrackingBack<S> {
                 } else {
                     th = 6;
                 }
-            } else if !self.map.read().imu_initialized && S::is_imu() {
+            } else if !self.map.read().imu_initialized && self.sensor.is_imu() {
                 th = 10;
             }
 
@@ -606,7 +574,7 @@ impl<S: SensorType + 'static> DarvisTrackingBack<S> {
                     self.matches_in_frame += 1;
                 }
 
-            } else if !S::is_mono() {
+            } else if !self.sensor.is_mono() {
                 //TODO: [Stereo] Handle Stereo Case
                 //mCurrentFrame.mappoint_matches[i] = static_cast<MapPoint*>(NULL);
                 // Following probably needs to be inside map actor:
@@ -615,7 +583,7 @@ impl<S: SensorType + 'static> DarvisTrackingBack<S> {
             }
         }
 
-        let map_msg = MapWriteMsg::<S>::increase_found(increase_found);
+        let map_msg = MapWriteMsg::increase_found(increase_found);
         map_actor.send_new(map_msg).unwrap();
 
         // Decide if the tracking was succesful
@@ -629,11 +597,13 @@ impl<S: SensorType + 'static> DarvisTrackingBack<S> {
             _ => {}
         }
 
-        match S::sensor_type() {
-            Sensor::ImuMono => { 
+        match self.sensor {
+            Sensor(FrameSensor::Mono, ImuSensor::Some) => { 
                 return !(self.matches_in_frame<15 && self.map.read().imu_initialized) && !(self.matches_in_frame<50 && !self.map.read().imu_initialized)
             },
-            Sensor::ImuStereo | Sensor::ImuRgbd => { return self.matches_in_frame >= 15; },
+            Sensor(FrameSensor::Stereo, ImuSensor::Some) | Sensor(FrameSensor::Rgbd, ImuSensor::Some) => {
+                return self.matches_in_frame >= 15;
+            },
             _ => { return self.matches_in_frame > 30 }
         }
     }
@@ -656,7 +626,7 @@ impl<S: SensorType + 'static> DarvisTrackingBack<S> {
         }
         self.last_frame.as_mut().unwrap().pose = Some(reference_kf_pose);
 
-        if S::is_mono() || self.frames_since_last_kf == 0 {
+        if self.sensor.is_mono() || self.frames_since_last_kf == 0 {
             return;
         }
 
@@ -791,7 +761,7 @@ impl<S: SensorType + 'static> DarvisTrackingBack<S> {
         new_local_keyframes.extend(neighbors_to_add);
 
         // Add 10 last temporal KFs (mainly for IMU)
-        if S::is_imu() && self.local_keyframes.len() < 80 {
+        if self.sensor.is_imu() && self.local_keyframes.len() < 80 {
             // TODO (IMU)
             // For the last 20 created keyframes, save into new_local_keyframes
             // until one of them was not in self.local_keyframes. Then, quit.
@@ -943,11 +913,11 @@ impl<S: SensorType + 'static> DarvisTrackingBack<S> {
         let actor_msg = GLOBAL_PARAMS.get::<String>(LOCAL_MAPPING, "actor_message");
         match actor_msg.as_ref() {
             "KeyFrameMsg" => {
-                localmapping.send_new(KeyFrameMsg{ kf: new_kf }).unwrap();
+                localmapping.send_new(KeyFrameMsg{ keyframe: new_kf }).unwrap();
             },
             _ => {
                 warn!("tracking_backend::create_new_keyframe;invalid message type, selecting KeyFrameMsg");
-                localmapping.send_new(KeyFrameMsg{ kf: new_kf }).unwrap();
+                localmapping.send_new(KeyFrameMsg{ keyframe: new_kf }).unwrap();
             },
         }
     }
@@ -956,7 +926,7 @@ impl<S: SensorType + 'static> DarvisTrackingBack<S> {
         //NeedNewKeyFrame
         let kfs_in_map = self.kfs_in_map();
         let not_enough_frames_since_last_reloc = (self.current_frame.id < self.relocalization.last_reloc_frame_id + (self.global_defaults.max_frames as i32)) && (kfs_in_map > (self.global_defaults.max_frames as u32));
-        let imu_not_initialized = S::is_imu() && !self.map.read().imu_initialized;
+        let imu_not_initialized = self.sensor.is_imu() && !self.map.read().imu_initialized;
 
         let too_close_to_last_kf = match self.last_kf_ts {
             Some(timestamp) => self.current_frame.timestamp - timestamp < Duration::milliseconds(250),
@@ -985,14 +955,14 @@ impl<S: SensorType + 'static> DarvisTrackingBack<S> {
         let need_to_insert_close = (tracked_close<100) && (non_tracked_close>70);
 
         // Thresholds
-        let th_ref_ratio = match S::sensor_type() {
-            Sensor::Mono => 0.9,
-            Sensor::ImuMono => {
+        let th_ref_ratio = match self.sensor {
+            Sensor(FrameSensor::Mono, ImuSensor::None) => 0.9,
+            Sensor(FrameSensor::Mono, ImuSensor::Some) => {
                 // Points tracked from the local map
                 if self.matches_in_frame > 350 { 0.75 } else { 0.90 }
             },
-            Sensor::ImuStereo | Sensor::Stereo | Sensor::ImuRgbd => 0.75,
-            Sensor::Rgbd => { if kfs_in_map < 2 { 0.4 } else { 0.75 } }
+            Sensor(FrameSensor::Stereo, _) | Sensor(FrameSensor::Rgbd, ImuSensor::Some) => 0.75,
+            Sensor(FrameSensor::Rgbd, ImuSensor::None) => { if kfs_in_map < 2 { 0.4 } else { 0.75 } }
         }; // Sofiya: is Rgbd right? See ORBSLAM3 code https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Tracking.cc#L3142
 
         // Condition 1a: More than "MaxFrames" have passed from last keyframe insertion
@@ -1001,8 +971,8 @@ impl<S: SensorType + 'static> DarvisTrackingBack<S> {
         // Note: removed localmappingidle from here
         let c1b = self.frames_since_last_kf >= (self.global_defaults.min_frames as i32);
         //Condition 1c: tracking is weak
-        let sensor_is_right = match S::sensor_type() {
-            Sensor::Mono | Sensor::ImuMono | Sensor::ImuStereo | Sensor::ImuRgbd => false,
+        let sensor_is_right = match self.sensor {
+            Sensor(FrameSensor::Mono, _) | Sensor(FrameSensor::Stereo, ImuSensor::Some) | Sensor(FrameSensor::Rgbd, ImuSensor::Some) => false,
             _ => true
         }; // Sofiya: why would they just be selecting for RGBD or Stereo without IMU??
         let c1c = sensor_is_right && ((self.matches_in_frame as f32) < tracked_mappoints * 0.25 || need_to_insert_close) ;
@@ -1015,14 +985,14 @@ impl<S: SensorType + 'static> DarvisTrackingBack<S> {
             None => false
         };
 
-        let c3 = S::is_imu() && close_to_last_kf;
+        let c3 = self.sensor.is_imu() && close_to_last_kf;
 
         let recently_lost = match self.state {
             TrackingState::RecentlyLost => true,
             _ => false
         };
-        let sensor_is_imumono = match S::sensor_type() {
-            Sensor::ImuMono => true,
+        let sensor_is_imumono = match self.sensor {
+            Sensor(FrameSensor::Rgbd, ImuSensor::Some) => true,
             _ => false
         };
         let c4 = ((self.matches_in_frame < 75 && self.matches_in_frame > 15) || recently_lost) && sensor_is_imumono;
@@ -1063,7 +1033,7 @@ impl<S: SensorType + 'static> DarvisTrackingBack<S> {
         todo!("Multimaps: Atlas::CreateNewMap");
     }
 }
-impl<S: SensorType + 'static> Function for DarvisTrackingBack<S> {
+impl Function for DarvisTrackingBack {
     fn handle(&mut self, context: axiom::prelude::Context, message: Message) -> ActorResult<()>
     {
         if let Some(msg) = message.content_as::<FeatureMsg>() {
