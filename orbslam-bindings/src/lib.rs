@@ -91,11 +91,11 @@ pub mod ffi {
         // but only C++ can see the fields.
 
         include!("orb_slam3/src/TwoViewReconstruction.h");
-        include!("orb_slam3/src/ORBmatcher.h");
+        include!("orb_slam3/src/ORBMatcherBridge.h");
         include!("orb_slam3/src/DVMat.h");
         //include!("orb_slam3/src/DVGrid.h");
         type TwoViewReconstruction;
-        type ORBmatcher;
+        type ORBMatcherBridge;
         type DVMat;
 
         fn new_two_view_reconstruction(
@@ -116,7 +116,7 @@ pub mod ffi {
             maxY: f32,
             nnratio: f32,
             checkOri: bool
-        ) -> UniquePtr<ORBmatcher>;
+        ) -> UniquePtr<ORBMatcherBridge>;
 
         fn Reconstruct_1(
             self: Pin<&mut TwoViewReconstruction>,
@@ -129,7 +129,7 @@ pub mod ffi {
         )-> bool;
 
         fn SearchForInitialization_1(
-            self: Pin<&mut ORBmatcher>,
+            self: Pin<&mut ORBMatcherBridge>,
             F1_mvKeysUn : &CxxVector<DVKeyPoint>, 
             F2_mvKeysUn: &CxxVector<DVKeyPoint>, 
             F1_mDescriptors: &DVMat,
@@ -139,16 +139,6 @@ pub mod ffi {
             vnMatches12 : Pin<&mut CxxVector<i32>>,
             windowSize: i32
         );
-
-        // SearchForInitialization(
-        //     const std::vector<cv::KeyPoint>& F1_mvKeysUn, 
-        //     const std::vector<cv::KeyPoint>& F2_mvKeysUn, 
-        //     const cv::Mat F1_mDescriptors,
-        //     const cv::Mat F2_mDescriptors,
-        //     const std::vector< std::vector <std::vector<size_t> > > F2_grid,
-        //     std::vector<cv::Point2f> &vbPrevMatched, 
-        //     std::vector<int> &vnMatches12, 
-        //     int windowSize=10)
 
     }
 

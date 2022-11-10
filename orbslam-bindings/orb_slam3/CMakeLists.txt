@@ -51,6 +51,8 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
 #set( ${PROJECT_SOURCE_DIR}/DBoW2/DUtils/...)
 
 add_library(${PROJECT_NAME} STATIC
+src/ORBMatcherBridge.h
+src/ORBMatcherBridge.cc
 src/DVMat.cc
 src/DVMat.h
 src/DVConvert.cc
