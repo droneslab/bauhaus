@@ -1,17 +1,8 @@
-use opencv::{
-    prelude::*,
-    core,
-    highgui,
-    imgproc,
-    imgcodecs,
-};
+use opencv::{prelude::*, core, highgui, imgproc, imgcodecs};
 use axiom::prelude::*;
 use serde::{Deserialize, Serialize};
-use dvcore::{
-    plugin_functions::Function,
-    matrix::*,
-};
-use crate::{actors::messages::VisMsg, dvmap::pose::{Translation, Rotation}};
+use dvcore::{plugin_functions::Function,matrix::*,};
+use crate::{actors::messages::VisMsg, dvmap::pose::{Translation, Rotation},};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct VisPathMsg {
@@ -20,10 +11,8 @@ pub struct VisPathMsg {
 }
 
 impl VisPathMsg {
-    pub fn new(img_path: String) -> Self {
-        Self {
-            last_img_path: img_path,
-        }
+    pub fn new(last_img_path: String) -> Self {
+        Self { last_img_path }
     }
 }
 
@@ -38,7 +27,6 @@ pub struct DarvisVis {
     traj_pos: Translation, 
     /// Built up trajectory rotation
     traj_rot: Rotation, 
-    /// actor_ids: ActorIds, // Collection of all spawned actor ids
     id: String
     }
 

@@ -59,7 +59,7 @@ namespace orb_slam3
 
 
 
-    void ORBmatcher::SearchForInitialization_1(
+    int32_t ORBmatcher::SearchForInitialization_1(
             const std::vector<orb_slam3::DVKeyPoint>  & F1_mvKeysUn , 
             const std::vector<orb_slam3::DVKeyPoint>  & F2_mvKeysUn, 
             const orb_slam3::DVMat  &F1_mDescriptors,
@@ -85,7 +85,7 @@ namespace orb_slam3
             
             // *reinterpret_cast<std::vector<cv::Point2f>*>(&vbPrevMatched);
 
-            SearchForInitialization(
+            return SearchForInitialization(
                 vKeys1_cv,
                 vKeys2_cv,
                 vdesc1_cv,
@@ -286,6 +286,7 @@ namespace orb_slam3
             return 4.0;
     }
 
+    // Sofiya: Already implemented in rust
     // int ORBmatcher::SearchByBoW(KeyFrame* pKF,Frame &F, vector<MapPoint*> &vpMapPointMatches)
     // {
     //     const vector<MapPoint*> vpMapPointsKF = pKF->GetMapPointMatches();

@@ -17,6 +17,7 @@
 
 #include <boost/serialization/serialization.hpp>
 #include <boost/serialization/map.hpp>
+#include "../../../target/cxxbridge/rust/cxx.h"
 
 namespace DBoW2 {
 
@@ -58,8 +59,10 @@ public:
    */
   friend std::ostream& operator<<(std::ostream &out, const FeatureVector &v);
 
-    std::unique_ptr<FeatureVector> clone() const; // For rust bindings...
-
+    // For rust bindings...
+    std::unique_ptr<FeatureVector> clone() const; 
+    rust::Vec<uint32_t> get_all_nodes() const;
+    rust::Vec<uint32_t> get_feat_from_node(unsigned int node_id) const;
 };
 
 std::unique_ptr<FeatureVector> new_feat_vec();

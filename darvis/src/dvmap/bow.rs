@@ -1,5 +1,4 @@
 use std::fmt;
-
 use cxx::{UniquePtr, let_cxx_string};
 use dvcore::{matrix::DVMatrix, global_params::{GLOBAL_PARAMS, SYSTEM_SETTINGS}};
 use log::info;
@@ -29,39 +28,25 @@ impl DVVocabulary {
                 bow.feat_vec.pin_mut(),
                 4
             );
+            bow.is_empty = false;
         }
 
     }
-    // pub fn transform_with_direct_idx(&self, features: &DVMatrix) -> (abow::BoW, abow::DirectIdx) {
-    //     let mut v_desc = Vec::new();
-    //     let desc_vec = features.mat().to_vec_2d::<u8>().unwrap();
-
-    //     for j in 0..features.mat().rows() {
-    //         let desc_j = desc_vec.get(j as usize).unwrap();
-    //         let mut desc_val : Desc = [0; 32];
-    //         for (&x, p) in desc_j.iter().zip(desc_val.iter_mut()) {
-    //             *p = x;
-    //         }
-    //         v_desc.push(desc_val);
-
-    //     }
-
-    //     self.vocabulary.transform_with_direct_idx(&v_desc).unwrap()
-    // }
-    
 }
 
 
 pub struct BoW {
     // BoW
-    pub bow_vec: UniquePtr<dvos3binding::ffi::BowVector>, // mBowVec
-    pub feat_vec: UniquePtr<dvos3binding::ffi::FeatureVector>, // mFeatVec
+    bow_vec: UniquePtr<dvos3binding::ffi::BowVector>, // mBowVec
+    feat_vec: UniquePtr<dvos3binding::ffi::FeatureVector>, // mFeatVec
+    pub is_empty: bool
 }
 impl BoW {
     pub fn new() -> Self {
         Self {
             bow_vec: dvos3binding::ffi::new_bow_vec(),
             feat_vec: dvos3binding::ffi::new_feat_vec(),
+            is_empty: true
         }
     }
     pub fn clone(&self) -> Self {
@@ -69,7 +54,14 @@ impl BoW {
         Self {
             bow_vec: self.bow_vec.clone(),
             feat_vec: self.feat_vec.clone(),
+            is_empty: self.is_empty
         }
+    }
+    pub fn get_feat_vec_nodes(&self) -> Vec<u32> {
+        self.feat_vec.get_all_nodes()
+    }
+    pub fn get_feat_from_node(&self, node: u32) -> Vec<u32> {
+        self.feat_vec.get_feat_from_node(node)
     }
 }
 

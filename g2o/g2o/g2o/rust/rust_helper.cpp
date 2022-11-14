@@ -249,7 +249,6 @@ namespace g2o {
     }
 
     // Sofiya note: This might already be deleted when g2o deletes the sparseoptimizer?
-    // Sofiya TODO: should check memory leaks though
     // BridgeSparseOptimizer::~BridgeSparseOptimizer() {
     //     delete linearSolver;
     //     delete solver_ptr;

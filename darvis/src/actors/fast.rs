@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use axiom::prelude::*;
 use log::warn;
 use opencv::{
@@ -23,7 +25,7 @@ impl DarvisFast {
         if let Some(msg) = message.content_as::<ImageMsg>() {
             let mut kp1 = VectorOfKeyPoint::new();
             let mut des1 = Mat::default();
-            let img1 = msg.frame.grayscale_to_cv_mat();
+            let img1: Mat = (&msg.frame).into(); // Taking ownership of message should not fail
 
             let fast_threshold: i32 = 20;
             let non_max_suppression: bool = true;

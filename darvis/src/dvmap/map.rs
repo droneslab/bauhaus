@@ -95,9 +95,11 @@ impl Map {
         info!("map::discard_mappoint;{}", id);
     }
 
-    pub fn insert_keyframe_to_map(&mut self, mut kf: KeyFrame<PrelimKeyFrame>) -> Id {
+    pub fn insert_keyframe_to_map(&mut self, mut kf: &KeyFrame<PrelimKeyFrame>) -> Id {
+        // Note: I would really like this to consume the keyframe, but this brings up issues
+        // with the map actor being able to take ownership of the keyframe message.
         self.last_kf_id += 1;
-        let full_keyframe = KeyFrame::<FullKeyFrame>::new(kf, self.id, self.last_kf_id);
+        let full_keyframe = KeyFrame::<FullKeyFrame>::new(&kf, self.id, self.last_kf_id);
         self.keyframes.insert(self.last_kf_id, full_keyframe);
 
         if self.keyframes.is_empty() {
@@ -125,10 +127,10 @@ impl Map {
 
         // Create KeyFrames
         let initial_kf_id = self.insert_keyframe_to_map(
-            KeyFrame::<PrelimKeyFrame>::new(&inidata.initial_frame.as_ref().unwrap(), &self.vocabulary)
+            &KeyFrame::<PrelimKeyFrame>::new(&inidata.initial_frame.as_ref().unwrap(), &self.vocabulary)
         );
         let curr_kf_id = self.insert_keyframe_to_map(
-            KeyFrame::<PrelimKeyFrame>::new(&inidata.current_frame.as_ref().unwrap(), &self.vocabulary)
+            &KeyFrame::<PrelimKeyFrame>::new(&inidata.current_frame.as_ref().unwrap(), &self.vocabulary)
         );
 
         let mut curr_frame = inidata.current_frame.as_ref().unwrap().clone();

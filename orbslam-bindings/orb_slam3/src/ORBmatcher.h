@@ -88,7 +88,7 @@ namespace orb_slam3
             // VectorOfDVPoint3f &vP3D, 
             // VectorOfDVBool &vbTriangulated
 
-        void SearchForInitialization_1(
+        int32_t SearchForInitialization_1(
             const std::vector<orb_slam3::DVKeyPoint>  & F1_mvKeysUn , 
             const std::vector<orb_slam3::DVKeyPoint>  & F2_mvKeysUn, 
             const orb_slam3::DVMat  &F1_mDescriptors,

@@ -808,7 +808,7 @@ impl Optimizer {
         // pFrame->mpcpi = new ConstraintPoseImu(VP->estimate().Rwb,VP->estimate().twb,VV->estimate(),VG->estimate(),VA->estimate(),H);
 
         // return nInitialCorrespondences-nBad;
-        todo!("TODO 10/17 BINDINGS Optimizer::PoseInertialOptimizationLastKeyFrame(&mCurrentFrame)");
+        todo!("TODO IMU Optimizer::PoseInertialOptimizationLastKeyFrame(&mCurrentFrame)");
     }
 
     pub fn optimize_pose(&self, frame: &mut Frame, map: &ReadOnlyWrapper<Map>) -> Option<(i32, Pose)> {
@@ -831,7 +831,7 @@ impl Optimizer {
         for i in 0..frame.features.num_keypoints as u32 {
             match frame.mappoint_matches.get(&i) {
                 Some((mp_id, _)) => {
-                    let keypoint = &frame.features.keypoints_get(i as usize);
+                    let keypoint = &frame.features.get_keypoint(i as usize);
 
                     let edge = match self.sensor.frame() {
                         crate::FrameSensor::Stereo => {
@@ -1043,7 +1043,7 @@ impl Optimizer {
                     _ => {
                         if left_index != -1 {
                             n_edges += 1;
-                            let keypoint = map.get_keyframe(kf_id).unwrap().features.keypoints_get(left_index as usize);
+                            let keypoint = map.get_keyframe(kf_id).unwrap().features.get_keypoint(left_index as usize);
 
                             let _ = optimizer.add_edge_monocular_binary(
                                 false, *mp_id, *kf_id,

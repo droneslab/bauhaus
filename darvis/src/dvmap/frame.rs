@@ -25,9 +25,6 @@ pub struct Frame {
     pub mappoint_matches: HashMap::<u32, (Id, bool)>, // mvpmappoints , mvbOutlier
 
     // Scale //
-    pub num_scale_levels: i32, // mnScaleLevels
-    pub scale_factor: f64, // mfScaleFactor
-    pub log_scale_factor: f64, // mfLogScaleFactor
     pub scale_factors: Vec<f32>, // mvScaleFactors
     // Used in ORBExtractor, which we haven't implemented
     // we're using detect_and_compute from opencv instead
@@ -60,9 +57,6 @@ impl Frame {
             id,
             timestamp: Utc::now(),
             features: features?,
-            num_scale_levels: GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "n_levels"),
-            scale_factor: GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "scale_factor"),
-            log_scale_factor: (GLOBAL_PARAMS.get::<f64>(SYSTEM_SETTINGS, "scale_factor") as f64).log(10.0),
             imu_bias: None, // TODO (IMU)
             camera: camera.clone(),
             sensor,
@@ -74,9 +68,11 @@ impl Frame {
 
     pub fn compute_bow(&mut self, voc: &DVVocabulary) {
         //Ref code : https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Frame.cc#L740
-        // if self.feature_vec.is_none() {
+        if self.bow.is_empty {
             // voc.transform(self.features.descriptors);
         // }
+            voc.transform(&self.features.descriptors, &mut self.bow);
+        }
     }
 
     //* MapPoints */
