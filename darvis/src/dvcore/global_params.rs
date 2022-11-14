@@ -232,9 +232,7 @@ pub fn add_system_setting_sensor(yaml: &Yaml) {
 
 
 
-// Note: sensor has to be in here because ConfigValueBox needs to hold a sensor
-// Tried working with the commented code below which could be close but ran into errors. 
-// Don't think it's worth it to optimize this rn.
+// Note: sensor has to be in dvcore because ConfigValueBox needs to hold a sensor
 #[derive(Clone, Copy, Debug, Default)]
 pub enum FrameSensor {
     #[default] Mono,
@@ -250,9 +248,6 @@ pub enum ImuSensor {
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Sensor (pub FrameSensor, pub ImuSensor);
-//     pub frame: FrameSensor,
-//     pub imu: ImuSensor
-// }
 
 impl Sensor {
     pub fn is_mono(&self) -> bool {
@@ -268,24 +263,3 @@ impl Sensor {
         self.1
     }
 }
-// pub static GLOBAL_PARAMS: OnceCell<GlobalParams> = OnceCell::INIT;
-
-// pub struct GlobalParams {
-//     pub params: HashMap<String, Box<dyn Any + Send + Sync + 'static>>,
-// }
-
-// impl GlobalParams {
-//     pub fn global() -> &'static GlobalParams {
-//         GLOBAL_PARAMS.get().expect("logger is not initialized")
-//     }
-
-//     pub fn get(&self, module : &str, param: &str) -> &Box<dyn Any + Send + Sync> {
-//         let key = format!("{}_{}", module, param);
-//         self.params.get(&key).unwrap()
-//     }
-//     pub fn insert<T: Send + Sync + 'static>(&mut self, key_module: &str, key_param: &str, value: T) {
-//         let key = format!("{}_{}", key_module, key_param);
-//         let value = Box::new(value);
-//         self.params.insert(key, value);
-//     }
-// }

@@ -22,7 +22,7 @@ impl DarvisTrackingFront {
     }
 
     pub fn tracking_frontend(&mut self, context: Context, message: Arc<ImageMsg>) {
-        let image = message.frame.grayscale_to_cv_mat();
+        let image: Mat = (&message.frame).into(); // Taking ownership of message should not fail
         let (keypoints, descriptors) = self.extract_features(&image);
         self.send_message_to_backend(context, image, keypoints, descriptors);
     }

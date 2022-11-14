@@ -7,7 +7,7 @@ use super::{keyframe::{KeyFrame, FullKeyFrame}, map::{Id, Map}};
 
 #[derive(Clone, Debug)]
 pub struct Observations {
-    pub obs: HashMap<Id, (i32, i32)>,
+    obs: HashMap<Id, (i32, i32)>,
     sensor: Sensor
 }
 

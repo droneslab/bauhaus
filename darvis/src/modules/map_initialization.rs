@@ -7,6 +7,8 @@ use crate::dvmap::{frame::Frame, pose::Pose, features::Features};
 
 use crate::modules::camera::Camera;
 
+use super::orbmatcher;
+
 
 #[derive(Debug, Clone, Default)]
 pub struct Initialization {
@@ -37,7 +39,7 @@ impl Initialization {
         }
     }
 
-    pub fn try_initialize(&mut self, current_frame: &Frame, camera: &Camera) -> Result<(), String> {
+    pub fn try_initialize(&mut self, current_frame: &Frame, camera: &mut Camera) -> Result<bool, Box<dyn std::error::Error>> {
         let sensor: Sensor = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "sensor");
         // Only set once at beginning
         if self.initial_frame.is_none() {
@@ -57,14 +59,18 @@ impl Initialization {
         }
     }
 
-    fn monocular_initialization(&mut self, camera: &Camera) -> Result<(), String> {
+    fn monocular_initialization(&mut self, camera: &mut Camera) -> Result<bool, Box<dyn std::error::Error>> {
         // Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Tracking.cc#L2448
-        if !self.ready_to_initializate && self.current_frame.as_ref().unwrap().features.num_keypoints > 100 {
-            // Set Reference Frame
-             self.prev_matched.resize(self.current_frame.as_ref().unwrap().features.num_keypoints as usize, Point2f::default());
+        let current_frame = self.current_frame.as_ref().unwrap();
+        let initial_frame = self.initial_frame.as_ref().unwrap();
+        let last_frame = self.last_frame.as_ref().unwrap();
 
-            for i in 0..self.current_frame.as_ref().unwrap().features.num_keypoints as usize {
-                self.prev_matched[i] = self.current_frame.as_ref().unwrap().features.keypoints_get(i).pt.clone();
+        if !self.ready_to_initializate && current_frame.features.num_keypoints > 100 {
+            // Set Reference Frame
+             self.prev_matched.resize(current_frame.features.num_keypoints as usize, Point2f::default());
+
+            for i in 0..current_frame.features.num_keypoints as usize {
+                self.prev_matched[i] = current_frame.features.get_keypoint(i).pt.clone();
             }
 
             match self.sensor.imu() {
@@ -82,41 +88,39 @@ impl Initialization {
                 _ => {}
             }
             self.ready_to_initializate = true;
-            return Err("Not ready to initialize yet 1.".to_string());
+            return Ok(false);
         } else {
-            if self.current_frame.as_ref().unwrap().features.num_keypoints <=100 || matches!(self.sensor.imu(), ImuSensor::Some) && self.last_frame.as_ref().unwrap().timestamp - self.initial_frame.as_ref().unwrap().timestamp > Duration::seconds(1) {
+            if current_frame.features.num_keypoints <=100 || matches!(self.sensor.imu(), ImuSensor::Some) && last_frame.timestamp - initial_frame.timestamp > Duration::seconds(1) {
                 self.ready_to_initializate = false;
-                return Err("Not ready to initialize yet 2.".to_string());
+                return Ok(false);
             }
 
             // Find correspondences
-            // TODO 10/17: BINDINGS
-            let mut nmatches =10; //orb_matcher.search_for_initialization(
-            //     &self.initial_frame.unwrap(), 
-            //     &self.current_frame.unwrap(), 
-            //     &mut self.prev_matched,
-            //     &mut self.mp_matches,
-            //     100
-            // );
+            let mut nmatches = orbmatcher::search_for_initialization(
+                &initial_frame, 
+                &current_frame, 
+                &mut self.prev_matched,
+                &mut self.mp_matches,
+                100
+            );
 
             // Check if there are enough correspondences
             if nmatches < 100 {
                 self.ready_to_initializate = false;
-                return Err("Not ready to initialize yet 3.".to_string());
-            }
+                return Ok(false);
+            };
 
             let mut tcw = Pose::default();
             let mut vb_triangulated = Vec::<bool>::new();
 
-            // TODO 10/17: BINDINGS
-            let reconstruct_success = false;//camera.reconstruct_with_two_views(
-            //     self.initial_frame.unwrap().keypoints_data.keypoints_un(),
-            //     self.current_frame.unwrap().keypoints_data.keypoints_un(),
-            //     &self.mp_matches,
-            //     &mut tcw,
-            //     &mut self.p3d,
-            //     &mut vb_triangulated
-            // );
+            let reconstruct_success = camera.reconstruct_with_two_views(
+                initial_frame.features.get_all_keypoints(),
+                current_frame.features.get_all_keypoints(),
+                &self.mp_matches,
+                &mut tcw,
+                &mut self.p3d,
+                &mut vb_triangulated
+            );
 
             if reconstruct_success {
                 let keys = self.mp_matches.keys().cloned().collect::<Vec<_>>();
@@ -130,14 +134,14 @@ impl Initialization {
                 self.initial_frame.as_mut().unwrap().pose = Some(Pose::default());
                 self.current_frame.as_mut().unwrap().pose = Some(tcw);
 
-                return Ok(());
+                return Ok(true);
             } else {
-                return Err("Not ready to initialize yet 4.".to_string());
+                return Ok(false);
             }
         }
     }
 
-    fn stereo_initialization(&mut self) -> Result<(), String> {
+    fn stereo_initialization(&mut self) -> Result<bool, Box<dyn std::error::Error>> {
         todo!("Stereo: StereoInitialization");
     }
 }

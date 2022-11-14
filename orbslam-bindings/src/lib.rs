@@ -36,12 +36,10 @@ pub mod ffi {
     }
 
     pub struct Pose{
-    
         pub pose: [[f32;4];4]
     }
     #[derive(Debug, Clone)]
     pub struct DVbool{
-    
         pub val: bool
     }
 
@@ -85,7 +83,11 @@ pub mod ffi {
 
         pub vec: Vec<VectorOfVecusize>
     }
-    
+
+    struct SharedUInt {
+        v: u32,
+    }
+
     unsafe extern "C++" {
         // Opaque types which both languages can pass around
         // but only C++ can see the fields.
@@ -107,6 +109,18 @@ pub mod ffi {
             iterations: i32
         ) -> UniquePtr<TwoViewReconstruction>;
 
+        fn Reconstruct_1(
+            self: Pin<&mut TwoViewReconstruction>,
+            vKeys1: &CxxVector<DVKeyPoint>,
+            vKeys2:  &CxxVector<DVKeyPoint>,
+            vMatches12: &CxxVector<i32>,
+            T21: &mut Pose,
+            vP3D: &mut VectorOfDVPoint3f,
+            vbTriangulated: &mut VectorOfDVBool
+        )-> bool;
+
+        // ORB Matcher
+        
         fn new_orb_matcher(
             frame_grid_cols : i32, 
             frame_grid_rows : i32,
@@ -118,16 +132,6 @@ pub mod ffi {
             checkOri: bool
         ) -> UniquePtr<ORBmatcher>;
 
-        fn Reconstruct_1(
-            self: Pin<&mut TwoViewReconstruction>,
-            vKeys1: &CxxVector<DVKeyPoint>,
-            vKeys2:  &CxxVector<DVKeyPoint>,
-            vMatches12: &CxxVector<i32>,
-            T21: &mut Pose,
-            vP3D: &mut VectorOfDVPoint3f,
-            vbTriangulated: &mut VectorOfDVBool
-        )-> bool;
-
         fn SearchForInitialization_1(
             self: Pin<&mut ORBmatcher>,
             F1_mvKeysUn : &CxxVector<DVKeyPoint>, 
@@ -135,10 +139,10 @@ pub mod ffi {
             F1_mDescriptors: &DVMat,
             F2_mDescriptors: &DVMat ,
             F2_grid: &DVGrid,
-             vbPrevMatched : Pin<&mut CxxVector<DVPoint2f>>, 
+            vbPrevMatched : Pin<&mut CxxVector<DVPoint2f>>, 
             vnMatches12 : Pin<&mut CxxVector<i32>>,
             windowSize: i32
-        );
+        ) -> i32;
 
         // SearchForInitialization(
         //     const std::vector<cv::KeyPoint>& F1_mvKeysUn, 
@@ -165,6 +169,8 @@ pub mod ffi {
 
         fn new_feat_vec() -> UniquePtr<FeatureVector>;
         fn clone(self: &FeatureVector) -> UniquePtr<FeatureVector>;
+        fn get_all_nodes(self: &FeatureVector) -> Vec<u32>;
+        fn get_feat_from_node(self: &FeatureVector, node_id: u32) -> Vec<u32>;
 
         fn load_vocabulary_from_text_file(file: &CxxString) -> UniquePtr<ORBVocabulary>;
         fn transform(

@@ -90,6 +90,25 @@ std::unique_ptr<FeatureVector> FeatureVector::clone() const {
     return vec;
 }
 
+rust::Vec<uint32_t> FeatureVector::get_all_nodes() const {
+    rust::Vec<uint32_t> keys;
+    for(auto it = this->begin(); it != this->end(); ++it) {
+        keys.push_back(it->first);
+    }
+    return keys;
+}
+
+rust::Vec<uint32_t> FeatureVector::get_feat_from_node(unsigned int node_id) const {
+    auto features = this->find(node_id);
+    rust::Vec<uint32_t> features_copy;
+    if (features != this->end()) {
+        for(auto it = features->second.begin(); it != features->second.end(); ++it) {
+            features_copy.push_back(*it);
+        }
+    }
+    return features_copy;
+}
+
 std::unique_ptr<FeatureVector> new_feat_vec() {
     std::unique_ptr<FeatureVector> vec = std::make_unique<FeatureVector>();
     return vec;

@@ -6,7 +6,6 @@ use std::collections::{HashMap};
 use std::fmt::Debug;
 use dvcore::global_params::FrameSensor;
 use dvcore::global_params::{*};
-use log::error;
 use opencv::prelude::{Mat, MatTraitConst, MatTrait};
 use opencv::types::{VectorOff32};
 use serde::{Deserialize, Serialize};
@@ -91,7 +90,25 @@ impl Features {
         }
     }
 
-    pub fn keypoints_get(&self, index: usize) -> KeyPoint {
+    pub fn has_left_kp(&self) -> Option<u32> {
+        match &self.keypoints {
+            KeyPoints::Stereo{keypoints_left_cutoff, ..} => Some(*keypoints_left_cutoff),
+            _ => None
+        }
+    }
+
+    pub fn get_all_keypoints(&self) -> &DVVectorOfKeyPoint {
+        match &self.keypoints {
+            KeyPoints::Mono{keypoints_un, ..} | KeyPoints::Rgbd{keypoints_un, ..} => keypoints_un,
+            KeyPoints::Stereo{keypoints_left, keypoints_right, ..} => {
+                todo!("TODO Stereo, need to concat keypoints_left and keypoints_right
+                    but can we do this without copying?")
+            },
+            KeyPoints::Empty => panic!("Keypoints should not be empty")
+        }
+    }
+
+    pub fn get_keypoint(&self, index: usize) -> KeyPoint {
         match &self.keypoints {
             KeyPoints::Mono{keypoints_un, ..} | KeyPoints::Rgbd{keypoints_un, ..} => keypoints_un.get(index).unwrap(),
             KeyPoints::Stereo{keypoints_left, keypoints_left_cutoff, keypoints_right, ..} => {
@@ -114,7 +131,7 @@ impl Features {
     }
 
     pub fn get_octave(&self, index: usize) -> i32 {
-        self.keypoints_get(index).octave
+        self.get_keypoint(index).octave
     }
 
     pub fn check_close_tracked_mappoints( &self, th_depth: f32, mappoint_matches: &HashMap::<u32, (Id, bool)> ) -> (i32, i32) {
@@ -142,7 +159,7 @@ impl Features {
     }
 
     fn undistort_keypoints(keypoints: &DVVectorOfKeyPoint, camera: &Camera) -> Result<DVVectorOfKeyPoint, Box<dyn std::error::Error>> {
-        // Sofiya: I am not sure I did this correctly
+        // TODO (Potential bugs) not sure I did this right
         if let Some(dist_coef) = &camera.dist_coef {
 
             let N = keypoints.len();
@@ -218,7 +235,7 @@ impl Features {
 
                 for j in 0..v_cell.len() {
                     //TODO (Stereo) Need to update this if stereo images are processed
-                    let kp_un = &self.keypoints_get(v_cell[j]);
+                    let kp_un = &self.get_keypoint(v_cell[j]);
                     if b_check_levels {
                         if kp_un.octave< *min_level as i32 {
                             continue;
@@ -293,91 +310,9 @@ impl Grid {
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-//* Mono *//
-// #[derive(Serialize, Deserialize, Clone, Debug, Default)]
-// pub struct KeyPointsMono {
-//     pub num_keypoints: i32,
-
-//     keypoints: DVVectorOfKeyPoint,
-//     keypoints_un: DVVectorOfKeyPoint,
-
-//     descriptors: DVMatrix,
-
-//     grid: Grid,
-
-//     // Note: empty/not set in the mono case
-//     // mvuright, mvdepth, mnCloseMPs
-//     // Nleft, Nright
-//     // mvLeftToRightMatch, mvRightToLeftMatch
-//     // mvStereo3Dpoints
-//     // monoLeft, monoRight
-// }
-
-// //* Stereo *//
-// #[derive(Serialize, Deserialize, Clone, Debug, Default)]
-// pub struct KeyPointsStereo {
-//     pub num_keypoints: i32, // N = Nleft + Nright
-//     pub num_keypoints_left: u32, // Nleft
-//     pub num_keypoints_right: i32, // Nright
-
-//     // Vector of keypoints (original for visualization)
-//     pub keypoints: DVVectorOfKeyPoint, // mvkeys
-//     pub keypoints_right: DVVectorOfKeyPoint, // mvkeysright
-
-//     pub descriptors: DVMatrix, // mDescriptors
-
-//     // Keypoints are assigned to cells in a grid to reduce matching complexity when projecting MapPoints.
-//     pub grid: Grid,
-
-//     pub mv_right: HashMap<u32, f32>, // mvuRight
-//     pub mv_depth: HashMap<u32, f32>, // mvDepth
-
-//     // Not set in the stereo case
-//     // keypoints_un is redundant as images must be rectified
-// }
-
-// //* RGBD *//
-// #[derive(Serialize, Deserialize, Clone, Debug, Default)]
-// pub struct KeyPointsRgbd {
-//     num_keypoints: i32,
-//     num_keypoints_left: i32,
-
-//     // Vector of keypoints (original for visualization) and undistorted (actually used by the system).
-//     keypoints: DVVectorOfKeyPoint,
-//     keypoints_right: DVVectorOfKeyPoint,
-//     keypoints_un: DVVectorOfKeyPoint,
-
-//     descriptors: DVMatrix,
-
-//     grid: Grid,
-
-//     mv_right: HashMap<u32, f32>,
-//     mv_depth: HashMap<u32, f32>,
-
-//     // Note: empty/not set in the RGBD case
-//     // num_keypoints_left, num_keypoints_right
-//     // mvLeftToRightMatch, mvRightToLeftMatch
-//     // mvStereo3Dpoints
-//     // monoLeft, monoRight
+// For conversion to/from C++
+// impl From<DVVectorOfKeyPoint> for CxxVector<dvos3binding::ffi::DVKeyPoint> {
+//     fn from(vec: DVVectorOfKeyPoint) -> Self { 
+//         *vec.into_raw() as *const CxxVector<dvos3binding::ffi::DVKeyPoint>
+//     }
 // }

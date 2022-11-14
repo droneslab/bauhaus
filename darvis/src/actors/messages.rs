@@ -10,14 +10,11 @@ use crate::dvmap::{keyframe::{KeyFrame, PrelimKeyFrame, KeyFrameState, FullKeyFr
 // Switch this in the future if we want to do anything over the network.
 // https://github.com/rsimmonsjr/axiom/issues/99
 
-pub type ActorIds = std::collections::HashMap<String, axiom::actors::Aid>;
-
 pub struct Reset {}
 impl ActorMessage for Reset {}
 
 pub struct VisMsg {
     pub new_pose: Pose,
-    pub actor_ids: ActorIds
 }
 impl ActorMessage for VisMsg {}
 
@@ -56,6 +53,12 @@ pub struct KeyFrameMsg<S: KeyFrameState> {
 }
 
 impl<S: KeyFrameState + 'static> ActorMessage for KeyFrameMsg<S> {}
+
+#[derive(Debug)]
+pub struct KeyFrameIdMsg {
+    pub keyframe_id: Id
+}
+impl ActorMessage for KeyFrameIdMsg {}
 
 // Sofiya: When KF has been added to the map already, so instead of sending the keyframe data,
 // send the keyframe Id. This is only for initialization, so maybe we can figure out a way to

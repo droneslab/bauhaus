@@ -70,6 +70,11 @@ impl<'de> Deserialize<'de> for DVMatrix {
         todo!("(low priority) deserialize");
     }
 }
+// impl From<DVMatrix> for *const dvos3binding::ffi::DVMat {
+//     fn from(mat: DVMatrix) -> Self { 
+//         mat.into_raw() as *const dvos3binding::ffi::DVMat
+//     }
+// }
 
 
 #[derive(Clone, Debug, Default)]
@@ -94,6 +99,12 @@ impl DVVectorOfKeyPoint {
     }
 
     pub fn clear(&mut self) { self.0.clear() }
+}
+impl Deref for DVVectorOfKeyPoint {
+    type Target = opencv::types::VectorOfKeyPoint;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
 }
 // From implementations to make it easier to pass this into opencv functions
 impl From<DVVectorOfKeyPoint> for opencv::types::VectorOfKeyPoint {
@@ -256,10 +267,10 @@ impl<T> Index<(usize, usize)> for DVMatrix3<T> {
         &self.0[i]
     }
 }
-impl<T> Index<(usize)> for DVMatrix3<T> {
+impl<T> Index<usize> for DVMatrix3<T> {
     type Output = T;
 
-    fn index(&self, i: (usize)) -> &Self::Output {
+    fn index(&self, i: usize) -> &Self::Output {
         &self.0[i]
     }
 }
@@ -281,74 +292,51 @@ impl<'de, T> Deserialize<'de> for DVMatrix3<T> {
 }
 
 
+#[derive(Clone, Debug)]
+pub struct DVMatrixGrayscale ( na::DMatrix<u8> );
 
-
-
-
-/// Used to handle Grayscale images 
-// TODO (mid priority) convert old code for darvismatrix below
-// into the same structure as code above
-
-// #[derive(Clone, Debug)]
-// pub struct DVMatrixGrayscale {
-//     mat: na::DMatrix<u8>
-// }
-// impl DVMatrixGrayscale {
-//     pub fn new(vec: na::Matrix3<T>) -> Self {
-//         DVMatrix3 { vec: vec.clone() }
-//     }
-// }
-pub type DVMatrixGrayscale = na::DMatrix<u8>;
-
-/// Traits useful fo converting between OPENCV and Algebra library format.
-pub trait DarvisMatrix {
-    fn grayscale_to_cv_mat(&self) -> opencv::core::Mat;
-    fn grayscale_mat(&self) -> DVMatrixGrayscale;
-}
-
-/// Matrix Trait implementation for OpenCV Mat
-impl DarvisMatrix for opencv::core::Mat {
-    /// get OpenCV Mat
-    fn grayscale_to_cv_mat(&self) -> opencv::core::Mat {
-        self.clone()
+impl DVMatrixGrayscale {
+    // Constructors
+    pub fn new(vec: na::DMatrix<u8>) -> Self {
+        DVMatrixGrayscale ( vec.clone() )
     }
+}
+// &DVMatrixGrayscale implemented instead of DVMatrixGrayscale because this avoids having to take 
+// ownership of the matrix when calling .into() ... this is useful because this matrix is usually
+// inside an Arc<ImageMsg> and you cannot move out of an arc. Alternatively, we could copy the matrix
+// but that takes too much time/memory.
+impl From<&DVMatrixGrayscale> for opencv::core::Mat {
+    fn from(mat: &DVMatrixGrayscale) -> opencv::core::Mat {
+        let mut new_mat = Mat::new_rows_cols_with_default(mat.0.nrows().try_into().unwrap(),mat.0.ncols().try_into().unwrap(),CV_8UC1, opencv::core::Scalar::all(0.0)).unwrap();
 
-    /// Convert OpenCV mat to Grayscale matrix
-    fn grayscale_mat(&self) -> DVMatrixGrayscale {
-        let mut dmat = DMatrix::from_element(self.rows().try_into().unwrap(), self.cols().try_into().unwrap(), 0u8);
-        for i in 0..self.rows() {
-            for j in 0..self.cols() {
-                let val = *self.at_2d::<u8>(i, j).unwrap(); // Grayscale 1 channel uint8
+        for i in 0..mat.0.nrows() {
+            for j in 0..mat.0.ncols() {
+                let r: usize = i.try_into().unwrap();
+                let c: usize = j.try_into().unwrap();
+                unsafe {*new_mat.at_2d_unchecked_mut::<u8>(i.try_into().unwrap(), j.try_into().unwrap()).unwrap() = mat.0[(r, c)];}
+            }
+        }
+        new_mat
+    }
+}
+impl From<opencv::core::Mat> for DVMatrixGrayscale {
+    fn from(mat: opencv::core::Mat) -> DVMatrixGrayscale {
+        let mut dmat = DMatrix::from_element(mat.rows().try_into().unwrap(), mat.cols().try_into().unwrap(), 0u8);
+        for i in 0..mat.rows() {
+            for j in 0..mat.cols() {
+                let val = *mat.at_2d::<u8>(i, j).unwrap(); // Grayscale 1 channel uint8
                 let r: usize = i.try_into().unwrap();
                 let c: usize = j.try_into().unwrap();
                 dmat[(r, c)] = val;
             }
         }
-        dmat
+        DVMatrixGrayscale(dmat)
     }
 }
 
-/// Matrix Trait implementation for Algebra Matrix
-impl DarvisMatrix for DVMatrixGrayscale {
-    /// Convert Grayscale matrix to OpenCV mat
-    fn grayscale_to_cv_mat(&self) -> opencv::core::Mat {
-        let mut mat = Mat::new_rows_cols_with_default(self.nrows().try_into().unwrap(),self.ncols().try_into().unwrap(),CV_8UC1, opencv::core::Scalar::all(0.0)).unwrap();
 
-        for i in 0..self.nrows() {
-            for j in 0..self.ncols() {
-                let r: usize = i.try_into().unwrap();
-                let c: usize = j.try_into().unwrap();
-                unsafe {*mat.at_2d_unchecked_mut::<u8>(i.try_into().unwrap(), j.try_into().unwrap()).unwrap() = self[(r, c)];}
-            }
-        }
-        return mat;
-    }
 
-    /// Get Algebra Matrix
-    fn grayscale_mat(&self) -> DVMatrixGrayscale {
-        self.clone()
-    }
-}
+// This is from the old implementation of DarvisVectorOfKeyPoint
 
 // Trait implementation for OpenCV vector of KeyPoint
 // impl DarvisVectorOfKeyPoint for VectorOfKeyPoint {
@@ -403,31 +391,3 @@ impl DarvisMatrix for DVMatrixGrayscale {
 //         self.clone()
 //     }
 // }
-
-
-
-// Functions to serialize and deserialize Mat objects, since they cannot be 
-// inferred with serde.
-
-// // Serde calls this the definition of the remote type. It is just a copy of the
-// // remote data structure. The `remote` attribute gives the path to the actual
-// // type we intend to derive code for.
-// #[derive(Serialize, Deserialize)]
-// #[serde(remote = "Mat")]
-// struct DurationDef {
-//     secs: i64,
-//     nanos: i32,
-// }
-
-// // Now the remote type can be used almost like it had its own Serialize and
-// // Deserialize impls all along. The `with` attribute gives the path to the
-// // definition for the remote type. Note that the real type of the field is the
-// // remote type, not the definition type.
-// #[derive(Serialize, Deserialize)]
-// struct Process {
-//     command_line: String,
-
-//     #[serde(with = "DurationDef")]
-//     wall_time: Duration,
-// }
-

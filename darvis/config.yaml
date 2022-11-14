@@ -6,7 +6,7 @@ master:
 system_settings:
        show_ui: false
        localization_only_mode: false
-       vocabulary_file: "/home/sofiya/darvis/vocabulary/ORBvoc.txt" # TODO: This does not work with ~/
+       vocabulary_file: "/home/sofiya/darvis/vocabulary/ORBvoc.txt" # TODO (low priority): This does not work with ~/
 
        framesensor: Mono
        imusensor: None

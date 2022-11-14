@@ -29,9 +29,6 @@ pub struct KeyFrame<K: KeyFrameState> {
     // depth_threshold: f64,
 
     // Scale //
-    pub num_scale_levels: i32, // mnScaleLevels
-    pub scale_factor: f64, // mfScaleFactor
-    pub log_scale_factor: f64, // mfLogScaleFactor
     pub scale_factors: Vec<f32>, // mvScaleFactors
     // Used in ORBExtractor, which we haven't implemented
     // we're using detect_and_compute from opencv instead
@@ -63,29 +60,24 @@ pub struct FullKeyFrame { // Full map item inserted into the map with the follow
     // Map connections ... Parent, children, neighbors
     pub parent: Option<Id>,
     pub children: Vec<Id>,
-    neighbors: Vec<Id>, // also sometimes called covisibility keyframes in ORBSLAM3
-    connected_keyframes: ConnectedKeyFrames,
-
-    // IMU
-    pub prev_kf_id: Option<Id>,
-    pub next_kf_id: Option<Id>,
+    connected_keyframes: ConnectedKeyFrames,// also sometimes called covisibility keyframes in ORBSLAM3
 
     // Sofiya: I think we can clean this up and get rid of these
     // Variables used by KF database
-    pub loop_query: u64, //mnLoopQuery
-    pub loop_words: i32, //mnLoopWords
-    pub reloc_query: u64, //mnRelocQuery
-    pub reloc_words: i32, //mnRelocWords
-    pub merge_query: u64, //mnMergeQuery
-    pub merge_words: i32, //mnMergeWords
-    pub place_recognition_query: u64, //mnPlaceRecognitionQuery
-    pub place_recognition_words: i32, //mnPlaceRecognitionWords
-    pub place_recognition_score: f32, //mPlaceRecognitionScore
-    // Variables used by loop closing
-    pub mnBAGlobalForKF: u64,
-    // Variables used by merging
-    pub mnMergeCorrectedForKF: u64,
-    pub mnBALocalForMerge: u64,
+    // pub loop_query: u64, //mnLoopQuery
+    // pub loop_words: i32, //mnLoopWords
+    // pub reloc_query: u64, //mnRelocQuery
+    // pub reloc_words: i32, //mnRelocWords
+    // pub merge_query: u64, //mnMergeQuery
+    // pub merge_words: i32, //mnMergeWords
+    // pub place_recognition_query: u64, //mnPlaceRecognitionQuery
+    // pub place_recognition_words: i32, //mnPlaceRecognitionWords
+    // pub place_recognition_score: f32, //mPlaceRecognitionScore
+    // // Variables used by loop closing
+    // pub mnBAGlobalForKF: u64,
+    // // Variables used by merging
+    // pub mnMergeCorrectedForKF: u64,
+    // pub mnBALocalForMerge: u64,
 }
 
 pub trait KeyFrameState: Send + Sync {}
@@ -100,10 +92,7 @@ impl KeyFrame<PrelimKeyFrame> {
             mappoint_matches: frame.mappoint_matches.clone(),
             pose: frame.pose.unwrap(),
             features: frame.features.clone(),
-            bow: BoW::new(),
-            num_scale_levels: frame.num_scale_levels,
-            scale_factor: frame.scale_factor,
-            log_scale_factor: frame.log_scale_factor,
+            bow: frame.bow.clone(),
             scale_factors: frame.scale_factors.clone(),
             imu_bias: frame.imu_bias,
             imu_preintegrated: frame.imu_preintegrated,
@@ -117,55 +106,40 @@ impl KeyFrame<PrelimKeyFrame> {
     }
 
     pub fn compute_bow(&mut self, voc: &DVVocabulary) {
-        voc.transform(&self.features.descriptors, &mut self.bow);
+        if self.bow.is_empty {
+            voc.transform(&self.features.descriptors, &mut self.bow);
+        }
     }
 }
 
 impl KeyFrame<FullKeyFrame> {
-    pub(super) fn new(prelim_keyframe: KeyFrame<PrelimKeyFrame>, origin_map_id: Id, id: Id) -> Self {
+    pub(super) fn new(prelim_keyframe: &KeyFrame<PrelimKeyFrame>, origin_map_id: Id, id: Id) -> Self {
         Self {
             timestamp: prelim_keyframe.timestamp,
             frame_id: prelim_keyframe.frame_id,
-            mappoint_matches: prelim_keyframe.mappoint_matches,
+            mappoint_matches: prelim_keyframe.mappoint_matches.clone(),
             pose: prelim_keyframe.pose,
-            features: prelim_keyframe.features,
-            bow: prelim_keyframe.bow,
-            num_scale_levels: prelim_keyframe.num_scale_levels,
-            scale_factor: prelim_keyframe.scale_factor,
-            log_scale_factor: prelim_keyframe.log_scale_factor,
-            scale_factors: prelim_keyframe.scale_factors,
+            features: prelim_keyframe.features.clone(),
+            bow: prelim_keyframe.bow.clone(),
+            scale_factors: prelim_keyframe.scale_factors.clone(),
             imu_bias: prelim_keyframe.imu_bias,
             imu_preintegrated: prelim_keyframe.imu_preintegrated,
             stereo_baseline: prelim_keyframe.stereo_baseline,
             full_kf_info: FullKeyFrame{
                 id,
                 origin_map_id,
-                prev_kf_id: todo!(),
-                next_kf_id: todo!(),
-                parent: todo!(),
-                children: todo!(),
-                neighbors: todo!(),
-                connected_keyframes: todo!(),
-                loop_query: todo!(),
-                loop_words: todo!(),
-                reloc_query: todo!(),
-                reloc_words: todo!(),
-                merge_query: todo!(),
-                merge_words: todo!(),
-                place_recognition_query: todo!(),
-                place_recognition_words: todo!(),
-                place_recognition_score: todo!(),
-                mnBAGlobalForKF: todo!(),
-                mnMergeCorrectedForKF: todo!(),
-                mnBALocalForMerge: todo!(),
+                ..Default::default()
             },
         }
     }
 
     pub fn id(&self) -> Id { self.full_kf_info.id }
 
-    pub fn get_neighbors(&self, num: i32) -> Vec<Id> {
-        Vec::from_iter(self.full_kf_info.neighbors[0..(num as usize)].iter().cloned())
+    pub fn get_mappoint(&self, index: &u32) -> Id {
+        self.mappoint_matches.get(index).unwrap().0
+    }
+    pub fn has_mappoint(&self, index: &u32) -> bool {
+        self.mappoint_matches.get(index).is_some()
     }
 
     pub fn add_mappoint(&mut self, mp: &MapPoint<FullMapPoint>, index: u32, is_outlier: bool) {
@@ -173,8 +147,22 @@ impl KeyFrame<FullKeyFrame> {
         self.mappoint_matches.insert(index, (mp.id(), is_outlier));
     }
 
+    pub fn erase_mappoint_match(&mut self, (left_index, right_index): (i32, i32)) {
+        // self.mappoint_matches.remove(id);
+        if left_index != -1 {
+            self.mappoint_matches.remove(&(left_index as u32));
+        }
+        if right_index != -1 {
+            self.mappoint_matches.remove(&(right_index as u32));
+        }
+    }
+
     pub fn add_connection(&mut self, kf_id: &Id, weight: i32) {
         self.full_kf_info.connected_keyframes.add_connection(kf_id, weight);
+    }
+
+    pub fn get_connections(&self, num: i32) -> Vec<Id> {
+        self.full_kf_info.connected_keyframes.get_connections(num)
     }
 
     pub fn insert_all_connections(&mut self, new_connections: HashMap::<Id, i32>, is_init_kf: bool) -> Option<Id> {
@@ -248,16 +236,6 @@ impl KeyFrame<FullKeyFrame> {
 
         num_points
     }
-
-    pub fn erase_mappoint_match(&mut self, (left_index, right_index): (i32, i32)) {
-        // self.mappoint_matches.remove(id);
-        if left_index != -1 {
-            self.mappoint_matches.remove(&(left_index as u32));
-        }
-        if right_index != -1 {
-            self.mappoint_matches.remove(&(right_index as u32));
-        }
-    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
@@ -289,8 +267,13 @@ impl ConnectedKeyFrames {
         self.map = new_connections;
     }
 
-    pub fn  first(&self) -> Id {
+    pub fn first(&self) -> Id {
         self.ordered[0].1
+    }
+
+    pub fn get_connections(&self, num: i32) -> Vec<Id> {
+        todo!("TODO 10/17");
+        // Vec::from_iter(self.ordered[0..(num as usize)].iter().cloned())
     }
 
     fn sort_ordered(&mut self) {

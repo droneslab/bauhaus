@@ -7,12 +7,13 @@ use dvcore::{
     lockwrap::ReadOnlyWrapper,
 };
 use log::warn;
+use crate::dvmap::keyframe::FullKeyFrame;
 use crate::dvmap::map_actor::MapWriteMsg;
 use crate::dvmap::{map::Map, map_actor::MAP_ACTOR, keyframe::{KeyFrame, PrelimKeyFrame}};
 use crate::modules::{imu::ImuModule, optimizer::Optimizer};
 use crate::registered_modules::LOOP_CLOSING;
 
-use super::messages::{Reset, KeyFrameMsg};
+use super::messages::{Reset, KeyFrameMsg, KeyFrameIdMsg};
 
 #[derive(Debug, Clone, Default)]
 pub struct DarvisLocalMapping {
@@ -43,13 +44,44 @@ impl DarvisLocalMapping {
         let map_actor = Some(context.system.find_aid_by_name(MAP_ACTOR).unwrap());
         self.current_keyframe = msg.keyframe.clone();
 
+        // BoW conversion and insertion in Map
+        // Compute Bags of Words structures
+        self.current_keyframe.compute_bow(&self.map.read().vocabulary);
+
+        // Associate MapPoints to the new keyframe and update normal and descriptor
+        // let mappoint_matches = self.map.read().get_keyframe(self.current_keyframe.id);
+        // const vector<MapPoint*> vpMapPointMatches = mpCurrentKeyFrame->GetMapPointMatches();
+
+        // for(size_t i=0; i<vpMapPointMatches.size(); i++)
+        // {
+        //     MapPoint* pMP = vpMapPointMatches[i];
+        //     if(pMP)
+        //     {
+        //         if(!pMP->isBad())
+        //         {
+        //             if(!pMP->IsInKeyFrame(mpCurrentKeyFrame))
+        //             {
+        //                 pMP->AddObservation(mpCurrentKeyFrame, i);
+        //                 pMP->UpdateNormalAndDepth();
+        //                 pMP->ComputeDistinctiveDescriptors();
+        //             }
+        //             else // this can only happen for new stereo points inserted by the Tracking
+        //             {
+        //                 mlpRecentAddedMapPoints.push_back(pMP);
+        //             }
+        //         }
+        //     }
+        // }
+
+        // // Update links in the Covisibility Graph
+        // mpCurrentKeyFrame->UpdateConnections();
+
+        // Insert Keyframe in Map
         // let map_actor = map_actor.as_ref().unwrap();
         // map_actor.send_new(MapWriteMsg::new_keyframe(self.current_keyframe)).unwrap();
+    }
 
-
-        // BoW conversion and insertion in Map
-        self.process_new_keyframe();
-
+    fn local_mapping(&mut self, context: Context, msg: Arc<KeyFrameIdMsg>) {
         // Check recent MapPoints
         self.mappoint_culling();
 
@@ -58,7 +90,7 @@ impl DarvisLocalMapping {
 
         let mbAbortBA = false;
 
-        // TODO (important): ORBSLAM will abort additional work if there are too many keyframes in the msg queue.
+        // TODO (design): ORBSLAM will abort additional work if there are too many keyframes in the msg queue.
         // But idk how to check the queue size from within the callback
         // if(!CheckNewKeyFrames()) {
                 // Find more matches in neighbor keyframes and fuse point duplications
@@ -70,7 +102,7 @@ impl DarvisLocalMapping {
 
         let t_init = 0.0; // Sofiya: idk what this is for but it's used all over the place
 
-        // TODO (important): ORBSLAM will abort additional work if there are too many keyframes in the msg queue (CheckNewKeyFrames)
+        // TODO (design): ORBSLAM will abort additional work if there are too many keyframes in the msg queue (CheckNewKeyFrames)
         // Additionally it will abort if a stop or reset is requested (stopRequested)
         // But idk how to check the queue size from within the callback, and idk how to "look ahead" at future messages to see if
         // a stop is requested further in the queue. Maybe the skip functionality? Maybe implementing messages with priority?
@@ -102,7 +134,7 @@ impl DarvisLocalMapping {
                     // Optimizer::LocalInertialBA(mpCurrentKeyFrame, &mbAbortBA, mpCurrentKeyFrame->GetMap(),num_FixedKF_BA,num_OptKF_BA,num_MPs_BA,num_edges_BA, bLarge, !mpCurrentKeyFrame->GetMap()->GetIniertialBA2());
                 },
                 false => {
-                    // TODO (important): ORBSLAM will abort additional work if there are too many keyframes in the msg queue.
+                    // TODO (design): ORBSLAM will abort additional work if there are too many keyframes in the msg queue.
                     let force_stop_flag = false; // mbAbortBA
                     self.optimizer.local_bundle_adjustment(&self.map.read(), &self.current_keyframe, force_stop_flag, 0, 0,0, 0);
                 }
@@ -163,42 +195,6 @@ impl DarvisLocalMapping {
 
 
         self.send_to_loop_closing(context);
-    }
-
-    fn process_new_keyframe(&mut self) {
-        // Compute Bags of Words structures
-        self.current_keyframe.compute_bow(&self.map.read().vocabulary);
-
-        // Associate MapPoints to the new keyframe and update normal and descriptor
-        // let mappoint_matches = self.map.read().get_keyframe(self.current_keyframe.id);
-        // const vector<MapPoint*> vpMapPointMatches = mpCurrentKeyFrame->GetMapPointMatches();
-
-        // for(size_t i=0; i<vpMapPointMatches.size(); i++)
-        // {
-        //     MapPoint* pMP = vpMapPointMatches[i];
-        //     if(pMP)
-        //     {
-        //         if(!pMP->isBad())
-        //         {
-        //             if(!pMP->IsInKeyFrame(mpCurrentKeyFrame))
-        //             {
-        //                 pMP->AddObservation(mpCurrentKeyFrame, i);
-        //                 pMP->UpdateNormalAndDepth();
-        //                 pMP->ComputeDistinctiveDescriptors();
-        //             }
-        //             else // this can only happen for new stereo points inserted by the Tracking
-        //             {
-        //                 mlpRecentAddedMapPoints.push_back(pMP);
-        //             }
-        //         }
-        //     }
-        // }
-
-        // // Update links in the Covisibility Graph
-        // mpCurrentKeyFrame->UpdateConnections();
-
-        // // Insert Keyframe in Map
-        // mpAtlas->AddKeyFrame(mpCurrentKeyFrame);
     }
 
     fn mappoint_culling(&self) {
@@ -854,8 +850,10 @@ impl Function for DarvisLocalMapping {
     {
         if let Some(msg) = message.content_as::<KeyFrameMsg<PrelimKeyFrame>>() {
             self.local_mapping_prelim(context, msg);
+        } else if let Some(msg) = message.content_as::<KeyFrameIdMsg>() {
+            self.local_mapping(context, msg);
         } else if let Some(msg) = message.content_as::<Reset>() {
-            // TODO: need to think about how reset requests should be propagated
+            // TODO (design) need to think about how reset requests should be propagated
         }
 
         Ok(Status::done(()))

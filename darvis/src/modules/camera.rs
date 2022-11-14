@@ -1,6 +1,7 @@
-use opencv::{types::VectorOfPoint3f, prelude::{Mat, MatTrait}, core::{CV_32F, Scalar}};
+use cxx::CxxVector;
+use opencv::{types::VectorOfPoint3f, prelude::{Mat, MatTrait, Boxed}, core::{CV_32F, Scalar}};
 use std::collections::HashMap;
-use dvcore::{global_params::*, matrix::{DVMatrix3, DVMatrix}};
+use dvcore::{global_params::*, matrix::{DVMatrix3, DVMatrix, DVVectorOfPoint3f, DVVector3}};
 use crate::{
     dvmap::{pose::Pose, map::Id},
     modules::{twoviewreconstruction::TwoViewReconstruction},
@@ -29,9 +30,10 @@ pub struct Camera {
     pub stereo_baseline: f64, //mb
     pub th_depth: i32, //mThDepth
     pub dist_coef: Option<Vec<f32>>, //mDistCoef
-    // tvr: Option<TwoViewReconstruction>,
+    // tvr: Option<TwoViewReconstruction>, // If we duplicate camera and have this pointer in here pointing to the same underlying tvr in C++, it is not thread safe
 }
 
+// TODO: I don't think we should duplicate camera in each kf/mp, I think we just need one reference?
 impl Camera {
     pub fn new(camera_type: CameraType) -> Camera {
         // Implementation only for PinholeCamera, see:
@@ -45,7 +47,7 @@ impl Camera {
         let stereo_baseline_times_fx= GLOBAL_PARAMS.get::<f64>(SYSTEM_SETTINGS, "stereo_baseline_times_fx");
         let th_depth= GLOBAL_PARAMS.get::<i32>(SYSTEM_SETTINGS, "thdepth");
 
-        //Check if we need to correct distortion from the images
+        // Todo Check if we need to correct distortion from the images
         let mut dist_coef = None;
         let sensor= GLOBAL_PARAMS.get::<Sensor>(SYSTEM_SETTINGS, "sensor");
         let k1= GLOBAL_PARAMS.get::<f64>(SYSTEM_SETTINGS, "camera_k1") as f32;
@@ -78,16 +80,38 @@ impl Camera {
         &mut self, 
         v_keys1: &DVVectorOfKeyPoint, 
         v_keys2: &DVVectorOfKeyPoint,
-        v_matches12: &HashMap<u32, Id>,
+        matches: &HashMap<u32, u32>,
         t21: &mut Pose,
-        v_p3_d: &mut VectorOfPoint3f,
+        v_p3_d: &mut DVVectorOfPoint3f,
         triangulated: &mut Vec<bool>
     ) -> bool {
-        let mut tvr = TwoViewReconstruction::default();
-        todo!("TODO 10/17 BINDINGS reconstruct");
-        return tvr.reconstruct(
-            v_keys1,v_keys2,v_matches12,t21, v_p3_d,triangulated
+
+        let tvr = dvos3binding::ffi::new_two_view_reconstruction(
+            self.fx as f32,
+            self.cx as f32,
+            self.fy as f32,
+            self.cy as f32,
+            1.0, 200
         );
+        todo!("Fix calling bindings");
+        // unsafe {
+        //     let kps_1_cv = (**v_keys1).into_raw() as *const CxxVector<dvos3binding::ffi::DVKeyPoint>;
+        //     let kps_2_cv = (**v_keys2).into_raw() as *const CxxVector<dvos3binding::ffi::DVKeyPoint>;
+
+        //     let matches_cv = matches.into_raw() as *const CxxVector<i32>;
+        //     let mut pose = dvos3binding::ffi::Pose{pose : [[0.0;4];4]};
+        //     let mut vP3D  = dvos3binding::ffi::VectorOfDVPoint3f{vec:Vec::new() };
+        //     let mut vbTriangulated  = dvos3binding::ffi::VectorOfDVBool{ vec:Vec::new() };
+
+        //     tvr.pin_mut().Reconstruct_1(
+        //         &*kps_1_cv,
+        //         &*kps_2_cv,
+        //         &*matches_new, 
+        //         &mut pose,
+        //         &mut vP3D,
+        //         &mut vbTriangulated
+        //     )
+        // }
     }
 
     pub fn to_K_matrix(&self) -> Result<Mat, Box<dyn std::error::Error>> {
@@ -98,6 +122,14 @@ impl Camera {
         *K.at_2d_mut::<f64>(1, 2)? = self.cy;
         *K.at_2d_mut::<f64>(2, 2)? = 1.0;
         Ok(K)
+    }
+
+    pub fn unproject_eig() -> DVVector3<f32> {
+        // Eigen::Vector3f Pinhole::unprojectEig(const cv::Point2f &p2D) {
+        //     return Eigen::Vector3f((p2D.x - mvParameters[2]) / mvParameters[0], (p2D.y - mvParameters[3]) / mvParameters[1],
+        //                     1.f);
+        // }
+        todo!("TODO LOCAL MAPPING");
     }
 }
 

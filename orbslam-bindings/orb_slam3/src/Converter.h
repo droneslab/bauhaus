@@ -46,7 +46,6 @@ public:
 
     static Sophus::SE3<float> toSophus(const cv::Mat& T);
 
-    // TODO templetize these functions
     // static cv::Mat toCvMat(const g2o::SE3Quat &SE3);
     // static cv::Mat toCvMat(const g2o::Sim3 &Sim3);
     static cv::Mat toCvMat(const Eigen::Matrix<double,4,4> &m);

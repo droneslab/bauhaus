@@ -37,7 +37,7 @@ impl DarvisFrameLoader {
 
                 // Kickoff the pipeline by sending the feature extraction module images
                 tracking_frontend.send_new(ImageMsg{
-                    frame: img.grayscale_mat(),
+                    frame: img.into(),
                 }).unwrap();
             }
         }

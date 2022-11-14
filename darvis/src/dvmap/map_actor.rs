@@ -23,18 +23,18 @@ impl MapActor {//+ std::marker::Send + std::marker::Sync
     }
 
     async fn handle(self, _context: Context, message: Message) -> ActorResult<Self> {
-        if let Some(_msg) = message.content_as::<MapWriteMsg>() {
+        if let Some(msg) = message.content_as::<MapWriteMsg>() {
             info!("map_actor::handle;received map edit msg");
             let mut write_lock = self.map.write();
+            let msg = &*msg;
 
-            match &_msg.target{
-
+            match &msg.target {
                 MapEditTarget::CreateInitialMapMonocular { initialization_data, tracking_actor } => {
-                    match write_lock.create_initial_map_monocular(initialization_data) {
+                    match write_lock.create_initial_map_monocular(&initialization_data) {
                             Some((curr_kf_pose, curr_kf_id, ini_kf_id, local_mappoints)) => {
                                 let tracking_msg = MapInitializedMsg {curr_kf_pose, curr_kf_id, ini_kf_id, local_mappoints};
                                 tracking_actor.send_new(tracking_msg).unwrap();
-                                info!("map::create_initial_map_monocular;success");
+                                info!("successfully created initial monocular map");
                             },
                             None => { }
                     };
@@ -43,19 +43,21 @@ impl MapActor {//+ std::marker::Send + std::marker::Sync
                 MapEditTarget::MapPoint__Discard { id } => {
                     write_lock.discard_mappoint(&id);
                 },
+
                 MapEditTarget::MapPoint_IncreaseFound { mp_ids_and_nums } => {
                     let mut write_lock = self.map.write();
                     for (mp, n) in mp_ids_and_nums {
-                        write_lock.increase_mappoint_found(mp, n);
+                        write_lock.increase_mappoint_found(&mp, &n);
                     }
                 },
+
                 MapEditTarget::KeyFrame__New { kf } => {
                     // Note: called by local mapping
-                    // let mut write_lock = self.map.write();
-                    // write_lock.new_keyframe(*kf);
+                    self.map.write().insert_keyframe_to_map(&kf);
                 },
+
                 _ => {
-                    warn!("map_actor::handle;invalid message type to map actor");
+                    warn!("invalid message type to map actor");
                 },
             }
         }
