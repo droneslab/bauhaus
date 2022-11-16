@@ -1,4 +1,4 @@
-use dvcore::{matrix::DVVector3, global_params::{Sensor, FrameSensor}};
+use dvcore::{matrix::DVVector3, config::{Sensor, FrameSensor}};
 use nalgebra::Vector3;
 use serde::{Serialize, de::DeserializeOwned, Deserialize};
 use std::{fmt::Debug, collections::{HashMap, hash_map::Keys}};

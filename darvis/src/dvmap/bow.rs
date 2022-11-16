@@ -1,6 +1,6 @@
 use std::fmt;
 use cxx::{UniquePtr, let_cxx_string};
-use dvcore::{matrix::DVMatrix, global_params::{GLOBAL_PARAMS, SYSTEM_SETTINGS}};
+use dvcore::{matrix::DVMatrix, config::{GLOBAL_PARAMS, SYSTEM_SETTINGS}};
 use log::info;
 use opencv::prelude::Boxed;
 

@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 use error_chain::bail;
 use log::{info, warn, error};
 
-use dvcore::{matrix::{DVVector3}, global_params::{Sensor, GLOBAL_PARAMS, SYSTEM_SETTINGS, FrameSensor, ImuSensor}};
+use dvcore::{matrix::{DVVector3}, config::{Sensor, GLOBAL_PARAMS, SYSTEM_SETTINGS, FrameSensor, ImuSensor}};
 use crate::{
     dvmap::{keyframe::*, mappoint::*, pose::Pose, bow::DVVocabulary},
     modules::{map_initialization::Initialization, optimizer::{BAResult, Optimizer}}
@@ -87,8 +87,8 @@ impl Map {
         self.mappoints
             .remove(id)
             .map(|mappoint| {
-                for kf_id in mappoint.observations().keys() {
-                    let indexes = mappoint.observations().get_observation(kf_id);
+                for kf_id in mappoint.get_observations().keys() {
+                    let indexes = mappoint.get_observations().get_observation(kf_id);
                     self.keyframes.get_mut(kf_id).unwrap().erase_mappoint_match(indexes);
                 }
             });
@@ -197,7 +197,7 @@ impl Map {
         }
 
         // Scale initial baseline
-        let new_trans = *(curr_kf.pose.translation()) * inverse_median_depth;
+        let new_trans = *(curr_kf.pose.get_translation()) * inverse_median_depth;
         let mut new_pose = Pose::default();
         new_pose.set_translation(new_trans[0], new_trans[1], new_trans[2]);
         curr_kf.pose = new_pose;
@@ -266,7 +266,7 @@ impl Map {
         let mut kf_counter = HashMap::<Id, i32>::new();
         for (_, (mp_id, _)) in &main_kf.mappoint_matches {
             let mp = self.mappoints.get(&mp_id).unwrap();
-            for kf_id in mp.observations().keys() {
+            for kf_id in mp.get_observations().keys() {
                 *kf_counter.entry(*kf_id).or_insert(0) += 1;
             }
         }
@@ -308,7 +308,7 @@ impl Map {
 
         for (mp_id, pose) in optimized_poses.optimized_mp_poses {
             if optimized_poses.loop_kf_is_first_kf {
-                self.mappoints.get_mut(&mp_id).unwrap().position = pose.translation();
+                self.mappoints.get_mut(&mp_id).unwrap().position = pose.get_translation();
                 let norm_and_depth = self.mappoints.get(&mp_id).unwrap().get_norm_and_depth(&self);
                 if norm_and_depth.is_some() {
                     self.mappoints.get_mut(&mp_id).unwrap().update_norm_and_depth(norm_and_depth.unwrap());

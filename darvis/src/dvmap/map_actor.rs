@@ -5,7 +5,7 @@ use nalgebra::Vector3;
 use crate::{
     lockwrap::ReadWriteWrapper,
     dvmap::{keyframe::*, map::*},
-    modules::map_initialization::Initialization,
+    modules::map_initialization::Initialization, actors::messages::MapInitializedMsg,
 };
 
 use super::pose::Pose;
@@ -127,13 +127,3 @@ impl MapWriteMsg {
         }
     }
 }
-
-// Message that map sends to tracking letting it know that map has been initialized
-#[derive(Debug)]
-pub struct MapInitializedMsg {
-    pub curr_kf_pose: Pose,
-    pub curr_kf_id: Id,
-    pub ini_kf_id: Id,
-    pub local_mappoints: HashSet<Id>,
-}
-impl ActorMessage for MapInitializedMsg { }

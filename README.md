@@ -94,17 +94,14 @@ impl DarvisVis {
     #[derive(Debug, Serialize, Deserialize)]
     pub struct VisMsg {
         new_pose: Pose,
-        actor_ids: std::collections::HashMap<String, axiom::actors::Aid>
     }
     ```
-    ==TODO: What are actor ids?==
 3. Implement the constructor for the message. Likewise, you can do this in ``src/modules/modulename.rs`` or ``src/modules/messages/messagename.rs``. Example:
     ```Rust
     impl VisMsg {
         pub fn new(pose: Pose, ids: std::collections::HashMap<String, axiom::actors::Aid>) -> Self {
             Self {
                 new_pose: pose,
-                actor_ids: ids,
             }
         }
     }
@@ -143,3 +140,25 @@ To use the setting in your code, reference it like:
 let max_features: i32 = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "max_features");
 ```
 Where ``max_features`` is the key you added in the config file.
+
+---
+## Future work, key for strings
+
+Strings are formatted like: ``TODO (string)``
+
+### Implementation
+- Sensor types
+    - **IMU**
+    - **Stereo**
+    - **RGBD**
+- Modules
+    - **relocalization**
+    - **local mapping**
+    - **loop closing**
+- Features
+    - **multimaps**
+    - **reset**
+
+### Design
+- Axiom framework
+    - **msg copy** - 

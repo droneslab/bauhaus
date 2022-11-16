@@ -5,12 +5,12 @@ use std::collections::{HashSet, HashMap};
 use cxx::SharedPtr;
 use dvcore::{
     lockwrap::ReadOnlyWrapper,
-    global_params::{GLOBAL_PARAMS, SYSTEM_SETTINGS, Sensor},
+    config::{GLOBAL_PARAMS, SYSTEM_SETTINGS, Sensor},
 };
 use g2o::ffi::{VertexSE3Expmap, VertexSBAPointXYZ, BridgeEdgeSE3ProjectXYZ};
 use log::info;
 use nalgebra::Matrix3;
-use crate::dvmap::{frame::Frame, pose::Pose, map::{Map, Id}, features::*, keyframe::{KeyFrame, PrelimKeyFrame}};
+use crate::{dvmap::{frame::Frame, pose::Pose, map::{Map, Id}, features::*, keyframe::{KeyFrame, PrelimKeyFrame}}, registered_modules::FEATURE_DETECTION};
 
 #[derive(Debug, Clone, Default)]
 pub struct Optimizer {
@@ -31,9 +31,9 @@ impl Optimizer {
 
         // See ORBExtractor constructor: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/ORBextractor.cc#L409
         // and note above about inv_level_sigma2
-        let scale_factor= GLOBAL_PARAMS.get::<f64>(SYSTEM_SETTINGS, "scale_factor");
-        let max_features = GLOBAL_PARAMS.get::<i32>(SYSTEM_SETTINGS, "max_features");
-        let n_levels = GLOBAL_PARAMS.get::<i32>(SYSTEM_SETTINGS, "n_levels");
+        let scale_factor= GLOBAL_PARAMS.get::<f64>(FEATURE_DETECTION, "scale_factor");
+        let max_features = GLOBAL_PARAMS.get::<i32>(FEATURE_DETECTION, "max_features");
+        let n_levels = GLOBAL_PARAMS.get::<i32>(FEATURE_DETECTION, "n_levels");
 
         let mut scale_factors = vec![1.0];
         let mut level_sigma2 = vec![1.0];
@@ -1029,7 +1029,7 @@ impl Optimizer {
                 Pose::new(&*mappoint.position, &Matrix3::zeros()).into() // create pose out of translation only
             );
 
-            let observations = mappoint.observations();
+            let observations = mappoint.get_observations();
             let mut n_edges = 0;
 
             //SET EDGES

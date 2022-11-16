@@ -4,15 +4,15 @@
 // on the type of sensor.
 use std::collections::{HashMap};
 use std::fmt::Debug;
-use dvcore::global_params::FrameSensor;
-use dvcore::global_params::{*};
+use dvcore::config::FrameSensor;
+use dvcore::config::{*};
 use opencv::prelude::{Mat, MatTraitConst, MatTrait};
 use opencv::types::{VectorOff32};
 use serde::{Deserialize, Serialize};
 use opencv::core::{KeyPoint, CV_32F, Scalar};
 use crate::{
     matrix::{DVMatrix, DVVectorOfKeyPoint},
-    dvmap::{frame::ImageBounds, map::Id}, modules::camera::Camera,
+    dvmap::{map::Id}, modules::camera::Camera,
 };
 
 pub const FRAME_GRID_ROWS :usize = 48;
@@ -21,18 +21,18 @@ pub const FRAME_GRID_COLS :usize = 64;
 #[derive(Clone, Debug, Default)]
 enum KeyPoints {
     #[default] Empty,
-    Mono{ 
+    Mono { 
         keypoints_orig: DVVectorOfKeyPoint, // Original for visualization.
         keypoints_un: DVVectorOfKeyPoint // Undistorted keypoints actually used by the system. For stereo, this is redundant bc images must be rectified
     },
-    Stereo{
+    Stereo { 
         keypoints_left: DVVectorOfKeyPoint,
         keypoints_left_cutoff: u32, // Nleft, if stereo and index passed in is < keypoints_left_cutoff, need to get keypoint from keypoints_right instead of keypoints
         keypoints_right: DVVectorOfKeyPoint,
         mv_right: HashMap<u32, f32>, // mvuRight
         mv_depth: HashMap<u32, f32>, //mvDepth
     },
-    Rgbd{
+    Rgbd {
         keypoints_orig: DVVectorOfKeyPoint, // Original for visualization.
         keypoints_un: DVVectorOfKeyPoint, // Undistorted keypoints actually used by the system. For stereo, this is redundant bc images must be rectified
         mv_depth: HashMap<u32, f32>, //mvDepth
@@ -42,41 +42,39 @@ enum KeyPoints {
 #[derive(Clone, Debug, Default)]
 pub struct Features {
     // Common across all sensor types:
-    pub image_bounds: ImageBounds, // min_x, max_x, min_y, max_y
     pub num_keypoints: u32,
     keypoints: KeyPoints,
+    pub image_bounds: ImageBounds,
     pub descriptors: DVMatrix, // mDescriptors
     grid: Grid, // Keypoints are assigned to cells in a grid to reduce matching complexity when projecting MapPoints.
 }
 
 impl Features {
     pub fn new(
-        keypoints: &DVVectorOfKeyPoint,
-        descriptors: &DVMatrix,
+        keypoints: DVVectorOfKeyPoint,
+        descriptors: DVMatrix,
         im_width: i32, im_height: i32,
         camera: &Camera,
         sensor: Sensor
     ) -> Result<Features, Box<dyn std::error::Error>> {
         let image_bounds = ImageBounds::new(im_width, im_height, &camera.dist_coef);
-
-        let keypoints_orig = keypoints.clone();
         let mut grid = Grid::default(&image_bounds);
+        let keypoints_orig = keypoints.clone();
 
         match sensor.frame() {
             FrameSensor::Mono => {
-                let keypoints_un =  Self::undistort_keypoints(keypoints, camera)?;
+                let keypoints_un =  Self::undistort_keypoints(&keypoints_orig, camera)?;
                 let num_keypoints = keypoints_un.len() as u32;
 
                 // assign features to grid
                 grid.assign_features(&image_bounds, &keypoints_un);
                 Ok::<Features, Box<dyn std::error::Error>>(
                     Features {
-                        image_bounds,
                         num_keypoints,
+                        image_bounds,
                         keypoints: KeyPoints::Mono { keypoints_orig, keypoints_un },
                         descriptors: descriptors.clone(),
                         grid,
-                        ..Default::default()
                     }
                 )
             },
@@ -122,7 +120,7 @@ impl Features {
         }
     }
 
-    pub fn mv_depth_get(&self, i: &u32) -> Option<&f32> {
+    pub fn get_mv_depth(&self, i: &u32) -> Option<&f32> {
         match &self.keypoints {
             KeyPoints::Mono{..}  => None,
             KeyPoints::Stereo{mv_depth, ..} | KeyPoints::Rgbd{mv_depth, ..} => mv_depth.get(i),
@@ -131,6 +129,10 @@ impl Features {
     }
 
     pub fn get_octave(&self, index: usize) -> i32 {
+        // Note: Use this function if you ever see a code pattern like this
+        // bestLevel = (F.Nleft == -1) ? F.mvKeysUn[idx].octave
+        //                     : (idx < F.Nleft) ? F.mvKeys[idx].octave
+        //                                         : F.mvKeysRight[idx - F.Nleft].octave;
         self.get_keypoint(index).octave
     }
 
@@ -177,10 +179,10 @@ impl Features {
             opencv::calib3d::undistort_points(
                 &mat,
                 &mut undistorted,
-                &camera.to_K_matrix()?,
+                &camera.k_matrix.mat(),
                 &dist_coefs,
                 &Mat::eye(3, 3, opencv::core::CV_32F)?,
-                &camera.to_K_matrix()?,
+                &camera.k_matrix.mat(),
             )?;
 
             mat = mat.reshape(1, 0)?;
@@ -200,9 +202,9 @@ impl Features {
         }
     }
 
-    pub fn get_features_in_area(&self, x: &f64, y: &f64, r: &f64, min_level: &i64, max_level: &i64) -> Vec<usize> {
+    pub fn get_features_in_area(&self, x: &f64, y: &f64, r: f64, min_level: i32, max_level: i32, image_bounds: &ImageBounds) -> Vec<u32> {
         //GetFeaturesInArea
-        let mut indices = Vec::<usize>::new();
+        let mut indices = Vec::<u32>::new();
         indices.reserve(self.num_keypoints as usize);
 
         let frame_grid_rows = FRAME_GRID_ROWS as i64;
@@ -210,19 +212,19 @@ impl Features {
         let grid_element_width_inv = self.grid.grid_element_width_inv;
         let grid_element_height_inv = self.grid.grid_element_height_inv;
 
-        let factor_x = *r;
-        let factor_y = *r;
+        let factor_x = r;
+        let factor_y = r;
 
-        let min_cell_x = i64::max(0, ((x-self.image_bounds.min_x-factor_x)*grid_element_width_inv).floor() as i64);
-        let max_cell_x = i64::min(frame_grid_cols-1, ((x-self.image_bounds.min_x+factor_x)*grid_element_width_inv).ceil() as i64);
-        let min_cell_y = i64::max(0, ((y-self.image_bounds.min_y-factor_y)*grid_element_height_inv).floor() as i64);
-        let max_cell_y = i64::min(frame_grid_rows-1, ((y-self.image_bounds.min_y+factor_y)*grid_element_height_inv).ceil() as i64);
+        let min_cell_x = i64::max(0, ((x-image_bounds.min_x-factor_x)*grid_element_width_inv).floor() as i64);
+        let max_cell_x = i64::min(frame_grid_cols-1, ((x-image_bounds.min_x+factor_x)*grid_element_width_inv).ceil() as i64);
+        let min_cell_y = i64::max(0, ((y-image_bounds.min_y-factor_y)*grid_element_height_inv).floor() as i64);
+        let max_cell_y = i64::min(frame_grid_rows-1, ((y-image_bounds.min_y+factor_y)*grid_element_height_inv).ceil() as i64);
 
-        if min_cell_x >= frame_grid_cols || max_cell_x < 0 || min_cell_y >= frame_grid_rows || max_cell_y < 0 {
+        if !image_bounds.check_bounds(min_cell_x as f64, min_cell_y as f64) || !image_bounds.check_bounds(max_cell_x as f64, max_cell_y as f64) {
             return indices;
         }
 
-        let b_check_levels = *min_level>0 || *max_level>=0;
+        let check_levels = min_level>0 || max_level>=0;
 
         for ix in min_cell_x..max_cell_x + 1 {
             for iy in min_cell_y..max_cell_y + 1 {
@@ -236,27 +238,76 @@ impl Features {
                 for j in 0..v_cell.len() {
                     //TODO (Stereo) Need to update this if stereo images are processed
                     let kp_un = &self.get_keypoint(v_cell[j]);
-                    if b_check_levels {
-                        if kp_un.octave< *min_level as i32 {
+                    if check_levels {
+                        if kp_un.octave < min_level as i32 {
                             continue;
                         }
-                        if *max_level>=0 {
-                            if kp_un.octave> *max_level as i32 {
+                        if max_level >= 0 {
+                            if kp_un.octave > max_level as i32 {
                                 continue;
                             }
                         }
                     }
 
-                    let distx = kp_un.pt.x- (*x as f32);
-                    let disty = kp_un.pt.y- (*y as f32);
+                    let distx = kp_un.pt.x - (*x as f32);
+                    let disty = kp_un.pt.y - (*y as f32);
 
                     if distx.abs()<(factor_x as f32) && disty.abs() < (factor_y as f32)  {
-                        indices.push(v_cell[j]);
+                        indices.push(v_cell[j] as u32);
                     }
                 }
             }
         }
         return indices;
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ImageBounds {
+    pub min_x: f64,//static float mnMinX;
+    pub max_x: f64,//static float mnMaxX;
+    pub min_y: f64,//static float mnMinY;
+    pub max_y: f64,//static float mnMaxY;
+}
+
+impl ImageBounds {
+    pub fn new(im_width: i32, im_height: i32, dist_coef: &Option<Vec<f32>>) -> ImageBounds {
+        //ComputeImageBounds
+        let min_x = 0.0;
+        let mut max_x = 0.0;
+        let min_y = 0.0;
+        let mut max_y = 0.0;
+
+        match dist_coef {
+            Some(vec) => {
+                todo!("mid priority: implement code if dist_coef is non-zero");
+                // cv::Mat mat(4,2,CV_32F);
+                // mat.at<float>(0,0)=0.0; mat.at<float>(0,1)=0.0;
+                // mat.at<float>(1,0)=imLeft.cols; mat.at<float>(1,1)=0.0;
+                // mat.at<float>(2,0)=0.0; mat.at<float>(2,1)=imLeft.rows;
+                // mat.at<float>(3,0)=imLeft.cols; mat.at<float>(3,1)=imLeft.rows;
+
+                // mat=mat.reshape(2);
+                // cv::undistortPoints(mat,mat,static_cast<Pinhole*>(mpCamera)->toK(),mDistCoef,cv::Mat(),mK);
+                // mat=mat.reshape(1);
+
+                // // Undistort corners
+                // mnMinX = min(mat.at<float>(0,0),mat.at<float>(2,0));
+                // mnMaxX = max(mat.at<float>(1,0),mat.at<float>(3,0));
+                // mnMinY = min(mat.at<float>(0,1),mat.at<float>(1,1));
+                // mnMaxY = max(mat.at<float>(2,1),mat.at<float>(3,1));
+            },
+            None => {
+                max_x = im_width as f64;
+                max_y = im_height as f64;
+            }
+        }
+
+        ImageBounds{ min_x, max_x, min_y, max_y }
+    }
+
+    pub fn check_bounds(&self, x: f64, y: f64) -> bool {
+        x >= self.min_x && x < self.max_x && y >= self.min_y && y < self.max_y
     }
 }
 
@@ -305,6 +356,19 @@ impl Grid {
         } else{
             return None;
         }
+    }
+}
+impl Into<dvos3binding::ffi::DVGrid> for Grid {
+    fn into(self) -> dvos3binding::ffi::DVGrid {
+        todo!("TODO BINDINGS");
+        // let mut grid_v1 = dvos3binding::ffi::VectorOfusize{vec: Vec::new()};
+        // let mut grid_vals = Vec::new();
+        // grid_v1.vec.append(&mut grid_vals);
+        // let mut grid_v2 = dvos3binding::ffi::VectorOfVecusize{vec:Vec::new()  };
+        // grid_v2.vec.push(grid_v1);
+        // let mut grid_v3 = dvos3binding::ffi::DVGrid{vec:Vec::new()};
+        // grid_v3.vec.push(grid_v2.clone());
+        // grid_v3.vec.push(grid_v2.clone());
     }
 }
 

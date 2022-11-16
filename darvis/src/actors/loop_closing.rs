@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use axiom::prelude::*;
 
-use dvcore::global_params::{Sensor, GLOBAL_PARAMS};
+use dvcore::config::{Sensor, GLOBAL_PARAMS};
 use dvcore::{
     plugin_functions::Function,
     lockwrap::ReadOnlyWrapper,

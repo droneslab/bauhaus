@@ -13,3 +13,9 @@ pub struct ActorConf{
     pub threads: i64,
     pub possible_paths: HashMap<String, String>
 }
+
+#[derive(Debug, Default, Clone)]
+// Struct holding configuration parameters for a given module
+pub struct ModuleConf{
+    pub name: String
+}

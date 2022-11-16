@@ -191,7 +191,7 @@ g2o/stuff/property.cpp
 g2o/stuff/property.h       
 
 # orbslam g2o modifications
-# TODO IMU... uncomment these
+# TODO (IMU)... uncomment these
 # g2o/types/G2oTypes.h
 # g2o/types/G2oTypes.cc
 # g2o/types/ImuTypes.h

@@ -7,7 +7,7 @@ use opencv::{
     features2d::{Feature2DTrait},
     types::{PtrOfBRISK, VectorOfKeyPoint},
 };
-use dvcore::{global_params::*, matrix::*, plugin_functions::Function};
+use dvcore::{config::*, matrix::*, plugin_functions::Function};
 use crate::{
     actors::messages::{FeatureMsg, ImageMsg},
     registered_modules::TRACKER
@@ -25,7 +25,7 @@ impl DarvisFast {
         if let Some(msg) = message.content_as::<ImageMsg>() {
             let mut kp1 = VectorOfKeyPoint::new();
             let mut des1 = Mat::default();
-            let img1: Mat = (&msg.frame).into(); // Taking ownership of message should not fail
+            let img1: Mat = (&msg.frame).into();
 
             let fast_threshold: i32 = 20;
             let non_max_suppression: bool = true;

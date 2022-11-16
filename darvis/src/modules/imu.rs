@@ -1,4 +1,4 @@
-use dvcore::{lockwrap::ReadOnlyWrapper, global_params::{Sensor, FrameSensor, ImuSensor}};
+use dvcore::{lockwrap::ReadOnlyWrapper, config::{Sensor, FrameSensor, ImuSensor}};
 use serde::{Deserialize, Serialize};
 
 use crate::dvmap::{pose::Pose, map::Map};
@@ -42,7 +42,7 @@ impl ImuModule {
 
     fn check_imu_sensor(&self) {
         if matches!(self.sensor.imu(), ImuSensor::None) {
-            panic!("Should not use IMU module if IMU sensor is not set".to_string());
+            panic!("{}", "Should not use IMU module if IMU sensor is not set".to_string());
         }
     }
 }

@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use axiom::message::ActorMessage;
 use dvcore::{
     matrix::{ DVVectorOfKeyPoint, DVMatrix, DVMatrixGrayscale},
@@ -42,6 +44,15 @@ pub struct ImagesMsg {
 }
 impl ActorMessage for ImagesMsg {}
 
+// Message that map sends to tracking letting it know that map has been initialized
+#[derive(Debug)]
+pub struct MapInitializedMsg {
+    pub curr_kf_pose: Pose,
+    pub curr_kf_id: Id,
+    pub ini_kf_id: Id,
+    pub local_mappoints: HashSet<Id>,
+}
+impl ActorMessage for MapInitializedMsg { }
 
 #[derive(Debug)]
 pub struct KeyFrameMsg<S: KeyFrameState> {
