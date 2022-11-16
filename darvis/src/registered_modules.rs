@@ -12,7 +12,7 @@ pub static TRACKER: &str = "TRACKER";
 pub static VISUALIZER: &str = "VISUALIZER";
 
 pub static FEATURE_DETECTION: &str = "FEATURE_DETECTION";
-pub static CAMERA: &str = "CAMERA";
+pub static MOD_CAMERA: &str = "CAMERA";
 pub static MATCHER: &str = "CAMERA";
 
 /// REGISTER MODULE: All the features/actors that are implemented, 

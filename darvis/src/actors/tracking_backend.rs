@@ -12,7 +12,7 @@ use crate::{
         map::Map, map_actor::MapWriteMsg, map_actor::{MAP_ACTOR}, map::Id,
         keyframe::KeyFrame, frame::Frame, pose::Pose, mappoint::{MapPoint, FullMapPoint}, bow,
     },
-    modules::{camera::Camera, camera::CameraType, imu::{ImuModule}, optimizer::*, orbmatcher, map_initialization::Initialization, relocalization::Relocalization},
+    modules::{camera::CAMERA, imu::{ImuModule}, optimizer::*, orbmatcher, map_initialization::Initialization, relocalization::Relocalization},
 };
 
 use super::messages::{InitialMapMsg, KeyFrameIdMsg};
@@ -81,7 +81,6 @@ pub struct DarvisTrackingBack {
     relocalization: Relocalization,
 
     // Idk where to put these
-    camera: Camera,
     map_updated : bool,  // TODO (design) I'm not sure we want to use this
 
     // Utilities from darvis::utils
@@ -113,7 +112,6 @@ impl DarvisTrackingBack {
         // and you shouldn't worry if you see this.
         DarvisTrackingBack {
             map: map,
-            camera: Camera::new(CameraType::Pinhole).unwrap(),
             sensor: GLOBAL_PARAMS.get::<Sensor>(SYSTEM_SETTINGS, "sensor"),
             localization_only_mode: GLOBAL_PARAMS.get::<bool>(SYSTEM_SETTINGS, "localization_only_mode"),
             frames_to_reset_imu: GLOBAL_PARAMS.get::<i32>(TRACKING_BACKEND, "frames_to_reset_IMU") as u32,
@@ -138,7 +136,6 @@ impl DarvisTrackingBack {
             msg.descriptors.clone(), // TODO (msg copy)
             msg.image_width,
             msg.image_height,
-            &self.camera
         ) {
             Ok(frame) => frame,
             Err(e) => panic!("Problem creating a frame: {:?}", e),
@@ -168,7 +165,7 @@ impl DarvisTrackingBack {
         let initial_success = match self.state {
             TrackingState::WaitForMapResponse => { return; },
             TrackingState::NotInitialized => {
-                match self.initialization.try_initialize(&self.current_frame, &mut self.camera) {
+                match self.initialization.try_initialize(&self.current_frame) {
                     Ok(ready) => {
                         if ready {
                             let msg = match self.sensor.frame() {
@@ -348,7 +345,7 @@ impl DarvisTrackingBack {
         let mut nmatches =0;
         let map_read_lock = self.map.read();
         let ref_kf = map_read_lock.get_keyframe(&self.ref_kf_id.unwrap()).unwrap();
-        match orbmatcher::search_by_bow_f(ref_kf, &self.current_frame,true, 0.7, &self.map) {
+        match orbmatcher::search_by_bow_frame(ref_kf, &self.current_frame,true, 0.7, &self.map) {
             Ok((num_matches, kf_match_edits)) => {
                 // TODO (MVP): map needs to be updated with kf_match_edits after calling this!!!
             },
@@ -409,7 +406,7 @@ impl DarvisTrackingBack {
             _ => 7
         };
 
-        let mut matches = orbmatcher::search_by_projection_with_threshold(
+        let mut matches = orbmatcher::search_by_projection_frame(
             &mut self.current_frame,
             self.last_frame.as_ref().unwrap(),
             th,
@@ -425,7 +422,7 @@ impl DarvisTrackingBack {
         if matches < 20 {
             info!("tracking_backend::track_with_motion_model;not enough matches, wider window search");
             self.current_frame.clear_mappoints();
-            matches = orbmatcher::search_by_projection_with_threshold(
+            matches = orbmatcher::search_by_projection_frame(
                 &mut self.current_frame,
                 self.last_frame.as_ref().unwrap(),
                 2 * th,
@@ -526,7 +523,7 @@ impl DarvisTrackingBack {
 
             // TODO (MVP) send mps_to_increase_visible to map
 
-            let matches = orbmatcher::search_by_projection(
+            let matches = orbmatcher::search_by_projection_mappoints(
                 &mut self.current_frame,
                 &self.local_mappoints,
                 th, true, 0.8,

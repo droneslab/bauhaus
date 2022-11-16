@@ -18,6 +18,10 @@ modules:
        name: CAMERA
        settings:
           - 
+           name: camera_type
+           value: Pinhole
+           type: string
+          - 
            name: fx
            value: 718.856
            type: f64

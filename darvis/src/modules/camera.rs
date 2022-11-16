@@ -1,23 +1,25 @@
-use cxx::CxxVector;
+use cxx::{CxxVector,UniquePtr};
 use opencv::{types::VectorOfPoint3f, prelude::{Mat, MatTrait, Boxed, MatTraitConst}, core::{CV_32F, Scalar, CV_64F}};
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Mutex};
 use dvcore::{config::*, matrix::{DVMatrix3, DVMatrix, DVVectorOfPoint3f, DVVector3}};
 use crate::{
     dvmap::{pose::Pose, map::Id},
-    modules::{twoviewreconstruction::TwoViewReconstruction},
-    matrix::DVVectorOfKeyPoint, registered_modules::CAMERA
+    matrix::DVVectorOfKeyPoint, registered_modules::MOD_CAMERA
 };
+use dvos3binding::ffi::TwoViewReconstruction;
 
-
-#[derive(Debug, Clone, Default)]
-pub enum CameraType {
-    #[default] Pinhole
+lazy_static! {
+    pub static ref CAMERA: DVCamera = {
+        DVCamera::new().unwrap()
+    };
 }
+// TODO (concurrency): implemented these so that we can pass DVCamera around globally
+// This should not cause a problem as long as the TwoViewReconstruction C++ code does not
+// mutate the TwoViewReconstruction object. If it does, we need to add mutexes on the C++ side.
+unsafe impl Send for DVCamera {}
+unsafe impl Sync for DVCamera {}
 
-#[derive(Debug, Clone, Default)]
-pub struct Camera {
-    pub camera_type: CameraType,
-
+pub struct DVCamera {
     // K in ORBSLAM3 is matrix with the following items:
     pub k_matrix: DVMatrix,
 
@@ -25,57 +27,70 @@ pub struct Camera {
     pub stereo_baseline: f64, //mb
     pub th_depth: i32, //mThDepth
     pub dist_coef: Option<Vec<f32>>, //mDistCoef
-    // tvr: Option<TwoViewReconstruction>, // If we duplicate camera and have this pointer in here pointing to the same underlying tvr in C++, it is not thread safe
+    tvr: UniquePtr<TwoViewReconstruction>,
 }
 
 // TODO: I don't think we should duplicate camera in each kf/mp, I think we just need one reference?
-impl Camera {
-    pub fn new(camera_type: CameraType) -> Result<Camera, Box<dyn std::error::Error>> {
+impl DVCamera {
+    fn new() -> Result<DVCamera, Box<dyn std::error::Error>> {
         // Implementation only for PinholeCamera, see:
         // - void Tracking::newParameterLoader
         // - GeometricCamera* Atlas::AddCamera(GeometricCamera* pCam)
-        // - void Settings::readCamera1(cv::FileStorage &fSettings) 
-        let fx= GLOBAL_PARAMS.get::<f64>(CAMERA, "fx");
-        let fy= GLOBAL_PARAMS.get::<f64>(CAMERA, "fy");
-        let cx= GLOBAL_PARAMS.get::<f64>(CAMERA, "cx");
-        let cy= GLOBAL_PARAMS.get::<f64>(CAMERA, "cy");
+        // - void Settings::readCamera1(cv::FileStorage &fSettings)
+        let camera_type = GLOBAL_PARAMS.get::<String>(MOD_CAMERA, "camera_type");
+        match camera_type.as_str() {
+            "Pinhole" => {
+                let fx= GLOBAL_PARAMS.get::<f64>(MOD_CAMERA, "fx");
+                let fy= GLOBAL_PARAMS.get::<f64>(MOD_CAMERA, "fy");
+                let cx= GLOBAL_PARAMS.get::<f64>(MOD_CAMERA, "cx");
+                let cy= GLOBAL_PARAMS.get::<f64>(MOD_CAMERA, "cy");
 
-        let mut k = Mat::new_rows_cols_with_default(3,3, CV_64F, Scalar::all(0.0))?;
-        *k.at_2d_mut::<f64>(0, 0)? = fx;
-        *k.at_2d_mut::<f64>(0, 2)? = cx;
-        *k.at_2d_mut::<f64>(1, 1)? = fy;
-        *k.at_2d_mut::<f64>(1, 2)? = cy;
-        *k.at_2d_mut::<f64>(2, 2)? = 1.0;
+                let mut k = Mat::new_rows_cols_with_default(3,3, CV_64F, Scalar::all(0.0))?;
+                *k.at_2d_mut::<f64>(0, 0)? = fx;
+                *k.at_2d_mut::<f64>(0, 2)? = cx;
+                *k.at_2d_mut::<f64>(1, 1)? = fy;
+                *k.at_2d_mut::<f64>(1, 2)? = cy;
+                *k.at_2d_mut::<f64>(2, 2)? = 1.0;
 
-        // Todo (need?) Check if we need to correct distortion from the images
-        let mut dist_coef = None;
-        let sensor= GLOBAL_PARAMS.get::<Sensor>(SYSTEM_SETTINGS, "sensor");
-        let k1= GLOBAL_PARAMS.get::<f64>(CAMERA, "k1") as f32;
-        if sensor.is_mono() && k1 != 0.0 {
-            let k2 = GLOBAL_PARAMS.get::<f64>(CAMERA, "k2") as f32;
-            let p1 = GLOBAL_PARAMS.get::<f64>(CAMERA, "p1") as f32;
-            let p2 = GLOBAL_PARAMS.get::<f64>(CAMERA, "p2") as f32;
-            let k3 = GLOBAL_PARAMS.get::<f64>(CAMERA, "k3") as f32;
-            if k3 != 0.0 {
-                dist_coef = Some(vec![k1, k2, p1, p2, k3]);
-            } else {
-                dist_coef = Some(vec![k1, k2, p1, p2]);
-            }
+                // Todo (need?) Check if we need to correct distortion from the images
+                let mut dist_coef = None;
+                let sensor= GLOBAL_PARAMS.get::<Sensor>(SYSTEM_SETTINGS, "sensor");
+                let k1= GLOBAL_PARAMS.get::<f64>(MOD_CAMERA, "k1") as f32;
+                if sensor.is_mono() && k1 != 0.0 {
+                    let k2 = GLOBAL_PARAMS.get::<f64>(MOD_CAMERA, "k2") as f32;
+                    let p1 = GLOBAL_PARAMS.get::<f64>(MOD_CAMERA, "p1") as f32;
+                    let p2 = GLOBAL_PARAMS.get::<f64>(MOD_CAMERA, "p2") as f32;
+                    let k3 = GLOBAL_PARAMS.get::<f64>(MOD_CAMERA, "k3") as f32;
+                    if k3 != 0.0 {
+                        dist_coef = Some(vec![k1, k2, p1, p2, k3]);
+                    } else {
+                        dist_coef = Some(vec![k1, k2, p1, p2]);
+                    }
+                }
+
+                let stereo_baseline_times_fx= GLOBAL_PARAMS.get::<f64>(MOD_CAMERA, "stereo_baseline_times_fx");
+                let th_depth= GLOBAL_PARAMS.get::<i32>(MOD_CAMERA, "thdepth");
+                let stereo_baseline = stereo_baseline_times_fx / fx;
+
+                let tvr = dvos3binding::ffi::new_two_view_reconstruction(
+                    fx as f32,
+                    cx as f32,
+                    fy as f32,
+                    cy as f32,
+                    1.0, 200
+                );
+
+                Ok(DVCamera {
+                    k_matrix: DVMatrix::new(k),
+                    stereo_baseline_times_fx,
+                    stereo_baseline,
+                    th_depth, dist_coef, tvr
+                })
+            },
+            _ => panic!("Incorrect camera type")
         }
-
-        let stereo_baseline_times_fx= GLOBAL_PARAMS.get::<f64>(CAMERA, "stereo_baseline_times_fx");
-        let th_depth= GLOBAL_PARAMS.get::<i32>(CAMERA, "thdepth");
-        let stereo_baseline = stereo_baseline_times_fx / fx;
-
-        Ok(Camera {
-            camera_type,
-            k_matrix: DVMatrix::new(k),
-            stereo_baseline_times_fx,
-            stereo_baseline,
-            th_depth, dist_coef,
-        })
     }
-    
+
     pub fn get_fx(&self) -> f64 { *self.k_matrix.mat().at_2d::<f64>(0,0).unwrap() }
     pub fn get_fy(&self) -> f64 { *self.k_matrix.mat().at_2d::<f64>(1,1).unwrap() }
     pub fn get_cx(&self) -> f64 { *self.k_matrix.mat().at_2d::<f64>(0,2).unwrap() }
@@ -84,7 +99,7 @@ impl Camera {
     pub fn get_inv_fy(&self) -> f64 { 1.0 / self.get_fy() }
 
     pub fn reconstruct_with_two_views(
-        &mut self, 
+        &self, 
         v_keys1: &DVVectorOfKeyPoint, 
         v_keys2: &DVVectorOfKeyPoint,
         matches: &HashMap<u32, u32>,
@@ -92,14 +107,6 @@ impl Camera {
         v_p3_d: &mut DVVectorOfPoint3f,
         triangulated: &mut Vec<bool>
     ) -> bool {
-
-        let tvr = dvos3binding::ffi::new_two_view_reconstruction(
-            self.get_fx() as f32,
-            self.get_cx() as f32,
-            self.get_fy() as f32,
-            self.get_cy() as f32,
-            1.0, 200
-        );
         todo!("Fix calling bindings");
         // unsafe {
         //     let kps_1_cv = (**v_keys1).into_raw() as *const CxxVector<dvos3binding::ffi::DVKeyPoint>;

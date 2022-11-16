@@ -1,19 +1,17 @@
 use std::collections::{HashMap, HashSet};
 use std::f64::INFINITY;
-use std::pin::Pin;
-use cxx::CxxVector;
-use dvcore::config::{GLOBAL_PARAMS, Sensor, FrameSensor};
-use opencv::core::{Point2f, KeyPoint, CV_8U};
+use dvcore::config::{GLOBAL_PARAMS, Sensor};
+use opencv::core::{Point2f, KeyPoint};
 use opencv::prelude::*;
 use crate::actors::tracking_backend::TrackedMapPointData;
 use crate::dvmap::keyframe::{KeyFrame, FullKeyFrame};
-use crate::dvmap::mappoint::FullMapPoint;
 use crate::registered_modules::MATCHER;
 use crate::{
-    dvmap::{frame::Frame, mappoint::MapPoint, map::Id, map::Map},
-    modules::{camera::Camera},
+    dvmap::{frame::Frame, map::Id, map::Map},
     lockwrap::ReadOnlyWrapper,
 };
+
+use super::camera::CAMERA;
 
 const  TH_HIGH: i32= 100;
 const  TH_LOW: i32 = 50;
@@ -60,7 +58,7 @@ pub fn search_for_initialization(
     // }
 }
 
-pub fn search_by_projection(
+pub fn search_by_projection_mappoints(
     frame: &mut Frame, mappoints: &HashSet<Id>, th: i32,
     check_orientation: bool, ratio: f64,
     track_in_view: &HashMap<Id, TrackedMapPointData>, track_in_view_right: &HashMap<Id, TrackedMapPointData>, 
@@ -225,15 +223,15 @@ pub fn search_by_projection(
     return Ok(num_matches);
 }
 
-// Project MapPoints tracked in last frame into the current frame and search matches.
-// Used to track from previous frame (Tracking)
-pub fn search_by_projection_with_threshold (
+pub fn search_by_projection_frame (
     current_frame: &mut Frame, last_frame: &Frame, th: i32,
     should_check_orientation: bool, ratio: f64,
     track_in_view: &HashMap<Id, TrackedMapPointData>, track_in_view_right: &HashMap<Id, TrackedMapPointData>,
     map: &ReadOnlyWrapper<Map>, sensor: Sensor
 ) -> Result<i32, Box<dyn std::error::Error>> {
     // int ORBmatcher::SearchByProjection(Frame &CurrentFrame, const Frame &LastFrame, const float th, const bool bMono)
+    // Project MapPoints tracked in last frame into the current frame and search matches.
+    // Used to track from previous frame (Tracking)
     // TODO (Stereo): This function should work for stereo as well as RGBD as long as get_all_keypoints() returns
     // a concatenated list of left keypoints and right keypoints (there is a to do for this in features.rs). BUT
     // double check that the descriptors works correctly. Instead of splitting descriptors into discriptors_left and right,
@@ -276,8 +274,8 @@ pub fn search_by_projection_with_threshold (
             let invzc = 1.0 / x_3d_c[2];
             if invzc < 0.0 { continue; }
 
-            let u = current_frame.camera.get_fx() * xc * invzc + current_frame.camera.get_cx();
-            let v = current_frame.camera.get_fy() * yc * invzc + current_frame.camera.get_cy();
+            let u = CAMERA.get_fx() * xc * invzc + CAMERA.get_cx();
+            let v = CAMERA.get_fy() * yc * invzc + CAMERA.get_cy();
             if !current_frame.features.image_bounds.check_bounds(u, v) {
                 continue;
             }
@@ -310,7 +308,7 @@ pub fn search_by_projection_with_threshold (
                     }
                 }
 
-                // TODO: Not sure what this is doing
+                // TODO (need?): Not sure what this is doing
                 // Nleft == -1 if the left camera has no extracted keypoints which would happen in the
                 // non-stereo case. But mvuRight is > 0 ONLY in the stereo case! So is this ever true?
                 // if(CurrentFrame.Nleft == -1 && CurrentFrame.mvuRight[i2]>0)
@@ -352,21 +350,26 @@ pub fn search_by_projection_with_threshold (
     return Ok(num_matches);
 } 
 
-// Sofiya: other searchbyprojection functions we will have to implement later:
+pub fn search_by_projection_kf() {
+    // Project MapPoints seen in KeyFrame into the Frame and search matches.
+    // Used in relocalisation (Tracking)
+    // int SearchByProjection(Frame &CurrentFrame, KeyFrame* pKF, const std::set<MapPoint*> &sAlreadyFound, const float th, const int ORBdist);
+}
 
-// Project MapPoints seen in KeyFrame into the Frame and search matches.
-// Used in relocalisation (Tracking)
-// int SearchByProjection(Frame &CurrentFrame, KeyFrame* pKF, const std::set<MapPoint*> &sAlreadyFound, const float th, const int ORBdist);
+pub fn search_by_projection_similarity() {
+    // Project MapPoints using a Similarity Transformation and search matches.
+    // Used in loop detection (Loop Closing)
+    // int SearchByProjection(KeyFrame* pKF, Sophus::Sim3<float> &Scw, const std::vector<MapPoint*> &vpPoints, std::vector<MapPoint*> &vpMatched, int th, float ratioHamming=1.0);
+}
 
-// Project MapPoints using a Similarity Transformation and search matches.
-// Used in loop detection (Loop Closing)
-// int SearchByProjection(KeyFrame* pKF, Sophus::Sim3<float> &Scw, const std::vector<MapPoint*> &vpPoints, std::vector<MapPoint*> &vpMatched, int th, float ratioHamming=1.0);
+pub fn search_by_projection_full() {
+    // Project MapPoints using a Similarity Transformation and search matches.
+    // Used in Place Recognition (Loop Closing and Merging)
+    // int SearchByProjection(KeyFrame* pKF, Sophus::Sim3<float> &Scw, const std::vector<MapPoint*> &vpPoints, const std::vector<KeyFrame*> &vpPointsKFs, std::vector<MapPoint*> &vpMatched, std::vector<KeyFrame*> &vpMatchedKF, int th, float ratioHamming=1.0);
+}
 
-// Project MapPoints using a Similarity Transformation and search matches.
-// Used in Place Recognition (Loop Closing and Merging)
-// int SearchByProjection(KeyFrame* pKF, Sophus::Sim3<float> &Scw, const std::vector<MapPoint*> &vpPoints, const std::vector<KeyFrame*> &vpPointsKFs, std::vector<MapPoint*> &vpMatched, std::vector<KeyFrame*> &vpMatchedKF, int th, float ratioHamming=1.0);
 
-pub fn search_by_bow_f(
+pub fn search_by_bow_frame(
     kf : &KeyFrame<FullKeyFrame>, frame : &Frame, should_check_orientation: bool, 
     ratio: f64, map: &ReadOnlyWrapper<Map>
 ) -> Result<(i32, HashMap<i32, Option<Id>>), Box<dyn std::error::Error>> {
@@ -477,62 +480,58 @@ pub fn search_by_bow_kf(
     let mut num_matches = 0;
     let mut kf_match_edits: HashMap<i32, Option<Id>> = HashMap::new();
 
-    let keypoints_1 = kf_1.features.get_all_keypoints();
-    let keypoints_2 = kf_2.features.get_all_keypoints();
-
     let factor = 1.0 / (HISTO_LENGTH as f32);
     let mut rot_hist = construct_rotation_histogram();
 
     for node_id_kf_1 in kf_1.bow.get_feat_vec_nodes() {
         for node_id_kf_2 in kf_2.bow.get_feat_vec_nodes() {
-            if node_id_kf_1 == node_id_kf_2 {
-                let indices_kf_1 = kf_1.bow.get_feat_from_node(node_id_kf_1);
-                let indices_kf_2 = kf_2.bow.get_feat_from_node(node_id_kf_2);
+            if node_id_kf_1 != node_id_kf_2 {
+                continue;
+            }
+            let indices_kf_1 = kf_1.bow.get_feat_from_node(node_id_kf_1);
+            let indices_kf_2 = kf_2.bow.get_feat_from_node(node_id_kf_2);
 
-                for index_kf_1 in indices_kf_1 {
-                    let mut best_dist = (256, 256);
-                    let mut best_index = -1;
-                    let descriptors_kf_1 = kf_1.features.descriptors.row(index_kf_1)?;
+            for index_kf_1 in indices_kf_1 {
+                let mut best_dist = (256, 256);
+                let mut best_index = -1;
+                let descriptors_kf_1 = kf_1.features.descriptors.row(index_kf_1)?;
 
-                    for index_kf_2 in &indices_kf_2 {
-                        if kf_2.features.has_left_kp().map_or(false, |n_left| index_kf_2 > &n_left) {
-                            continue;
-                        }
-
-                        if kf_2.has_mappoint(&index_kf_2) {
-                            continue;
-                        }
-
-                        let descriptors_kf_2 = kf_2.features.descriptors.row(*index_kf_2)?;
-                        let dist = descriptor_distance(&descriptors_kf_1, &descriptors_kf_2);
-                        if dist < best_dist.0 {
-                            best_dist.1 = best_dist.0;
-                            best_dist.0 = dist;
-                            best_index = *index_kf_2 as i32;
-                        } else if dist < best_dist.1 {
-                            best_dist.1 = dist;
-                        }
+                for index_kf_2 in &indices_kf_2 {
+                    if kf_2.features.has_left_kp().map_or(false, |n_left| index_kf_2 > &n_left) {
+                        continue;
                     }
 
-                    if best_dist.0 <= TH_LOW {
-                        let mp_id = &kf_2.get_mappoint(&(best_index as u32));
-
-                        if (best_dist.0 as f64) < ratio * (best_dist.1 as f64) {
-                            kf_match_edits.insert(index_kf_1 as i32, Some(*mp_id)); // for Kf_1
-
-                            if should_check_orientation {
-                                check_orientation_1(
-                                    &kf_1.features.get_keypoint(index_kf_1 as usize),
-                                    &kf_2.features.get_keypoint(best_index as usize),
-                                    &mut rot_hist, factor, best_index
-                                );
-                            }
-                            num_matches += 1;
-                        }
+                    if kf_2.has_mappoint(&index_kf_2) {
+                        continue;
                     }
 
+                    let descriptors_kf_2 = kf_2.features.descriptors.row(*index_kf_2)?;
+                    let dist = descriptor_distance(&descriptors_kf_1, &descriptors_kf_2);
+                    if dist < best_dist.0 {
+                        best_dist.1 = best_dist.0;
+                        best_dist.0 = dist;
+                        best_index = *index_kf_2 as i32;
+                    } else if dist < best_dist.1 {
+                        best_dist.1 = dist;
+                    }
                 }
 
+                if best_dist.0 <= TH_LOW {
+                    let mp_id = &kf_2.get_mappoint(&(best_index as u32));
+
+                    if (best_dist.0 as f64) < ratio * (best_dist.1 as f64) {
+                        kf_match_edits.insert(index_kf_1 as i32, Some(*mp_id)); // for Kf_1
+
+                        if should_check_orientation {
+                            check_orientation_1(
+                                &kf_1.features.get_keypoint(index_kf_1 as usize),
+                                &kf_2.features.get_keypoint(best_index as usize),
+                                &mut rot_hist, factor, best_index
+                            );
+                        }
+                        num_matches += 1;
+                    }
+                }
             }
         }
     }

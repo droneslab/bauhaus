@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use opencv::core::{KeyPoint, CV_32F, Scalar};
 use crate::{
     matrix::{DVMatrix, DVVectorOfKeyPoint},
-    dvmap::{map::Id}, modules::camera::Camera,
+    dvmap::{map::Id}, modules::camera::CAMERA,
 };
 
 pub const FRAME_GRID_ROWS :usize = 48;
@@ -54,16 +54,15 @@ impl Features {
         keypoints: DVVectorOfKeyPoint,
         descriptors: DVMatrix,
         im_width: i32, im_height: i32,
-        camera: &Camera,
         sensor: Sensor
     ) -> Result<Features, Box<dyn std::error::Error>> {
-        let image_bounds = ImageBounds::new(im_width, im_height, &camera.dist_coef);
+        let image_bounds = ImageBounds::new(im_width, im_height, &CAMERA.dist_coef);
         let mut grid = Grid::default(&image_bounds);
         let keypoints_orig = keypoints.clone();
 
         match sensor.frame() {
             FrameSensor::Mono => {
-                let keypoints_un =  Self::undistort_keypoints(&keypoints_orig, camera)?;
+                let keypoints_un =  Self::undistort_keypoints(&keypoints_orig)?;
                 let num_keypoints = keypoints_un.len() as u32;
 
                 // assign features to grid
@@ -160,8 +159,8 @@ impl Features {
         }
     }
 
-    fn undistort_keypoints(keypoints: &DVVectorOfKeyPoint, camera: &Camera) -> Result<DVVectorOfKeyPoint, Box<dyn std::error::Error>> {
-        if let Some(dist_coef) = &camera.dist_coef {
+    fn undistort_keypoints(keypoints: &DVVectorOfKeyPoint) -> Result<DVVectorOfKeyPoint, Box<dyn std::error::Error>> {
+        if let Some(dist_coef) = &CAMERA.dist_coef {
 
             let num_keypoints = keypoints.len();
             // Fill matrix with points
@@ -178,10 +177,10 @@ impl Features {
             opencv::calib3d::undistort_points(
                 &mat,
                 &mut undistorted,
-                &camera.k_matrix.mat(),
+                &CAMERA.k_matrix.mat(),
                 &dist_coefs,
                 &Mat::eye(3, 3, opencv::core::CV_32F)?,
-                &camera.k_matrix.mat(),
+                &CAMERA.k_matrix.mat(),
             )?;
 
             mat = mat.reshape(1, 0)?;
