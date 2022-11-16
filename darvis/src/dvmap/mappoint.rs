@@ -192,7 +192,7 @@ impl MapPoint<FullMapPoint> {
         let dist = pc.norm();
 
         let level = self.full_mp_info.observations.get_level(ref_kf);
-        let level_scale_factor = ref_kf.scale_factors[level as usize] as f64; //TODO 10/17: This is always going to be an empty vector, need to fill it like in optimizer
+        let level_scale_factor = ref_kf.scale_factors[level as usize] as f64; //TODO (MVP) This is always going to be an empty vector, need to fill it like in optimizer
         let n_levels = GLOBAL_PARAMS.get::<i32>(SYSTEM_SETTINGS, "n_levels");
 
         let max_distance = dist * level_scale_factor;

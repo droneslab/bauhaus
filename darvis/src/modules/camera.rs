@@ -47,7 +47,7 @@ impl Camera {
         *k.at_2d_mut::<f64>(1, 2)? = cy;
         *k.at_2d_mut::<f64>(2, 2)? = 1.0;
 
-        // Todo Check if we need to correct distortion from the images
+        // Todo (need?) Check if we need to correct distortion from the images
         let mut dist_coef = None;
         let sensor= GLOBAL_PARAMS.get::<Sensor>(SYSTEM_SETTINGS, "sensor");
         let k1= GLOBAL_PARAMS.get::<f64>(CAMERA, "k1") as f32;

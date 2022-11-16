@@ -1,5 +1,4 @@
 use std::collections::{HashMap, HashSet};
-use error_chain::bail;
 use log::{info, warn, error};
 
 use dvcore::{matrix::{DVVector3}, config::{Sensor, GLOBAL_PARAMS, SYSTEM_SETTINGS, FrameSensor, ImuSensor}};
@@ -7,6 +6,8 @@ use crate::{
     dvmap::{keyframe::*, mappoint::*, pose::Pose, bow::DVVocabulary},
     modules::{map_initialization::Initialization, optimizer::{BAResult, Optimizer}}
 };
+
+use super::bow;
 
 pub type Id = i32;
 
@@ -21,7 +22,7 @@ pub struct Map {
     // KeyFrames
     keyframes: HashMap<Id, KeyFrame<FullKeyFrame>>, // = mspKeyFrames
     last_kf_id: Id, // = mnMaxKFid
-    pub initial_kf_id: Id, // todo (multimaps): this is the initial kf id that was added to this map, when this map is made. should tie together map vesioning better, maybe in a single struct
+    pub initial_kf_id: Id, // TODO (multimaps): this is the initial kf id that was added to this map, when this map is made. should tie together map vesioning better, maybe in a single struct
 
     // MapPoints
     mappoints: HashMap<Id, MapPoint<FullMapPoint>>, // = mspMapPoints
@@ -32,8 +33,6 @@ pub struct Map {
     // no other thread/module/actor will use except the map. Should there even be a link to Optimizer here,
     // or should we make a specific global optimization object?
     optimizer: Optimizer,
-
-    pub vocabulary: DVVocabulary,
 
     sensor: Sensor,
     // Sofiya: following are in orbslam3, not sure if we need:
@@ -127,10 +126,10 @@ impl Map {
 
         // Create KeyFrames
         let initial_kf_id = self.insert_keyframe_to_map(
-            &KeyFrame::<PrelimKeyFrame>::new(&inidata.initial_frame.as_ref().unwrap(), &self.vocabulary)
+            &KeyFrame::<PrelimKeyFrame>::new(&inidata.initial_frame.as_ref().unwrap(), &bow::VOCABULARY)
         );
         let curr_kf_id = self.insert_keyframe_to_map(
-            &KeyFrame::<PrelimKeyFrame>::new(&inidata.current_frame.as_ref().unwrap(), &self.vocabulary)
+            &KeyFrame::<PrelimKeyFrame>::new(&inidata.current_frame.as_ref().unwrap(), &bow::VOCABULARY)
         );
 
         let mut curr_frame = inidata.current_frame.as_ref().unwrap().clone();
@@ -300,7 +299,7 @@ impl Map {
             if optimized_poses.loop_kf_is_first_kf {
                 self.keyframes.get_mut(&kf_id).unwrap().pose = pose;
             } else {
-                // TODO 10/17
+                // TODO (MVP)
                 // pKF->mTcwGBA = Sophus::SE3d(SE3quat.rotation(),SE3quat.translation()).cast<float>();
                 // pKF->mnBAGlobalForKF = nLoopKF;
             }
@@ -314,7 +313,7 @@ impl Map {
                     self.mappoints.get_mut(&mp_id).unwrap().update_norm_and_depth(norm_and_depth.unwrap());
                 }
             } else {
-                // TODO 10/17
+                // TODO (MVP)
                 // pMP->mPosGBA = vPoint->estimate().cast<float>();
                 // pMP->mnBAGlobalForKF = nLoopKF;
             }

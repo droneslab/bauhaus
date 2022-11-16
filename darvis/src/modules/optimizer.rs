@@ -444,7 +444,7 @@ impl Optimizer {
 
     //     return nInitialCorrespondences-nBad;
     // }
-    todo!("TODO IMU BINDINGS Optimizer::PoseInertialOptimizationLastFrame(&mCurrentFrame)");
+    todo!("TODO (IMU) Optimizer::PoseInertialOptimizationLastFrame(&mCurrentFrame)");
     }
 
     //int Optimizer::PoseInertialOptimizationLastKeyFrame(Frame *pFrame, bool bRecInit)
@@ -808,7 +808,7 @@ impl Optimizer {
         // pFrame->mpcpi = new ConstraintPoseImu(VP->estimate().Rwb,VP->estimate().twb,VV->estimate(),VG->estimate(),VA->estimate(),H);
 
         // return nInitialCorrespondences-nBad;
-        todo!("TODO IMU Optimizer::PoseInertialOptimizationLastKeyFrame(&mCurrentFrame)");
+        todo!("TODO (IMU) Optimizer::PoseInertialOptimizationLastKeyFrame(&mCurrentFrame)");
     }
 
     pub fn optimize_pose(&self, frame: &mut Frame, map: &ReadOnlyWrapper<Map>) -> Option<(i32, Pose)> {
@@ -836,7 +836,7 @@ impl Optimizer {
                     let edge = match self.sensor.frame() {
                         crate::FrameSensor::Stereo => {
                             // Stereo observations
-                            todo!("TODO stereo");
+                            todo!("TODO (Stereo)");
                             // let edge = optimizer.create_edge_stereo(
                             //     keypoint.octave, keypoint.pt.x, keypoint.pt.y,
                             //    frame.keypoints_data.mv_right.get(mp_id).unwrap(),
@@ -921,7 +921,7 @@ impl Optimizer {
                 }
             }
 
-            // TODO (mid priority) SLAM with respect to a rigid body...probably don't have to do this rn?
+            // TODO (rigid body) SLAM with respect to a rigid body...probably don't have to do this rn?
             // vpEdgesMono_FHR comes from "SLAM with respect to a rigid body"
             // which I didn't implement...
             // see add_edge_monocular in rust_helper.cpp
@@ -1038,7 +1038,7 @@ impl Optimizer {
 
                 match self.sensor.frame() {
                     crate::FrameSensor::Stereo => {
-                        todo!("TODO STEREO, Optimizer lines 194-226");
+                        todo!("TODO (Stereo), Optimizer lines 194-226");
                     },
                     _ => {
                         if left_index != -1 {
@@ -1058,7 +1058,7 @@ impl Optimizer {
                 };
 
                 // if(pKF->mpCamera2){
-                // TODO Stereo Optimizer lines 229-261
+                // TODO (Stereo) Optimizer lines 229-261
                 // }
             }
 
