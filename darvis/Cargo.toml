@@ -38,3 +38,4 @@ log = "*"
 fern = {version = "0.6", features = ["colored"] }
 derivative = "*"
 error-chain = "*"
+linked-hash-map = "0.5.6"

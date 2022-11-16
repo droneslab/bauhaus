@@ -3,9 +3,9 @@ use axiom::prelude::*;
 use dvmap::map_actor::{MAP_ACTOR, MapActor};
 use fern::colors::{ColoredLevelConfig, Color};
 use glob::glob;
-use log::{warn, info};
+use log::{warn, info, error};
 use yaml_rust::yaml;
-use dvcore::{*, lockwrap::ReadWriteWrapper, global_params::*};
+use dvcore::{*, lockwrap::ReadWriteWrapper, config::*};
 
 mod actors;
 mod registered_modules;
@@ -17,7 +17,7 @@ use crate::dvmap::map::Map;
 use registered_modules::{FeatureManager, FRAME_LOADER};
 
 fn main() {
-    setup_logger();
+    setup_logger().unwrap();
 
     let args: Vec<String> = env::args().collect();
     if args.len() < 3 {
@@ -29,70 +29,27 @@ fn main() {
     let config_file = args[2].to_owned();
 
     // Load config, including custom settings and actor information
-    let module_info = load_config(config_file);
+    if let Some((actor_info, module_info)) = load_config(&config_file) {
+        // Get image paths from directory
+        let img_paths = generate_image_paths(img_dir);
+        // Create the global map
+        let writeable_map = ReadWriteWrapper::new(Map::new());
+        // Initialize actor system from config
+        let actor_system = initialize_actor_system(actor_info, &writeable_map);
+        // Create map actor
+        let map_actor_aid = MapActor::spawn(&actor_system, writeable_map);
 
-    // Get image paths from directory
-    let img_paths = generate_image_paths(img_dir);
-    // Create the global map
-    let writeable_map: ReadWriteWrapper<Map> = ReadWriteWrapper::new(Map::new());
-    // Initialize actor system from config
-    let actor_system = initialize_actor_system(module_info, &writeable_map);
-    // Create map actor
-    let map_actor_aid = MapActor::spawn(&actor_system, writeable_map);
+        info!("System ready to receive messages");
 
-    // aids.insert(MAP_ACTOR.to_string(), map_actor_aid);
+        // Kickoff the pipeline by sending the feature extraction module images
+        let feat_aid = actor_system.find_aid_by_name(FRAME_LOADER).unwrap();
 
-    info!("System ready to receive messages");
+        feat_aid.send_new(ImagesMsg{ img_paths }).unwrap();
 
-    // Kickoff the pipeline by sending the feature extraction module images
-    let feat_aid = actor_system.find_aid_by_name(FRAME_LOADER).unwrap();
-
-    feat_aid.send_new(ImagesMsg{ img_paths }).unwrap();
-
-    actor_system.await_shutdown(None);
-}
-
-fn load_config(config_file: String) -> Vec<base::ActorConf> {
-    let mut module_info = Vec::<base::ActorConf>::new();
-
-    let config_string = read_config_file(&config_file);
-    load_modules_from_config(&config_string, &mut module_info);
-
-    // Load additional custom settings from config file
-    let yaml = &yaml::YamlLoader::load_from_str(&config_string).unwrap()[0]["system_settings"];
-    println!("SYSTEM SETTINGS");
-    add_system_setting_bool(yaml, "show_ui");
-    add_system_setting_bool(yaml, "localization_only_mode");
-    add_system_setting_sensor(yaml);
-    add_system_setting_string(yaml, "vocabulary_file");
-    // camera calibration
-    add_system_setting_f64(yaml, "camera_fx");
-    add_system_setting_f64(yaml, "camera_fy");
-    add_system_setting_f64(yaml, "camera_cx");
-    add_system_setting_f64(yaml, "camera_cy");
-    add_system_setting_f64(yaml, "camera_k1");
-    add_system_setting_f64(yaml, "camera_k2");
-    add_system_setting_f64(yaml, "camera_p1");
-    add_system_setting_f64(yaml, "camera_p2");
-    add_system_setting_i32(yaml, "camera_width");
-    add_system_setting_i32(yaml, "camera_height");
-    add_system_setting_f64(yaml, "fps");
-    add_system_setting_f64(yaml, "stereo_baseline_times_fx");
-    add_system_setting_i32(yaml, "thdepth");
-    // feature detection
-    add_system_setting_i32(yaml, "max_features");
-    add_system_setting_f64(yaml, "scale_factor");
-    add_system_setting_i32(yaml, "n_levels");
-    add_system_setting_i32(yaml, "fast_threshold");
-    // tracking
-    add_system_setting_i32(yaml, "recently_lost_cutoff");
-    add_system_setting_i32(yaml, "frames_to_reset_IMU");
-    add_system_setting_bool(yaml, "insert_KFs_when_lost");
-    add_system_setting_i32(yaml, "min_num_features");
-    // local mapping
-    add_system_setting_f64(yaml, "far_points_threshold");
-
-    module_info
+        actor_system.await_shutdown(None);
+    } else {
+        error!("Could not load config");
+    }
 }
 
 fn generate_image_paths(img_dir: String) -> Vec<String> {

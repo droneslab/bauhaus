@@ -61,7 +61,7 @@ namespace g2o {
             return vSE3;
         } else {
             // For Optimizer::PoseInertialOptimizationLastFrame and Optimizer::PoseInertialOptimizationLastKeyFrame
-            // TODO IMU
+            // TODO (IMU)
             // Following variables rely on types/G2oTypes and types/ImuTypes, from ORBSLAM3
             // but those have dependency on Frame and KeyFrame. Need to go through and figure out how to
             // remove the dependency by just passing minimal info instead of the whole object.
@@ -134,7 +134,7 @@ namespace g2o {
             edge->setRobustKernel(rk.get());
             rk->setDelta(thHuber2D);
         }
-        // TODO: do we need this?
+        // TODO (need?)
         // e->pCamera = pKF->mpCamera;
 
         Eigen::Vector3d worldpos_vec(mp_world_position.data());
@@ -166,7 +166,7 @@ namespace g2o {
             edge->setRobustKernel(rk.get());
             rk->setDelta(thHuber2D);
         }
-        // TODO: do we need this?
+        // TODO (need?)
         // e->pCamera = pKF->mpCamera;
 
         optimizer->addEdge(edge.get());
@@ -188,7 +188,7 @@ namespace g2o {
         Vector3d translation = SE3quat_recov.translation();
         Quaterniond rotation = SE3quat_recov.rotation();
 
-        // Sofiya TODO: make sure that quaternion order of (w,x,y,z)
+        // TODO (verify): make sure that quaternion order of (w,x,y,z)
         // is the order that we use for quaternions in darvis
         // Also, feel like there should be a cleaner way to do this?
         Pose pose;
@@ -210,7 +210,7 @@ namespace g2o {
         g2o::VertexSBAPointXYZ* vertex = static_cast<VertexSBAPointXYZ*>(optimizer->vertex(vertex_id));
         Eigen::Vector3f pos = vertex->estimate().cast<float>();
 
-        // Sofiya TODO: make sure that quaternion order of (w,x,y,z)
+        // TODO (verify): make sure that quaternion order of (w,x,y,z)
         // is the order that we use for quaternions in darvis
         // Also, feel like there should be a cleaner way to do this?
         Pose pose;

@@ -24,8 +24,8 @@ impl Pose {
     // TODO: I think we should rethink how pose, translation, and rotation is structured
     // Which variables should we be returning and when?
     // This forces a copy of the matrix/vector each time, which might not be ideal for just reads.
-    pub fn translation(&self) -> Translation { DVVector3::new(self.0.translation.vector) }
-    pub fn rotation(&self) -> Rotation { DVMatrix3::new(*self.0.rotation.to_rotation_matrix().matrix()) }
+    pub fn get_translation(&self) -> Translation { DVVector3::new(self.0.translation.vector) }
+    pub fn get_rotation(&self) -> Rotation { DVMatrix3::new(*self.0.rotation.to_rotation_matrix().matrix()) }
 
     pub fn set_translation(&mut self, x: f64, y: f64, z: f64) {
         self.0.translation.x = x;

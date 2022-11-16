@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use axiom::prelude::*;
 
-use dvcore::global_params::{Sensor, GLOBAL_PARAMS, SYSTEM_SETTINGS};
+use dvcore::config::{Sensor, GLOBAL_PARAMS, SYSTEM_SETTINGS};
 use dvcore::{
     plugin_functions::Function,
     lockwrap::ReadOnlyWrapper,
@@ -112,7 +112,7 @@ impl DarvisLocalMapping {
         if self.kfs_in_map() > 2 {
             match self.sensor.is_imu() {
                 true => { // and self.map.read().imu_initialized
-                    // TODO IMU
+                    // TODO (IMU)
                     // float dist = (mpCurrentKeyFrame->mPrevKF->GetCameraCenter() - mpCurrentKeyFrame->GetCameraCenter()).norm() +
                     //         (mpCurrentKeyFrame->mPrevKF->mPrevKF->GetCameraCenter() - mpCurrentKeyFrame->mPrevKF->GetCameraCenter()).norm();
 
@@ -150,7 +150,7 @@ impl DarvisLocalMapping {
         self.keyframe_culling();
 
         if self.sensor.is_imu() && t_init < 50.0 {
-            // TODO IMU
+            // TODO (IMU)
             // if(mpCurrentKeyFrame->GetMap()->isImuInitialized() && mpTracker->mState==Tracking::OK) // Enter here everytime local-mapping is called
             // {
             //     if(!mpCurrentKeyFrame->GetMap()->GetIniertialBA1()){

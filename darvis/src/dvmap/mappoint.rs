@@ -1,11 +1,11 @@
 use std::{fmt::Debug};
 use array2d::Array2D;
-use dvcore::{matrix::DVMatrix, global_params::{Sensor, GLOBAL_PARAMS, SYSTEM_SETTINGS}};
+use dvcore::{matrix::DVMatrix, config::{Sensor, GLOBAL_PARAMS, SYSTEM_SETTINGS}};
 use log::{info, error};
 use na::Vector3;
 use serde::{Deserialize, Serialize};
 extern crate nalgebra as na;
-use crate::{matrix::DVVector3, modules::orbmatcher::descriptor_distance};
+use crate::{matrix::DVVector3, modules::orbmatcher::descriptor_distance, registered_modules::FEATURE_DETECTION};
 use super::{map::{Id, Map}, observations::Observations};
 
 // Note: Implementing typestate for like here: http://cliffle.com/blog/rust-typestate/#a-simple-example-the-living-and-the-dead
@@ -151,10 +151,26 @@ impl MapPoint<FullMapPoint> {
         }
     }
 
-    pub fn id(&self) -> Id { self.full_mp_info.id }
-    pub fn observations(&self) -> &Observations { &self.full_mp_info.observations }
+    pub fn get_id(&self) -> Id { self.full_mp_info.id }
+    pub fn get_observations(&self) -> &Observations { &self.full_mp_info.observations }
+    pub fn get_best_descriptor(&self) -> &DVMatrix { &self.full_mp_info.best_descriptor }
+    pub fn get_normal(&self) -> DVVector3<f64> {
+        // Eigen::Vector3f MapPoint::GetNormal() 
+        self.full_mp_info.normal_vector
+    }
+
+    pub fn get_max_distance_invariance(&self) -> f64 {
+        // float MapPoint::GetMaxDistanceInvariance()
+        1.2 * self.full_mp_info.max_distance
+    }
+
+    pub fn get_min_distance_invariance(&self) -> f64 {
+        // float MapPoint::GetMinDistanceInvariance()
+        0.8 * self.full_mp_info.min_distance
+    }
 
     pub fn increase_found(&mut self, n: &i32) {
+        // void MapPoint::IncreaseFound(int n)
         self.full_mp_info.nfound += n;
         info!("mappoint:increase_found;mappoint id:{}", self.full_mp_info.id);
     }
@@ -164,6 +180,7 @@ impl MapPoint<FullMapPoint> {
     }
 
     pub fn get_norm_and_depth(&self, map: &Map) -> Option<(f64, f64, DVVector3<f64>)> {
+        // Part 1 of void MapPoint::UpdateNormalAndDepth()
         if self.full_mp_info.observations.is_empty() {
             return None;
         }
@@ -186,12 +203,14 @@ impl MapPoint<FullMapPoint> {
     }
 
     pub fn update_norm_and_depth(&mut self, vals: (f64, f64, DVVector3<f64>)) {
+        // Part 2 of void MapPoint::UpdateNormalAndDepth()
         self.full_mp_info.max_distance = vals.0;
         self.full_mp_info.min_distance = vals.1;
         self.full_mp_info.normal_vector = vals.2;
     }
 
     pub fn compute_distinctive_descriptors(&self, map: &Map) -> Option<DVMatrix> {
+        // Part 1 of void MapPoint::ComputeDistinctiveDescriptors()
         if self.full_mp_info.observations.len() == 0 {
             error!("mappoint::compute_distinctive_descriptors;No observations");
             return None;
@@ -235,6 +254,26 @@ impl MapPoint<FullMapPoint> {
     }
 
     pub fn update_distinctive_descriptors(&mut self, desc: DVMatrix) {
+        // Part 2 of void MapPoint::ComputeDistinctiveDescriptors()
         self.full_mp_info.best_descriptor = desc;
     }
+
+    pub fn predict_scale(&self, current_distance: &f64) -> i32 {
+        // int MapPoint::PredictScale(const float &currentDist, KeyFrame* pKF)
+        let ratio = self.full_mp_info.max_distance / current_distance;
+        let scale_factor= GLOBAL_PARAMS.get::<f64>(FEATURE_DETECTION, "scale_factor");
+        let log_scale_factor = scale_factor.log10();
+        let scale = (ratio.log10() / log_scale_factor).ceil() as i32;
+        let scale_levels = GLOBAL_PARAMS.get::<i32>(FEATURE_DETECTION, "n_levels");
+
+        let scale = if scale < 0 { 0 } else { scale };
+        if scale < 0 {
+            return 0;
+        } else if scale >= scale_levels.into() {
+            return scale_levels - 1;
+        } else {
+            return scale;
+        }
+    }
+    
 }

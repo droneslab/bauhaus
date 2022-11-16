@@ -16,7 +16,7 @@
 
 use std::{fmt::Debug, convert::TryInto, ops::Index};
 use std::ops::Deref;
-use cxx::{UniquePtr, let_cxx_string};
+use cxx::{UniquePtr, let_cxx_string, CxxVector};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use na::{DMatrix, ComplexField};
@@ -110,6 +110,11 @@ impl Deref for DVVectorOfKeyPoint {
 impl From<DVVectorOfKeyPoint> for opencv::types::VectorOfKeyPoint {
     fn from(vec: DVVectorOfKeyPoint) -> opencv::types::VectorOfKeyPoint { vec.0 }
 }
+// impl From<DVVectorOfKeyPoint> for *const CxxVector<dvos3binding::ffi::DVKeyPoint> {
+//     fn from(vec: DVVectorOfKeyPoint) -> Self {
+//     vec.into_raw() as *const CxxVector<dvos3binding::ffi::DVKeyPoint>
+//     }
+// }
 impl Serialize for DVVectorOfKeyPoint {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where

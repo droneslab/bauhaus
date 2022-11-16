@@ -4,7 +4,7 @@ pub mod base;
 pub mod plugin_functions;
 // Logic to get/set global configuration parameters
 // and load data from config file.
-pub mod global_params;
+pub mod config;
 
 /// *** Map *** ///
 // Wraps Arc<RwLock> to give it the option of being read-only. 

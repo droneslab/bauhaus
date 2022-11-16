@@ -4,9 +4,9 @@ use axiom::prelude::*;
 use log::{error, warn};
 use std::sync::Arc;
 use opencv::{prelude::*,features2d::{Feature2DTrait, ORB},types::{PtrOfORB, VectorOfKeyPoint},};
-use dvcore::{matrix::*,lockwrap::ReadOnlyWrapper,plugin_functions::Function,global_params::*,};
+use dvcore::{matrix::*,lockwrap::ReadOnlyWrapper,plugin_functions::Function,config::*,};
 use crate::{
-    registered_modules::{TRACKING_BACKEND},
+    registered_modules::{TRACKING_BACKEND, FEATURE_DETECTION},
     actors::{messages::{ImageMsg, FeatureMsg,},},
     dvmap::{map::Map},
 };
@@ -72,10 +72,10 @@ impl DarvisTrackingFront {
     }
 
     fn set_extractor_settings(&mut self, orb: &mut PtrOfORB) {
-        let max_features = GLOBAL_PARAMS.get::<i32>(SYSTEM_SETTINGS, "max_features");
-        let scale_factor = GLOBAL_PARAMS.get::<f64>(SYSTEM_SETTINGS, "scale_factor");
-        let n_levels = GLOBAL_PARAMS.get::<i32>(SYSTEM_SETTINGS, "n_levels");
-        let fast_threshold = GLOBAL_PARAMS.get::<i32>(SYSTEM_SETTINGS, "fast_threshold");
+        let max_features = GLOBAL_PARAMS.get::<i32>(FEATURE_DETECTION, "max_features");
+        let scale_factor = GLOBAL_PARAMS.get::<f64>(FEATURE_DETECTION, "scale_factor");
+        let n_levels = GLOBAL_PARAMS.get::<i32>(FEATURE_DETECTION, "n_levels");
+        let fast_threshold = GLOBAL_PARAMS.get::<i32>(FEATURE_DETECTION, "fast_threshold");
 
         let res1 = orb.set_max_features(max_features);
         let res2 = orb.set_max_features(max_features);

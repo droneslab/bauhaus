@@ -2,7 +2,7 @@
 pub mod ffi {
     // Shared structs with fields visible to both languages.
 
-    // TODO: needed for "SLAM with respect to rigid body", which I haven't implemented
+    // TODO (SLAM with respect to rigid body)
     // struct BridgeEdgeSE3ProjectXYZOnlyPose {
     //     edge: SharedPtr<EdgeSE3ProjectXYZOnlyPose>
     // } 

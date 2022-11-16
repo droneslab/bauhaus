@@ -144,7 +144,7 @@ impl KeyFrame<FullKeyFrame> {
 
     pub fn add_mappoint(&mut self, mp: &MapPoint<FullMapPoint>, index: u32, is_outlier: bool) {
         // KeyFrame::AddMapPoint(MapPoint *pMP, const size_t &idx)
-        self.mappoint_matches.insert(index, (mp.id(), is_outlier));
+        self.mappoint_matches.insert(index, (mp.get_id(), is_outlier));
     }
 
     pub fn erase_mappoint_match(&mut self, (left_index, right_index): (i32, i32)) {
@@ -187,7 +187,7 @@ impl KeyFrame<FullKeyFrame> {
     }
 
     pub fn get_camera_center(&self) -> DVVector3<f64> {
-        self.pose.inverse().translation()
+        self.pose.inverse().get_translation()
         // Note: In Orbslam, this is: mTwc.translation()
         // and mTwc is inverse of the pose
     }
@@ -206,9 +206,9 @@ impl KeyFrame<FullKeyFrame> {
 
         let mut depths = Vec::new();
         // depths.reserve(self.keypoints_data.num_keypoints as usize); // probably unnecessary?
-        let rot = self.pose.rotation();
+        let rot = self.pose.get_rotation();
         let rcw2 = rot.row(2);
-        let zcw = self.pose.translation()[2];
+        let zcw = self.pose.get_translation()[2];
 
         for (_, (mp_id, _)) in &self.mappoint_matches {
             let world_pos = *(map.get_mappoint(mp_id).unwrap().position);
@@ -229,7 +229,7 @@ impl KeyFrame<FullKeyFrame> {
         let mut num_points = 0;
         for (_, (mp_id, _)) in &self.mappoint_matches {
             let mappoint = map.get_mappoint(&mp_id).unwrap();
-            if mappoint.observations().len() >= (min_observations as usize) {
+            if mappoint.get_observations().len() >= (min_observations as usize) {
                 num_points += 1;
             }
         }

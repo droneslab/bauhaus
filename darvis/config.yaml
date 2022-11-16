@@ -1,3 +1,5 @@
+# Validate yaml with: https://yamlchecker.com/
+
 master:
        name: manager
        address: localhost
@@ -7,41 +9,96 @@ system_settings:
        show_ui: false
        localization_only_mode: false
        vocabulary_file: "/home/sofiya/darvis/vocabulary/ORBvoc.txt" # TODO (low priority): This does not work with ~/
-
+       fps: 10.0
        framesensor: Mono
        imusensor: None
-      # CAMERA CALIBRATION
-       camera_fx: 718.856
-       camera_fy: 718.856
-       camera_cx: 607.1928
-       camera_cy: 185.2157
-       # Distortion
-       camera_k1: 0.0
-       camera_k2: 0.0
-       camera_p1: 0.0
-       camera_p2: 0.0
-       camera_k3: 0.0
-       camera_width: 1241
-       camera_height: 376
-       fps: 10.0
-       stereo_baseline_times_fx: 386.1448 #stereo baseline times fx
-       thdepth: 35
-      #  depth_map_factor:
-      #  ORB FEATURE DETECTION
-       max_features: 2000
-       scale_factor: 1.2
-       n_levels: 8
-       fast_threshold: 20
-       # TRACKING
-       recently_lost_cutoff: 5
-       frames_to_reset_IMU: 30
-       insert_KFs_when_lost: true
-       min_num_features: 2000
-       # LOCAL MAPPING
-       far_points_threshold: 20.0
-
 
 modules:
+      - 
+       name: CAMERA
+       settings:
+          - 
+           name: fx
+           value: 718.856
+           type: f64
+          - 
+           name: fy
+           value: 718.856
+           type: f64
+          - 
+           name: cx
+           value: 607.1928
+           type: f64
+          - 
+           name: cy
+           value: 185.2157
+           type: f64
+          - 
+           name: k1
+           value: 0.0
+           type: f64
+          - 
+           name: k2
+           value: 0.0
+           type: f64
+          - 
+           name: p1
+           value: 0.0
+           type: f64
+          - 
+           name: p2
+           value: 0.0
+           type: f64
+          - 
+           name: k3
+           value: 0.0
+           type: f64
+          - 
+           name: width
+           value: 1241
+           type: i32
+          - 
+           name: height
+           value: 376
+           type: i32
+          - 
+           name: thdepth
+           value: 35
+           type: i32
+          - 
+           name: stereo_baseline_times_fx
+           value: 386.1448
+           type: f64
+
+      - 
+       name: FEATURE_DETECTION
+       settings:
+          - 
+           name: max_features
+           value: 2000
+           type: i32
+          - 
+           name: scale_factor
+           value: 1.2
+           type: f64
+          - 
+           name: n_levels
+           value: 8
+           type: i32
+          - 
+           name: fast_threshold
+           value: 20
+           type: i32
+      -
+       name: MATCHER
+       settings:
+          - 
+            name: far_points_threshold
+            value: 20.0
+            type: f64
+          
+
+actors:
       -
        name: FRAME_LOADER
        file: frameloader
@@ -62,6 +119,8 @@ modules:
                        to: ImageAlignment
                        input: images
                        output: feature vectors
+       settings:
+          -
 
       -
        name: VISUALIZER
@@ -78,6 +137,8 @@ modules:
                       to: KFDecision
                       input: feature vectors
                       output: frame, feature points
+       settings:
+          -
 
       -
        name: TRACKING_FRONTEND
@@ -94,6 +155,8 @@ modules:
                       to: tracking_backend
                       input: image
                       output: keypoints, descriptors
+       settings:
+          -
 
       -
        name: TRACKING_BACKEND
@@ -110,4 +173,67 @@ modules:
                       to: localmapping
                       input: keypoints, descriptors
                       output: newkeyframe
+       settings:
+          - 
+            name: recently_lost_cutoff
+            value: 5
+            type: i32
+          - 
+            name: frames_to_reset_IMU
+            value: 30
+            type: i32
+          - 
+            name: insert_KFs_when_lost
+            value: true
+            type: bool
+          - 
+            name: min_num_features
+            value: 2000
+            type: i32
 
+      -
+       name: LOOP_CLOSING
+       file: loop_closing
+       actor_message: FeatureMsg
+       actor_function: loop_closing
+       address: localhost
+       port: !!str 7780
+       multithreaded: false
+       threads: 1
+       possible_paths:
+                     -
+                      from: tracking_frontend
+                      to: localmapping
+                      input: keypoints, descriptors
+                      output: newkeyframe
+       settings:
+          - 
+
+      -
+       name: LOCAL_MAPPING
+       file: local_mapping
+       actor_message: FeatureMsg
+       actor_function: tracking_backend
+       address: localhost
+       port: !!str 7780
+       multithreaded: false
+       threads: 1
+       possible_paths:
+                     -
+                      from: tracking_frontend
+                      to: localmapping
+                      input: keypoints, descriptors
+                      output: newkeyframe
+       settings:
+          - 
+            name: recently_lost_cutoff
+            value: 5
+            type: i32
+          - 
+            name: insert_KFs_when_lost
+            value: true
+            type: bool
+          - 
+            name: min_num_features
+            value: 2000
+            type: i32
