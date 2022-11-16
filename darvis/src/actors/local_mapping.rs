@@ -7,6 +7,7 @@ use dvcore::{
     lockwrap::ReadOnlyWrapper,
 };
 use log::warn;
+use crate::dvmap::bow;
 use crate::dvmap::keyframe::FullKeyFrame;
 use crate::dvmap::map_actor::MapWriteMsg;
 use crate::dvmap::{map::Map, map_actor::MAP_ACTOR, keyframe::{KeyFrame, PrelimKeyFrame}};
@@ -46,7 +47,7 @@ impl DarvisLocalMapping {
 
         // BoW conversion and insertion in Map
         // Compute Bags of Words structures
-        self.current_keyframe.compute_bow(&self.map.read().vocabulary);
+        self.current_keyframe.compute_bow(&bow::VOCABULARY);
 
         // Associate MapPoints to the new keyframe and update normal and descriptor
         // let mappoint_matches = self.map.read().get_keyframe(self.current_keyframe.id);

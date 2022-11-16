@@ -10,7 +10,7 @@ use crate::{
     registered_modules::{LOCAL_MAPPING, TRACKING_BACKEND},
     dvmap::{
         map::Map, map_actor::MapWriteMsg, map_actor::{MAP_ACTOR}, map::Id,
-        keyframe::KeyFrame, frame::Frame, pose::Pose, mappoint::{MapPoint, FullMapPoint},
+        keyframe::KeyFrame, frame::Frame, pose::Pose, mappoint::{MapPoint, FullMapPoint}, bow,
     },
     modules::{camera::Camera, camera::CameraType, imu::{ImuModule}, optimizer::*, orbmatcher, map_initialization::Initialization, relocalization::Relocalization},
 };
@@ -24,10 +24,9 @@ pub struct TrackedMapPointData {
     pub proj_x: f64,
     pub proj_y: f64,
     pub track_depth: f64
-    // TODO (Stereo) ... orbslam also has "right" versions of each of the above fields
-    // and sets either the normal (left) versions of the right versions, depending on which camera it is.
-    // When writing the stereo version, don't duplicate all the fields like they did, instead
-    // just set a is_right variable or something.
+    // Note: orbslam also has "right" versions of each of the above fields
+    // and sets either the normal (left) versions or the right versions, depending on which camera it is.
+    // When writing the stereo code, don't duplicate all the fields like they did.
 }
 impl TrackedMapPointData {
     pub fn new() -> Self {
@@ -69,8 +68,8 @@ pub struct DarvisTrackingBack {
     last_kf_ts: Option<DateTime<Utc>>,
 
     // Local map
-    // TODO (design) Can we get rid of these and pipe this all through the map instead?
-    local_keyframes: HashSet<Id>, //mvpLocalKeyFrames
+    // TODO (design) Can we get rid of the local_ variables and pipe them through the map instead?
+    local_keyframes: HashSet<Id>, //mvpLocalKeyFrames 
     local_mappoints: HashSet<Id>, //mvpLocalMapPoints
     track_in_view: HashMap::<Id, TrackedMapPointData>,
     track_in_view_r: HashMap::<Id, TrackedMapPointData>,
@@ -170,7 +169,7 @@ impl DarvisTrackingBack {
             TrackingState::WaitForMapResponse => { return; },
             TrackingState::NotInitialized => {
                 match self.initialization.try_initialize(&self.current_frame, &mut self.camera) {
-                    Ok((ready)) => {
+                    Ok(ready) => {
                         if ready {
                             let msg = match self.sensor.frame() {
                                 FrameSensor::Mono => MapWriteMsg::create_initial_map_monocular(self.initialization.clone(), tracking_actor),
@@ -187,11 +186,13 @@ impl DarvisTrackingBack {
                 return;
             },
             TrackingState::Ok => {
-                let ok = match !self.imu.ready(&self.map) || self.relocalization.frames_since_lost(&self.current_frame) < 2 {
-                    true => self.track_reference_keyframe(),
-                    false => self.track_with_motion_model().and_then(|success| if !success { self.track_reference_keyframe() } else { Ok(true) })
-                }.expect("Should have last frame and reference keyframe");
-
+                let mut ok = false;
+                if self.imu.ready(&self.map) && self.relocalization.frames_since_lost(&self.current_frame) >= 2 {
+                    ok = self.track_with_motion_model().unwrap();
+                };
+                if !ok {
+                    ok = self.track_reference_keyframe().unwrap();
+                }
                 if !ok {
                     self.relocalization.timestamp_lost = Some(self.current_frame.timestamp);
                     self.state = match self.kfs_in_map() > 10 {
@@ -203,17 +204,15 @@ impl DarvisTrackingBack {
             },
             TrackingState::RecentlyLost => {
                 warn!("tracking_backend::handle_message;State recently lost");
-                let (ok, move_to_lost) = match self.imu.ready(&self.map) {
-                    true => (
-                        self.imu.predict_state(),
-                        self.relocalization.past_cutoff(&self.current_frame)
-                    ),
-                    false => {
-                        let reloc = self.relocalization.run();
-                        (reloc, !reloc && self.relocalization.sec_since_lost(&self.current_frame) > Duration::seconds(3))
-                    }
-                };
-                if move_to_lost {
+                let (ok, is_lost);
+                if self.imu.ready(&self.map) {
+                    ok = self.imu.predict_state();
+                    is_lost = self.relocalization.past_cutoff(&self.current_frame);
+                } else {
+                    ok = self.relocalization.run();
+                    is_lost = !ok && self.relocalization.sec_since_lost(&self.current_frame) > Duration::seconds(3);
+                }
+                if is_lost {
                     self.state = TrackingState::Lost;
                     warn!("tracking_backend::handle_message;Tracking lost...");
                 }
@@ -340,7 +339,7 @@ impl DarvisTrackingBack {
     fn track_reference_keyframe(&mut self) -> Result<bool, Box<dyn std::error::Error>> {
         // Tracking::TrackReferenceKeyFrame()
         // Compute Bag of Words vector
-        self.current_frame.compute_bow(&self.map.read().vocabulary);
+        self.current_frame.compute_bow(&bow::VOCABULARY);
 
         // We perform first an ORB matching with the reference keyframe
         // If enough matches are found we setup a PnP solver
@@ -351,7 +350,7 @@ impl DarvisTrackingBack {
         let ref_kf = map_read_lock.get_keyframe(&self.ref_kf_id.unwrap()).unwrap();
         match orbmatcher::search_by_bow_f(ref_kf, &self.current_frame,true, 0.7, &self.map) {
             Ok((num_matches, kf_match_edits)) => {
-                // TODO BINDINGS: map needs to be updated with kf_match_edits after calling this!!!
+                // TODO (MVP): map needs to be updated with kf_match_edits after calling this!!!
             },
             Err(err) => panic!("Problem with search_by_bow_f {}", err)
         }
@@ -420,7 +419,7 @@ impl DarvisTrackingBack {
             &self.track_in_view_r,
             &self.map,
             self.sensor
-        ).unwrap();
+        )?;
 
         // If few matches, uses a wider window search
         if matches < 20 {
@@ -436,7 +435,7 @@ impl DarvisTrackingBack {
                 &self.track_in_view_r,
                 &self.map,
                 self.sensor
-            ).unwrap();
+            )?;
         }
 
         if matches < 20 {
@@ -453,7 +452,7 @@ impl DarvisTrackingBack {
         let nmatches_map = -deleted_mps + self.current_frame.get_num_mappoints_with_observations(&*self.map.read());
 
         if self.localization_only_mode {
-            // TODO (localization only)
+            // TODO (localization-only)
             // mbVO = nmatchesMap<10;
             // return nmatches>20;
         }
@@ -525,7 +524,7 @@ impl DarvisTrackingBack {
                 _ => {}
             }
 
-            // TODO 10/17 send mps_to_increase_visible to map
+            // TODO (MVP) send mps_to_increase_visible to map
 
             let matches = orbmatcher::search_by_projection(
                 &mut self.current_frame,
@@ -757,7 +756,7 @@ impl DarvisTrackingBack {
                 }
             });
         }
-        new_local_keyframes.extend(neighbors_to_add); // TODO 10/17: I'm pretty sure I have to add these in the keyframe
+        new_local_keyframes.extend(neighbors_to_add); // TODO (MVP) I'm pretty sure I have to add these in the keyframe
 
         // Add 10 last temporal KFs (mainly for IMU)
         if self.sensor.is_imu() && self.local_keyframes.len() < 80 {
@@ -805,7 +804,7 @@ impl DarvisTrackingBack {
         let mut new_kf;
         {
             let map_read_lock = self.map.read();
-            new_kf = KeyFrame::new(&self.current_frame, &map_read_lock.vocabulary);
+            new_kf = KeyFrame::new(&self.current_frame, &bow::VOCABULARY);
         }
 
         // TODO (IMU) Reset preintegration from last KF (Create new object)

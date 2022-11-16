@@ -4,6 +4,13 @@ use dvcore::{matrix::DVMatrix, config::{GLOBAL_PARAMS, SYSTEM_SETTINGS}};
 use log::info;
 use opencv::prelude::Boxed;
 
+lazy_static! {
+    pub static ref VOCABULARY: DVVocabulary = {
+        let filename = GLOBAL_PARAMS.get::<String>(SYSTEM_SETTINGS, "vocabulary_file");
+        DVVocabulary::load(filename)
+    };
+}
+
 pub struct DVVocabulary {
     vocabulary: UniquePtr<dvos3binding::ffi::ORBVocabulary>,
     filename: String,
@@ -78,17 +85,6 @@ impl fmt::Debug for DVVocabulary {
         f.debug_struct("DVVocabulary")
          .field("filename", &self.filename)
          .finish()
-    }
-}
-impl Default for DVVocabulary {
-    fn default() -> Self { 
-        let filename = GLOBAL_PARAMS.get::<String>(SYSTEM_SETTINGS, "vocabulary_file");
-        let_cxx_string!(file = filename.clone());
-
-        Self {
-            vocabulary: dvos3binding::ffi::load_vocabulary_from_text_file(&file),
-            filename,
-        }
     }
 }
 impl Clone for BoW {

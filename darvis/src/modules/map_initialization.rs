@@ -40,7 +40,6 @@ impl Initialization {
     }
 
     pub fn try_initialize(&mut self, current_frame: &Frame, camera: &mut Camera) -> Result<bool, Box<dyn std::error::Error>> {
-        let sensor: Sensor = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "sensor");
         // Only set once at beginning
         if self.initial_frame.is_none() {
             self.initial_frame = Some(current_frame.clone());

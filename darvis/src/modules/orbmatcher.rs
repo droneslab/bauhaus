@@ -235,7 +235,7 @@ pub fn search_by_projection_with_threshold (
 ) -> Result<i32, Box<dyn std::error::Error>> {
     // int ORBmatcher::SearchByProjection(Frame &CurrentFrame, const Frame &LastFrame, const float th, const bool bMono)
     // TODO (Stereo): This function should work for stereo as well as RGBD as long as get_all_keypoints() returns
-    // a concatenated list of left keypoints and right keypoints (there is a todo for this in features.rs). BUT
+    // a concatenated list of left keypoints and right keypoints (there is a to do for this in features.rs). BUT
     // double check that the descriptors works correctly. Instead of splitting descriptors into discriptors_left and right,
     // I have all of them in one long vec. I THINK this should be fine, but double check.
     let mut num_matches = 0;

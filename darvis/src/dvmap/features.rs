@@ -79,10 +79,10 @@ impl Features {
                 )
             },
             FrameSensor::Rgbd => {
-                todo!("todo RGBD");
+                todo!("TODO (RGBD)");
             },
             FrameSensor::Stereo => {
-                todo!("todo stereo");
+                todo!("TODO (Stereo)");
             }
 
         }
@@ -99,7 +99,7 @@ impl Features {
         match &self.keypoints {
             KeyPoints::Mono{keypoints_un, ..} | KeyPoints::Rgbd{keypoints_un, ..} => keypoints_un,
             KeyPoints::Stereo{keypoints_left, keypoints_right, ..} => {
-                todo!("TODO Stereo, need to concat keypoints_left and keypoints_right
+                todo!("TODO (Stereo), need to concat keypoints_left and keypoints_right
                     but can we do this without copying?")
             },
             KeyPoints::Empty => panic!("Keypoints should not be empty")
@@ -161,13 +161,12 @@ impl Features {
     }
 
     fn undistort_keypoints(keypoints: &DVVectorOfKeyPoint, camera: &Camera) -> Result<DVVectorOfKeyPoint, Box<dyn std::error::Error>> {
-        // TODO (Potential bugs) not sure I did this right
         if let Some(dist_coef) = &camera.dist_coef {
 
-            let N = keypoints.len();
+            let num_keypoints = keypoints.len();
             // Fill matrix with points
-            let mut mat = Mat::new_rows_cols_with_default(N,2, CV_32F, Scalar::all(0.0))?;
-            for i in 0..N {
+            let mut mat = Mat::new_rows_cols_with_default(num_keypoints,2, CV_32F, Scalar::all(0.0))?;
+            for i in 0..num_keypoints {
                 *mat.at_2d_mut::<f32>(i, 0)? = keypoints.get(i as usize)?.pt.x;
                 *mat.at_2d_mut::<f32>(i, 1)? = keypoints.get(i as usize)?.pt.y;
             }
@@ -175,7 +174,7 @@ impl Features {
             // Undistort points
             mat = mat.reshape(2, 0)?;
             let mut undistorted = mat.clone();
-            let dist_coefs = VectorOff32::from_iter((*camera.dist_coef.as_ref().unwrap()).clone());
+            let dist_coefs = VectorOff32::from_iter((*dist_coef).clone());
             opencv::calib3d::undistort_points(
                 &mat,
                 &mut undistorted,
@@ -189,7 +188,7 @@ impl Features {
 
             // Fill undistorted keypoint vector
             let mut undistorted_kp_vec = opencv::types::VectorOfKeyPoint::new();
-            for i in 0..N {
+            for i in 0..num_keypoints {
                 let mut kp = keypoints.get(i as usize)?;
                 kp.pt.x = *mat.at_2d::<f32>(i, 0)?;
                 kp.pt.y = *mat.at_2d::<f32>(i, 1)?;

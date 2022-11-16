@@ -96,7 +96,7 @@ impl KeyFrame<PrelimKeyFrame> {
             scale_factors: frame.scale_factors.clone(),
             imu_bias: frame.imu_bias,
             imu_preintegrated: frame.imu_preintegrated,
-            stereo_baseline: 0.0, // TODO Stereo
+            stereo_baseline: 0.0, // TODO (Stereo)
             full_kf_info: PrelimKeyFrame{},
         };
 
@@ -193,7 +193,7 @@ impl KeyFrame<FullKeyFrame> {
     }
 
     pub fn get_right_camera_center(&self) -> DVVector3<f64> {
-        todo!("TODO IMU");
+        todo!("TODO (IMU)");
         // NOt sure what mTlr is, it comes from the settings but might get updated somewhere.
         //    return (mTwc * mTlr).translation();
         // this needs to be generic on sensor, so it can't be called if the sensor doesn't have a right camera
@@ -253,7 +253,7 @@ struct ConnectedKeyFrames {
 impl ConnectedKeyFrames {
     pub(super) fn add_connection(&mut self, kf_id: &Id, weight: i32) {
         *self.map.entry(*kf_id).or_insert(weight) = weight;
-        // TODO verify: Sorting might be backwards? Not quite clear whether low weight = earlier index or vice versa
+        // TODO (verify): Sorting might be backwards? Not quite clear whether low weight = earlier index or vice versa
         if weight > self.cutoff_weight { self.sort_ordered(); }
     }
 
@@ -272,12 +272,12 @@ impl ConnectedKeyFrames {
     }
 
     pub fn get_connections(&self, num: i32) -> Vec<Id> {
-        todo!("TODO 10/17");
+        todo!("TODO (MVP)");
         // Vec::from_iter(self.ordered[0..(num as usize)].iter().cloned())
     }
 
     fn sort_ordered(&mut self) {
-        // TODO verify: Sorting might be backwards? Not quite clear whether low weight = earlier index or vice versa
+        // TODO (verify): Sorting might be backwards? Not quite clear whether low weight = earlier index or vice versa
         //KeyFrame::UpdateBestCovisibles
         self.ordered.sort_by(|(_,w1), (_,w2)| w2.cmp(&w1));
         self.cutoff_weight = self.ordered[30].1;
