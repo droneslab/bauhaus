@@ -159,7 +159,8 @@ namespace orb_slam3
             // Select a minimum set
             for(size_t j=0; j<8; j++)
             {
-                int randi = j ; //DUtils::Random::RandomInt(0,vAvailableIndices.size()-1);
+
+                int randi = DUtils::Random::RandomInt(0,vAvailableIndices.size()-1);
                 int idx = vAvailableIndices[randi];
 
                 mvSets[it][j] = idx;
@@ -170,7 +171,6 @@ namespace orb_slam3
         }
 
         
-        return false;
         // Launch threads to compute in parallel a fundamental matrix and a homography
         vector<bool> vbMatchesInliersH, vbMatchesInliersF;
         float SH, SF;
