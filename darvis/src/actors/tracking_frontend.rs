@@ -76,7 +76,8 @@ impl DarvisTrackingFront {
         let scale_factor = GLOBAL_PARAMS.get::<f64>(FEATURE_DETECTION, "scale_factor");
         let n_levels = GLOBAL_PARAMS.get::<i32>(FEATURE_DETECTION, "n_levels");
         let fast_threshold = GLOBAL_PARAMS.get::<i32>(FEATURE_DETECTION, "fast_threshold");
-
+        
+        
         let res1 = orb.set_max_features(max_features);
         let res2 = orb.set_max_features(max_features);
         let res3 = orb.set_scale_factor(scale_factor);

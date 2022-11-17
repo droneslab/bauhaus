@@ -70,6 +70,14 @@ impl Map {
         }
     }
 
+    pub fn debug_keyframes(&self) { 
+        info!("keyframes.len {}", self.keyframes.len());
+        for (kfid,_) in &self.keyframes
+        {
+            info!("kfid {}", kfid);
+        }
+    }
+
     pub fn num_keyframes(&self) -> i32 { self.keyframes.len() as i32 }
     pub fn get_keyframe(&self, id: &Id) -> Option<&KeyFrame<FullKeyFrame>> { self.keyframes.get(id) }
     pub fn get_all_keyframes(&self) -> &HashMap<Id, KeyFrame<FullKeyFrame>> { &self.keyframes }
@@ -124,6 +132,11 @@ impl Map {
         // if(mSensor == System::IMU_MONOCULAR)
         //     pKFini->mpImuPreintegrated = (IMU::Preintegrated*)(NULL);
 
+        if self.last_kf_id ==0
+        {
+            self.initial_kf_id = self.last_kf_id+1;
+        }
+
         // Create KeyFrames
         let initial_kf_id = self.insert_keyframe_to_map(
             &KeyFrame::<PrelimKeyFrame>::new(&inidata.initial_frame.as_ref().unwrap(), &bow::VOCABULARY)
@@ -138,8 +151,16 @@ impl Map {
         // I REALLY don't like this, but my only other option for getting two mutable keyframes inside the keyframes
         // hashmap is to wrap it all in a refcell, which I think introduces way more concurrency problems for the other 
         // actors, since they have to access get_keyframes().
-        let mut initial_kf = self.keyframes.remove(&initial_kf_id).unwrap();
-        let mut curr_kf = self.keyframes.remove(&curr_kf_id).unwrap();
+
+        // Pranay : commenting since it create issue in following code that uses Keyframes
+        //Instead creating a copy and then use the id to replace the map element back
+
+        // let mut initial_kf = self.keyframes.remove(&initial_kf_id).unwrap();
+        // let mut curr_kf = self.keyframes.remove(&curr_kf_id).unwrap();
+
+        let mut initial_kf = self.keyframes[&initial_kf_id].clone();
+        let mut curr_kf = self.keyframes[&curr_kf_id].clone();
+
 
         for (index, index2) in &inidata.mp_matches {
             let point = inidata.p3d.get(*index as usize).unwrap();
@@ -179,9 +200,13 @@ impl Map {
         self.update_connections(&mut initial_kf);
         self.update_connections(&mut curr_kf);
 
-        // Bundle Adjustment
-        let optimized_poses = self.optimizer.global_bundle_adjustment(self, 0, 20);
-        self.update_after_ba(optimized_poses);
+
+        //Pranay : Getting Segmentation Fault  for bundle adjustment
+        // commeting for now, as we have only 2 frame for initial map
+        // info!("Bundle Adjustment; self.keyframes.insert(initial_kf_id, initial_kf);  {}", self.keyframes.len());
+        // // Bundle Adjustment
+        // let optimized_poses = self.optimizer.global_bundle_adjustment(self, 0, 20);
+        // self.update_after_ba(optimized_poses);
 
         let median_depth = initial_kf.compute_scene_median_depth(&self, 2);
         let inverse_median_depth = match self.sensor {
@@ -249,9 +274,15 @@ impl Map {
         let ini_kf_id = initial_kf.id();
         let curr_kf_pose = curr_kf.pose;
 
+        info!("self.keyframes.insert(initial_kf_id, initial_kf);  {}", self.keyframes.len());
+
+        //Pranay: commenting the re-insert, rather replacing the existing keyframes by ID
+        let mut initial_kf_ = self.keyframes.remove(&initial_kf_id).unwrap();
+        let mut curr_kf_ = self.keyframes.remove(&curr_kf_id).unwrap();
         // Put back the keyframes we previously took out to modify.
         self.keyframes.insert(initial_kf_id, initial_kf);
         self.keyframes.insert(curr_kf_id, curr_kf);
+
 
         // Update tracking with new info
         let relevant_mappoints = self.mappoints.keys().cloned().collect();
@@ -286,11 +317,23 @@ impl Map {
         for (kf_id, weight) in &kf_counter {
             self.keyframes.get_mut(&kf_id).unwrap().add_connection(&main_kf.id(), *weight);
         }
-        main_kf.insert_all_connections(kf_counter, self.initial_kf_id == main_kf.id())
-            .map(|parent_kf| {
+
+        let parent_kf_id = main_kf.insert_all_connections(kf_counter, self.initial_kf_id == main_kf.id());
+
+        if parent_kf_id.is_some()
+        {
+            parent_kf_id.map(|parent_kf| {
+                info!("parent_kf {}  , {} -> {}", self.initial_kf_id, parent_kf, main_kf.id());
                 self.keyframes.get_mut(&parent_kf).unwrap().add_child(main_kf.id());
             }
         );
+        }
+        // main_kf.insert_all_connections(kf_counter, self.initial_kf_id == main_kf.id()).
+        // map_or((), |parent_kf| {
+        //         info!("parent_kf {} -> {}", parent_kf, main_kf.id());
+        //         self.keyframes.get_mut(&parent_kf).unwrap().add_child(main_kf.id());
+        //     }
+        // );
 
     }
 

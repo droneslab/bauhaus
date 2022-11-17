@@ -46,7 +46,7 @@ pub struct Frame {
 impl Frame {
     pub fn new(
         id: Id, keypoints_vec: DVVectorOfKeyPoint, descriptors_vec: DVMatrix,
-        im_width: i32, im_height: i32, camera: &Camera
+        im_width: i32, im_height: i32, camera: &Camera, scale_factors: &Vec<f32>
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let sensor = GLOBAL_PARAMS.get::<Sensor>(SYSTEM_SETTINGS, "sensor");
 
@@ -57,6 +57,8 @@ impl Frame {
             imu_bias: None, // TODO (IMU)
             camera: camera.clone(),
             sensor,
+            scale_factors : scale_factors.clone(), // Pranay: hard coding the scales_factors, should fill it from orb extractor
+
             ..Default::default()
         })
     }
