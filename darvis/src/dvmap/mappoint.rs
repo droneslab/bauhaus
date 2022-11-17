@@ -193,7 +193,7 @@ impl MapPoint<FullMapPoint> {
 
         let level = self.full_mp_info.observations.get_level(ref_kf);
         let level_scale_factor = ref_kf.scale_factors[level as usize] as f64; //TODO (MVP) This is always going to be an empty vector, need to fill it like in optimizer
-        let n_levels = GLOBAL_PARAMS.get::<i32>(SYSTEM_SETTINGS, "n_levels");
+        let n_levels = GLOBAL_PARAMS.get::<i32>(FEATURE_DETECTION, "n_levels");
 
         let max_distance = dist * level_scale_factor;
         let min_distance = self.full_mp_info.max_distance / (ref_kf.scale_factors[(n_levels - 1) as usize] as f64);
@@ -240,7 +240,8 @@ impl MapPoint<FullMapPoint> {
         let all_dists: Vec<i32> = distances.elements_row_major_iter().cloned().collect();
         let N = descriptors.len();
         for i in 0..N {
-            let mut slice_dists = Vec::with_capacity(N - i);
+            let mut slice_dists = Vec::new();
+            slice_dists.resize(N - i, 0i32);
             slice_dists[..N-i].clone_from_slice(&all_dists[i..N]);
             slice_dists.sort();
             let median = slice_dists[(0.5 * (N-1) as f64) as usize];

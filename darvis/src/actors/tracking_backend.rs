@@ -7,7 +7,7 @@ use opencv::core::Point2f;
 use dvcore::{lockwrap::ReadOnlyWrapper, plugin_functions::Function, config::*};
 use crate::{
     actors::messages::{FeatureMsg, KeyFrameMsg, MapInitializedMsg},
-    registered_modules::{LOCAL_MAPPING, TRACKING_BACKEND},
+    registered_modules::{LOCAL_MAPPING, TRACKING_BACKEND, FEATURE_DETECTION},
     dvmap::{
         map::Map, map_actor::MapWriteMsg, map_actor::{MAP_ACTOR}, map::Id,
         keyframe::KeyFrame, frame::Frame, pose::Pose, mappoint::{MapPoint, FullMapPoint}, bow,
@@ -130,6 +130,21 @@ impl DarvisTrackingBack {
         let map_actor = context.system.find_aid_by_name(MAP_ACTOR).unwrap();
         let tracking_actor = context.system.find_aid_by_name(TRACKING_BACKEND).unwrap();
 
+        //Pranay: need to fill Orb extractor setting for each frame, as it is needed in further processing in mappoints
+        // For now it is computated below for each new frame, but ideally it should be common for each frame, "static variables"
+        let mut scale_factors: Vec<f32> = Vec::new();
+        let scale_factor = GLOBAL_PARAMS.get::<f64>(FEATURE_DETECTION, "scale_factor");
+        let n_levels = GLOBAL_PARAMS.get::<i32>(FEATURE_DETECTION, "n_levels");
+        
+        scale_factors.resize(n_levels as usize, 1.0);
+
+        for i in 1..n_levels as usize
+        {
+            scale_factors[i]=scale_factors[i-1]*scale_factor as f32;
+        }
+
+
+
         // Sofiya interface: creating new frame
         self.last_frame_id += 1;
         self.current_frame = match Frame::new(
@@ -138,7 +153,8 @@ impl DarvisTrackingBack {
             msg.descriptors.clone(), // TODO (msg copy)
             msg.image_width,
             msg.image_height,
-            &self.camera
+            &self.camera,
+            &scale_factors
         ) {
             Ok(frame) => frame,
             Err(e) => panic!("Problem creating a frame: {:?}", e),
@@ -339,6 +355,7 @@ impl DarvisTrackingBack {
     fn track_reference_keyframe(&mut self) -> Result<bool, Box<dyn std::error::Error>> {
         // Tracking::TrackReferenceKeyFrame()
         // Compute Bag of Words vector
+        info!("track_reference_keyframe ........");
         self.current_frame.compute_bow(&bow::VOCABULARY);
 
         // We perform first an ORB matching with the reference keyframe
@@ -350,13 +367,15 @@ impl DarvisTrackingBack {
         let ref_kf = map_read_lock.get_keyframe(&self.ref_kf_id.unwrap()).unwrap();
         match orbmatcher::search_by_bow_f(ref_kf, &self.current_frame,true, 0.7, &self.map) {
             Ok((num_matches, kf_match_edits)) => {
+                nmatches = num_matches;
+
                 // TODO (MVP): map needs to be updated with kf_match_edits after calling this!!!
             },
             Err(err) => panic!("Problem with search_by_bow_f {}", err)
         }
-
+        
         if nmatches < 15 {
-            warn!("tracking_backend::track_reference_keyframe;Less than 15 matches!!\n");
+            warn!("tracking_backend::track_reference_keyframe;Less than 15 matches = {}!!\n", nmatches);
             return Ok(false);
         }
 
@@ -1006,6 +1025,7 @@ impl DarvisTrackingBack {
                 self.trajectory_poses.push(tcr);
                 self.trajectory_times.push(self.current_frame.timestamp);
                 self.trajectory_keyframes.push(ref_kf_id);
+                info!("store_pose_info_for_trajectory.....");
             },
             None => {
                 // This can happen if tracking is lost. Duplicate last element of each vector

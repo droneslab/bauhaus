@@ -2,7 +2,7 @@ use std::{collections::{HashMap}, iter::FromIterator};
 use chrono::{DateTime, Utc};
 use derivative::Derivative;
 use dvcore::{matrix::{DVVector3}};
-use log::error;
+use log::{error, info};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use crate::{dvmap::{map::Id, pose::Pose, frame::*, bow::DVVocabulary},modules::{imu::*},};
 use super::{mappoint::{MapPoint, FullMapPoint}, map::{Map}, features::Features, bow::BoW};
@@ -169,8 +169,10 @@ impl KeyFrame<FullKeyFrame> {
         self.full_kf_info.connected_keyframes.insert_all_connections(new_connections);
         if self.full_kf_info.parent.is_none() && !is_init_kf { 
             self.change_parent(self.full_kf_info.connected_keyframes.first());
+            info!("keyframe; insert_all_connections ;Returning Some {} -> {:?} ", is_init_kf, self.full_kf_info.connected_keyframes);
             Some(self.full_kf_info.connected_keyframes.first())
         } else {
+            info!("keyframe; insert_all_connections ;Returning None");
             None
         }
     }
@@ -268,7 +270,7 @@ impl ConnectedKeyFrames {
     }
 
     pub fn first(&self) -> Id {
-        self.ordered[0].1
+        self.ordered[0].0 //.1
     }
 
     pub fn get_connections(&self, num: i32) -> Vec<Id> {
@@ -280,6 +282,15 @@ impl ConnectedKeyFrames {
         // TODO (verify): Sorting might be backwards? Not quite clear whether low weight = earlier index or vice versa
         //KeyFrame::UpdateBestCovisibles
         self.ordered.sort_by(|(_,w1), (_,w2)| w2.cmp(&w1));
-        self.cutoff_weight = self.ordered[30].1;
+        let max_len = self.ordered.len(); // Pranay: not sure why it was set to "30", i.e. self.ordered[30].1;
+        if max_len >0
+        {
+            self.cutoff_weight = self.ordered[max_len-1].1;
+        }
+        else
+        {
+            self.cutoff_weight =0;
+        }
+        
     }
 }

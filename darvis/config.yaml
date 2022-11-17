@@ -10,7 +10,7 @@ system_settings:
        localization_only_mode: false
        vocabulary_file: "vocabulary/ORBvoc.txt" # TODO (low priority): This does not work with ~/
 
-       fps: 30.0
+       fps: 1.0
        framesensor: Mono
        imusensor: None
 
