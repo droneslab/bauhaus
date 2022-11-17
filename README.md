@@ -146,7 +146,9 @@ Where ``max_features`` is the key you added in the config file.
 
 Strings are formatted like: ``TODO (string)``
 
-### Implementation
+- Importance
+    - **MVP**
+    - **low priority**
 - Sensor types
     - **IMU**
     - **Stereo**
@@ -158,7 +160,13 @@ Strings are formatted like: ``TODO (string)``
 - Features
     - **multimaps**
     - **reset**
-
-### Design
-- Axiom framework
-    - **msg copy** - 
+    - **localization-only**
+    - **rigid body** - SLAM with respect to a rigid body
+- Double checking
+    - **need?** - whether we need a line of code from ORBSLAM
+    - **verify** - potential error with implementation
+- Design
+    - **msg copy** - instances where we copy large data structures. We should try to avoid this so it might be worth going back through and figuring out how to clean these up.
+    - **design**
+- **misc**
+- 
