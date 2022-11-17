@@ -46,7 +46,7 @@ pub struct Features {
     keypoints: KeyPoints,
     pub image_bounds: ImageBounds,
     pub descriptors: DVMatrix, // mDescriptors
-    grid: Grid, // Keypoints are assigned to cells in a grid to reduce matching complexity when projecting MapPoints.
+    pub grid: Grid, // Keypoints are assigned to cells in a grid to reduce matching complexity when projecting MapPoints.
 }
 
 impl Features {
@@ -261,6 +261,9 @@ impl Features {
     }
 }
 
+
+
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ImageBounds {
     pub min_x: f64,//static float mnMinX;
@@ -311,10 +314,10 @@ impl ImageBounds {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-struct Grid {
+pub struct Grid {
     pub grid_element_width_inv: f64,
     pub grid_element_height_inv: f64,
-    pub grid: Vec<Vec<usize>> // mGrid
+    pub grid: Vec<Vec<Vec<usize>>> // mGrid
 }
 impl Grid {
     pub fn default(image_bounds: &ImageBounds) -> Self {
@@ -325,12 +328,28 @@ impl Grid {
         }
     }
 
-    fn initialize_grid() -> Vec<Vec<usize>> {
-        let mut grid = Vec::new();
-        for _ in 0..FRAME_GRID_ROWS {
-            let row = vec![0; FRAME_GRID_COLS];
-            grid.push(row);
+    pub fn empty() -> Self {
+        Grid {
+            grid_element_width_inv: 0.0,
+            grid_element_height_inv: 0.0,
+            grid: Self::initialize_grid()
         }
+    }
+
+    fn initialize_grid() -> Vec<Vec<Vec<usize>>> {
+        let mut grid = Vec::new();
+        for i in 0.. FRAME_GRID_COLS  {
+            let mut row = Vec::new(); //vec![];
+            for j in 0..FRAME_GRID_ROWS
+            {
+                row.push(Vec::new());
+                
+            }
+            grid.push(row);
+            // let row = vec![Vec::new(); FRAME_GRID_COLS];
+            // grid.push(row);
+        }
+        //println!("Grid row col : {:?}, {:?}", FRAME_GRID_ROWS, FRAME_GRID_COLS);
         grid
     }
 
@@ -338,36 +357,63 @@ impl Grid {
         for i in 0..keypoints_un.len() as usize {
             let keypoint = &keypoints_un.get(i).unwrap();
             if let Some((pos_x, pos_y)) = self.pos_in_grid(&image_bounds, keypoint) { 
-                self.grid[pos_y as usize][pos_x as usize] = i;
+                self.grid[pos_x as usize][pos_y as usize].push(i);
             }
         }
     }
 
-    fn pos_in_grid(&self, image_bounds: &ImageBounds, kp : &KeyPoint) -> Option<(i32, i32)> {
-        let pos_x = (kp.pt.x-(image_bounds.min_x as f32)*self.grid_element_width_inv as f32).round() as i32;
-        let pos_y = (kp.pt.y-(image_bounds.min_y as f32)*self.grid_element_height_inv as f32).round() as i32;
+    pub fn pos_in_grid(&self, image_bounds: &ImageBounds, kp : &KeyPoint) -> Option<(i32, i32)> {
+        let pos_x = ((kp.pt.x-(image_bounds.min_x as f32))*self.grid_element_width_inv as f32).round() as i32;
+        let pos_y = ((kp.pt.y-(image_bounds.min_y as f32))*self.grid_element_height_inv as f32).round() as i32;
 
-        let x_in_bounds = pos_x >= 0 && pos_x < (FRAME_GRID_COLS as i32);
-        let y_in_bounds = pos_y >= 0 && pos_y < (FRAME_GRID_ROWS as i32);
+        //let x_in_bounds = pos_x >= 0 && pos_x < (FRAME_GRID_COLS as i32);
+        //let y_in_bounds = pos_y >= 0 && pos_y < (FRAME_GRID_ROWS as i32);
+
+        let not_in_bounds = (pos_x<0 || pos_x>=FRAME_GRID_COLS as i32 || pos_y<0 || pos_y>=FRAME_GRID_ROWS as i32);
+
         //Keypoint's coordinates are undistorted, which could cause to go out of the image
-        if x_in_bounds && y_in_bounds {
-            return Some((pos_x, pos_y));
-        } else{
+        if not_in_bounds
+        {
             return None;
+        }
+        else
+        {
+            return Some((pos_x, pos_y));
         }
     }
 }
-impl Into<dvos3binding::ffi::DVGrid> for Grid {
-    fn into(self) -> dvos3binding::ffi::DVGrid {
-        todo!("TODO BINDINGS");
-        // let mut grid_v1 = dvos3binding::ffi::VectorOfusize{vec: Vec::new()};
-        // let mut grid_vals = Vec::new();
-        // grid_v1.vec.append(&mut grid_vals);
-        // let mut grid_v2 = dvos3binding::ffi::VectorOfVecusize{vec:Vec::new()  };
-        // grid_v2.vec.push(grid_v1);
-        // let mut grid_v3 = dvos3binding::ffi::DVGrid{vec:Vec::new()};
-        // grid_v3.vec.push(grid_v2.clone());
-        // grid_v3.vec.push(grid_v2.clone());
+
+// From implementations to make it easier to pass this into opencv functions
+impl From<Grid> for dvos3binding::ffi::DVGrid {
+    fn from(dvgrid: Grid) -> dvos3binding::ffi::DVGrid { 
+        
+        let mut grid = dvos3binding::ffi::DVGrid{vec: Vec::new()};
+
+
+        //////
+
+        for i in 0.. FRAME_GRID_COLS  {
+            let mut row = dvos3binding::ffi::VectorOfVecusize{vec: Vec::new()};
+
+            for j in 0..FRAME_GRID_ROWS
+            {
+                let mut col = dvos3binding::ffi::VectorOfusize{vec: Vec::new()};
+
+                for k in 0..dvgrid.grid[i][j].len()
+                {
+                    let val = dvgrid.grid[i][j][k];
+                    col.vec.push(val);
+                }
+
+                row.vec.push(col);
+                
+            }
+            grid.vec.push(row);
+
+        }
+
+
+        grid    
     }
 }
 

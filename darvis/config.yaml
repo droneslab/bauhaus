@@ -6,10 +6,11 @@ master:
        file: main.rs
 
 system_settings:
-       show_ui: false
+       show_ui: true
        localization_only_mode: false
-       vocabulary_file: "/home/sofiya/darvis/vocabulary/ORBvoc.txt" # TODO (low priority): This does not work with ~/
-       fps: 1.0
+       vocabulary_file: "vocabulary/ORBvoc.txt" # TODO (low priority): This does not work with ~/
+
+       fps: 30.0
        framesensor: Mono
        imusensor: None
 

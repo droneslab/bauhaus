@@ -1,11 +1,15 @@
 use std::collections::{HashMap, HashSet};
 use std::f64::INFINITY;
+use std::convert::{TryInto, TryFrom};
 use std::pin::Pin;
 use cxx::CxxVector;
 use dvcore::config::{GLOBAL_PARAMS, Sensor, FrameSensor};
+use log::info;
 use opencv::core::{Point2f, KeyPoint, CV_8U};
+use opencv::features2d::BFMatcher;
 use opencv::prelude::*;
 use crate::actors::tracking_backend::TrackedMapPointData;
+use opencv::types::{VectorOfKeyPoint, VectorOfDMatch};
 use crate::dvmap::keyframe::{KeyFrame, FullKeyFrame};
 use crate::dvmap::mappoint::FullMapPoint;
 use crate::registered_modules::MATCHER;
@@ -19,6 +23,87 @@ const  TH_HIGH: i32= 100;
 const  TH_LOW: i32 = 50;
 const  HISTO_LENGTH: i32 = 30;
 
+// Bit set count operation from
+// http://graphics.stanford.edu/~seander/bithacks.html#CountBitsSetParallel
+
+
+fn match_frames(
+    ini_frame: &Frame,
+    curr_frame: &Frame,
+    prev_matched: &mut Vec<Point2f>,
+    mp_matches: &mut HashMap<u32, u32>,
+) -> i32
+{
+    let frame1_keypoints = ini_frame.features.get_all_keypoints();
+    info!("{}", frame1_keypoints.len());
+    let frame1_descriptors = &*ini_frame.features.descriptors; 
+    let frame2_keypoints = curr_frame.features.get_all_keypoints();
+
+
+    let frame2_descriptors = &*curr_frame.features.descriptors;
+ 
+
+
+    let mut pt_indx2 = opencv::types::VectorOfi32::new();
+    let mut points2 = opencv::types::VectorOfPoint2f::new();
+    KeyPoint::convert(&frame2_keypoints, &mut points2, &pt_indx2).unwrap();  
+    
+    mp_matches.clear();
+    //////////////////////////////////////////////
+
+      // BFMatcher to get good matches
+      let bfmtch = BFMatcher::create(6 , true).unwrap(); 
+      let mut mask = Mat::default(); 
+      let mut matches = VectorOfDMatch::new();
+      bfmtch.train_match(&frame2_descriptors, &frame1_descriptors, &mut matches, &mut mask).unwrap(); 
+
+      // Sort the matches based on the distance in ascending order
+      // Using O(n^2) sort here. Need to make the code use cv sort function
+      // by providing custom comparator
+
+      let mut sorted_matches = VectorOfDMatch::new();
+      let mut added = vec![false; matches.len()];
+      for i in 0.. matches.len() {
+          if added[i] == true {
+              continue;
+          }
+          let mut mn = i;
+          let mut dist = matches.get(i).unwrap().distance;
+          for j in 0..matches.len() {
+              let dmatch2 = matches.get(j).unwrap();
+              if dist > dmatch2.distance && !added[j] {
+                  mn = j;
+                  dist = dmatch2.distance;
+              }        
+          }      
+          let dmatch1 = matches.get(mn).unwrap();
+          sorted_matches.push(dmatch1);
+          added[mn] = true;
+      }
+
+
+
+
+      prev_matched.clear();
+
+      for i in 0..sorted_matches.len(){
+
+        let pindex1: i32 = sorted_matches.get(i).unwrap().train_idx.try_into().unwrap();
+        let pindex2: i32 = sorted_matches.get(i).unwrap().query_idx.try_into().unwrap();
+
+        mp_matches.insert(pindex1.try_into().unwrap(), pindex2.try_into().unwrap());
+
+        prev_matched.push(points2.get(sorted_matches.get(i).unwrap().query_idx.try_into().unwrap() ).unwrap());
+
+        
+
+      }
+    ////////////////////////////////////////////
+    let nmatches = sorted_matches.len() as i32;
+    info!("nmatches : {}  ......., hashmap: {}", nmatches, mp_matches.len());
+    nmatches
+}
+
 pub fn search_for_initialization(
     ini_frame: &Frame,
     curr_frame: &Frame,
@@ -26,38 +111,83 @@ pub fn search_for_initialization(
     mp_matches: &mut HashMap<u32, u32>,
     window_size: i32
 ) -> i32 {
-    todo!("BINDINGS");
-    // // Sofiya: Should we avoid making a new orb matcher each time? Is this expensive?
-    // let mut matcher = dvos3binding::ffi::new_orb_matcher(48, 48, 0.0, 0.0, 600.0, 600.0,0.1,true);
 
-    // let frame1_keypoints = *ini_frame.features.get_all_keypoints();
-    // let frame1_keypoints_cxx = frame1_keypoints.into_raw() as *const CxxVector<dvos3binding::ffi::DVKeyPoint>;
-    // let frame1_descriptors = *ini_frame.features.descriptors;
-    // let frame1_descriptors_cxx = frame1_descriptors.into_raw() as *const dvos3binding::ffi::DVMat;
+    // Pranay: for now using BFMatcher to frame matching, as ORBMatcher API seems dependent on ORBExtractor.
+    return match_frames(
+        ini_frame,
+        curr_frame,
+        prev_matched,
+        mp_matches
+    );
 
-    // let frame2_keypoints = **curr_frame.features.get_all_keypoints();
-    // let frame2_keypoints_cxx = frame2_keypoints.into_raw() as *const CxxVector<dvos3binding::ffi::DVKeyPoint>;
-    // let frame2_descriptors = *curr_frame.features.descriptors;
-    // let frame2_descriptors_cxx = frame2_descriptors.into_raw() as *const dvos3binding::ffi::DVMat;
+    //todo!("Fix calling bindings");
 
-    // // let mut prev_match_cv = opencv::types::VectorOfPoint2f::default();
-    // // let prev_matchcv = prev_matched.into_raw() as *mut CxxVector<dvos3binding::ffi::DVPoint2f>;
+    // Sofiya: Should we avoid making a new orb matcher each time? Is this expensive?
+    let mut matcher = dvos3binding::ffi::new_orb_matcher(48, 48, 0.0, 0.0, 600.0, 600.0,0.1,true);
 
-    // let mut matches_cv=  opencv::types::VectorOfi32::default();
-    // let matchescv = matches_cv.into_raw() as *mut CxxVector<i32>;
+    let frame1_keypoints = ini_frame.features.get_all_keypoints();
+    info!("{}", frame1_keypoints.len());
 
-    // unsafe {
-    //     return matcher.pin_mut().SearchForInitialization_1(
-    //         &*frame1_keypoints_cxx,
-    //         &*frame2_keypoints_cxx, 
-    //         &*frame1_descriptors_cxx,
-    //         &*frame2_descriptors_cxx,
-    //         &curr_frame.features.grid.into(),
-    //         Pin::new_unchecked(prev_matchcv.as_mut().unwrap()), 
-    //         Pin::new_unchecked(matchescv.as_mut().unwrap()),
-    //         window_size
-    //     );
+    let frame1_keypoints_cxx = frame1_keypoints.as_raw() as *const CxxVector<dvos3binding::ffi::DVKeyPoint>;
+
+    info!("{}", frame1_keypoints.len());
+    let frame1_descriptors = ini_frame.features.descriptors.clone();
+    let frame1_descriptors_cxx = frame1_descriptors.as_raw() as *const dvos3binding::ffi::DVMat;
+
+    let frame2_keypoints = curr_frame.features.get_all_keypoints();
+    let frame2_keypoints_cxx = frame2_keypoints.as_raw() as *const CxxVector<dvos3binding::ffi::DVKeyPoint>;
+
+
+
+    info!("{}", frame2_keypoints.len());
+    let frame2_descriptors = &*curr_frame.features.descriptors;
+    let frame2_descriptors_cxx = frame2_descriptors.clone().into_raw() as *const dvos3binding::ffi::DVMat;
+
+
+
+    let grid_dv = curr_frame.features.grid.grid.clone();
+
+    let mut grid_v3: dvos3binding::ffi::DVGrid = curr_frame.features.grid.clone().into();
+
+
+    // let mut grid_v3 = dvos3binding::ffi::DVGrid{vec:Vec::new()};
+    // unsafe{
+    //     grid_v3.vec = std::mem::transmute(grid_dv);
+
     // }
+
+
+
+    let mut prev_match_cv = opencv::types::VectorOfPoint2f::default();
+
+    //Pranay: try find way to pass match without cloning
+    for i in 0..prev_matched.len()
+    {
+        prev_match_cv.push(prev_matched.get(i).unwrap().clone());
+    }
+    info!("prev_match_cv: {}, prev_matched : {}", prev_match_cv.len(), prev_matched.len());
+    let prev_matchcv = prev_match_cv.into_raw() as *mut CxxVector<dvos3binding::ffi::DVPoint2f>;
+
+    let mut matches_cv=  opencv::types::VectorOfi32::default();
+    let matchescv = matches_cv.into_raw() as *mut CxxVector<i32>;
+
+    unsafe {
+        let matches = matcher.pin_mut().SearchForInitialization_1(
+            &*frame1_keypoints_cxx,
+            &*frame2_keypoints_cxx, 
+            &*frame1_descriptors_cxx,
+            &*frame2_descriptors_cxx,
+            &grid_v3,
+            Pin::new_unchecked(prev_matchcv.as_mut().unwrap()), 
+            Pin::new_unchecked(matchescv.as_mut().unwrap()),
+            window_size
+        );
+        info!("new matches: {}", matches);
+        return matches;
+
+    }
+
+    
 }
 
 pub fn search_by_projection(
@@ -224,7 +354,6 @@ pub fn search_by_projection(
 
     return Ok(num_matches);
 }
-
 // Project MapPoints tracked in last frame into the current frame and search matches.
 // Used to track from previous frame (Tracking)
 pub fn search_by_projection_with_threshold (
