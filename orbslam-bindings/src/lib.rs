@@ -35,6 +35,7 @@ pub mod ffi {
         pub z: f32
     }
 
+    #[derive(Debug, Clone)]
     pub struct Pose{
         pub pose: [[f32;4];4]
     }
@@ -42,7 +43,7 @@ pub mod ffi {
     pub struct DVbool{
         pub val: bool
     }
-
+    #[derive(Debug, Clone)]
     pub struct VectorOfDVPoint3f
     {
         pub vec: Vec<DVPoint3f>

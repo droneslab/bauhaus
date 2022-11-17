@@ -1,9 +1,10 @@
 use cxx::{CxxVector,UniquePtr};
-use opencv::{types::VectorOfPoint3f, prelude::{Mat, MatTrait, Boxed, MatTraitConst}, core::{CV_32F, Scalar, CV_64F}};
+use log::info;
 use std::{collections::HashMap, sync::Mutex};
+use opencv::{types::VectorOfPoint3f, prelude::{Mat, MatTrait, Boxed, MatTraitConst}, core::{CV_32F, Scalar, Point3f, CV_64F}};
 use dvcore::{config::*, matrix::{DVMatrix3, DVMatrix, DVVectorOfPoint3f, DVVector3}};
 use crate::{
-    dvmap::{pose::Pose, map::Id},
+    dvmap::{pose::{Pose, Rotation}, map::Id},
     matrix::DVVectorOfKeyPoint, registered_modules::MOD_CAMERA
 };
 use dvos3binding::ffi::TwoViewReconstruction;
@@ -107,25 +108,76 @@ impl DVCamera {
         v_p3_d: &mut DVVectorOfPoint3f,
         triangulated: &mut Vec<bool>
     ) -> bool {
-        todo!("Fix calling bindings");
-        // unsafe {
-        //     let kps_1_cv = (**v_keys1).into_raw() as *const CxxVector<dvos3binding::ffi::DVKeyPoint>;
-        //     let kps_2_cv = (**v_keys2).into_raw() as *const CxxVector<dvos3binding::ffi::DVKeyPoint>;
 
-        //     let matches_cv = matches.into_raw() as *const CxxVector<i32>;
-        //     let mut pose = dvos3binding::ffi::Pose{pose : [[0.0;4];4]};
-        //     let mut vP3D  = dvos3binding::ffi::VectorOfDVPoint3f{vec:Vec::new() };
-        //     let mut vbTriangulated  = dvos3binding::ffi::VectorOfDVBool{ vec:Vec::new() };
+        let mut tvr = dvos3binding::ffi::new_two_view_reconstruction(
+            self.get_fx() as f32,
+            self.get_cx() as f32,
+            self.get_fy() as f32,
+            self.get_cy() as f32,
+            1.0, 200
+        );
+        
+        
+        //todo!("Fix calling bindings");
+        let mut matches_cv = opencv::types::VectorOfi32::default();
 
-        //     tvr.pin_mut().Reconstruct_1(
-        //         &*kps_1_cv,
-        //         &*kps_2_cv,
-        //         &*matches_new, 
-        //         &mut pose,
-        //         &mut vP3D,
-        //         &mut vbTriangulated
-        //     )
-        // }
+        for i in 0..v_keys1.len() as u32
+        {
+            if matches.contains_key(&i)
+            {
+                matches_cv.push(matches[&i] as i32);
+            }
+            else
+            {
+                matches_cv.push(-1)
+            }
+
+        }
+
+        unsafe {
+            let kps_1_cxx = v_keys1.as_raw() as *const CxxVector<dvos3binding::ffi::DVKeyPoint>;
+            let kps_2_cxx = v_keys2.as_raw()as *const CxxVector<dvos3binding::ffi::DVKeyPoint>;
+
+
+            let matches_cxx = matches_cv.into_raw() as *const CxxVector<i32>;
+            let mut pose = dvos3binding::ffi::Pose{pose : [[0.0;4];4]};
+            let mut vP3D  = dvos3binding::ffi::VectorOfDVPoint3f{vec:Vec::new() };
+            let mut vbTriangulated  = dvos3binding::ffi::VectorOfDVBool{ vec:Vec::new() };
+
+            let reconstructed = tvr.pin_mut().Reconstruct_1(
+                &*kps_1_cxx,
+                &*kps_2_cxx,
+                &*matches_cxx, 
+                &mut pose,
+                &mut vP3D,
+                &mut vbTriangulated
+            );
+
+            info!("pose {:?} \n vP3D {:?} \n reconstructed: {}", pose, vP3D.vec.len(), reconstructed);
+
+            let out_pose = pose.pose;
+
+            let rot = nalgebra::Matrix3::<f64>::new(out_pose[0][0] as f64, out_pose[0][1] as f64, out_pose[0][2] as f64,
+            out_pose[1][0] as f64, out_pose[1][1] as f64, out_pose[1][2] as f64, 
+            out_pose[2][0] as f64, out_pose[2][1] as f64, out_pose[2][2] as f64);
+                
+            //let dvrot = Rotation::new(rot);
+            t21.set_rotation(&Rotation::new(rot));
+            t21.set_translation(out_pose[3][0] as f64, out_pose[3][1] as f64, out_pose[3][2] as f64);
+            
+
+            for pt3d in vP3D.vec
+            {
+                v_p3_d.push(Point3f::new(pt3d.x, pt3d.y, pt3d.z));
+            }
+
+            for is_traingulated in vbTriangulated.vec
+            {
+                triangulated.push(is_traingulated);
+            }
+            
+            reconstructed 
+        }
     }
 
     pub fn unproject_eig() -> DVVector3<f32> {
