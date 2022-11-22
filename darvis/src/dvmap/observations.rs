@@ -66,8 +66,7 @@ impl Observations {
         let mut n = 0;
         let position_opencv = **position;
         for (id, _) in &self.obs {
-            info!("map.get_keyframe(&id) {}", id);
-            map.debug_keyframes();
+
             let kf = map.get_keyframe(&id).unwrap();
             let mut camera_center = kf.get_camera_center();
             let owi = *camera_center;

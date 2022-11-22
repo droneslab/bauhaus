@@ -95,7 +95,7 @@ impl Frame {
 
     pub fn discard_outliers(&mut self) -> i32 {
         let mps_at_start = self.mappoint_matches.len() as i32;
-        self.mappoint_matches.retain(|_, (_, is_outlier)| *is_outlier);
+        self.mappoint_matches.retain(|_, (_, is_outlier)| !*is_outlier);
         mps_at_start - self.mappoint_matches.len() as i32
     }
 
