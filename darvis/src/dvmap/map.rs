@@ -1,10 +1,10 @@
 use std::collections::{HashMap, HashSet};
-use log::{info, warn, error};
+use log::{info, warn, error, debug};
 
 use dvcore::{matrix::{DVVector3}, config::{Sensor, GLOBAL_PARAMS, SYSTEM_SETTINGS, FrameSensor, ImuSensor}};
 use crate::{
     dvmap::{keyframe::*, mappoint::*, pose::Pose, bow::DVVocabulary},
-    modules::{map_initialization::Initialization, optimizer::{BAResult, Optimizer}}
+    modules::{map_initialization::Initialization, optimizer::{self}}
 };
 
 use super::bow;
@@ -27,12 +27,6 @@ pub struct Map {
     // MapPoints
     mappoints: HashMap<Id, MapPoint<FullMapPoint>>, // = mspMapPoints
     last_mp_id: Id,
-
-    // Utilities from darvis::utils
-    // Sofiya: as far as I can tell, optimizer is just needed here because of global optimization, which 
-    // no other thread/module/actor will use except the map. Should there even be a link to Optimizer here,
-    // or should we make a specific global optimization object?
-    optimizer: Optimizer,
 
     sensor: Sensor,
     // Sofiya: following are in orbslam3, not sure if we need:
@@ -64,18 +58,13 @@ impl Map {
             id: 0, // TODO (Multimaps): this should increase when new maps are made
             keyframes: HashMap::new(),
             mappoints: HashMap::new(),
-            optimizer: Optimizer::new(),
             sensor,
             ..Default::default()
         }
     }
 
     pub fn debug_keyframes(&self) { 
-        info!("keyframes.len {}", self.keyframes.len());
-        for (kfid,_) in &self.keyframes
-        {
-            info!("kfid {}", kfid);
-        }
+        debug!("keyframes in map {:?}", self.keyframes.keys());
     }
 
     pub fn num_keyframes(&self) -> i32 { self.keyframes.len() as i32 }
@@ -200,13 +189,11 @@ impl Map {
         self.update_connections(&mut initial_kf);
         self.update_connections(&mut curr_kf);
 
-
         //Pranay : Getting Segmentation Fault  for bundle adjustment
         // commeting for now, as we have only 2 frame for initial map
-        // info!("Bundle Adjustment; self.keyframes.insert(initial_kf_id, initial_kf);  {}", self.keyframes.len());
-        // // Bundle Adjustment
-        // let optimized_poses = self.optimizer.global_bundle_adjustment(self, 0, 20);
-        // self.update_after_ba(optimized_poses);
+        // Bundle Adjustment
+        let optimized_poses = optimizer::global_bundle_adjustment(self, 0, 20);
+        self.update_after_ba(optimized_poses);
 
         let median_depth = initial_kf.compute_scene_median_depth(&self, 2);
         let inverse_median_depth = match self.sensor {
@@ -297,7 +284,9 @@ impl Map {
         for (_, (mp_id, _)) in &main_kf.mappoint_matches {
             let mp = self.mappoints.get(&mp_id).unwrap();
             for kf_id in mp.get_observations().keys() {
-                *kf_counter.entry(*kf_id).or_insert(0) += 1;
+                if *kf_id != main_kf.id() {
+                    *kf_counter.entry(*kf_id).or_insert(0) += 1;
+                }
             }
         }
 
@@ -317,27 +306,16 @@ impl Map {
         for (kf_id, weight) in &kf_counter {
             self.keyframes.get_mut(&kf_id).unwrap().add_connection(&main_kf.id(), *weight);
         }
-
-        let parent_kf_id = main_kf.insert_all_connections(kf_counter, self.initial_kf_id == main_kf.id());
-
-        if parent_kf_id.is_some()
-        {
+        let parent_kf_id = main_kf.insert_all_connections(kf_counter, main_kf.id() == self.initial_kf_id);
+        if parent_kf_id.is_some() {
             parent_kf_id.map(|parent_kf| {
                 info!("parent_kf {}  , {} -> {}", self.initial_kf_id, parent_kf, main_kf.id());
                 self.keyframes.get_mut(&parent_kf).unwrap().add_child(main_kf.id());
-            }
-        );
+            });
         }
-        // main_kf.insert_all_connections(kf_counter, self.initial_kf_id == main_kf.id()).
-        // map_or((), |parent_kf| {
-        //         info!("parent_kf {} -> {}", parent_kf, main_kf.id());
-        //         self.keyframes.get_mut(&parent_kf).unwrap().add_child(main_kf.id());
-        //     }
-        // );
-
     }
 
-    pub fn update_after_ba(&mut self, optimized_poses: BAResult) {
+    pub fn update_after_ba(&mut self, optimized_poses: optimizer::BAResult) {
         for (kf_id, pose) in optimized_poses.optimized_kf_poses {
             if optimized_poses.loop_kf_is_first_kf {
                 self.keyframes.get_mut(&kf_id).unwrap().pose = pose;

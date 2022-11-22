@@ -6,9 +6,9 @@ master:
        file: main.rs
 
 system_settings:
-       show_ui: true
+       show_ui: false
        localization_only_mode: false
-       vocabulary_file: "vocabulary/ORBvoc.txt" # TODO (low priority): This does not work with ~/
+       vocabulary_file: "../vocabulary/ORBvoc.txt" # TODO (low priority): This does not work with ~/
 
        fps: 1.0
        framesensor: Mono
