@@ -160,6 +160,7 @@ impl DarvisTrackingBack {
             Err(e) => panic!("Problem creating a frame: {:?}", e),
         };
 
+
         // TODO (reset): Reset map because local mapper set the bad imu flag
         // Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Tracking.cc#L1808
 
@@ -180,6 +181,7 @@ impl DarvisTrackingBack {
         // TODO: update map change index. Used by mbMapUpdated
         // Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Tracking.cc#L1890
 
+        info!(" State check start {:?}", self.state);
         // Initial estimation of camera pose and matching
         let initial_success = match self.state {
             TrackingState::WaitForMapResponse => { return; },
@@ -207,7 +209,8 @@ impl DarvisTrackingBack {
                     ok = self.track_with_motion_model().unwrap();
                 };
                 if !ok {
-                    ok = self.track_reference_keyframe().unwrap();
+                    ok = self.track_reference_keyframe(&map_actor).unwrap();
+                    info!("track_reference_keyframe done ..... {} ", ok);
                 }
                 if !ok {
                     self.relocalization.timestamp_lost = Some(self.current_frame.timestamp);
@@ -216,6 +219,7 @@ impl DarvisTrackingBack {
                         false => TrackingState::Lost
                     };
                 }
+                
                 ok
             },
             TrackingState::RecentlyLost => {
@@ -253,6 +257,7 @@ impl DarvisTrackingBack {
         // Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Tracking.cc#L1933
         // Look for "mbOnlyTracking" in Track() function
 
+        info!("Track local map started ....");
         // Track Local Map
         let success = initial_success && self.track_local_map(&map_actor);
         self.state = match success {
@@ -269,6 +274,7 @@ impl DarvisTrackingBack {
             }
         };
 
+        info!("Track local map Done ....");
         // TODO (IMU)
         // Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Tracking.cc#L2167
         // This code not done, so double check with C++ reference.
@@ -291,6 +297,7 @@ impl DarvisTrackingBack {
         //     }
         // }
 
+        info!("Track local map started ....");
         if success || matches!(self.state, TrackingState::RecentlyLost) {
             // Update motion model
             let last_frame = self.last_frame.as_ref();
@@ -345,15 +352,19 @@ impl DarvisTrackingBack {
             self.current_frame.ref_kf_id = self.ref_kf_id;
         }
 
+        info!(" state_check : Middle {:?}", self.state);
         match self.state {
             TrackingState::Ok | TrackingState::RecentlyLost => self.store_pose_info_for_trajectory(),
             _ => {}
         }
+
+        info!(" state_check : self.state {:?}", self.state);
     }
 
     //* MVP */
-    fn track_reference_keyframe(&mut self) -> Result<bool, Box<dyn std::error::Error>> {
+    fn track_reference_keyframe(&mut self, map_actor: &Aid) -> Result<bool, Box<dyn std::error::Error>> {
         // Tracking::TrackReferenceKeyFrame()
+        
         // Compute Bag of Words vector
         info!("track_reference_keyframe ........");
         self.current_frame.compute_bow(&bow::VOCABULARY);
@@ -362,34 +373,60 @@ impl DarvisTrackingBack {
         // If enough matches are found we setup a PnP solver
         let mut vp_mappoint_matches = HashMap::<u32, (Id, bool)>::new();
 
+
+
         let mut nmatches =0;
         let map_read_lock = self.map.read();
-        let ref_kf = map_read_lock.get_keyframe(&self.ref_kf_id.unwrap()).unwrap();
+        let mut ref_kf = map_read_lock.get_keyframe(&self.ref_kf_id.unwrap()).unwrap();
+
+        
+        let mut increase_found = Vec::new();
+
         match orbmatcher::search_by_bow_f(ref_kf, &self.current_frame,true, 0.7, &self.map) {
             Ok((num_matches, kf_match_edits)) => {
                 nmatches = num_matches;
+                for (index, mp_id) in kf_match_edits
+                {
+                    if mp_id.is_some()
+                    {
+                        vp_mappoint_matches.insert(index as u32, (mp_id.unwrap(), false)); // adding only the matches from orbmatcher bow search
 
-                // TODO (MVP): map needs to be updated with kf_match_edits after calling this!!!
+                        increase_found.push((mp_id.unwrap(), 1));
+                    }
+
+                }
+
+                let map_msg = MapWriteMsg::increase_found(increase_found);
+                map_actor.send_new(map_msg).unwrap();
+
+
+                // TODO (MVP_Done): Pranay :map needs to be updated with kf_match_edits after calling this!!!
             },
             Err(err) => panic!("Problem with search_by_bow_f {}", err)
         }
+        
+
         
         if nmatches < 15 {
             warn!("tracking_backend::track_reference_keyframe;Less than 15 matches = {}!!\n", nmatches);
             return Ok(false);
         }
 
+        //todo!("vp_mappoint_matches is not getting");
+        //[TODO (MVP_done)] Pranay : vp_mappoint_matches is not getting populated, hence it is still zero matches
         self.current_frame.mappoint_matches = vp_mappoint_matches.clone();
         self.current_frame.pose = Some(self.last_frame.as_ref().unwrap().pose.unwrap());
 
-        if let Some((_, pose)) = self.optimizer.optimize_pose(&mut self.current_frame, &self.map) {
-            self.current_frame.pose = Some(pose);
-        }
+        // if let Some((_, pose)) = self.optimizer.optimize_pose(&mut self.current_frame, &self.map) {
+        //     self.current_frame.pose = Some(pose);
+        // }
 
         // Discard outliers
         let deleted_mps = self.current_frame.discard_outliers();
         let nmatches_map = -deleted_mps + self.current_frame.get_num_mappoints_with_observations(&*self.map.read());
+        
 
+        info!("nmatches_map {}, mappoints_with_obs {}",nmatches_map, self.current_frame.get_num_mappoints_with_observations(&*self.map.read()));
         match self.sensor.is_imu() {
             true => { return Ok(true); },
             false => { return Ok(nmatches_map >= 10); }
@@ -559,10 +596,15 @@ impl DarvisTrackingBack {
         // Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Tracking.cc#L2949
         // This is for visualization
         // mpAtlas->SetReferenceMapPoints(mvpLocalMapPoints);
+
+        info!(" {{{{update_local_keyframes}}}}");
         self.update_local_keyframes();
+        info!(" {{{{update_local_points}}}}");
         self.update_local_points();
+        info!(" {{{{search_local_points}}}}");
         self.search_local_points();
 
+        info!(" {{{{optimize_pose}}}}");
         let mut inliers = 0;
         if !self.map.read().imu_initialized || (self.current_frame.id <= self.relocalization.last_reloc_frame_id + (self.frames_to_reset_imu as i32)) {
             self.optimizer.optimize_pose(&mut self.current_frame, &self.map)
@@ -600,6 +642,7 @@ impl DarvisTrackingBack {
             }
         }
 
+        info!(" {{{{ MapWriteMsg::increase_found}}}}");
         let map_msg = MapWriteMsg::increase_found(increase_found);
         map_actor.send_new(map_msg).unwrap();
 
@@ -1028,6 +1071,7 @@ impl DarvisTrackingBack {
                 info!("store_pose_info_for_trajectory.....");
             },
             None => {
+                info!("store_pose_info_for_trajectory..... Tracking Lost...");
                 // This can happen if tracking is lost. Duplicate last element of each vector
                 if let Some(last) = self.trajectory_poses.last().cloned() { self.trajectory_poses.push(last); }
                 if let Some(last) = self.trajectory_times.last().cloned() { self.trajectory_times.push(last); }

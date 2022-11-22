@@ -274,8 +274,8 @@ impl ConnectedKeyFrames {
     }
 
     pub fn get_connections(&self, num: i32) -> Vec<Id> {
-        todo!("TODO (MVP)");
-        // Vec::from_iter(self.ordered[0..(num as usize)].iter().cloned())
+       let (conections, _) : (Vec<i32>, Vec<i32>) = self.ordered[0..(num as usize)].iter().cloned().unzip();
+       conections
     }
 
     fn sort_ordered(&mut self) {
