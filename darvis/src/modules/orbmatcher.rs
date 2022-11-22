@@ -9,6 +9,7 @@ use opencv::core::{Point2f, KeyPoint, CV_8U};
 use opencv::features2d::BFMatcher;
 use opencv::prelude::*;
 use crate::actors::tracking_backend::TrackedMapPointData;
+use crate::dvmap::bow::{self, BoW};
 use opencv::types::{VectorOfKeyPoint, VectorOfDMatch};
 use crate::dvmap::keyframe::{KeyFrame, FullKeyFrame};
 use crate::dvmap::mappoint::FullMapPoint;
@@ -540,10 +541,19 @@ pub fn search_by_bow_f(
         }
     }
 
-    for node_id_kf in kf.bow.get_feat_vec_nodes() {
+    
+    info!("kf.bow.get_feat_vec_nodes() {}", kf.bow.get_feat_vec_nodes().len());
+
+    // Pranay: Not sure why the kf.bow is empty, for now re-computing bow 
+    //TODO: fix the bug for empty bow for keyframes
+    let mut bow_kf = BoW::new();
+    bow::VOCABULARY.transform(&kf.features.descriptors, &mut bow_kf);
+
+    
+    for node_id_kf in bow_kf.get_feat_vec_nodes() {
         for node_id_frame in frame.bow.get_feat_vec_nodes() {
             if node_id_kf == node_id_frame {
-                let indices_kf = kf.bow.get_feat_from_node(node_id_kf);
+                let indices_kf = bow_kf.get_feat_from_node(node_id_kf);
                 let indices_f = frame.bow.get_feat_from_node(node_id_frame);
 
                 for index_kf in indices_kf {
@@ -556,9 +566,20 @@ pub fn search_by_bow_f(
                     let descriptors_kf = kf.features.descriptors.row(index_kf)?;
 
                     for index_f in &indices_f {
-                        if map.read().get_mappoint(&kf.get_mappoint(&index_f)).is_some() {
+
+
+
+                        //Pranay : was the below intentional getting index_f from kf but it is not being used later.
+                        // if map.read().get_mappoint(&kf.get_mappoint(&index_f)).is_some() {
+                        //     continue;
+                        // }
+
+                        // Instead of above code, checking if index_kf exist as mappoint.
+                        if !kf.has_mappoint(&index_kf)
+                        {
                             continue;
                         }
+
                         let descriptors_f = frame.features.descriptors.row(*index_f)?;
 
                         let dist = descriptor_distance(&descriptors_kf, &descriptors_f);
@@ -576,7 +597,7 @@ pub fn search_by_bow_f(
                     }
 
                     if best_dist_left.0 <= TH_LOW {
-                        let map = map.read();
+                        let map_read = map.read();
                         let mp_id = &kf.get_mappoint(&index_kf);
 
                         if (best_dist_left.0 as f64) < ratio * (best_dist_left.1 as f64) {
@@ -609,6 +630,7 @@ pub fn search_by_bow_f(
         }
     }
 
+    info!(" search_by_bow_f : num_matches {}", num_matches);
     if should_check_orientation {
         check_orientation_2(&rot_hist, &mut kf_match_edits, &mut num_matches)
     };
