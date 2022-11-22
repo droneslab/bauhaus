@@ -12,7 +12,7 @@ use crate::actors::tracking_backend::TrackedMapPointData;
 use opencv::types::{VectorOfKeyPoint, VectorOfDMatch};
 use crate::dvmap::keyframe::{KeyFrame, FullKeyFrame};
 use crate::dvmap::mappoint::FullMapPoint;
-use crate::registered_modules::MATCHER;
+use crate::registered_modules::{MATCHER, FEATURE_DETECTION};
 use crate::{
     dvmap::{frame::Frame, mappoint::MapPoint, map::Id, map::Map},
     modules::{camera::Camera},
@@ -25,6 +25,27 @@ const  HISTO_LENGTH: i32 = 30;
 
 // Bit set count operation from
 // http://graphics.stanford.edu/~seander/bithacks.html#CountBitsSetParallel
+
+lazy_static! {
+    // Note: Does not change, so can have multiple copies of this.
+    // ORBSLAM3 duplicates this var at every frame and keyframe,
+    // but I'm pretty sure that it's set once per-system when the ORBExtractor
+    // is created and only ever used by Optimizer.
+    // In general, I'd like to remove these kinds of variables away from the
+    // frame/keyframe/mappoint implementation and into the object that actually
+    // directly uses it.
+
+    pub static ref SCALE_FACTORS: Vec<f32> = {
+        let scale_factor = GLOBAL_PARAMS.get::<f64>(FEATURE_DETECTION, "scale_factor");
+        let n_levels = GLOBAL_PARAMS.get::<i32>(FEATURE_DETECTION, "n_levels");
+        let mut scale_factors = vec![1.0];
+
+        for i in 1..n_levels as usize {
+            scale_factors.push(scale_factors[i-1] * (scale_factor as f32));
+        }
+        scale_factors
+    };
+}
 
 
 fn match_frames(
@@ -218,7 +239,7 @@ pub fn search_by_projection(
             let indices = frame.get_features_in_area(
                 &mp_data.proj_x,
                 &mp_data.proj_y,
-                r * (frame.scale_factors[mp_data.predicted_level as usize] as f64),
+                r * (SCALE_FACTORS[mp_data.predicted_level as usize] as f64),
                 mp_data.predicted_level-1,
                 mp_data.predicted_level
             );
@@ -414,7 +435,7 @@ pub fn search_by_projection_with_threshold (
             let last_octave = last_frame.features.get_octave(idx1 as usize);
 
             // Search in a window. Size depends on scale
-            let radius = ((th as f32) * current_frame.scale_factors[last_octave as usize]) as f64;
+            let radius = ((th as f32) * SCALE_FACTORS[last_octave as usize]) as f64;
 
             let indices_2 =
                 if forward {

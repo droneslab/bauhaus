@@ -1,5 +1,5 @@
 use dvcore::{matrix::DVVector3, config::{Sensor, FrameSensor}};
-use log::info;
+use log::{info, debug};
 use nalgebra::Vector3;
 use serde::{Serialize, de::DeserializeOwned, Deserialize};
 use std::{fmt::Debug, collections::{HashMap, hash_map::Keys}};
@@ -66,7 +66,7 @@ impl Observations {
         let mut n = 0;
         let position_opencv = **position;
         for (id, _) in &self.obs {
-            info!("map.get_keyframe(&id) {}", id);
+            debug!("map.get_keyframe(&id) {}", id);
             map.debug_keyframes();
             let kf = map.get_keyframe(&id).unwrap();
             let mut camera_center = kf.get_camera_center();

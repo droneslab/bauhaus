@@ -21,36 +21,40 @@ pub mod ffi {
         type BridgeSparseOptimizer;
         type VertexSE3Expmap;
         type VertexSBAPointXYZ;
-        type BridgeEdgeSE3ProjectXYZOnlyPose;
-        type BridgeEdgeSE3ProjectXYZ;
+        type EdgeSE3ProjectXYZOnlyPose;
+        type EdgeSE3ProjectXYZ;
 
         fn new_sparse_optimizer(opt_type: i32) -> UniquePtr<BridgeSparseOptimizer>;
 
         // creating/adding vertices to graph
         fn add_frame_vertex(
-            self: &BridgeSparseOptimizer,
+            self: Pin<&mut BridgeSparseOptimizer>,
             vertex_id: i32,
             pose: Pose,
             set_fixed: bool
         ) -> SharedPtr<VertexSE3Expmap>;
         fn add_mappoint_vertex(
-            self: &BridgeSparseOptimizer,
+            self: Pin<&mut BridgeSparseOptimizer>,
             vertex_id: i32,
             pose: Pose
         ) -> SharedPtr<VertexSBAPointXYZ>;
         fn set_vertex_estimate(
-            self: &BridgeSparseOptimizer,
+            self: Pin<&mut BridgeSparseOptimizer>,
             vertex: SharedPtr<VertexSE3Expmap>,
             pose: Pose,
         );
         fn remove_vertex(
-            self: &BridgeSparseOptimizer,
+            self: Pin<&mut BridgeSparseOptimizer>,
             vertex: SharedPtr<VertexSBAPointXYZ>,
         );
+        fn has_vertex(
+            self: &BridgeSparseOptimizer,
+            id: i32,
+        ) -> bool;
 
         // creating/adding edges to graph
         fn add_edge_monocular_unary(
-            self: &BridgeSparseOptimizer,
+            self: Pin<&mut BridgeSparseOptimizer>,
             robust_kernel: bool,
             vertex_id: i32,
             keypoint_octave: i32,
@@ -58,27 +62,27 @@ pub mod ffi {
             keypoint_pt_y: f32,
             invSigma2: f32,
             mp_world_position: [f64; 3]
-        ) -> SharedPtr<BridgeEdgeSE3ProjectXYZOnlyPose>;
+        ) -> UniquePtr<EdgeSE3ProjectXYZOnlyPose>;
         fn add_edge_monocular_binary(
-            self: &BridgeSparseOptimizer,
+            self: Pin<&mut BridgeSparseOptimizer>,
             robust_kernel: bool,
-            vertex_id_1: i32,
-            vertex_id_2: i32,
+            vertex_id_1: SharedPtr<VertexSBAPointXYZ>,
+            vertex_id_2: SharedPtr<VertexSE3Expmap>,
             keypoint_octave: i32,
             keypoint_pt_x: f32,
             keypoint_pt_y: f32,
             invSigma2: f32,
-        ) -> SharedPtr<BridgeEdgeSE3ProjectXYZ>;
+        ) -> UniquePtr<EdgeSE3ProjectXYZ>;
         // fn set_edge_worldpos(
         //     self: &BridgeSparseOptimizer,
         //     mp_world_index: i32,
-        //     edge: SharedPtr<BridgeEdgeSE3ProjectXYZOnlyPose>,
+        //     edge: SharedPtr<EdgeSE3ProjectXYZOnlyPose>,
         //     mp_world_position: [f64; 3]
         // );
         // fn add_edge(
         //     self: &BridgeSparseOptimizer,
         //     mp_world_index: i32,
-        //     edge: SharedPtr<BridgeEdgeSE3ProjectXYZOnlyPose>,
+        //     edge: SharedPtr<EdgeSE3ProjectXYZOnlyPose>,
         //     mp_world_position: [f64; 3]
         // );
 
@@ -87,7 +91,7 @@ pub mod ffi {
 
         // optimization
         fn optimize(
-            self: &BridgeSparseOptimizer,
+            self: Pin<&mut BridgeSparseOptimizer>,
             iterations: i32,
         );
         fn recover_optimized_frame_pose(
@@ -100,12 +104,14 @@ pub mod ffi {
         ) -> Pose;
 
         // optimization within edge
-        fn set_level(
-            self: &BridgeEdgeSE3ProjectXYZOnlyPose,
+        #[rust_name = "set_level"]
+        fn setLevel(
+            self: Pin<&mut EdgeSE3ProjectXYZOnlyPose>,
             level: i32,
         );
-        fn compute_error(self: &BridgeEdgeSE3ProjectXYZOnlyPose);
-        fn chi2(self: &BridgeEdgeSE3ProjectXYZOnlyPose) -> f64;
-        fn set_robust_kernel(self: &BridgeEdgeSE3ProjectXYZOnlyPose, reset: bool);
+        #[rust_name = "compute_error"]
+        fn computeError(self: Pin<&mut EdgeSE3ProjectXYZOnlyPose>);
+        fn chi2(self: &EdgeSE3ProjectXYZOnlyPose) -> f64;
+        fn set_robust_kernel(self: Pin<&mut EdgeSE3ProjectXYZOnlyPose>, reset: bool);
     }
 }

@@ -5,7 +5,7 @@ use log::{info, error};
 use na::Vector3;
 use serde::{Deserialize, Serialize};
 extern crate nalgebra as na;
-use crate::{matrix::DVVector3, modules::orbmatcher::descriptor_distance, registered_modules::FEATURE_DETECTION};
+use crate::{matrix::DVVector3, modules::orbmatcher::{descriptor_distance, SCALE_FACTORS}, registered_modules::FEATURE_DETECTION};
 use super::{map::{Id, Map}, observations::Observations};
 
 // Note: Implementing typestate for like here: http://cliffle.com/blog/rust-typestate/#a-simple-example-the-living-and-the-dead
@@ -192,11 +192,11 @@ impl MapPoint<FullMapPoint> {
         let dist = pc.norm();
 
         let level = self.full_mp_info.observations.get_level(ref_kf);
-        let level_scale_factor = ref_kf.scale_factors[level as usize] as f64; //TODO (MVP) This is always going to be an empty vector, need to fill it like in optimizer
+        let level_scale_factor = SCALE_FACTORS[level as usize] as f64; //TODO (MVP) This is always going to be an empty vector, need to fill it like in optimizer
         let n_levels = GLOBAL_PARAMS.get::<i32>(FEATURE_DETECTION, "n_levels");
 
         let max_distance = dist * level_scale_factor;
-        let min_distance = self.full_mp_info.max_distance / (ref_kf.scale_factors[(n_levels - 1) as usize] as f64);
+        let min_distance = self.full_mp_info.max_distance / (SCALE_FACTORS[(n_levels - 1) as usize] as f64);
         let normal_vector = DVVector3::new(normal / (n as f64));
 
         Some((max_distance, min_distance, normal_vector))

@@ -25,7 +25,7 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "hyper_graph.h"
-
+#include <iostream>
 #include <assert.h>
 #include <queue>
 

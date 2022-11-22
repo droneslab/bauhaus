@@ -164,6 +164,7 @@ namespace g2o{
   }
 
   bool SparseOptimizer::buildIndexMapping(SparseOptimizer::VertexContainer& vlist){
+      cout << "vlist size " << vlist.size() << endl;
     if (! vlist.size()){
       _ivMap.clear();
       return false;
@@ -200,6 +201,7 @@ namespace g2o{
     HyperGraph::VertexSet vset;
     for (VertexIDMap::iterator it=vertices().begin(); it!=vertices().end(); ++it)
       vset.insert(it->second);
+    cout << "vset size " << vset.size() << endl;
     return initializeOptimization(vset,level);
   }
 
@@ -224,13 +226,16 @@ namespace g2o{
         OptimizableGraph::Edge* e=reinterpret_cast<OptimizableGraph::Edge*>(*it);
         if (level < 0 || e->level() == level) {
 
+            cout << "e vertices size " << e->vertices().size() << endl;
+
           bool allVerticesOK = true;
           for (vector<HyperGraph::Vertex*>::const_iterator vit = e->vertices().begin(); vit != e->vertices().end(); ++vit) {
             if (vset.find(*vit) == vset.end()) {
-              allVerticesOK = false;
+              allVerticesOK = false; // Sofiya: way way way more e->vertices than there are in vset (ie, vertices in general)
               break;
             }
           }
+          cout << "adding to level edges... " << allVerticesOK << endl;
           if (allVerticesOK && !e->allVerticesFixed()) {
             auxEdgeSet.insert(e);
             levelEdges++;

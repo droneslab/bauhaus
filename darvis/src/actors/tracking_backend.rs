@@ -12,7 +12,7 @@ use crate::{
         map::Map, map_actor::MapWriteMsg, map_actor::{MAP_ACTOR}, map::Id,
         keyframe::KeyFrame, frame::Frame, pose::Pose, mappoint::{MapPoint, FullMapPoint}, bow,
     },
-    modules::{camera::Camera, camera::CameraType, imu::{ImuModule}, optimizer::*, orbmatcher, map_initialization::Initialization, relocalization::Relocalization},
+    modules::{camera::Camera, camera::CameraType, imu::{ImuModule}, optimizer::{*, self}, orbmatcher, map_initialization::Initialization, relocalization::Relocalization},
 };
 
 use super::messages::{InitialMapMsg, KeyFrameIdMsg};
@@ -84,9 +84,6 @@ pub struct DarvisTrackingBack {
     camera: Camera,
     map_updated : bool,  // TODO (design) I'm not sure we want to use this
 
-    // Utilities from darvis::utils
-    optimizer: Optimizer,
-
     // Lists used to recover the full camera trajectory at the end of the execution.
     // Basically we store the reference keyframe for each frame and its relative transformation
     trajectory_poses: Vec<Pose>, //mlRelativeFramePoses
@@ -121,7 +118,6 @@ impl DarvisTrackingBack {
             min_num_features: GLOBAL_PARAMS.get::<i32>(TRACKING_BACKEND, "min_num_features"),
             max_frames: GLOBAL_PARAMS.get::<f64>(SYSTEM_SETTINGS, "fps") as i64,
             min_frames: 0,
-            optimizer: Optimizer::new(),
             ..Default::default()
         }
     }
@@ -129,21 +125,6 @@ impl DarvisTrackingBack {
     fn handle_message(&mut self, context: axiom::prelude::Context, msg: Arc<FeatureMsg>) {
         let map_actor = context.system.find_aid_by_name(MAP_ACTOR).unwrap();
         let tracking_actor = context.system.find_aid_by_name(TRACKING_BACKEND).unwrap();
-
-        //Pranay: need to fill Orb extractor setting for each frame, as it is needed in further processing in mappoints
-        // For now it is computated below for each new frame, but ideally it should be common for each frame, "static variables"
-        let mut scale_factors: Vec<f32> = Vec::new();
-        let scale_factor = GLOBAL_PARAMS.get::<f64>(FEATURE_DETECTION, "scale_factor");
-        let n_levels = GLOBAL_PARAMS.get::<i32>(FEATURE_DETECTION, "n_levels");
-        
-        scale_factors.resize(n_levels as usize, 1.0);
-
-        for i in 1..n_levels as usize
-        {
-            scale_factors[i]=scale_factors[i-1]*scale_factor as f32;
-        }
-
-
 
         // Sofiya interface: creating new frame
         self.last_frame_id += 1;
@@ -154,7 +135,6 @@ impl DarvisTrackingBack {
             msg.image_width,
             msg.image_height,
             &self.camera,
-            &scale_factors
         ) {
             Ok(frame) => frame,
             Err(e) => panic!("Problem creating a frame: {:?}", e),
@@ -382,7 +362,7 @@ impl DarvisTrackingBack {
         self.current_frame.mappoint_matches = vp_mappoint_matches.clone();
         self.current_frame.pose = Some(self.last_frame.as_ref().unwrap().pose.unwrap());
 
-        if let Some((_, pose)) = self.optimizer.optimize_pose(&mut self.current_frame, &self.map) {
+        if let Some((_, pose)) = optimizer::optimize_pose(&mut self.current_frame, &self.map) {
             self.current_frame.pose = Some(pose);
         }
 
@@ -463,7 +443,7 @@ impl DarvisTrackingBack {
         }
 
         // Optimize frame pose with all matches
-        self.optimizer.optimize_pose(&mut self.current_frame, &self.map)
+        optimizer::optimize_pose(&mut self.current_frame, &self.map)
             .map(|(_,pose)| self.current_frame.pose = Some(pose) );
 
         // Discard outliers
@@ -565,12 +545,12 @@ impl DarvisTrackingBack {
 
         let mut inliers = 0;
         if !self.map.read().imu_initialized || (self.current_frame.id <= self.relocalization.last_reloc_frame_id + (self.frames_to_reset_imu as i32)) {
-            self.optimizer.optimize_pose(&mut self.current_frame, &self.map)
+            optimizer::optimize_pose(&mut self.current_frame, &self.map)
                 .map(|(_,pose)| self.current_frame.pose = Some(pose) );
         } else if !self.map_updated {
-            let _inliers = self.optimizer.pose_inertial_optimization_last_frame(&mut self.current_frame, &self.map);
+            let _inliers = optimizer::pose_inertial_optimization_last_frame(&mut self.current_frame, &self.map);
         } else {
-            let _inliers = self.optimizer.pose_inertial_optimization_last_keyframe(&mut self.current_frame);
+            let _inliers = optimizer::pose_inertial_optimization_last_keyframe(&mut self.current_frame);
         }
 
         self.matches_in_frame = 0;

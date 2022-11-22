@@ -14,7 +14,8 @@ mod registered_modules;
 mod dvmap;
 mod modules;
 
-use crate::actors::messages::ImagesMsg;
+use crate::dvmap::bow::VOCABULARY;
+use crate::{actors::messages::ImagesMsg, dvmap::bow::DVVocabulary};
 use crate::dvmap::map::Map;
 use registered_modules::{FeatureManager, FRAME_LOADER};
 
@@ -40,6 +41,8 @@ fn main() {
         let actor_system = initialize_actor_system(actor_info, &writeable_map);
         // Create map actor
         let map_actor_aid = MapActor::spawn(&actor_system, writeable_map);
+
+        VOCABULARY.access();
 
         info!("System ready to receive messages");
 
@@ -124,7 +127,7 @@ fn setup_logger() -> Result<(), fern::InitError> {
                 message = message
             ))
         })
-        .level(log::LevelFilter::Info)
+        .level(log::LevelFilter::Debug)
         .level_for("axiom", log::LevelFilter::Warn)
         .chain(std::io::stdout())
         .chain(fern::log_file("output.log")?)

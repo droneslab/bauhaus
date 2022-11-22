@@ -2,7 +2,7 @@ use std::{collections::{HashMap}, iter::FromIterator};
 use chrono::{DateTime, Utc};
 use derivative::Derivative;
 use dvcore::{matrix::{DVVector3}};
-use log::{error, info};
+use log::{error, info, debug};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use crate::{dvmap::{map::Id, pose::Pose, frame::*, bow::DVVocabulary},modules::{imu::*},};
 use super::{mappoint::{MapPoint, FullMapPoint}, map::{Map}, features::Features, bow::BoW};
@@ -27,12 +27,6 @@ pub struct KeyFrame<K: KeyFrameState> {
 
     // scale: f64,
     // depth_threshold: f64,
-
-    // Scale //
-    pub scale_factors: Vec<f32>, // mvScaleFactors
-    // Used in ORBExtractor, which we haven't implemented
-    // we're using detect_and_compute from opencv instead
-    // pub level_sigma2: Vec<f32>, // mvLevelSigma2
 
     // IMU //
     // Preintegrated IMU measurements from previous keyframe
@@ -93,7 +87,6 @@ impl KeyFrame<PrelimKeyFrame> {
             pose: frame.pose.unwrap(),
             features: frame.features.clone(),
             bow: frame.bow.clone(),
-            scale_factors: frame.scale_factors.clone(),
             imu_bias: frame.imu_bias,
             imu_preintegrated: frame.imu_preintegrated,
             stereo_baseline: 0.0, // TODO (Stereo)
@@ -121,7 +114,6 @@ impl KeyFrame<FullKeyFrame> {
             pose: prelim_keyframe.pose,
             features: prelim_keyframe.features.clone(),
             bow: prelim_keyframe.bow.clone(),
-            scale_factors: prelim_keyframe.scale_factors.clone(),
             imu_bias: prelim_keyframe.imu_bias,
             imu_preintegrated: prelim_keyframe.imu_preintegrated,
             stereo_baseline: prelim_keyframe.stereo_baseline,
@@ -168,11 +160,12 @@ impl KeyFrame<FullKeyFrame> {
     pub fn insert_all_connections(&mut self, new_connections: HashMap::<Id, i32>, is_init_kf: bool) -> Option<Id> {
         self.full_kf_info.connected_keyframes.insert_all_connections(new_connections);
         if self.full_kf_info.parent.is_none() && !is_init_kf { 
-            self.change_parent(self.full_kf_info.connected_keyframes.first());
-            info!("keyframe; insert_all_connections ;Returning Some {} -> {:?} ", is_init_kf, self.full_kf_info.connected_keyframes);
+            let parent_id = self.full_kf_info.connected_keyframes.first();
+            self.change_parent(parent_id);
+            info!("keyframe;inserted parent;{};for child;{}", parent_id, self.full_kf_info.id);
             Some(self.full_kf_info.connected_keyframes.first())
         } else {
-            info!("keyframe; insert_all_connections ;Returning None");
+            info!("keyframe;not inserting parent for kf;{}", self.full_kf_info.id);
             None
         }
     }
@@ -282,15 +275,11 @@ impl ConnectedKeyFrames {
         // TODO (verify): Sorting might be backwards? Not quite clear whether low weight = earlier index or vice versa
         //KeyFrame::UpdateBestCovisibles
         self.ordered.sort_by(|(_,w1), (_,w2)| w2.cmp(&w1));
-        let max_len = self.ordered.len(); // Pranay: not sure why it was set to "30", i.e. self.ordered[30].1;
-        if max_len >0
-        {
-            self.cutoff_weight = self.ordered[max_len-1].1;
-        }
-        else
-        {
+        let max_len = self.ordered.len(); 
+        if max_len >= 30 {
+            self.cutoff_weight = self.ordered[30].1;
+        } else {
             self.cutoff_weight =0;
         }
-        
     }
 }

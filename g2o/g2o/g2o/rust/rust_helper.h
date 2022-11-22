@@ -13,20 +13,20 @@ namespace g2o {
     // Note: it would be nice to combine these two objects into one
     // and return a BaseEdge pointer instead, but that requires making it
     // a template, and I'm not sure how that would work with the rust bindings.
-    class BridgeEdgeSE3ProjectXYZOnlyPose{
-        public:
-            std::shared_ptr<EdgeSE3ProjectXYZOnlyPose> edge;
+    // class BridgeEdgeSE3ProjectXYZOnlyPose{
+    //     public:
+    //         std::unique_ptr<EdgeSE3ProjectXYZOnlyPose> edge;
 
-            void set_level(int level) const;
-            void compute_error() const;
-            double chi2() const;
-            void set_robust_kernel(bool reset) const;
-    };
+    //         void set_level(int level);
+    //         void compute_error() const;
+    //         double chi2() const;
+    //         void set_robust_kernel(bool reset);
+    // };
 
-    class BridgeEdgeSE3ProjectXYZ{
-        public:
-            std::shared_ptr<EdgeSE3ProjectXYZ> edge;
-    };
+    // class BridgeEdgeSE3ProjectXYZ{
+    //     public:
+    //         std::unique_ptr<EdgeSE3ProjectXYZ> edge;
+    // };
 
     class BridgeSparseOptimizer {
     public:
@@ -34,38 +34,34 @@ namespace g2o {
         // ~BridgeSparseOptimizer();
 
         // vertices
-        void remove_vertex (std::shared_ptr<VertexSBAPointXYZ> vertex) const;
-        std::shared_ptr<VertexSE3Expmap> add_frame_vertex (
+        bool has_vertex(int id) const;
+        void remove_vertex(std::shared_ptr<VertexSBAPointXYZ> vertex);
+        std::shared_ptr<VertexSE3Expmap> add_frame_vertex(
             int vertex_id, Pose pose, bool set_fixed
-        ) const;
-        std::shared_ptr<VertexSBAPointXYZ> add_mappoint_vertex (
-            int vertex_id,  Pose pose
-        ) const;
-        void set_vertex_estimate(
-            std::shared_ptr<VertexSE3Expmap> vertex, 
-            Pose pose
-        ) const;
+        );
+        std::shared_ptr<VertexSBAPointXYZ> add_mappoint_vertex(int vertex_id,  Pose pose);
+        void set_vertex_estimate(std::shared_ptr<VertexSE3Expmap> vertex, Pose pose);
 
         // edges
-        std::shared_ptr<BridgeEdgeSE3ProjectXYZOnlyPose> add_edge_monocular_unary(
+        std::unique_ptr<EdgeSE3ProjectXYZOnlyPose> add_edge_monocular_unary(
             bool robust_kernel, int vertex_id,
             int keypoint_octave, float keypoint_pt_x, float keypoint_pt_y, float invSigma2,
             array<double, 3> mp_world_position
-        ) const;
-        std::shared_ptr<BridgeEdgeSE3ProjectXYZ> add_edge_monocular_binary(
-            bool robust_kernel, int vertex_id_1, int vertex_id_2,
+        );
+        std::unique_ptr<EdgeSE3ProjectXYZ> add_edge_monocular_binary(
+            bool robust_kernel, std::shared_ptr<VertexSBAPointXYZ> vertex1, std::shared_ptr<VertexSE3Expmap> vertex2,
             int keypoint_octave, float keypoint_pt_x, float keypoint_pt_y, float invSigma2
-        ) const;
+        );
 
         // void add_edge_monocular(
-        //     int mp_world_index, std::shared_ptr<BridgeEdgeSE3ProjectXYZOnlyPose> edge,
+        //     int mp_world_index, std::shared_ptr<EdgeSE3ProjectXYZ> edge,
         //     array<double, 3> mp_world_position
         // ) const;
         void _add_edge_stereo() const;
         int num_edges() const;
 
         // optimization
-        void optimize(int iterations) const;
+        void optimize(int iterations);
         Pose recover_optimized_frame_pose(int vertex_id) const;
         Pose recover_optimized_mappoint_pose(int vertex_id) const;
 

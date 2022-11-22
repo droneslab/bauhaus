@@ -11,7 +11,8 @@ use crate::dvmap::bow;
 use crate::dvmap::keyframe::FullKeyFrame;
 use crate::dvmap::map_actor::MapWriteMsg;
 use crate::dvmap::{map::Map, map_actor::MAP_ACTOR, keyframe::{KeyFrame, PrelimKeyFrame}};
-use crate::modules::{imu::ImuModule, optimizer::Optimizer};
+use crate::modules::optimizer;
+use crate::modules::{imu::ImuModule};
 use crate::registered_modules::LOOP_CLOSING;
 
 use super::messages::{Reset, KeyFrameMsg, KeyFrameIdMsg};
@@ -26,7 +27,6 @@ pub struct DarvisLocalMapping {
 
     // Modules
     imu: ImuModule,
-    optimizer: Optimizer,
 }
 
 impl DarvisLocalMapping {
@@ -36,7 +36,6 @@ impl DarvisLocalMapping {
         DarvisLocalMapping {
             map,
             sensor,
-            optimizer: Optimizer::new(),
             ..Default::default()
         }
     }
@@ -137,7 +136,7 @@ impl DarvisLocalMapping {
                 false => {
                     // TODO (design): ORBSLAM will abort additional work if there are too many keyframes in the msg queue.
                     let force_stop_flag = false; // mbAbortBA
-                    self.optimizer.local_bundle_adjustment(&self.map.read(), &self.current_keyframe, force_stop_flag, 0, 0,0, 0);
+                    optimizer::local_bundle_adjustment(&self.map.read(), &self.current_keyframe, force_stop_flag, 0, 0,0, 0);
                 }
             }
         }

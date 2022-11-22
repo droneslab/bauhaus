@@ -16,6 +16,7 @@ pub struct DVVocabulary {
     filename: String,
 }
 impl DVVocabulary {
+    pub fn access(&self) {}
     pub fn load(filename: String) -> Self {
         let_cxx_string!(file = filename.clone());
         info!("Loading vocabulary");
