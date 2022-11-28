@@ -2,8 +2,8 @@ use axiom::prelude::*;
 use dvcore::{plugin_functions::*, lockwrap::ReadOnlyWrapper};
 use crate::dvmap::{map::Map};
 
+pub static SHUTDOWN: &str = "SHUTDOWN";
 // REGISTER MODULE: add a string to refer to your module here
-pub static FRAME_LOADER: &str = "FRAME_LOADER";
 pub static TRACKING_FRONTEND: &str = "TRACKING_FRONTEND";
 pub static TRACKING_BACKEND: &str = "TRACKING_BACKEND";
 pub static LOCAL_MAPPING: &str = "LOCAL_MAPPING";
@@ -36,7 +36,6 @@ pub fn getmethod(fnname: &String, id: &String, map: ReadOnlyWrapper<Map>) -> Fun
 {
     match fnname.as_ref()
     {
-        "frameloader" => FunctionProxy {function: Box::new(crate::actors::frameloader::DarvisFrameLoader::new())},
         "tracking_frontend" => FunctionProxy {function: Box::new(crate::actors::tracking_frontend::DarvisTrackingFront::new(map))},
         "tracking_backend" => FunctionProxy {function: Box::new(crate::actors::tracking_backend::DarvisTrackingBack::new(map))},
         "local_mapping" => FunctionProxy {function: Box::new(crate::actors::local_mapping::DarvisLocalMapping::new(map))},

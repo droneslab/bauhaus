@@ -2,7 +2,7 @@ use std::{collections::{HashMap}, iter::FromIterator};
 use chrono::{DateTime, Utc};
 use derivative::Derivative;
 use dvcore::{matrix::{DVVector3}};
-use log::{error, info, debug};
+use log::{error, info, debug, warn};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use crate::{dvmap::{map::Id, pose::Pose, frame::*, bow::DVVocabulary},modules::{imu::*},};
 use super::{mappoint::{MapPoint, FullMapPoint}, map::{Map}, features::Features, bow::BoW};
@@ -93,8 +93,6 @@ impl KeyFrame<PrelimKeyFrame> {
             full_kf_info: PrelimKeyFrame{},
         };
 
-        kf.compute_bow(vocabulary);
-
         kf
     }
 
@@ -162,10 +160,10 @@ impl KeyFrame<FullKeyFrame> {
         if self.full_kf_info.parent.is_none() && !is_init_kf { 
             let parent_id = self.full_kf_info.connected_keyframes.first();
             self.change_parent(parent_id);
-            info!("keyframe;inserted parent;{};for child;{}", parent_id, self.full_kf_info.id);
+            debug!("keyframe;inserted parent;{};for child;{}", parent_id, self.full_kf_info.id);
             Some(self.full_kf_info.connected_keyframes.first())
         } else {
-            info!("keyframe;not inserting parent for kf;{}", self.full_kf_info.id);
+            debug!("keyframe;not inserting parent for kf;{}", self.full_kf_info.id);
             None
         }
     }
@@ -194,7 +192,7 @@ impl KeyFrame<FullKeyFrame> {
         // this needs to be generic on sensor, so it can't be called if the sensor doesn't have a right camera
     }
 
-    pub fn compute_scene_median_depth(&self, map: &Map, q: i32) -> f64 {
+    pub fn compute_scene_median_depth(&self, mappoints: &HashMap<Id, MapPoint<FullMapPoint>>, q: i32) -> f64 {
         if self.features.num_keypoints == 0 {
             return -1.0;
         }
@@ -206,7 +204,7 @@ impl KeyFrame<FullKeyFrame> {
         let zcw = self.pose.get_translation()[2];
 
         for (_, (mp_id, _)) in &self.mappoint_matches {
-            let world_pos = *(map.get_mappoint(mp_id).unwrap().position);
+            let world_pos = *(mappoints.get(mp_id).unwrap().position);
             let z = (rcw2 * world_pos)[0] + zcw; // first part of this term is scalar but still need to get it from Matrix<1,1> to f64
             depths.push(z);
         }

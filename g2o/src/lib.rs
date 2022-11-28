@@ -32,25 +32,22 @@ pub mod ffi {
             vertex_id: i32,
             pose: Pose,
             set_fixed: bool
-        ) -> SharedPtr<VertexSE3Expmap>;
+        );
         fn add_mappoint_vertex(
             self: Pin<&mut BridgeSparseOptimizer>,
             vertex_id: i32,
             pose: Pose
-        ) -> SharedPtr<VertexSBAPointXYZ>;
+        );
         fn set_vertex_estimate(
             self: Pin<&mut BridgeSparseOptimizer>,
-            vertex: SharedPtr<VertexSE3Expmap>,
+            vertex: i32,
             pose: Pose,
         );
         fn remove_vertex(
             self: Pin<&mut BridgeSparseOptimizer>,
-            vertex: SharedPtr<VertexSBAPointXYZ>,
+            vertex_id: i32,
         );
-        fn has_vertex(
-            self: &BridgeSparseOptimizer,
-            id: i32,
-        ) -> bool;
+        fn has_vertex(self: &BridgeSparseOptimizer, id: i32) -> bool;
 
         // creating/adding edges to graph
         fn add_edge_monocular_unary(
@@ -62,17 +59,17 @@ pub mod ffi {
             keypoint_pt_y: f32,
             invSigma2: f32,
             mp_world_position: [f64; 3]
-        ) -> UniquePtr<EdgeSE3ProjectXYZOnlyPose>;
+        );
         fn add_edge_monocular_binary(
             self: Pin<&mut BridgeSparseOptimizer>,
             robust_kernel: bool,
-            vertex_id_1: SharedPtr<VertexSBAPointXYZ>,
-            vertex_id_2: SharedPtr<VertexSE3Expmap>,
+            vertex_id_1: i32,
+            vertex_id_2: i32,
             keypoint_octave: i32,
             keypoint_pt_x: f32,
             keypoint_pt_y: f32,
             invSigma2: f32,
-        ) -> UniquePtr<EdgeSE3ProjectXYZ>;
+        );
         // fn set_edge_worldpos(
         //     self: &BridgeSparseOptimizer,
         //     mp_world_index: i32,
@@ -96,11 +93,11 @@ pub mod ffi {
         );
         fn recover_optimized_frame_pose(
             self: &BridgeSparseOptimizer,
-            vertex_id: i32,
+            vertex: i32,
         ) -> Pose;
         fn recover_optimized_mappoint_pose(
             self: &BridgeSparseOptimizer,
-            vertex_id: i32,
+            vertex: i32,
         ) -> Pose;
 
         // optimization within edge

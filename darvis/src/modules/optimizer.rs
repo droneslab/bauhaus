@@ -7,6 +7,7 @@ use dvcore::{
     lockwrap::ReadOnlyWrapper,
     config::{GLOBAL_PARAMS, SYSTEM_SETTINGS, Sensor},
 };
+use flamer::flame;
 use g2o::ffi::{VertexSE3Expmap, VertexSBAPointXYZ, EdgeSE3ProjectXYZ};
 use log::{info, debug, warn};
 use nalgebra::Matrix3;
@@ -810,7 +811,8 @@ pub fn optimize_pose(frame: &mut Frame, map: &ReadOnlyWrapper<Map>) -> Option<(i
     // example of how to send a string to C++
     // let_cxx_string!(vertex_name = "VertexSE3Expmap");
 
-    let vertex = optimizer.pin_mut().add_frame_vertex(1, (*frame.pose.as_ref().unwrap()).into(), false);
+    let frame_vertex_id = 1;
+    optimizer.pin_mut().add_frame_vertex(frame_vertex_id, (*frame.pose.as_ref().unwrap()).into(), false);
 
     if frame.mappoint_matches.len() < 3 {
         return None;
@@ -847,7 +849,7 @@ pub fn optimize_pose(frame: &mut Frame, map: &ReadOnlyWrapper<Map>) -> Option<(i
                         let map_read_lock = map.read();
                         let position = &map_read_lock.get_mappoint(mp_id).unwrap().position;
                         let edge = optimizer.pin_mut().add_edge_monocular_unary(
-                            false, 1, keypoint.octave, keypoint.pt.x, keypoint.pt.y,
+                            false, frame_vertex_id, keypoint.octave, keypoint.pt.x, keypoint.pt.y,
                             INV_LEVEL_SIGMA2[keypoint.octave as usize],
                             (position).into()
                         );
@@ -884,33 +886,34 @@ pub fn optimize_pose(frame: &mut Frame, map: &ReadOnlyWrapper<Map>) -> Option<(i
         // Both pointers point to the same object on the heap.
         // see https://cxx.rs/binding/sharedptr.html
         optimizer.pin_mut().set_vertex_estimate(
-            vertex.clone(), 
+            frame_vertex_id, 
             (*frame.pose.as_ref().unwrap()).into()
         );
 
         optimizer.pin_mut().optimize(iterations[iteration]);
 
         num_bad = 0;
-        for (index, edge) in &mut edges {
-            if frame.is_mp_outlier(&index) {
-                edge.pin_mut().compute_error();
-            }
+        // Sofiya todo; need to uncomment this
+        // for (index, edge) in &mut edges {
+        //     if frame.is_mp_outlier(&index) {
+        //         edge.pin_mut().compute_error();
+        //     }
 
-            let chi2 = edge.chi2();
+        //     let chi2 = edge.chi2();
 
-            if chi2 > chi2_mono[iteration] {
-                frame.set_mp_outlier(&index, true);
-                edge.pin_mut().set_level(1);
-                num_bad += 1;
-            } else {
-                frame.set_mp_outlier(&index, false);
-                edge.pin_mut().set_level(0);
-            }
+        //     if chi2 > chi2_mono[iteration] {
+        //         frame.set_mp_outlier(&index, true);
+        //         edge.pin_mut().set_level(1);
+        //         num_bad += 1;
+        //     } else {
+        //         frame.set_mp_outlier(&index, false);
+        //         edge.pin_mut().set_level(0);
+        //     }
 
-            if iteration == 2 {
-                edge.pin_mut().set_robust_kernel(false);
-            }
-        }
+        //     if iteration == 2 {
+        //         edge.pin_mut().set_robust_kernel(false);
+        //     }
+        // }
 
         // TODO (rigid body) SLAM with respect to a rigid body...probably don't have to do this rn?
         // vpEdgesMono_FHR comes from "SLAM with respect to a rigid body"
@@ -982,7 +985,7 @@ pub fn optimize_pose(frame: &mut Frame, map: &ReadOnlyWrapper<Map>) -> Option<(i
     }
 
     // Recover optimized pose
-    let pose = optimizer.recover_optimized_frame_pose(0);
+    let pose = optimizer.recover_optimized_frame_pose(frame_vertex_id);
 
     // Return number of inliers
     return Some((initial_correspondences - num_bad, pose.into()));
@@ -997,33 +1000,41 @@ pub fn global_bundle_adjustment(map: &Map, loop_kf: i32, iterations: i32) -> BAR
 
     // Set KeyFrame vertices
     let keyframes = map.get_all_keyframes();
-    let mut keyframe_vertices = HashMap::<Id, SharedPtr<VertexSE3Expmap>>::new();
+    let mut kf_vertex_ids = Vec::new();//HashMap::<Id, SharedPtr<VertexSE3Expmap>>::new();
     for (id, kf) in keyframes {
-        keyframe_vertices.insert(*id,
-            optimizer.pin_mut().add_frame_vertex(
-                *id,
-                (kf.pose).into(),
-                *id == map.initial_kf_id
-            )
+        flame::start("add_frame_vertex");
+        optimizer.pin_mut().add_frame_vertex(
+            *id,
+            (kf.pose).into(),
+            *id == map.initial_kf_id
         );
+        flame::end("add_frame_vertex");
+        kf_vertex_ids.push(*id);
 
         if *id > max_kf_id {
             max_kf_id = *id;
         }
     }
 
-    let mut mappoint_vertices = HashMap::<Id, SharedPtr<VertexSBAPointXYZ>>::new();
-    let mut edges = Vec::<UniquePtr<EdgeSE3ProjectXYZ>>::new();
+    let mut mappoint_vertices = Vec::new();
     // Set MapPoint vertices
+    flame::start("get_all_mappoints");
     let mappoints = map.get_all_mappoints();
+    flame::end("get_all_mappoints");
+
     for (mp_id, mappoint) in mappoints {
         let mp_vertex_id = mp_id + max_kf_id + 1;
-        let mp_vertex = optimizer.pin_mut().add_mappoint_vertex(
+        // flame::start("add_mappoint_vertex");
+        optimizer.pin_mut().add_mappoint_vertex(
             mp_vertex_id,
             Pose::new(&*mappoint.position, &Matrix3::zeros()).into() // create pose out of translation only
         );
+        // flame::end("add_mappoint_vertex");
 
+        flame::start("get_observations");
         let observations = mappoint.get_observations();
+        flame::end("get_observations");
+
         let mut n_edges = 0;
 
         //SET EDGES
@@ -1041,17 +1052,15 @@ pub fn global_bundle_adjustment(map: &Map, loop_kf: i32, iterations: i32) -> BAR
                 _ => {
                     if left_index != -1 {
                         n_edges += 1;
+
+                        flame::start("add_edge_monocular_binary");
                         let keypoint = map.get_keyframe(kf_id).unwrap().features.get_keypoint(left_index as usize);
-
-                        warn!("add edge monocular binary");
-
-                        edges.push(
-                                optimizer.pin_mut().add_edge_monocular_binary(
-                                false, mp_vertex.clone(), keyframe_vertices.get(kf_id).unwrap().clone(),
-                                keypoint.octave, keypoint.pt.x, keypoint.pt.y,
-                                INV_LEVEL_SIGMA2[keypoint.octave as usize]
-                            )
+                        optimizer.pin_mut().add_edge_monocular_binary(
+                            false, mp_vertex_id, *kf_id,
+                            keypoint.octave, keypoint.pt.x, keypoint.pt.y,
+                            INV_LEVEL_SIGMA2[keypoint.octave as usize]
                         );
+                        flame::end("add_edge_monocular_binary");
                         // Sofiya: below code sets edge's camera to the frame's camera
                         // but are we sure we need it?
                         // edge->pCamera = pFrame->mpCamera;
@@ -1065,30 +1074,37 @@ pub fn global_bundle_adjustment(map: &Map, loop_kf: i32, iterations: i32) -> BAR
         }
 
         if n_edges == 0 {
-            optimizer.pin_mut().remove_vertex(mp_vertex);
+            warn!("Removed vertex");
+            // optimizer.pin_mut().remove_vertex(mp_vertex);
         } else {
-            mappoint_vertices.insert(*mp_id, mp_vertex);
+            mappoint_vertices.push(mp_vertex_id);
         }
     }
+    warn!("gba3");
 
     // Optimize!
+    flame::start("optimize");
     optimizer.pin_mut().optimize(iterations);
+    flame::end("optimize");
     info!("optimizer::global_bundle_adjustment;End of the optimization");
 
     // Recover optimized data
     // Keyframes
+    flame::start("recover");
     let mut optimized_kf_poses = HashMap::<Id, Pose>::new();
-    for (kf_id, _) in keyframe_vertices {
-        let pose = optimizer.recover_optimized_frame_pose(kf_id);
-        optimized_kf_poses.insert(kf_id, pose.into());
+    for id in kf_vertex_ids {
+        let pose = optimizer.recover_optimized_frame_pose(id);
+        optimized_kf_poses.insert(id, pose.into());
     }
 
     //Points
     let mut optimized_mp_poses = HashMap::<Id, Pose>::new();
-    for (mp_id, _) in mappoint_vertices {
-        let pose = optimizer.recover_optimized_mappoint_pose(mp_id);
-        optimized_mp_poses.insert(mp_id, pose.into());
+    for id in mappoint_vertices {
+        let pose = optimizer.recover_optimized_mappoint_pose(id);
+        optimized_mp_poses.insert(id, pose.into());
+        debug!("pose {:?}", optimized_mp_poses.get(&id).unwrap());
     }
+    flame::end("recover");
 
     BAResult {
         optimized_mp_poses, optimized_kf_poses,

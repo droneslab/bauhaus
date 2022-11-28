@@ -1,9 +1,11 @@
 use std::collections::HashSet;
 
 use axiom::message::ActorMessage;
+use chrono::{DateTime, Utc};
 use dvcore::{
     matrix::{ DVVectorOfKeyPoint, DVMatrix, DVMatrixGrayscale},
 };
+use serde::{Serialize, Deserialize};
 use crate::dvmap::{keyframe::{KeyFrame, PrelimKeyFrame, KeyFrameState, FullKeyFrame}, pose::Pose, map::Id};
 
 // Note: Can avoid having to serialize/deserialize every message 
@@ -11,6 +13,43 @@ use crate::dvmap::{keyframe::{KeyFrame, PrelimKeyFrame, KeyFrameState, FullKeyFr
 // "impl ActorMessage for FeatureMsg" instead of just "impl FeatureMsg".
 // Switch this in the future if we want to do anything over the network.
 // https://github.com/rsimmonsjr/axiom/issues/99
+
+// For shutdown actor
+pub struct ShutdownMessage {}
+impl ActorMessage for ShutdownMessage {}
+pub struct TrajectoryMessage {
+    pub pose: Option<Pose>,
+    pub ref_kf_id: Option<Id>,
+    pub timestamp: Option<DateTime<Utc>>,
+}
+impl ActorMessage for TrajectoryMessage {}
+impl TrajectoryMessage {
+    pub fn empty() -> Self {
+        TrajectoryMessage{
+            pose: None,
+            ref_kf_id: None,
+            timestamp: None,
+        }
+    }
+    pub fn new(pose: Pose, ref_kf_id: Id, timestamp: DateTime<Utc>) -> Self {
+        TrajectoryMessage{
+            pose: Some(pose),
+            ref_kf_id: Some(ref_kf_id),
+            timestamp: Some(timestamp),
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct VisPathMsg {
+    pub last_img_path: String // last processed image path.
+}
+
+impl VisPathMsg {
+    pub fn new(last_img_path: String) -> Self {
+        Self { last_img_path }
+    }
+}
 
 pub struct Reset {}
 impl ActorMessage for Reset {}

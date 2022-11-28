@@ -1,10 +1,11 @@
 use std::collections::{HashMap, HashSet};
 use chrono::{DateTime, Utc};
 use dvcore::config::{GLOBAL_PARAMS, Sensor, FrameSensor};
+use log::warn;
 use serde::{Deserialize, Serialize};
 
 use crate::{config::{SYSTEM_SETTINGS}, matrix::*, modules::{imu::IMUBias, imu::IMUPreIntegrated, camera::*,}, actors::tracking_backend::TrackedMapPointData, dvmap::mappoint::{FullMapPoint, MapPoint}};
-use super::{pose::Pose, map::{Id, Map}, features::{FRAME_GRID_ROWS, FRAME_GRID_COLS, Features}, bow::{DVVocabulary, BoW}};
+use super::{pose::Pose, map::{Id, Map}, features::{FRAME_GRID_ROWS, FRAME_GRID_COLS, Features}, bow::{DVVocabulary, BoW, self}};
 
 #[derive(Debug, Clone, Default)]
 pub struct Frame {
@@ -43,8 +44,7 @@ impl Frame {
         im_width: i32, im_height: i32, camera: &Camera
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let sensor = GLOBAL_PARAMS.get::<Sensor>(SYSTEM_SETTINGS, "sensor");
-
-        Ok(Frame{
+        let mut frame = Frame{
             id,
             timestamp: Utc::now(),
             features: Features::new(keypoints_vec, descriptors_vec, im_width, im_height, camera, sensor)?,
@@ -52,13 +52,9 @@ impl Frame {
             camera: camera.clone(),
             sensor,
             ..Default::default()
-        })
-    }
-
-    pub fn compute_bow(&mut self, voc: &DVVocabulary) {
-        if self.bow.is_empty {
-            voc.transform(&self.features.descriptors, &mut self.bow);
-        }
+        };
+        bow::VOCABULARY.transform(&frame.features.descriptors, &mut frame.bow);
+        Ok(frame)
     }
 
     //* MapPoints */

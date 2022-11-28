@@ -35,28 +35,21 @@ namespace g2o {
 
         // vertices
         bool has_vertex(int id) const;
-        void remove_vertex(std::shared_ptr<VertexSBAPointXYZ> vertex);
-        std::shared_ptr<VertexSE3Expmap> add_frame_vertex(
-            int vertex_id, Pose pose, bool set_fixed
-        );
-        std::shared_ptr<VertexSBAPointXYZ> add_mappoint_vertex(int vertex_id,  Pose pose);
-        void set_vertex_estimate(std::shared_ptr<VertexSE3Expmap> vertex, Pose pose);
+        void remove_vertex(int vertex_id);
+        void add_frame_vertex(int vertex_id, Pose pose, bool set_fixed);
+        void add_mappoint_vertex(int vertex_id,  Pose pose);
+        void set_vertex_estimate(int vertex_id, Pose pose);
 
         // edges
-        std::unique_ptr<EdgeSE3ProjectXYZOnlyPose> add_edge_monocular_unary(
+        void add_edge_monocular_unary(
             bool robust_kernel, int vertex_id,
             int keypoint_octave, float keypoint_pt_x, float keypoint_pt_y, float invSigma2,
             array<double, 3> mp_world_position
         );
-        std::unique_ptr<EdgeSE3ProjectXYZ> add_edge_monocular_binary(
-            bool robust_kernel, std::shared_ptr<VertexSBAPointXYZ> vertex1, std::shared_ptr<VertexSE3Expmap> vertex2,
+        void add_edge_monocular_binary(
+            bool robust_kernel, int vertex1, int vertex2,
             int keypoint_octave, float keypoint_pt_x, float keypoint_pt_y, float invSigma2
         );
-
-        // void add_edge_monocular(
-        //     int mp_world_index, std::shared_ptr<EdgeSE3ProjectXYZ> edge,
-        //     array<double, 3> mp_world_position
-        // ) const;
         void _add_edge_stereo() const;
         int num_edges() const;
 
@@ -65,8 +58,10 @@ namespace g2o {
         Pose recover_optimized_frame_pose(int vertex_id) const;
         Pose recover_optimized_mappoint_pose(int vertex_id) const;
 
+        // void set_robust_kernel_for_edge(int edge_id, bool reset);
+
     private:
-        std::unique_ptr<SparseOptimizer> optimizer;
+        SparseOptimizer * optimizer;
         int optimizer_type; // see constructor 
         float deltaMono;
         float deltaStereo;

@@ -129,8 +129,7 @@ void BowVector::saveM(const std::string &filename, size_t W) const
 
 std::unique_ptr<BowVector> BowVector::clone() const {
     std::unique_ptr<BowVector> vec = std::make_unique<BowVector>();
-    map<WordId, WordValue> new_bowvector;
-    new_bowvector = *this; // mp3 is also a copy of mp2 (via copy-assignment)
+    *vec = *this;
     return vec;
 }
 

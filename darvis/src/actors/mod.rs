@@ -11,9 +11,6 @@ pub mod loop_closing;
 /// Visualization of the Frames and Trajectory traced
 pub mod vis;
 
-/// Frame Loader to load frames and stream to the Feature Extraction actor
-pub mod frameloader;
-
 /// FAST Feature extraction 
 pub mod fast;
 

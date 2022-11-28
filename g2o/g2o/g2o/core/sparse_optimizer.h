@@ -119,6 +119,8 @@ namespace g2o {
      * It can be called only after initializeOptimization
      */
     int optimize(int iterations, bool online = false);
+    
+    void printStats();
 
     /**
      * computes the blocks of the inverse of the specified pattern.
