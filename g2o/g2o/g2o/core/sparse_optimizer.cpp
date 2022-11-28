@@ -42,6 +42,7 @@
 #include "../stuff/macros.h"
 #include "../stuff/misc.h"
 #include "../../config.h"
+#include "../types/types_six_dof_expmap.h"
 
 namespace g2o{
   using namespace std;
@@ -60,12 +61,18 @@ namespace g2o{
 
   void SparseOptimizer::computeActiveErrors()
   {
+    // std::cout << "Here" << std::endl;
+    //       printStats();
+
     // call the callbacks in case there is something registered
     HyperGraphActionSet& actions = _graphActions[AT_COMPUTEACTIVERROR];
     if (actions.size() > 0) {
       for (HyperGraphActionSet::iterator it = actions.begin(); it != actions.end(); ++it)
         (*(*it))(this);
     }
+        // std::cout << "Next" << std::endl;
+
+    //   printStats();
 
 #   ifdef G2O_OPENMP
 #   pragma omp parallel for default (shared) if (_activeEdges.size() > 50)
@@ -80,7 +87,7 @@ namespace g2o{
       OptimizableGraph::Edge* e = _activeEdges[k];
       bool hasNan = arrayHasNaN(e->errorData(), e->dimension());
       if (hasNan) {
-        cerr << "computeActiveErrors(): found NaN in error for edge " << e << endl;
+        cerr << "computeActiveErrors(): found NaN in error for edge " << e->id() << endl;
       }
     }
 #  endif
@@ -164,7 +171,6 @@ namespace g2o{
   }
 
   bool SparseOptimizer::buildIndexMapping(SparseOptimizer::VertexContainer& vlist){
-      cout << "vlist size " << vlist.size() << endl;
     if (! vlist.size()){
       _ivMap.clear();
       return false;
@@ -201,7 +207,6 @@ namespace g2o{
     HyperGraph::VertexSet vset;
     for (VertexIDMap::iterator it=vertices().begin(); it!=vertices().end(); ++it)
       vset.insert(it->second);
-    cout << "vset size " << vset.size() << endl;
     return initializeOptimization(vset,level);
   }
 
@@ -225,17 +230,13 @@ namespace g2o{
       for (OptimizableGraph::EdgeSet::const_iterator it=vEdges.begin(); it!=vEdges.end(); ++it){
         OptimizableGraph::Edge* e=reinterpret_cast<OptimizableGraph::Edge*>(*it);
         if (level < 0 || e->level() == level) {
-
-            cout << "e vertices size " << e->vertices().size() << endl;
-
           bool allVerticesOK = true;
           for (vector<HyperGraph::Vertex*>::const_iterator vit = e->vertices().begin(); vit != e->vertices().end(); ++vit) {
             if (vset.find(*vit) == vset.end()) {
-              allVerticesOK = false; // Sofiya: way way way more e->vertices than there are in vset (ie, vertices in general)
+              allVerticesOK = false;
               break;
             }
           }
-          cout << "adding to level edges... " << allVerticesOK << endl;
           if (allVerticesOK && !e->allVerticesFixed()) {
             auxEdgeSet.insert(e);
             levelEdges++;
@@ -268,8 +269,26 @@ namespace g2o{
       _activeEdges.push_back(*it);
 
     sortVectorContainers();
+
+    // printStats();
     return buildIndexMapping(_activeVertices);
   }
+
+void SparseOptimizer::printStats() {
+    for (VertexIDMap::iterator it=vertices().begin(); it!=vertices().end(); ++it){
+    auto bla = it->second;
+      OptimizableGraph::Vertex* v= (OptimizableGraph::Vertex*) bla;
+      const OptimizableGraph::EdgeSet& vEdges=v->edges();
+      for (OptimizableGraph::EdgeSet::const_iterator bla=vEdges.begin(); bla!=vEdges.end(); ++bla){
+        EdgeSE3ProjectXYZ* e=dynamic_cast<EdgeSE3ProjectXYZ*>(*bla);
+        const VertexSE3Expmap* v1 = dynamic_cast<const VertexSE3Expmap*>(e->vertices()[1]);
+        const VertexSBAPointXYZ* v2 = dynamic_cast<const VertexSBAPointXYZ*>(e->vertices()[0]);
+        std::cout << "E1: " << v1->estimate() << std::endl;
+        std::cout << "E2: " << v2->estimate() << std::endl;
+        std::cout << "E3: " << e->measurement() << std::endl;
+        }
+    }
+}
 
   bool SparseOptimizer::initializeOptimization(HyperGraph::EdgeSet& eset){
     bool workspaceAllocated = _jacobianWorkspace.allocate(); (void) workspaceAllocated;
@@ -376,7 +395,7 @@ namespace g2o{
     _batchStatistics.clear();
     if (_computeBatchStatistics)
       _batchStatistics.resize(iterations);
-    
+
     OptimizationAlgorithm::SolverResult result = OptimizationAlgorithm::OK;
     for (int i=0; i<iterations && ! terminate() && ok; i++){
       preIteration(i);
@@ -388,7 +407,7 @@ namespace g2o{
         cstat.numEdges =  _activeEdges.size();
         cstat.numVertices = _activeVertices.size();
       }
-      
+
       double ts = get_monotonic_time();
       result = _algorithm->solve(i, online);
       ok = ( result == OptimizationAlgorithm::OK );
@@ -420,6 +439,7 @@ namespace g2o{
     if (result == OptimizationAlgorithm::Fail) {
       return 0;
     }
+
     return cjIterations;
   }
 

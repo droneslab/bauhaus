@@ -14,6 +14,11 @@ name = "dvcore"
 path = "src/dvcore/lib.rs"
 
 
+[profile.release]
+debug = 1
+[rust]
+debuginfo-level = 1
+
 [dependencies]
 g2o = { path = "../g2o" }
 dvos3binding = { path = "../orbslam-bindings" }
@@ -40,3 +45,6 @@ derivative = "*"
 error-chain = "*"
 linked-hash-map = "0.5.6"
 spin_sleep = "*"
+flame = "0.2.2"
+flamer = "0.3"
+ctrlc = "3.2.3"

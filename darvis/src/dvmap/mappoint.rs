@@ -1,7 +1,7 @@
 use std::{fmt::Debug};
 use array2d::Array2D;
 use dvcore::{matrix::DVMatrix, config::{Sensor, GLOBAL_PARAMS, SYSTEM_SETTINGS}};
-use log::{info, error};
+use log::{info, error, debug};
 use na::Vector3;
 use serde::{Deserialize, Serialize};
 extern crate nalgebra as na;
@@ -172,7 +172,7 @@ impl MapPoint<FullMapPoint> {
     pub fn increase_found(&mut self, n: &i32) {
         // void MapPoint::IncreaseFound(int n)
         self.full_mp_info.nfound += n;
-        info!("mappoint:increase_found;mappoint id:{}", self.full_mp_info.id);
+        debug!("mappoint:increase_found;mappoint id:{}", self.full_mp_info.id);
     }
 
     pub fn add_observation(&mut self, kf_id: &Id, num_keypoints_left_for_kf: u32, index: u32) {
@@ -192,7 +192,7 @@ impl MapPoint<FullMapPoint> {
         let dist = pc.norm();
 
         let level = self.full_mp_info.observations.get_level(ref_kf);
-        let level_scale_factor = SCALE_FACTORS[level as usize] as f64; //TODO (MVP) This is always going to be an empty vector, need to fill it like in optimizer
+        let level_scale_factor = SCALE_FACTORS[level as usize] as f64;
         let n_levels = GLOBAL_PARAMS.get::<i32>(FEATURE_DETECTION, "n_levels");
 
         let max_distance = dist * level_scale_factor;

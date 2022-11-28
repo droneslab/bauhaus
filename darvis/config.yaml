@@ -6,9 +6,11 @@ master:
        file: main.rs
 
 system_settings:
+       should_profile: true
        show_ui: false
        localization_only_mode: false
        vocabulary_file: "../vocabulary/ORBvoc.txt" # TODO (low priority): This does not work with ~/
+       trajectory_file_name: "trajectory.txt"
 
        fps: 1.0
        framesensor: Mono
@@ -100,29 +102,6 @@ modules:
           
 
 actors:
-      -
-       name: FRAME_LOADER
-       file: frameloader
-       actor_message: ImagesMsg
-       actor_function: frameloader
-       address: locahost
-       port: !!str 7777
-       multithreaded: false
-       threads: 1
-       possible_paths:
-                      - 
-                       from: ImageRead
-                       to: Initilization
-                       input: images
-                       output: feature vectors
-                      -
-                       from: ImageRead
-                       to: ImageAlignment
-                       input: images
-                       output: feature vectors
-       settings:
-          -
-
       -
        name: VISUALIZER
        file: vis

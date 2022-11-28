@@ -126,6 +126,8 @@ public:
     const VertexSBAPointXYZ* v2 = static_cast<const VertexSBAPointXYZ*>(_vertices[0]);
     Vector2d obs(_measurement);
     _error = obs-cam_project(v1->estimate().map(v2->estimate()));
+    // std::cout << "Sofiya1: " << v1->estimate() << std::endl;
+    // std::cout << "Sofiya2: " << v2->estimate() << std::endl;
   }
 
   bool isDepthPositive() {

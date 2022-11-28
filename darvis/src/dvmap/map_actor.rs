@@ -1,6 +1,6 @@
 use std::{collections::HashSet};
 use axiom::{prelude::*, message::ActorMessage};
-use log::{info, warn};
+use log::{info, warn, debug};
 use nalgebra::Vector3;
 use crate::{
     lockwrap::ReadWriteWrapper,
@@ -24,7 +24,7 @@ impl MapActor {//+ std::marker::Send + std::marker::Sync
 
     async fn handle(self, _context: Context, message: Message) -> ActorResult<Self> {
         if let Some(msg) = message.content_as::<MapWriteMsg>() {
-            info!("map_actor::handle;received map edit msg");
+            debug!("map_actor::handle;received map edit msg");
             let mut write_lock = self.map.write();
             let msg = &*msg;
 
@@ -45,7 +45,6 @@ impl MapActor {//+ std::marker::Send + std::marker::Sync
                 },
 
                 MapEditTarget::MapPoint_IncreaseFound { mp_ids_and_nums } => {
-                    let mut write_lock = self.map.write();
                     for (mp, n) in mp_ids_and_nums {
                         write_lock.increase_mappoint_found(&mp, &n);
                     }
@@ -53,7 +52,7 @@ impl MapActor {//+ std::marker::Send + std::marker::Sync
 
                 MapEditTarget::KeyFrame__New { kf } => {
                     // Note: called by local mapping
-                    self.map.write().insert_keyframe_to_map(&kf);
+                    write_lock.insert_keyframe_to_map(kf);
                 },
 
                 _ => {

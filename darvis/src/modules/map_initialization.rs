@@ -3,7 +3,7 @@ use chrono::Duration;
 use dvcore::config::{GLOBAL_PARAMS, SYSTEM_SETTINGS, FrameSensor, ImuSensor};
 use opencv::core::Point2f;
 use dvcore::{matrix::DVVectorOfPoint3f, config::Sensor};
-use crate::dvmap::{frame::Frame, pose::Pose, features::Features};
+use crate::dvmap::{frame::Frame, pose::Pose};
 
 use crate::modules::camera::Camera;
 

@@ -389,7 +389,7 @@ namespace g2o {
 
         // indicates if all vertices are fixed
         virtual bool allVerticesFixed() const = 0;
-        
+
         // computes the error of the edge and stores it in an internal structure
         virtual void computeError() = 0;
 

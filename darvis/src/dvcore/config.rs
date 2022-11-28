@@ -159,7 +159,9 @@ pub fn load_config(file_name: &String) -> Option<(Vec<ActorConf>, Vec<ModuleConf
     let system_settings = &yaml::YamlLoader::load_from_str(&config_string).unwrap()[0]["system_settings"];
     add_setting_bool(SYSTEM_SETTINGS, "show_ui", &system_settings["show_ui"]);
     add_setting_bool(SYSTEM_SETTINGS, "localization_only_mode", &system_settings["localization_only_mode"]);
+    add_setting_bool(SYSTEM_SETTINGS, "should_profile", &system_settings["should_profile"]);
     add_setting_string(SYSTEM_SETTINGS, "vocabulary_file", &system_settings["vocabulary_file"]);
+    add_setting_string(SYSTEM_SETTINGS, "trajectory_file_name", &system_settings["trajectory_file_name"]);
     add_setting_f64(SYSTEM_SETTINGS, "fps", &system_settings["fps"]);
 
     // Load sensor settings

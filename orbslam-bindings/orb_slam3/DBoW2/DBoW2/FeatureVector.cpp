@@ -85,8 +85,7 @@ std::ostream& operator<<(std::ostream &out,
 
 std::unique_ptr<FeatureVector> FeatureVector::clone() const {
     std::unique_ptr<FeatureVector> vec = std::make_unique<FeatureVector>();
-    map<NodeId, std::vector<unsigned int>> new_featvector;
-    new_featvector = *this;
+    *vec = *this;
     return vec;
 }
 

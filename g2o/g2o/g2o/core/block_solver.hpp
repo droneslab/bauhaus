@@ -536,7 +536,7 @@ bool BlockSolver<Traits>::buildSystem()
       if (! v->fixed()) {
         bool hasANan = arrayHasNaN(jacobianWorkspace.workspaceForVertex(i), e->dimension() * v->dimension());
         if (hasANan) {
-          cerr << "buildSystem(): NaN within Jacobian for edge " << e << " for vertex " << i << endl;
+          cerr << "buildSystem(): NaN within Jacobian for edge " << e->id() << " for vertex " << i << endl;
           break;
         }
       }

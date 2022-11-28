@@ -4,17 +4,7 @@ use serde::{Deserialize, Serialize};
 use dvcore::{plugin_functions::Function,matrix::*,};
 use crate::{actors::messages::VisMsg, dvmap::pose::{Translation, Rotation},};
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct VisPathMsg {
-    /// last processed image path.
-    last_img_path: String
-}
-
-impl VisPathMsg {
-    pub fn new(last_img_path: String) -> Self {
-        Self { last_img_path }
-    }
-}
+use super::messages::VisPathMsg;
 
 #[derive(Debug, Clone)]
 /// Vis state data

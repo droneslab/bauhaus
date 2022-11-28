@@ -4,7 +4,7 @@ use std::convert::{TryInto, TryFrom};
 use std::pin::Pin;
 use cxx::CxxVector;
 use dvcore::config::{GLOBAL_PARAMS, Sensor, FrameSensor};
-use log::info;
+use log::{info, debug, warn};
 use opencv::core::{Point2f, KeyPoint, CV_8U};
 use opencv::features2d::BFMatcher;
 use opencv::prelude::*;
@@ -57,7 +57,7 @@ fn match_frames(
 ) -> i32
 {
     let frame1_keypoints = ini_frame.features.get_all_keypoints();
-    info!("{}", frame1_keypoints.len());
+    debug!("{}", frame1_keypoints.len());
     let frame1_descriptors = &*ini_frame.features.descriptors; 
     let frame2_keypoints = curr_frame.features.get_all_keypoints();
 
@@ -103,9 +103,6 @@ fn match_frames(
           added[mn] = true;
       }
 
-
-
-
       prev_matched.clear();
 
       for i in 0..sorted_matches.len(){
@@ -117,12 +114,10 @@ fn match_frames(
 
         prev_matched.push(points2.get(sorted_matches.get(i).unwrap().query_idx.try_into().unwrap() ).unwrap());
 
-        
-
       }
     ////////////////////////////////////////////
     let nmatches = sorted_matches.len() as i32;
-    info!("nmatches : {}  ......., hashmap: {}", nmatches, mp_matches.len());
+    debug!("nmatches : {}  ......., hashmap: {}", nmatches, mp_matches.len());
     nmatches
 }
 
@@ -148,11 +143,11 @@ pub fn search_for_initialization(
     let mut matcher = dvos3binding::ffi::new_orb_matcher(48, 48, 0.0, 0.0, 600.0, 600.0,0.1,true);
 
     let frame1_keypoints = ini_frame.features.get_all_keypoints();
-    info!("{}", frame1_keypoints.len());
+    debug!("{}", frame1_keypoints.len());
 
     let frame1_keypoints_cxx = frame1_keypoints.as_raw() as *const CxxVector<dvos3binding::ffi::DVKeyPoint>;
 
-    info!("{}", frame1_keypoints.len());
+    debug!("{}", frame1_keypoints.len());
     let frame1_descriptors = ini_frame.features.descriptors.clone();
     let frame1_descriptors_cxx = frame1_descriptors.as_raw() as *const dvos3binding::ffi::DVMat;
 
@@ -161,7 +156,7 @@ pub fn search_for_initialization(
 
 
 
-    info!("{}", frame2_keypoints.len());
+    debug!("{}", frame2_keypoints.len());
     let frame2_descriptors = &*curr_frame.features.descriptors;
     let frame2_descriptors_cxx = frame2_descriptors.clone().into_raw() as *const dvos3binding::ffi::DVMat;
 
@@ -187,7 +182,7 @@ pub fn search_for_initialization(
     {
         prev_match_cv.push(prev_matched.get(i).unwrap().clone());
     }
-    info!("prev_match_cv: {}, prev_matched : {}", prev_match_cv.len(), prev_matched.len());
+    debug!("prev_match_cv: {}, prev_matched : {}", prev_match_cv.len(), prev_matched.len());
     let prev_matchcv = prev_match_cv.into_raw() as *mut CxxVector<dvos3binding::ffi::DVPoint2f>;
 
     let mut matches_cv=  opencv::types::VectorOfi32::default();
@@ -204,7 +199,7 @@ pub fn search_for_initialization(
             Pin::new_unchecked(matchescv.as_mut().unwrap()),
             window_size
         );
-        info!("new matches: {}", matches);
+        debug!("new matches: {}", matches);
         return matches;
 
     }
@@ -390,7 +385,7 @@ pub fn search_by_projection_with_threshold (
     // double check that the descriptors works correctly. Instead of splitting descriptors into discriptors_left and right,
     // I have all of them in one long vec. I THINK this should be fine, but double check.
     let mut num_matches = 0;
-    let mut kf_match_edits: HashMap<i32, Option<Id>> = HashMap::new();
+    let mut matches = HashMap::<u32, Id>::new();
 
     let factor = 1.0 / (HISTO_LENGTH as f32);
     let mut rot_hist = construct_rotation_histogram();
@@ -497,7 +492,7 @@ pub fn search_by_projection_with_threshold (
 
     // Apply rotation consistency
     if should_check_orientation {
-        check_orientation_2(&rot_hist, &mut kf_match_edits, &mut num_matches)
+        check_orientation_2(&rot_hist, &mut matches)
     };
 
     return Ok(num_matches);
@@ -518,12 +513,12 @@ pub fn search_by_projection_with_threshold (
 // int SearchByProjection(KeyFrame* pKF, Sophus::Sim3<float> &Scw, const std::vector<MapPoint*> &vpPoints, const std::vector<KeyFrame*> &vpPointsKFs, std::vector<MapPoint*> &vpMatched, std::vector<KeyFrame*> &vpMatchedKF, int th, float ratioHamming=1.0);
 
 pub fn search_by_bow_f(
-    kf : &KeyFrame<FullKeyFrame>, frame : &Frame, should_check_orientation: bool, 
-    ratio: f64, map: &ReadOnlyWrapper<Map>
-) -> Result<(i32, HashMap<i32, Option<Id>>), Box<dyn std::error::Error>> {
+    kf : &KeyFrame<FullKeyFrame>, frame : &mut Frame, should_check_orientation: bool, 
+    ratio: f64
+) -> Result<HashMap<u32, Id>, Box<dyn std::error::Error>> {
     // int SearchByBoW(KeyFrame *pKF, Frame &F, std::vector<MapPoint*> &vpMapPointMatches);
-    let mut num_matches = 0;
-    let mut kf_match_edits: HashMap<i32, Option<Id>> = HashMap::new();
+    frame.clear_mappoints();
+    let mut matches = HashMap::<u32, Id>::new();
 
     let factor = 1.0 / (HISTO_LENGTH as f32);
     let mut rot_hist = construct_rotation_histogram();
@@ -541,22 +536,18 @@ pub fn search_by_bow_f(
         }
     }
 
-    
-    info!("kf.bow.get_feat_vec_nodes() {}", kf.bow.get_feat_vec_nodes().len());
-
-    // Pranay: Not sure why the kf.bow is empty, for now re-computing bow 
-    //TODO: fix the bug for empty bow for keyframes
-    let mut bow_kf = BoW::new();
-    bow::VOCABULARY.transform(&kf.features.descriptors, &mut bow_kf);
-
-    
-    for node_id_kf in bow_kf.get_feat_vec_nodes() {
+    for node_id_kf in kf.bow.get_feat_vec_nodes() {
         for node_id_frame in frame.bow.get_feat_vec_nodes() {
             if node_id_kf == node_id_frame {
-                let indices_kf = bow_kf.get_feat_from_node(node_id_kf);
+                let indices_kf = kf.bow.get_feat_from_node(node_id_kf);
                 let indices_f = frame.bow.get_feat_from_node(node_id_frame);
 
                 for index_kf in indices_kf {
+                    let mp_id = match kf.has_mappoint(&index_kf) {
+                        true => kf.get_mappoint(&index_kf),
+                        false => continue
+                    };
+
                     let mut best_dist_left = (256, 256);
                     let mut best_index_left = -1;
 
@@ -566,17 +557,7 @@ pub fn search_by_bow_f(
                     let descriptors_kf = kf.features.descriptors.row(index_kf)?;
 
                     for index_f in &indices_f {
-
-
-
-                        //Pranay : was the below intentional getting index_f from kf but it is not being used later.
-                        // if map.read().get_mappoint(&kf.get_mappoint(&index_f)).is_some() {
-                        //     continue;
-                        // }
-
-                        // Instead of above code, checking if index_kf exist as mappoint.
-                        if !kf.has_mappoint(&index_kf)
-                        {
+                        if matches.contains_key(&index_f) {
                             continue;
                         }
 
@@ -597,11 +578,8 @@ pub fn search_by_bow_f(
                     }
 
                     if best_dist_left.0 <= TH_LOW {
-                        let map_read = map.read();
-                        let mp_id = &kf.get_mappoint(&index_kf);
-
                         if (best_dist_left.0 as f64) < ratio * (best_dist_left.1 as f64) {
-                            kf_match_edits.insert(best_index_left, Some(*mp_id));
+                            matches.insert(best_index_left as u32, mp_id);
 
                             if should_check_orientation {
                                 check_orientation_1(
@@ -610,10 +588,9 @@ pub fn search_by_bow_f(
                                     &mut rot_hist, factor, best_index_left
                                 );
                             };
-                            num_matches += 1;
                         }
                         if (best_dist_right.0 as f64) < ratio * (best_dist_right.1 as f64) {
-                            kf_match_edits.insert(best_index_right, Some(*mp_id));
+                            matches.insert(best_index_right as u32, mp_id);
 
                             if should_check_orientation {
                                 check_orientation_1(
@@ -622,7 +599,6 @@ pub fn search_by_bow_f(
                                     &mut rot_hist, factor, best_index_left
                                 );
                             };
-                            num_matches += 1;
                         }
                     }
                 }
@@ -630,24 +606,23 @@ pub fn search_by_bow_f(
         }
     }
 
-    info!(" search_by_bow_f : num_matches {}", num_matches);
     if should_check_orientation {
-        check_orientation_2(&rot_hist, &mut kf_match_edits, &mut num_matches)
+        check_orientation_2(&rot_hist, &mut matches)
     };
 
-    return Ok((num_matches, kf_match_edits));
+    return Ok(matches);
 }
 
 pub fn search_by_bow_kf(
     kf_1 : &KeyFrame<FullKeyFrame>, kf_2 : &KeyFrame<FullKeyFrame>, should_check_orientation: bool, 
     ratio: f64, map: &ReadOnlyWrapper<Map>
-) -> Result<(i32, HashMap<i32, Option<Id>>), Box<dyn std::error::Error>> {
+) -> Result<HashMap<u32, Id>, Box<dyn std::error::Error>> {
     // int SearchByBoW(KeyFrame *pKF1, KeyFrame* pKF2, std::vector<MapPoint*> &vpMatches12);
     // Sofiya: THis is EXTREMELY similar to the other search_by_bow, the only difference is
     // this does not check left and right matches and sets the mappoint in kf_match_edits
     // a little differently. Can we combine?
     let mut num_matches = 0;
-    let mut kf_match_edits: HashMap<i32, Option<Id>> = HashMap::new();
+    let mut matches = HashMap::<u32, Id>::new();
 
     let keypoints_1 = kf_1.features.get_all_keypoints();
     let keypoints_2 = kf_2.features.get_all_keypoints();
@@ -690,7 +665,7 @@ pub fn search_by_bow_kf(
                         let mp_id = &kf_2.get_mappoint(&(best_index as u32));
 
                         if (best_dist.0 as f64) < ratio * (best_dist.1 as f64) {
-                            kf_match_edits.insert(index_kf_1 as i32, Some(*mp_id)); // for Kf_1
+                            matches.insert(index_kf_1, *mp_id); // for Kf_1
 
                             if should_check_orientation {
                                 check_orientation_1(
@@ -710,10 +685,10 @@ pub fn search_by_bow_kf(
     }
 
     if should_check_orientation {
-        check_orientation_2(&rot_hist, &mut kf_match_edits, &mut num_matches)
+        check_orientation_2(&rot_hist, &mut matches)
     };
 
-    return Ok((num_matches, kf_match_edits));
+    return Ok(matches);
 }
 
 pub fn descriptor_distance(a : &Mat, b: &Mat) -> i32 {
@@ -724,7 +699,7 @@ pub fn descriptor_distance(a : &Mat, b: &Mat) -> i32 {
 
 fn check_orientation_1(
     keypoint_1: &KeyPoint, keypoint_2: &KeyPoint,
-    rot_hist: &mut Vec<Vec<i32>>, factor: f32,
+    rot_hist: &mut Vec<Vec<u32>>, factor: f32,
     best_index: i32
 ) {
     let mut rot = keypoint_1.angle - keypoint_2.angle;
@@ -736,18 +711,20 @@ fn check_orientation_1(
         bin = 0;
     }
     assert!(bin >= 0 && bin < HISTO_LENGTH );
-    rot_hist[bin as usize].push(best_index);
+    rot_hist[bin as usize].push(best_index as u32);
 }
 
-fn check_orientation_2(rot_hist: &Vec<Vec<i32>>, kf_match_edits: &mut HashMap<i32, Option<Id>>, num_matches: &mut i32) {
+fn check_orientation_2(rot_hist: &Vec<Vec<u32>>, matches: &mut HashMap<u32, Id>) {
     let (ind_1, ind_2, ind_3) = compute_three_maxima(&rot_hist,HISTO_LENGTH);
     for i in 0..HISTO_LENGTH {
         if i == ind_1 || i == ind_2 || i == ind_3 {
             continue;
         }
         for j in 0..rot_hist[i as usize].len() {
-            kf_match_edits.insert(rot_hist[i as usize][j], None);
-            *num_matches -= 1 ;
+            let key = rot_hist[i as usize][j];
+            if matches.contains_key(&key) {
+                matches.remove(&key);
+            }
         }
     }
 }
@@ -759,16 +736,16 @@ fn radius_by_viewing_cos(view_cos: f64) -> f64 {
     };
 }
 
-fn construct_rotation_histogram() -> Vec<Vec<i32>> {
+fn construct_rotation_histogram() -> Vec<Vec<u32>> {
     // Rotation Histogram (to check rotation consistency)
-    let mut rot_hist: Vec<Vec<i32>> = Vec::new();
+    let mut rot_hist: Vec<Vec<u32>> = Vec::new();
     for _ in 0..HISTO_LENGTH {
         rot_hist.push(Vec::new());
     }
     rot_hist
 }
 
-fn compute_three_maxima(histo : &Vec<Vec<i32>> , L: i32) -> (i32, i32, i32) {
+fn compute_three_maxima(histo : &Vec<Vec<u32>> , L: i32) -> (i32, i32, i32) {
     let (mut max_1, mut max_2, mut max_3) = (0, 0, 0);
     let (mut ind_1, mut ind_2, mut ind_3) = (-1, -1, -1);
 
