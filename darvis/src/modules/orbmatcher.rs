@@ -536,11 +536,11 @@ pub fn search_by_bow_f(
         }
     }
 
-    for node_id_kf in kf.bow.get_feat_vec_nodes() {
-        for node_id_frame in frame.bow.get_feat_vec_nodes() {
+    for node_id_kf in kf.bow.as_ref().unwrap().get_feat_vec_nodes() {
+        for node_id_frame in frame.bow.as_ref().unwrap().get_feat_vec_nodes() {
             if node_id_kf == node_id_frame {
-                let indices_kf = kf.bow.get_feat_from_node(node_id_kf);
-                let indices_f = frame.bow.get_feat_from_node(node_id_frame);
+                let indices_kf = kf.bow.as_ref().unwrap().get_feat_from_node(node_id_kf);
+                let indices_f = frame.bow.as_ref().unwrap().get_feat_from_node(node_id_frame);
 
                 for index_kf in indices_kf {
                     let mp_id = match kf.has_mappoint(&index_kf) {
@@ -630,11 +630,11 @@ pub fn search_by_bow_kf(
     let factor = 1.0 / (HISTO_LENGTH as f32);
     let mut rot_hist = construct_rotation_histogram();
 
-    for node_id_kf_1 in kf_1.bow.get_feat_vec_nodes() {
-        for node_id_kf_2 in kf_2.bow.get_feat_vec_nodes() {
+    for node_id_kf_1 in kf_1.bow.as_ref().unwrap().get_feat_vec_nodes() {
+        for node_id_kf_2 in kf_2.bow.as_ref().unwrap().get_feat_vec_nodes() {
             if node_id_kf_1 == node_id_kf_2 {
-                let indices_kf_1 = kf_1.bow.get_feat_from_node(node_id_kf_1);
-                let indices_kf_2 = kf_2.bow.get_feat_from_node(node_id_kf_2);
+                let indices_kf_1 = kf_1.bow.as_ref().unwrap().get_feat_from_node(node_id_kf_1);
+                let indices_kf_2 = kf_2.bow.as_ref().unwrap().get_feat_from_node(node_id_kf_2);
 
                 for index_kf_1 in indices_kf_1 {
                     let mut best_dist = (256, 256);

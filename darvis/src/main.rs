@@ -10,7 +10,7 @@ extern crate flame;
 // #[macro_use] extern crate flamer;
 // #[cfg_attr(feature = "flame_it", flame)]
 
-use std::{fs::File, io::Write, path::Path, sync::{Arc, Mutex}, env};
+use std::{fs::{File, OpenOptions}, io::Write, path::Path, sync::{Arc, Mutex}, env};
 use axiom::prelude::*;
 use chrono::{DateTime, Utc};
 use fern::colors::{ColoredLevelConfig, Color};
@@ -248,7 +248,11 @@ fn setup_logger() -> Result<(), fern::InitError> {
                     message = message
                 ))
             })
-            .chain(fern::log_file(Path::new(RESULTS_FOLDER).join("output.log"))?),
+            .chain(OpenOptions::new()
+                .write(true)
+                .create(true)
+                .open(Path::new(RESULTS_FOLDER).join("output.log"))?
+            )
     )
     .apply()?;
 

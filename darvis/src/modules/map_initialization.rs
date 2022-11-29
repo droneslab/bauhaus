@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use chrono::Duration;
 use dvcore::config::{GLOBAL_PARAMS, SYSTEM_SETTINGS, FrameSensor, ImuSensor};
+use log::debug;
 use opencv::core::Point2f;
 use dvcore::{matrix::DVVectorOfPoint3f, config::Sensor};
 use crate::dvmap::{frame::Frame, pose::Pose};
@@ -87,6 +88,7 @@ impl Initialization {
                 _ => {}
             }
             self.ready_to_initializate = true;
+            debug!("MonocularInitialization, completed step 1");
             return Ok(false);
         } else {
             if current_frame.features.num_keypoints <=100 || matches!(self.sensor.imu(), ImuSensor::Some) && last_frame.timestamp - initial_frame.timestamp > Duration::seconds(1) {
@@ -102,6 +104,7 @@ impl Initialization {
                 &mut self.mp_matches,
                 100
             );
+            debug!("MonocularInitialization, search for initialization.. {} matches", nmatches);
 
             // Check if there are enough correspondences
             if nmatches < 100 {
@@ -133,8 +136,11 @@ impl Initialization {
                 self.initial_frame.as_mut().unwrap().pose = Some(Pose::default());
                 self.current_frame.as_mut().unwrap().pose = Some(tcw);
 
+                debug!("MonocularInitialization, ReconstructWithTwoViews... success ... can initialize now");
                 return Ok(true);
             } else {
+                // TODO (tracking bugs): Reconstruction always fails at the first attempt, is this normal?
+                debug!("MonocularInitialization, ReconstructWithTwoViews... failure");
                 return Ok(false);
             }
         }

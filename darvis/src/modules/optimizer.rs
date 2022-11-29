@@ -1102,7 +1102,6 @@ pub fn global_bundle_adjustment(map: &Map, loop_kf: i32, iterations: i32) -> BAR
     for id in mappoint_vertices {
         let pose = optimizer.recover_optimized_mappoint_pose(id);
         optimized_mp_poses.insert(id, pose.into());
-        debug!("pose {:?}", optimized_mp_poses.get(&id).unwrap());
     }
     flame::end("recover");
 

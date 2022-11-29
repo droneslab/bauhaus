@@ -356,6 +356,7 @@ impl DarvisTrackingBack {
         // Tracking::TrackReferenceKeyFrame()
         // We perform first an ORB matching with the reference keyframe
         // If enough matches are found we setup a PnP solver
+        self.current_frame.compute_bow();
         let mut vp_mappoint_matches = HashMap::<u32, (Id, bool)>::new();
         let mut nmatches;
         {
@@ -1050,7 +1051,7 @@ impl Function for DarvisTrackingBack {
         if let Some(msg) = message.content_as::<FeatureMsg>() {
             self.handle_message(context, msg)
         } else if let Some(msg) = message.content_as::<MapInitializedMsg>() {
-            error!("Received map initialized message {:?}", msg.curr_kf_pose);
+            debug!("Received map initialized message {:?}", msg.curr_kf_pose);
             self.frames_since_last_kf = 0;
             self.local_keyframes.insert(msg.curr_kf_id);
             self.local_keyframes.insert(msg.ini_kf_id);

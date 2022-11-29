@@ -1,5 +1,6 @@
 use std::ops::Mul;
 use dvcore::matrix::{DVVector3, DVMatrix3};
+use log::debug;
 use nalgebra::{Isometry3, Rotation3, Quaternion, Translation3,geometry::UnitQuaternion, Vector3, Matrix3};
 use serde::{Deserialize, Serialize};
 
@@ -21,7 +22,7 @@ impl Pose {
         Pose (pose)
     }
 
-    // TODO: I think we should rethink how pose, translation, and rotation is structured
+    // TODO (design, runtime optimization): I think we should rethink how pose, translation, and rotation is structured
     // Which variables should we be returning and when?
     // This forces a copy of the matrix/vector each time, which might not be ideal for just reads.
     pub fn get_translation(&self) -> Translation { DVVector3::new(self.0.translation.vector) }
@@ -57,19 +58,20 @@ impl Mul for Pose {
 }
 
 impl From<g2o::ffi::Pose> for Pose {
-    fn from(pose: g2o::ffi::Pose) -> Self { 
+    fn from(pose: g2o::ffi::Pose) -> Self {
         let translation = Translation3::new(
             pose.translation[0],
             pose.translation[1],
             pose.translation[2]
         );
-        let quaternion = Quaternion::<f64>::new(
-            pose.rotation[0],
-            pose.rotation[1],
-            pose.rotation[2],
-            pose.rotation[3],
+        let rotation = UnitQuaternion::<f64>::from_quaternion(
+            Quaternion::<f64>::new(
+                pose.rotation[0],
+                pose.rotation[1],
+                pose.rotation[2],
+                pose.rotation[3],
+            )
         );
-        let rotation = UnitQuaternion::<f64>::from_quaternion(quaternion);
         Pose ( Isometry3::from_parts(translation,rotation) )
     }
 }
