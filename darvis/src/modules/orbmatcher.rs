@@ -117,7 +117,7 @@ fn match_frames(
       }
     ////////////////////////////////////////////
     let nmatches = sorted_matches.len() as i32;
-    debug!("nmatches : {}  ......., hashmap: {}", nmatches, mp_matches.len());
+    
     nmatches
 }
 
@@ -129,12 +129,14 @@ pub fn search_for_initialization(
     window_size: i32
 ) -> i32 {
     // Pranay: for now using BFMatcher to frame matching, as ORBMatcher API seems dependent on ORBExtractor.
-    return match_frames(
+    let nmatches = match_frames(
         ini_frame,
         curr_frame,
         prev_matched,
         mp_matches
     );
+    info!("search_for_initialization; {}  matches", nmatches);
+    return nmatches;
 
 
     // Sofiya: Should we avoid making a new orb matcher each time? Is this expensive?
