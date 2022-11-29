@@ -388,9 +388,7 @@ impl DarvisTrackingBack {
             return Ok(false);
         }
 
-        //[TODO (MVP_done)] Pranay : vp_mappoint_matches is not getting populated, hence it is still zero matches
-        self.current_frame.mappoint_matches = vp_mappoint_matches;
-        debug!("mappoint match length {}", self.current_frame.mappoint_matches.len());
+        self.current_frame.mappoint_matches = vp_mappoint_matches.clone();
         self.current_frame.pose = Some(self.last_frame.as_ref().unwrap().pose.unwrap());
 
         if let Some((_, pose)) = optimizer::optimize_pose(&mut self.current_frame, &self.map) {
@@ -573,11 +571,8 @@ impl DarvisTrackingBack {
         // This is for visualization
         // mpAtlas->SetReferenceMapPoints(mvpLocalMapPoints);
 
-        info!(" {{{{update_local_keyframes}}}}");
         self.update_local_keyframes();
-        info!(" {{{{update_local_points}}}}");
         self.update_local_points();
-        info!(" {{{{search_local_points}}}}");
         self.search_local_points();
 
         info!(" {{{{optimize_pose}}}}");
@@ -618,13 +613,14 @@ impl DarvisTrackingBack {
             }
         }
 
-        info!(" {{{{ MapWriteMsg::increase_found}}}}");
+        
         let map_msg = MapWriteMsg::increase_found(increase_found);
         map_actor.send_new(map_msg).unwrap();
 
         // Decide if the tracking was succesful
         // More restrictive if there was a relocalization recently
         if self.current_frame.id < self.relocalization.last_reloc_frame_id + (self.max_frames as i32) && self.matches_in_frame<50 {
+            warn!("track_local_map unsuccessful; matches in frame < 50 : {}",self.matches_in_frame);
             return false;
         }
 
@@ -823,12 +819,16 @@ impl DarvisTrackingBack {
         // So, just directly look up if it was saved in local_mappoints instead.
         for kf_id in &self.local_keyframes {
             let map_read_lock = self.map.read();
-            let mp_ids = &map_read_lock.get_keyframe(kf_id).unwrap().mappoint_matches;
-            for (_, (mp_id, _)) in mp_ids {
-                if self.local_mappoints.get(mp_id).is_none() {
-                    new_mappoints.insert(*mp_id);
+            if map_read_lock.get_keyframe(kf_id).is_some()
+            {
+                let mp_ids = &map_read_lock.get_keyframe(kf_id).unwrap().mappoint_matches;
+                for (_, (mp_id, _)) in mp_ids {
+                    if self.local_mappoints.get(mp_id).is_none() {
+                        new_mappoints.insert(*mp_id);
+                    }
                 }
             }
+
         }
 
         self.local_mappoints.clear();

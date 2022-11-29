@@ -1,4 +1,4 @@
-use std::{collections::{HashMap}, iter::FromIterator};
+use std::{collections::{HashMap}, iter::FromIterator, cmp::min};
 use chrono::{DateTime, Utc};
 use derivative::Derivative;
 use dvcore::{matrix::{DVVector3}};
@@ -277,7 +277,10 @@ impl ConnectedKeyFrames {
     }
 
     pub fn get_connections(&self, num: i32) -> Vec<Id> {
-       let (conections, _) : (Vec<i32>, Vec<i32>) = self.ordered[0..(num as usize)].iter().cloned().unzip();
+    
+       let max_len = min(self.ordered.len(), num as usize);
+       let (conections, _) : (Vec<i32>, Vec<i32>) = self.ordered[0..max_len].iter().cloned().unzip();
+       info!("connections : {:?}", conections);
        conections
     }
 
