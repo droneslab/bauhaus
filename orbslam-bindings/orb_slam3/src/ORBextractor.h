@@ -23,6 +23,8 @@
 #include <list>
 #include <opencv2/opencv.hpp>
 
+#include "DVMat.h"
+#include "DVConvert.h"
 
 namespace orb_slam3
 {
@@ -47,14 +49,15 @@ public:
     enum {HARRIS_SCORE=0, FAST_SCORE=1 };
 
     ORBextractor(int nfeatures, float scaleFactor, int nlevels,
-                 int iniThFAST, int minThFAST);
+                 int iniThFAST, int minThFAST, int overlap_begin, int overlap_end);
 
     ~ORBextractor(){}
 
     // Compute the ORB features and descriptors on an image.
     // ORB are dispersed on the image using an octree.
     // Mask is ignored in the current implementation.
-    int operator()( cv::InputArray _image, cv::InputArray _mask,
+    int extract_rust(const orb_slam3::DVMat & image, std::vector<orb_slam3::DVKeyPoint> & keypoints, orb_slam3::DVMat & descriptors);
+    int extract(cv::InputArray _image, cv::InputArray _mask,
                     std::vector<cv::KeyPoint>& _keypoints,
                     cv::OutputArray _descriptors, std::vector<int> &vLappingArea);
 
@@ -106,7 +109,14 @@ protected:
     std::vector<float> mvInvScaleFactor;    
     std::vector<float> mvLevelSigma2;
     std::vector<float> mvInvLevelSigma2;
+
+    // For stereo camera
+    int overlap_begin;
+    int overlap_end;
 };
+
+// For rust bindings
+std::unique_ptr<ORBextractor> new_orb_extractor(int features, float scale_factor, int levels, int ini_th_FAST, int min_th_FAST, int overlap_begin, int overlap_end);
 
 } //namespace ORB_SLAM
 

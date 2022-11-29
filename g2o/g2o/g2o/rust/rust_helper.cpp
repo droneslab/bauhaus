@@ -222,7 +222,7 @@ namespace g2o {
             (double) pos.z()
         };
         pose.rotation = {
-            (double) 0.0,
+            (double) 1.0,
             (double) 0.0,
             (double) 0.0,
             (double) 0.0

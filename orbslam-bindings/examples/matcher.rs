@@ -74,7 +74,7 @@ fn main() {
         let mut matches_cv=  opencv::types::VectorOfi32::default();
         let  matchescv = matches_cv.into_raw() as *mut CxxVector<i32>;
 
-        matcher.pin_mut().SearchForInitialization_1(
+        matcher.pin_mut().search_for_initialization(
             &*kps1cv,
             &*kps2cv,
             &*desc1cv,

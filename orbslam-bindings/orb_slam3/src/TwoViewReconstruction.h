@@ -45,23 +45,20 @@ namespace orb_slam3
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
         // Fix the reference frame
         TwoViewReconstruction(float fx, float cx, float fy, float cy, float sigma, int iterations);
-
+        ~TwoViewReconstruction();
         // Computes in parallel a fundamental matrix and a homography
         // Selects a model and tries to recover the motion and the structure from motion
         bool Reconstruct(const std::vector<cv::KeyPoint>& vKeys1, const std::vector<cv::KeyPoint>& vKeys2, const std::vector<int> &vMatches12,
                           Sophus::SE3f &T21, std::vector<cv::Point3f> &vP3D, std::vector<bool> &vbTriangulated) ;
 
-
-
-
-
+        // Entrypoint from rust
         bool Reconstruct_1(
             const std::vector<orb_slam3::DVKeyPoint> &vKeys1,
             const std::vector<orb_slam3::DVKeyPoint> &vKeys2,const std::vector<int32_t> &vMatches12,
             orb_slam3::Pose &T21, 
             VectorOfDVPoint3f &vP3D, 
             VectorOfDVBool &vbTriangulated
-        ) ;
+        );
 
     private:
 

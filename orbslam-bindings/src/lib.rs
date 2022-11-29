@@ -90,17 +90,33 @@ pub mod ffi {
     }
 
     unsafe extern "C++" {
-        // Opaque types which both languages can pass around
-        // but only C++ can see the fields.
-
-        include!("orb_slam3/src/TwoViewReconstruction.h");
-        include!("orb_slam3/src/ORBmatcher.h");
         include!("orb_slam3/src/DVMat.h");
         //include!("orb_slam3/src/DVGrid.h");
-        type TwoViewReconstruction;
-        type ORBmatcher;
         type DVMat;
 
+        // ORB extractor
+        include!("orb_slam3/src/ORBextractor.h");
+        type ORBextractor;
+        fn new_orb_extractor(
+            features: i32,
+            scale_factor: f32,
+            levels: i32,
+            ini_th_fast: i32,
+            min_th_fast: i32,
+            overlap_begin: i32,
+            overlap_end: i32,
+        ) -> UniquePtr<ORBextractor>;
+        #[rust_name = "extract"]
+        fn extract_rust(
+            self: Pin<&mut ORBextractor>,
+            image: &DVMat,
+            keypoints: Pin<&mut CxxVector<DVKeyPoint>>, 
+            descriptors: Pin<&mut DVMat>, 
+        ) -> i32;
+
+        // Two view reconstruction
+        include!("orb_slam3/src/TwoViewReconstruction.h");
+        type TwoViewReconstruction;
         fn new_two_view_reconstruction(
             fx: f32,
             cx: f32,
@@ -109,7 +125,6 @@ pub mod ffi {
             sigma: f32,
             iterations: i32
         ) -> UniquePtr<TwoViewReconstruction>;
-
         fn Reconstruct_1(
             self: Pin<&mut TwoViewReconstruction>,
             vKeys1: &CxxVector<DVKeyPoint>,
@@ -121,7 +136,8 @@ pub mod ffi {
         )-> bool;
 
         // ORB Matcher
-        
+        include!("orb_slam3/src/ORBmatcher.h");
+        type ORBmatcher;
         fn new_orb_matcher(
             frame_grid_cols : i32, 
             frame_grid_rows : i32,
@@ -132,7 +148,7 @@ pub mod ffi {
             nnratio: f32,
             checkOri: bool
         ) -> UniquePtr<ORBmatcher>;
-
+        #[rust_name = "search_for_initialization"]
         fn SearchForInitialization_1(
             self: Pin<&mut ORBmatcher>,
             F1_mvKeysUn : &CxxVector<DVKeyPoint>, 
@@ -144,7 +160,6 @@ pub mod ffi {
             vnMatches12 : Pin<&mut CxxVector<i32>>,
             windowSize: i32
         ) -> i32;
-
         // SearchForInitialization(
         //     const std::vector<cv::KeyPoint>& F1_mvKeysUn, 
         //     const std::vector<cv::KeyPoint>& F2_mvKeysUn, 
