@@ -46,7 +46,7 @@ impl DarvisLocalMapping {
 
         // BoW conversion and insertion in Map
         // Compute Bags of Words structures
-        self.current_keyframe.compute_bow(&bow::VOCABULARY);
+        // self.current_keyframe.compute_bow();
 
         // Associate MapPoints to the new keyframe and update normal and descriptor
         // let mappoint_matches = self.map.read().get_keyframe(self.current_keyframe.id);

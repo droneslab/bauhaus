@@ -100,6 +100,11 @@ impl Camera {
             self.get_cy() as f32,
             1.0, 200
         );
+        debug!("sofiya tvr {} {} {} {}",             self.get_fx() as f32,
+            self.get_cx() as f32,
+            self.get_fy() as f32,
+            self.get_cy() as f32,
+);
         let mut matches_cv = opencv::types::VectorOfi32::default();
 
         for i in 0..v_keys1.len() as u32 {

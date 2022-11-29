@@ -36,7 +36,6 @@ impl DVVocabulary {
                 bow.feat_vec.pin_mut(),
                 4
             );
-            bow.is_empty = false;
         }
 
     }
@@ -47,14 +46,12 @@ pub struct BoW {
     // BoW
     bow_vec: UniquePtr<dvos3binding::ffi::BowVector>, // mBowVec
     feat_vec: UniquePtr<dvos3binding::ffi::FeatureVector>, // mFeatVec
-    pub is_empty: bool
 }
 impl BoW {
     pub fn new() -> Self {
         Self {
             bow_vec: dvos3binding::ffi::new_bow_vec(),
             feat_vec: dvos3binding::ffi::new_feat_vec(),
-            is_empty: true
         }
     }
     pub fn clone(&self) -> Self {
@@ -62,7 +59,6 @@ impl BoW {
         Self {
             bow_vec: self.bow_vec.clone(),
             feat_vec: self.feat_vec.clone(),
-            is_empty: self.is_empty
         }
     }
     pub fn get_feat_vec_nodes(&self) -> Vec<u32> {

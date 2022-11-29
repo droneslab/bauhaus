@@ -5,7 +5,7 @@ use dvcore::{matrix::{DVVector3}};
 use log::{error, info, debug, warn};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use crate::{dvmap::{map::Id, pose::Pose, frame::*, bow::DVVocabulary},modules::{imu::*},};
-use super::{mappoint::{MapPoint, FullMapPoint}, map::{Map}, features::Features, bow::BoW};
+use super::{mappoint::{MapPoint, FullMapPoint}, map::{Map}, features::Features, bow::{BoW, self}};
 
 // Typestate...Keyframe information that is ALWAYS available, regardless of keyframe state.
 // Uncomment this if doing serialization/deserialization: unsafe impl<S: SensorType> Sync for KeyFrame<S> {}
@@ -18,7 +18,7 @@ pub struct KeyFrame<K: KeyFrameState> {
 
     // Vision //
     pub features: Features, // KeyPoints, stereo coordinate and descriptors (all associated by an index)
-    pub bow: BoW,
+    pub bow: Option<BoW>,
 
     // Mappoints
     // Note: u32 is index in array, Id is mappoint Id ... equal to vector in ORBSLAM3
@@ -86,32 +86,36 @@ impl KeyFrame<PrelimKeyFrame> {
             mappoint_matches: frame.mappoint_matches.clone(),
             pose: frame.pose.unwrap(),
             features: frame.features.clone(),
-            bow: frame.bow.clone(),
             imu_bias: frame.imu_bias,
             imu_preintegrated: frame.imu_preintegrated,
             stereo_baseline: 0.0, // TODO (Stereo)
             full_kf_info: PrelimKeyFrame{},
+            bow: frame.bow.clone()
         };
 
         kf
-    }
-
-    pub fn compute_bow(&mut self, voc: &DVVocabulary) {
-        if self.bow.is_empty {
-            voc.transform(&self.features.descriptors, &mut self.bow);
-        }
     }
 }
 
 impl KeyFrame<FullKeyFrame> {
     pub(super) fn new(prelim_keyframe: &KeyFrame<PrelimKeyFrame>, origin_map_id: Id, id: Id) -> Self {
+        let bow = match &prelim_keyframe.bow {
+            Some(bow) => Some(bow.clone()),
+            None => {
+                let mut bow = BoW::new();
+                bow::VOCABULARY.transform(&prelim_keyframe.features.descriptors, &mut bow);
+                Some(bow)
+            }
+        };
+
+
         Self {
             timestamp: prelim_keyframe.timestamp,
             frame_id: prelim_keyframe.frame_id,
             mappoint_matches: prelim_keyframe.mappoint_matches.clone(),
             pose: prelim_keyframe.pose,
             features: prelim_keyframe.features.clone(),
-            bow: prelim_keyframe.bow.clone(),
+            bow,
             imu_bias: prelim_keyframe.imu_bias,
             imu_preintegrated: prelim_keyframe.imu_preintegrated,
             stereo_baseline: prelim_keyframe.stereo_baseline,
@@ -120,6 +124,14 @@ impl KeyFrame<FullKeyFrame> {
                 origin_map_id,
                 ..Default::default()
             },
+        }
+    }
+
+    pub fn compute_bow(&mut self) {
+        if self.bow.is_none() {
+            self.bow = Some(BoW::new());
+            debug!("mbowvector for keyframe {} with frame id {}", self.full_kf_info.id, self.frame_id);
+            bow::VOCABULARY.transform(&self.features.descriptors, &mut self.bow.as_mut().unwrap());
         }
     }
 

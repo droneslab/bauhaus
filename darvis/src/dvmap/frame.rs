@@ -18,7 +18,7 @@ pub struct Frame {
 
     // Vision //
     pub features: Features, // KeyPoints, stereo coordinate and descriptors (all associated by an index)
-    pub bow: BoW,
+    pub bow: Option<BoW>,
 
     // Mappoints //
     // Note: u32 is index in array, Id is mappoint Id, bool is if it's an oultier
@@ -53,8 +53,14 @@ impl Frame {
             sensor,
             ..Default::default()
         };
-        bow::VOCABULARY.transform(&frame.features.descriptors, &mut frame.bow);
         Ok(frame)
+    }
+
+    pub fn compute_bow(&mut self) {
+        if self.bow.is_none() {
+            self.bow = Some(BoW::new());
+            bow::VOCABULARY.transform(&self.features.descriptors, &mut self.bow.as_mut().unwrap());
+        }
     }
 
     //* MapPoints */
