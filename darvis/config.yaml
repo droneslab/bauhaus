@@ -6,15 +6,15 @@ master:
        file: main.rs
 
 system_settings:
-       should_profile: true
-       show_ui: false
-       localization_only_mode: false
-       vocabulary_file: "../vocabulary/ORBvoc.txt" # TODO (low priority): This does not work with ~/
-       trajectory_file_name: "trajectory.txt"
+      should_profile: true
+      show_ui: false
+      localization_only_mode: false
+      vocabulary_file: "../vocabulary/ORBvoc.txt" # TODO (low priority): This does not work with ~/
+      trajectory_file_name: "trajectory.txt"
 
-       fps: 1.0
-       framesensor: Mono
-       imusensor: None
+      fps: 1.0
+      framesensor: Mono
+      imusensor: None
 
 modules:
       - 
@@ -72,6 +72,14 @@ modules:
            name: stereo_baseline_times_fx
            value: 386.1448
            type: f64
+          - 
+           name: stereo_overlapping_begin
+           value: 0
+           type: i32
+          -
+           name: stereo_overlapping_end
+           value: 511 # This depends on the camera type, look at the orbslam configs
+           type: i32
 
       - 
        name: FEATURE_DETECTION
@@ -89,9 +97,14 @@ modules:
            value: 8
            type: i32
           - 
-           name: fast_threshold
+           name: ini_th_fast
            value: 20
            type: i32
+          - 
+           name: min_th_fast
+           value: 7
+           type: i32
+
       -
        name: MATCHER
        settings:
@@ -99,7 +112,7 @@ modules:
             name: far_points_threshold
             value: 20.0
             type: f64
-          
+
 
 actors:
       -

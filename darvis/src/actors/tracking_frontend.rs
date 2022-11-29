@@ -1,8 +1,10 @@
 extern crate g2o;
 
 use axiom::prelude::*;
-use log::{error, warn};
-use std::sync::Arc;
+use cxx::{UniquePtr, CxxVector};
+use log::{error, warn, debug};
+use std::{sync::Arc, fmt};
+use std::fmt::Debug;
 use opencv::{prelude::*,features2d::{Feature2DTrait, ORB},types::{PtrOfORB, VectorOfKeyPoint},};
 use dvcore::{matrix::*,lockwrap::ReadOnlyWrapper,plugin_functions::Function,config::*,};
 use crate::{
@@ -11,14 +13,43 @@ use crate::{
     dvmap::{map::Map},
 };
 
+struct DVORBextractor (UniquePtr<dvos3binding::ffi::ORBextractor>);
+impl DVORBextractor {
+    pub fn new() -> Self {
+        DVORBextractor(
+            dvos3binding::ffi::new_orb_extractor(
+                GLOBAL_PARAMS.get::<i32>(FEATURE_DETECTION, "max_features"),
+                GLOBAL_PARAMS.get::<f64>(FEATURE_DETECTION, "scale_factor") as f32,
+                GLOBAL_PARAMS.get::<i32>(FEATURE_DETECTION, "n_levels"),
+                GLOBAL_PARAMS.get::<i32>(FEATURE_DETECTION, "ini_th_fast"),
+                GLOBAL_PARAMS.get::<i32>(FEATURE_DETECTION, "min_th_fast"),
+                GLOBAL_PARAMS.get::<i32>(FEATURE_DETECTION, "stereo_overlapping_begin"),
+                GLOBAL_PARAMS.get::<i32>(FEATURE_DETECTION, "stereo_overlapping_end")
+            )
+        )
+    }
+}
+impl Clone for DVORBextractor {
+    fn clone(&self) -> Self {
+        DVORBextractor::new()
+    }
+}
+impl Debug for DVORBextractor {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("DVORBextractor")
+         .finish()
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct DarvisTrackingFront {
     map: ReadOnlyWrapper<Map>,
+    orb_extractor: DVORBextractor,
 }
 
 impl DarvisTrackingFront {
     pub fn new(map: ReadOnlyWrapper<Map>) -> DarvisTrackingFront {
-        DarvisTrackingFront { map }
+        DarvisTrackingFront { map, orb_extractor: DVORBextractor::new() }
     }
 
     pub fn tracking_frontend(&mut self, context: Context, message: Arc<ImageMsg>) {
@@ -31,16 +62,20 @@ impl DarvisTrackingFront {
         let mut keypoints = VectorOfKeyPoint::new();
         let mut descriptors = Mat::default();
 
-        let mut orb: PtrOfORB =  <dyn ORB>::default().unwrap();
-        self.set_extractor_settings(&mut orb);
-        orb.detect_and_compute(
-            image,
-            &Mat::default(), 
-            &mut keypoints, 
-            &mut descriptors, 
-            false
-        ).unwrap();
+        unsafe {
+            let keypoints_cxx = keypoints.as_raw() as *const CxxVector<dvos3binding::ffi::DVKeyPoint>;
+            let descriptors_cxx = descriptors.clone().into_raw() as *const dvos3binding::ffi::DVMat;
+            let image_dvmat = image.clone().into_raw() as *const dvos3binding::ffi::DVMat;
 
+            self.orb_extractor.0.pin_mut().extract(
+                &image_dvmat, // should be unchanged
+                // I think these two are changed:
+                &*keypoints_cxx,
+                &*descriptors_cxx
+            );
+        }
+
+        // If descriptors are cloned into descriptors_cxx and then that object is modified in the C++ code, is descriptors empty here?
         (keypoints, descriptors)
     }
 
@@ -50,6 +85,8 @@ impl DarvisTrackingFront {
     ) {
         let align_id = context.system.find_aid_by_name(TRACKING_BACKEND).unwrap();
         let new_message = GLOBAL_PARAMS.get::<String>(TRACKING_BACKEND, "actor_message");
+        debug!("Keypoints {:?}", keypoints);
+        debug!("Descriptors {:?}", descriptors);
         match new_message.as_ref() {
             "FeatureMsg" => {
                 align_id.send_new(FeatureMsg {
@@ -68,23 +105,6 @@ impl DarvisTrackingFront {
                     image_height: image.rows(),
                 }).unwrap();
             },
-        }
-    }
-
-    fn set_extractor_settings(&mut self, orb: &mut PtrOfORB) {
-        let max_features = GLOBAL_PARAMS.get::<i32>(FEATURE_DETECTION, "max_features");
-        let scale_factor = GLOBAL_PARAMS.get::<f64>(FEATURE_DETECTION, "scale_factor");
-        let n_levels = GLOBAL_PARAMS.get::<i32>(FEATURE_DETECTION, "n_levels");
-        let fast_threshold = GLOBAL_PARAMS.get::<i32>(FEATURE_DETECTION, "fast_threshold");
-
-        let res1 = orb.set_max_features(max_features);
-        let res2 = orb.set_max_features(max_features);
-        let res3 = orb.set_scale_factor(scale_factor);
-        let res4 = orb.set_n_levels(n_levels);
-        let res5 = orb.set_fast_threshold(fast_threshold);
-
-        if res1.is_err() || res2.is_err() || res3.is_err() || res4.is_err() || res5.is_err() {
-            panic!("tracking_frontend::set_extractor_settings;Error setting ORB extractor options from config");
         }
     }
 }

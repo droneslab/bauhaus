@@ -13,7 +13,7 @@ pub static VISUALIZER: &str = "VISUALIZER";
 
 pub static FEATURE_DETECTION: &str = "FEATURE_DETECTION";
 pub static CAMERA: &str = "CAMERA";
-pub static MATCHER: &str = "CAMERA";
+pub static MATCHER: &str = "MATCHER";
 
 /// REGISTER MODULE: All the features/actors that are implemented, 
 /// need to be registered through this function.

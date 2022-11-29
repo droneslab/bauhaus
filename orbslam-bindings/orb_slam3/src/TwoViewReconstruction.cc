@@ -33,72 +33,55 @@
 using namespace std;
 namespace orb_slam3
 {
+    TwoViewReconstruction::~TwoViewReconstruction() {
+        cout << "Calling destructor!" << endl;
+    }
 
+    // bool TwoViewReconstruction::GetCVKeypoints(const std::vector<orb_slam3::DVKeyPoint> &vKeys1, std::vector<cv::KeyPoint> &cvvKeys1){}
+    bool TwoViewReconstruction::Reconstruct_1(
+        const std::vector<orb_slam3::DVKeyPoint> &vKeys1,
+        const std::vector<orb_slam3::DVKeyPoint> &vKeys2,
+        const std::vector<int32_t> &vMatches12,
+        orb_slam3::Pose &T21, 
+        VectorOfDVPoint3f &vP3D, 
+        VectorOfDVBool &vbTriangulated
+    ) {
+        auto vKeys1_cv = *reinterpret_cast<const std::vector<cv::KeyPoint>*>(&vKeys1);
+        auto vKeys2_cv = *reinterpret_cast<const std::vector<cv::KeyPoint>*>(&vKeys2);
 
-        // bool TwoViewReconstruction::GetCVKeypoints(const std::vector<orb_slam3::DVKeyPoint> &vKeys1, std::vector<cv::KeyPoint> &cvvKeys1)
-        // {
+        Sophus::SE3f T21_c;
+        vector<cv::Point3f> vP3D_c;
+        vector<bool> vbTriangulated_c ;
 
-        // }
-        bool TwoViewReconstruction::Reconstruct_1(
-            const std::vector<orb_slam3::DVKeyPoint> &vKeys1,
-            const std::vector<orb_slam3::DVKeyPoint> &vKeys2,
-            const std::vector<int32_t> &vMatches12,
-            orb_slam3::Pose &T21, 
-            VectorOfDVPoint3f &vP3D, 
-            VectorOfDVBool &vbTriangulated
-        ) 
-        {
+        bool result = Reconstruct(
+            vKeys1_cv,vKeys2_cv,
+            vMatches12, T21_c, 
+            vP3D_c, vbTriangulated_c
+        );
+        cout << "TwoViewReconstruction, result is " << result << endl;
 
+        // Assign data from cpp to rust variables
+        auto tf_4x4 = *reinterpret_cast<const std::array<::std::array<double, 4>, 4> *>(T21_c.matrix().data());
+        memcpy(&T21.pose[0][0], &tf_4x4, sizeof T21.pose);
 
-            auto vKeys1_cv = *reinterpret_cast<const std::vector<cv::KeyPoint>*>(&vKeys1);
-            auto vKeys2_cv = *reinterpret_cast<const std::vector<cv::KeyPoint>*>(&vKeys2);
+        for(int i =0;i < vP3D_c.size(); i++) {
+            vP3D.vec.push_back(orb_slam3::DVPoint3f{x:vP3D_c[i].x, y:vP3D_c[i].y, z:vP3D_c[i].z});
+        }
 
+        for(int i =0;i < vbTriangulated_c.size(); i++) {
+            vbTriangulated.vec.push_back(vbTriangulated_c[i]);
+        }
 
-            Sophus::SE3f T21_c;
-            
-            vector<cv::Point3f> vP3D_c;
-            vector<bool> vbTriangulated_c ;
-
-
-            bool result = Reconstruct( vKeys1_cv, 
-            vKeys2_cv,
-            vMatches12,
-            T21_c, 
-            vP3D_c, 
-            vbTriangulated_c);
-
-
-            // Assign data from cpp to rust variables
-            auto tf_4x4 = *reinterpret_cast<const std::array<::std::array<double, 4>, 4> *>(T21_c.matrix().data());
-            memcpy(&T21.pose[0][0], &tf_4x4, sizeof T21.pose);
-
-            for(int i =0;i < vP3D_c.size(); i++)
-            {
-                vP3D.vec.push_back(orb_slam3::DVPoint3f{x:vP3D_c[i].x, y:vP3D_c[i].y, z:vP3D_c[i].z});
-            }
-
-            for(int i =0;i < vbTriangulated_c.size(); i++)
-            {
-                vbTriangulated.vec.push_back(vbTriangulated_c[i]);
-            }
-            
-
-            return result;
-
-            //return true;
-        }        
-
+        return result;
+    }
 
     void test() {}
-
 
     std::unique_ptr<TwoViewReconstruction> new_two_view_reconstruction(float fx, float cx, float fy, float cy, float sigma, int iterations) {
         return std::unique_ptr<TwoViewReconstruction>(new TwoViewReconstruction(fx, cx, fy, cy, sigma, iterations));
     }
 
-    TwoViewReconstruction::TwoViewReconstruction(
-        float fx, float cx, float fy, float cy, float sigma, int iterations
-    ) {
+    TwoViewReconstruction::TwoViewReconstruction(float fx, float cx, float fy, float cy, float sigma, int iterations) {
         Eigen::Matrix3f K;
         K << fx, 0.f, cx, 0.f, fy, cy, 0.f, 0.f, 1.f;
         mK = K;
@@ -108,58 +91,47 @@ namespace orb_slam3
         mMaxIterations = iterations;
     }
 
-    bool TwoViewReconstruction::Reconstruct(const std::vector<cv::KeyPoint>& vKeys1, const std::vector<cv::KeyPoint>& vKeys2, const vector<int> &vMatches12,
-                                             Sophus::SE3f &T21, vector<cv::Point3f> &vP3D, vector<bool> &vbTriangulated)
-    {
-        mvKeys1.clear();
-        mvKeys2.clear();
-
+    bool TwoViewReconstruction::Reconstruct(
+        const std::vector<cv::KeyPoint>& vKeys1, const std::vector<cv::KeyPoint>& vKeys2, const vector<int> &vMatches12,
+        Sophus::SE3f &T21, vector<cv::Point3f> &vP3D, vector<bool> &vbTriangulated
+    ) {
         mvKeys1 = vKeys1;
         mvKeys2 = vKeys2;
-        
+
         // Fill structures with current keypoints and matches with reference frame
         // Reference Frame: 1, Current Frame: 2
         mvMatches12.clear();
         mvMatches12.reserve(mvKeys2.size());
         mvbMatched1.resize(mvKeys1.size());
-        for(size_t i=0, iend=vMatches12.size();i<iend; i++)
-        {
-            if(vMatches12[i]>=0)
-            {
+        for(size_t i=0, iend=vMatches12.size();i<iend; i++) {
+            if(vMatches12[i]>=0) {
                 mvMatches12.push_back(make_pair(i,vMatches12[i]));
                 mvbMatched1[i]=true;
-            }
-            else
+            } else {
                 mvbMatched1[i]=false;
+            }
         }
 
         const int N = mvMatches12.size();
-        
+
         // Indices for minimum set selection
         vector<size_t> vAllIndices;
         vAllIndices.reserve(N);
         vector<size_t> vAvailableIndices;
 
-        for(int i=0; i<N; i++)
-        {
+        for(int i=0; i<N; i++) {
             vAllIndices.push_back(i);
         }
 
         // Generate sets of 8 points for each RANSAC iteration
         mvSets = vector< vector<size_t> >(mMaxIterations,vector<size_t>(8,0));
-
-        
         DUtils::Random::SeedRandOnce(0);
 
-        
-        for(int it=0; it<mMaxIterations; it++)
-        {
+        for(int it=0; it<mMaxIterations; it++) {
             vAvailableIndices = vAllIndices;
 
             // Select a minimum set
-            for(size_t j=0; j<8; j++)
-            {
-
+            for(size_t j=0; j<8; j++) {
                 int randi = DUtils::Random::RandomInt(0,vAvailableIndices.size()-1);
                 int idx = vAvailableIndices[randi];
 
@@ -170,13 +142,11 @@ namespace orb_slam3
             }
         }
 
-        
         // Launch threads to compute in parallel a fundamental matrix and a homography
         vector<bool> vbMatchesInliersH, vbMatchesInliersF;
         float SH, SF;
         Eigen::Matrix3f H, F;
 
-        
         thread threadH(&TwoViewReconstruction::FindHomography,this,ref(vbMatchesInliersH), ref(SH), ref(H));
         thread threadF(&TwoViewReconstruction::FindFundamental,this,ref(vbMatchesInliersF), ref(SF), ref(F));
 
@@ -193,12 +163,12 @@ namespace orb_slam3
         // Try to reconstruct from homography or fundamental depending on the ratio (0.40-0.45)
         if(RH>0.50) // if(RH>0.40)
         {
-            //cout << "Initialization from Homography" << endl;
+            cout << "TwoViewReconstruction, Initialization from Homography" << endl;
             return ReconstructH(vbMatchesInliersH,H, mK,T21,vP3D,vbTriangulated,minParallax,50);
         }
         else //if(pF_HF>0.6)
         {
-            //cout << "Initialization from Fundamental" << endl;
+            cout << "TwoViewReconstruction, Initialization from Fundamental" << endl;
             return ReconstructF(vbMatchesInliersF,F,mK,T21,vP3D,vbTriangulated,minParallax,50);
         }
     }
@@ -591,6 +561,8 @@ namespace orb_slam3
         if(nGood4>0.7*maxGood)
             nsimilar++;
 
+        cout << "TwoViewReconstruction::ReconstructF, results from checkRT " << nGood1 << " " << nGood2 << " " << nGood3 << " " << nGood4 << " " << maxGood << endl;
+
         // If there is not a clear winner or not enough triangulated points reject initialization
         if(maxGood<nMinGood || nsimilar>1)
         {
@@ -923,14 +895,18 @@ namespace orb_slam3
             float cosParallax = normal1.dot(normal2) / (dist1*dist2);
 
             // Check depth in front of first camera (only if enough parallax, as "infinite" points can easily go to negative depth)
-            if(p3dC1(2)<=0 && cosParallax<0.99998)
+            if(p3dC1(2)<=0 && cosParallax<0.99998) {
+                // cout << "parallax check" << endl;
                 continue;
+            }
 
             // Check depth in front of second camera (only if enough parallax, as "infinite" points can easily go to negative depth)
             Eigen::Vector3f p3dC2 = R * p3dC1 + t;
 
-            if(p3dC2(2)<=0 && cosParallax<0.99998)
+            if(p3dC2(2)<=0 && cosParallax<0.99998) {
+                // cout << "parallax check 2" << endl;
                 continue;
+            }
 
             // Check reprojection error in first image
             float im1x, im1y;
@@ -940,8 +916,10 @@ namespace orb_slam3
 
             float squareError1 = (im1x-kp1.pt.x)*(im1x-kp1.pt.x)+(im1y-kp1.pt.y)*(im1y-kp1.pt.y);
 
-            if(squareError1>th2)
+            if(squareError1>th2) {
+                // cout << "squareerror check" << endl;
                 continue;
+            }
 
             // Check reprojection error in second image
             float im2x, im2y;
@@ -951,8 +929,10 @@ namespace orb_slam3
 
             float squareError2 = (im2x-kp2.pt.x)*(im2x-kp2.pt.x)+(im2y-kp2.pt.y)*(im2y-kp2.pt.y);
 
-            if(squareError2>th2)
+            if(squareError2>th2) {
+                // cout << "squareerror check 2" << endl;
                 continue;
+            }
 
             vCosParallax.push_back(cosParallax);
             vP3D[vMatches12[i].first] = cv::Point3f(p3dC1(0), p3dC1(1), p3dC1(2));

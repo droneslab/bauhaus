@@ -116,6 +116,7 @@ impl DarvisTrackingBack {
             min_num_features: GLOBAL_PARAMS.get::<i32>(TRACKING_BACKEND, "min_num_features"),
             max_frames: GLOBAL_PARAMS.get::<f64>(SYSTEM_SETTINGS, "fps") as i64,
             min_frames: 0,
+            last_frame_id: -1,
             ..Default::default()
         }
     }
@@ -842,7 +843,7 @@ impl DarvisTrackingBack {
         let mut new_kf;
         {
             let map_read_lock = self.map.read();
-            new_kf = KeyFrame::new(&self.current_frame, &bow::VOCABULARY);
+            new_kf = KeyFrame::new(&self.current_frame);
         }
 
         // TODO (IMU) Reset preintegration from last KF (Create new object)

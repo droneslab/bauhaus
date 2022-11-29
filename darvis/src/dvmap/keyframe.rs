@@ -79,8 +79,8 @@ impl KeyFrameState for PrelimKeyFrame {}
 impl KeyFrameState for FullKeyFrame {}
 
 impl KeyFrame<PrelimKeyFrame> {
-    pub fn new(frame: &Frame, vocabulary: &DVVocabulary) -> KeyFrame<PrelimKeyFrame> {
-        let mut kf = KeyFrame {
+    pub fn new(frame: &Frame) -> KeyFrame<PrelimKeyFrame> {
+        KeyFrame {
             timestamp: frame.timestamp,
             frame_id: frame.id,
             mappoint_matches: frame.mappoint_matches.clone(),
@@ -91,9 +91,7 @@ impl KeyFrame<PrelimKeyFrame> {
             stereo_baseline: 0.0, // TODO (Stereo)
             full_kf_info: PrelimKeyFrame{},
             bow: frame.bow.clone()
-        };
-
-        kf
+        }
     }
 }
 
@@ -103,6 +101,7 @@ impl KeyFrame<FullKeyFrame> {
             Some(bow) => Some(bow.clone()),
             None => {
                 let mut bow = BoW::new();
+                debug!("mbowvector for keyframe {} with frame id {}", id, prelim_keyframe.frame_id);
                 bow::VOCABULARY.transform(&prelim_keyframe.features.descriptors, &mut bow);
                 Some(bow)
             }
@@ -124,14 +123,6 @@ impl KeyFrame<FullKeyFrame> {
                 origin_map_id,
                 ..Default::default()
             },
-        }
-    }
-
-    pub fn compute_bow(&mut self) {
-        if self.bow.is_none() {
-            self.bow = Some(BoW::new());
-            debug!("mbowvector for keyframe {} with frame id {}", self.full_kf_info.id, self.frame_id);
-            bow::VOCABULARY.transform(&self.features.descriptors, &mut self.bow.as_mut().unwrap());
         }
     }
 

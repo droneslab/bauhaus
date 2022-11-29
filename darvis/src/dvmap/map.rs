@@ -58,6 +58,7 @@ impl Map {
         Map {
             id: 0, // TODO (Multimaps): this should increase when new maps are made
             sensor,
+            last_kf_id: -1,
             ..Default::default()
         }
     }
@@ -122,10 +123,10 @@ impl Map {
         debug!("Tracking::CreateInitialMapMonocular, Creating initial map with frame {} and {}", inidata.initial_frame.as_ref().unwrap().id, inidata.current_frame.as_ref().unwrap().id);
         // Create KeyFrames
         let initial_kf_id = self.insert_keyframe_to_map(
-            &KeyFrame::<PrelimKeyFrame>::new(&inidata.initial_frame.as_ref().unwrap(), &bow::VOCABULARY)
+            &KeyFrame::<PrelimKeyFrame>::new(&inidata.initial_frame.as_ref().unwrap())
         );
         let curr_kf_id = self.insert_keyframe_to_map(
-            &KeyFrame::<PrelimKeyFrame>::new(&inidata.current_frame.as_ref().unwrap(), &bow::VOCABULARY)
+            &KeyFrame::<PrelimKeyFrame>::new(&inidata.current_frame.as_ref().unwrap())
         );
 
         // let curr_frame = inidata.current_frame.as_ref().unwrap();

@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::f64::INFINITY;
 use std::convert::{TryInto, TryFrom};
 use std::pin::Pin;
-use cxx::CxxVector;
+use cxx::{CxxVector, UniquePtr};
 use dvcore::config::{GLOBAL_PARAMS, Sensor, FrameSensor};
 use log::{info, debug, warn};
 use opencv::core::{Point2f, KeyPoint, CV_8U};
@@ -128,7 +128,6 @@ pub fn search_for_initialization(
     mp_matches: &mut HashMap<u32, u32>,
     window_size: i32
 ) -> i32 {
-
     // Pranay: for now using BFMatcher to frame matching, as ORBMatcher API seems dependent on ORBExtractor.
     return match_frames(
         ini_frame,
@@ -137,7 +136,6 @@ pub fn search_for_initialization(
         mp_matches
     );
 
-    //todo!("Fix calling bindings");
 
     // Sofiya: Should we avoid making a new orb matcher each time? Is this expensive?
     let mut matcher = dvos3binding::ffi::new_orb_matcher(48, 48, 0.0, 0.0, 600.0, 600.0,0.1,true);
@@ -189,7 +187,7 @@ pub fn search_for_initialization(
     let matchescv = matches_cv.into_raw() as *mut CxxVector<i32>;
 
     unsafe {
-        let matches = matcher.pin_mut().SearchForInitialization_1(
+        let matches = matcher.pin_mut().search_for_initialization(
             &*frame1_keypoints_cxx,
             &*frame2_keypoints_cxx, 
             &*frame1_descriptors_cxx,
@@ -201,7 +199,6 @@ pub fn search_for_initialization(
         );
         debug!("new matches: {}", matches);
         return matches;
-
     }
 
     

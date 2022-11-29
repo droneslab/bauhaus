@@ -44,7 +44,7 @@ impl Frame {
         im_width: i32, im_height: i32, camera: &Camera
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let sensor = GLOBAL_PARAMS.get::<Sensor>(SYSTEM_SETTINGS, "sensor");
-        let mut frame = Frame{
+        let frame = Frame{
             id,
             timestamp: Utc::now(),
             features: Features::new(keypoints_vec, descriptors_vec, im_width, im_height, camera, sensor)?,
