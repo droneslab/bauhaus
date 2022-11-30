@@ -3,6 +3,7 @@ extern crate g2o;
 use axiom::prelude::*;
 use cxx::{UniquePtr, CxxVector};
 use log::{error, warn, debug};
+use std::pin::Pin;
 use std::{sync::Arc, fmt};
 use std::fmt::Debug;
 use opencv::{prelude::*,features2d::{Feature2DTrait, ORB},types::{PtrOfORB, VectorOfKeyPoint},};
@@ -59,19 +60,19 @@ impl DarvisTrackingFront {
     }
 
     fn extract_features(&mut self, image: &opencv::core::Mat) -> (VectorOfKeyPoint, Mat) {
-        let mut keypoints = VectorOfKeyPoint::new();
-        let mut descriptors = Mat::default();
+        let keypoints = VectorOfKeyPoint::new();
+        let descriptors = Mat::default();
 
         unsafe {
-            let keypoints_cxx = keypoints.as_raw() as *const CxxVector<dvos3binding::ffi::DVKeyPoint>;
-            let descriptors_cxx = descriptors.clone().into_raw() as *const dvos3binding::ffi::DVMat;
+            let keypoints_cxx = keypoints.as_raw() as *mut CxxVector<dvos3binding::ffi::DVKeyPoint>;
+            let descriptors_cxx = descriptors.as_raw() as *mut dvos3binding::ffi::DVMat;
             let image_dvmat = image.clone().into_raw() as *const dvos3binding::ffi::DVMat;
 
             self.orb_extractor.0.pin_mut().extract(
-                &image_dvmat, // should be unchanged
+                &*image_dvmat, // should be unchanged
                 // I think these two are changed:
-                &*keypoints_cxx,
-                &*descriptors_cxx
+                Pin::new_unchecked(keypoints_cxx.as_mut().unwrap()),
+                Pin::new_unchecked(descriptors_cxx.as_mut().unwrap())
             );
         }
 
