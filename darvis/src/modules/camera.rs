@@ -127,7 +127,7 @@ impl Camera {
                 &mut vb_triangulated
             );
 
-            debug!("pose {:?} \n vP3D {:?} \n reconstructed: {}", pose, v_p3d.vec.len(), reconstructed);
+            //debug!("pose {:?} \n vP3D {:?} \n reconstructed: {}", pose, v_p3d.vec.len(), reconstructed);
 
             let out_pose = pose.pose;
 

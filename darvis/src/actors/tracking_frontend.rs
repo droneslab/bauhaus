@@ -60,8 +60,8 @@ impl DarvisTrackingFront {
     }
 
     fn extract_features(&mut self, image: &opencv::core::Mat) -> (VectorOfKeyPoint, Mat) {
-        let keypoints = VectorOfKeyPoint::new();
-        let descriptors = Mat::default();
+        let mut keypoints = VectorOfKeyPoint::new();
+        let mut descriptors = Mat::default();
 
         unsafe {
             let keypoints_cxx = keypoints.as_raw() as *mut CxxVector<dvos3binding::ffi::DVKeyPoint>;
@@ -86,8 +86,8 @@ impl DarvisTrackingFront {
     ) {
         let align_id = context.system.find_aid_by_name(TRACKING_BACKEND).unwrap();
         let new_message = GLOBAL_PARAMS.get::<String>(TRACKING_BACKEND, "actor_message");
-        debug!("Keypoints {:?}", keypoints);
-        debug!("Descriptors {:?}", descriptors);
+        //debug!("Keypoints {:?}", keypoints);
+        //debug!("Descriptors {:?}", descriptors);
         match new_message.as_ref() {
             "FeatureMsg" => {
                 align_id.send_new(FeatureMsg {

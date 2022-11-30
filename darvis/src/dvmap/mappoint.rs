@@ -172,7 +172,6 @@ impl MapPoint<FullMapPoint> {
     pub fn increase_found(&mut self, n: &i32) {
         // void MapPoint::IncreaseFound(int n)
         self.full_mp_info.nfound += n;
-        debug!("mappoint:increase_found;mappoint id:{}", self.full_mp_info.id);
     }
 
     pub fn add_observation(&mut self, kf_id: &Id, num_keypoints_left_for_kf: u32, index: u32) {
