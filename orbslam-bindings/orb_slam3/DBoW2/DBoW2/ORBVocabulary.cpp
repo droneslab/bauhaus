@@ -49,6 +49,6 @@ void ORBVocabulary::transform(
     vector<cv::Mat> desc3 = orb_slam3::Converter::toDescriptorVector(desc2);
 
     vocabulary.transform(desc3, bow_vector, feature_vector, levelsup);
-    cout << bow_vector << endl;
+    //cout << bow_vector << endl;
 }
 }

@@ -101,7 +101,7 @@ impl KeyFrame<FullKeyFrame> {
             Some(bow) => Some(bow.clone()),
             None => {
                 let mut bow = BoW::new();
-                debug!("mbowvector for keyframe {} with frame id {}", id, prelim_keyframe.frame_id);
+                //debug!("mbowvector for keyframe {} with frame id {}", id, prelim_keyframe.frame_id);
                 bow::VOCABULARY.transform(&prelim_keyframe.features.descriptors, &mut bow);
                 Some(bow)
             }

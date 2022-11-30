@@ -1084,10 +1084,21 @@ namespace orb_slam3 {
 
     int ORBextractor::extract_rust(const orb_slam3::DVMat & image, std::vector<orb_slam3::DVKeyPoint> & keypoints, orb_slam3::DVMat & descriptors) {
         vector<int> lapping = {overlap_begin, overlap_end};
-        cv::Mat descriptors_1 = orb_slam3::get_descriptor_const(descriptors);
-        auto keypoints_1 = orb_slam3::get_keypoints_const(keypoints);
         auto image_1 = orb_slam3::get_descriptor_const(image);
+
+        cv::Mat descriptors_1;
+        std::vector<cv::KeyPoint> keypoints_1;
+
         extract(image_1, cv::Mat(), keypoints_1, descriptors_1, lapping);
+
+        
+        // // Assign data from cpp to rust variables
+        for(int i =0;i < keypoints_1.size(); i++) {
+            keypoints.push_back(*reinterpret_cast<orb_slam3::DVKeyPoint* >(&keypoints_1[i]));
+        }
+
+        descriptors_1.assignTo((*reinterpret_cast<cv::Mat *> (&descriptors)));
+
     }
 
     int ORBextractor::extract( InputArray _image, InputArray _mask, vector<KeyPoint>& _keypoints,

@@ -173,9 +173,10 @@ impl Map {
         Map::update_connections(& self.mappoints, &mut self.keyframes, & self.initial_kf_id, &initial_kf_id);
         Map::update_connections(& self.mappoints, &mut self.keyframes, & self.initial_kf_id, &curr_kf_id);
 
-        // Bundle Adjustment
-        let optimized_poses = optimizer::global_bundle_adjustment(self, 0, 20);
-        self.update_after_ba(optimized_poses);
+        // // Pranay : commenting for now as it is taking more time
+        // // Bundle Adjustment
+        // let optimized_poses = optimizer::global_bundle_adjustment(self, 0, 20);
+        // self.update_after_ba(optimized_poses);
 
         let median_depth = self.keyframes.get_mut(&initial_kf_id)?.compute_scene_median_depth(& self.mappoints, 2);
         let inverse_median_depth = match self.sensor {
