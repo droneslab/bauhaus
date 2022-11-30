@@ -9,7 +9,7 @@ use std::fmt::Debug;
 use opencv::{prelude::*,features2d::{Feature2DTrait, ORB},types::{PtrOfORB, VectorOfKeyPoint},};
 use dvcore::{matrix::*,lockwrap::ReadOnlyWrapper,plugin_functions::Function,config::*,};
 use crate::{
-    registered_modules::{TRACKING_BACKEND, FEATURE_DETECTION},
+    registered_modules::{TRACKING_BACKEND, FEATURE_DETECTION, CAMERA},
     actors::{messages::{ImageMsg, FeatureMsg,},},
     dvmap::{map::Map},
 };
@@ -24,8 +24,8 @@ impl DVORBextractor {
                 GLOBAL_PARAMS.get::<i32>(FEATURE_DETECTION, "n_levels"),
                 GLOBAL_PARAMS.get::<i32>(FEATURE_DETECTION, "ini_th_fast"),
                 GLOBAL_PARAMS.get::<i32>(FEATURE_DETECTION, "min_th_fast"),
-                GLOBAL_PARAMS.get::<i32>(FEATURE_DETECTION, "stereo_overlapping_begin"),
-                GLOBAL_PARAMS.get::<i32>(FEATURE_DETECTION, "stereo_overlapping_end")
+                GLOBAL_PARAMS.get::<i32>(CAMERA, "stereo_overlapping_begin"),
+                GLOBAL_PARAMS.get::<i32>(CAMERA, "stereo_overlapping_end")
             )
         )
     }
