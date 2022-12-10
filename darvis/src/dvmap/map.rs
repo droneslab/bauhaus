@@ -1,13 +1,10 @@
-use std::{collections::{HashMap, HashSet}, convert::TryInto};
+use std::{collections::{HashMap, HashSet}};
 use log::{info, warn, error, debug};
-
 use dvcore::{matrix::{DVVector3}, config::{Sensor, GLOBAL_PARAMS, SYSTEM_SETTINGS, FrameSensor, ImuSensor}};
 use crate::{
-    dvmap::{keyframe::*, mappoint::*, pose::Pose, bow::DVVocabulary},
+    dvmap::{keyframe::*, mappoint::*, pose::Pose},
     modules::{map_initialization::Initialization, optimizer::{self}}
 };
-
-use super::bow;
 
 pub type Id = i32;
 
@@ -61,10 +58,6 @@ impl Map {
             last_kf_id: -1,
             ..Default::default()
         }
-    }
-
-    pub fn debug_keyframes(&self) { 
-        debug!("keyframes in map {:?}", self.keyframes.keys());
     }
 
     pub fn num_keyframes(&self) -> i32 { self.keyframes.len() as i32 }
@@ -131,8 +124,12 @@ impl Map {
 
         // let curr_frame = inidata.current_frame.as_ref().unwrap();
 
-        for (index, index2) in &inidata.mp_matches {
-            let point = inidata.p3d.get(*index as usize).unwrap();
+        for index in 0..inidata.mp_matches.len() {
+            let index2 = inidata.mp_matches.get(index).unwrap();
+            if *index2 == -1 {
+                continue;
+            }
+            let point = inidata.p3d.get(index).unwrap();
             let world_pos = DVVector3::new_with(point.x as f64, point.y as f64, point.z as f64);
 
             let new_mp_id = Map::insert_mappoint_to_map(
@@ -143,13 +140,13 @@ impl Map {
             let new_mp = self.mappoints.get_mut(&new_mp_id).unwrap();
 
             self.keyframes.get_mut(&initial_kf_id).map(|kf| {
-                kf.add_mappoint(&new_mp, *index, false);
-                new_mp.add_observation(&kf.id(), kf.features.num_keypoints, *index);
+                kf.add_mappoint(&new_mp, index as u32, false);
+                new_mp.add_observation(&kf.id(), kf.features.num_keypoints, index as u32);
             });
 
             self.keyframes.get_mut(&curr_kf_id).map(|kf| {
-                kf.add_mappoint(&new_mp, *index2, false);
-                new_mp.add_observation(&kf.id(), kf.features.num_keypoints, *index2);
+                kf.add_mappoint(&new_mp, *index2 as u32, false);
+                new_mp.add_observation(&kf.id(), kf.features.num_keypoints, *index2 as u32);
             });
 
             // Sofiya: clean up this workflow

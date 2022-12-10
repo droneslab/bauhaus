@@ -1,76 +1,145 @@
+use std::ffi::c_void;
+use opencv;
+use cxx::{type_id, ExternType};
 
-use cxx::{CxxVector, SharedPtr};
+// Note: The structs BindCV[x] below allow us to pass rust openCV objects
+// (created using the rust opencv crate) to the orbslam C++ code.
+// The rust opencv objects (opencv::types::VectorOfKeyPoint, opencv::core::Mat) 
+// are actually just pointers to data allocated in C++, so we should be able to
+// just pass those raw pointers from rust to the orbslam C++ code.
+// Of course, we could accidentally pass the wrong pointer and end up with a
+// memory error. The code below helps prevent that by linking the opencv rust
+// pointers (ex, opencv::types::VectorOfKeyPoint) to the orbslam C++ pointers
+// (ex, orb_slam3::BindCVKeyPoints, see CVConvert.h). Unfortunately we need the 
+// wrapper BindCVKeyPoints and BindCVMat because we can't implement ExternType
+// on a struct declared outside our repository.
+// So, to pass an opencv matrix allocated from the rust opencv crate into these
+// orbslam C++ bindings, the entire workflow looks like this:
+// In Rust...
+//   Read an image using the opencv crate:
+//     let opencv_crate_img = imgcodecs::imread(&path, imgcodecs::IMREAD_GRAYSCALE)?;
+//   Wrap the image into a struct that can be passed to the orbslam C++ code:
+//     let dv_mat_img = DVMatrix::new(opencv_crate_img);
+//     let ready_for_orbslam_img: dvos3binding::ffi::WrapBindCVMat = dv_mat_img.into();
+//   Call the orbslam C++ binding:
+//     dvos3binding::ffi::send_mat(ready_for_orbslam_img);
+// In C++...
+//     void send_mat(const orb_slam3::WrapBindCVMat & image) {
+//       Convert the wrapped image into a regular opencv mat:
+//         opencv::Mat * regular_mat_img = *image.mat_ptr;
+//     }
+//
+// The C++ equivalent of these structs is defined in CVConvert.h
+#[derive(Debug, Clone)]
+pub struct BindCVKeyPoints {
+    pub kp_ptr: opencv::types::VectorOfKeyPoint
+}
+unsafe impl ExternType for BindCVKeyPoints {
+    type Id = type_id!("orb_slam3::BindCVKeyPoints");
+    type Kind = cxx::kind::Trivial;
+}
+pub struct BindCVKeyPointsRef<'a> {
+    pub kp_ptr: &'a opencv::types::VectorOfKeyPoint
+}
+unsafe impl<'a> ExternType for BindCVKeyPointsRef<'a> {
+    type Id = type_id!("orb_slam3::BindCVKeyPointsRef");
+    type Kind = cxx::kind::Trivial;
+}
+
+#[derive(Debug, Clone)]
+pub struct BindCVMat {
+    pub mat_ptr: opencv::core::Mat
+}
+unsafe impl ExternType for BindCVMat {
+    type Id = type_id!("orb_slam3::BindCVMat");
+    type Kind = cxx::kind::Trivial;
+}
+pub struct BindCVMatRef<'a> {
+    pub mat_ptr: &'a opencv::core::Mat
+}
+unsafe impl<'a> ExternType for BindCVMatRef<'a> {
+    type Id = type_id!("orb_slam3::BindCVMatRef");
+    type Kind = cxx::kind::Trivial;
+}
+
+#[derive(Debug, Clone)]
+pub struct BindCVVectorOfi32 {
+    pub vec_ptr: opencv::types::VectorOfi32
+}
+unsafe impl ExternType for BindCVVectorOfi32 {
+    type Id = type_id!("orb_slam3::BindCVVectorOfi32");
+    type Kind = cxx::kind::Trivial;
+}
+#[derive(Debug, Clone)]
+pub struct BindCVVectorOfPoint2f {
+    pub vec_ptr: opencv::types::VectorOfPoint2f
+}
+unsafe impl ExternType for BindCVVectorOfPoint2f {
+    type Id = type_id!("orb_slam3::BindCVVectorOfPoint2f");
+    type Kind = cxx::kind::Trivial;
+}
+
+#[derive(Debug, Clone)]
+pub struct BindCVVectorOfPoint3f {
+    pub vec_ptr: opencv::types::VectorOfPoint3f
+}
+unsafe impl ExternType for BindCVVectorOfPoint3f {
+    type Id = type_id!("orb_slam3::BindCVVectorOfPoint3f");
+    type Kind = cxx::kind::Trivial;
+}
+pub struct BindCVVectorOfPoint2fRef<'a> {
+    pub vec_ptr:  &'a mut opencv::types::VectorOfPoint2f
+}
+unsafe impl<'a> ExternType for BindCVVectorOfPoint2fRef<'a> {
+    type Id = type_id!("orb_slam3::BindCVVectorOfPoint2fRef");
+    type Kind = cxx::kind::Trivial;
+}
+
+// Note: Don't use this (and/or RawCVPtr below) if you can avoid it.
+// It's safer to use BindCVKeyPoints and BindCVMat because then C++
+// is sure to do the cast correctly. This is only useful in the 
+// specific circumstance where you don't have ownership of a DVMatrix
+// or a DVVectorOfKeyPoint but you also can't clone the data.
+#[derive(Debug, Clone)]
+pub struct BindCVRawPtr {
+    pub raw_ptr: *const c_void
+}
+unsafe impl ExternType for BindCVRawPtr {
+    type Id = type_id!("orb_slam3::BindCVRawPtr");
+    type Kind = cxx::kind::Trivial;
+}
 
 #[cxx::bridge(namespace = "orb_slam3")]
 pub mod ffi {
     // Shared structs with fields visible to both languages.
-    #[derive(Debug, Clone)]
-    pub struct DVPoint2f
-    {
-        pub x : f32,
-        pub y : f32
+    pub struct WrapBindCVRawPtr {
+        pub raw_ptr: BindCVRawPtr
     }
-    #[derive(Debug, Clone)]
-    pub struct DVKeyPoint {
-        /// coordinates of the keypoints
-        pub pt: DVPoint2f,
-        /// diameter of the meaningful keypoint neighborhood
-        pub size: f32,
-        /// computed orientation of the keypoint (-1 if not applicable);
-        /// it's in [0,360) degrees and measured relative to
-        /// image coordinate system, ie in clockwise.
-        pub angle: f32,
-        /// the response by which the most strong keypoints have been selected. Can be used for the further sorting or subsampling
-        pub response: f32,
-        /// octave (pyramid layer) from which the keypoint has been extracted
-        pub octave: i32,
-        /// object class (if the keypoints need to be clustered by an object they belong to)
-        pub class_id: i32,
+    pub struct WrapBindCVKeyPoints {
+        pub kp_ptr: BindCVKeyPoints
+    }
+    pub struct WrapBindCVMat {
+        pub mat_ptr: BindCVMat
+    }
+    pub struct WrapBindCVVectorOfi32 {
+        pub vec_ptr: BindCVVectorOfi32
+    }
+    pub struct WrapBindCVVectorOfPoint2f {
+        pub vec_ptr: BindCVVectorOfPoint2f
+    }
+    pub struct WrapBindCVVectorOfPoint3f {
+        pub vec_ptr: BindCVVectorOfPoint3f
     }
 
     #[derive(Debug, Clone)]
-    pub struct DVPoint3f {
-        pub x : f32,
-        pub y : f32,
-        pub z: f32
-    }
-
-    #[derive(Debug, Clone)]
-    pub struct Pose{
+    pub struct Pose {
         pub pose: [[f32;4];4]
     }
-    #[derive(Debug, Clone)]
-    pub struct DVbool{
-        pub val: bool
-    }
-    #[derive(Debug, Clone)]
-    pub struct VectorOfDVPoint3f
-    {
-        pub vec: Vec<DVPoint3f>
-    }
-    pub struct VectorOfDVBool
-    {
-        pub vec: Vec<bool>
-    }
-    pub struct VectorOfDVi32
-    {
-        pub vec: Vec<i32>
-    }
-    pub struct VectorOfDVPoint2f
-    {
-        pub vec: Vec<DVPoint2f>
-    }
 
     #[derive(Debug, Clone)]
-    pub struct VectorOff32
-    {
-        pub vec: Vec<f32>
-    }
+    pub struct Grid {
 
-    #[derive(Debug, Clone)]
-    pub struct VectorOfusize
-    {
-        pub vec: Vec<usize>
+        pub vec: Vec<VectorOfVecusize>
     }
 
     #[derive(Debug, Clone)]
@@ -80,19 +149,22 @@ pub mod ffi {
     }
 
     #[derive(Debug, Clone)]
-    pub struct DVGrid {
-
-        pub vec: Vec<VectorOfVecusize>
-    }
-
-    struct SharedUInt {
-        v: u32,
+    pub struct VectorOfusize
+    {
+        pub vec: Vec<usize>
     }
 
     unsafe extern "C++" {
-        include!("orb_slam3/src/DVMat.h");
-        //include!("orb_slam3/src/DVGrid.h");
-        type DVMat;
+        include!("orb_slam3/src/CVConvert.h");
+        type BindCVMat = crate::BindCVMat;
+        type BindCVKeyPoints = crate::BindCVKeyPoints;
+        type BindCVRawPtr = crate::BindCVRawPtr;
+        type BindCVVectorOfi32 = crate::BindCVVectorOfi32;
+        type BindCVVectorOfPoint2f = crate::BindCVVectorOfPoint2f;
+        type BindCVVectorOfPoint3f = crate::BindCVVectorOfPoint3f;
+        type BindCVKeyPointsRef<'a> = crate::BindCVKeyPointsRef<'a>;
+        type BindCVMatRef<'a> = crate::BindCVMatRef<'a>;
+        type BindCVVectorOfPoint2fRef<'a> = crate::BindCVVectorOfPoint2fRef<'a>;
 
         // ORB extractor
         include!("orb_slam3/src/ORBextractor.h");
@@ -109,9 +181,9 @@ pub mod ffi {
         #[rust_name = "extract"]
         fn extract_rust(
             self: Pin<&mut ORBextractor>,
-            image: &DVMat,
-            keypoints: Pin<&mut CxxVector<DVKeyPoint>>, 
-            descriptors: Pin<&mut DVMat>, 
+            image: &WrapBindCVMat,
+            keypoints: &mut WrapBindCVKeyPoints,
+            descriptors: &mut WrapBindCVMat
         ) -> i32;
 
         // Two view reconstruction
@@ -125,14 +197,15 @@ pub mod ffi {
             sigma: f32,
             iterations: i32
         ) -> UniquePtr<TwoViewReconstruction>;
-        fn Reconstruct_1(
+        #[rust_name = "reconstruct"]
+        fn reconstruct_rust(
             self: Pin<&mut TwoViewReconstruction>,
-            vKeys1: &CxxVector<DVKeyPoint>,
-            vKeys2:  &CxxVector<DVKeyPoint>,
-            vMatches12: &CxxVector<i32>,
+            vKeys1: & WrapBindCVKeyPoints,
+            vKeys2: & WrapBindCVKeyPoints,
+            vMatches12: & Vec<i32>,
             T21: &mut Pose,
-            vP3D: &mut VectorOfDVPoint3f,
-            vbTriangulated: &mut VectorOfDVBool
+            vP3D: &mut WrapBindCVVectorOfPoint3f,
+            vbTriangulated: &mut Vec<bool>
         )-> bool;
 
         // ORB Matcher
@@ -149,27 +222,17 @@ pub mod ffi {
             checkOri: bool
         ) -> UniquePtr<ORBmatcher>;
         #[rust_name = "search_for_initialization"]
-        fn SearchForInitialization_1(
-            self: Pin<&mut ORBmatcher>,
-            F1_mvKeysUn : &CxxVector<DVKeyPoint>, 
-            F2_mvKeysUn: &CxxVector<DVKeyPoint>, 
-            F1_mDescriptors: &DVMat,
-            F2_mDescriptors: &DVMat ,
-            F2_grid: &DVGrid,
-            vbPrevMatched : Pin<&mut CxxVector<DVPoint2f>>, 
-            vnMatches12 : Pin<&mut CxxVector<i32>>,
+        fn search_for_initialization_rust(
+            self: &ORBmatcher,
+            F1_mvKeysUn : &BindCVKeyPointsRef, 
+            F2_mvKeysUn: &BindCVKeyPointsRef, 
+            F1_mDescriptors: &BindCVMatRef,
+            F2_mDescriptors: &BindCVMatRef ,
+            F2_grid: &Grid,
+            vbPrevMatched : &mut BindCVVectorOfPoint2fRef,
+            vnMatches12 : &mut Vec<i32>,
             windowSize: i32
         ) -> i32;
-        // SearchForInitialization(
-        //     const std::vector<cv::KeyPoint>& F1_mvKeysUn, 
-        //     const std::vector<cv::KeyPoint>& F2_mvKeysUn, 
-        //     const cv::Mat F1_mDescriptors,
-        //     const cv::Mat F2_mDescriptors,
-        //     const std::vector< std::vector <std::vector<size_t> > > F2_grid,
-        //     std::vector<cv::Point2f> &vbPrevMatched, 
-        //     std::vector<int> &vnMatches12, 
-        //     int windowSize=10)
-
     }
 
     #[namespace = "DBoW2"]
@@ -191,12 +254,11 @@ pub mod ffi {
         fn load_vocabulary_from_text_file(file: &CxxString) -> UniquePtr<ORBVocabulary>;
         fn transform(
             self: &ORBVocabulary,
-            descriptors: &DVMat,
+            descriptors: &WrapBindCVMat,
             bow_vector: Pin<&mut BowVector>,
             feature_vector: Pin<&mut FeatureVector>,
             levelsup: i32
         );
-
     }
 }
 

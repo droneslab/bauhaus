@@ -6,7 +6,7 @@ use crate::dvmap::{pose::Pose, map::Map};
 #[derive(Debug, Clone, Default)]
 pub struct ImuModule {
     pub velocity: Option<Pose>,
-    last_bias: Option<IMUBias>,
+    _last_bias: Option<IMUBias>,
     sensor: Sensor
 }
 

@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 use chrono::Duration;
 use dvcore::config::{GLOBAL_PARAMS, SYSTEM_SETTINGS, FrameSensor, ImuSensor};
+use dvcore::matrix::DVVectorOfPoint2f;
 use log::debug;
 use opencv::core::Point2f;
-use dvcore::{matrix::DVVectorOfPoint3f, config::Sensor};
+use dvcore::{matrix::DVVectorOfPoint3f, config::Sensor, matrix::DVVectorOfi32};
 use crate::dvmap::{frame::Frame, pose::Pose};
-
 use crate::modules::camera::Camera;
 
 use super::orbmatcher;
@@ -14,8 +14,8 @@ use super::orbmatcher;
 #[derive(Debug, Clone, Default)]
 pub struct Initialization {
     // Initialization (Monocular)
-    pub mp_matches: HashMap<u32, u32>,// ini_matches .. mvIniMatches;
-    pub prev_matched: Vec<Point2f>,// std::vector<cv::Point2f> mvbPrevMatched;
+    pub mp_matches: Vec<i32>,// ini_matches .. mvIniMatches;
+    pub prev_matched: DVVectorOfPoint2f,// std::vector<cv::Point2f> mvbPrevMatched;
     pub p3d: DVVectorOfPoint3f,// std::vector<cv::Point3f> mvIniP3D;
     pub ready_to_initializate: bool,
     pub initial_frame: Option<Frame>,
@@ -29,8 +29,8 @@ impl Initialization {
         let sensor: Sensor = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "sensor");
 
         Self {
-            mp_matches: HashMap::new(),
-            prev_matched: Vec::new(),
+            mp_matches: Vec::new(),
+            prev_matched: DVVectorOfPoint2f::empty(),
             p3d: DVVectorOfPoint3f::empty(),
             ready_to_initializate: false,
             initial_frame: None,
@@ -67,10 +67,8 @@ impl Initialization {
 
         if !self.ready_to_initializate && current_frame.features.num_keypoints > 100 {
             // Set Reference Frame
-             self.prev_matched.resize(current_frame.features.num_keypoints as usize, Point2f::default());
-
             for i in 0..current_frame.features.num_keypoints as usize {
-                self.prev_matched[i] = current_frame.features.get_keypoint(i).pt.clone();
+                self.prev_matched.push(current_frame.features.get_keypoint(i).pt.clone()); // TODO (clone)
             }
 
             match self.sensor.imu() {
@@ -91,45 +89,41 @@ impl Initialization {
             debug!("MonocularInitialization, completed step 1");
             return Ok(false);
         } else {
+            debug!("Current frame ID {}", current_frame.id);
+
             if current_frame.features.num_keypoints <=100 || matches!(self.sensor.imu(), ImuSensor::Some) && last_frame.timestamp - initial_frame.timestamp > Duration::seconds(1) {
                 self.ready_to_initializate = false;
                 return Ok(false);
             }
 
             // Find correspondences
-            let mut nmatches = orbmatcher::search_for_initialization(
+            let (mut num_matches, mp_matches) = orbmatcher::search_for_initialization(
                 &initial_frame, 
-                &current_frame, 
+                &current_frame,
                 &mut self.prev_matched,
-                &mut self.mp_matches,
                 100
             );
-            debug!("MonocularInitialization, search for initialization.. {} matches", nmatches);
+            self.mp_matches = mp_matches;
+            debug!("MonocularInitialization, search for initialization.. {} matches", num_matches);
 
             // Check if there are enough correspondences
-            if nmatches < 100 {
+            if num_matches < 100 {
                 self.ready_to_initializate = false;
                 return Ok(false);
             };
 
-            let mut tcw = Pose::default();
-            let mut vb_triangulated = Vec::<bool>::new();
-
-            let reconstruct_success = camera.reconstruct_with_two_views(
+            let (reconstruct_success, tcw, v_p3d, vb_triangulated) = camera.reconstruct_with_two_views(
                 initial_frame.features.get_all_keypoints(),
                 current_frame.features.get_all_keypoints(),
-                &self.mp_matches,
-                &mut tcw,
-                &mut self.p3d,
-                &mut vb_triangulated
+                & self.mp_matches,
             );
+            self.p3d = v_p3d;
 
             if reconstruct_success {
-                let keys = self.mp_matches.keys().cloned().collect::<Vec<_>>();
-                for index in keys {
+                for index in 0..self.mp_matches.len() {
                     if !vb_triangulated[index as usize] {
-                        self.mp_matches.remove(&index);
-                        nmatches-=1;
+                        self.mp_matches[index] = -1;
+                        num_matches -= 1;
                     }
                 }
 

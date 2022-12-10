@@ -24,6 +24,7 @@
 #include<opencv2/core/core.hpp>
 #include<opencv2/features2d/features2d.hpp>
 #include"sophus/sim3.hpp"
+#include "../../../target/cxxbridge/rust/cxx.h"
 
 // #include"MapPoint.h"
 // #include"KeyFrame.h"
@@ -35,18 +36,22 @@ namespace orb_slam3
 
     struct DVKeyPoint;
     struct DVPoint2f;
-    struct DVMat;
-    struct DVGrid;
+    struct Grid;
     struct VectorOfDVPoint2f;
     struct VectorOfDVi32;
+    struct WrapBindCVMat;
+    struct WrapBindCVKeyPoints;
+    struct WrapBindCVRawPtr;
+    struct WrapBindCVVectorOfi32;
+    struct WrapBindCVVectorOfPoint2f;
+    struct BindCVKeyPointsRef;
+    struct BindCVMatRef;
+    struct BindCVVectorOfPoint2fRef;
 
     class ORBmatcher
     {
 
-    
     public:
-
-
 
         ORBmatcher(int frame_grid_cols, int frame_grid_rows, float minX=0.0, float minY=0.0,  float maxX=0.0, float maxY=0.0,float nnratio=0.6, bool checkOri=true);
 
@@ -82,42 +87,33 @@ namespace orb_slam3
         // Matching for the Map Initialization (only used in the monocular case)
         // int SearchForInitialization(Frame &F1, Frame &F2, std::vector<cv::Point2f> &vbPrevMatched, std::vector<int> &vnMatches12, int windowSize=10);
 
-            // const std::vector<orb_slam3::DVKeyPoint> &vKeys1,
-            // const std::vector<orb_slam3::DVKeyPoint> &vKeys2,const std::vector<int32_t> &vMatches12,
-            // orb_slam3::Pose &T21, 
-            // VectorOfDVPoint3f &vP3D, 
-            // VectorOfDVBool &vbTriangulated
-
-        int32_t SearchForInitialization_1(
-            const std::vector<orb_slam3::DVKeyPoint>  & F1_mvKeysUn , 
-            const std::vector<orb_slam3::DVKeyPoint>  & F2_mvKeysUn, 
-            const orb_slam3::DVMat  &F1_mDescriptors,
-            const orb_slam3::DVMat  &F2_mDescriptors,
-            const orb_slam3::DVGrid  & F2_grid, 
-            std::vector<orb_slam3::DVPoint2f>& vbPrevMatched,
-            std::vector<int32_t>& vnMatches12,
+        int32_t search_for_initialization_rust(
+            const orb_slam3::BindCVKeyPointsRef  & F1_mvKeysUn , 
+            const orb_slam3::BindCVKeyPointsRef  & F2_mvKeysUn, 
+            const orb_slam3::BindCVMatRef  &F1_mDescriptors,
+            const orb_slam3::BindCVMatRef  &F2_mDescriptors,
+            const orb_slam3::Grid  & F2_grid, 
+            orb_slam3::BindCVVectorOfPoint2fRef & vbPrevMatched,
+            rust::vec<int> & vnMatches12,
             int32_t windowSize
-        );
-
-
-
+        ) const;
 
         int SearchForInitialization(
-        const std::vector<cv::KeyPoint>& F1_mvKeysUn, 
-        const std::vector<cv::KeyPoint>& F2_mvKeysUn, 
-        const cv::Mat F1_mDescriptors,
-        const cv::Mat F2_mDescriptors,
-        const std::vector< std::vector <std::vector<size_t> > > F2_grid,
-        std::vector<cv::Point2f> &vbPrevMatched, 
-        std::vector<int> &vnMatches12, 
-        int windowSize=10);
+            const std::vector<cv::KeyPoint>& F1_mvKeysUn, 
+            const std::vector<cv::KeyPoint>& F2_mvKeysUn, 
+            const cv::Mat F1_mDescriptors,
+            const cv::Mat F2_mDescriptors,
+            const orb_slam3::Grid F2_grid,
+            std::vector<cv::Point2f> &vbPrevMatched, 
+            rust::vec<int> &vnMatches12, 
+            int windowSize=10
+        ) const;
 
 
          std::vector<size_t> GetFeaturesInArea(
             const std::vector<cv::KeyPoint> mvKeysUn,
-            const std::vector< std::vector <std::vector<size_t> > > mGrid,
+            const orb_slam3::Grid mGrid,
             const float &x, const float  &y, const float  &r, const int minLevel=-1, const int maxLevel=-1) const;
-
 
         // // Matching to triangulate new MapPoints. Check Epipolar Constraint.
         // int SearchForTriangulation(KeyFrame *pKF1, KeyFrame* pKF2,
@@ -144,7 +140,7 @@ namespace orb_slam3
     protected:
         float RadiusByViewingCos(const float &viewCos);
 
-        void ComputeThreeMaxima(std::vector<int>* histo, const int L, int &ind1, int &ind2, int &ind3);
+        void ComputeThreeMaxima(std::vector<int>* histo, const int L, int &ind1, int &ind2, int &ind3) const;
 
         float mfNNratio;
         bool mbCheckOrientation;
@@ -167,7 +163,19 @@ namespace orb_slam3
         float maxX,
         float maxY, 
         float nnratio,
-        bool checkOri);
+        bool checkOri
+    );
+
+    void new_test(
+        int frame_grid_cols,
+        int frame_grid_rows, 
+        float minX, 
+        float minY, 
+        float maxX,
+        float maxY, 
+        float nnratio,
+        bool checkOri
+    );
 
 }// namespace ORB_SLAM
 

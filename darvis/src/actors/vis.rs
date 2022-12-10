@@ -1,6 +1,5 @@
 use opencv::{prelude::*, core, highgui, imgproc, imgcodecs};
 use axiom::prelude::*;
-use serde::{Deserialize, Serialize};
 use dvcore::{plugin_functions::Function,matrix::*,};
 use crate::{actors::messages::VisMsg, dvmap::pose::{Translation, Rotation},};
 
@@ -17,20 +16,17 @@ pub struct DarvisVis {
     traj_pos: Translation, 
     /// Built up trajectory rotation
     traj_rot: Rotation, 
-    id: String
-    }
+}
 
 impl DarvisVis {
     /// Constructor
-    pub fn new(id: String) -> DarvisVis {
+    pub fn new() -> DarvisVis {
         DarvisVis {
             //traj_img: Mat::new_rows_cols_with_default(750, 1000, core::CV_8UC3, core::Scalar::all(0.0)).unwrap(),
             traj_img: Mat::new_rows_cols_with_default(376, 500, core::CV_8UC3, core::Scalar::all(0.0)).unwrap(),
             cam_img: Mat::default(),
             traj_pos: DVVector3::zeros::<f64>(),
             traj_rot: DVMatrix3::zeros::<f64>(),
-            id: id
-            // actor_ids: ids,
         }
     }
 

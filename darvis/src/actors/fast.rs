@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use axiom::prelude::*;
 use log::warn;
 use opencv::{

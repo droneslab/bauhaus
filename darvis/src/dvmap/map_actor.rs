@@ -1,4 +1,3 @@
-use std::{collections::HashSet};
 use axiom::{prelude::*, message::ActorMessage};
 use log::{info, warn, debug};
 use nalgebra::Vector3;
@@ -7,8 +6,6 @@ use crate::{
     dvmap::{keyframe::*, map::*},
     modules::map_initialization::Initialization, actors::messages::MapInitializedMsg,
 };
-
-use super::pose::Pose;
 
 pub static MAP_ACTOR: &str = "MAP_ACTOR"; 
 

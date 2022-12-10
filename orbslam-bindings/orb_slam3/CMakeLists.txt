@@ -7,8 +7,8 @@ ENDIF()
 
 MESSAGE("Build type: " ${CMAKE_BUILD_TYPE})
 
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS}  -Wall   -O0 -g ")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall   -O0 -g ")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS}  -Wall  -O0 -g")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall  -O0 -g")
 
 # Sofiya: Removed -march=native, based on https://github.com/raulmur/ORB_SLAM2/issues/341 
 set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -g ")
@@ -51,12 +51,11 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
 # )
 
 #set( ${PROJECT_SOURCE_DIR}/DBoW2/DUtils/...)
+include_directories(../target/cxxbridge)
 
 add_library(${PROJECT_NAME} STATIC
-src/DVMat.cc
-src/DVMat.h
-src/DVConvert.cc
-src/DVConvert.h
+src/CVConvert.cc
+src/CVConvert.h
 src/ORBextractor.cc
 src/ORBextractor.h
 src/ORBmatcher.cc

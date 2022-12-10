@@ -141,6 +141,13 @@ let max_features: i32 = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "max_features");
 ```
 Where ``max_features`` is the key you added in the config file.
 
+## Debugging
+
+To instead run with address sanitizer to check memory errors from the ffi bindings, run:
+```
+RUSTFLAGS="-Z sanitizer=address" cargo run --target x86_64-unknown-linux-gnu /datasets/ config.yaml
+```
+
 ---
 ## Future work, key for strings
 
@@ -161,4 +168,4 @@ Strings are formatted like: ``TODO (string)``
 
 ### Design
 - Axiom framework
-    - **msg copy** - 
+    - **msg copy**

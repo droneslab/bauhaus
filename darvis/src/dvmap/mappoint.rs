@@ -2,7 +2,6 @@ use std::{fmt::Debug};
 use array2d::Array2D;
 use dvcore::{matrix::DVMatrix, config::{Sensor, GLOBAL_PARAMS, SYSTEM_SETTINGS}};
 use log::{info, error, debug};
-use na::Vector3;
 use serde::{Deserialize, Serialize};
 extern crate nalgebra as na;
 use crate::{matrix::DVVector3, modules::orbmatcher::{descriptor_distance, SCALE_FACTORS}, registered_modules::FEATURE_DETECTION};
@@ -69,8 +68,6 @@ pub struct FullMapPoint { // Full map item inserted into the map with the follow
     // following two are only set by tracking and only checked by local mapping for mappoint culling, but not sure what the diff is b/w visible and found
     nvisible: i32, //mnvisible
     nfound: i32, //mnfound
-
-    sensor: Sensor
 }
 
 pub trait MapPointState {}
@@ -146,7 +143,6 @@ impl MapPoint<FullMapPoint> {
                 nvisible: 1,
                 nfound: 1,
                 best_descriptor: DVMatrix::empty(),
-                sensor: sensor
             },
         }
     }
@@ -237,13 +233,13 @@ impl MapPoint<FullMapPoint> {
         let mut best_idx = 0;
 
         let all_dists: Vec<i32> = distances.elements_row_major_iter().cloned().collect();
-        let N = descriptors.len();
-        for i in 0..N {
+        let num_descriptors = descriptors.len();
+        for i in 0..num_descriptors {
             let mut slice_dists = Vec::new();
-            slice_dists.resize(N - i, 0i32);
-            slice_dists[..N-i].clone_from_slice(&all_dists[i..N]);
+            slice_dists.resize(num_descriptors - i, 0i32);
+            slice_dists[..num_descriptors-i].clone_from_slice(&all_dists[i..num_descriptors]);
             slice_dists.sort();
-            let median = slice_dists[(0.5 * (N-1) as f64) as usize];
+            let median = slice_dists[(0.5 * (num_descriptors-1) as f64) as usize];
             if median < best_median {
                 best_median = median;
                 best_idx = i;

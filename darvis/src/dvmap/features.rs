@@ -369,7 +369,7 @@ impl Grid {
         //let x_in_bounds = pos_x >= 0 && pos_x < (FRAME_GRID_COLS as i32);
         //let y_in_bounds = pos_y >= 0 && pos_y < (FRAME_GRID_ROWS as i32);
 
-        let not_in_bounds = (pos_x<0 || pos_x>=FRAME_GRID_COLS as i32 || pos_y<0 || pos_y>=FRAME_GRID_ROWS as i32);
+        let not_in_bounds = pos_x<0 || pos_x>=FRAME_GRID_COLS as i32 || pos_y<0 || pos_y>=FRAME_GRID_ROWS as i32;
 
         //Keypoint's coordinates are undistorted, which could cause to go out of the image
         if not_in_bounds
@@ -384,10 +384,10 @@ impl Grid {
 }
 
 // From implementations to make it easier to pass this into opencv functions
-impl From<Grid> for dvos3binding::ffi::DVGrid {
-    fn from(dvgrid: Grid) -> dvos3binding::ffi::DVGrid { 
+impl From<Grid> for dvos3binding::ffi::Grid {
+    fn from(dvgrid: Grid) -> dvos3binding::ffi::Grid { 
         
-        let mut grid = dvos3binding::ffi::DVGrid{vec: Vec::new()};
+        let mut grid = dvos3binding::ffi::Grid{vec: Vec::new()};
 
 
         //////

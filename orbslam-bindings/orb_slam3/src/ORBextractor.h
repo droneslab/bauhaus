@@ -23,11 +23,11 @@
 #include <list>
 #include <opencv2/opencv.hpp>
 
-#include "DVMat.h"
-#include "DVConvert.h"
-
+#include "CVConvert.h"
 namespace orb_slam3
 {
+struct WrapBindCVMat; 
+struct WrapBindCVKeyPoints;
 
 class ExtractorNode
 {
@@ -56,10 +56,11 @@ public:
     // Compute the ORB features and descriptors on an image.
     // ORB are dispersed on the image using an octree.
     // Mask is ignored in the current implementation.
-    int extract_rust(const orb_slam3::DVMat & image, std::vector<orb_slam3::DVKeyPoint> & keypoints, orb_slam3::DVMat & descriptors);
+    int extract_rust(const orb_slam3::WrapBindCVMat & image, orb_slam3::WrapBindCVKeyPoints & keypoints, orb_slam3::WrapBindCVMat & descriptors);
     int extract(cv::InputArray _image, cv::InputArray _mask,
                     std::vector<cv::KeyPoint>& _keypoints,
                     cv::OutputArray _descriptors, std::vector<int> &vLappingArea);
+
 
     int inline GetLevels(){
         return nlevels;}

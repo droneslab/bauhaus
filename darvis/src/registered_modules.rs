@@ -36,11 +36,11 @@ pub fn getmethod(fnname: &String, id: &String, map: ReadOnlyWrapper<Map>) -> Fun
 {
     match fnname.as_ref()
     {
-        "tracking_frontend" => FunctionProxy {function: Box::new(crate::actors::tracking_frontend::DarvisTrackingFront::new(map))},
+        "tracking_frontend" => FunctionProxy {function: Box::new(crate::actors::tracking_frontend::DarvisTrackingFront::new())},
         "tracking_backend" => FunctionProxy {function: Box::new(crate::actors::tracking_backend::DarvisTrackingBack::new(map))},
         "local_mapping" => FunctionProxy {function: Box::new(crate::actors::local_mapping::DarvisLocalMapping::new(map))},
         "loop_closing" => FunctionProxy {function: Box::new(crate::actors::loop_closing::DarvisLoopClosing::new(map))},
-        "vis" => FunctionProxy {function: Box::new(crate::actors::vis::DarvisVis::new(id.clone()))},
+        "vis" => FunctionProxy {function: Box::new(crate::actors::vis::DarvisVis::new())},
         "fast_extract" => FunctionProxy {function: Box::new(crate::actors::fast::DarvisFast::new())},
         _ => FunctionProxy {function: Box::new(dvcore::plugin_functions::DarvisNone)},
     }

@@ -12,7 +12,6 @@
 use std::{collections::HashMap, sync::RwLock, fmt};
 use lazy_static::*;
 use linked_hash_map::LinkedHashMap;
-use log::info;
 
 use std::fs::File;
 use std::io::Read;

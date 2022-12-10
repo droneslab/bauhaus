@@ -28,10 +28,11 @@ impl DVVocabulary {
     }
     pub fn transform(&self, descriptors: &DVMatrix, bow: & mut BoW) {
         unsafe {
-            let descriptors = descriptors.mat().clone().into_raw() as *const dvos3binding::ffi::DVMat;
+            // Avoid cloning here?
+            let mut bla: dvos3binding::ffi::WrapBindCVMat = descriptors.clone().into();
 
             self.vocabulary.transform(
-                &*descriptors,
+                &mut bla,
                 bow.bow_vec.pin_mut(),
                 bow.feat_vec.pin_mut(),
                 4

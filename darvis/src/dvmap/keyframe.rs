@@ -1,10 +1,10 @@
-use std::{collections::{HashMap}, iter::FromIterator, cmp::min};
+use std::{collections::{HashMap}, cmp::min};
 use chrono::{DateTime, Utc};
 use derivative::Derivative;
 use dvcore::{matrix::{DVVector3}};
-use log::{error, info, debug, warn};
-use serde::{Deserialize, Serialize, de::DeserializeOwned};
-use crate::{dvmap::{map::Id, pose::Pose, frame::*, bow::DVVocabulary},modules::{imu::*},};
+use log::{error, info, debug};
+use serde::{Deserialize, Serialize};
+use crate::{dvmap::{map::Id, pose::Pose, frame::*},modules::{imu::*},};
 use super::{mappoint::{MapPoint, FullMapPoint}, map::{Map}, features::Features, bow::{BoW, self}};
 
 // Typestate...Keyframe information that is ALWAYS available, regardless of keyframe state.

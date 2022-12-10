@@ -1,8 +1,5 @@
-use cxx::CxxVector;
-use log::{info, debug};
-use opencv::{types::VectorOfPoint3f, prelude::{Mat, MatTrait, Boxed, MatTraitConst}, core::{Scalar, Point3f, CV_64F}};
-use std::collections::HashMap;
-use dvcore::{config::*, matrix::{DVMatrix3, DVMatrix, DVVectorOfPoint3f, DVVector3}};
+use opencv::{prelude::{Mat, MatTrait, Boxed, MatTraitConst}, core::{Scalar, Point3f, CV_64F}};
+use dvcore::{config::*, matrix::{DVMatrix, DVVectorOfPoint3f, DVVector3, DVVectorOfi32}};
 use crate::{
     dvmap::{pose::{Pose, Rotation}},
     matrix::DVVectorOfKeyPoint, registered_modules::CAMERA
@@ -75,7 +72,7 @@ impl Camera {
             th_depth, dist_coef,
         })
     }
-    
+
     pub fn get_fx(&self) -> f64 { *self.k_matrix.mat().at_2d::<f64>(0,0).unwrap() }
     pub fn get_fy(&self) -> f64 { *self.k_matrix.mat().at_2d::<f64>(1,1).unwrap() }
     pub fn get_cx(&self) -> f64 { *self.k_matrix.mat().at_2d::<f64>(0,2).unwrap() }
@@ -87,11 +84,8 @@ impl Camera {
         &mut self, 
         v_keys1: &DVVectorOfKeyPoint, 
         v_keys2: &DVVectorOfKeyPoint,
-        matches: &HashMap<u32, u32>,
-        t21: &mut Pose,
-        v_p3_d: &mut DVVectorOfPoint3f,
-        triangulated: &mut Vec<bool>
-    ) -> bool {
+        matches: &Vec<i32>,
+    ) -> (bool, Pose, DVVectorOfPoint3f, Vec<bool>) {
         let mut tvr = dvos3binding::ffi::new_two_view_reconstruction(
             self.get_fx() as f32,
             self.get_cx() as f32,
@@ -99,56 +93,33 @@ impl Camera {
             self.get_cy() as f32,
             1.0, 200
         );
-        let mut matches_cv = opencv::types::VectorOfi32::default();
 
-        for i in 0..v_keys1.len() as u32 {
-            if matches.contains_key(&i) {
-                matches_cv.push(matches[&i] as i32);
-            } else {
-                matches_cv.push(-1)
-            }
-        }
+        let mut pose = dvos3binding::ffi::Pose{pose : [[0.0;4];4]};
+        let mut v_p3d: dvos3binding::ffi::WrapBindCVVectorOfPoint3f = DVVectorOfPoint3f::empty().into();
+        let mut vb_triangulated  = Vec::new();
 
-        unsafe {
-            let kps_1_cxx = v_keys1.as_raw() as *const CxxVector<dvos3binding::ffi::DVKeyPoint>;
-            let kps_2_cxx = v_keys2.as_raw()as *const CxxVector<dvos3binding::ffi::DVKeyPoint>;
+        let reconstructed = tvr.pin_mut().reconstruct(
+            & v_keys1.clone().into(),
+            & v_keys2.clone().into(),
+            matches, 
+            &mut pose,
+            &mut v_p3d,
+            &mut vb_triangulated
+        );
 
-            let matches_cxx = matches_cv.into_raw() as *const CxxVector<i32>;
-            let mut pose = dvos3binding::ffi::Pose{pose : [[0.0;4];4]};
-            let mut v_p3d  = dvos3binding::ffi::VectorOfDVPoint3f{vec:Vec::new() };
-            let mut vb_triangulated  = dvos3binding::ffi::VectorOfDVBool{ vec:Vec::new() };
+        //debug!("pose {:?} \n vP3D {:?} \n reconstructed: {}", pose, v_p3d.vec.len(), reconstructed);
 
-            let reconstructed = tvr.pin_mut().Reconstruct_1(
-                &*kps_1_cxx,
-                &*kps_2_cxx,
-                &*matches_cxx, 
-                &mut pose,
-                &mut v_p3d,
-                &mut vb_triangulated
-            );
+        let out_pose = pose.pose;
 
-            //debug!("pose {:?} \n vP3D {:?} \n reconstructed: {}", pose, v_p3d.vec.len(), reconstructed);
+        let rot = nalgebra::Matrix3::<f64>::new(out_pose[0][0] as f64, out_pose[0][1] as f64, out_pose[0][2] as f64,
+        out_pose[1][0] as f64, out_pose[1][1] as f64, out_pose[1][2] as f64, 
+        out_pose[2][0] as f64, out_pose[2][1] as f64, out_pose[2][2] as f64);
 
-            let out_pose = pose.pose;
+        let mut t21 = Pose::default();
+        t21.set_rotation(&Rotation::new(rot));
+        t21.set_translation(out_pose[3][0] as f64, out_pose[3][1] as f64, out_pose[3][2] as f64);
 
-            let rot = nalgebra::Matrix3::<f64>::new(out_pose[0][0] as f64, out_pose[0][1] as f64, out_pose[0][2] as f64,
-            out_pose[1][0] as f64, out_pose[1][1] as f64, out_pose[1][2] as f64, 
-            out_pose[2][0] as f64, out_pose[2][1] as f64, out_pose[2][2] as f64);
-
-            //let dvrot = Rotation::new(rot);
-            t21.set_rotation(&Rotation::new(rot));
-            t21.set_translation(out_pose[3][0] as f64, out_pose[3][1] as f64, out_pose[3][2] as f64);
-
-            for pt3d in v_p3d.vec {
-                v_p3_d.push(Point3f::new(pt3d.x, pt3d.y, pt3d.z));
-            }
-
-            for is_traingulated in vb_triangulated.vec {
-                triangulated.push(is_traingulated);
-            }
-
-            reconstructed 
-        }
+        (reconstructed, t21, v_p3d.into(), vb_triangulated) 
     }
 
     pub fn unproject_eig() -> DVVector3<f32> {

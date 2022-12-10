@@ -17,8 +17,9 @@
 #include"FORB.h"
 
 #include "ORBVocabulary.h"
-#include "../../src/DVConvert.h"
+#include "../../src/CVConvert.h"
 #include "../../src/Converter.h"
+#include "dvos3binding/src/lib.rs.h"
 
 
 struct DVKeyPoint;
@@ -40,15 +41,14 @@ std::unique_ptr<ORBVocabulary> load_vocabulary_from_text_file(const string &file
 }
 
 void ORBVocabulary::transform(
-    const orb_slam3::DVMat& desc1, 
+    const orb_slam3::WrapBindCVMat& desc1, 
     DBoW2::BowVector & bow_vector,
     DBoW2::FeatureVector & feature_vector,
     int32_t levelsup
 ) const {
-    cv::Mat desc2 = orb_slam3::get_descriptor_const(desc1);
-    vector<cv::Mat> desc3 = orb_slam3::Converter::toDescriptorVector(desc2);
+    vector<cv::Mat> desc2 = orb_slam3::Converter::toDescriptorVector(*desc1.mat_ptr);
 
-    vocabulary.transform(desc3, bow_vector, feature_vector, levelsup);
+    vocabulary.transform(desc2, bow_vector, feature_vector, levelsup);
     //cout << bow_vector << endl;
 }
 }

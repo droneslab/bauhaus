@@ -1,22 +1,21 @@
 use std::collections::{HashMap, HashSet};
 use std::f64::INFINITY;
-use std::convert::{TryInto, TryFrom};
+use std::convert::{TryInto};
 use std::pin::Pin;
-use cxx::{CxxVector, UniquePtr};
-use dvcore::config::{GLOBAL_PARAMS, Sensor, FrameSensor};
-use log::{info, debug, warn};
-use opencv::core::{Point2f, KeyPoint, CV_8U};
+use cxx::{CxxVector};
+use dvcore::config::{GLOBAL_PARAMS, Sensor};
+use dvcore::matrix::{DVVectorOfi32, DVVectorOfPoint2f};
+use dvos3binding::ffi::WrapBindCVVectorOfPoint2f;
+use log::{debug};
+use opencv::core::{Point2f, KeyPoint};
 use opencv::features2d::BFMatcher;
 use opencv::prelude::*;
 use crate::actors::tracking_backend::TrackedMapPointData;
-use crate::dvmap::bow::{self, BoW};
-use opencv::types::{VectorOfKeyPoint, VectorOfDMatch};
+use opencv::types::{VectorOfDMatch};
 use crate::dvmap::keyframe::{KeyFrame, FullKeyFrame};
-use crate::dvmap::mappoint::FullMapPoint;
 use crate::registered_modules::{MATCHER, FEATURE_DETECTION};
 use crate::{
-    dvmap::{frame::Frame, mappoint::MapPoint, map::Id, map::Map},
-    modules::{camera::Camera},
+    dvmap::{frame::Frame, map::Id, map::Map},
     lockwrap::ReadOnlyWrapper,
 };
 
@@ -24,18 +23,13 @@ const  TH_HIGH: i32= 100;
 const  TH_LOW: i32 = 50;
 const  HISTO_LENGTH: i32 = 30;
 
-// Bit set count operation from
-// http://graphics.stanford.edu/~seander/bithacks.html#CountBitsSetParallel
-
 lazy_static! {
-    // Note: Does not change, so can have multiple copies of this.
-    // ORBSLAM3 duplicates this var at every frame and keyframe,
+    // Note: ORBSLAM3 duplicates this var at every frame and keyframe,
     // but I'm pretty sure that it's set once per-system when the ORBExtractor
     // is created and only ever used by Optimizer.
     // In general, I'd like to remove these kinds of variables away from the
     // frame/keyframe/mappoint implementation and into the object that actually
     // directly uses it.
-
     pub static ref SCALE_FACTORS: Vec<f32> = {
         let scale_factor = GLOBAL_PARAMS.get::<f64>(FEATURE_DETECTION, "scale_factor");
         let n_levels = GLOBAL_PARAMS.get::<i32>(FEATURE_DETECTION, "n_levels");
@@ -48,28 +42,21 @@ lazy_static! {
     };
 }
 
-
 fn match_frames(
     ini_frame: &Frame,
     curr_frame: &Frame,
     prev_matched: &mut Vec<Point2f>,
     mp_matches: &mut HashMap<u32, u32>,
-) -> i32
-{
+) -> i32 {
     let frame1_keypoints = ini_frame.features.get_all_keypoints();
     debug!("{}", frame1_keypoints.len());
     let frame1_descriptors = &*ini_frame.features.descriptors; 
     let frame2_keypoints = curr_frame.features.get_all_keypoints();
-
-
     let frame2_descriptors = &*curr_frame.features.descriptors;
  
-
-
-    let mut pt_indx2 = opencv::types::VectorOfi32::new();
+    let pt_indx2 = opencv::types::VectorOfi32::new();
     let mut points2 = opencv::types::VectorOfPoint2f::new();
     KeyPoint::convert(&frame2_keypoints, &mut points2, &pt_indx2).unwrap();  
-    
     mp_matches.clear();
     //////////////////////////////////////////////
 
@@ -117,93 +104,35 @@ fn match_frames(
       }
     ////////////////////////////////////////////
     let nmatches = sorted_matches.len() as i32;
-    
+
     nmatches
 }
 
 pub fn search_for_initialization(
     ini_frame: &Frame,
     curr_frame: &Frame,
-    prev_matched: &mut Vec<Point2f>,
-    mp_matches: &mut HashMap<u32, u32>,
+    prev_matched: &mut DVVectorOfPoint2f,
     window_size: i32
-) -> i32 {
-    // Pranay: for now using BFMatcher to frame matching, as ORBMatcher API seems dependent on ORBExtractor.
-    let nmatches = match_frames(
-        ini_frame,
-        curr_frame,
-        prev_matched,
-        mp_matches
-    );
-    info!("search_for_initialization; {}  matches", nmatches);
-    return nmatches;
-
-
+) -> (i32, Vec<i32>) {
     // Sofiya: Should we avoid making a new orb matcher each time? Is this expensive?
-    let mut matcher = dvos3binding::ffi::new_orb_matcher(48, 48, 0.0, 0.0, 600.0, 600.0,0.1,true);
+    let matcher = dvos3binding::ffi::new_orb_matcher(48, 48, 0.0, 0.0, 600.0, 600.0,0.1,true);
+    let grid_v3: dvos3binding::ffi::Grid = curr_frame.features.grid.clone().into();
+    let mut mp_matches = Vec::new();
 
-    let frame1_keypoints = ini_frame.features.get_all_keypoints();
-    debug!("{}", frame1_keypoints.len());
+    debug!("search_for_initialization {} {} {:?} {:?}", ini_frame.features.get_all_keypoints().len(), curr_frame.features.get_all_keypoints().len(), (*ini_frame.features.descriptors).size().unwrap(), (*curr_frame.features.descriptors).size().unwrap());
 
-    let frame1_keypoints_cxx = frame1_keypoints.as_raw() as *const CxxVector<dvos3binding::ffi::DVKeyPoint>;
-
-    debug!("{}", frame1_keypoints.len());
-    let frame1_descriptors = ini_frame.features.descriptors.clone();
-    let frame1_descriptors_cxx = frame1_descriptors.as_raw() as *const dvos3binding::ffi::DVMat;
-
-    let frame2_keypoints = curr_frame.features.get_all_keypoints();
-    let frame2_keypoints_cxx = frame2_keypoints.as_raw() as *const CxxVector<dvos3binding::ffi::DVKeyPoint>;
-
-
-
-    debug!("{}", frame2_keypoints.len());
-    let frame2_descriptors = &*curr_frame.features.descriptors;
-    let frame2_descriptors_cxx = frame2_descriptors.clone().into_raw() as *const dvos3binding::ffi::DVMat;
-
-
-
-    let grid_dv = curr_frame.features.grid.grid.clone();
-
-    let mut grid_v3: dvos3binding::ffi::DVGrid = curr_frame.features.grid.clone().into();
-
-
-    // let mut grid_v3 = dvos3binding::ffi::DVGrid{vec:Vec::new()};
-    // unsafe{
-    //     grid_v3.vec = std::mem::transmute(grid_dv);
-
-    // }
-
-
-
-    let mut prev_match_cv = opencv::types::VectorOfPoint2f::default();
-
-    //Pranay: try find way to pass match without cloning
-    for i in 0..prev_matched.len()
-    {
-        prev_match_cv.push(prev_matched.get(i).unwrap().clone());
-    }
-    debug!("prev_match_cv: {}, prev_matched : {}", prev_match_cv.len(), prev_matched.len());
-    let prev_matchcv = prev_match_cv.into_raw() as *mut CxxVector<dvos3binding::ffi::DVPoint2f>;
-
-    let mut matches_cv=  opencv::types::VectorOfi32::default();
-    let matchescv = matches_cv.into_raw() as *mut CxxVector<i32>;
-
-    unsafe {
-        let matches = matcher.pin_mut().search_for_initialization(
-            &*frame1_keypoints_cxx,
-            &*frame2_keypoints_cxx, 
-            &*frame1_descriptors_cxx,
-            &*frame2_descriptors_cxx,
-            &grid_v3,
-            Pin::new_unchecked(prev_matchcv.as_mut().unwrap()), 
-            Pin::new_unchecked(matchescv.as_mut().unwrap()),
-            window_size
-        );
-        debug!("new matches: {}", matches);
-        return matches;
-    }
-
-    
+    let num_matches = matcher.search_for_initialization(
+        & ini_frame.features.get_all_keypoints().into(),
+        & curr_frame.features.get_all_keypoints().into(), 
+        & (&ini_frame.features.descriptors).into(),
+        & (&curr_frame.features.descriptors).into(),
+        &grid_v3,
+        &mut prev_matched.into(),
+        &mut mp_matches,
+        window_size
+    );
+    debug!("new matches: {}", num_matches);
+    return (num_matches, mp_matches);
 }
 
 pub fn search_by_projection(
@@ -370,6 +299,7 @@ pub fn search_by_projection(
 
     return Ok(num_matches);
 }
+
 // Project MapPoints tracked in last frame into the current frame and search matches.
 // Used to track from previous frame (Tracking)
 pub fn search_by_projection_with_threshold (
@@ -744,11 +674,11 @@ fn construct_rotation_histogram() -> Vec<Vec<u32>> {
     rot_hist
 }
 
-fn compute_three_maxima(histo : &Vec<Vec<u32>> , L: i32) -> (i32, i32, i32) {
+fn compute_three_maxima(histo : &Vec<Vec<u32>> , histo_length: i32) -> (i32, i32, i32) {
     let (mut max_1, mut max_2, mut max_3) = (0, 0, 0);
     let (mut ind_1, mut ind_2, mut ind_3) = (-1, -1, -1);
 
-    for i in 0..L {
+    for i in 0..histo_length {
         let s = histo[i as usize].len() as i32;
         if s > max_1 {
             max_3=max_2;

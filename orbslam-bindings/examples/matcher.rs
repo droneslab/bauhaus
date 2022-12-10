@@ -50,8 +50,8 @@ fn main() {
         let  kps2cv = kps_cv2.into_raw() as *const CxxVector<dvos3binding::ffi::DVKeyPoint>;
 
 
-        let  desc1cv = desc1.into_raw() as *const dvos3binding::ffi::DVMat;
-        let  desc2cv = desc2.into_raw() as *const dvos3binding::ffi::DVMat;
+        let  desc1cv = desc1.into_raw() as *const dvos3binding::ffi::BindCVMat;
+        let  desc2cv = desc2.into_raw() as *const dvos3binding::ffi::BindCVMat;
 
         
         let mut grid_v1 = dvos3binding::ffi::VectorOfusize{vec: Vec::new()};
@@ -80,7 +80,7 @@ fn main() {
             &*desc1cv,
             &*desc2cv,
             &grid_v3,
-             Pin::new_unchecked(prev_matchcv.as_mut().unwrap()), 
+            Pin::new_unchecked(prev_matchcv.as_mut().unwrap()), 
             Pin::new_unchecked(matchescv.as_mut().unwrap()),
             100
             );
