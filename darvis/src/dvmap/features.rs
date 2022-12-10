@@ -386,11 +386,7 @@ impl Grid {
 // From implementations to make it easier to pass this into opencv functions
 impl From<Grid> for dvos3binding::ffi::Grid {
     fn from(dvgrid: Grid) -> dvos3binding::ffi::Grid { 
-        
         let mut grid = dvos3binding::ffi::Grid{vec: Vec::new()};
-
-
-        //////
 
         for i in 0.. FRAME_GRID_COLS  {
             let mut row = dvos3binding::ffi::VectorOfVecusize{vec: Vec::new()};
@@ -398,6 +394,7 @@ impl From<Grid> for dvos3binding::ffi::Grid {
             for j in 0..FRAME_GRID_ROWS
             {
                 let mut col = dvos3binding::ffi::VectorOfusize{vec: Vec::new()};
+                // Bug here ...dvgrid.grid[i][j].len() is 0
 
                 for k in 0..dvgrid.grid[i][j].len()
                 {
@@ -406,14 +403,13 @@ impl From<Grid> for dvos3binding::ffi::Grid {
                 }
 
                 row.vec.push(col);
-                
             }
             grid.vec.push(row);
 
         }
 
 
-        grid    
+        grid
     }
 }
 
