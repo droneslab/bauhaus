@@ -1,25 +1,15 @@
 #![feature(map_many_mut)]
-
 extern crate flame;
-
-// #![feature(proc_macro_hygiene)]
-// #![cfg_attr(feature = "flame_it", feature(proc_macro_hygiene))]
-// #[cfg(feature = "flame_it")]
-// extern crate flame;
-// #[cfg(feature = "flame_it")]
-// #[macro_use] extern crate flamer;
-// #[cfg_attr(feature = "flame_it", flame)]
-
 use std::{fs::{File, OpenOptions}, io::Write, path::Path, sync::{Arc, Mutex}, env};
 use axiom::prelude::*;
 use chrono::{DateTime, Utc};
 use fern::colors::{ColoredLevelConfig, Color};
 use glob::glob;
-use log::{warn, info, error};
+use log::{warn, info, debug};
 use spin_sleep::LoopHelper;
 #[macro_use]
 extern crate lazy_static;
-use opencv::imgcodecs;
+use opencv::{imgcodecs, prelude::*};
 
 use dvcore::{*, lockwrap::ReadWriteWrapper, config::*};
 use crate::actors::{messages::{ImageMsg, ShutdownMessage, TrajectoryMessage, VisPathMsg}};

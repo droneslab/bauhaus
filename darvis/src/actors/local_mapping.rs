@@ -6,10 +6,6 @@ use dvcore::{
     plugin_functions::Function,
     lockwrap::ReadOnlyWrapper,
 };
-use log::warn;
-use crate::dvmap::bow;
-use crate::dvmap::keyframe::FullKeyFrame;
-use crate::dvmap::map_actor::MapWriteMsg;
 use crate::dvmap::{map::Map, map_actor::MAP_ACTOR, keyframe::{KeyFrame, PrelimKeyFrame}};
 use crate::modules::optimizer;
 use crate::modules::{imu::ImuModule};
@@ -88,17 +84,12 @@ impl DarvisLocalMapping {
         // Triangulate new MapPoints
         self.create_new_mappoints();
 
-        let mbAbortBA = false;
-
         // TODO (design): ORBSLAM will abort additional work if there are too many keyframes in the msg queue.
         // But idk how to check the queue size from within the callback
         // if(!CheckNewKeyFrames()) {
                 // Find more matches in neighbor keyframes and fuse point duplications
                 self.search_in_neighbors();
         // }
-
-
-        let b_doneLBA = false;
 
         let t_init = 0.0; // Sofiya: idk what this is for but it's used all over the place
 
@@ -192,7 +183,6 @@ impl DarvisLocalMapping {
             //     }
             // }
         }
-
 
         self.send_to_loop_closing(context);
     }
@@ -852,7 +842,7 @@ impl Function for DarvisLocalMapping {
             self.local_mapping_prelim(context, msg);
         } else if let Some(msg) = message.content_as::<KeyFrameIdMsg>() {
             self.local_mapping(context, msg);
-        } else if let Some(msg) = message.content_as::<Reset>() {
+        } else if let Some(_) = message.content_as::<Reset>() {
             // TODO (design) need to think about how reset requests should be propagated
         }
 

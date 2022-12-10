@@ -33,30 +33,24 @@
 using namespace std;
 namespace orb_slam3
 {
-    TwoViewReconstruction::~TwoViewReconstruction() {
-        cout << "Calling destructor!" << endl;
-    }
+    TwoViewReconstruction::~TwoViewReconstruction() {}
 
     // bool TwoViewReconstruction::GetCVKeypoints(const std::vector<orb_slam3::DVKeyPoint> &vKeys1, std::vector<cv::KeyPoint> &cvvKeys1){}
-    bool TwoViewReconstruction::Reconstruct_1(
-        const std::vector<orb_slam3::DVKeyPoint> &vKeys1,
-        const std::vector<orb_slam3::DVKeyPoint> &vKeys2,
-        const std::vector<int32_t> &vMatches12,
-        orb_slam3::Pose &T21, 
-        VectorOfDVPoint3f &vP3D, 
-        VectorOfDVBool &vbTriangulated
-    ) {
-        auto vKeys1_cv = *reinterpret_cast<const std::vector<cv::KeyPoint>*>(&vKeys1);
-        auto vKeys2_cv = *reinterpret_cast<const std::vector<cv::KeyPoint>*>(&vKeys2);
 
+    bool TwoViewReconstruction::reconstruct_rust(
+        const orb_slam3::WrapBindCVKeyPoints &vKeys1,
+        const orb_slam3::WrapBindCVKeyPoints &vKeys2,
+        const rust::vec<int> &vMatches12,
+        orb_slam3::Pose &T21, 
+        orb_slam3::WrapBindCVVectorOfPoint3f &vP3D, 
+        rust::Vec<bool> &vbTriangulated
+    ) {
         Sophus::SE3f T21_c;
-        vector<cv::Point3f> vP3D_c;
-        vector<bool> vbTriangulated_c ;
 
         bool result = Reconstruct(
-            vKeys1_cv,vKeys2_cv,
+            *vKeys1.kp_ptr, *vKeys2.kp_ptr,
             vMatches12, T21_c, 
-            vP3D_c, vbTriangulated_c
+            *vP3D.vec_ptr, vbTriangulated
         );
         cout << "TwoViewReconstruction, result is " << result << endl;
 
@@ -64,18 +58,8 @@ namespace orb_slam3
         auto tf_4x4 = *reinterpret_cast<const std::array<::std::array<double, 4>, 4> *>(T21_c.matrix().data());
         memcpy(&T21.pose[0][0], &tf_4x4, sizeof T21.pose);
 
-        for(int i =0;i < vP3D_c.size(); i++) {
-            vP3D.vec.push_back(orb_slam3::DVPoint3f{x:vP3D_c[i].x, y:vP3D_c[i].y, z:vP3D_c[i].z});
-        }
-
-        for(int i =0;i < vbTriangulated_c.size(); i++) {
-            vbTriangulated.vec.push_back(vbTriangulated_c[i]);
-        }
-
         return result;
     }
-
-    void test() {}
 
     std::unique_ptr<TwoViewReconstruction> new_two_view_reconstruction(float fx, float cx, float fy, float cy, float sigma, int iterations) {
         return std::unique_ptr<TwoViewReconstruction>(new TwoViewReconstruction(fx, cx, fy, cy, sigma, iterations));
@@ -92,8 +76,8 @@ namespace orb_slam3
     }
 
     bool TwoViewReconstruction::Reconstruct(
-        const std::vector<cv::KeyPoint>& vKeys1, const std::vector<cv::KeyPoint>& vKeys2, const vector<int> &vMatches12,
-        Sophus::SE3f &T21, vector<cv::Point3f> &vP3D, vector<bool> &vbTriangulated
+        const std::vector<cv::KeyPoint>& vKeys1, const std::vector<cv::KeyPoint>& vKeys2, const rust::vec<int> &vMatches12,
+        Sophus::SE3f &T21, vector<cv::Point3f> &vP3D, rust::Vec<bool> &vbTriangulated
     ) {
         mvKeys1 = vKeys1;
         mvKeys2 = vKeys2;
@@ -518,7 +502,7 @@ namespace orb_slam3
     }
 
     bool TwoViewReconstruction::ReconstructF(vector<bool> &vbMatchesInliers, Eigen::Matrix3f &F21, Eigen::Matrix3f &K,
-                                             Sophus::SE3f &T21, vector<cv::Point3f> &vP3D, vector<bool> &vbTriangulated, float minParallax, int minTriangulated)
+                                             Sophus::SE3f &T21, vector<cv::Point3f> &vP3D, rust::Vec<bool> &vbTriangulated, float minParallax, int minTriangulated)
     {
         int N=0;
         for(size_t i=0, iend = vbMatchesInliers.size() ; i<iend; i++)
@@ -575,7 +559,10 @@ namespace orb_slam3
             if(parallax1>minParallax)
             {
                 vP3D = vP3D1;
-                vbTriangulated = vbTriangulated1;
+                for(const auto & element : vbTriangulated1) {
+                    vbTriangulated.push_back(element);
+                }
+
 
                 T21 = Sophus::SE3f(R1, t1);
                 return true;
@@ -585,7 +572,10 @@ namespace orb_slam3
             if(parallax2>minParallax)
             {
                 vP3D = vP3D2;
-                vbTriangulated = vbTriangulated2;
+                for(const auto & element : vbTriangulated2) {
+                    vbTriangulated.push_back(element);
+                }
+
 
                 T21 = Sophus::SE3f(R2, t1);
                 return true;
@@ -595,7 +585,9 @@ namespace orb_slam3
             if(parallax3>minParallax)
             {
                 vP3D = vP3D3;
-                vbTriangulated = vbTriangulated3;
+                for(const auto & element : vbTriangulated3) {
+                    vbTriangulated.push_back(element);
+                }
 
                 T21 = Sophus::SE3f(R1, t2);
                 return true;
@@ -605,7 +597,9 @@ namespace orb_slam3
             if(parallax4>minParallax)
             {
                 vP3D = vP3D4;
-                vbTriangulated = vbTriangulated4;
+                for(const auto & element : vbTriangulated4) {
+                    vbTriangulated.push_back(element);
+                }
 
                 T21 = Sophus::SE3f(R2, t2);
                 return true;
@@ -616,7 +610,7 @@ namespace orb_slam3
     }
 
     bool TwoViewReconstruction::ReconstructH(vector<bool> &vbMatchesInliers, Eigen::Matrix3f &H21, Eigen::Matrix3f &K,
-                                             Sophus::SE3f &T21, vector<cv::Point3f> &vP3D, vector<bool> &vbTriangulated, float minParallax, int minTriangulated)
+                                             Sophus::SE3f &T21, vector<cv::Point3f> &vP3D, rust::Vec<bool> &vbTriangulated, float minParallax, int minTriangulated)
     {
         int N=0;
         for(size_t i=0, iend = vbMatchesInliers.size() ; i<iend; i++)
@@ -772,7 +766,9 @@ namespace orb_slam3
         if(secondBestGood<0.75*bestGood && bestParallax>=minParallax && bestGood>minTriangulated && bestGood>0.9*N)
         {
             T21 = Sophus::SE3f(vR[bestSolutionIdx], vt[bestSolutionIdx]);
-            vbTriangulated = bestTriangulated;
+            for(const auto & element : bestTriangulated) {
+                vbTriangulated.push_back(element);
+            }
 
             return true;
         }

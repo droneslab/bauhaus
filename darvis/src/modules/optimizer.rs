@@ -1,17 +1,13 @@
 extern crate g2o;
 
-use std::collections::{HashSet, HashMap};
-
-use cxx::{SharedPtr, UniquePtr};
+use std::collections::{HashMap};
 use dvcore::{
     lockwrap::ReadOnlyWrapper,
     config::{GLOBAL_PARAMS, SYSTEM_SETTINGS, Sensor},
 };
-use flamer::flame;
-use g2o::ffi::{VertexSE3Expmap, VertexSBAPointXYZ, EdgeSE3ProjectXYZ};
-use log::{info, debug, warn};
+use log::{info, warn};
 use nalgebra::Matrix3;
-use crate::{dvmap::{frame::Frame, pose::Pose, map::{Map, Id}, features::*, keyframe::{KeyFrame, PrelimKeyFrame}}, registered_modules::FEATURE_DETECTION};
+use crate::{dvmap::{frame::Frame, pose::Pose, map::{Map, Id}, keyframe::{KeyFrame, PrelimKeyFrame}}, registered_modules::FEATURE_DETECTION};
 
 lazy_static! {
     pub static ref INV_LEVEL_SIGMA2: Vec<f32> = {
@@ -44,14 +40,14 @@ lazy_static! {
 // but bRecInit is always set to false
 pub fn pose_inertial_optimization_last_frame(frame: &mut Frame, map: &ReadOnlyWrapper<Map>) -> i32 {
     // TODO IMU
-    let mut optimizer = g2o::ffi::new_sparse_optimizer(2);
+    // let mut optimizer = g2o::ffi::new_sparse_optimizer(2);
 
-    let nInitialMonoCorrespondences = 0;
-    let nInitialStereoCorrespondences = 0;
-    let nInitialCorrespondences = 0;
+    // let nInitialMonoCorrespondences = 0;
+    // let nInitialStereoCorrespondences = 0;
+    // let nInitialCorrespondences = 0;
 
     // Set Current Frame vertex
-    let vertex = optimizer.pin_mut().add_frame_vertex(1, (*frame.pose.as_ref().unwrap()).into(), false);
+    // let vertex = optimizer.pin_mut().add_frame_vertex(1, (*frame.pose.as_ref().unwrap()).into(), false);
 
     // Set MapPoint vertices
 //     const int N = pFrame->N;
@@ -441,14 +437,14 @@ todo!("TODO (IMU) Optimizer::PoseInertialOptimizationLastFrame(&mCurrentFrame)")
 // but bRecInit is always set to false
 pub fn pose_inertial_optimization_last_keyframe(frame: &mut Frame) -> i32 {
     // TODO IMU
-    let mut optimizer = g2o::ffi::new_sparse_optimizer(2);
+    // let mut optimizer = g2o::ffi::new_sparse_optimizer(2);
 
-    let nInitialMonoCorrespondences = 0;
-    let nInitialStereoCorrespondences = 0;
-    let nInitialCorrespondences = 0;
+    // let nInitialMonoCorrespondences = 0;
+    // let nInitialStereoCorrespondences = 0;
+    // let nInitialCorrespondences = 0;
 
-    // Set Frame vertex
-    let vertex = optimizer.pin_mut().add_frame_vertex(1, (*frame.pose.as_ref().unwrap()).into(), false);
+    // // Set Frame vertex
+    // let vertex = optimizer.pin_mut().add_frame_vertex(1, (*frame.pose.as_ref().unwrap()).into(), false);
 
 
     // Set MapPoint vertices
@@ -1114,7 +1110,7 @@ pub fn global_bundle_adjustment(map: &Map, loop_kf: i32, iterations: i32) -> BAR
 pub fn local_bundle_adjustment(
     map: &Map, keyframe: &KeyFrame<PrelimKeyFrame>,
     force_stop_flag: bool,
-    num_OptKF: i32, num_fixedKF: i32, num_MPs: i32, num_edges: i32
+    num_opt_kf: i32,num_fixed_kf: i32, num_mps: i32, num_edges: i32
 ) -> BAResult {
     // void Optimizer::LocalBundleAdjustment(KeyFrame *pKF, bool* pbStopFlag, Map* pMap, int& num_fixedKF, int& num_OptKF, int& num_MPs, int& num_edges)
     todo!("TODO: Local Mapping, local bundle adjustment");

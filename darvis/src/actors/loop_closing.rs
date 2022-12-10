@@ -1,16 +1,14 @@
 use std::sync::Arc;
 use axiom::prelude::*;
 
-use dvcore::config::{Sensor, GLOBAL_PARAMS};
 use dvcore::{
     plugin_functions::Function,
     lockwrap::ReadOnlyWrapper,
 };
-use crate::dvmap::{map::Map, map_actor::MAP_ACTOR};
-use crate::actors::messages::KeyFrameMsg;
+use crate::dvmap::{map::Map};
 use crate::modules::imu::ImuModule;
 
-use super::messages::{Reset, KeyFrameIdMsg};
+use super::messages::{KeyFrameIdMsg};
 
 #[derive(Debug, Clone, Default)]
 pub struct DarvisLoopClosing {

@@ -338,6 +338,7 @@ namespace orb_slam3 {
     ORBextractor::ORBextractor(int _nfeatures, float _scaleFactor, int _nlevels, int _iniThFAST, int _minThFAST, int _overlap_begin, int _overlap_end):
         nfeatures(_nfeatures), scaleFactor(_scaleFactor), nlevels(_nlevels), iniThFAST(_iniThFAST), minThFAST(_minThFAST), overlap_begin(_overlap_begin), overlap_end(_overlap_end)
     {
+        cout << "ORBextractor " << _nfeatures << " " << _scaleFactor << " " << _nlevels << " " << _iniThFAST << " " << _minThFAST << " " << _overlap_begin << " " << _overlap_end << endl;
         mvScaleFactor.resize(nlevels);
         mvLevelSigma2.resize(nlevels);
         mvScaleFactor[0]=1.0f;
@@ -1082,29 +1083,26 @@ namespace orb_slam3 {
             computeOrbDescriptor(keypoints[i], image, &pattern[0], descriptors.ptr((int)i));
     }
 
-    int ORBextractor::extract_rust(const orb_slam3::DVMat & image, std::vector<orb_slam3::DVKeyPoint> & keypoints, orb_slam3::DVMat & descriptors) {
+    int ORBextractor::extract_rust(const orb_slam3::WrapBindCVMat & image, orb_slam3::WrapBindCVKeyPoints & keypoints, orb_slam3::WrapBindCVMat & descriptors) {
         vector<int> lapping = {overlap_begin, overlap_end};
-        auto image_1 = orb_slam3::get_descriptor_const(image);
 
-        cv::Mat descriptors_1;
-        std::vector<cv::KeyPoint> keypoints_1;
+        auto num_extracted = extract(*image.mat_ptr, cv::Mat(), *keypoints.kp_ptr, *descriptors.mat_ptr, lapping);
 
-        extract(image_1, cv::Mat(), keypoints_1, descriptors_1, lapping);
-
-        
-        // // Assign data from cpp to rust variables
-        for(int i =0;i < keypoints_1.size(); i++) {
-            keypoints.push_back(*reinterpret_cast<orb_slam3::DVKeyPoint* >(&keypoints_1[i]));
-        }
-
-        descriptors_1.assignTo((*reinterpret_cast<cv::Mat *> (&descriptors)));
-
+        // Assign data from cpp to rust variables
+        // cout << "keypoints" << endl;
+        // for(int i =0;i < keypoints_1.size(); i++) {
+        //     keypoints.push_back(*reinterpret_cast<orb_slam3::DVKeyPoint* >(&keypoints_1[i]));
+        //     // cout << keypoints_1[i].pt << " " << keypoints_1[i].size << " " << keypoints_1[i].angle << " " << keypoints_1[i].response << " " << keypoints_1[i].octave << "// ";
+        // }
+    //    cout << endl;
+        return num_extracted;
     }
 
     int ORBextractor::extract( InputArray _image, InputArray _mask, vector<KeyPoint>& _keypoints,
                                   OutputArray _descriptors, std::vector<int> &vLappingArea)
     {
         //cout << "[ORBextractor]: Max Features: " << nfeatures << endl;
+
         if(_image.empty())
             return -1;
 
@@ -1181,12 +1179,22 @@ namespace orb_slam3 {
                 i++;
             }
         }
-        //cout << "[ORBextractor]: extracted " << _keypoints.size() << " KeyPoints" << endl;
+
+        // cout << "keypoints" << endl;
+        // for(int i =0;i < _keypoints.size(); i++) {
+        //     cout << _keypoints[i].pt << " " << _keypoints[i].size << " " << _keypoints[i].angle << " " << _keypoints[i].response << " " << _keypoints[i].octave << "// ";
+        // }
+        // cout << endl;
+
+        // cout << "monoIndex " << monoIndex << endl;
+
+
         return monoIndex;
     }
 
     void ORBextractor::ComputePyramid(cv::Mat image)
     {
+
         for (int level = 0; level < nlevels; ++level)
         {
             float scale = mvInvScaleFactor[level];

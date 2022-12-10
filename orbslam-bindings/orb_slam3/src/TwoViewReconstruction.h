@@ -26,6 +26,7 @@
 #include <sophus/se3.hpp>
 
 #include <opencv2/core/types.hpp>
+#include "rust/cxx.h"
 
 namespace orb_slam3
 {
@@ -36,6 +37,9 @@ namespace orb_slam3
     struct DVbool;
     struct VectorOfDVPoint3f;
     struct VectorOfDVBool;
+    struct WrapBindCVKeyPoints;
+    struct WrapBindCVVectorOfi32;
+    struct WrapBindCVVectorOfPoint3f;
 
     class TwoViewReconstruction
     {
@@ -48,16 +52,17 @@ namespace orb_slam3
         ~TwoViewReconstruction();
         // Computes in parallel a fundamental matrix and a homography
         // Selects a model and tries to recover the motion and the structure from motion
-        bool Reconstruct(const std::vector<cv::KeyPoint>& vKeys1, const std::vector<cv::KeyPoint>& vKeys2, const std::vector<int> &vMatches12,
-                          Sophus::SE3f &T21, std::vector<cv::Point3f> &vP3D, std::vector<bool> &vbTriangulated) ;
+        bool Reconstruct(const std::vector<cv::KeyPoint>& vKeys1, const std::vector<cv::KeyPoint>& vKeys2, const rust::vec<int> &vMatches12,
+                          Sophus::SE3f &T21, std::vector<cv::Point3f> &vP3D, rust::Vec<bool> &vbTriangulated) ;
 
         // Entrypoint from rust
-        bool Reconstruct_1(
-            const std::vector<orb_slam3::DVKeyPoint> &vKeys1,
-            const std::vector<orb_slam3::DVKeyPoint> &vKeys2,const std::vector<int32_t> &vMatches12,
+        bool reconstruct_rust(
+            const orb_slam3::WrapBindCVKeyPoints &vKeys1,
+            const orb_slam3::WrapBindCVKeyPoints &vKeys2,
+            const rust::vec<int> &vMatches12,
             orb_slam3::Pose &T21, 
-            VectorOfDVPoint3f &vP3D, 
-            VectorOfDVBool &vbTriangulated
+            orb_slam3::WrapBindCVVectorOfPoint3f &vP3D, 
+            rust::Vec<bool> &vbTriangulated
         );
 
     private:
@@ -73,10 +78,10 @@ namespace orb_slam3
         float CheckFundamental(const Eigen::Matrix3f &F21, std::vector<bool> &vbMatchesInliers, float sigma);
 
         bool ReconstructF(std::vector<bool> &vbMatchesInliers, Eigen::Matrix3f &F21, Eigen::Matrix3f &K,
-                          Sophus::SE3f &T21, std::vector<cv::Point3f> &vP3D, std::vector<bool> &vbTriangulated, float minParallax, int minTriangulated);
+                          Sophus::SE3f &T21, std::vector<cv::Point3f> &vP3D, rust::Vec<bool> &vbTriangulated, float minParallax, int minTriangulated);
 
         bool ReconstructH(std::vector<bool> &vbMatchesInliers, Eigen::Matrix3f &H21, Eigen::Matrix3f &K,
-                          Sophus::SE3f &T21, std::vector<cv::Point3f> &vP3D,std:: vector<bool> &vbTriangulated, float minParallax, int minTriangulated);
+                          Sophus::SE3f &T21, std::vector<cv::Point3f> &vP3D,rust::Vec<bool> &vbTriangulated, float minParallax, int minTriangulated);
 
         void Normalize(const std::vector<cv::KeyPoint> &vKeys, std::vector<cv::Point2f> &vNormalizedPoints, Eigen::Matrix3f &T);
 
@@ -113,10 +118,6 @@ namespace orb_slam3
     };
 
     std::unique_ptr<TwoViewReconstruction> new_two_view_reconstruction(float fx, float cx, float fy, float cy, float sigma, int iterations);
-    
-    // std::unique_ptr<BridgeVecOfKeypoint> new_vec_keypoint(const VecOfKeypoint & vKeys1);
-    void test();
-
 } //namespace ORB_SLAM
 
 #endif // TwoViewReconstruction_H

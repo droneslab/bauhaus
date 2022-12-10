@@ -30,80 +30,57 @@
 #include "../../../target/cxxbridge/dvos3binding/src/lib.rs.h"
 
 
-#include "DVMat.h"
-#include "DVConvert.h"
+#include "CVConvert.h"
 
 using namespace std;
 
-namespace orb_slam3
-{
-
+namespace orb_slam3 {
     const int ORBmatcher::TH_HIGH = 100;
     const int ORBmatcher::TH_LOW = 50;
     const int ORBmatcher::HISTO_LENGTH = 30;
 
-
-    std::unique_ptr<ORBmatcher> new_orb_matcher(
-        int frame_grid_cols,
-        int frame_grid_rows, 
-        float minX, 
-        float minY, 
-        float maxX,
-        float maxY, 
-        float nnratio,
-        bool checkOri
-    )
-    {
-        return std::unique_ptr<ORBmatcher>(new ORBmatcher(frame_grid_cols, frame_grid_rows, minX, minY, maxX, maxY, nnratio, checkOri));
+    void new_test(
+        int frame_grid_cols, int frame_grid_rows, 
+        float minX, float minY, 
+        float maxX, float maxY, 
+        float nnratio, bool checkOri
+    ) {
     }
 
+    std::unique_ptr<ORBmatcher> new_orb_matcher(
+        int frame_grid_cols, int frame_grid_rows, 
+        float minX, float minY, 
+        float maxX, float maxY, 
+        float nnratio, bool checkOri
+    ) {
+        return make_unique<ORBmatcher>(frame_grid_cols, frame_grid_rows, minX, minY, maxX, maxY, nnratio, checkOri);
+    }
 
+    int32_t ORBmatcher::search_for_initialization_rust(
+        const orb_slam3::BindCVKeyPointsRef & F1_mvKeysUn , 
+        const orb_slam3::BindCVKeyPointsRef & F2_mvKeysUn, 
+        const orb_slam3::BindCVMatRef & F1_mDescriptors,
+        const orb_slam3::BindCVMatRef & F2_mDescriptors,
+        const orb_slam3::Grid & F2_grid,
+        orb_slam3::BindCVVectorOfPoint2fRef & vbPrevMatched, 
+        rust::vec<int> & vnMatches12,
+        int32_t windowSize
+    ) const {
+        return SearchForInitialization(
+            **F1_mvKeysUn.ptr,
+            **F2_mvKeysUn.ptr,
+            **F1_mDescriptors.ptr,
+            **F2_mDescriptors.ptr,
+            F2_grid,
+            **vbPrevMatched.ptr,
+            vnMatches12,
+            windowSize
+        );
+    }
 
-    int32_t ORBmatcher::SearchForInitialization_1(
-            const std::vector<orb_slam3::DVKeyPoint>  & F1_mvKeysUn , 
-            const std::vector<orb_slam3::DVKeyPoint>  & F2_mvKeysUn, 
-            const orb_slam3::DVMat  &F1_mDescriptors,
-            const orb_slam3::DVMat  &F2_mDescriptors,
-            const orb_slam3::DVGrid  & F2_grid,
-            std::vector<orb_slam3::DVPoint2f>& vbPrevMatched, 
-            std::vector<int32_t>& vnMatches12,
-            int32_t windowSize
-        )
-        {
-            auto vKeys1_cv = orb_slam3::get_keypoints_const(F1_mvKeysUn);
-            auto vKeys2_cv = orb_slam3::get_keypoints_const(F2_mvKeysUn);
-
-            cv::Mat vdesc1_cv = orb_slam3::get_descriptor_const(F1_mDescriptors);
-            cv::Mat vdesc2_cv = orb_slam3::get_descriptor_const(F2_mDescriptors);
-
-            // orb_slam3::debug_DVMat(F1_mDescriptors);
-            // orb_slam3::debug_DVMat(F2_mDescriptors);
-
-            auto mGrid = orb_slam3::get_grid_const(F2_grid);
-
-            auto prevMatch_cv = orb_slam3::get_vecofpoint2f_const(vbPrevMatched);
-            
-            // *reinterpret_cast<std::vector<cv::Point2f>*>(&vbPrevMatched);
-
-            return SearchForInitialization(
-                vKeys1_cv,
-                vKeys2_cv,
-                vdesc1_cv,
-                vdesc2_cv,
-                mGrid,
-                prevMatch_cv,
-                vnMatches12,
-                windowSize
-            );
-
-        }
-
-    ORBmatcher::ORBmatcher(int frame_grid_cols, int frame_grid_rows, float minX, float minY, float maxX, float maxY, float nnratio, bool checkOri): mframe_grid_cols(frame_grid_cols), mframe_grid_rows(frame_grid_rows), mnMinX(minX), mnMinY(minY), mnMaxX(maxX), mnMaxY(maxY), mfNNratio(nnratio), mbCheckOrientation(checkOri)
-    {
-
+    ORBmatcher::ORBmatcher(int frame_grid_cols, int frame_grid_rows, float minX, float minY, float maxX, float maxY, float nnratio, bool checkOri): mframe_grid_cols(frame_grid_cols), mframe_grid_rows(frame_grid_rows), mnMinX(minX), mnMinY(minY), mnMaxX(maxX), mnMaxY(maxY), mfNNratio(nnratio), mbCheckOrientation(checkOri) {
         mfGridElementWidthInv=static_cast<float>(mframe_grid_cols)/(mnMaxX-mnMinX);
         mfGridElementHeightInv=static_cast<float>(mframe_grid_rows)/(mnMaxY-mnMinY);
-
     }
 
     // int ORBmatcher::SearchByProjection(Frame &F, const vector<MapPoint*> &vpMapPoints, const float th, const bool bFarPoints, const float thFarPoints)
@@ -715,18 +692,22 @@ namespace orb_slam3
     // int ORBmatcher::SearchForInitialization(Frame &F1, Frame &F2, vector<cv::Point2f> &vbPrevMatched, vector<int> &vnMatches12, int windowSize)
 
     int ORBmatcher::SearchForInitialization(
-    const std::vector<cv::KeyPoint>& F1_mvKeysUn, 
-    const std::vector<cv::KeyPoint>& F2_mvKeysUn, 
-    const cv::Mat F1_mDescriptors,
-    const cv::Mat F2_mDescriptors,
-    const std::vector< std::vector <std::vector<size_t> > > F2_grid,std::vector<cv::Point2f> &vbPrevMatched, vector<int> &vnMatches12, 
-    int windowSize)
-    {
+        const std::vector<cv::KeyPoint>& F1_mvKeysUn, 
+        const std::vector<cv::KeyPoint>& F2_mvKeysUn, 
+        const cv::Mat F1_mDescriptors,
+        const cv::Mat F2_mDescriptors,
+        const orb_slam3::Grid F2_grid,
+        std::vector<cv::Point2f> &vbPrevMatched,
+        rust::vec<int> &vnMatches12, 
+        int windowSize
+    ) const {
         //Needs:
         // mvKeysUn
         // mDescriptors
         int nmatches=0;
-        vnMatches12 = vector<int>(F1_mvKeysUn.size(),-1);
+        for(int i=0;i<F1_mvKeysUn.size();i++) {
+            vnMatches12.push_back(-1);
+        }
 
         vector<int> rotHist[HISTO_LENGTH];
         for(int i=0;i<HISTO_LENGTH;i++)
@@ -738,6 +719,7 @@ namespace orb_slam3
 
         for(size_t i1=0, iend1=F1_mvKeysUn.size(); i1<iend1; i1++)
         {
+            vnMatches12[i1] = -1;
             cv::KeyPoint kp1 = F1_mvKeysUn[i1];
             int level1 = kp1.octave;
             if(level1>0)
@@ -837,16 +819,15 @@ namespace orb_slam3
             if(vnMatches12[i1]>=0)
                 vbPrevMatched[i1]=F2_mvKeysUn[vnMatches12[i1]].pt;
 
+        cout << "search for initialization " << nmatches << endl;
         return nmatches;
     }
 
-
-
-     std::vector<size_t> ORBmatcher::GetFeaturesInArea(
-            const std::vector<cv::KeyPoint> mvKeysUn,
-            const std::vector< std::vector <std::vector<size_t> > > mGrid,
-            const float &x, const float  &y, const float  &r, const int minLevel, const int maxLevel) const
-    {
+    std::vector<size_t> ORBmatcher::GetFeaturesInArea(
+        const std::vector<cv::KeyPoint> mvKeysUn,
+        const orb_slam3::Grid mGrid,
+        const float &x, const float  &y, const float  &r, const int minLevel, const int maxLevel
+    ) const {
         size_t N = mvKeysUn.size();
         vector<size_t> vIndices;
         vIndices.reserve(N);
@@ -884,7 +865,7 @@ namespace orb_slam3
         {
             for(int iy = nMinCellY; iy<=nMaxCellY; iy++)
             {
-                const vector<size_t> vCell = mGrid[ix][iy] ; //(!bRight) ? mGrid[ix][iy] : mGridRight[ix][iy];
+                const rust::vec<size_t> vCell = mGrid.vec[ix].vec[iy].vec ; //(!bRight) ? mGrid[ix][iy] : mGridRight[ix][iy];
                 if(vCell.empty())
                     continue;
 
@@ -911,8 +892,6 @@ namespace orb_slam3
 
         return vIndices;
     }
-
-
 
 
     // int ORBmatcher::SearchByBoW(KeyFrame *pKF1, KeyFrame *pKF2, vector<MapPoint *> &vpMatches12)
@@ -2162,7 +2141,7 @@ namespace orb_slam3
     //     return nmatches;
     // }
 
-    void ORBmatcher::ComputeThreeMaxima(vector<int>* histo, const int L, int &ind1, int &ind2, int &ind3)
+    void ORBmatcher::ComputeThreeMaxima(vector<int>* histo, const int L, int &ind1, int &ind2, int &ind3) const
     {
         int max1=0;
         int max2=0;

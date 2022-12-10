@@ -6,7 +6,9 @@ use dvcore::{
     matrix::{ DVVectorOfKeyPoint, DVMatrix, DVMatrixGrayscale},
 };
 use serde::{Serialize, Deserialize};
-use crate::dvmap::{keyframe::{KeyFrame, PrelimKeyFrame, KeyFrameState, FullKeyFrame}, pose::Pose, map::Id};
+use crate::dvmap::{keyframe::{KeyFrame, KeyFrameState}, pose::Pose, map::Id};
+
+use super::tracking_backend::TrackingState;
 
 // Note: Can avoid having to serialize/deserialize every message 
 // by removing Serialize,Deserialize derives and doing 
@@ -39,6 +41,12 @@ impl TrajectoryMessage {
         }
     }
 }
+
+#[derive(Debug)]
+pub struct TrackingStateMsg {
+    pub state: TrackingState
+}
+impl ActorMessage for TrackingStateMsg {}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct VisPathMsg {

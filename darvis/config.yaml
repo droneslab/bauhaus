@@ -205,7 +205,7 @@ actors:
       -
        name: LOCAL_MAPPING
        file: local_mapping
-       actor_message: FeatureMsg
+       actor_message: KeyFrameMsg
        actor_function: tracking_backend
        address: localhost
        port: !!str 7780

@@ -31,7 +31,7 @@
 #include "BowVector.h"
 #include "ScoringObject.h"
 #include"FORB.h"
-#include "../../src/DVConvert.h"
+#include "../../src/CVConvert.h"
 #include "../../src/Converter.h"
 
 #include "../DUtils/Random.h"
