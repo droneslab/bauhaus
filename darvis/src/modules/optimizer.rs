@@ -7,7 +7,7 @@ use dvcore::{
 };
 use log::{info, warn};
 use nalgebra::Matrix3;
-use crate::{dvmap::{frame::Frame, pose::Pose, map::{Map, Id}, keyframe::{KeyFrame, PrelimKeyFrame}}, registered_modules::FEATURE_DETECTION};
+use crate::{dvmap::{frame::Frame, pose::Pose, map::{Map, Id}, keyframe::{KeyFrame, PrelimKeyFrame, FullKeyFrame}}, registered_modules::FEATURE_DETECTION};
 
 lazy_static! {
     pub static ref INV_LEVEL_SIGMA2: Vec<f32> = {
@@ -843,7 +843,7 @@ pub fn optimize_pose(frame: &mut Frame, map: &ReadOnlyWrapper<Map>) -> Option<(i
                     _ => {
                         // Mono observations
                         let map_read_lock = map.read();
-                        let position = &map_read_lock.get_mappoint(mp_id).unwrap().position;
+                        let position = &map_read_lock.get_mappoint(&mp_id).unwrap().position;
                         let edge = optimizer.pin_mut().add_edge_monocular_unary(
                             false, frame_vertex_id, keypoint.octave, keypoint.pt.x, keypoint.pt.y,
                             INV_LEVEL_SIGMA2[keypoint.octave as usize],
@@ -1108,7 +1108,7 @@ pub fn global_bundle_adjustment(map: &Map, loop_kf: i32, iterations: i32) -> BAR
 }
 
 pub fn local_bundle_adjustment(
-    map: &Map, keyframe: &KeyFrame<PrelimKeyFrame>,
+    map: &Map, keyframe: &KeyFrame<FullKeyFrame>,
     force_stop_flag: bool,
     num_opt_kf: i32,num_fixed_kf: i32, num_mps: i32, num_edges: i32
 ) -> BAResult {

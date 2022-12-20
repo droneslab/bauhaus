@@ -1,6 +1,6 @@
 use std::{collections::{HashMap, HashSet}};
 use log::{info, warn, error, debug};
-use dvcore::{matrix::{DVVector3}, config::{Sensor, GLOBAL_PARAMS, SYSTEM_SETTINGS, FrameSensor, ImuSensor}};
+use dvcore::{matrix::{DVVector3, DVVectorOfPoint3f}, config::{Sensor, GLOBAL_PARAMS, SYSTEM_SETTINGS, FrameSensor, ImuSensor}};
 use crate::{
     dvmap::{keyframe::*, mappoint::*, pose::Pose},
     modules::{map_initialization::Initialization, optimizer::{self}}
@@ -12,8 +12,8 @@ pub type Id = i32;
 pub struct Map {
     pub id: Id,
 
-    keyframes: HashMap<Id, KeyFrame<FullKeyFrame>>, // = mspKeyFrames
-    mappoints: HashMap<Id, MapPoint<FullMapPoint>>, // = mspMapPoints
+    pub keyframes: HashMap<Id, KeyFrame<FullKeyFrame>>, // = mspKeyFrames
+    pub mappoints: HashMap<Id, MapPoint<FullMapPoint>>, // = mspMapPoints
 
     // IMU
     pub imu_initialized: bool, // isImuInitialized(), set true by local mapper
@@ -67,9 +67,95 @@ impl Map {
     pub fn get_all_mappoints(&self) -> &HashMap<Id, MapPoint<FullMapPoint>> { &self.mappoints }
 
     ////* &mut self ... behind map actor */////////////////////////////////////////////////////
+    pub fn insert_mappoint_to_map(&mut self, mp: &MapPoint<PrelimMapPoint>, observations_to_add: &Vec<(Id, u32, usize)>) -> Id {
+        // Note: I would really like this to consume the mp, but this brings up issues
+        // with the map actor being able to take ownership of the message.
+        self.last_mp_id += 1;
+        let new_mp_id = self.last_mp_id;
 
-    pub fn increase_mappoint_found(&mut self, id: &Id, num: &i32) {
-        self.mappoints.get_mut(id).unwrap().increase_found(num);
+        let full_mappoint = MapPoint::<FullMapPoint>::new(mp, self.last_mp_id);
+        self.mappoints.insert(self.last_mp_id, full_mappoint);
+        // info!("insert_mappoint_to_map;{}", self.last_mp_id);
+
+        for (kf_id, num_keypoints, index) in observations_to_add {
+            // Add observation for mp->kf
+            full_mappoint.add_observation(&kf_id, *num_keypoints, *index as u32);
+
+            // Add observation kf->mp
+            self.keyframes.get_mut(&kf_id).map(|kf| {
+                kf.add_mappoint(&full_mappoint, *index as u32, false);
+            });
+        }
+
+        // Compute distinctive descriptors
+        let best_descriptor = self.mappoints.get(&new_mp_id)
+            .and_then(|mp| mp.compute_distinctive_descriptors(&self)).unwrap();
+        self.mappoints.get_mut(&new_mp_id)
+            .map(|mp| mp.update_distinctive_descriptors(best_descriptor));
+
+        // Update normal and depth
+        let norm_and_depth = self.mappoints.get(&new_mp_id)
+            .and_then(|mp| {mp.get_norm_and_depth(&self)}).unwrap();
+        self.mappoints.get_mut(&new_mp_id)
+            .map(|mp| mp.update_norm_and_depth(norm_and_depth));
+
+        return self.last_mp_id;
+    }
+
+    pub fn insert_keyframe_to_map(&mut self, prelim_kf: &KeyFrame<PrelimKeyFrame>, is_initialization: bool) -> Id {
+        // Note: I would really like this to consume the keyframe, but this brings up issues
+        // with the map actor being able to take ownership of the keyframe message.
+        self.last_kf_id += 1;
+        let new_kf_id = self.last_kf_id;
+
+        let full_keyframe = KeyFrame::<FullKeyFrame>::new(&prelim_kf, self.id, new_kf_id);
+        let num_keypoints = full_keyframe.features.num_keypoints;
+        self.keyframes.insert(new_kf_id, full_keyframe);
+
+        if self.keyframes.is_empty() {
+            info!("initialized new map;first kf:{};map init kf:{}", new_kf_id, self.initial_kf_id);
+            self.initial_kf_id = new_kf_id;
+            // self.lowest_kf = kf; // Sofiya: ORBSLAM3:Map.cc:67, used to sort mspKeyFrames. I think we can ignore?
+        }
+
+        info!("insert keyframe to map;{}", new_kf_id);
+
+        // Update mp connections after insertion
+        // Note: In ORBSLAM, this code is copied in a bunch of places. Pulled into here
+        // and generalized a bit so we can guarantee it runs every time it needs to.
+        // is_initialization check is because initialization does a very similar task
+        // but different enough that it's not worth it to generalize it to here.
+        if !is_initialization {
+            for index in prelim_kf.mappoint_matches.keys() {
+                let (mp_id, _) = prelim_kf.mappoint_matches.get(index).unwrap();
+                let mp = self.mappoints.get_mut(mp_id).unwrap();
+
+                // Add observation for mp->kf
+                mp.add_observation(&new_kf_id, num_keypoints, *index);
+
+                // Add observation kf->mp
+                self.keyframes.get_mut(&new_kf_id).map(|kf| {
+                    kf.add_mappoint(&mp, *index, false);
+                });
+
+                // Update normal and depth
+                let norm_and_depth = self.mappoints.get(&mp_id)
+                    .and_then(|mp| {mp.get_norm_and_depth(&self)}).unwrap();
+                self.mappoints.get_mut(&mp_id)
+                    .map(|mp| mp.update_norm_and_depth(norm_and_depth));
+
+                // Compute distinctive descriptors
+                let best_descriptor = self.mappoints.get(&mp_id)
+                    .and_then(|mp| mp.compute_distinctive_descriptors(&self)).unwrap();
+                self.mappoints.get_mut(&mp_id)
+                    .map(|mp| mp.update_distinctive_descriptors(best_descriptor));
+            }
+
+            // Update Connections
+            Map::update_connections(&self.mappoints, &mut self.keyframes, & new_kf_id, &new_kf_id);
+        }
+
+        new_kf_id
     }
 
     pub fn discard_mappoint(&mut self, id: &Id) {
@@ -84,23 +170,6 @@ impl Map {
         info!("map::discard_mappoint;{}", id);
     }
 
-    pub fn insert_keyframe_to_map(&mut self, kf: &KeyFrame<PrelimKeyFrame>) -> Id {
-        // Note: I would really like this to consume the keyframe, but this brings up issues
-        // with the map actor being able to take ownership of the keyframe message.
-        self.last_kf_id += 1;
-        let full_keyframe = KeyFrame::<FullKeyFrame>::new(&kf, self.id, self.last_kf_id);
-        self.keyframes.insert(self.last_kf_id, full_keyframe);
-
-        if self.keyframes.is_empty() {
-            info!("initialized new map;first kf:{};map init kf:{}", self.last_kf_id, self.initial_kf_id);
-            self.initial_kf_id = self.last_kf_id;
-            // self.lowest_kf = kf; // Sofiya: ORBSLAM3:Map.cc:67, used to sort mspKeyFrames. I think we can ignore?
-        }
-
-        info!("insert keyframe to map;{}", self.last_kf_id);
-        self.last_kf_id
-    }
-
     pub fn create_initial_map_monocular(&mut self, inidata: &Initialization) -> Option<(Pose, i32, i32, HashSet<Id>)> {
         // TODO (design) - we have to do some pretty gross things with calling functions in this section
         // so that we can have multiple references to parts of the map. This should get cleaned up, but I'm not sure how.
@@ -113,58 +182,37 @@ impl Map {
             self.initial_kf_id = self.last_kf_id + 1;
         }
 
-        debug!("Tracking::CreateInitialMapMonocular, Creating initial map with frame {} and {}", inidata.initial_frame.as_ref().unwrap().id, inidata.current_frame.as_ref().unwrap().id);
+        let num_keypoints = inidata.initial_frame.as_ref().unwrap().features.num_keypoints;
+
         // Create KeyFrames
         let initial_kf_id = self.insert_keyframe_to_map(
-            &KeyFrame::<PrelimKeyFrame>::new(&inidata.initial_frame.as_ref().unwrap())
+            &KeyFrame::<PrelimKeyFrame>::new(&inidata.initial_frame.as_ref().unwrap()),
+            true
         );
         let curr_kf_id = self.insert_keyframe_to_map(
-            &KeyFrame::<PrelimKeyFrame>::new(&inidata.current_frame.as_ref().unwrap())
+            &KeyFrame::<PrelimKeyFrame>::new(&inidata.current_frame.as_ref().unwrap()),
+            true
         );
 
-        // let curr_frame = inidata.current_frame.as_ref().unwrap();
-
-        for index in 0..inidata.mp_matches.len() {
-            let index2 = inidata.mp_matches.get(index).unwrap();
-            if *index2 == -1 {
+        let mut count = 0;
+        for kf1_index in 0..inidata.mp_matches.len() {
+            // Get index for kf1 and kf2
+            let kf2_index = inidata.mp_matches.get(kf1_index).unwrap();
+            if *kf2_index == -1 {
                 continue;
             }
-            let point = inidata.p3d.get(index).unwrap();
-            let world_pos = DVVector3::new_with(point.x as f64, point.y as f64, point.z as f64);
+            count +=1;
 
-            let new_mp_id = Map::insert_mappoint_to_map(
-                &mut self.last_mp_id,
-                &mut self.mappoints,
-                MapPoint::<PrelimMapPoint>::new(world_pos, curr_kf_id, self.id)
+            // Create mappoint
+            let point = inidata.p3d.get(kf1_index).unwrap();
+            let world_pos = DVVector3::new_with(point.x as f64, point.y as f64, point.z as f64);
+            let new_mp_id = self.insert_mappoint_to_map(
+                &MapPoint::<PrelimMapPoint>::new(world_pos, curr_kf_id, self.id),
+                &vec![(initial_kf_id, num_keypoints, kf1_index), (curr_kf_id, num_keypoints, *kf2_index as usize)]
             );
             let new_mp = self.mappoints.get_mut(&new_mp_id).unwrap();
-
-            self.keyframes.get_mut(&initial_kf_id).map(|kf| {
-                kf.add_mappoint(&new_mp, index as u32, false);
-                new_mp.add_observation(&kf.id(), kf.features.num_keypoints, index as u32);
-            });
-
-            self.keyframes.get_mut(&curr_kf_id).map(|kf| {
-                kf.add_mappoint(&new_mp, *index2 as u32, false);
-                new_mp.add_observation(&kf.id(), kf.features.num_keypoints, *index2 as u32);
-            });
-
-            // Sofiya: clean up this workflow
-            let norm_and_depth = self.mappoints.get(&new_mp_id)
-                .and_then(|mp2| {mp2.get_norm_and_depth(&self)});
-            if norm_and_depth.is_some() {
-                self.mappoints.get_mut(&new_mp_id).map(|mp2| mp2.update_norm_and_depth(norm_and_depth.unwrap()));
-            }
-
-            let best_descriptor = self.mappoints.get(&new_mp_id)
-                .and_then(|mp| mp.compute_distinctive_descriptors(&self));
-            if best_descriptor.is_some() {
-                self.mappoints.get_mut(&new_mp_id).map(|mp| mp.update_distinctive_descriptors(best_descriptor.unwrap()));
-            }
-
-            //Fill Current Frame structure
-            // curr_frame.add_mappoint(*index2, new_mp_id, false);
         }
+        debug!("monocular initialization, created {} mps", count);
 
         // Update Connections
         Map::update_connections(& self.mappoints, &mut self.keyframes, & self.initial_kf_id, &initial_kf_id);
@@ -201,14 +249,10 @@ impl Map {
             let mp = self.mappoints.get_mut(&mp_id).unwrap();
             mp.position = DVVector3::new((*mp.position) * inverse_median_depth);
 
-            // Sofiya: is there a better way to do this workflow? 
-            // get and update norm_and_depth needs to be separate because get needs the map, and we can't
-            // mutate anything in self.mappoints if we also have to pass in self. So both function calls 
-            // also can't be in the same chain.
-            let norm_and_depth = self.mappoints.get(&mp_id).and_then(|mp2| mp2.get_norm_and_depth(&self));
-            if norm_and_depth.is_some() {
-                self.mappoints.get_mut(&mp_id).map(|mp2| mp2.update_norm_and_depth(norm_and_depth.unwrap()));
-            }
+            let norm_and_depth = self.mappoints.get(&mp_id)
+                .and_then(|mp| {mp.get_norm_and_depth(&self)}).unwrap();
+            self.mappoints.get_mut(&mp_id)
+                .map(|mp| mp.update_norm_and_depth(norm_and_depth));
         }
 
         // TODO (IMU)
@@ -311,14 +355,5 @@ impl Map {
             }
         }
 
-    }
-
-
-    pub fn insert_mappoint_to_map(last_mp_id: &mut i32, mappoints: &mut HashMap<Id, MapPoint<FullMapPoint>>, mp: MapPoint<PrelimMapPoint>) -> Id {
-        *last_mp_id += 1;
-        let full_mappoint = MapPoint::<FullMapPoint>::new(mp, *last_mp_id);
-        mappoints.insert(*last_mp_id, full_mappoint);
-        // info!("insert_mappoint_to_map;{}", self.last_mp_id);
-        return *last_mp_id;
     }
 }

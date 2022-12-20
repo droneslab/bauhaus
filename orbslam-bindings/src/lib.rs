@@ -133,7 +133,8 @@ pub mod ffi {
 
     #[derive(Debug, Clone)]
     pub struct Pose {
-        pub pose: [[f32;4];4]
+        pub translation: [f32;3],
+        pub rotation: [f32;4]
     }
 
     #[derive(Debug, Clone)]

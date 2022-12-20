@@ -45,18 +45,23 @@ namespace orb_slam3
         orb_slam3::WrapBindCVVectorOfPoint3f &vP3D, 
         rust::Vec<bool> &vbTriangulated
     ) {
-        Sophus::SE3f T21_c;
+        Eigen::Matrix3f rotation;
+        Eigen::Vector3f translation;
 
         bool result = Reconstruct(
             *vKeys1.kp_ptr, *vKeys2.kp_ptr,
-            vMatches12, T21_c, 
+            vMatches12, rotation, translation, 
             *vP3D.vec_ptr, vbTriangulated
         );
-        cout << "TwoViewReconstruction, result is " << result << endl;
 
         // Assign data from cpp to rust variables
-        auto tf_4x4 = *reinterpret_cast<const std::array<::std::array<double, 4>, 4> *>(T21_c.matrix().data());
-        memcpy(&T21.pose[0][0], &tf_4x4, sizeof T21.pose);
+        T21.translation[0] = translation(0);
+        T21.translation[1] = translation(1);
+        T21.translation[2] = translation(2);
+        T21.rotation[0] = rotation(0);
+        T21.rotation[1] = rotation(1);
+        T21.rotation[2] = rotation(2);
+        T21.rotation[3] = rotation(3);
 
         return result;
     }
@@ -77,7 +82,8 @@ namespace orb_slam3
 
     bool TwoViewReconstruction::Reconstruct(
         const std::vector<cv::KeyPoint>& vKeys1, const std::vector<cv::KeyPoint>& vKeys2, const rust::vec<int> &vMatches12,
-        Sophus::SE3f &T21, vector<cv::Point3f> &vP3D, rust::Vec<bool> &vbTriangulated
+        Eigen::Matrix3f &rotation, Eigen::Vector3f &translation,
+        vector<cv::Point3f> &vP3D, rust::Vec<bool> &vbTriangulated
     ) {
         mvKeys1 = vKeys1;
         mvKeys2 = vKeys2;
@@ -147,13 +153,11 @@ namespace orb_slam3
         // Try to reconstruct from homography or fundamental depending on the ratio (0.40-0.45)
         if(RH>0.50) // if(RH>0.40)
         {
-            cout << "TwoViewReconstruction, Initialization from Homography" << endl;
-            return ReconstructH(vbMatchesInliersH,H, mK,T21,vP3D,vbTriangulated,minParallax,50);
+            return ReconstructH(vbMatchesInliersH,H, mK,rotation, translation,vP3D,vbTriangulated,minParallax,50);
         }
         else //if(pF_HF>0.6)
         {
-            cout << "TwoViewReconstruction, Initialization from Fundamental" << endl;
-            return ReconstructF(vbMatchesInliersF,F,mK,T21,vP3D,vbTriangulated,minParallax,50);
+            return ReconstructF(vbMatchesInliersF,F,mK,rotation, translation,vP3D,vbTriangulated,minParallax,50);
         }
     }
 
@@ -502,7 +506,8 @@ namespace orb_slam3
     }
 
     bool TwoViewReconstruction::ReconstructF(vector<bool> &vbMatchesInliers, Eigen::Matrix3f &F21, Eigen::Matrix3f &K,
-                                             Sophus::SE3f &T21, vector<cv::Point3f> &vP3D, rust::Vec<bool> &vbTriangulated, float minParallax, int minTriangulated)
+                                             Eigen::Matrix3f &rotation, Eigen::Vector3f &translation,
+                                             vector<cv::Point3f> &vP3D, rust::Vec<bool> &vbTriangulated, float minParallax, int minTriangulated)
     {
         int N=0;
         for(size_t i=0, iend = vbMatchesInliers.size() ; i<iend; i++)
@@ -532,7 +537,6 @@ namespace orb_slam3
         int nGood4 = CheckRT(R2,t2,mvKeys1,mvKeys2,mvMatches12,vbMatchesInliers,K, vP3D4, 4.0*mSigma2, vbTriangulated4, parallax4);
 
         int maxGood = max(nGood1,max(nGood2,max(nGood3,nGood4)));
-
         int nMinGood = max(static_cast<int>(0.9*N),minTriangulated);
 
         int nsimilar = 0;
@@ -544,8 +548,6 @@ namespace orb_slam3
             nsimilar++;
         if(nGood4>0.7*maxGood)
             nsimilar++;
-
-        cout << "TwoViewReconstruction::ReconstructF, results from checkRT " << nGood1 << " " << nGood2 << " " << nGood3 << " " << nGood4 << " " << maxGood << endl;
 
         // If there is not a clear winner or not enough triangulated points reject initialization
         if(maxGood<nMinGood || nsimilar>1)
@@ -563,8 +565,8 @@ namespace orb_slam3
                     vbTriangulated.push_back(element);
                 }
 
-
-                T21 = Sophus::SE3f(R1, t1);
+                rotation = R1;
+                translation = t1;
                 return true;
             }
         }else if(maxGood==nGood2)
@@ -576,8 +578,8 @@ namespace orb_slam3
                     vbTriangulated.push_back(element);
                 }
 
-
-                T21 = Sophus::SE3f(R2, t1);
+                rotation = R2;
+                translation = t1;
                 return true;
             }
         }else if(maxGood==nGood3)
@@ -588,8 +590,8 @@ namespace orb_slam3
                 for(const auto & element : vbTriangulated3) {
                     vbTriangulated.push_back(element);
                 }
-
-                T21 = Sophus::SE3f(R1, t2);
+                rotation = R1;
+                translation = t2;
                 return true;
             }
         }else if(maxGood==nGood4)
@@ -600,8 +602,8 @@ namespace orb_slam3
                 for(const auto & element : vbTriangulated4) {
                     vbTriangulated.push_back(element);
                 }
-
-                T21 = Sophus::SE3f(R2, t2);
+                rotation = R2;
+                translation = t2;
                 return true;
             }
         }
@@ -610,7 +612,7 @@ namespace orb_slam3
     }
 
     bool TwoViewReconstruction::ReconstructH(vector<bool> &vbMatchesInliers, Eigen::Matrix3f &H21, Eigen::Matrix3f &K,
-                                             Sophus::SE3f &T21, vector<cv::Point3f> &vP3D, rust::Vec<bool> &vbTriangulated, float minParallax, int minTriangulated)
+                                             Eigen::Matrix3f &rotation, Eigen::Vector3f &translation, vector<cv::Point3f> &vP3D, rust::Vec<bool> &vbTriangulated, float minParallax, int minTriangulated)
     {
         int N=0;
         for(size_t i=0, iend = vbMatchesInliers.size() ; i<iend; i++)
@@ -765,11 +767,12 @@ namespace orb_slam3
 
         if(secondBestGood<0.75*bestGood && bestParallax>=minParallax && bestGood>minTriangulated && bestGood>0.9*N)
         {
-            T21 = Sophus::SE3f(vR[bestSolutionIdx], vt[bestSolutionIdx]);
             for(const auto & element : bestTriangulated) {
                 vbTriangulated.push_back(element);
             }
 
+            rotation = vR[bestSolutionIdx];
+            translation = vt[bestSolutionIdx];
             return true;
         }
 

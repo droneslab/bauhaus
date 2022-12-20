@@ -34,7 +34,8 @@ pub struct MapPoint<M: MapPointState> {
     // rather than duplicating all these connections across all the objects and hoping we remember
     // to update them correctly after a map modification
     origin_map_id: Id,
-    ref_kf: Id, // = mnFirstKFid and mpRefKF ... first one is Id, second is a pointer to the KF, but we only keep Ids 
+    ref_kf_id: Id, // mpRefKF
+    pub first_kf_id: Id, // mnFirstKFid
 
     // Variables in ORBSLAM, DON'T Set these!!
     // mnFirstFrame ... literally never used meaningfully
@@ -75,11 +76,12 @@ impl MapPointState for PrelimMapPoint {}
 impl MapPointState for FullMapPoint {}
 
 impl MapPoint<PrelimMapPoint> {
-    pub fn new(position: DVVector3<f64>, ref_kf: Id, origin_map_id: Id) -> Self {
+    pub fn new(position: DVVector3<f64>, ref_kf_id: Id, origin_map_id: Id) -> Self {
         Self {
             position,
             origin_map_id,
-            ref_kf,
+            ref_kf_id,
+            first_kf_id: ref_kf_id,
             full_mp_info: PrelimMapPoint{} 
         }
     }
@@ -127,13 +129,14 @@ impl MapPoint<PrelimMapPoint> {
 }
 
 impl MapPoint<FullMapPoint> {
-    pub(super) fn new(prelim_mappoint: MapPoint<PrelimMapPoint>, id: Id) -> Self {
+    pub(super) fn new(prelim_mappoint: &MapPoint<PrelimMapPoint>, id: Id) -> Self {
     let sensor: Sensor = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "sensor");
 
         Self {
             position: prelim_mappoint.position,
             origin_map_id: prelim_mappoint.origin_map_id,
-            ref_kf: prelim_mappoint.ref_kf,
+            ref_kf_id: prelim_mappoint.ref_kf_id,
+            first_kf_id: prelim_mappoint.first_kf_id,
             full_mp_info: FullMapPoint{
                 id,
                 observations: Observations::new(sensor),
@@ -170,6 +173,10 @@ impl MapPoint<FullMapPoint> {
         self.full_mp_info.nfound += n;
     }
 
+    pub fn get_found_ratio(&self) -> f32 {
+        self.full_mp_info.nfound as f32 / self.full_mp_info.nvisible as f32
+    }
+
     pub fn add_observation(&mut self, kf_id: &Id, num_keypoints_left_for_kf: u32, index: u32) {
         self.full_mp_info.observations.add_observation(kf_id, num_keypoints_left_for_kf, index);
     }
@@ -182,7 +189,7 @@ impl MapPoint<FullMapPoint> {
 
         let (n, normal) = self.full_mp_info.observations.get_normal(map, &self.position);
 
-        let ref_kf = map.get_keyframe(&self.ref_kf).unwrap();
+        let ref_kf = map.get_keyframe(&self.ref_kf_id).unwrap();
         let pc = (*self.position) - (*ref_kf.get_camera_center());
         let dist = pc.norm();
 
@@ -271,5 +278,4 @@ impl MapPoint<FullMapPoint> {
             return scale;
         }
     }
-    
 }
