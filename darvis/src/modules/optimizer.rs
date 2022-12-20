@@ -1023,7 +1023,7 @@ pub fn global_bundle_adjustment(map: &Map, loop_kf: i32, iterations: i32) -> BAR
         // flame::start("add_mappoint_vertex");
         optimizer.pin_mut().add_mappoint_vertex(
             mp_vertex_id,
-            Pose::new(&*mappoint.position, &Matrix3::zeros()).into() // create pose out of translation only
+            Pose::new(&*mappoint.position, &Matrix3::identity()).into() // create pose out of translation only
         );
         // flame::end("add_mappoint_vertex");
 
@@ -1073,7 +1073,7 @@ pub fn global_bundle_adjustment(map: &Map, loop_kf: i32, iterations: i32) -> BAR
             warn!("Removed vertex");
             // optimizer.pin_mut().remove_vertex(mp_vertex);
         } else {
-            mappoint_vertices.push(mp_vertex_id);
+            mappoint_vertices.push((mp_vertex_id, mp_id));
         }
     }
     warn!("gba3");
@@ -1095,9 +1095,9 @@ pub fn global_bundle_adjustment(map: &Map, loop_kf: i32, iterations: i32) -> BAR
 
     //Points
     let mut optimized_mp_poses = HashMap::<Id, Pose>::new();
-    for id in mappoint_vertices {
-        let pose = optimizer.recover_optimized_mappoint_pose(id);
-        optimized_mp_poses.insert(id, pose.into());
+    for (mp_vertex_id, mp_id) in mappoint_vertices {
+        let pose = optimizer.recover_optimized_mappoint_pose(mp_vertex_id);
+        optimized_mp_poses.insert(*mp_id, pose.into());
     }
     flame::end("recover");
 

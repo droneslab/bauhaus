@@ -218,17 +218,17 @@ impl Map {
         Map::update_connections(& self.mappoints, &mut self.keyframes, & self.initial_kf_id, &initial_kf_id);
         Map::update_connections(& self.mappoints, &mut self.keyframes, & self.initial_kf_id, &curr_kf_id);
 
-        // // Pranay : commenting for now as it is taking more time
-        // // Bundle Adjustment
-        // let optimized_poses = optimizer::global_bundle_adjustment(self, 0, 20);
-        // self.update_after_ba(optimized_poses);
+        // // Pranay : Bundle adjustment is giving pose that is results is negative median depth ???
+        // Bundle Adjustment
+        let optimized_poses = optimizer::global_bundle_adjustment(self, 0, 20);
+        self.update_after_ba(optimized_poses);
 
         let median_depth = self.keyframes.get_mut(&initial_kf_id)?.compute_scene_median_depth(& self.mappoints, 2);
         let inverse_median_depth = match self.sensor {
             Sensor(FrameSensor::Mono, ImuSensor::Some) => 4.0 / median_depth,
             _ => 1.0 / median_depth
         };
-
+        
         if median_depth < 0.0 || self.keyframes.get(&curr_kf_id)?.tracked_mappoints(&self, 1) < 50 {
             // reset active map
             warn!("map::create_initial_map_monocular;wrong initialization");

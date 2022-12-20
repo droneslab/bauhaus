@@ -44,96 +44,138 @@ lazy_static! {
     };
 }
 
-fn match_frames(
-    ini_frame: &Frame,
-    curr_frame: &Frame,
-    prev_matched: &mut Vec<Point2f>,
-    mp_matches: &mut HashMap<u32, u32>,
-) -> i32 {
-    let frame1_keypoints = ini_frame.features.get_all_keypoints();
-    debug!("{}", frame1_keypoints.len());
-    let frame1_descriptors = &*ini_frame.features.descriptors; 
-    let frame2_keypoints = curr_frame.features.get_all_keypoints();
-    let frame2_descriptors = &*curr_frame.features.descriptors;
- 
-    let pt_indx2 = opencv::types::VectorOfi32::new();
-    let mut points2 = opencv::types::VectorOfPoint2f::new();
-    KeyPoint::convert(&frame2_keypoints, &mut points2, &pt_indx2).unwrap();  
-    mp_matches.clear();
-    //////////////////////////////////////////////
 
-      // BFMatcher to get good matches
-      let bfmtch = BFMatcher::create(6 , true).unwrap(); 
-      let mut mask = Mat::default(); 
-      let mut matches = VectorOfDMatch::new();
-      bfmtch.train_match(&frame2_descriptors, &frame1_descriptors, &mut matches, &mut mask).unwrap(); 
+// Sofiya edits: conflict
+// pub fn search_for_initialization(
+//     ini_frame: &Frame,
+//     curr_frame: &Frame,
+//     prev_matched: &mut DVVectorOfPoint2f,
+//     window_size: i32
+// ) -> (i32, Vec<i32>) {
+//     // Sofiya: Should we avoid making a new orb matcher each time? Is this expensive?
+//     let matcher = dvos3binding::ffi::new_orb_matcher(64, 48, 0.0, 0.0, 1241.0, 376.0,0.9,true);
+//     let grid_v3: dvos3binding::ffi::Grid = curr_frame.features.grid.clone().into();
+//     let mut mp_matches = Vec::new();
 
-      // Sort the matches based on the distance in ascending order
-      // Using O(n^2) sort here. Need to make the code use cv sort function
-      // by providing custom comparator
-
-      let mut sorted_matches = VectorOfDMatch::new();
-      let mut added = vec![false; matches.len()];
-      for i in 0.. matches.len() {
-          if added[i] == true {
-              continue;
-          }
-          let mut mn = i;
-          let mut dist = matches.get(i).unwrap().distance;
-          for j in 0..matches.len() {
-              let dmatch2 = matches.get(j).unwrap();
-              if dist > dmatch2.distance && !added[j] {
-                  mn = j;
-                  dist = dmatch2.distance;
-              }        
-          }      
-          let dmatch1 = matches.get(mn).unwrap();
-          sorted_matches.push(dmatch1);
-          added[mn] = true;
-      }
-
-      prev_matched.clear();
-
-      for i in 0..sorted_matches.len(){
-
-        let pindex1: i32 = sorted_matches.get(i).unwrap().train_idx.try_into().unwrap();
-        let pindex2: i32 = sorted_matches.get(i).unwrap().query_idx.try_into().unwrap();
-
-        mp_matches.insert(pindex1.try_into().unwrap(), pindex2.try_into().unwrap());
-
-        prev_matched.push(points2.get(sorted_matches.get(i).unwrap().query_idx.try_into().unwrap() ).unwrap());
-
-      }
-    ////////////////////////////////////////////
-    let nmatches = sorted_matches.len() as i32;
-
-    nmatches
-}
-
+//     let num_matches = matcher.search_for_initialization(
+//         & ini_frame.features.get_all_keypoints().into(),
+//         & curr_frame.features.get_all_keypoints().into(), 
+//         & (&ini_frame.features.descriptors).into(),
+//         & (&curr_frame.features.descriptors).into(),
+//         &grid_v3,
+//         &mut prev_matched.into(),
+//         &mut mp_matches,
+//         window_size
+//     );
+//     debug!("new matches: {}", num_matches);
+//     return (num_matches, mp_matches);
+// }
 pub fn search_for_initialization(
-    ini_frame: &Frame,
-    curr_frame: &Frame,
-    prev_matched: &mut DVVectorOfPoint2f,
-    window_size: i32
-) -> (i32, Vec<i32>) {
-    // Sofiya: Should we avoid making a new orb matcher each time? Is this expensive?
-    let matcher = dvos3binding::ffi::new_orb_matcher(64, 48, 0.0, 0.0, 1241.0, 376.0,0.9,true);
-    let grid_v3: dvos3binding::ffi::Grid = curr_frame.features.grid.clone().into();
-    let mut mp_matches = Vec::new();
+        f1: &Frame,
+        f2: &Frame,
+        vb_prev_matched: &mut DVVectorOfPoint2f,
+        window_size: i32,
+    ) -> (i32, Vec<i32>) {
+        let nnratio = 0.9;
+        let check_ori=true;
 
-    let num_matches = matcher.search_for_initialization(
-        & ini_frame.features.get_all_keypoints().into(),
-        & curr_frame.features.get_all_keypoints().into(), 
-        & (&ini_frame.features.descriptors).into(),
-        & (&curr_frame.features.descriptors).into(),
-        &grid_v3,
-        &mut prev_matched.into(),
-        &mut mp_matches,
-        window_size
-    );
-    debug!("new matches: {}", num_matches);
-    return (num_matches, mp_matches);
-}
+        let mut vn_matches12: Vec<i32> = vec![-1; f1.features.get_all_keypoints().len() as usize];
+        let factor = 1.0 / HISTO_LENGTH as f32;
+        let mut v_matched_distance = vec![std::i32::MAX; f2.features.get_all_keypoints().len() as usize];
+        let mut vn_matches21: Vec<i32> = vec![-1; f2.features.get_all_keypoints().len() as usize];
+        let mut n_matches = 0;
+
+        let mut rot_hist = construct_rotation_histogram();
+
+        for (i1, kp1) in f1.features.get_all_keypoints().iter().enumerate() {
+            let level1 = kp1.octave;
+            if level1 > 0 {
+                continue;
+            }
+
+            // Pranay : could be a bug ?? get_features_in_area
+            let v_indices2 = f2.get_features_in_area(
+                &(vb_prev_matched.get(i1).unwrap().x as f64),
+                &(vb_prev_matched.get(i1).unwrap().y as f64),
+                window_size as f64,
+                level1,
+                level1,
+            );
+
+            if v_indices2.is_empty() {
+                continue;
+            }
+            
+            let d1 = f1.features.descriptors.row(i1 as u32).unwrap();
+            let (mut best_dist, mut best_dist2, mut best_idx2) : (i32, i32, i32) = (std::i32::MAX, std::i32::MAX, -1);
+            for i2 in v_indices2 {
+                let d2 = f2.features.descriptors.row(i2).unwrap();
+                let dist = descriptor_distance(&d1, &d2);
+                if v_matched_distance[i2 as usize] <= dist {
+                    continue;
+                }
+                if dist < best_dist {
+                    best_dist2 = best_dist;
+                    best_dist = dist;
+                    best_idx2 = i2 as i32;
+                } else if dist < best_dist2 {
+                    best_dist2 = dist;
+                }
+            }
+            if best_dist <= TH_LOW {
+                if best_dist < (best_dist2 as f32 *  nnratio) as i32 {
+                    if vn_matches21[best_idx2 as usize] >= 0 {
+                        vn_matches12[vn_matches21[best_idx2 as usize] as usize] = -1;
+                        n_matches -= 1;
+                    }
+                    vn_matches12[i1] = best_idx2;
+                    vn_matches21[best_idx2 as usize] = i1 as i32;
+                    v_matched_distance[best_idx2 as usize] = best_dist;
+                    n_matches+=1;
+                    if check_ori {
+                        check_orientation_1(
+                            &f1.features.get_keypoint(i1 as usize),
+                            &f2.features.get_keypoint(best_idx2 as usize),
+                            &mut rot_hist, factor, i1 as i32
+                        );
+                    }
+                }
+            }
+        }
+              
+        if check_ori {
+            
+            let (ind_1, ind_2, ind_3) = compute_three_maxima(&rot_hist,HISTO_LENGTH);
+            for i in 0..HISTO_LENGTH {
+                if i == ind_1 as i32 || i == ind_2 as i32 || i == ind_3 as i32 {
+                    continue;
+                }
+                for j in 0..rot_hist[i as usize].len() {
+                    let key = rot_hist[i as usize][j];
+                    if vn_matches12[ key as usize] >= 0 {
+                        vn_matches12[key as usize] = -1;
+                        n_matches -= 1;
+                    }
+                }
+            }
+
+        }
+
+        for (i1, match12) in vn_matches12.iter().enumerate() {
+            if *match12 >= 0 {
+                *vb_prev_matched.get(i1).as_mut().unwrap() = f2.features.get_keypoint(*match12 as usize).pt;
+            }
+        }
+        
+        (n_matches, vn_matches12)
+        
+                
+    }
+
+
+
+//////////////////////////////////////////////////////////////////////
+
 
 pub fn search_by_projection(
     frame: &mut Frame, mappoints: &HashSet<Id>, th: i32,
