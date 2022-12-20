@@ -227,7 +227,7 @@ impl Features {
 
         for ix in min_cell_x..max_cell_x + 1 {
             for iy in min_cell_y..max_cell_y + 1 {
-                let v_cell = Vec::<usize>::new();
+                let v_cell  =&self.grid.grid[ix as usize][iy as usize];
                 //const vector<size_t> vCell = (!bRight) ? mGrid[ix][iy] : mGridRight[ix][iy];
 
                 if v_cell.is_empty() {
