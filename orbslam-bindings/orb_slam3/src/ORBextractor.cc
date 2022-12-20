@@ -338,7 +338,6 @@ namespace orb_slam3 {
     ORBextractor::ORBextractor(int _nfeatures, float _scaleFactor, int _nlevels, int _iniThFAST, int _minThFAST, int _overlap_begin, int _overlap_end):
         nfeatures(_nfeatures), scaleFactor(_scaleFactor), nlevels(_nlevels), iniThFAST(_iniThFAST), minThFAST(_minThFAST), overlap_begin(_overlap_begin), overlap_end(_overlap_end)
     {
-        cout << "ORBextractor " << _nfeatures << " " << _scaleFactor << " " << _nlevels << " " << _iniThFAST << " " << _minThFAST << " " << _overlap_begin << " " << _overlap_end << endl;
         mvScaleFactor.resize(nlevels);
         mvLevelSigma2.resize(nlevels);
         mvScaleFactor[0]=1.0f;
@@ -1102,7 +1101,6 @@ namespace orb_slam3 {
                                   OutputArray _descriptors, std::vector<int> &vLappingArea)
     {
         //cout << "[ORBextractor]: Max Features: " << nfeatures << endl;
-
         if(_image.empty())
             return -1;
 
@@ -1179,15 +1177,6 @@ namespace orb_slam3 {
                 i++;
             }
         }
-
-        // cout << "keypoints" << endl;
-        // for(int i =0;i < _keypoints.size(); i++) {
-        //     cout << _keypoints[i].pt << " " << _keypoints[i].size << " " << _keypoints[i].angle << " " << _keypoints[i].response << " " << _keypoints[i].octave << "// ";
-        // }
-        // cout << endl;
-
-        // cout << "monoIndex " << monoIndex << endl;
-
 
         return monoIndex;
     }

@@ -19,6 +19,8 @@ use crate::{
     lockwrap::ReadOnlyWrapper,
 };
 
+use super::camera::CAMERA_MODULE;
+
 const  TH_HIGH: i32= 100;
 const  TH_LOW: i32 = 50;
 const  HISTO_LENGTH: i32 = 30;
@@ -115,11 +117,9 @@ pub fn search_for_initialization(
     window_size: i32
 ) -> (i32, Vec<i32>) {
     // Sofiya: Should we avoid making a new orb matcher each time? Is this expensive?
-    let matcher = dvos3binding::ffi::new_orb_matcher(48, 48, 0.0, 0.0, 600.0, 600.0,0.1,true);
+    let matcher = dvos3binding::ffi::new_orb_matcher(64, 48, 0.0, 0.0, 1241.0, 376.0,0.9,true);
     let grid_v3: dvos3binding::ffi::Grid = curr_frame.features.grid.clone().into();
     let mut mp_matches = Vec::new();
-
-    debug!("search_for_initialization {} {} {:?} {:?}", ini_frame.features.get_all_keypoints().len(), curr_frame.features.get_all_keypoints().len(), (*ini_frame.features.descriptors).size().unwrap(), (*curr_frame.features.descriptors).size().unwrap());
 
     let num_matches = matcher.search_for_initialization(
         & ini_frame.features.get_all_keypoints().into(),
@@ -334,8 +334,8 @@ pub fn search_by_projection_with_threshold (
     let tlw = current_frame.pose.unwrap().get_translation();
     let tlc = (*rlw) * twc + (*tlw);
 
-    let forward = tlc[2] > current_frame.stereo_baseline && !sensor.is_mono();
-    let backward = -tlc[2] > current_frame.stereo_baseline && !sensor.is_mono();
+    let forward = tlc[2] > CAMERA_MODULE.stereo_baseline && !sensor.is_mono();
+    let backward = -tlc[2] > CAMERA_MODULE.stereo_baseline && !sensor.is_mono();
 
     for idx1 in 0..last_frame.features.get_all_keypoints().len() {
         if last_frame.mappoint_matches.contains_key(&(idx1 as u32)) && !last_frame.is_mp_outlier(&(idx1 as u32)) {
@@ -351,8 +351,8 @@ pub fn search_by_projection_with_threshold (
             let invzc = 1.0 / x_3d_c[2];
             if invzc < 0.0 { continue; }
 
-            let u = current_frame.camera.get_fx() * xc * invzc + current_frame.camera.get_cx();
-            let v = current_frame.camera.get_fy() * yc * invzc + current_frame.camera.get_cy();
+            let u = CAMERA_MODULE.get_fx() * xc * invzc + CAMERA_MODULE.get_cx();
+            let v = CAMERA_MODULE.get_fy() * yc * invzc + CAMERA_MODULE.get_cy();
             if !current_frame.features.image_bounds.check_bounds(u, v) {
                 continue;
             }
@@ -534,10 +534,11 @@ pub fn search_by_bow_f(
             }
         }
     }
-
+    debug!("initial matches {}", matches.len());
     if should_check_orientation {
         check_orientation_2(&rot_hist, &mut matches)
     };
+    debug!("final matches {}", matches.len());
 
     return Ok(matches);
 }
@@ -618,6 +619,14 @@ pub fn search_by_bow_kf(
     };
 
     return Ok(matches);
+}
+
+pub fn search_for_triangulation(
+    kf_1 : &KeyFrame<FullKeyFrame>, kf_2 : &KeyFrame<FullKeyFrame>, should_check_orientation: bool, 
+    ratio: f64, map: &ReadOnlyWrapper<Map>
+) -> Result<HashMap<usize, usize>, Box<dyn std::error::Error>> {
+    todo!("Search for triangulation");
+    //int ORBmatcher::SearchForTriangulation(KeyFrame *pKF1, KeyFrame *pKF2, vector<pair<size_t, size_t> > &vMatchedPairs, const bool bOnlyStereo, const bool bCoarse)
 }
 
 pub fn descriptor_distance(a : &Mat, b: &Mat) -> i32 {

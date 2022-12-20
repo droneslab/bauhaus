@@ -4,8 +4,10 @@ use nalgebra::Vector3;
 use crate::{
     lockwrap::ReadWriteWrapper,
     dvmap::{keyframe::*, map::*},
-    modules::map_initialization::Initialization, actors::messages::MapInitializedMsg,
+    modules::map_initialization::Initialization, actors::messages::{MapInitializedMsg, KeyFrameIdMsg}, registered_modules::{LOCAL_MAPPING, TRACKING_BACKEND},
 };
+
+use super::mappoint::{MapPoint, PrelimMapPoint};
 
 pub static MAP_ACTOR: &str = "MAP_ACTOR"; 
 
@@ -19,22 +21,27 @@ impl MapActor {//+ std::marker::Send + std::marker::Sync
         aid
     }
 
-    async fn handle(self, _context: Context, message: Message) -> ActorResult<Self> {
+    async fn handle(self, context: Context, message: Message) -> ActorResult<Self> {
         if let Some(msg) = message.content_as::<MapWriteMsg>() {
-            debug!("map_actor::handle;received map edit msg");
             let mut write_lock = self.map.write();
             let msg = &*msg;
 
             match &msg.target {
-                MapEditTarget::CreateInitialMapMonocular { initialization_data, tracking_actor } => {
+                MapEditTarget::CreateInitialMapMonocular { initialization_data, callback_actor } => {
                     match write_lock.create_initial_map_monocular(&initialization_data) {
                             Some((curr_kf_pose, curr_kf_id, ini_kf_id, local_mappoints)) => {
-                                let tracking_msg = MapInitializedMsg {curr_kf_pose, curr_kf_id, ini_kf_id, local_mappoints};
-                                tracking_actor.send_new(tracking_msg).unwrap();
+                                callback_actor.send_new(
+                                    MapInitializedMsg {curr_kf_pose, curr_kf_id, ini_kf_id, local_mappoints}
+                                ).unwrap();
                                 info!("successfully created initial monocular map");
                             },
                             None => { }
                     };
+                },
+
+                MapEditTarget::MapPoint__New { mp ,observations_to_add } => {
+                    let new_mp_id = write_lock.insert_mappoint_to_map(mp, observations_to_add);
+
                 },
 
                 MapEditTarget::MapPoint__Discard { id } => {
@@ -43,13 +50,14 @@ impl MapActor {//+ std::marker::Send + std::marker::Sync
 
                 MapEditTarget::MapPoint_IncreaseFound { mp_ids_and_nums } => {
                     for (mp, n) in mp_ids_and_nums {
-                        write_lock.increase_mappoint_found(&mp, &n);
+                        write_lock.mappoints.get_mut(mp).unwrap().increase_found(n);
                     }
                 },
 
-                MapEditTarget::KeyFrame__New { kf } => {
-                    // Note: called by local mapping
-                    write_lock.insert_keyframe_to_map(kf);
+                MapEditTarget::KeyFrame__New { kf, callback_actor } => {
+                    let new_kf_id = write_lock.insert_keyframe_to_map(kf, false);
+                    // Send the new keyframe ID directly back to the sender so they can use the ID 
+                    callback_actor.send_new(KeyFrameIdMsg{keyframe_id: new_kf_id}).unwrap();
                 },
 
                 _ => {
@@ -66,10 +74,11 @@ impl MapActor {//+ std::marker::Send + std::marker::Sync
 #[allow(non_camel_case_types)]
 enum MapEditTarget {
     // #[serde(bound = "")] If using serialize/deserialize, uncomment this
-    CreateInitialMapMonocular{initialization_data: Initialization, tracking_actor: axiom::actors::Aid},
-    CreateInitialMapStereo{initialization_data: Initialization, tracking_actor: axiom::actors::Aid},
-    KeyFrame__New{kf: KeyFrame<PrelimKeyFrame>},
+    CreateInitialMapMonocular{initialization_data: Initialization, callback_actor: axiom::actors::Aid},
+    CreateInitialMapStereo{initialization_data: Initialization, callback_actor: axiom::actors::Aid},
+    KeyFrame__New{kf: KeyFrame<PrelimKeyFrame>, callback_actor: axiom::actors::Aid},
     Map__ResetActive(),
+    MapPoint__New{mp: MapPoint<PrelimMapPoint>, observations_to_add: Vec<(Id, u32, usize)>},
     MapPoint__Position{ id: u64, pos: Vector3<f32> },
     MapPoint__Discard{id: Id},
     MapPoint_IncreaseFound{mp_ids_and_nums: Vec::<(Id, i32)>},
@@ -83,28 +92,33 @@ impl ActorMessage for MapWriteMsg { }
 impl MapWriteMsg {
     pub fn create_initial_map_monocular(
         initialization_data: Initialization,
-        tracking_actor: axiom::actors::Aid
+        callback_actor: axiom::actors::Aid
     ) -> MapWriteMsg {
         Self {
-            target: MapEditTarget::CreateInitialMapMonocular{initialization_data, tracking_actor},
+            target: MapEditTarget::CreateInitialMapMonocular{initialization_data, callback_actor },
         }
     }
     pub fn create_initial_map_stereo(
         initialization_data: Initialization,
-        tracking_actor: axiom::actors::Aid
+        callback_actor: axiom::actors::Aid
     ) -> MapWriteMsg {
         Self {
-            target: MapEditTarget::CreateInitialMapStereo{initialization_data, tracking_actor},
+            target: MapEditTarget::CreateInitialMapStereo{initialization_data, callback_actor},
         }
     }
-    pub fn new_keyframe(kf: KeyFrame<PrelimKeyFrame>) -> MapWriteMsg {
+    pub fn new_keyframe(kf: KeyFrame<PrelimKeyFrame>, callback_actor: axiom::actors::Aid) -> MapWriteMsg {
         Self {
-            target: MapEditTarget::KeyFrame__New {kf: kf},
+            target: MapEditTarget::KeyFrame__New {kf, callback_actor},
         }
     }
     pub fn reset_active_map() -> MapWriteMsg {
         Self {
             target: MapEditTarget::Map__ResetActive(),
+        }
+    }
+    pub fn create_new_mappoint(mp: MapPoint<PrelimMapPoint>, observations_to_add: Vec<(Id, u32, usize)>) -> MapWriteMsg {
+        Self {
+            target: MapEditTarget::MapPoint__New {mp, observations_to_add},
         }
     }
     pub fn update_mappoint_position(kf_id: u64, pos : &Vector3<f32>) -> MapWriteMsg {

@@ -6,7 +6,7 @@ use log::debug;
 use opencv::core::Point2f;
 use dvcore::{matrix::DVVectorOfPoint3f, config::Sensor, matrix::DVVectorOfi32};
 use crate::dvmap::{frame::Frame, pose::Pose};
-use crate::modules::camera::Camera;
+use crate::modules::camera::{Camera, CAMERA_MODULE};
 
 use super::orbmatcher;
 
@@ -40,7 +40,7 @@ impl Initialization {
         }
     }
 
-    pub fn try_initialize(&mut self, current_frame: &Frame, camera: &mut Camera) -> Result<bool, Box<dyn std::error::Error>> {
+    pub fn try_initialize(&mut self, current_frame: &Frame) -> Result<bool, Box<dyn std::error::Error>> {
         // Only set once at beginning
         if self.initial_frame.is_none() {
             self.initial_frame = Some(current_frame.clone());
@@ -54,12 +54,12 @@ impl Initialization {
         self.current_frame = Some(current_frame.clone());
 
         match self.sensor.frame() {
-            FrameSensor::Mono => self.monocular_initialization(camera),
+            FrameSensor::Mono => self.monocular_initialization(),
             _ => self.stereo_initialization()
         }
     }
 
-    fn monocular_initialization(&mut self, camera: &mut Camera) -> Result<bool, Box<dyn std::error::Error>> {
+    fn monocular_initialization(&mut self) -> Result<bool, Box<dyn std::error::Error>> {
         // Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Tracking.cc#L2448
         let current_frame = self.current_frame.as_ref().unwrap();
         let initial_frame = self.initial_frame.as_ref().unwrap();
@@ -86,7 +86,6 @@ impl Initialization {
                 _ => {}
             }
             self.ready_to_initializate = true;
-            debug!("MonocularInitialization, completed step 1");
             return Ok(false);
         } else {
             debug!("Current frame ID {}", current_frame.id);
@@ -112,7 +111,7 @@ impl Initialization {
                 return Ok(false);
             };
 
-            let (reconstruct_success, tcw, v_p3d, vb_triangulated) = camera.reconstruct_with_two_views(
+            let (reconstruct_success, tcw, v_p3d, vb_triangulated) = CAMERA_MODULE.reconstruct_with_two_views(
                 initial_frame.features.get_all_keypoints(),
                 current_frame.features.get_all_keypoints(),
                 & self.mp_matches,
@@ -130,10 +129,8 @@ impl Initialization {
                 self.initial_frame.as_mut().unwrap().pose = Some(Pose::default());
                 self.current_frame.as_mut().unwrap().pose = Some(tcw);
 
-                debug!("MonocularInitialization, ReconstructWithTwoViews... success ... can initialize now");
                 return Ok(true);
             } else {
-                // TODO (tracking bugs): Reconstruction always fails at the first attempt, is this normal?
                 debug!("MonocularInitialization, ReconstructWithTwoViews... failure");
                 return Ok(false);
             }

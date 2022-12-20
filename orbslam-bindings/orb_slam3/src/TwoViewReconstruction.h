@@ -53,7 +53,8 @@ namespace orb_slam3
         // Computes in parallel a fundamental matrix and a homography
         // Selects a model and tries to recover the motion and the structure from motion
         bool Reconstruct(const std::vector<cv::KeyPoint>& vKeys1, const std::vector<cv::KeyPoint>& vKeys2, const rust::vec<int> &vMatches12,
-                          Sophus::SE3f &T21, std::vector<cv::Point3f> &vP3D, rust::Vec<bool> &vbTriangulated) ;
+                          Eigen::Matrix3f &rotation, Eigen::Vector3f &translation,
+                          std::vector<cv::Point3f> &vP3D, rust::Vec<bool> &vbTriangulated) ;
 
         // Entrypoint from rust
         bool reconstruct_rust(
@@ -78,10 +79,12 @@ namespace orb_slam3
         float CheckFundamental(const Eigen::Matrix3f &F21, std::vector<bool> &vbMatchesInliers, float sigma);
 
         bool ReconstructF(std::vector<bool> &vbMatchesInliers, Eigen::Matrix3f &F21, Eigen::Matrix3f &K,
-                          Sophus::SE3f &T21, std::vector<cv::Point3f> &vP3D, rust::Vec<bool> &vbTriangulated, float minParallax, int minTriangulated);
+                          Eigen::Matrix3f &rotation, Eigen::Vector3f &translation,
+                          std::vector<cv::Point3f> &vP3D, rust::Vec<bool> &vbTriangulated, float minParallax, int minTriangulated);
 
         bool ReconstructH(std::vector<bool> &vbMatchesInliers, Eigen::Matrix3f &H21, Eigen::Matrix3f &K,
-                          Sophus::SE3f &T21, std::vector<cv::Point3f> &vP3D,rust::Vec<bool> &vbTriangulated, float minParallax, int minTriangulated);
+                          Eigen::Matrix3f &rotation, Eigen::Vector3f &translation,
+                          std::vector<cv::Point3f> &vP3D,rust::Vec<bool> &vbTriangulated, float minParallax, int minTriangulated);
 
         void Normalize(const std::vector<cv::KeyPoint> &vKeys, std::vector<cv::Point2f> &vNormalizedPoints, Eigen::Matrix3f &T);
 

@@ -83,3 +83,22 @@ impl From<Pose> for g2o::ffi::Pose {
         }
     }
 }
+
+impl From<dvos3binding::ffi::Pose> for Pose {
+    fn from(pose: dvos3binding::ffi::Pose) -> Self {
+        let translation = Translation3::new(
+            pose.translation[0] as f64,
+            pose.translation[1] as f64,
+            pose.translation[2] as f64
+        );
+        let rotation = UnitQuaternion::<f64>::from_quaternion(
+            Quaternion::<f64>::new(
+                pose.rotation[0] as f64,
+                pose.rotation[1] as f64,
+                pose.rotation[2] as f64,
+                pose.rotation[3] as f64,
+            )
+        );
+        Pose ( Isometry3::from_parts(translation,rotation) )
+    }
+}

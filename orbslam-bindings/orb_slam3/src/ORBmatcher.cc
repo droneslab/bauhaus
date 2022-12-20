@@ -819,7 +819,6 @@ namespace orb_slam3 {
             if(vnMatches12[i1]>=0)
                 vbPrevMatched[i1]=F2_mvKeysUn[vnMatches12[i1]].pt;
 
-        cout << "search for initialization " << nmatches << endl;
         return nmatches;
     }
 

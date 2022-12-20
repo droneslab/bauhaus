@@ -33,10 +33,6 @@ pub struct KeyFrame<K: KeyFrameState> {
     pub imu_bias: Option<IMUBias>,
     pub imu_preintegrated: Option<IMUPreIntegrated>,
     // pub imu_calib: IMUCalib,
-
-    // Stereo //
-    pub stereo_baseline: f64,
-
     pub full_kf_info: K,
 
     // Don't add these in!! read explanations below
@@ -88,7 +84,6 @@ impl KeyFrame<PrelimKeyFrame> {
             features: frame.features.clone(),
             imu_bias: frame.imu_bias,
             imu_preintegrated: frame.imu_preintegrated,
-            stereo_baseline: 0.0, // TODO (Stereo)
             full_kf_info: PrelimKeyFrame{},
             bow: frame.bow.clone()
         }
@@ -117,7 +112,6 @@ impl KeyFrame<FullKeyFrame> {
             bow,
             imu_bias: prelim_keyframe.imu_bias,
             imu_preintegrated: prelim_keyframe.imu_preintegrated,
-            stereo_baseline: prelim_keyframe.stereo_baseline,
             full_kf_info: FullKeyFrame{
                 id,
                 origin_map_id,
@@ -141,7 +135,6 @@ impl KeyFrame<FullKeyFrame> {
     }
 
     pub fn erase_mappoint_match(&mut self, (left_index, right_index): (i32, i32)) {
-        // self.mappoint_matches.remove(id);
         if left_index != -1 {
             self.mappoint_matches.remove(&(left_index as u32));
         }
@@ -155,6 +148,7 @@ impl KeyFrame<FullKeyFrame> {
     }
 
     pub fn get_connections(&self, num: i32) -> Vec<Id> {
+        // KeyFrame::GetBestCovisibilityKeyFrames
         self.full_kf_info.connected_keyframes.get_connections(num)
     }
 
@@ -268,7 +262,6 @@ impl ConnectedKeyFrames {
     }
 
     pub fn get_connections(&self, num: i32) -> Vec<Id> {
-    
        let max_len = min(self.ordered.len(), num as usize);
        let (conections, _) : (Vec<i32>, Vec<i32>) = self.ordered[0..max_len].iter().cloned().unzip();
        info!("connections : {:?}", conections);

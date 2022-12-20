@@ -6,7 +6,7 @@ master:
        file: main.rs
 
 system_settings:
-      should_profile: true
+      should_profile: false
       show_ui: false
       localization_only_mode: false
       vocabulary_file: "../vocabulary/ORBvoc.txt" # TODO (low priority): This does not work with ~/
@@ -78,7 +78,7 @@ modules:
            type: i32
           -
            name: stereo_overlapping_end
-           value: 511 # This depends on the camera type, look at the orbslam configs
+           value: 1000
            type: i32
 
       - 

@@ -1,10 +1,17 @@
-use opencv::{prelude::{Mat, MatTrait, Boxed, MatTraitConst}, core::{Scalar, Point3f, CV_64F}};
+use log::info;
+use opencv::{prelude::{Mat, MatTrait, Boxed, MatTraitConst}, core::{Scalar, Point3f, CV_64F, KeyPoint, Point}};
 use dvcore::{config::*, matrix::{DVMatrix, DVVectorOfPoint3f, DVVector3, DVVectorOfi32}};
 use crate::{
     dvmap::{pose::{Pose, Rotation}},
     matrix::DVVectorOfKeyPoint, registered_modules::CAMERA
 };
 
+
+lazy_static! {
+    pub static ref CAMERA_MODULE: Camera = {
+        Camera::new(CameraType::Pinhole).unwrap()
+    };
+}
 
 #[derive(Debug, Clone, Default)]
 pub enum CameraType {
@@ -18,6 +25,7 @@ pub struct Camera {
     // K in ORBSLAM3 is matrix with the following items:
     pub k_matrix: DVMatrix,
 
+    // Constants
     pub stereo_baseline_times_fx: f64, // mbf
     pub stereo_baseline: f64, //mb
     pub th_depth: i32, //mThDepth
@@ -81,7 +89,7 @@ impl Camera {
     pub fn get_inv_fy(&self) -> f64 { 1.0 / self.get_fy() }
 
     pub fn reconstruct_with_two_views(
-        &mut self, 
+        & self, 
         v_keys1: &DVVectorOfKeyPoint, 
         v_keys2: &DVVectorOfKeyPoint,
         matches: &Vec<i32>,
@@ -94,7 +102,10 @@ impl Camera {
             1.0, 200
         );
 
-        let mut pose = dvos3binding::ffi::Pose{pose : [[0.0;4];4]};
+        let mut pose = dvos3binding::ffi::Pose{
+            translation: [0.0;3],
+            rotation: [0.0;4]
+        };
         let mut v_p3d: dvos3binding::ffi::WrapBindCVVectorOfPoint3f = DVVectorOfPoint3f::empty().into();
         let mut vb_triangulated  = Vec::new();
 
@@ -107,22 +118,13 @@ impl Camera {
             &mut vb_triangulated
         );
 
-        //debug!("pose {:?} \n vP3D {:?} \n reconstructed: {}", pose, v_p3d.vec.len(), reconstructed);
+        // debug!("pose {:?} \n vP3D {:?} \n reconstructed: {}", pose, v_p3d.vec.len(), reconstructed);
+        info!("pose in tvr {:?}", pose);
 
-        let out_pose = pose.pose;
-
-        let rot = nalgebra::Matrix3::<f64>::new(out_pose[0][0] as f64, out_pose[0][1] as f64, out_pose[0][2] as f64,
-        out_pose[1][0] as f64, out_pose[1][1] as f64, out_pose[1][2] as f64, 
-        out_pose[2][0] as f64, out_pose[2][1] as f64, out_pose[2][2] as f64);
-
-        let mut t21 = Pose::default();
-        t21.set_rotation(&Rotation::new(rot));
-        t21.set_translation(out_pose[3][0] as f64, out_pose[3][1] as f64, out_pose[3][2] as f64);
-
-        (reconstructed, t21, v_p3d.into(), vb_triangulated) 
+        (reconstructed, pose.into(), v_p3d.into(), vb_triangulated) 
     }
 
-    pub fn unproject_eig() -> DVVector3<f32> {
+    pub fn unproject_eig(&self, kp: &opencv::core::Point2f) -> DVVector3<f32> {
         // Eigen::Vector3f Pinhole::unprojectEig(const cv::Point2f &p2D) {
         //     return Eigen::Vector3f((p2D.x - mvParameters[2]) / mvParameters[0], (p2D.y - mvParameters[3]) / mvParameters[1],
         //                     1.f);

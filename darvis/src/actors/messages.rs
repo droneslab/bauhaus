@@ -118,6 +118,10 @@ pub struct KeyFrameIdMsg {
 }
 impl ActorMessage for KeyFrameIdMsg {}
 
+#[derive(Debug)]
+pub struct LastKeyFrameUpdatedMsg {}
+impl ActorMessage for LastKeyFrameUpdatedMsg {}
+
 // Sofiya: When KF has been added to the map already, so instead of sending the keyframe data,
 // send the keyframe Id. This is only for initialization, so maybe we can figure out a way to
 // combine this logic into one keyframe message?

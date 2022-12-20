@@ -27,27 +27,22 @@ pub struct Frame {
     pub imu_bias: Option<IMUBias>,
     pub imu_preintegrated: Option<IMUPreIntegrated>,
 
-    // Stereo //
-    pub stereo_baseline: f64,
-
     // Idk where to put this
     // depth_threshold: u64,
-    pub camera: Camera,
     pub sensor: Sensor,
 }
 
 impl Frame {
     pub fn new(
         id: Id, keypoints_vec: DVVectorOfKeyPoint, descriptors_vec: DVMatrix,
-        im_width: i32, im_height: i32, camera: &Camera
+        im_width: i32, im_height: i32
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let sensor = GLOBAL_PARAMS.get::<Sensor>(SYSTEM_SETTINGS, "sensor");
         let frame = Frame{
             id,
             timestamp: Utc::now(),
-            features: Features::new(keypoints_vec, descriptors_vec, im_width, im_height, camera, sensor)?,
+            features: Features::new(keypoints_vec, descriptors_vec, im_width, im_height, sensor)?,
             imu_bias: None, // TODO (IMU)
-            camera: camera.clone(),
             sensor,
             ..Default::default()
         };
@@ -104,7 +99,7 @@ impl Frame {
     }
 
     pub fn check_close_tracked_mappoints(&self) -> (i32, i32) {
-        self.features.check_close_tracked_mappoints(self.camera.th_depth as f32, &self.mappoint_matches)
+        self.features.check_close_tracked_mappoints(CAMERA_MODULE.th_depth as f32, &self.mappoint_matches)
     }
 
     pub fn is_in_frustum(&self, mp_id: Id, viewing_cos_limit: f64, map: &Map) -> (Option<TrackedMapPointData>, Option<TrackedMapPointData>) {
@@ -149,7 +144,7 @@ impl Frame {
 
         let (uvx, uvy) = match is_right {
             true => todo!("TODO (stereo)"), //self.camera2.project(pos_camera),
-            false => self.camera.project(DVVector3::new(pos_camera))
+            false => CAMERA_MODULE.project(DVVector3::new(pos_camera))
         };
         if !self.features.image_bounds.check_bounds(uvx, uvy) {
             return None;
