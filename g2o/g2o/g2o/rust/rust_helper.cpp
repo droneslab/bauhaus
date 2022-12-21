@@ -11,11 +11,11 @@
 #include "../core/hyper_graph.h"
 
 namespace g2o {
-    std::unique_ptr<BridgeSparseOptimizer> new_sparse_optimizer(int opt_type) {
-        return std::unique_ptr<BridgeSparseOptimizer>(new BridgeSparseOptimizer(opt_type));
+    std::unique_ptr<BridgeSparseOptimizer> new_sparse_optimizer(int opt_type, std::array<double,4> camera_param) {
+        return std::unique_ptr<BridgeSparseOptimizer>(new BridgeSparseOptimizer(opt_type, camera_param));
     }
 
-    BridgeSparseOptimizer::BridgeSparseOptimizer(int opt_type) {
+    BridgeSparseOptimizer::BridgeSparseOptimizer(int opt_type, std::array<double,4> camera_param) {
         if (opt_type == 1) {
             // For Optimizer::PoseOptimization and GlobalBundleAdjustemnt
             optimizer = new SparseOptimizer();
@@ -27,6 +27,11 @@ namespace g2o {
             deltaMono = sqrt(5.991);
             deltaStereo = sqrt(7.815);
             optimizer_type = 1;
+
+            fx = camera_param[0];
+            fy = camera_param[1];
+            cx = camera_param[2];
+            cy = camera_param[3];
         } else {
             // For Optimizer::PoseInertialOptimizationLastFrame and Optimizer::PoseInertialOptimizationLastKeyFrame
             optimizer = new SparseOptimizer();
@@ -42,6 +47,11 @@ namespace g2o {
             thHuber2D = sqrt(5.99);
             thHuber3D = sqrt(7.815);
             optimizer_type = 2;
+            
+            fx = camera_param[0];
+            fy = camera_param[1];
+            cx = camera_param[2];
+            cy = camera_param[3];
         }
     }
  
@@ -102,7 +112,9 @@ namespace g2o {
 
     SE3Quat BridgeSparseOptimizer::format_pose(Pose pose) const {
         Eigen::Vector3d trans_vec(pose.translation.data());
-        Eigen::Quaterniond rot_quat(pose.rotation.data());
+        //Pranay : quaternion in nlabegra [w,x,y,z] while in eigen [x,y,z,w]
+        auto rot_quat_val = pose.rotation.data();
+        Eigen::Quaterniond rot_quat(rot_quat_val[0], rot_quat_val[1], rot_quat_val[2],rot_quat_val[3]);
         // Rotation is already a quaternion in Darvis!!
         // Don't need to do the conversion in ORBSLAM3
         return SE3Quat(rot_quat, trans_vec);
@@ -137,8 +149,12 @@ namespace g2o {
             edge->setRobustKernel(rk);
             rk->setDelta(thHuber2D);
         }
-        // TODO (need?)
-        // e->pCamera = pKF->mpCamera;
+
+        // Pranay : Important camera settings
+        edge->fx = fx;
+        edge->fy = fy;
+        edge->cx = cx;
+        edge->cy = cy;
 
         Eigen::Vector3d worldpos_vec(mp_world_position.data());
         edge->Xw = worldpos_vec;
@@ -164,8 +180,12 @@ namespace g2o {
             edge->setRobustKernel(rk);
             rk->setDelta(thHuber2D);
         }
-        // TODO (need?)
-        // e->pCamera = pKF->mpCamera;
+
+        // Pranay : Important camera settings
+        edge->fx = fx;
+        edge->fy = fy;
+        edge->cx = cx;
+        edge->cy = cy;
 
         optimizer->addEdge(edge);
 
@@ -177,7 +197,7 @@ namespace g2o {
     //** Optimization *//
     void BridgeSparseOptimizer::optimize(int iterations) {
         optimizer->initializeOptimization(0);
-        optimizer->optimize(1);
+        optimizer->optimize(iterations);
     }
 
     Pose BridgeSparseOptimizer::recover_optimized_frame_pose(int vertex_id) const {
