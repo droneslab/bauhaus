@@ -30,7 +30,7 @@ namespace g2o {
 
     class BridgeSparseOptimizer {
     public:
-        BridgeSparseOptimizer(int opt_type);
+        BridgeSparseOptimizer(int opt_type, std::array<double,4> camera_param);
         // ~BridgeSparseOptimizer();
 
         // vertices
@@ -72,7 +72,10 @@ namespace g2o {
         vector<size_t> vnIndexEdgeMono;
 
         SE3Quat format_pose(Pose pose) const;
+
+        // Camera Parameters for Optimization
+        float fx,fy,cx,cy;
     };
 
-    std::unique_ptr<BridgeSparseOptimizer> new_sparse_optimizer(int opt_type);
+    std::unique_ptr<BridgeSparseOptimizer> new_sparse_optimizer(int opt_type, std::array<double,4> camera_param);
 } // end namespace
