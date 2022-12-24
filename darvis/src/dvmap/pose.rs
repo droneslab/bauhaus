@@ -41,6 +41,12 @@ impl Pose {
     pub fn inverse(&self) -> Pose{
         Pose(self.0.inverse())
     }
+
+    pub fn iso(&self) -> Isometry3<f64>
+    {
+        self.0
+    }
+
 }
 impl From<Pose> for [f64; 4] {
     fn from(pose: Pose) -> [f64; 4] { [pose.0.rotation.w, pose.0.rotation.i, pose.0.rotation.j, pose.0.rotation.k] }
