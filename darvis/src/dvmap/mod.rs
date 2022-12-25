@@ -12,3 +12,5 @@ pub mod misc; //BowDB
 pub mod features;
 pub mod observations;
 pub mod bow;
+
+pub mod keyframe_database;

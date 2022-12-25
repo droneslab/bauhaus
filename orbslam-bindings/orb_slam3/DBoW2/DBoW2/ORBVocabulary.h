@@ -23,6 +23,8 @@ class ORBVocabulary {
             DBoW2::FeatureVector & feature_vector,
             int levelsup
         ) const;
+
+        double score(const DBoW2::BowVector &a, const DBoW2::BowVector &b) const;
 };
 
 std::unique_ptr<ORBVocabulary> load_vocabulary_from_text_file(const string &file);

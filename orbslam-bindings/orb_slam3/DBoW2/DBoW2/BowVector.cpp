@@ -138,4 +138,13 @@ std::unique_ptr<BowVector> new_bow_vec() {
     return vec;
 }
 
+
+rust::Vec<uint32_t> BowVector::get_all_words() const {
+    rust::Vec<uint32_t> keys;
+    for(auto it = this->begin(); it != this->end(); ++it) {
+        keys.push_back(it->first);
+    }
+    return keys;
+}
+
 } // namespace DBoW2

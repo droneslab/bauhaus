@@ -11,6 +11,8 @@ use dvcore::config::{Sensor, SYSTEM_SETTINGS, GLOBAL_PARAMS};
 use log::{warn, info, debug};
 use nalgebra::{Matrix3, Similarity3};
 use crate::dvmap::keyframe::{KeyFrame, FullKeyFrame};
+
+use crate::dvmap::map_actor::{MAP_ACTOR, KeyframeDatabaseWriteMsg};
 use crate::dvmap::pose::Pose;
 use crate::dvmap::{map::Map};
 use crate::modules::imu::ImuModule;
@@ -38,6 +40,7 @@ pub struct DarvisLoopClosing {
     mg2oLoopSlw : Option<Similarity3<f64>>,
     mg2oLoopScw : Option<Similarity3<f64>>,
     lastcurrent_kf :Option<KeyFrame<FullKeyFrame>>,
+
 }
 
 
@@ -59,11 +62,14 @@ impl DarvisLoopClosing {
             //     mpLastCurrentKF->mvpMergeCandKFs.clear();
             // }
 
+            // setting current keyframe
+            self.current_kf = Some(self.map.read().get_keyframe(&msg.keyframe_id).unwrap().clone());
+
             let b_finded_region = self.new_detect_common_regions();
 
-            if(b_finded_region)
+            if b_finded_region
             {
-                if(self.merge_detected)
+                if self.merge_detected
                 {
                     // if ((mpTracker->mSensor==System::IMU_MONOCULAR || mpTracker->mSensor==System::IMU_STEREO || mpTracker->mSensor==System::IMU_RGBD) &&
                     //     (!mpCurrentKF->GetMap()->isImuInitialized()))
@@ -214,46 +220,62 @@ impl DarvisLoopClosing {
         
 
 
-        fn new_detect_common_regions(&mut self) -> bool
+        fn new_detect_common_regions(&mut self, context: Context) -> bool
         {
-            todo!("new_detect_common_regions");
+            
+            let map_actor = Some(context.system.find_aid_by_name(MAP_ACTOR).unwrap());
+
+            //Pranay : If we have an active loop closing actor, we don't need additional check, if loop closing is active or not
             // // To deactivate placerecognition. No loopclosing nor merging will be performed
             // if(!mbActiveLC)
             //     return false;
 
+            //Pranay : Do we need to set notErase for Keypoint. Below code refers to multi-map case.
             // {
-            //     unique_lock<mutex> lock(mMutexLoopQueue);
-            //     mpCurrentKF = mlpLoopKeyFrameQueue.front();
-            //     mlpLoopKeyFrameQueue.pop_front();
             //     // Avoid that a keyframe can be erased while it is being process by this thread
             //     mpCurrentKF->SetNotErase();
             //     mpCurrentKF->mbCurrentPlaceRecognition = true;
 
             //     mpLastMap = mpCurrentKF->GetMap();
             // }
+            
 
-            // if(mpLastMap->IsInertial() && !mpLastMap->GetIniertialBA2())
-            // {
-            //     mpKeyFrameDB->add(mpCurrentKF);
-            //     mpCurrentKF->SetErase();
-            //     return false;
-            // }
 
-            // if(mpTracker->mSensor == System::STEREO && mpLastMap->GetAllKeyFrames().size() < 5) //12
-            // {
-            //     // cout << "LoopClousure: Stereo KF inserted without check: " << mpCurrentKF->mnId << endl;
-            //     mpKeyFrameDB->add(mpCurrentKF);
-            //     mpCurrentKF->SetErase();
-            //     return false;
-            // }
+            if self.sensor.is_imu()
+            {
+                todo!(" Implement for IMU");
+                // if(mpLastMap->IsInertial() && !mpLastMap->GetIniertialBA2())
+                // {
+                //     mpKeyFrameDB->add(mpCurrentKF);
+                //     mpCurrentKF->SetErase();
+                //     return false;
+                // }
+            }
 
+
+            if !self.sensor.is_mono()
+            {
+                todo!(" Implement for STEREO");
+                // if(mpTracker->mSensor == System::STEREO && mpLastMap->GetAllKeyFrames().size() < 5) //12
+                // {
+                //     // cout << "LoopClousure: Stereo KF inserted without check: " << mpCurrentKF->mnId << endl;
+                //     mpKeyFrameDB->add(mpCurrentKF);
+                //     mpCurrentKF->SetErase();
+                //     return false;
+                // }
+            }
+
+            if self.map.read().get_all_keyframes().len() <12
             // if(mpLastMap->GetAllKeyFrames().size() < 12)
-            // {
-            //     // cout << "LoopClousure: Stereo KF inserted without check, map is small: " << mpCurrentKF->mnId << endl;
-            //     mpKeyFrameDB->add(mpCurrentKF);
-            //     mpCurrentKF->SetErase();
-            //     return false;
-            // }
+            {
+                // cout << "LoopClousure: Stereo KF inserted without check, map is small: " << mpCurrentKF->mnId << endl;
+
+                // Insert Keyframe in Database
+                let map_actor = map_actor.as_ref().unwrap();
+                map_actor.send_new(KeyframeDatabaseWriteMsg::add(self.current_kf.unwrap().id())).unwrap(); // mpKeyFrameDB->add(mpCurrentKF);                
+                //mpCurrentKF->SetErase();
+                return false;
+            }
 
             // //cout << "LoopClousure: Checking KF: " << mpCurrentKF->mnId << endl;
 
@@ -401,7 +423,7 @@ impl DarvisLoopClosing {
             // mpCurrentKF->SetErase();
             // mpCurrentKF->mbCurrentPlaceRecognition = false;
 
-            // return false;
+            return false;
 
         }
     

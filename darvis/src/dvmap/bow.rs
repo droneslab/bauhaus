@@ -40,6 +40,11 @@ impl DVVocabulary {
         }
 
     }
+
+    pub fn score(&self, a : &BoW, b: &BoW) ->  f64
+    {
+        self.vocabulary.score(&a.bow_vec, &b.bow_vec)
+    }
 }
 
 
@@ -67,6 +72,11 @@ impl BoW {
     }
     pub fn get_feat_from_node(&self, node: u32) -> Vec<u32> {
         self.feat_vec.get_feat_from_node(node)
+    }
+
+    pub fn get_word_vec(&self) -> Vec<u32>
+    {
+        self.bow_vec.get_all_words()
     }
 }
 

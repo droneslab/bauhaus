@@ -6,6 +6,8 @@ use crate::{
     modules::{map_initialization::Initialization, optimizer::{self}}
 };
 
+use super::keyframe_database::KeyFrameDatabase;
+
 pub type Id = i32;
 
 #[derive(Debug, Clone, Default)]
@@ -46,6 +48,10 @@ pub struct Map {
     // mnMapChange: bool
     // mnMapChangeNotified: bool
     // mnBigChangeIdx: i32
+
+    //Pranay : Need KeyframeDatabase to be part of shared system, which we currently have as map
+    // Might need to create a system variable instead and wrap map and keyframedatabase inside it
+    pub keyframe_database : Option<KeyFrameDatabase>
 }
 
 impl Map {

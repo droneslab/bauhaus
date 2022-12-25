@@ -57,6 +57,27 @@ impl MapActor {//+ std::marker::Send + std::marker::Sync
                 },
             }
         }
+        else if let Some(msg) = message.content_as::<KeyframeDatabaseWriteMsg>() {
+            debug!("map_actor::handle;received map edit msg");
+            let mut write_lock = self.map.write();
+            let msg = &*msg;
+            match &msg.target {
+
+
+                KeyframeDatabaseEditTarget::KeyFrame__add { kf_id } => {
+                    // Note: called by loop closing
+                    //write_lock.insert_keyframe_to_map(kf_id);
+                },
+                KeyframeDatabaseEditTarget::KeyFrame__add { kf_id } => {
+                    
+                    //write_lock.insert_keyframe_to_map(kf_id);
+                },
+                _ => {
+                    warn!("invalid message type to map actor");
+                },
+            }
+
+        }
 
         Ok(Status::done(self))
     }
@@ -120,6 +141,34 @@ impl MapWriteMsg {
     pub fn increase_found(mp_ids_and_nums: Vec<(Id, i32)>) -> MapWriteMsg {
         Self {
             target: MapEditTarget::MapPoint_IncreaseFound { mp_ids_and_nums },
+        }
+    }
+}
+
+
+enum KeyframeDatabaseEditTarget {
+    // #[serde(bound = "")] If using serialize/deserialize, uncomment this
+    KeyFrame__add{kf_id: Id},
+    KeyFrame__erase{kf_id: Id},
+}
+
+pub struct KeyframeDatabaseWriteMsg {
+    // #[serde(bound = "")] If using serialize/deserialize, uncomment this
+    target: KeyframeDatabaseEditTarget,
+}
+impl ActorMessage for KeyframeDatabaseWriteMsg { }
+
+impl KeyframeDatabaseWriteMsg {
+
+    pub fn add(kf_id: Id) -> KeyframeDatabaseWriteMsg {
+        Self {
+            target: KeyframeDatabaseEditTarget::KeyFrame__add {kf_id: kf_id},
+        }
+    }
+
+    pub fn erase(kf_id: Id) -> KeyframeDatabaseWriteMsg {
+        Self {
+            target: KeyframeDatabaseEditTarget::KeyFrame__erase {kf_id: kf_id},
         }
     }
 }

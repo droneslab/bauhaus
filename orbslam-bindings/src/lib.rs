@@ -259,6 +259,15 @@ pub mod ffi {
             feature_vector: Pin<&mut FeatureVector>,
             levelsup: i32
         );
+
+
+        fn score(
+            self: &ORBVocabulary,
+            bow_vector_a: &BowVector,
+            bow_vector_b: &BowVector
+        ) -> f64;
+
+        fn get_all_words(self: &BowVector) -> Vec<u32>;
     }
 }
 

@@ -51,4 +51,10 @@ void ORBVocabulary::transform(
     vocabulary.transform(desc2, bow_vector, feature_vector, levelsup);
     //cout << bow_vector << endl;
 }
+
+double ORBVocabulary::score(const DBoW2::BowVector &a, const DBoW2::BowVector &b) const
+{
+    return vocabulary.score(a,b);
+}
+
 }

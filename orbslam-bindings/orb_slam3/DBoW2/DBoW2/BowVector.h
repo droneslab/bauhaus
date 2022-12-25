@@ -16,7 +16,7 @@
 
 #include <boost/serialization/serialization.hpp>
 #include <boost/serialization/map.hpp>
-
+#include "../../../target/cxxbridge/rust/cxx.h"
 namespace DBoW2 {
 
 /// Id of words
@@ -114,6 +114,8 @@ public:
 	void saveM(const std::string &filename, size_t W) const;
 
     std::unique_ptr<BowVector> clone() const; // For rust bindings
+
+	rust::Vec<uint32_t> get_all_words() const;  // For rust bindings
 };
 
 std::unique_ptr<BowVector> new_bow_vec();

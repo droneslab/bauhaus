@@ -12,7 +12,7 @@ extern crate lazy_static;
 use opencv::{imgcodecs, prelude::*};
 
 use dvcore::{*, lockwrap::ReadWriteWrapper, config::*};
-use crate::actors::{messages::{ImageMsg, ShutdownMessage, TrajectoryMessage, VisPathMsg}};
+use crate::{actors::{messages::{ImageMsg, ShutdownMessage, TrajectoryMessage, VisPathMsg}}, dvmap::keyframe_database::KeyFrameDatabase};
 use crate::dvmap::{bow::VOCABULARY, map_actor::MapActor, pose::Pose, map::Map, map::Id};
 use crate::registered_modules::{TRACKING_FRONTEND, VISUALIZER, SHUTDOWN, FeatureManager};
 
@@ -38,6 +38,14 @@ fn main() {
         // Load config, including custom settings and actor information
         let img_paths = generate_image_paths(img_dir);
         let writeable_map = ReadWriteWrapper::new(Map::new());
+
+        //Pranay : this situation occured, where KeyframeDatabase contains read only map and vice versa.
+        let mut keyframe_db = KeyFrameDatabase::new(writeable_map.read_only());
+        {
+            writeable_map.write().keyframe_database = Some(keyframe_db);
+        }
+        
+
         let actor_system = initialize_actor_system(actor_info, &writeable_map);
         let _map_actor_aid = MapActor::spawn(&actor_system, writeable_map);
         VOCABULARY.access(); // Loads vocabulary
