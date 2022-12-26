@@ -13,6 +13,7 @@ use nalgebra::{Matrix3, Similarity3};
 use crate::dvmap::keyframe::{KeyFrame, FullKeyFrame};
 
 use crate::dvmap::map_actor::{MAP_ACTOR, KeyframeDatabaseWriteMsg};
+use crate::dvmap::mappoint::FullMapPoint;
 use crate::dvmap::pose::Pose;
 use crate::dvmap::{map::Map};
 use crate::modules::imu::ImuModule;
@@ -40,7 +41,17 @@ pub struct DarvisLoopClosing {
     mg2oLoopSlw : Option<Similarity3<f64>>,
     mg2oLoopScw : Option<Similarity3<f64>>,
     lastcurrent_kf :Option<KeyFrame<FullKeyFrame>>,
+    mnLoopNumCoincidences : u32,
+    looplastcurrent_kf:Option<KeyFrame<FullKeyFrame>>,
+    mvpLoopMPs : Vec<i32>,
+    loop_matched_mps: Vec<i32>,
+    mnLoopNumNotFound : i32,
+    mnMergeNumCoincidences: u32,
 
+    loop_matched_kf: Option<KeyFrame<FullKeyFrame>>, 
+    mergelastcurrent_kf:Option<KeyFrame<FullKeyFrame>>,
+    merge_matched_mps: Vec<i32>,
+    mnMergeNumNotFound : u32,
 }
 
 
@@ -65,7 +76,7 @@ impl DarvisLoopClosing {
             // setting current keyframe
             self.current_kf = Some(self.map.read().get_keyframe(&msg.keyframe_id).unwrap().clone());
 
-            let b_finded_region = self.new_detect_common_regions();
+            let b_finded_region = self.new_detect_common_regions(context.clone());
 
             if b_finded_region
             {
@@ -139,7 +150,7 @@ impl DarvisLoopClosing {
                     }
 
                     // Reset all variables
-                    self.reset_all_variables();
+                    self.reset_merge_variables();
 
                     if self.mbLoopDetected
                     {
@@ -265,14 +276,13 @@ impl DarvisLoopClosing {
                 // }
             }
 
-            if self.map.read().get_all_keyframes().len() <12
-            // if(mpLastMap->GetAllKeyFrames().size() < 12)
+            if self.map.read().get_all_keyframes().len() <12 // if(mpLastMap->GetAllKeyFrames().size() < 12)
             {
                 // cout << "LoopClousure: Stereo KF inserted without check, map is small: " << mpCurrentKF->mnId << endl;
 
                 // Insert Keyframe in Database
                 let map_actor = map_actor.as_ref().unwrap();
-                map_actor.send_new(KeyframeDatabaseWriteMsg::add(self.current_kf.unwrap().id())).unwrap(); // mpKeyFrameDB->add(mpCurrentKF);                
+                map_actor.send_new(KeyframeDatabaseWriteMsg::add(self.current_kf.as_ref().unwrap().id())).unwrap(); // mpKeyFrameDB->add(mpCurrentKF);                
                 //mpCurrentKF->SetErase();
                 return false;
             }
@@ -281,101 +291,115 @@ impl DarvisLoopClosing {
 
             // //Check the last candidates with geometric validation
             // // Loop candidates
-            // bool bLoopDetectedInKF = false;
-            // bool bCheckSpatial = false;
+            let mut bLoopDetectedInKF = false; // bool bLoopDetectedInKF = false;
+            let mut bCheckSpatial = false;// bool bCheckSpatial = false;
 
 
-            // if(mnLoopNumCoincidences > 0)
-            // {
-            //     bCheckSpatial = true;
-            //     // Find from the last KF candidates
-            //     Sophus::SE3d mTcl = (mpCurrentKF->GetPose() * mpLoopLastCurrentKF->GetPoseInverse()).cast<double>();
-            //     g2o::Sim3 gScl(mTcl.unit_quaternion(),mTcl.translation(),1.0);
-            //     g2o::Sim3 gScw = gScl * mg2oLoopSlw;
-            //     int numProjMatches = 0;
-            //     vector<MapPoint*> vpMatchedMPs;
-            //     bool bCommonRegion = DetectAndReffineSim3FromLastKF(mpCurrentKF, mpLoopMatchedKF, gScw, numProjMatches, mvpLoopMPs, vpMatchedMPs);
-            //     if(bCommonRegion)
-            //     {
+            if self.mnLoopNumCoincidences > 0 // if(mnLoopNumCoincidences > 0)
+            {
+                bCheckSpatial = true;
+                // Find from the last KF candidates
+                let mTcl = self.current_kf.as_ref().unwrap().pose * self.looplastcurrent_kf.as_ref().unwrap().pose; //Sophus::SE3d mTcl = (mpCurrentKF->GetPose() * mpLoopLastCurrentKF->GetPoseInverse()).cast<double>();
+                let gScl = Similarity3::from_isometry(mTcl.iso(), 1.0);//g2o::Sim3 gScl(mTcl.unit_quaternion(),mTcl.translation(),1.0);
+                let gScw = gScl *self.mg2oLoopSlw.unwrap();//g2o::Sim3 gScw = gScl * mg2oLoopSlw;
+                let mut numProjMatches = 0;//int numProjMatches = 0;
+                let mut vpMatchedMPs = Vec::new(); //vector<MapPoint*> vpMatchedMPs;
+                let bCommonRegion = DarvisLoopClosing::detect_and_reffine_sim3_from_last_kf(
+                &self.current_kf.as_ref().unwrap(), 
+                &self.loop_matched_kf.as_ref().unwrap(),
+                &gScw,
+                numProjMatches,
+                &mut self.mvpLoopMPs, 
+                &mut vpMatchedMPs );//bool bCommonRegion = DetectAndReffineSim3FromLastKF(mpCurrentKF, mpLoopMatchedKF, gScw, numProjMatches, mvpLoopMPs, vpMatchedMPs);
+                if bCommonRegion 
+                {
 
-            //         bLoopDetectedInKF = true;
+                    bLoopDetectedInKF = true;
 
-            //         mnLoopNumCoincidences++;
-            //         mpLoopLastCurrentKF->SetErase();
-            //         mpLoopLastCurrentKF = mpCurrentKF;
-            //         mg2oLoopSlw = gScw;
-            //         mvpLoopMatchedMPs = vpMatchedMPs;
+                    self.mnLoopNumCoincidences+=1;
+                    //mpLoopLastCurrentKF->SetErase();
+                    self.looplastcurrent_kf = self.current_kf.clone();//mpLoopLastCurrentKF = mpCurrentKF;
+                    self.mg2oLoopSlw = Some(gScw);
+                    self.loop_matched_mps = vpMatchedMPs; //mvpLoopMatchedMPs = vpMatchedMPs;
 
 
-            //         mbLoopDetected = mnLoopNumCoincidences >= 3;
-            //         mnLoopNumNotFound = 0;
+                    self.mbLoopDetected = self.mnLoopNumCoincidences >= 3;
+                    self.mnLoopNumNotFound = 0;
 
-            //         if(!mbLoopDetected)
-            //         {
-            //             cout << "PR: Loop detected with Reffine Sim3" << endl;
-            //         }
-            //     }
-            //     else
-            //     {
-            //         bLoopDetectedInKF = false;
+                    if !self.mbLoopDetected
+                    {
+                        warn!("PR: Loop detected with Reffine Sim3"); //cout << "PR: Loop detected with Reffine Sim3" << endl;
+                    }
+                }
+                else
+                {
+                    bLoopDetectedInKF = false;
 
-            //         mnLoopNumNotFound++;
-            //         if(mnLoopNumNotFound >= 2)
-            //         {
-            //             mpLoopLastCurrentKF->SetErase();
-            //             mpLoopMatchedKF->SetErase();
-            //             mnLoopNumCoincidences = 0;
-            //             mvpLoopMatchedMPs.clear();
-            //             mvpLoopMPs.clear();
-            //             mnLoopNumNotFound = 0;
-            //         }
+                    self.mnLoopNumNotFound+=1;
+                    if self.mnLoopNumNotFound >= 2
+                    {                       
+                        // mpLoopLastCurrentKF->SetErase();
+                        // mpLoopMatchedKF->SetErase();
+                        self.mnLoopNumCoincidences = 0;
+                        self.loop_matched_mps.clear(); //mvpLoopMatchedMPs.clear();
+                        self.mvpLoopMPs.clear(); // mvpLoopMPs.clear();
+                        self.mnLoopNumNotFound = 0;// mnLoopNumNotFound = 0;
 
-            //     }
-            // }
+                    }
+
+                }
+            }
 
             // //Merge candidates
-            // bool bMergeDetectedInKF = false;
-            // if(mnMergeNumCoincidences > 0)
-            // {
-            //     // Find from the last KF candidates
-            //     Sophus::SE3d mTcl = (mpCurrentKF->GetPose() * mpMergeLastCurrentKF->GetPoseInverse()).cast<double>();
+            let mut bMergeDetectedInKF = false;// bool bMergeDetectedInKF = false;
+            if self.mnMergeNumCoincidences >0 // if(mnMergeNumCoincidences > 0)
+            {
+                // Find from the last KF candidates
+                let mTcl = self.current_kf.as_ref().unwrap().pose * self.mergelastcurrent_kf.as_ref().unwrap().pose;//ophus::SE3d mTcl = (mpCurrentKF->GetPose() * mpMergeLastCurrentKF->GetPoseInverse()).cast<double>();
 
-            //     g2o::Sim3 gScl(mTcl.unit_quaternion(), mTcl.translation(), 1.0);
-            //     g2o::Sim3 gScw = gScl * mg2oMergeSlw;
-            //     int numProjMatches = 0;
-            //     vector<MapPoint*> vpMatchedMPs;
-            //     bool bCommonRegion = DetectAndReffineSim3FromLastKF(mpCurrentKF, mpMergeMatchedKF, gScw, numProjMatches, mvpMergeMPs, vpMatchedMPs);
-            //     if(bCommonRegion)
-            //     {
-            //         bMergeDetectedInKF = true;
+                let gScl = Similarity3::from_isometry(mTcl.iso(), 1.0);//g2o::Sim3 gScl(mTcl.unit_quaternion(), mTcl.translation(), 1.0);
+                let gScw = gScl *self.mg2oMergeSlw.unwrap();// g2o::Sim3 gScw = gScl * mg2oMergeSlw;
+                let mut numProjMatches = 0;//int numProjMatches = 0;
+                let mut vpMatchedMPs = Vec::new(); //vector<MapPoint*> vpMatchedMPs;
+                let bCommonRegion = DarvisLoopClosing::detect_and_reffine_sim3_from_last_kf(
+                &self.current_kf.as_ref().unwrap(), 
+                &self.merge_match_kf.as_ref().unwrap(),
+                &gScw,
+                numProjMatches,
+                &mut self.mvpLoopMPs, 
+                &mut vpMatchedMPs ); //bool bCommonRegion = DetectAndReffineSim3FromLastKF(mpCurrentKF, mpMergeMatchedKF, gScw, numProjMatches, mvpMergeMPs, vpMatchedMPs);
+                if bCommonRegion
+                {
+                    bMergeDetectedInKF = true;
 
-            //         mnMergeNumCoincidences++;
-            //         mpMergeLastCurrentKF->SetErase();
-            //         mpMergeLastCurrentKF = mpCurrentKF;
-            //         mg2oMergeSlw = gScw;
-            //         mvpMergeMatchedMPs = vpMatchedMPs;
+                    self.mnMergeNumCoincidences+=1;
+                    //mpMergeLastCurrentKF->SetErase();
+                    self.mergelastcurrent_kf = self.current_kf.clone(); //mpMergeLastCurrentKF = mpCurrentKF;
+                    self.mg2oMergeSlw = Some(gScw);
+                    self.merge_matched_mps = vpMatchedMPs ; //mvpMergeMatchedMPs = vpMatchedMPs;
 
-            //         mbMergeDetected = mnMergeNumCoincidences >= 3;
-            //     }
-            //     else
-            //     {
-            //         mbMergeDetected = false;
-            //         bMergeDetectedInKF = false;
+                    self.merge_detected = self.mnMergeNumCoincidences >= 3 ; //mbMergeDetected = mnMergeNumCoincidences >= 3;
+                }
+                else
+                {
+                    self.merge_detected = false;// mbMergeDetected = false;
+                    bMergeDetectedInKF = false;
 
-            //         mnMergeNumNotFound++;
-            //         if(mnMergeNumNotFound >= 2)
-            //         {
-            //             mpMergeLastCurrentKF->SetErase();
-            //             mpMergeMatchedKF->SetErase();
-            //             mnMergeNumCoincidences = 0;
-            //             mvpMergeMatchedMPs.clear();
-            //             mvpMergeMPs.clear();
-            //             mnMergeNumNotFound = 0;
-            //         }
+                    self.mnMergeNumNotFound+=1;
+                    if(self.mnMergeNumNotFound >= 2)
+                    {
+                        todo!("fix merge variable clear");
+                        // mpMergeLastCurrentKF->SetErase();
+                        // mpMergeMatchedKF->SetErase();
+                        // mnMergeNumCoincidences = 0;
+                        // mvpMergeMatchedMPs.clear();
+                        // mvpMergeMPs.clear();
+                        self.mnMergeNumNotFound = 0;
+                    }
 
 
-            //     }
-            // }  
+                }
+            }  
 
 
             // if(mbMergeDetected || mbLoopDetected)
@@ -427,9 +451,9 @@ impl DarvisLoopClosing {
 
         }
     
-        fn reset_all_variables(&mut self) 
+        fn reset_merge_variables(&mut self) 
         {
-            todo!("reset_all_variables");
+            todo!("reset_merge_variables");
             //// Reset all variables
             // mpMergeLastCurrentKF->SetErase();
             // mpMergeMatchedKF->SetErase();
@@ -442,20 +466,67 @@ impl DarvisLoopClosing {
     
         fn reset_loop_variables(&mut self) 
         {
-            todo!("reset_loop_variables");
+            
             // // Reset Loop variables
+            // // Pranay : why we need SetErase for keyframe?
             // mpLoopLastCurrentKF->SetErase();
             // mpLoopMatchedKF->SetErase();
-            // mnLoopNumCoincidences = 0;
-            // mvpLoopMatchedMPs.clear();
-            // mvpLoopMPs.clear();
-            // mnLoopNumNotFound = 0;
-            // mbLoopDetected = false;
+            self.mnLoopNumCoincidences = 0; // mnLoopNumCoincidences = 0;
+            self.loop_matched_mps.clear(); //mvpLoopMatchedMPs.clear();
+            self.mvpLoopMPs.clear(); // mvpLoopMPs.clear();
+            self.mnLoopNumNotFound = 0;// mnLoopNumNotFound = 0;
+            self.mbLoopDetected= false;
+
         }
 
         fn merge_local(&mut self)
         {
             todo!("Implement merge_local");
+        }
+
+
+        //bool LoopClosing::DetectAndReffineSim3FromLastKF(KeyFrame* pCurrentKF, KeyFrame* pMatchedKF, g2o::Sim3 &gScw, int &nNumProjMatches,std::vector<MapPoint*> &vpMPs, std::vector<MapPoint*> &vpMatchedMPs)
+        fn detect_and_reffine_sim3_from_last_kf(current_kf: &KeyFrame<FullKeyFrame>, matched_kf : &KeyFrame<FullKeyFrame>, gScw: &Similarity3<f64>, num_proj_matches: i32, vmMPs: &mut Vec<i32>, vpMatchedMPs : &mut Vec<i32>) -> bool
+        {
+            todo!("Implement detect_and_reffine_sim3_from_last_kf");
+            // set<MapPoint*> spAlreadyMatchedMPs;
+            // nNumProjMatches = FindMatchesByProjection(pCurrentKF, pMatchedKF, gScw, spAlreadyMatchedMPs, vpMPs, vpMatchedMPs);
+
+            // int nProjMatches = 30;
+            // int nProjOptMatches = 50;
+            // int nProjMatchesRep = 100;
+
+            // if(nNumProjMatches >= nProjMatches)
+            // {
+            // //Verbose::PrintMess("Sim3 reffine: There are " + to_string(nNumProjMatches) + " initial matches ", Verbose::VERBOSITY_DEBUG);
+            // Sophus::SE3d mTwm = pMatchedKF->GetPoseInverse().cast<double>();
+            // g2o::Sim3 gSwm(mTwm.unit_quaternion(),mTwm.translation(),1.0);
+            // g2o::Sim3 gScm = gScw * gSwm;
+            // Eigen::Matrix<double, 7, 7> mHessian7x7;
+
+            // bool bFixedScale = mbFixScale;       // TODO CHECK; Solo para el monocular inertial
+            // if(mpTracker->mSensor==System::IMU_MONOCULAR && !pCurrentKF->GetMap()->GetIniertialBA2())
+            // bFixedScale=false;
+            // int numOptMatches = Optimizer::OptimizeSim3(mpCurrentKF, pMatchedKF, vpMatchedMPs, gScm, 10, bFixedScale, mHessian7x7, true);
+
+            // //Verbose::PrintMess("Sim3 reffine: There are " + to_string(numOptMatches) + " matches after of the optimization ", Verbose::VERBOSITY_DEBUG);
+
+            // if(numOptMatches > nProjOptMatches)
+            // {
+            // g2o::Sim3 gScw_estimation(gScw.rotation(), gScw.translation(),1.0);
+
+            // vector<MapPoint*> vpMatchedMP;
+            // vpMatchedMP.resize(mpCurrentKF->GetMapPointMatches().size(), static_cast<MapPoint*>(NULL));
+
+            // nNumProjMatches = FindMatchesByProjection(pCurrentKF, pMatchedKF, gScw_estimation, spAlreadyMatchedMPs, vpMPs, vpMatchedMPs);
+            // if(nNumProjMatches >= nProjMatchesRep)
+            // {
+            // gScw = gScw_estimation;
+            // return true;
+            // }
+            // }
+            // }
+            // return false;
         }
 
     }

@@ -327,4 +327,28 @@ impl Map {
         // info!("insert_mappoint_to_map;{}", self.last_mp_id);
         return *last_mp_id;
     }
+
+    pub fn add_keyframe_to_database(&mut self, kf_id: &Id)
+    {
+        if self.keyframe_database.is_some()
+        {
+            let keyframe = self.get_keyframe(kf_id).unwrap();
+            self.keyframe_database.unwrap().add(*keyframe);
+        }
+        else {
+            warn!("KeyframeDatabase for the map is None; Please initialize the map with KeyframeDatabase");
+        }
+    }
+
+    pub fn erase_keyframe_from_database(&mut self, kf_id: &Id)
+    {
+        if self.keyframe_database.is_some()
+        {
+            let keyframe = self.get_keyframe(kf_id).unwrap();
+            self.keyframe_database.unwrap().erase(*keyframe);
+        }
+        else {
+            warn!("KeyframeDatabase for the map is None; Please initialize the map with KeyframeDatabase");
+        }
+    }
 }

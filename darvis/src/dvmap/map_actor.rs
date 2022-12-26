@@ -66,11 +66,10 @@ impl MapActor {//+ std::marker::Send + std::marker::Sync
 
                 KeyframeDatabaseEditTarget::KeyFrame__add { kf_id } => {
                     // Note: called by loop closing
-                    //write_lock.insert_keyframe_to_map(kf_id);
+                    write_lock.add_keyframe_to_database(kf_id);
                 },
                 KeyframeDatabaseEditTarget::KeyFrame__add { kf_id } => {
-                    
-                    //write_lock.insert_keyframe_to_map(kf_id);
+                    write_lock.erase_keyframe_from_database(kf_id);
                 },
                 _ => {
                     warn!("invalid message type to map actor");
