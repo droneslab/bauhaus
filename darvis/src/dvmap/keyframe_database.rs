@@ -20,24 +20,29 @@ impl KeyFrameDatabase {
         Self { map,inverted_file: HashMap::new() }
     }
 
-    pub fn add(&mut self, keyframe : KeyFrame<FullKeyFrame>)
+    pub fn add(&mut self, keyframe : &KeyFrame<FullKeyFrame>)
     {
 
-        let bow_vec = keyframe.bow.unwrap().get_word_vec();
+        let bow_vec = keyframe.bow.as_ref().unwrap().get_word_vec();
         for bow in bow_vec
         {
-            self.inverted_file[&bow].push(keyframe.id());
+            if !self.inverted_file.contains_key(&bow)
+            {
+                self.inverted_file.insert(bow, Vec::new());
+            }
+            self.inverted_file.get_mut(&bow).unwrap().push(keyframe.id());
+            
         }
         
     }
-    pub fn erase(&mut self, keyframe : KeyFrame<FullKeyFrame>)
+    pub fn erase(&mut self, keyframe : &KeyFrame<FullKeyFrame>)
     {
 
-        let bow_vec = keyframe.bow.unwrap().get_word_vec();
+        let bow_vec = keyframe.bow.as_ref().unwrap().get_word_vec();
         for bow in bow_vec
         {
 
-            let keyframe_ids = self.inverted_file[&bow];
+            let keyframe_ids = self.inverted_file.get_mut(&bow).unwrap();
 
             // Ignore if no such element is found
             if let Some(pos) = keyframe_ids.iter().position(|x| *x == keyframe.id()) {
@@ -55,10 +60,10 @@ impl KeyFrameDatabase {
 
 
     //void DetectNBestCandidates(KeyFrame *pKF, vector<KeyFrame*> &vpLoopCand, vector<KeyFrame*> &vpMergeCand, int nNumCandidates);
-    pub fn detect_n_best_candidates(&mut self, keyframe : KeyFrame<FullKeyFrame>, loop_cand : Vec<i32>, merge_cand: Vec<i32>, num_candidates : i32)
+    pub fn detect_n_best_candidates(&self, keyframe : &KeyFrame<FullKeyFrame>, loop_cand : &mut Vec<i32>, merge_cand: &mut Vec<i32>, num_candidates : i32)
     {
 
-        let mut lKFsSharingWords = Vec::new();
+        let mut lKFsSharingWords: Vec<i32> = Vec::new();
         let mut spConnectedKF = Vec::new();
 
         let mut place_recog_query_kf_map: HashMap<&i32, i32> = HashMap::new();
@@ -73,13 +78,13 @@ impl KeyFrameDatabase {
             //Pranay : setting 30 for num of connections
             spConnectedKF = keyframe.get_connections(30);
     
-            let bow_vec = keyframe.bow.unwrap().get_word_vec();
+            let bow_vec = keyframe.bow.as_ref().unwrap().get_word_vec();
             for bow in bow_vec
             {
             // for(DBoW2::BowVector::const_iterator vit=pKF->mBowVec.begin(), vend=pKF->mBowVec.end(); vit != vend; vit++)
             // {
 
-                let keyframe_ids = self.inverted_file[&bow];
+                let keyframe_ids = &self.inverted_file[&bow];
 
                 for kfi in keyframe_ids
                 {
@@ -92,14 +97,14 @@ impl KeyFrameDatabase {
 
                     if place_recog_query_kf_map[&kfi]!=keyframe.id()
                     {
-                        place_recog_words_kf_map[&kfi]=0;
+                        place_recog_words_kf_map.insert(kfi, 0);// [&kfi]=0;
                         if !spConnectedKF.contains(&kfi)
                         {
-                            place_recog_query_kf_map[&kfi] = keyframe.id();
-                            lKFsSharingWords.push(kfi);
+                            place_recog_query_kf_map.insert(kfi, keyframe.id()); // [&kfi] = keyframe.id();
+                            lKFsSharingWords.push(*kfi);
                         }
                     }
-                    place_recog_words_kf_map[&kfi]+=1;
+                    place_recog_words_kf_map.entry(kfi).and_modify(|counter| *counter += 1); //place_recog_words_kf_map[&kfi]+=1;
 
                 }
             
@@ -113,13 +118,13 @@ impl KeyFrameDatabase {
             
     
         // Only compare against those keyframes that share enough words
-        let maxCommonWords=0;
+        let mut maxCommonWords=0;
 
-        for kfi in lKFsSharingWords
+        for kfi in &lKFsSharingWords
         {
             if place_recog_words_kf_map[&kfi] > maxCommonWords
             {
-                maxCommonWords = place_recog_words_kf_map[&kfi];
+                maxCommonWords = *place_recog_words_kf_map.get(kfi).unwrap(); //[&kfi];
             }
         }
 
@@ -133,15 +138,15 @@ impl KeyFrameDatabase {
         
 
         // Compute similarity score.
-        for kfi in lKFsSharingWords
+        for kfi in &lKFsSharingWords
         {
             if place_recog_words_kf_map[&kfi] as f64 > minCommonWords
             {
                 nscores+=1;
                 
-                let kfi_kf = self.map.read().get_keyframe(&kfi).unwrap();
-                let si = bow::VOCABULARY.score(&keyframe.bow.unwrap(), &kfi_kf.bow.unwrap());
-                place_recog_score_kf_map[&kfi]=si;
+                let kfi_kf = self.map.read().get_keyframe(&kfi).unwrap().clone();
+                let si = bow::VOCABULARY.score(&keyframe.bow.as_ref().unwrap(), &kfi_kf.bow.unwrap());
+                place_recog_score_kf_map.insert(kfi, si); //[&kfi]=si;
                 lScoreAndMatch.push((si,kfi));
             }
         }
@@ -154,21 +159,21 @@ impl KeyFrameDatabase {
     
         
         let mut lAccScoreAndMatch = Vec::new(); // list<pair<float,KeyFrame*> > lAccScoreAndMatch;
-        let bestAccScore : f64 = 0.0; // float bestAccScore = 0;
+        let mut bestAccScore : f64 = 0.0; // float bestAccScore = 0;
         
 
         // // Lets now accumulate score by covisibility
         for (scr, kfi) in lScoreAndMatch
         {
-            let kfi_kf = self.map.read().get_keyframe(&kfi).unwrap();
+            let kfi_kf = self.map.read().get_keyframe(&kfi).unwrap().clone();
             let neighs_kfi = kfi_kf.get_connections(10); //vector<KeyFrame*> vpNeighs = pKFi->GetBestCovisibilityKeyFrames(10);
     
-            let bestScore = scr;
-            let accScore = bestScore;
+            let mut bestScore = scr;
+            let mut accScore = bestScore;
             
-            let best_kfi = kfi; //KeyFrame* pBestKF = pKFi;
+            let mut best_kfi = *kfi; //KeyFrame* pBestKF = pKFi;
 
-            for kf2 in neighs_kfi // for(vector<KeyFrame*>::iterator vit=vpNeighs.begin(), vend=vpNeighs.end(); vit!=vend; vit++)
+            for kf2 in &neighs_kfi // for(vector<KeyFrame*>::iterator vit=vpNeighs.begin(), vend=vpNeighs.end(); vit!=vend; vit++)
             {
                 if place_recog_query_kf_map[&kf2] != keyframe.id() // if(pKF2->mnPlaceRecognitionQuery!=pKF->mnId)
                 {
@@ -176,10 +181,10 @@ impl KeyFrameDatabase {
                 }
                     
     
-                accScore+= place_recog_score_kf_map[&kf2]; //  pKF2->mPlaceRecognitionScore;
+                accScore+= place_recog_score_kf_map.get(kf2).unwrap(); // [&kf2]; //  pKF2->mPlaceRecognitionScore;
                 if place_recog_score_kf_map[&kf2]> bestScore //if(pKF2->mPlaceRecognitionScore>bestScore)
                 {
-                    best_kfi = kf2; //pBestKF=pKF2;
+                    best_kfi = *kf2; //pBestKF=pKF2;
                     bestScore = place_recog_score_kf_map[&kf2]; //pKF2->mPlaceRecognitionScore;
                 }
     
@@ -197,7 +202,7 @@ impl KeyFrameDatabase {
         //merge_cand.reserve(num_candidates as usize);// vpMergeCand.reserve(nNumCandidates);
         let mut spAlreadyAddedKF: HashSet<&i32> = HashSet::new(); // set<KeyFrame*> spAlreadyAddedKF;
 
-        for (scr, kfi) in lAccScoreAndMatch // while(i < lAccScoreAndMatch.size() && (vpLoopCand.size() < nNumCandidates || vpMergeCand.size() < nNumCandidates))
+        for (scr, kfi) in &lAccScoreAndMatch // while(i < lAccScoreAndMatch.size() && (vpLoopCand.size() < nNumCandidates || vpMergeCand.size() < nNumCandidates))
         {
             if self.map.read().get_keyframe(&kfi).is_none()
             {
@@ -208,7 +213,7 @@ impl KeyFrameDatabase {
             {
                 if loop_cand.len() < num_candidates as usize
                 {
-                    loop_cand.push(kfi);
+                    loop_cand.push(*kfi);
                 }
                 // //Pranay: (TODO) this condition need to be implemented for multi-map systems
                 //else if(pKF->GetMap() != pKFi->GetMap() && vpMergeCand.size() < nNumCandidates && !pKFi->GetMap()->IsBad())
@@ -216,7 +221,7 @@ impl KeyFrameDatabase {
                 //    vpMergeCand.push_back(pKFi);
                 //}
 
-                spAlreadyAddedKF.insert(&kfi);
+                spAlreadyAddedKF.insert(kfi);
             }
 
             // break if num_candidates is satisfied

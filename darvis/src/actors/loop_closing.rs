@@ -17,6 +17,7 @@ use crate::dvmap::mappoint::FullMapPoint;
 use crate::dvmap::pose::Pose;
 use crate::dvmap::{map::Map};
 use crate::modules::imu::ImuModule;
+use crate::registered_modules::LOOP_CLOSING;
 
 use super::messages::{KeyFrameIdMsg};
 
@@ -52,6 +53,7 @@ pub struct DarvisLoopClosing {
     mergelastcurrent_kf:Option<KeyFrame<FullKeyFrame>>,
     merge_matched_mps: Vec<i32>,
     mnMergeNumNotFound : u32,
+    mvpMergeMPs : Vec<i32>,
 }
 
 
@@ -234,8 +236,6 @@ impl DarvisLoopClosing {
         fn new_detect_common_regions(&mut self, context: Context) -> bool
         {
             
-            let map_actor = Some(context.system.find_aid_by_name(MAP_ACTOR).unwrap());
-
             //Pranay : If we have an active loop closing actor, we don't need additional check, if loop closing is active or not
             // // To deactivate placerecognition. No loopclosing nor merging will be performed
             // if(!mbActiveLC)
@@ -280,9 +280,8 @@ impl DarvisLoopClosing {
             {
                 // cout << "LoopClousure: Stereo KF inserted without check, map is small: " << mpCurrentKF->mnId << endl;
 
-                // Insert Keyframe in Database
-                let map_actor = map_actor.as_ref().unwrap();
-                map_actor.send_new(KeyframeDatabaseWriteMsg::add(self.current_kf.as_ref().unwrap().id())).unwrap(); // mpKeyFrameDB->add(mpCurrentKF);                
+                // Insert Keyframe in Database                
+                self.add_keyframe_to_database(context, self.current_kf.as_ref().unwrap().id());// mpKeyFrameDB->add(mpCurrentKF);
                 //mpCurrentKF->SetErase();
                 return false;
             }
@@ -386,7 +385,7 @@ impl DarvisLoopClosing {
                     bMergeDetectedInKF = false;
 
                     self.mnMergeNumNotFound+=1;
-                    if(self.mnMergeNumNotFound >= 2)
+                    if self.mnMergeNumNotFound >= 2
                     {
                         todo!("fix merge variable clear");
                         // mpMergeLastCurrentKF->SetErase();
@@ -402,48 +401,48 @@ impl DarvisLoopClosing {
             }  
 
 
-            // if(mbMergeDetected || mbLoopDetected)
-            // {
-
-            //     mpKeyFrameDB->add(mpCurrentKF);
-            //     return true;
-            // }
+            if self.merge_detected || self.mbLoopDetected //if(mbMergeDetected || mbLoopDetected)
+            {
+                self.add_keyframe_to_database(context, self.current_kf.as_ref().unwrap().id()); //mpKeyFrameDB->add(mpCurrentKF);
+                return true;
+            }
 
             // //TODO: This is only necessary if we use a minimun score for pick the best candidates
-            // const vector<KeyFrame*> vpConnectedKeyFrames = mpCurrentKF->GetVectorCovisibleKeyFrames();
+            let vpConnectedKeyFrames = self.current_kf.as_ref().unwrap().get_connections(30);// const vector<KeyFrame*> vpConnectedKeyFrames = mpCurrentKF->GetVectorCovisibleKeyFrames();
 
             // // Extract candidates from the bag of words
-            // vector<KeyFrame*> vpMergeBowCand, vpLoopBowCand;
-            // if(!bMergeDetectedInKF || !bLoopDetectedInKF)
-            // {
-            //     // Search in BoW
+            let (mut vpMergeBowCand, mut vpLoopBowCand)= (Vec::new(), Vec::new());// vector<KeyFrame*> vpMergeBowCand, vpLoopBowCand;
+            if !bMergeDetectedInKF || !bLoopDetectedInKF
+            {
+                // Search in BoW
 
-            //     mpKeyFrameDB->DetectNBestCandidates(mpCurrentKF, vpLoopBowCand, vpMergeBowCand,3);
+                let kf_database = self.map.read().keyframe_database.as_ref().unwrap().clone();
+                kf_database.detect_n_best_candidates(&self.current_kf.as_ref().unwrap(), &mut vpLoopBowCand, &mut vpMergeBowCand, 3); //mpKeyFrameDB->DetectNBestCandidates(mpCurrentKF, vpLoopBowCand, vpMergeBowCand,3);
 
-            // }
+            }
 
 
             // // Check the BoW candidates if the geometric candidate list is empty
             // //Loop candidates
-            // if(!bLoopDetectedInKF && !vpLoopBowCand.empty())
-            // {
-            //     mbLoopDetected = DetectCommonRegionsFromBoW(vpLoopBowCand, mpLoopMatchedKF, mpLoopLastCurrentKF, mg2oLoopSlw, mnLoopNumCoincidences, mvpLoopMPs, mvpLoopMatchedMPs);
-            // }
+            if !bLoopDetectedInKF && !vpLoopBowCand.is_empty()
+            {
+                self.mbLoopDetected =  DarvisLoopClosing::detect_common_regions_from_bow(&vpLoopBowCand, self.loop_matched_kf.as_ref().unwrap(), self.looplastcurrent_kf.as_ref().unwrap(), self.mg2oLoopSlw.as_ref().unwrap(), self.mnLoopNumCoincidences as i32, &mut self.mvpLoopMPs, &mut self.loop_matched_mps); //mbLoopDetected = DetectCommonRegionsFromBoW(vpLoopBowCand, mpLoopMatchedKF, mpLoopLastCurrentKF, mg2oLoopSlw, mnLoopNumCoincidences, mvpLoopMPs, mvpLoopMatchedMPs);
+            }
             // // Merge candidates
-            // if(!bMergeDetectedInKF && !vpMergeBowCand.empty())
-            // {
-            //     mbMergeDetected = DetectCommonRegionsFromBoW(vpMergeBowCand, mpMergeMatchedKF, mpMergeLastCurrentKF, mg2oMergeSlw, mnMergeNumCoincidences, mvpMergeMPs, mvpMergeMatchedMPs);
-            // }
+            if !bMergeDetectedInKF && !vpMergeBowCand.is_empty()
+            {
+                self.merge_detected = DarvisLoopClosing::detect_common_regions_from_bow(&vpMergeBowCand, self.merge_match_kf.as_ref().unwrap(), self.mergelastcurrent_kf.as_ref().unwrap(), self.mg2oMergeSlw.as_ref().unwrap(), self.mnMergeNumCoincidences as i32, &mut self.mvpMergeMPs, &mut self.merge_matched_mps) ;//mbMergeDetected = DetectCommonRegionsFromBoW(vpMergeBowCand, mpMergeMatchedKF, mpMergeLastCurrentKF, mg2oMergeSlw, mnMergeNumCoincidences, mvpMergeMPs, mvpMergeMatchedMPs);
+            }
 
 
+            self.add_keyframe_to_database(context, self.current_kf.as_ref().unwrap().id()); // mpKeyFrameDB->add(mpCurrentKF);
 
-            // mpKeyFrameDB->add(mpCurrentKF);
+            if self.merge_detected  || self.mbLoopDetected 
+            {
+                return true;
+            }
 
-            // if(mbMergeDetected || mbLoopDetected)
-            // {
-            //     return true;
-            // }
-
+            // // Pranay : need to check why we set these variables
             // mpCurrentKF->SetErase();
             // mpCurrentKF->mbCurrentPlaceRecognition = false;
 
@@ -478,6 +477,15 @@ impl DarvisLoopClosing {
             self.mbLoopDetected= false;
 
         }
+
+        fn add_keyframe_to_database(&self, context: Context,  kf_id : i32)
+        {
+                let map_actor = Some(context.system.find_aid_by_name(MAP_ACTOR).unwrap());
+                // Insert Keyframe in Database
+                let map_actor = map_actor.as_ref().unwrap();
+                map_actor.send_new(KeyframeDatabaseWriteMsg::add(kf_id)).unwrap(); // mpKeyFrameDB->add
+        }
+
 
         fn merge_local(&mut self)
         {
@@ -528,6 +536,331 @@ impl DarvisLoopClosing {
             // }
             // return false;
         }
+
+
+        //bool LoopClosing::DetectCommonRegionsFromBoW(std::vector<KeyFrame*> &vpBowCand, KeyFrame* &pMatchedKF2, KeyFrame* &pLastCurrentKF, g2o::Sim3 &g2oScw, int &nNumCoincidences, std::vector<MapPoint*> &vpMPs, std::vector<MapPoint*> &vpMatchedMPs)
+        fn detect_common_regions_from_bow(vpBowCand : &Vec<i32>, pMatchedKF2 : &KeyFrame<FullKeyFrame>, pLastCurrentKF : &KeyFrame<FullKeyFrame>,  g2oScw: &Similarity3<f64>, nNumCoincidences : i32, vpMPs: &mut Vec<i32>,  vpMatchedMPs : &mut Vec<i32>) -> bool
+        {
+            todo!("Implement detect_common_regions_from_bow");
+            // int nBoWMatches = 20;
+            // int nBoWInliers = 15;
+            // int nSim3Inliers = 20;
+            // int nProjMatches = 50;
+            // int nProjOptMatches = 80;
+
+            // set<KeyFrame*> spConnectedKeyFrames = mpCurrentKF->GetConnectedKeyFrames();
+
+            // int nNumCovisibles = 10;
+
+            // ORBmatcher matcherBoW(0.9, true);
+            // ORBmatcher matcher(0.75, true);
+
+            // // Varibles to select the best numbe
+            // KeyFrame* pBestMatchedKF;
+            // int nBestMatchesReproj = 0;
+            // int nBestNumCoindicendes = 0;
+            // g2o::Sim3 g2oBestScw;
+            // std::vector<MapPoint*> vpBestMapPoints;
+            // std::vector<MapPoint*> vpBestMatchedMapPoints;
+
+            // int numCandidates = vpBowCand.size();
+            // vector<int> vnStage(numCandidates, 0);
+            // vector<int> vnMatchesStage(numCandidates, 0);
+
+            // int index = 0;
+            // //Verbose::PrintMess("BoW candidates: There are " + to_string(vpBowCand.size()) + " possible candidates ", Verbose::VERBOSITY_DEBUG);
+            // for(KeyFrame* pKFi : vpBowCand)
+            // {
+            // if(!pKFi || pKFi->isBad())
+            // continue;
+
+            // // std::cout << "KF candidate: " << pKFi->mnId << std::endl;
+            // // Current KF against KF with covisibles version
+            // std::vector<KeyFrame*> vpCovKFi = pKFi->GetBestCovisibilityKeyFrames(nNumCovisibles);
+            // if(vpCovKFi.empty())
+            // {
+            // std::cout << "Covisible list empty" << std::endl;
+            // vpCovKFi.push_back(pKFi);
+            // }
+            // else
+            // {
+            // vpCovKFi.push_back(vpCovKFi[0]);
+            // vpCovKFi[0] = pKFi;
+            // }
+
+
+            // bool bAbortByNearKF = false;
+            // for(int j=0; j<vpCovKFi.size(); ++j)
+            // {
+            // if(spConnectedKeyFrames.find(vpCovKFi[j]) != spConnectedKeyFrames.end())
+            // {
+            // bAbortByNearKF = true;
+            // break;
+            // }
+            // }
+            // if(bAbortByNearKF)
+            // {
+            // //std::cout << "Check BoW aborted because is close to the matched one " << std::endl;
+            // continue;
+            // }
+            // //std::cout << "Check BoW continue because is far to the matched one " << std::endl;
+
+
+            // std::vector<std::vector<MapPoint*> > vvpMatchedMPs;
+            // vvpMatchedMPs.resize(vpCovKFi.size());
+            // std::set<MapPoint*> spMatchedMPi;
+            // int numBoWMatches = 0;
+
+            // KeyFrame* pMostBoWMatchesKF = pKFi;
+            // int nMostBoWNumMatches = 0;
+
+            // std::vector<MapPoint*> vpMatchedPoints = std::vector<MapPoint*>(mpCurrentKF->GetMapPointMatches().size(), static_cast<MapPoint*>(NULL));
+            // std::vector<KeyFrame*> vpKeyFrameMatchedMP = std::vector<KeyFrame*>(mpCurrentKF->GetMapPointMatches().size(), static_cast<KeyFrame*>(NULL));
+
+            // int nIndexMostBoWMatchesKF=0;
+            // for(int j=0; j<vpCovKFi.size(); ++j)
+            // {
+            // if(!vpCovKFi[j] || vpCovKFi[j]->isBad())
+            // continue;
+
+            // int num = matcherBoW.SearchByBoW(mpCurrentKF, vpCovKFi[j], vvpMatchedMPs[j]);
+            // if (num > nMostBoWNumMatches)
+            // {
+            // nMostBoWNumMatches = num;
+            // nIndexMostBoWMatchesKF = j;
+            // }
+            // }
+
+            // for(int j=0; j<vpCovKFi.size(); ++j)
+            // {
+            // for(int k=0; k < vvpMatchedMPs[j].size(); ++k)
+            // {
+            // MapPoint* pMPi_j = vvpMatchedMPs[j][k];
+            // if(!pMPi_j || pMPi_j->isBad())
+            // continue;
+
+            // if(spMatchedMPi.find(pMPi_j) == spMatchedMPi.end())
+            // {
+            // spMatchedMPi.insert(pMPi_j);
+            // numBoWMatches++;
+
+            // vpMatchedPoints[k]= pMPi_j;
+            // vpKeyFrameMatchedMP[k] = vpCovKFi[j];
+            // }
+            // }
+            // }
+
+            // //pMostBoWMatchesKF = vpCovKFi[pMostBoWMatchesKF];
+
+            // if(numBoWMatches >= nBoWMatches) // TODO pick a good threshold
+            // {
+            // // Geometric validation
+            // bool bFixedScale = mbFixScale;
+            // if(mpTracker->mSensor==System::IMU_MONOCULAR && !mpCurrentKF->GetMap()->GetIniertialBA2())
+            // bFixedScale=false;
+
+            // Sim3Solver solver = Sim3Solver(mpCurrentKF, pMostBoWMatchesKF, vpMatchedPoints, bFixedScale, vpKeyFrameMatchedMP);
+            // solver.SetRansacParameters(0.99, nBoWInliers, 300); // at least 15 inliers
+
+            // bool bNoMore = false;
+            // vector<bool> vbInliers;
+            // int nInliers;
+            // bool bConverge = false;
+            // Eigen::Matrix4f mTcm;
+            // while(!bConverge && !bNoMore)
+            // {
+            // mTcm = solver.iterate(20,bNoMore, vbInliers, nInliers, bConverge);
+            // //Verbose::PrintMess("BoW guess: Solver achieve " + to_string(nInliers) + " geometrical inliers among " + to_string(nBoWInliers) + " BoW matches", Verbose::VERBOSITY_DEBUG);
+            // }
+
+            // if(bConverge)
+            // {
+            // //std::cout << "Check BoW: SolverSim3 converged" << std::endl;
+
+            // //Verbose::PrintMess("BoW guess: Convergende with " + to_string(nInliers) + " geometrical inliers among " + to_string(nBoWInliers) + " BoW matches", Verbose::VERBOSITY_DEBUG);
+            // // Match by reprojection
+            // vpCovKFi.clear();
+            // vpCovKFi = pMostBoWMatchesKF->GetBestCovisibilityKeyFrames(nNumCovisibles);
+            // vpCovKFi.push_back(pMostBoWMatchesKF);
+            // set<KeyFrame*> spCheckKFs(vpCovKFi.begin(), vpCovKFi.end());
+
+            // //std::cout << "There are " << vpCovKFi.size() <<" near KFs" << std::endl;
+
+            // set<MapPoint*> spMapPoints;
+            // vector<MapPoint*> vpMapPoints;
+            // vector<KeyFrame*> vpKeyFrames;
+            // for(KeyFrame* pCovKFi : vpCovKFi)
+            // {
+            // for(MapPoint* pCovMPij : pCovKFi->GetMapPointMatches())
+            // {
+            // if(!pCovMPij || pCovMPij->isBad())
+            // continue;
+
+            // if(spMapPoints.find(pCovMPij) == spMapPoints.end())
+            // {
+            // spMapPoints.insert(pCovMPij);
+            // vpMapPoints.push_back(pCovMPij);
+            // vpKeyFrames.push_back(pCovKFi);
+            // }
+            // }
+            // }
+
+            // //std::cout << "There are " << vpKeyFrames.size() <<" KFs which view all the mappoints" << std::endl;
+
+            // g2o::Sim3 gScm(solver.GetEstimatedRotation().cast<double>(),solver.GetEstimatedTranslation().cast<double>(), (double) solver.GetEstimatedScale());
+            // g2o::Sim3 gSmw(pMostBoWMatchesKF->GetRotation().cast<double>(),pMostBoWMatchesKF->GetTranslation().cast<double>(),1.0);
+            // g2o::Sim3 gScw = gScm*gSmw; // Similarity matrix of current from the world position
+            // Sophus::Sim3f mScw = Converter::toSophus(gScw);
+
+            // vector<MapPoint*> vpMatchedMP;
+            // vpMatchedMP.resize(mpCurrentKF->GetMapPointMatches().size(), static_cast<MapPoint*>(NULL));
+            // vector<KeyFrame*> vpMatchedKF;
+            // vpMatchedKF.resize(mpCurrentKF->GetMapPointMatches().size(), static_cast<KeyFrame*>(NULL));
+            // int numProjMatches = matcher.SearchByProjection(mpCurrentKF, mScw, vpMapPoints, vpKeyFrames, vpMatchedMP, vpMatchedKF, 8, 1.5);
+            // //cout <<"BoW: " << numProjMatches << " matches between " << vpMapPoints.size() << " points with coarse Sim3" << endl;
+
+            // if(numProjMatches >= nProjMatches)
+            // {
+            // // Optimize Sim3 transformation with every matches
+            // Eigen::Matrix<double, 7, 7> mHessian7x7;
+
+            // bool bFixedScale = mbFixScale;
+            // if(mpTracker->mSensor==System::IMU_MONOCULAR && !mpCurrentKF->GetMap()->GetIniertialBA2())
+            // bFixedScale=false;
+
+            // int numOptMatches = Optimizer::OptimizeSim3(mpCurrentKF, pKFi, vpMatchedMP, gScm, 10, mbFixScale, mHessian7x7, true);
+
+            // if(numOptMatches >= nSim3Inliers)
+            // {
+            // g2o::Sim3 gSmw(pMostBoWMatchesKF->GetRotation().cast<double>(),pMostBoWMatchesKF->GetTranslation().cast<double>(),1.0);
+            // g2o::Sim3 gScw = gScm*gSmw; // Similarity matrix of current from the world position
+            // Sophus::Sim3f mScw = Converter::toSophus(gScw);
+
+            // vector<MapPoint*> vpMatchedMP;
+            // vpMatchedMP.resize(mpCurrentKF->GetMapPointMatches().size(), static_cast<MapPoint*>(NULL));
+            // int numProjOptMatches = matcher.SearchByProjection(mpCurrentKF, mScw, vpMapPoints, vpMatchedMP, 5, 1.0);
+
+            // if(numProjOptMatches >= nProjOptMatches)
+            // {
+            // int max_x = -1, min_x = 1000000;
+            // int max_y = -1, min_y = 1000000;
+            // for(MapPoint* pMPi : vpMatchedMP)
+            // {
+            // if(!pMPi || pMPi->isBad())
+            // {
+            //    continue;
+            // }
+
+            // tuple<size_t,size_t> indexes = pMPi->GetIndexInKeyFrame(pKFi);
+            // int index = get<0>(indexes);
+            // if(index >= 0)
+            // {
+            //    int coord_x = pKFi->mvKeysUn[index].pt.x;
+            //    if(coord_x < min_x)
+            //    {
+            //        min_x = coord_x;
+            //    }
+            //    if(coord_x > max_x)
+            //    {
+            //        max_x = coord_x;
+            //    }
+            //    int coord_y = pKFi->mvKeysUn[index].pt.y;
+            //    if(coord_y < min_y)
+            //    {
+            //        min_y = coord_y;
+            //    }
+            //    if(coord_y > max_y)
+            //    {
+            //        max_y = coord_y;
+            //    }
+            // }
+            // }
+
+            // int nNumKFs = 0;
+            // //vpMatchedMPs = vpMatchedMP;
+            // //vpMPs = vpMapPoints;
+            // // Check the Sim3 transformation with the current KeyFrame covisibles
+            // vector<KeyFrame*> vpCurrentCovKFs = mpCurrentKF->GetBestCovisibilityKeyFrames(nNumCovisibles);
+
+            // int j = 0;
+            // while(nNumKFs < 3 && j<vpCurrentCovKFs.size())
+            // {
+            // KeyFrame* pKFj = vpCurrentCovKFs[j];
+            // Sophus::SE3d mTjc = (pKFj->GetPose() * mpCurrentKF->GetPoseInverse()).cast<double>();
+            // g2o::Sim3 gSjc(mTjc.unit_quaternion(),mTjc.translation(),1.0);
+            // g2o::Sim3 gSjw = gSjc * gScw;
+            // int numProjMatches_j = 0;
+            // vector<MapPoint*> vpMatchedMPs_j;
+            // bool bValid = DetectCommonRegionsFromLastKF(pKFj,pMostBoWMatchesKF, gSjw,numProjMatches_j, vpMapPoints, vpMatchedMPs_j);
+
+            // if(bValid)
+            // {
+            //    Sophus::SE3f Tc_w = mpCurrentKF->GetPose();
+            //    Sophus::SE3f Tw_cj = pKFj->GetPoseInverse();
+            //    Sophus::SE3f Tc_cj = Tc_w * Tw_cj;
+            //    Eigen::Vector3f vector_dist = Tc_cj.translation();
+            //    nNumKFs++;
+            // }
+            // j++;
+            // }
+
+            // if(nNumKFs < 3)
+            // {
+            // vnStage[index] = 8;
+            // vnMatchesStage[index] = nNumKFs;
+            // }
+
+            // if(nBestMatchesReproj < numProjOptMatches)
+            // {
+            // nBestMatchesReproj = numProjOptMatches;
+            // nBestNumCoindicendes = nNumKFs;
+            // pBestMatchedKF = pMostBoWMatchesKF;
+            // g2oBestScw = gScw;
+            // vpBestMapPoints = vpMapPoints;
+            // vpBestMatchedMapPoints = vpMatchedMP;
+            // }
+            // }
+            // }
+            // }
+            // }
+            // /*else
+            // {
+            // Verbose::PrintMess("BoW candidate: it don't match with the current one", Verbose::VERBOSITY_DEBUG);
+            // }*/
+            // }
+            // index++;
+            // }
+
+            // if(nBestMatchesReproj > 0)
+            // {
+            // pLastCurrentKF = mpCurrentKF;
+            // nNumCoincidences = nBestNumCoindicendes;
+            // pMatchedKF2 = pBestMatchedKF;
+            // pMatchedKF2->SetNotErase();
+            // g2oScw = g2oBestScw;
+            // vpMPs = vpBestMapPoints;
+            // vpMatchedMPs = vpBestMatchedMapPoints;
+
+            // return nNumCoincidences >= 3;
+            // }
+            // else
+            // {
+            // int maxStage = -1;
+            // int maxMatched;
+            // for(int i=0; i<vnStage.size(); ++i)
+            // {
+            // if(vnStage[i] > maxStage)
+            // {
+            // maxStage = vnStage[i];
+            // maxMatched = vnMatchesStage[i];
+            // }
+            // }
+            // }
+            // return false;
+        }
+
+
+
 
     }
 

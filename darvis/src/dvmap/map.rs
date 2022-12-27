@@ -332,8 +332,8 @@ impl Map {
     {
         if self.keyframe_database.is_some()
         {
-            let keyframe = self.get_keyframe(kf_id).unwrap();
-            self.keyframe_database.unwrap().add(*keyframe);
+            let keyframe_c = self.get_keyframe(kf_id).unwrap().clone();
+            self.keyframe_database.as_mut().unwrap().add(&keyframe_c);
         }
         else {
             warn!("KeyframeDatabase for the map is None; Please initialize the map with KeyframeDatabase");
@@ -344,8 +344,8 @@ impl Map {
     {
         if self.keyframe_database.is_some()
         {
-            let keyframe = self.get_keyframe(kf_id).unwrap();
-            self.keyframe_database.unwrap().erase(*keyframe);
+            let keyframe_c = self.get_keyframe(kf_id).unwrap().clone();
+            self.keyframe_database.as_mut().unwrap().erase(&keyframe_c);
         }
         else {
             warn!("KeyframeDatabase for the map is None; Please initialize the map with KeyframeDatabase");

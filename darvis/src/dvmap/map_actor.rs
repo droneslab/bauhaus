@@ -68,7 +68,7 @@ impl MapActor {//+ std::marker::Send + std::marker::Sync
                     // Note: called by loop closing
                     write_lock.add_keyframe_to_database(kf_id);
                 },
-                KeyframeDatabaseEditTarget::KeyFrame__add { kf_id } => {
+                KeyframeDatabaseEditTarget::KeyFrame__erase { kf_id } => {
                     write_lock.erase_keyframe_from_database(kf_id);
                 },
                 _ => {
