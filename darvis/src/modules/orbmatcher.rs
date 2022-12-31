@@ -71,107 +71,103 @@ lazy_static! {
 //     return (num_matches, mp_matches);
 // }
 pub fn search_for_initialization(
-        f1: &Frame,
-        f2: &Frame,
-        vb_prev_matched: &mut DVVectorOfPoint2f,
-        window_size: i32,
-    ) -> (i32, Vec<i32>) {
-        let nnratio = 0.9;
-        let check_ori=true;
+    f1: &Frame,
+    f2: &Frame,
+    vb_prev_matched: &mut DVVectorOfPoint2f,
+    window_size: i32,
+) -> (i32, Vec<i32>) {
+    let nnratio = 0.9;
+    let check_ori=true;
 
-        let mut vn_matches12: Vec<i32> = vec![-1; f1.features.get_all_keypoints().len() as usize];
-        let factor = 1.0 / HISTO_LENGTH as f32;
-        let mut v_matched_distance = vec![std::i32::MAX; f2.features.get_all_keypoints().len() as usize];
-        let mut vn_matches21: Vec<i32> = vec![-1; f2.features.get_all_keypoints().len() as usize];
-        let mut n_matches = 0;
+    let mut vn_matches12: Vec<i32> = vec![-1; f1.features.get_all_keypoints().len() as usize];
+    let factor = 1.0 / HISTO_LENGTH as f32;
+    let mut v_matched_distance = vec![std::i32::MAX; f2.features.get_all_keypoints().len() as usize];
+    let mut vn_matches21: Vec<i32> = vec![-1; f2.features.get_all_keypoints().len() as usize];
+    let mut n_matches = 0;
 
-        let mut rot_hist = construct_rotation_histogram();
+    let mut rot_hist = construct_rotation_histogram();
 
-        for (i1, kp1) in f1.features.get_all_keypoints().iter().enumerate() {
-            let level1 = kp1.octave;
-            if level1 > 0 {
+    for (i1, kp1) in f1.features.get_all_keypoints().iter().enumerate() {
+        let level1 = kp1.octave;
+        if level1 > 0 {
+            continue;
+        }
+
+        // Pranay : could be a bug ?? get_features_in_area
+        let v_indices2 = f2.get_features_in_area(
+            &(vb_prev_matched.get(i1).unwrap().x as f64),
+            &(vb_prev_matched.get(i1).unwrap().y as f64),
+            window_size as f64,
+            level1,
+            level1,
+        );
+
+        if v_indices2.is_empty() {
+            continue;
+        }
+
+        let d1 = f1.features.descriptors.row(i1 as u32).unwrap();
+        let (mut best_dist, mut best_dist2, mut best_idx2) : (i32, i32, i32) = (std::i32::MAX, std::i32::MAX, -1);
+        for i2 in v_indices2 {
+            let d2 = f2.features.descriptors.row(i2).unwrap();
+            let dist = descriptor_distance(&d1, &d2);
+            if v_matched_distance[i2 as usize] <= dist {
                 continue;
             }
-
-            // Pranay : could be a bug ?? get_features_in_area
-            let v_indices2 = f2.get_features_in_area(
-                &(vb_prev_matched.get(i1).unwrap().x as f64),
-                &(vb_prev_matched.get(i1).unwrap().y as f64),
-                window_size as f64,
-                level1,
-                level1,
-            );
-
-            if v_indices2.is_empty() {
-                continue;
+            if dist < best_dist {
+                best_dist2 = best_dist;
+                best_dist = dist;
+                best_idx2 = i2 as i32;
+            } else if dist < best_dist2 {
+                best_dist2 = dist;
             }
-            
-            let d1 = f1.features.descriptors.row(i1 as u32).unwrap();
-            let (mut best_dist, mut best_dist2, mut best_idx2) : (i32, i32, i32) = (std::i32::MAX, std::i32::MAX, -1);
-            for i2 in v_indices2 {
-                let d2 = f2.features.descriptors.row(i2).unwrap();
-                let dist = descriptor_distance(&d1, &d2);
-                if v_matched_distance[i2 as usize] <= dist {
-                    continue;
+        }
+        if best_dist <= TH_LOW {
+            if best_dist < (best_dist2 as f32 *  nnratio) as i32 {
+                if vn_matches21[best_idx2 as usize] >= 0 {
+                    vn_matches12[vn_matches21[best_idx2 as usize] as usize] = -1;
+                    n_matches -= 1;
                 }
-                if dist < best_dist {
-                    best_dist2 = best_dist;
-                    best_dist = dist;
-                    best_idx2 = i2 as i32;
-                } else if dist < best_dist2 {
-                    best_dist2 = dist;
-                }
-            }
-            if best_dist <= TH_LOW {
-                if best_dist < (best_dist2 as f32 *  nnratio) as i32 {
-                    if vn_matches21[best_idx2 as usize] >= 0 {
-                        vn_matches12[vn_matches21[best_idx2 as usize] as usize] = -1;
-                        n_matches -= 1;
-                    }
-                    vn_matches12[i1] = best_idx2;
-                    vn_matches21[best_idx2 as usize] = i1 as i32;
-                    v_matched_distance[best_idx2 as usize] = best_dist;
-                    n_matches+=1;
-                    if check_ori {
-                        check_orientation_1(
-                            &f1.features.get_keypoint(i1 as usize),
-                            &f2.features.get_keypoint(best_idx2 as usize),
-                            &mut rot_hist, factor, i1 as i32
-                        );
-                    }
+                vn_matches12[i1] = best_idx2;
+                vn_matches21[best_idx2 as usize] = i1 as i32;
+                v_matched_distance[best_idx2 as usize] = best_dist;
+                n_matches+=1;
+                if check_ori {
+                    check_orientation_1(
+                        &f1.features.get_keypoint(i1 as usize),
+                        &f2.features.get_keypoint(best_idx2 as usize),
+                        &mut rot_hist, factor, i1 as i32
+                    );
                 }
             }
         }
-              
-        if check_ori {
-            
-            let (ind_1, ind_2, ind_3) = compute_three_maxima(&rot_hist,HISTO_LENGTH);
-            for i in 0..HISTO_LENGTH {
-                if i == ind_1 as i32 || i == ind_2 as i32 || i == ind_3 as i32 {
-                    continue;
-                }
-                for j in 0..rot_hist[i as usize].len() {
-                    let key = rot_hist[i as usize][j];
-                    if vn_matches12[ key as usize] >= 0 {
-                        vn_matches12[key as usize] = -1;
-                        n_matches -= 1;
-                    }
-                }
-            }
-
-        }
-
-        for (i1, match12) in vn_matches12.iter().enumerate() {
-            if *match12 >= 0 {
-                *vb_prev_matched.get(i1).as_mut().unwrap() = f2.features.get_keypoint(*match12 as usize).pt;
-            }
-        }
-        
-        (n_matches, vn_matches12)
-        
-                
     }
 
+    if check_ori {
+        let (ind_1, ind_2, ind_3) = compute_three_maxima(&rot_hist,HISTO_LENGTH);
+        for i in 0..HISTO_LENGTH {
+            if i == ind_1 as i32 || i == ind_2 as i32 || i == ind_3 as i32 {
+                continue;
+            }
+            for j in 0..rot_hist[i as usize].len() {
+                let key = rot_hist[i as usize][j];
+                if vn_matches12[ key as usize] >= 0 {
+                    vn_matches12[key as usize] = -1;
+                    n_matches -= 1;
+                }
+            }
+        }
+    }
+
+    for (i1, match12) in vn_matches12.iter().enumerate() {
+        if *match12 >= 0 {
+            *vb_prev_matched.get(i1).as_mut().unwrap() = f2.features.get_keypoint(*match12 as usize).pt;
+        }
+    }
+    debug!("new matches: {}", n_matches);
+
+    (n_matches, vn_matches12)
+}
 
 
 //////////////////////////////////////////////////////////////////////
