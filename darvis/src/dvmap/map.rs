@@ -77,13 +77,14 @@ impl Map {
         self.mappoints.insert(self.last_mp_id, full_mappoint);
         // info!("insert_mappoint_to_map;{}", self.last_mp_id);
 
+        let mp = self.mappoints.get_mut(&new_mp_id).unwrap();
         for (kf_id, num_keypoints, index) in observations_to_add {
             // Add observation for mp->kf
-            full_mappoint.add_observation(&kf_id, *num_keypoints, *index as u32);
+            mp.add_observation(&kf_id, *num_keypoints, *index as u32);
 
             // Add observation kf->mp
             self.keyframes.get_mut(&kf_id).map(|kf| {
-                kf.add_mappoint(&full_mappoint, *index as u32, false);
+                kf.add_mappoint(&mp, *index as u32, false);
             });
         }
 
@@ -228,7 +229,7 @@ impl Map {
             Sensor(FrameSensor::Mono, ImuSensor::Some) => 4.0 / median_depth,
             _ => 1.0 / median_depth
         };
-        
+
         if median_depth < 0.0 || self.keyframes.get(&curr_kf_id)?.tracked_mappoints(&self, 1) < 50 {
             // reset active map
             warn!("map::create_initial_map_monocular;wrong initialization");

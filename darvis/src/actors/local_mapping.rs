@@ -40,16 +40,17 @@ impl DarvisLocalMapping {
     }
 
     fn local_mapping(&mut self, context: Context) {
+        let map_actor = context.system.find_aid_by_name(MAP_ACTOR).unwrap();
         // TODO (Stereo): LocalMapping::ProcessNewKeyFrame pushes to mlpRecentAddedMapPoints
         // those stereo mappoints which were added in tracking. The rest of the function
         // is redundant here because all of it is already computed when inserting a keyframe,
         // but the part about mlpRecentAddedMapPoints needs to be included.
 
         // Check recent MapPoints
-        self.mappoint_culling();
+        self.mappoint_culling(&map_actor);
 
         // Triangulate new MapPoints
-        self.create_new_mappoints(context.system.find_aid_by_name(MAP_ACTOR).unwrap());
+        self.create_new_mappoints(&map_actor);
         // Inform tracking that we are done with creating new mappoints. Needed because tracking fails if new points are not created
         // before track_with_reference_keyframe, so to avoid the race condition we have it wait until the new points are ready.
         context.system.find_aid_by_name("TRACKING_BACKEND").unwrap().send_new(LastKeyFrameUpdatedMsg{}).unwrap();
@@ -159,30 +160,31 @@ impl DarvisLocalMapping {
         self.send_to_loop_closing(context);
     }
 
-    fn mappoint_culling(&mut self) {
+    fn mappoint_culling(&mut self, map_actor: &Aid) {
         let th_obs = match self.sensor.is_mono() {
             true => 2,
             false => 3
         };
 
-        let mut mappoints_to_delete = Vec::new();
+        let map = self.map.read();
+        let current_kf_id = self.current_keyframe_id;
         self.recently_added_mappoints.retain(|&mp_id| {
-            let map = self.map.read();
             let mappoint = map.get_mappoint(&mp_id).unwrap();
 
             if (mappoint.get_found_ratio() < 0.25) ||
-            (self.current_keyframe_id - mappoint.first_kf_id >= 2 && mappoint.get_observations().len() <= th_obs) {
-                mappoints_to_delete.push(mp_id);
+            (current_kf_id - mappoint.first_kf_id >= 2 && mappoint.get_observations().len() <= th_obs) {
+                map_actor.send_new(MapWriteMsg::discard_mappoint(&mp_id)).unwrap();
                 false
-            } else if self.current_keyframe_id - mappoint.first_kf_id >= 3 {
+            } else if current_kf_id - mappoint.first_kf_id >= 3 {
                 false // mappoint should not be deleted, but remove from recently_added_mappoints
             } else {
                 true // mappoint should not be deleted
             }
         });
+        // TODO: send mappoints_to_delete to map actor
     }
 
-    fn create_new_mappoints(&self, map_actor: Aid) {
+    fn create_new_mappoints(&self, map_actor: &Aid) {
         // Retrieve neighbor keyframes in covisibility graph
         let nn = match self.sensor.is_mono() {
             true => 30,
@@ -460,11 +462,11 @@ impl DarvisLocalMapping {
                 //     continue;
 
                 // Triangulation is succesfull
-                let new_mp_msg = MapWriteMsg::create_new_mappoint(
-                    MapPoint::<PrelimMapPoint>::new(x3D, self.current_keyframe_id, map.id),
-                    vec![(self.current_keyframe_id, num_keypoints, idx1), (neighbor_id, num_keypoints, idx2)]
-                );
-                map_actor.send_new(new_mp_msg).unwrap();
+                // let new_mp_msg = MapWriteMsg::create_new_mappoint(
+                //     MapPoint::<PrelimMapPoint>::new(x3D, self.current_keyframe_id, map.id),
+                //     vec![(self.current_keyframe_id, num_keypoints, idx1), (neighbor_id, num_keypoints, idx2)]
+                // );
+                // map_actor.send_new(new_mp_msg).unwrap();
             }
         }
     }

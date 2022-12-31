@@ -195,15 +195,20 @@ impl KeyFrame<FullKeyFrame> {
         }
 
         let mut depths = Vec::new();
-        // depths.reserve(self.keypoints_data.num_keypoints as usize); // probably unnecessary?
         let rot = self.pose.get_rotation();
         let rcw2 = rot.row(2);
         let zcw = self.pose.get_translation()[2];
+
+        debug!("compute_scene_median_depth rot {:?} ", rot);
+        debug!("compute_scene_median_depth rcw2 {:?} ", rcw2[0], rcw2[1], rcw2[2]);
+        debug!("compute_scene_median_depth tcw {:?} ", self.pose.get_translation());
+        debug!("compute_scene_median_depth zcw {:?} ", zcw);
 
         for (_, (mp_id, _)) in &self.mappoint_matches {
             let world_pos = *(mappoints.get(mp_id).unwrap().position);
             let z = (rcw2 * world_pos)[0] + zcw; // first part of this term is scalar but still need to get it from Matrix<1,1> to f64
             depths.push(z);
+            // debug!("depths {} {}", z, world_pos);
         }
 
         depths.sort_by(|a, b| a.total_cmp(&b));
