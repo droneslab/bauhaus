@@ -24,7 +24,7 @@ pub mod ffi {
         type EdgeSE3ProjectXYZOnlyPose;
         type EdgeSE3ProjectXYZ;
 
-        fn new_sparse_optimizer(opt_type: i32) -> UniquePtr<BridgeSparseOptimizer>;
+        fn new_sparse_optimizer(opt_type: i32, camera_param: [f64;4]) -> UniquePtr<BridgeSparseOptimizer>;
 
         // creating/adding vertices to graph
         fn add_frame_vertex(

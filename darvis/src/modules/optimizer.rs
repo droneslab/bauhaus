@@ -801,7 +801,14 @@ pub fn optimize_pose(frame: &mut Frame, map: &ReadOnlyWrapper<Map>) -> Option<(i
     //int Optimizer::PoseOptimization(Frame *pFrame)
     let sensor: Sensor = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "sensor");
 
-    let mut optimizer = g2o::ffi::new_sparse_optimizer(1);
+    let fx= GLOBAL_PARAMS.get::<f64>(CAMERA, "fx");
+    let fy= GLOBAL_PARAMS.get::<f64>(CAMERA, "fy");
+    let cx= GLOBAL_PARAMS.get::<f64>(CAMERA, "cx");
+    let cy= GLOBAL_PARAMS.get::<f64>(CAMERA, "cy");
+    
+    let camera_param = [fx, fy, cx,cy];
+
+    let mut optimizer = g2o::ffi::new_sparse_optimizer(1, camera_param);
 
     // Don't need this but saving here for reference
     // example of how to send a string to C++
@@ -990,7 +997,15 @@ pub fn optimize_pose(frame: &mut Frame, map: &ReadOnlyWrapper<Map>) -> Option<(i
 pub fn global_bundle_adjustment(map: &Map, loop_kf: i32, iterations: i32) -> BAResult {
     // void Optimizer::GlobalBundleAdjustemnt(Map* pMap, int nIterations, bool* pbStopFlag, const unsigned long nLoopKF, const bool bRobust)
     let sensor: Sensor = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "sensor");
-    let mut optimizer = g2o::ffi::new_sparse_optimizer(1);
+
+    let fx= GLOBAL_PARAMS.get::<f64>(CAMERA, "fx");
+    let fy= GLOBAL_PARAMS.get::<f64>(CAMERA, "fy");
+    let cx= GLOBAL_PARAMS.get::<f64>(CAMERA, "cx");
+    let cy= GLOBAL_PARAMS.get::<f64>(CAMERA, "cy");
+    
+    let camera_param = [fx, fy, cx,cy];
+
+    let mut optimizer = g2o::ffi::new_sparse_optimizer(1, camera_param);
 
     let mut max_kf_id = 0;
 
