@@ -126,7 +126,6 @@ constexpr nullopt_t nullopt{};
 /// Lightweight optional implementation which requires ``T`` to have a
 /// default constructor.
 ///
-/// TODO: Replace with std::optional once Sophus moves to c++17.
 ///
 template <class T>
 class optional {

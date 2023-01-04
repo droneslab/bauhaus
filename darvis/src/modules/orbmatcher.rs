@@ -660,10 +660,11 @@ pub fn search_by_bow_kf(
 }
 
 pub fn search_for_triangulation(
-    kf_1 : &KeyFrame<FullKeyFrame>, kf_2 : &KeyFrame<FullKeyFrame>, should_check_orientation: bool, 
-    ratio: f64, map: &ReadOnlyWrapper<Map>
+    kf_1 : &KeyFrame<FullKeyFrame>, kf_2 : &KeyFrame<FullKeyFrame>,
+    should_check_orientation: bool, only_stereo: bool, course: bool, ratio: f64,
+    map: &ReadOnlyWrapper<Map>
 ) -> Result<HashMap<usize, usize>, Box<dyn std::error::Error>> {
-    todo!("Search for triangulation");
+    todo!("TODO LOCAL MAPPING");
     //int ORBmatcher::SearchForTriangulation(KeyFrame *pKF1, KeyFrame *pKF2, vector<pair<size_t, size_t> > &vMatchedPairs, const bool bOnlyStereo, const bool bCoarse)
 }
 

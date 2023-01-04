@@ -59,7 +59,7 @@ pub mod ffi {
             keypoint_pt_y: f32,
             invSigma2: f32,
             mp_world_position: [f64; 3]
-        );
+        ) -> UniquePtr<EdgeSE3ProjectXYZOnlyPose>;
         fn add_edge_monocular_binary(
             self: Pin<&mut BridgeSparseOptimizer>,
             robust_kernel: bool,
@@ -69,7 +69,7 @@ pub mod ffi {
             keypoint_pt_x: f32,
             keypoint_pt_y: f32,
             invSigma2: f32,
-        );
+        ) -> UniquePtr<EdgeSE3ProjectXYZ>;
         // fn set_edge_worldpos(
         //     self: &BridgeSparseOptimizer,
         //     mp_world_index: i32,

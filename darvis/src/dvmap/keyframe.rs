@@ -199,16 +199,10 @@ impl KeyFrame<FullKeyFrame> {
         let rcw2 = rot.row(2);
         let zcw = self.pose.get_translation()[2];
 
-        debug!("compute_scene_median_depth rot {:?} ", rot);
-        debug!("compute_scene_median_depth rcw2 {:?} ", rcw2[0], rcw2[1], rcw2[2]);
-        debug!("compute_scene_median_depth tcw {:?} ", self.pose.get_translation());
-        debug!("compute_scene_median_depth zcw {:?} ", zcw);
-
         for (_, (mp_id, _)) in &self.mappoint_matches {
             let world_pos = *(mappoints.get(mp_id).unwrap().position);
             let z = (rcw2 * world_pos)[0] + zcw; // first part of this term is scalar but still need to get it from Matrix<1,1> to f64
             depths.push(z);
-            // debug!("depths {} {}", z, world_pos);
         }
 
         depths.sort_by(|a, b| a.total_cmp(&b));
@@ -230,6 +224,15 @@ impl KeyFrame<FullKeyFrame> {
         }
 
         num_points
+    }
+
+    pub fn get_right_pose(&self) -> Pose {
+        todo!("TODO (Stereo)");
+        // Sophus::SE3<float> KeyFrame::GetRightPose() {
+        //     unique_lock<mutex> lock(mMutexPose);
+
+        //     return mTrl * mTcw;
+        // }
     }
 }
 
@@ -269,7 +272,7 @@ impl ConnectedKeyFrames {
     pub fn get_connections(&self, num: i32) -> Vec<Id> {
        let max_len = min(self.ordered.len(), num as usize);
        let (conections, _) : (Vec<i32>, Vec<i32>) = self.ordered[0..max_len].iter().cloned().unzip();
-       info!("connections : {:?}", conections);
+       debug!("keyframe connections : {:?}", conections);
        conections
     }
 

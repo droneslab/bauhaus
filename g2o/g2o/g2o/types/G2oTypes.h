@@ -71,7 +71,7 @@ Eigen::Matrix<T,3,3> NormalizeRotation(const Eigen::Matrix<T,3,3> &R) {
     return svd.matrixU() * svd.matrixV().transpose();
 }
 
-// TODO IMU
+// TODO (IMU)
 // class ImuCamPose
 // {
 // public:
@@ -498,7 +498,7 @@ class EdgeInertial : public g2o::BaseMultiEdge<9,Vector9d>
 public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-    // TODO IMU 
+    // TODO (IMU) 
     // EdgeInertial(IMU::Preintegrated* pInt);
 
     virtual bool read(std::istream& is){return false;}

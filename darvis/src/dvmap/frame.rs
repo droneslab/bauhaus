@@ -95,7 +95,7 @@ impl Frame {
 
     pub fn delete_mappoints_without_observations(&mut self, map: &Map) {
         self.mappoint_matches
-            .retain(|_, (mp_id, _)| map.get_mappoint(mp_id).unwrap().get_observations().len() == 0);
+            .retain(|_, (mp_id, _)| map.get_mappoint(mp_id).unwrap().get_observations().len() > 0);
     }
 
     pub fn check_close_tracked_mappoints(&self) -> (i32, i32) {

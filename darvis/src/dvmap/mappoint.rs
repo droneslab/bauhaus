@@ -1,4 +1,4 @@
-use std::{fmt::Debug};
+use std::{fmt::Debug, collections::HashMap};
 use array2d::Array2D;
 use dvcore::{matrix::DVMatrix, config::{Sensor, GLOBAL_PARAMS, SYSTEM_SETTINGS}};
 use log::{info, error, debug};
@@ -225,13 +225,13 @@ impl MapPoint<FullMapPoint> {
          }
 
         // Compute distances between them
-        let mut distances = Array2D::filled_with(0, descriptors.len(), descriptors.len());
+        let mut distances = HashMap::new();
         for i in 0..descriptors.len() {
-            distances[(i,i)] = 0;
+            distances.insert((i,i), 0);
             for j in i+1..descriptors.len() {
                 let dist_ij = descriptor_distance(&descriptors[i], &descriptors[j]);
-                distances[(i,j)] = dist_ij;
-                distances[(j,i)] = dist_ij;
+                distances.insert((i,j), dist_ij);
+                distances.insert((j,i), dist_ij);
             }
         }
 
@@ -239,16 +239,18 @@ impl MapPoint<FullMapPoint> {
         let mut best_median = std::i32::MAX;
         let mut best_idx = 0;
 
-        let all_dists: Vec<i32> = distances.elements_row_major_iter().cloned().collect();
         let num_descriptors = descriptors.len();
         for i in 0..num_descriptors {
-            let mut slice_dists = Vec::new();
-            slice_dists.resize(num_descriptors - i, 0i32);
-            slice_dists[..num_descriptors-i].clone_from_slice(&all_dists[i..num_descriptors]);
-            slice_dists.sort();
-            let median = slice_dists[(0.5 * (num_descriptors-1) as f64) as usize];
-            if median < best_median {
-                best_median = median;
+            let mut v_descriptors = Vec::new();
+            for (key, dist) in &distances {
+                if key.0 == i || key.1 == i {
+                    v_descriptors.push(dist);
+                }
+            }
+            v_descriptors.sort();
+            let median = v_descriptors[(v_descriptors.len()/2) as usize];
+            if median < &best_median {
+                best_median = *median;
                 best_idx = i;
             }
         }

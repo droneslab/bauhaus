@@ -369,7 +369,7 @@ void EdgeMono::linearizeOplus()
             -z , 0.0, x, 0.0, 1.0, 0.0,
             y ,  -x , 0.0, 0.0, 0.0, 1.0;
 
-    _jacobianOplusXj = proj_jac * Rcb * SE3deriv; // TODO optimize this product
+    _jacobianOplusXj = proj_jac * Rcb * SE3deriv;
 }
 
 void EdgeMonoOnlyPose::linearizeOplus()
@@ -513,7 +513,6 @@ EdgeInertial::EdgeInertial(IMU::Preintegrated *pInt):JRg(pInt->JRg.cast<double>(
 
 void EdgeInertial::computeError()
 {
-    // TODO Maybe Reintegrate inertial measurments when difference between linearization point and current estimate is too big
     const VertexPose* VP1 = static_cast<const VertexPose*>(_vertices[0]);
     const VertexVelocity* VV1= static_cast<const VertexVelocity*>(_vertices[1]);
     const VertexGyroBias* VG1= static_cast<const VertexGyroBias*>(_vertices[2]);
@@ -616,7 +615,6 @@ EdgeInertialGS::EdgeInertialGS(IMU::Preintegrated *pInt):JRg(pInt->JRg.cast<doub
 
 void EdgeInertialGS::computeError()
 {
-    // TODO Maybe Reintegrate inertial measurments when difference between linearization point and current estimate is too big
     const VertexPose* VP1 = static_cast<const VertexPose*>(_vertices[0]);
     const VertexVelocity* VV1= static_cast<const VertexVelocity*>(_vertices[1]);
     const VertexGyroBias* VG= static_cast<const VertexGyroBias*>(_vertices[2]);

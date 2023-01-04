@@ -6,6 +6,7 @@ use std::collections::{HashMap};
 use std::fmt::Debug;
 use dvcore::config::FrameSensor;
 use dvcore::config::{*};
+use log::debug;
 use opencv::prelude::{Mat, MatTraitConst, MatTrait};
 use opencv::types::{VectorOff32};
 use serde::{Deserialize, Serialize};
@@ -30,13 +31,13 @@ enum KeyPoints {
         keypoints_left: DVVectorOfKeyPoint,
         keypoints_left_cutoff: u32, // Nleft, if stereo and index passed in is < keypoints_left_cutoff, need to get keypoint from keypoints_right instead of keypoints
         keypoints_right: DVVectorOfKeyPoint,
-        mv_right: HashMap<u32, f32>, // mvuRight
-        mv_depth: HashMap<u32, f32>, //mvDepth
+        mv_right: Vec<f32>, // mvuRight
+        mv_depth: Vec<f32>, //mvDepth
     },
     Rgbd {
         keypoints_orig: DVVectorOfKeyPoint, // Original for visualization.
         keypoints_un: DVVectorOfKeyPoint, // Undistorted keypoints actually used by the system. For stereo, this is redundant bc images must be rectified
-        mv_depth: HashMap<u32, f32>, //mvDepth
+        mv_depth: Vec<f32>, //mvDepth
     }
 }
 
@@ -80,9 +81,11 @@ impl Features {
             },
             FrameSensor::Rgbd => {
                 todo!("TODO (RGBD)");
+                // mv_right and mv_depth size should be same as keypoints, if there isn't a value for an index it should be 0
             },
             FrameSensor::Stereo => {
                 todo!("TODO (Stereo)");
+                // mv_right and mv_depth size should be same as keypoints, if there isn't a value for an index it should be 0
             }
 
         }
@@ -120,10 +123,18 @@ impl Features {
         }
     }
 
-    pub fn get_mv_depth(&self, i: &u32) -> Option<&f32> {
+    pub fn get_mv_depth(&self, i: usize) -> Option<f32> {
         match &self.keypoints {
             KeyPoints::Mono{..}  => None,
-            KeyPoints::Stereo{mv_depth, ..} | KeyPoints::Rgbd{mv_depth, ..} => mv_depth.get(i),
+            KeyPoints::Stereo{mv_depth, ..} | KeyPoints::Rgbd{mv_depth, ..} => Some(mv_depth[i]),
+            KeyPoints::Empty => panic!("Keypoints should not be empty")
+        }
+    }
+
+    pub fn get_mv_right(&self, i: usize) -> Option<f32> {
+        match &self.keypoints {
+            KeyPoints::Mono{..} | KeyPoints::Rgbd{..}  => None,
+            KeyPoints::Stereo{mv_right, ..}  => Some(mv_right[i]),
             KeyPoints::Empty => panic!("Keypoints should not be empty")
         }
     }
@@ -142,15 +153,13 @@ impl Features {
             KeyPoints::Stereo{mv_depth, ..} | KeyPoints::Rgbd{mv_depth, ..} => {
                 let (mut tracked_close, mut non_tracked_close) = (0, 0);
                 for i in 0..self.num_keypoints as u32 {
-                    if let Some(value) = mv_depth.get(&i) {
-                        let depth = *value;
-                        if depth > 0.0 && depth < th_depth {
-                            let mp = mappoint_matches.get(&i);
-                            if mp.is_some() && !mp.unwrap().1 {
-                                tracked_close += 1;
-                            } else {
-                                non_tracked_close += 1;
-                            }
+                    let depth = mv_depth[i as usize];
+                    if depth > 0.0 && depth < th_depth {
+                        let mp = mappoint_matches.get(&i);
+                        if mp.is_some() && !mp.unwrap().1 {
+                            tracked_close += 1;
+                        } else {
+                            non_tracked_close += 1;
                         }
                     }
                 }

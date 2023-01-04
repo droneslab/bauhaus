@@ -130,7 +130,7 @@ namespace g2o {
         return optimizer->edges().size();
     }
 
-    void BridgeSparseOptimizer::add_edge_monocular_unary(
+    unique_ptr<EdgeSE3ProjectXYZOnlyPose> BridgeSparseOptimizer::add_edge_monocular_unary(
         bool robust_kernel, int vertex_id,
         int keypoint_octave, float keypoint_pt_x, float keypoint_pt_y, float invSigma2,
         array<double, 3> mp_world_position
@@ -160,9 +160,12 @@ namespace g2o {
         edge->Xw = worldpos_vec;
 
         optimizer->addEdge(edge);
+
+        unique_ptr<EdgeSE3ProjectXYZOnlyPose> ptr_edge(edge);
+        return ptr_edge;
     }
 
-    void BridgeSparseOptimizer::add_edge_monocular_binary(
+    std::unique_ptr<g2o::EdgeSE3ProjectXYZ> BridgeSparseOptimizer::add_edge_monocular_binary(
         bool robust_kernel, int vertex1, int vertex2,
         int keypoint_octave, float keypoint_pt_x, float keypoint_pt_y, float invSigma2
     ) {
@@ -189,9 +192,8 @@ namespace g2o {
 
         optimizer->addEdge(edge);
 
-        // shared_ptr<EdgeSE3ProjectXYZ> shared_ptr_edge(edge);
-        // edges.push_back(shared_ptr_edge);
-        // return shared_ptr_edge;
+        unique_ptr<EdgeSE3ProjectXYZ> ptr_edge(edge);
+        return ptr_edge;
     }
 
     //** Optimization *//
@@ -249,25 +251,6 @@ namespace g2o {
         };
         return pose;
     }
-
-    //** Functions on edge *//
-    // void BridgeSparseOptimizer::set_robust_kernel_for_edge(int edge_id, bool reset) {
-    //     // Note: setRobustKernel takes a RobustKernelHuber pointer
-    //     // ORBSLAM3 usually does this but occasionally passes in a 0 instead
-    //     // Here is an alternative implementation that takes a boolean:
-    //     // http://docs.ros.org/en/fuerte/api/re_vision/html/optimizable__graph_8h_source.html
-    //     // although this implementation isn't in the ORBSLAM3 modified g2o...
-    //     // so I have no idea how they are passing in a 0 and compiling it correctly.
-    //     // I *think* that passing in a 0 is equivalent to removing the robust kernel pointer.
-    //     EdgeSE3ProjectXYZOnlyPose * e = optimizer->edge(edge_id);
-    //     if (reset) {
-    //         e->setRobustKernel(NULL);
-    //     } else {
-    //         RobustKernelHuber* rk = new RobustKernelHuber;
-    //         e->setRobustKernel(rk);
-    //     }
-    // }
-    // void BridgeSparseOptimizer::set_edge_level(int edge_id, int level) {
 
     // }
     // Sofiya note: This might already be deleted when g2o deletes the sparseoptimizer?
