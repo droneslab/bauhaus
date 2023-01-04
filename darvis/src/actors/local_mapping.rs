@@ -1,12 +1,18 @@
-use std::sync::Arc;
-use axiom::prelude::*;
+use std::f64::INFINITY;
 
+use axiom::prelude::*;
 use dvcore::config::{Sensor, GLOBAL_PARAMS, SYSTEM_SETTINGS, FrameSensor};
+use dvcore::matrix::DVVector3;
 use dvcore::{
     plugin_functions::Function,
     lockwrap::ReadOnlyWrapper,
 };
+use log::debug;
 use crate::dvmap::map_actor::MapWriteMsg;
+use crate::modules::camera;
+use crate::modules::optimizer::INV_LEVEL_SIGMA2;
+use crate::modules::orbmatcher::SCALE_FACTORS;
+use crate::registered_modules::{FEATURE_DETECTION, MATCHER};
 use crate::{
     dvmap::{map::Map, map_actor::MAP_ACTOR, keyframe::{KeyFrame, PrelimKeyFrame}, mappoint::{MapPoint, PrelimMapPoint}},
     modules::{optimizer, orbmatcher, imu::ImuModule, camera::CAMERA_MODULE},
@@ -54,6 +60,7 @@ impl DarvisLocalMapping {
         // Inform tracking that we are done with creating new mappoints. Needed because tracking fails if new points are not created
         // before track_with_reference_keyframe, so to avoid the race condition we have it wait until the new points are ready.
         context.system.find_aid_by_name("TRACKING_BACKEND").unwrap().send_new(LastKeyFrameUpdatedMsg{}).unwrap();
+        debug!("Local mapping finished creating new mappoints");
 
         // TODO (design): ORBSLAM will abort additional work if there are too many keyframes in the msg queue.
         // But idk how to check the queue size from within the callback
@@ -181,7 +188,6 @@ impl DarvisLocalMapping {
                 true // mappoint should not be deleted
             }
         });
-        // TODO: send mappoints_to_delete to map actor
     }
 
     fn create_new_mappoints(&self, map_actor: &Aid) {
@@ -190,10 +196,14 @@ impl DarvisLocalMapping {
             true => 30,
             false => 10
         };
+        let thresh = 0.6;
+        let ratio_factor = 1.5 * GLOBAL_PARAMS.get::<f64>(FEATURE_DETECTION, "scale_factor");
+        let fpt = GLOBAL_PARAMS.get::<f64>(MATCHER, "far_points_threshold");
+        let far_points_th = if fpt == 0.0 { INFINITY } else { fpt };
+
         let map = self.map.read();
         let current_kf = map.get_keyframe(&self.current_keyframe_id).unwrap();
         let neighbor_kfs = current_kf.get_connections(nn);
-
         if self.sensor.is_imu() {
             // TODO (IMU)
             // KeyFrame* pKF = mpCurrentKeyFrame;
@@ -207,26 +217,21 @@ impl DarvisLocalMapping {
             // }
         }
 
-        let th = 0.6;
-
-        let kf_pose = current_kf.pose.get_translation();
-        // Sophus::SE3<float> sophTcw1 = mpCurrentKeyFrame->GetPose();
-        // Eigen::Matrix<float,3,4> eigTcw1 = sophTcw1.matrix3x4();
-        // Eigen::Matrix<float,3,3> Rcw1 = eigTcw1.block<3,3>(0,0);
-        // Eigen::Matrix<float,3,3> Rwc1 = Rcw1.transpose();
-        // Eigen::Vector3f tcw1 = sophTcw1.translation();
-        let ow1 = current_kf.get_camera_center();
-
-        // const float ratioFactor = 1.5f*mpCurrentKeyFrame->mfScaleFactor;
+        let mut pose1 = current_kf.pose; // sophTcw1
+        let mut translation1 = pose1.get_translation(); // tcw1
+        let mut rotation1 = pose1.get_rotation(); // Rcw1
+        let mut rotation_transpose1 = rotation1.transpose(); // Rwc1
+        let mut ow1 = current_kf.get_camera_center();
 
         // Search matches with epipolar restriction and triangulate
         for neighbor_id in neighbor_kfs {
+            // TODO (design): ORBSLAM will abort additional work if there are too many keyframes in the msg queue.
             // if(i>0 && CheckNewKeyFrames())
             //     return;
             let neighbor_kf = map.get_keyframe(&neighbor_id).unwrap();
 
             // Check first that baseline is not too short
-            let ow2 = neighbor_kf.get_camera_center();
+            let mut ow2 = neighbor_kf.get_camera_center();
             let baseline = (*ow2 - *ow1).norm();
             match self.sensor.is_mono() {
                 true => {
@@ -243,225 +248,188 @@ impl DarvisLocalMapping {
             }
 
             // Search matches that fullfil epipolar constraint
-            // let course = self.sensor.is_imu() && ;
-            // bool bCoarse = mbInertial && mpTracker->mState==Tracking::RECENTLY_LOST && mpCurrentKeyFrame->GetMap()->GetIniertialBA2();
-            // TODO: this is an error because map lock is taken twice in same thread
-            let matches = match orbmatcher::search_for_triangulation(current_kf, neighbor_kf, false, th, &self.map) {
+            // TODO (IMU): should replace falses with mpCurrentKeyFrame->GetMap()->GetIniertialBA2() and mpTracker->mState==Tracking::RECENTLY_LOST
+            let course = self.sensor.is_imu() && false && false;
+            let matches = match orbmatcher::search_for_triangulation(
+                current_kf, neighbor_kf,
+                false, false, course, thresh,
+                &self.map
+            ) {
                 Ok(matches) => matches,
                 Err(err) => panic!("Problem with search_by_bow_f {}", err)
             };
 
-            // Sophus::SE3<float> sophTcw2 = neighbor_kf->GetPose();
-            // Eigen::Matrix<float,3,4> eigTcw2 = sophTcw2.matrix3x4();
-            // Eigen::Matrix<float,3,3> Rcw2 = eigTcw2.block<3,3>(0,0);
-            // Eigen::Matrix<float,3,3> Rwc2 = Rcw2.transpose();
-            // Eigen::Vector3f tcw2 = sophTcw2.translation();
+            let mut pose2 = neighbor_kf.pose;
+            let mut translation2 = pose2.get_translation(); // tcw2
+            let mut rotation2 = pose2.get_rotation(); // Rcw2
+            let mut rotation_transpose2 = rotation2.transpose(); // Rwc2
 
             // Triangulate each match
             for (idx1, idx2) in matches {
                 let kp1 = current_kf.features.get_keypoint(idx1);
-                let kp2 = current_kf.features.get_keypoint(idx2);
+                let kp2 = neighbor_kf.features.get_keypoint(idx2);
 
-                // TODO (stereo)
-                // const float kp1_ur=mpCurrentKeyFrame->mvuRight[idx1];
-                // bool bStereo1 = (!mpCurrentKeyFrame->mpCamera2 && kp1_ur>=0);
-                // const bool bRight1 = (mpCurrentKeyFrame -> NLeft == -1 || idx1 < mpCurrentKeyFrame -> NLeft) ? false : true;
-                match self.sensor.frame() {
-                    FrameSensor::Mono | FrameSensor::Rgbd => {},
+                let (kp1_ur, kp2_ur, stereo1, stereo2, right1, right2) = match self.sensor.frame() {
+                    FrameSensor::Mono | FrameSensor::Rgbd => (0.0, 0.0, false, false, false, false),
                     FrameSensor::Stereo => {
-                        // TODO (stereo)
-                        // if(bRight1 && bRight2){
-                        //     sophTcw1 = mpCurrentKeyFrame->GetRightPose();
-                        //     Ow1 = mpCurrentKeyFrame->GetRightCameraCenter();
+                        // TODO (stereo) ... fill in the commented out things in this subsection
+                        let kp1_ur = current_kf.features.get_mv_right(idx1);
+                        let stereo1 = kp1_ur.is_some(); // && !mpCurrentKeyFrame->mpCamera2
+                        let right1 = current_kf.features.has_left_kp().map_or(false, |n_left| (idx1 as u32) >= n_left);
 
-                        //     sophTcw2 = neighbor_kf->GetRightPose();
-                        //     Ow2 = neighbor_kf->GetRightCameraCenter();
+                        let kp2_ur = neighbor_kf.features.get_mv_right(idx2);
+                        let stereo2 = kp2_ur.is_some(); // && !neighbor_kf->mpCamera2
+                        let right2 = neighbor_kf.features.has_left_kp().map_or(false, |n_left| (idx2 as u32) >= n_left);
 
-                        //     pCamera1 = mpCurrentKeyFrame->mpCamera2;
-                        //     pCamera2 = neighbor_kf->mpCamera2;
-                        // }
-                        // else if(bRight1 && !bRight2){
-                        //     sophTcw1 = mpCurrentKeyFrame->GetRightPose();
-                        //     Ow1 = mpCurrentKeyFrame->GetRightCameraCenter();
+                        if right1 {
+                            pose1 = current_kf.get_right_pose();
+                            ow1 = current_kf.get_right_camera_center();
+                            // camera1 = mpCurrentKeyFrame->mpCamera2
+                        } else {
+                            pose1 = current_kf.pose;
+                            ow1 = current_kf.get_camera_center();
+                            // camera1 = mpCurrentKeyFrame->mpCamera
+                        };
+                        if right2 {
+                            pose2 = neighbor_kf.get_right_pose();
+                            ow2 = neighbor_kf.get_right_camera_center();
+                            // camera2 = neighbor_kf->mpCamera2
+                        } else {
+                            pose2 = neighbor_kf.pose;
+                            ow2 = neighbor_kf.get_camera_center();
+                            // camera2 = neighbor_kf->mpCamera
+                        }
 
-                        //     sophTcw2 = neighbor_kf->GetPose();
-                        //     Ow2 = neighbor_kf->GetCameraCenter();
+                        translation1 = pose1.get_translation();
+                        rotation1 = pose1.get_rotation();
+                        rotation_transpose1 = rotation1.transpose();
 
-                        //     pCamera1 = mpCurrentKeyFrame->mpCamera2;
-                        //     pCamera2 = neighbor_kf->mpCamera;
-                        // }
-                        // else if(!bRight1 && bRight2){
-                        //     sophTcw1 = mpCurrentKeyFrame->GetPose();
-                        //     Ow1 = mpCurrentKeyFrame->GetCameraCenter();
+                        translation2 = pose2.get_translation();
+                        rotation2 = pose2.get_rotation();
+                        rotation_transpose2 = rotation2.transpose();
 
-                        //     sophTcw2 = neighbor_kf->GetRightPose();
-                        //     Ow2 = neighbor_kf->GetRightCameraCenter();
-
-                        //     pCamera1 = mpCurrentKeyFrame->mpCamera;
-                        //     pCamera2 = neighbor_kf->mpCamera2;
-                        // }
-                        // else{
-                        //     sophTcw1 = mpCurrentKeyFrame->GetPose();
-                        //     Ow1 = mpCurrentKeyFrame->GetCameraCenter();
-
-                        //     sophTcw2 = neighbor_kf->GetPose();
-                        //     Ow2 = neighbor_kf->GetCameraCenter();
-
-                        //     pCamera1 = mpCurrentKeyFrame->mpCamera;
-                        //     pCamera2 = neighbor_kf->mpCamera;
-                        // }
-                        // eigTcw1 = sophTcw1.matrix3x4();
-                        // Rcw1 = eigTcw1.block<3,3>(0,0);
-                        // Rwc1 = Rcw1.transpose();
-                        // tcw1 = sophTcw1.translation();
-
-                        // eigTcw2 = sophTcw2.matrix3x4();
-                        // Rcw2 = eigTcw2.block<3,3>(0,0);
-                        // Rwc2 = Rcw2.transpose();
-                        // tcw2 = sophTcw2.translation();
+                        (kp1_ur.unwrap_or_else(|| 0.0), kp2_ur.unwrap_or_else(|| 0.0), stereo1, stereo2, right1, right2)
                     },
-                }
+                };
 
                 // Check parallax between rays
                 let xn1 = CAMERA_MODULE.unproject_eig(&kp1.pt);
                 let xn2 = CAMERA_MODULE.unproject_eig(&kp2.pt);
-
-                // Eigen::Vector3f ray1 = Rwc1 * xn1;
-                // Eigen::Vector3f ray2 = Rwc2 * xn2;
-                // const float cosParallaxRays = ray1.dot(ray2)/(ray1.norm() * ray2.norm());
-
-                {
+                let ray1 = rotation_transpose1 * (*xn1);
+                let ray2 = rotation_transpose2 * (*xn2);
+                let cos_parallax_rays = ray1.dot(&ray2) / (ray1.norm() * ray2.norm());
+                let (cos_parallax_stereo1, cos_parallax_stereo2) = (cos_parallax_rays + 1.0, cos_parallax_rays + 1.0);
+                if stereo1 {
                     // TODO (Stereo)
-                    // float cosParallaxStereo = cosParallaxRays+1;
-                    // float cosParallaxStereo1 = cosParallaxStereo;
-                    // float cosParallaxStereo2 = cosParallaxStereo;
+                    // cosParallaxStereo1 = cos(2*atan2(mpCurrentKeyFrame->mb/2,mpCurrentKeyFrame->mvDepth[idx1]));
+                } else if stereo2 {
+                    // TODO (Stereo)
+                    //cosParallaxStereo2 = cos(2*atan2(neighbor_kf->mb/2,neighbor_kf->mvDepth[idx2]));
+                }
+                let cos_parallax_stereo = cos_parallax_stereo1.min(cos_parallax_stereo2);
 
-                    // if(bStereo1)
-                    //     cosParallaxStereo1 = cos(2*atan2(mpCurrentKeyFrame->mb/2,mpCurrentKeyFrame->mvDepth[idx1]));
-                    // else if(bStereo2)
-                    //     cosParallaxStereo2 = cos(2*atan2(neighbor_kf->mb/2,neighbor_kf->mvDepth[idx2]));
-
-                    // if (bStereo1 || bStereo2) totalStereoPts++;
-
-                    // cosParallaxStereo = min(cosParallaxStereo1,cosParallaxStereo2);
+                let x3_d;
+                let good_parallax_with_imu = cos_parallax_rays < 0.9996 && self.sensor.is_imu();
+                let good_parallax_wo_imu = cos_parallax_rays < 0.9998 && !self.sensor.is_imu();
+                if cos_parallax_rays < cos_parallax_stereo && cos_parallax_rays > 0.0 && (stereo1 || stereo2 || good_parallax_with_imu || good_parallax_wo_imu) {
+                    x3_d = camera::triangulate(xn1, xn2, translation1, translation2);
+                } else if stereo1 && cos_parallax_stereo1 < cos_parallax_stereo2 {
+                    x3_d = CAMERA_MODULE.unproject_stereo(current_kf, idx1);
+                } else if stereo2 && cos_parallax_stereo2 < cos_parallax_stereo1 {
+                    x3_d = CAMERA_MODULE.unproject_stereo(neighbor_kf, idx2);
+                } else {
+                    continue // No stereo and very low parallax
+                }
+                if x3_d.is_none() {
+                    continue
                 }
 
-                // Eigen::Vector3f x3D;
-
-                // bool goodProj = false;
-                // bool bPointStereo = false;
-                // if(cosParallaxRays<cosParallaxStereo && cosParallaxRays>0 && (bStereo1 || bStereo2 ||
-                //                                                             (cosParallaxRays<0.9996 && mbInertial) || (cosParallaxRays<0.9998 && !mbInertial)))
-                // {
-                //     goodProj = GeometricTools::Triangulate(xn1, xn2, eigTcw1, eigTcw2, x3D);
-                //     if(!goodProj)
-                //         continue;
-                // }
-                // else if(bStereo1 && cosParallaxStereo1<cosParallaxStereo2)
-                // {
-                //     countStereoAttempt++;
-                //     bPointStereo = true;
-                //     goodProj = mpCurrentKeyFrame->UnprojectStereo(idx1, x3D);
-                // }
-                // else if(bStereo2 && cosParallaxStereo2<cosParallaxStereo1)
-                // {
-                //     countStereoAttempt++;
-                //     bPointStereo = true;
-                //     goodProj = neighbor_kf->UnprojectStereo(idx2, x3D);
-                // }
-                // else
-                // {
-                //     continue; //No stereo and very low parallax
-                // }
-
-                // if(goodProj && bPointStereo)
-                //     countStereoGoodProj++;
-
-                // if(!goodProj)
-                //     continue;
-
-                // //Check triangulation in front of cameras
+                //Check triangulation in front of cameras
+                let x3_d_nalg = *x3_d.unwrap();
+                let z1 = rotation1.row(2).transpose().dot(&x3_d_nalg) + (*translation1)[2];
                 // float z1 = Rcw1.row(2).dot(x3D) + tcw1(2);
-                // if(z1<=0)
-                //     continue;
+                if z1 <= 0.0 {
+                    continue;
+                }
+                let z2 = rotation2.row(2).transpose().dot(&x3_d_nalg) + (*translation2)[2];
+                if z2 <= 0.0 {
+                    continue;
+                }
 
-                // float z2 = Rcw2.row(2).dot(x3D) + tcw2(2);
-                // if(z2<=0)
-                //     continue;
+                //Check reprojection error in first keyframe
+                let sigma_square1 = INV_LEVEL_SIGMA2[kp1.octave as usize];
+                let x1 = rotation1.row(0).transpose().dot(&x3_d_nalg) + (*translation1)[0];
+                let y1 = rotation1.row(1).transpose().dot(&x3_d_nalg) + (*translation1)[1];
+                let invz1 = 1.0 / z1;
+                
+                if !stereo1 {
+                    let uv1 = CAMERA_MODULE.project(DVVector3::new_with(x1, y1, z1));
+                    let err_x1 = uv1.0 as f32 - kp1.pt.x;
+                    let err_y1 = uv1.1 as f32 - kp1.pt.y;
+                    if (err_x1 * err_x1  + err_y1 * err_y1) > 5.991 * sigma_square1 {
+                        continue
+                    }
+                } else {
+                    let u1 = CAMERA_MODULE.get_fx() * x1 * invz1 + CAMERA_MODULE.get_cx();
+                    let u1_r = u1 - CAMERA_MODULE.stereo_baseline_times_fx * invz1;
+                    let v1 = CAMERA_MODULE.get_fy() * y1 * invz1 + CAMERA_MODULE.get_cy();
+                    let err_x1 = u1 as f32 - kp1.pt.x;
+                    let err_y1 = v1 as f32 - kp1.pt.y;
+                    let err_x1_r = u1_r as f32 - kp1_ur;
+                    if (err_x1 * err_x1  + err_y1 * err_y1 + err_x1_r * err_x1_r) > 7.8 * sigma_square1 {
+                        continue
+                    }
+                }
 
-                // //Check reprojection error in first keyframe
-                // const float &sigmaSquare1 = mpCurrentKeyFrame->mvLevelSigma2[kp1.octave];
-                // const float x1 = Rcw1.row(0).dot(x3D)+tcw1(0);
-                // const float y1 = Rcw1.row(1).dot(x3D)+tcw1(1);
-                // const float invz1 = 1.0/z1;
+                //Check reprojection error in second keyframe
+                let sigma_square2 = INV_LEVEL_SIGMA2[kp2.octave as usize];
+                let x2 = rotation2.row(0).transpose().dot(&x3_d_nalg) + (*translation2)[0];
+                let y2 = rotation2.row(1).transpose().dot(&x3_d_nalg) + (*translation2)[1];
+                let invz2 = 1.0 / z2;
 
-                // if(!bStereo1)
-                // {
-                //     cv::Point2f uv1 = pCamera1->project(cv::Point3f(x1,y1,z1));
-                //     float errX1 = uv1.x - kp1.pt.x;
-                //     float errY1 = uv1.y - kp1.pt.y;
+                if !stereo2 {
+                    let uv2 = CAMERA_MODULE.project(DVVector3::new_with(x2, y2, z2)); // TODO(STEREO): This should be camera2, not camera
+                    let err_x2 = uv2.0 as f32 - kp2.pt.x;
+                    let err_y2 = uv2.1 as f32 - kp2.pt.y;
+                    if (err_x2 * err_x2  + err_y2 * err_y2) > 5.991 * sigma_square2 {
+                        continue
+                    }
 
-                //     if((errX1*errX1+errY1*errY1)>5.991*sigmaSquare1)
-                //         continue;
+                } else {
+                    let u2 = CAMERA_MODULE.get_fx() * x2 * invz2 + CAMERA_MODULE.get_cx();// TODO(STEREO): This should be camera2, not camera
+                    let u2_r = u2 - CAMERA_MODULE.stereo_baseline_times_fx * invz2;
+                    let v2 = CAMERA_MODULE.get_fy() * y2 * invz2 + CAMERA_MODULE.get_cy();// TODO(STEREO): This should be camera2, not camera
+                    let err_x2 = u2 as f32 - kp2.pt.x;
+                    let err_y2 = v2 as f32 - kp2.pt.y;
+                    let err_x2_r = u2_r as f32- kp2_ur;
+                    if (err_x2 * err_x2  + err_y2 * err_y2 + err_x2_r * err_x2_r) > 7.8 * sigma_square2 {
+                        continue
+                    }
+                }
 
-                // }
-                // else
-                // {
-                //     float u1 = fx1*x1*invz1+cx1;
-                //     float u1_r = u1 - mpCurrentKeyFrame->mbf*invz1;
-                //     float v1 = fy1*y1*invz1+cy1;
-                //     float errX1 = u1 - kp1.pt.x;
-                //     float errY1 = v1 - kp1.pt.y;
-                //     float errX1_r = u1_r - kp1_ur;
-                //     if((errX1*errX1+errY1*errY1+errX1_r*errX1_r)>7.8*sigmaSquare1)
-                //         continue;
-                // }
+                //Check scale consistency
+                let normal1 = *x3_d.unwrap() - *ow1;
+                let dist1 = normal1.norm();
 
-                // //Check reprojection error in second keyframe
-                // const float sigmaSquare2 = neighbor_kf->mvLevelSigma2[kp2.octave];
-                // const float x2 = Rcw2.row(0).dot(x3D)+tcw2(0);
-                // const float y2 = Rcw2.row(1).dot(x3D)+tcw2(1);
-                // const float invz2 = 1.0/z2;
-                // if(!bStereo2)
-                // {
-                //     cv::Point2f uv2 = pCamera2->project(cv::Point3f(x2,y2,z2));
-                //     float errX2 = uv2.x - kp2.pt.x;
-                //     float errY2 = uv2.y - kp2.pt.y;
-                //     if((errX2*errX2+errY2*errY2)>5.991*sigmaSquare2)
-                //         continue;
-                // }
-                // else
-                // {
-                //     float u2 = fx2*x2*invz2+cx2;
-                //     float u2_r = u2 - mpCurrentKeyFrame->mbf*invz2;
-                //     float v2 = fy2*y2*invz2+cy2;
-                //     float errX2 = u2 - kp2.pt.x;
-                //     float errY2 = v2 - kp2.pt.y;
-                //     float errX2_r = u2_r - kp2_ur;
-                //     if((errX2*errX2+errY2*errY2+errX2_r*errX2_r)>7.8*sigmaSquare2)
-                //         continue;
-                // }
+                let normal2 = *x3_d.unwrap() - *ow2;
+                let dist2 = normal2.norm();
 
-                // //Check scale consistency
-                // Eigen::Vector3f normal1 = x3D - Ow1;
-                // float dist1 = normal1.norm();
+                if dist1 == 0.0 || dist2 == 0.0 {
+                    continue;
+                }
 
-                // Eigen::Vector3f normal2 = x3D - Ow2;
-                // float dist2 = normal2.norm();
+                if dist1 >= far_points_th || dist2 >= far_points_th {
+                    continue;
+                }
 
-                // if(dist1==0 || dist2==0)
-                //     continue;
-
-                // if(mbFarPoints && (dist1>=mThFarPoints||dist2>=mThFarPoints)) // MODIFICATION
-                //     continue;
-
-                // const float ratioDist = dist2/dist1;
-                // const float ratioOctave = mpCurrentKeyFrame->mvScaleFactors[kp1.octave]/neighbor_kf->mvScaleFactors[kp2.octave];
-
-                // if(ratioDist*ratioFactor<ratioOctave || ratioDist>ratioOctave*ratioFactor)
-                //     continue;
+                let ratio_dist = dist2 / dist1;
+                let ratio_octave = (SCALE_FACTORS[kp1.octave as usize] / SCALE_FACTORS[kp2.octave as usize]) as f64;
+                if ratio_dist * ratio_factor < ratio_octave || ratio_dist > ratio_octave * ratio_factor {
+                    continue;
+                }
 
                 // Triangulation is succesfull
+                // TODO LOCAL MAPPING
                 // let new_mp_msg = MapWriteMsg::create_new_mappoint(
                 //     MapPoint::<PrelimMapPoint>::new(x3D, self.current_keyframe_id, map.id),
                 //     vec![(self.current_keyframe_id, num_keypoints, idx1), (neighbor_id, num_keypoints, idx2)]
@@ -472,6 +440,7 @@ impl DarvisLocalMapping {
     }
 
     fn search_in_neighbors(&self) {
+        // TODO LOCAL MAPPING
         // // Retrieve neighbor keyframes
         // int nn = 10;
         // if(mbMonocular)
@@ -582,6 +551,7 @@ impl DarvisLocalMapping {
     }
 
     fn keyframe_culling(&self) {
+        // TODO LOCAL MAPPING
         // // Check redundant keyframes (only local keyframes)
         // // A keyframe is considered redundant if the 90% of the MapPoints it sees, are seen
         // // in at least other 3 keyframes (in the same or finer scale)
@@ -737,6 +707,7 @@ impl DarvisLocalMapping {
     fn send_to_loop_closing(&self, context: Context) {
         let loopclosing = context.system.find_aid_by_name(LOOP_CLOSING).unwrap();
         let actor_msg = GLOBAL_PARAMS.get::<String>(LOOP_CLOSING, "actor_message");
+        // TODO LOCAL MAPPING
         // match actor_msg.as_ref() {
         //     "KeyFrameMsg" => {
         //         loopclosing.send_new(KeyFrameMsg{ kf: new_kf }).unwrap();

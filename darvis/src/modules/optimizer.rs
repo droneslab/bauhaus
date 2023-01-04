@@ -7,7 +7,7 @@ use dvcore::{
 };
 use log::{info, warn, debug};
 use nalgebra::Matrix3;
-use crate::{dvmap::{frame::Frame, pose::Pose, map::{Map, Id}, keyframe::{KeyFrame, PrelimKeyFrame, FullKeyFrame}}, registered_modules::FEATURE_DETECTION};
+use crate::{dvmap::{frame::Frame, pose::Pose, map::{Map, Id}, keyframe::{KeyFrame, PrelimKeyFrame, FullKeyFrame}}, registered_modules::{FEATURE_DETECTION, CAMERA}};
 
 lazy_static! {
     pub static ref INV_LEVEL_SIGMA2: Vec<f32> = {
@@ -805,7 +805,7 @@ pub fn optimize_pose(frame: &mut Frame, map: &ReadOnlyWrapper<Map>) -> Option<(i
     let fy= GLOBAL_PARAMS.get::<f64>(CAMERA, "fy");
     let cx= GLOBAL_PARAMS.get::<f64>(CAMERA, "cx");
     let cy= GLOBAL_PARAMS.get::<f64>(CAMERA, "cy");
-    
+
     let camera_param = [fx, fy, cx,cy];
 
     let mut optimizer = g2o::ffi::new_sparse_optimizer(1, camera_param);
@@ -897,26 +897,26 @@ pub fn optimize_pose(frame: &mut Frame, map: &ReadOnlyWrapper<Map>) -> Option<(i
 
         num_bad = 0;
         // Sofiya todo; need to uncomment this
-        // for (index, edge) in &mut edges {
-        //     if frame.is_mp_outlier(&index) {
-        //         edge.pin_mut().compute_error();
-        //     }
+        for (index, edge) in &mut edges {
+            if frame.is_mp_outlier(&index) {
+                edge.pin_mut().compute_error();
+            }
 
-        //     let chi2 = edge.chi2();
+            let chi2 = edge.chi2();
 
-        //     if chi2 > chi2_mono[iteration] {
-        //         frame.set_mp_outlier(&index, true);
-        //         edge.pin_mut().set_level(1);
-        //         num_bad += 1;
-        //     } else {
-        //         frame.set_mp_outlier(&index, false);
-        //         edge.pin_mut().set_level(0);
-        //     }
+            if chi2 > chi2_mono[iteration] {
+                frame.set_mp_outlier(&index, true);
+                edge.pin_mut().set_level(1);
+                num_bad += 1;
+            } else {
+                frame.set_mp_outlier(&index, false);
+                edge.pin_mut().set_level(0);
+            }
 
-        //     if iteration == 2 {
-        //         edge.pin_mut().set_robust_kernel(false);
-        //     }
-        // }
+            if iteration == 2 {
+                edge.pin_mut().set_robust_kernel(false);
+            }
+        }
 
         // TODO (rigid body) SLAM with respect to a rigid body...probably don't have to do this rn?
         // vpEdgesMono_FHR comes from "SLAM with respect to a rigid body"
@@ -1075,7 +1075,7 @@ pub fn global_bundle_adjustment(map: &Map, loop_kf: i32, iterations: i32) -> BAR
 
         if n_edges == 0 {
             warn!("Removed vertex");
-            optimizer.pin_mut().remove_vertex(mp_vertex);
+            optimizer.pin_mut().remove_vertex(mp_vertex_id);
         } else {
             mappoint_vertices.push((mp_vertex_id, mp_id));
         }
@@ -1112,7 +1112,7 @@ pub fn local_bundle_adjustment(
     num_opt_kf: i32,num_fixed_kf: i32, num_mps: i32, num_edges: i32
 ) -> BAResult {
     // void Optimizer::LocalBundleAdjustment(KeyFrame *pKF, bool* pbStopFlag, Map* pMap, int& num_fixedKF, int& num_OptKF, int& num_MPs, int& num_edges)
-    todo!("TODO: Local Mapping, local bundle adjustment");
+    todo!("TODO LOCAL MAPPING, local bundle adjustment");
 }
 
 

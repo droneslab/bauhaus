@@ -354,6 +354,8 @@ impl DarvisTrackingBack {
             let ref_kf = map_read_lock.get_keyframe(&self.ref_kf_id.unwrap()).unwrap();
             let mut increase_found = Vec::new();
 
+            debug!("Mappoint count {}", map_read_lock.mappoints.len());
+
             match orbmatcher::search_by_bow_f(ref_kf, &mut self.current_frame,true, 0.7) {
                 Ok(matches) => {
                     nmatches = matches.len();
@@ -379,6 +381,7 @@ impl DarvisTrackingBack {
         }
 
         self.current_frame.mappoint_matches = vp_mappoint_matches.clone();
+
         self.current_frame.pose = Some(self.last_frame.as_ref().unwrap().pose.unwrap());
 
         if let Some((_, pose)) = optimizer::optimize_pose(&mut self.current_frame, &self.map) {
@@ -584,15 +587,13 @@ impl DarvisTrackingBack {
         self.update_local_points();
         self.search_local_points();
 
-        info!(" {{{{optimize_pose}}}}");
-        let mut inliers = 0;
         if !self.map.read().imu_initialized || (self.current_frame.id <= self.relocalization.last_reloc_frame_id + (self.frames_to_reset_imu as i32)) {
             optimizer::optimize_pose(&mut self.current_frame, &self.map)
                 .map(|(_,pose)| self.current_frame.pose = Some(pose) );
         } else if !self.map_updated {
-            let _inliers = optimizer::pose_inertial_optimization_last_frame(&mut self.current_frame, &self.map);
+            let inliers = optimizer::pose_inertial_optimization_last_frame(&mut self.current_frame, &self.map);
         } else {
-            let _inliers = optimizer::pose_inertial_optimization_last_keyframe(&mut self.current_frame);
+            let inliers = optimizer::pose_inertial_optimization_last_keyframe(&mut self.current_frame);
         }
 
         self.matches_in_frame = 0;
@@ -622,6 +623,7 @@ impl DarvisTrackingBack {
             }
         }
 
+        debug!("Matches in frame {}", self.matches_in_frame);
         let map_msg = MapWriteMsg::increase_found(increase_found);
         map_actor.send_new(map_msg).unwrap();
 
@@ -1047,7 +1049,7 @@ impl Function for DarvisTrackingBack {
             ).unwrap();
         } else if let Some(msg) = message.content_as::<LastKeyFrameUpdatedMsg>() {
             // Received from local mapping after it culls and creates new MPs for the last inserted KF
-
+            self.state = TrackingState::Ok;
         }
 
         match self.state {

@@ -41,12 +41,12 @@ namespace g2o {
         void set_vertex_estimate(int vertex_id, Pose pose);
 
         // edges
-        void add_edge_monocular_unary(
+        unique_ptr<EdgeSE3ProjectXYZOnlyPose> add_edge_monocular_unary(
             bool robust_kernel, int vertex_id,
             int keypoint_octave, float keypoint_pt_x, float keypoint_pt_y, float invSigma2,
             array<double, 3> mp_world_position
         );
-        void add_edge_monocular_binary(
+        unique_ptr<g2o::EdgeSE3ProjectXYZ> add_edge_monocular_binary(
             bool robust_kernel, int vertex1, int vertex2,
             int keypoint_octave, float keypoint_pt_x, float keypoint_pt_y, float invSigma2
         );

@@ -131,7 +131,6 @@ Eigen::Quaternion<Scalar> averageUnitQuaternion(
   }
 
   Eigen::Matrix<Scalar, 4, 4> QQt = Q * Q.transpose();
-  // TODO: Figure out why we can't use SelfAdjointEigenSolver here.
   Eigen::EigenSolver<Eigen::Matrix<Scalar, 4, 4> > es(QQt);
 
   std::complex<Scalar> max_eigenvalue = es.eigenvalues()[0];
@@ -156,7 +155,6 @@ Eigen::Quaternion<Scalar> averageUnitQuaternion(
 
 // Mean implementation for SO(3).
 //
-// TODO: Detect degenerated cases and return nullopt.
 template <class SequenceContainer,
           class Scalar = typename SequenceContainer::value_type::Scalar>
 enable_if_t<
@@ -192,8 +190,6 @@ enable_if_t<
     std::is_same<typename SequenceContainer::value_type, SE2<Scalar> >::value,
     optional<typename SequenceContainer::value_type> >
 average(SequenceContainer const& foo_Ts_bar, int max_num_iterations = 20) {
-  // TODO: Implement Proposition 12 from Sec. 6.2 of
-  // ftp://ftp-sop.inria.fr/epidaure/Publications/Arsigny/arsigny_rr_biinvariant_average.pdf.
   return iterativeMean(foo_Ts_bar, max_num_iterations);
 }
 

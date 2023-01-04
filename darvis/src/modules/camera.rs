@@ -2,7 +2,7 @@ use log::info;
 use opencv::{prelude::{Mat, MatTrait, Boxed, MatTraitConst}, core::{Scalar, Point3f, CV_64F, KeyPoint, Point}};
 use dvcore::{config::*, matrix::{DVMatrix, DVVectorOfPoint3f, DVVector3, DVVectorOfi32}};
 use crate::{
-    dvmap::{pose::{Pose, Rotation}},
+    dvmap::{pose::{Pose, Rotation}, keyframe::{KeyFrame, FullKeyFrame}},
     matrix::DVVectorOfKeyPoint, registered_modules::CAMERA
 };
 
@@ -124,12 +124,37 @@ impl Camera {
         (reconstructed, pose.into(), v_p3d.into(), vb_triangulated) 
     }
 
-    pub fn unproject_eig(&self, kp: &opencv::core::Point2f) -> DVVector3<f32> {
-        // Eigen::Vector3f Pinhole::unprojectEig(const cv::Point2f &p2D) {
-        //     return Eigen::Vector3f((p2D.x - mvParameters[2]) / mvParameters[0], (p2D.y - mvParameters[3]) / mvParameters[1],
-        //                     1.f);
+    pub fn unproject_eig(&self, kp: &opencv::core::Point2f) -> DVVector3<f64> {
+        // Eigen::Vector3f Pinhole::unprojectEig(const cv::Point2f &p2D)
+        // mvParameters in orbslam are:
+        // 0 = fx, 1 = fy, 2 = cx, 3 = cy
+        DVVector3::new_with(
+            (kp.x as f64 - self.get_cx()) / self.get_fx(),
+            (kp.y as f64 - self.get_cy()) / self.get_fy(),
+            1.0
+        )
+    }
+
+    pub fn unproject_stereo(&self, kf: &KeyFrame<FullKeyFrame>, idx: usize) -> Option<DVVector3<f64>> {
+        todo!("TODO (Stereo)");
+        // bool KeyFrame::UnprojectStereo(int i, Eigen::Vector3f &x3D)
+        // {
+        //     const float z = mvDepth[i];
+        //     if(z>0)
+        //     {
+        //         const float u = mvKeys[i].pt.x;
+        //         const float v = mvKeys[i].pt.y;
+        //         const float x = (u-cx)*z*invfx;
+        //         const float y = (v-cy)*z*invfy;
+        //         Eigen::Vector3f x3Dc(x, y, z);
+
+        //         unique_lock<mutex> lock(mMutexPose);
+        //         x3D = mRwc * x3Dc + mTwc.translation();
+        //         return true;
+        //     }
+        //     else
+        //         return false;
         // }
-        todo!("TODO LOCAL MAPPING");
     }
 
     pub fn project(&self, pos: DVVector3<f64>) -> (f64, f64) {
@@ -144,3 +169,28 @@ impl Camera {
     }
 }
 
+pub fn triangulate(
+    xn1: DVVector3<f64>, xn2: DVVector3<f64>,
+    translation1: DVVector3<f64>, translation2: DVVector3<f64>
+) -> Option<DVVector3<f64>> {
+    todo!("TODO LOCAL MAPPING");
+    // bool GeometricTools::Triangulate(Eigen::Vector3f &x_c1, Eigen::Vector3f &x_c2,Eigen::Matrix<float,3,4> &Tc1w ,Eigen::Matrix<float,3,4> &Tc2w , Eigen::Vector3f &x3D)
+
+//     Eigen::Matrix4f A;
+//     A.block<1,4>(0,0) = x_c1(0) * Tc1w.block<1,4>(2,0) - Tc1w.block<1,4>(0,0);
+//     A.block<1,4>(1,0) = x_c1(1) * Tc1w.block<1,4>(2,0) - Tc1w.block<1,4>(1,0);
+//     A.block<1,4>(2,0) = x_c2(0) * Tc2w.block<1,4>(2,0) - Tc2w.block<1,4>(0,0);
+//     A.block<1,4>(3,0) = x_c2(1) * Tc2w.block<1,4>(2,0) - Tc2w.block<1,4>(1,0);
+
+//     Eigen::JacobiSVD<Eigen::Matrix4f> svd(A, Eigen::ComputeFullV);
+
+//     Eigen::Vector4f x3Dh = svd.matrixV().col(3);
+
+//     if(x3Dh(3)==0)
+//         return false;
+
+//     // Euclidean coordinates
+//     x3D = x3Dh.head(3)/x3Dh(3);
+
+//     return true;
+}

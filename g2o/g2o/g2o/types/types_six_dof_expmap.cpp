@@ -25,6 +25,7 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "types_six_dof_expmap.h"
+#include "../core/robust_kernel_impl.h"
 
 #include "../core/factory.h"
 #include "../stuff/macros.h"
@@ -415,5 +416,22 @@ void EdgeStereoSE3ProjectXYZOnlyPose::linearizeOplus() {
   _jacobianOplusXi(2,5) = _jacobianOplusXi(0,5)-bf*invz_2;
 }
 
+  void EdgeSE3ProjectXYZOnlyPose::set_robust_kernel(bool reset) {
+    // Darvis
+    // Note: setRobustKernel takes a RobustKernelHuber pointer
+    // ORBSLAM3 usually does this but occasionally passes in a 0 instead
+    // Here is an alternative implementation that takes a boolean:
+    // http://docs.ros.org/en/fuerte/api/re_vision/html/optimizable__graph_8h_source.html
+    // although this implementation isn't in the ORBSLAM3 modified g2o...
+    // so I have no idea how they are passing in a 0 and compiling it correctly.
+    // I *think* that passing in a 0 is equivalent to removing the robust kernel pointer.
+    if (reset) {
+        setRobustKernel(NULL);
+    } else {
+        RobustKernelHuber* rk = new RobustKernelHuber;
+        setRobustKernel(rk);
+    }
+
+  }
 
 } // end namespace

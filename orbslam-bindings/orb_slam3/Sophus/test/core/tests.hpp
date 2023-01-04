@@ -325,10 +325,6 @@ class LieGroupTests {
     using std::sqrt;
     Scalar const eps = Constants<Scalar>::epsilon();
     Scalar const sqrt_eps = sqrt(eps);
-    // TODO: Improve accuracy of ``interpolate`` (and hence ``exp`` and ``log``)
-    //       so that we can use more accurate bounds in these tests, i.e.
-    //       ``eps`` instead of ``sqrt_eps``.
-
     for (LieGroup const& foo_T_bar : group_vec_) {
       for (LieGroup const& foo_T_baz : group_vec_) {
         // Test boundary conditions ``alpha=0`` and ``alpha=1``.

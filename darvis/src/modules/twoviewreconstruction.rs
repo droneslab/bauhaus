@@ -145,7 +145,6 @@
 
 //         let SF = self.check_fundamental(&F21, &mut vbMatchesInliers, self.sigma);
 
-//         //TODO: Need to implement thread
 //         //thread threadH(&TwoViewReconstruction::FindHomography,this,ref(vbMatchesInliersH), ref(SH), ref(H));
 //         //thread threadF(&TwoViewReconstruction::FindFundamental,this,ref(vbMatchesInliersF), ref(SF), ref(F));
 
