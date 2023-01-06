@@ -20,6 +20,10 @@ use crate::{
 pub const FRAME_GRID_ROWS :usize = 48;
 pub const FRAME_GRID_COLS :usize = 64;
 
+// TODO (eventually) ... I don't think it makes the most sense to name this "features" or even to have it separate from a keyframe
+// But at the same time it's nice to hide a lot of this logic away from the keyframe. It would be good to
+// re-factor this eventually but it isn't high priority.
+
 #[derive(Clone, Debug, Default)]
 enum KeyPoints {
     #[default] Empty,
@@ -109,14 +113,15 @@ impl Features {
         }
     }
 
-    pub fn get_keypoint(&self, index: usize) -> KeyPoint {
+    pub fn get_keypoint(&self, index: usize) -> (KeyPoint, bool) {
+        // Return keypoint and whether it is in the right frame or not
         match &self.keypoints {
-            KeyPoints::Mono{keypoints_un, ..} | KeyPoints::Rgbd{keypoints_un, ..} => keypoints_un.get(index).unwrap(),
+            KeyPoints::Mono{keypoints_un, ..} | KeyPoints::Rgbd{keypoints_un, ..} => (keypoints_un.get(index).unwrap(), false),
             KeyPoints::Stereo{keypoints_left, keypoints_left_cutoff, keypoints_right, ..} => {
                 if index < *keypoints_left_cutoff as usize {
-                    keypoints_left.get(index).unwrap()
+                    (keypoints_left.get(index).unwrap(), false)
                 } else {
-                    keypoints_right.get(index).unwrap()
+                    (keypoints_right.get(index).unwrap(), true)
                 }
             },
             KeyPoints::Empty => panic!("Keypoints should not be empty")
@@ -144,7 +149,7 @@ impl Features {
         // bestLevel = (F.Nleft == -1) ? F.mvKeysUn[idx].octave
         //                     : (idx < F.Nleft) ? F.mvKeys[idx].octave
         //                                         : F.mvKeysRight[idx - F.Nleft].octave;
-        self.get_keypoint(index).octave
+        self.get_keypoint(index).0.octave
     }
 
     pub fn check_close_tracked_mappoints( &self, th_depth: f32, mappoint_matches: &HashMap::<u32, (Id, bool)> ) -> (i32, i32) {
@@ -245,7 +250,7 @@ impl Features {
 
                 for j in 0..v_cell.len() {
                     //TODO (Stereo) Need to update this if stereo images are processed
-                    let kp_un = &self.get_keypoint(v_cell[j]);
+                    let (kp_un, is_right) = &self.get_keypoint(v_cell[j]);
                     if check_levels {
                         if kp_un.octave < min_level as i32 {
                             continue;
@@ -267,6 +272,11 @@ impl Features {
             }
         }
         return indices;
+    }
+
+    pub fn is_in_image(&self, x: f64, y: f64) -> bool {
+        // bool KeyFrame::IsInImage(const float &x, const float &y) const
+        return x >= self.image_bounds.min_x && x < self.image_bounds.max_x && y >= self.image_bounds.min_y && y < self.image_bounds.max_y;
     }
 }
 

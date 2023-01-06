@@ -181,6 +181,41 @@ impl MapPoint<FullMapPoint> {
         self.full_mp_info.observations.add_observation(kf_id, num_keypoints_left_for_kf, index);
     }
 
+    pub fn erase_observation(&mut self, kf_id: &Id) {
+        todo!("TODO LOCAL MAPPING");
+        // bool bBad=false;
+        // {
+        //     unique_lock<mutex> lock(mMutexFeatures);
+        //     if(mObservations.count(pKF))
+        //     {
+        //         tuple<int,int> indexes = mObservations[pKF];
+        //         int leftIndex = get<0>(indexes), rightIndex = get<1>(indexes);
+
+        //         if(leftIndex != -1){
+        //             if(!pKF->mpCamera2 && pKF->mvuRight[leftIndex]>=0)
+        //                 nObs-=2;
+        //             else
+        //                 nObs--;
+        //         }
+        //         if(rightIndex != -1){
+        //             nObs--;
+        //         }
+
+        //         mObservations.erase(pKF);
+
+        //         if(mpRefKF==pKF)
+        //             mpRefKF=mObservations.begin()->first;
+
+        //         // If only 2 observations or less, discard point
+        //         if(nObs<=2)
+        //             bBad=true;
+        //     }
+        // }
+
+        // if(bBad)
+        //     SetBadFlag();
+    }
+
     pub fn get_norm_and_depth(&self, map: &Map) -> Option<(f64, f64, DVVector3<f64>)> {
         // Part 1 of void MapPoint::UpdateNormalAndDepth()
         if self.full_mp_info.observations.is_empty() {

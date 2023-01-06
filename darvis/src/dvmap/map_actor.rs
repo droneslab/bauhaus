@@ -48,7 +48,7 @@ impl MapActor {//+ std::marker::Send + std::marker::Sync
                     write_lock.discard_mappoint(&id);
                 },
 
-                MapEditTarget::MapPoint_IncreaseFound { mp_ids_and_nums } => {
+                MapEditTarget::MapPoint__IncreaseFound { mp_ids_and_nums } => {
                     for (mp, n) in mp_ids_and_nums {
                         write_lock.mappoints.get_mut(mp).unwrap().increase_found(n);
                     }
@@ -60,6 +60,17 @@ impl MapActor {//+ std::marker::Send + std::marker::Sync
                     callback_actor.send_new(KeyFrameIdMsg{keyframe_id: new_kf_id}).unwrap();
                 },
 
+                MapEditTarget::KeyFrame__Delete { id } => {
+                    let new_kf_id = write_lock.discard_keyframe(id);
+                },
+                MapEditTarget::MapPoint__AddObservation {mp_id, kf_id, index} => {
+                    let num_keypoints = write_lock.get_keyframe(kf_id).unwrap().features.num_keypoints;
+                    write_lock.mappoints.get_mut(mp_id).unwrap().add_observation(&kf_id, num_keypoints, *index as u32);
+                    write_lock.keyframes.get_mut(kf_id).unwrap().add_mappoint(*mp_id, *index as u32, false);
+                },
+                MapEditTarget::MapPoint__Replace {mp_to_replace, mp} => {
+                    write_lock.replace_mappoint(mp_to_replace, mp);
+                },
                 _ => {
                     warn!("invalid message type to map actor");
                 },
@@ -77,11 +88,14 @@ enum MapEditTarget {
     CreateInitialMapMonocular{initialization_data: Initialization, callback_actor: axiom::actors::Aid},
     CreateInitialMapStereo{initialization_data: Initialization, callback_actor: axiom::actors::Aid},
     KeyFrame__New{kf: KeyFrame<PrelimKeyFrame>, callback_actor: axiom::actors::Aid},
+    KeyFrame__Delete{id: Id},
     Map__ResetActive(),
     MapPoint__New{mp: MapPoint<PrelimMapPoint>, observations_to_add: Vec<(Id, u32, usize)>},
     MapPoint__Position{ id: u64, pos: Vector3<f32> },
     MapPoint__Discard{id: Id},
-    MapPoint_IncreaseFound{mp_ids_and_nums: Vec::<(Id, i32)>},
+    MapPoint__Replace{mp_to_replace: Id, mp: Id},
+    MapPoint__IncreaseFound{mp_ids_and_nums: Vec::<(Id, i32)>},
+    MapPoint__AddObservation{mp_id: Id, kf_id: Id, index: usize}
 }
 pub struct MapWriteMsg {
     // #[serde(bound = "")] If using serialize/deserialize, uncomment this
@@ -111,6 +125,11 @@ impl MapWriteMsg {
             target: MapEditTarget::KeyFrame__New {kf, callback_actor},
         }
     }
+    pub fn delete_keyframe(id: Id) -> MapWriteMsg {
+        Self {
+            target: MapEditTarget::KeyFrame__Delete { id }
+        }
+    }
     pub fn reset_active_map() -> MapWriteMsg {
         Self {
             target: MapEditTarget::Map__ResetActive(),
@@ -133,7 +152,17 @@ impl MapWriteMsg {
     }
     pub fn increase_found(mp_ids_and_nums: Vec<(Id, i32)>) -> MapWriteMsg {
         Self {
-            target: MapEditTarget::MapPoint_IncreaseFound { mp_ids_and_nums },
+            target: MapEditTarget::MapPoint__IncreaseFound { mp_ids_and_nums },
+        }
+    }
+    pub fn replace_mappoint(mp_to_replace: Id, mp: Id) -> MapWriteMsg {
+        Self {
+            target: MapEditTarget::MapPoint__Replace{mp_to_replace, mp},
+        }
+    }
+    pub fn add_observation(mp_id: Id, kf_id: Id, index: usize) -> MapWriteMsg {
+        Self {
+            target: MapEditTarget::MapPoint__AddObservation{mp_id, kf_id, index}
         }
     }
 }

@@ -102,7 +102,6 @@ impl KeyFrame<FullKeyFrame> {
             }
         };
 
-
         Self {
             timestamp: prelim_keyframe.timestamp,
             frame_id: prelim_keyframe.frame_id,
@@ -129,9 +128,9 @@ impl KeyFrame<FullKeyFrame> {
         self.mappoint_matches.get(index).is_some()
     }
 
-    pub fn add_mappoint(&mut self, mp: &MapPoint<FullMapPoint>, index: u32, is_outlier: bool) {
+    pub fn add_mappoint(&mut self, mp_id: Id, index: u32, is_outlier: bool) {
         // KeyFrame::AddMapPoint(MapPoint *pMP, const size_t &idx)
-        self.mappoint_matches.insert(index, (mp.get_id(), is_outlier));
+        self.mappoint_matches.insert(index, (mp_id, is_outlier));
     }
 
     pub fn erase_mappoint_match(&mut self, (left_index, right_index): (i32, i32)) {
@@ -145,6 +144,10 @@ impl KeyFrame<FullKeyFrame> {
 
     pub fn add_connection(&mut self, kf_id: &Id, weight: i32) {
         self.full_kf_info.connected_keyframes.add_connection(kf_id, weight);
+    }
+
+    pub fn erase_connection(&mut self, kf_id: &Id) {
+        self.full_kf_info.connected_keyframes.erase_connection(kf_id);
     }
 
     pub fn get_connections(&self, num: i32) -> Vec<Id> {
@@ -234,6 +237,11 @@ impl KeyFrame<FullKeyFrame> {
         //     return mTrl * mTcw;
         // }
     }
+
+    pub fn get_features_in_area(&self, x: &f64, y: &f64, radius: f32, is_right: bool) -> Vec<u32> {
+        todo!("TODO LOCAL MAPPING");
+        // self.features.get_features_in_area(x, y, radius, &self.features.image_bounds)
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
@@ -253,6 +261,22 @@ impl ConnectedKeyFrames {
         *self.map.entry(*kf_id).or_insert(weight) = weight;
         // TODO (verify): Sorting might be backwards? Not quite clear whether low weight = earlier index or vice versa
         if weight > self.cutoff_weight { self.sort_ordered(); }
+    }
+
+    pub fn erase_connection(&mut self, kf_id: &Id) {
+        todo!("TODO LOCAL MAPPING");
+        // bool bUpdate = false;
+        // {
+        //     unique_lock<mutex> lock(mMutexConnections);
+        //     if(mConnectedKeyFrameWeights.count(pKF))
+        //     {
+        //         mConnectedKeyFrameWeights.erase(pKF);
+        //         bUpdate=true;
+        //     }
+        // }
+
+        // if(bUpdate)
+        //     UpdateBestCovisibles();
     }
 
     pub fn insert_all_connections(&mut self, new_connections: HashMap::<Id, i32>) {
@@ -276,7 +300,7 @@ impl ConnectedKeyFrames {
        conections
     }
 
-    fn sort_ordered(&mut self) {
+    pub fn sort_ordered(&mut self) {
         // TODO (verify): Sorting might be backwards? Not quite clear whether low weight = earlier index or vice versa
         //KeyFrame::UpdateBestCovisibles
         self.ordered.sort_by(|(_,w1), (_,w2)| w2.cmp(&w1));

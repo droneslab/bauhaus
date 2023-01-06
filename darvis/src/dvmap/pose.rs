@@ -1,7 +1,7 @@
 use std::ops::Mul;
 use dvcore::matrix::{DVVector3, DVMatrix3};
 use log::debug;
-use nalgebra::{Isometry3, Rotation3, Quaternion, Translation3,geometry::UnitQuaternion, Vector3, Matrix3};
+use nalgebra::{Isometry3, Rotation3, Quaternion, Translation3,geometry::UnitQuaternion, Vector3, Matrix3, Matrix3x4};
 use serde::{Deserialize, Serialize};
 
 pub type Translation = DVVector3<f64>; // TODO: Should we use nalgebra::Translation3 instead of our own matrices?
@@ -30,8 +30,8 @@ impl Pose {
 
     pub fn set_translation(&mut self, x: f64, y: f64, z: f64) {
         self.0.translation.x = x;
-        self.0.translation.x = y;
-        self.0.translation.x = z;
+        self.0.translation.y = y;
+        self.0.translation.z = z;
     }
 
     pub fn set_rotation(&mut self, rot: &Rotation) {
@@ -40,6 +40,19 @@ impl Pose {
 
     pub fn inverse(&self) -> Pose{
         Pose(self.0.inverse())
+    }
+
+    pub fn as_matrix(&self) -> Matrix3x4<f64> {
+        let binding = self.0.rotation.to_rotation_matrix();
+        let r = binding.matrix();
+        let t = *self.get_translation();
+        let matrix = nalgebra::Matrix3x4::new(
+            r[(0,0)], r[(0,1)], r[(0,2)], t[0],
+            r[(1,0)], r[(1,1)], r[(1,2)], t[1],
+            r[(2,0)], r[(2,1)], r[(2,2)], t[2]
+        );
+
+        matrix
     }
 }
 impl From<Pose> for [f64; 4] {

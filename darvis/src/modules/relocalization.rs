@@ -6,7 +6,7 @@ use crate::dvmap::{map::Id, frame::Frame};
 #[derive(Debug, Clone, Derivative)]
 #[derivative(Default)]
 pub struct Relocalization {
-    pub last_reloc_frame_id: Id, // last_reloc_frame_id
+    pub last_reloc_frame_id: Id,
     pub timestamp_lost: Option<DateTime<Utc>>,
 }
 
