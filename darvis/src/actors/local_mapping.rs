@@ -1,22 +1,22 @@
+use std::cmp::min;
+use std::collections::HashSet;
 use std::f64::INFINITY;
+use std::iter::FromIterator;
 
 use axiom::prelude::*;
-use dvcore::config::{Sensor, GLOBAL_PARAMS, SYSTEM_SETTINGS, FrameSensor};
-use dvcore::matrix::DVVector3;
 use dvcore::{
     plugin_functions::Function,
     lockwrap::ReadOnlyWrapper,
+    config::{Sensor, GLOBAL_PARAMS, SYSTEM_SETTINGS, FrameSensor, ImuSensor},
+    matrix::DVVector3
 };
 use log::debug;
-use crate::dvmap::map_actor::MapWriteMsg;
-use crate::modules::camera;
-use crate::modules::optimizer::INV_LEVEL_SIGMA2;
-use crate::modules::orbmatcher::SCALE_FACTORS;
-use crate::registered_modules::{FEATURE_DETECTION, MATCHER};
 use crate::{
-    dvmap::{map::Map, map_actor::MAP_ACTOR, keyframe::{KeyFrame, PrelimKeyFrame}, mappoint::{MapPoint, PrelimMapPoint}},
-    modules::{optimizer, orbmatcher, imu::ImuModule, camera::CAMERA_MODULE},
-    registered_modules::LOOP_CLOSING,
+    dvmap::{
+        map_actor::MapWriteMsg, mappoint::FullMapPoint, map::Map, map_actor::MAP_ACTOR, keyframe::{KeyFrame, PrelimKeyFrame}, mappoint::{MapPoint, PrelimMapPoint}
+    },
+    modules::{optimizer, orbmatcher, imu::ImuModule, camera::CAMERA_MODULE, camera, optimizer::INV_LEVEL_SIGMA2, orbmatcher::SCALE_FACTORS, geometric_tools},
+    registered_modules::{FEATURE_DETECTION, LOOP_CLOSING, MATCHER, CAMERA},
     Id,
     actors::messages::{Reset, KeyFrameIdMsg, LastKeyFrameUpdatedMsg}
 };
@@ -62,7 +62,7 @@ impl DarvisLocalMapping {
         context.system.find_aid_by_name("TRACKING_BACKEND").unwrap().send_new(LastKeyFrameUpdatedMsg{}).unwrap();
         debug!("Local mapping finished creating new mappoints");
 
-        // TODO (design): ORBSLAM will abort additional work if there are too many keyframes in the msg queue.
+        // TODO (design): mbAbortBA
         // But idk how to check the queue size from within the callback
         // if(!CheckNewKeyFrames()) {
                 // Find more matches in neighbor keyframes and fuse point duplications
@@ -71,7 +71,8 @@ impl DarvisLocalMapping {
 
         let t_init = 0.0; // Sofiya: idk what this is for but it's used all over the place
 
-        // TODO (design): ORBSLAM will abort additional work if there are too many keyframes in the msg queue (CheckNewKeyFrames)
+        // TODO (design): mbAbortBA
+        // ORBSLAM will abort additional work if there are too many keyframes in the msg queue (CheckNewKeyFrames)
         // Additionally it will abort if a stop or reset is requested (stopRequested)
         // But idk how to check the queue size from within the callback, and idk how to "look ahead" at future messages to see if
         // a stop is requested further in the queue. Maybe the skip functionality? Maybe implementing messages with priority?
@@ -103,7 +104,7 @@ impl DarvisLocalMapping {
                     // Optimizer::LocalInertialBA(mpCurrentKeyFrame, &mbAbortBA, mpCurrentKeyFrame->GetMap(),num_FixedKF_BA,num_OptKF_BA,num_MPs_BA,num_edges_BA, bLarge, !mpCurrentKeyFrame->GetMap()->GetIniertialBA2());
                 },
                 false => {
-                    // TODO (design): ORBSLAM will abort additional work if there are too many keyframes in the msg queue.
+                    // TODO (design): mbAbortBA
                     let force_stop_flag = false; // mbAbortBA
                     let map = self.map.read();
                     let current_keyframe = map.get_keyframe(&self.current_keyframe_id).unwrap();
@@ -118,7 +119,7 @@ impl DarvisLocalMapping {
         }
 
         // Check redundant local Keyframes
-        self.keyframe_culling();
+        self.keyframe_culling(&context);
 
         if self.sensor.is_imu() && t_init < 50.0 {
             // TODO (IMU)
@@ -266,51 +267,30 @@ impl DarvisLocalMapping {
 
             // Triangulate each match
             for (idx1, idx2) in matches {
-                let kp1 = current_kf.features.get_keypoint(idx1);
-                let kp2 = neighbor_kf.features.get_keypoint(idx2);
+                let (kp1, right1) = current_kf.features.get_keypoint(idx1);
+                let (kp2, right2) = neighbor_kf.features.get_keypoint(idx2);
 
-                let (kp1_ur, kp2_ur, stereo1, stereo2, right1, right2) = match self.sensor.frame() {
-                    FrameSensor::Mono | FrameSensor::Rgbd => (0.0, 0.0, false, false, false, false),
-                    FrameSensor::Stereo => {
-                        // TODO (stereo) ... fill in the commented out things in this subsection
-                        let kp1_ur = current_kf.features.get_mv_right(idx1);
-                        let stereo1 = kp1_ur.is_some(); // && !mpCurrentKeyFrame->mpCamera2
-                        let right1 = current_kf.features.has_left_kp().map_or(false, |n_left| (idx1 as u32) >= n_left);
-
-                        let kp2_ur = neighbor_kf.features.get_mv_right(idx2);
-                        let stereo2 = kp2_ur.is_some(); // && !neighbor_kf->mpCamera2
-                        let right2 = neighbor_kf.features.has_left_kp().map_or(false, |n_left| (idx2 as u32) >= n_left);
-
-                        if right1 {
-                            pose1 = current_kf.get_right_pose();
-                            ow1 = current_kf.get_right_camera_center();
-                            // camera1 = mpCurrentKeyFrame->mpCamera2
-                        } else {
-                            pose1 = current_kf.pose;
-                            ow1 = current_kf.get_camera_center();
-                            // camera1 = mpCurrentKeyFrame->mpCamera
-                        };
-                        if right2 {
-                            pose2 = neighbor_kf.get_right_pose();
-                            ow2 = neighbor_kf.get_right_camera_center();
-                            // camera2 = neighbor_kf->mpCamera2
-                        } else {
-                            pose2 = neighbor_kf.pose;
-                            ow2 = neighbor_kf.get_camera_center();
-                            // camera2 = neighbor_kf->mpCamera
-                        }
-
-                        translation1 = pose1.get_translation();
-                        rotation1 = pose1.get_rotation();
-                        rotation_transpose1 = rotation1.transpose();
-
-                        translation2 = pose2.get_translation();
-                        rotation2 = pose2.get_rotation();
-                        rotation_transpose2 = rotation2.transpose();
-
-                        (kp1_ur.unwrap_or_else(|| 0.0), kp2_ur.unwrap_or_else(|| 0.0), stereo1, stereo2, right1, right2)
-                    },
-                };
+                let (mut kp1_ur, mut kp2_ur) = (None, None);
+                if right1 {
+                    kp1_ur = current_kf.features.get_mv_right(idx1);
+                    pose1 = current_kf.get_right_pose();
+                    ow1 = current_kf.get_right_camera_center();
+                    // camera1 = mpCurrentKeyFrame->mpCamera2 TODO (STEREO) .. right now just using global CAMERA
+                } else {
+                    pose1 = current_kf.pose;
+                    ow1 = current_kf.get_camera_center();
+                    // camera1 = mpCurrentKeyFrame->mpCamera TODO (STEREO)
+                }
+                if right2 {
+                    kp2_ur = neighbor_kf.features.get_mv_right(idx2);
+                    pose2 = neighbor_kf.get_right_pose();
+                    ow2 = neighbor_kf.get_right_camera_center();
+                    // camera2 = neighbor_kf->mpCamera2 TODO (STEREO)
+                } else {
+                    pose2 = neighbor_kf.pose;
+                    ow2 = neighbor_kf.get_camera_center();
+                    // camera2 = neighbor_kf->mpCamera TODO (STEREO)
+                }
 
                 // Check parallax between rays
                 let xn1 = CAMERA_MODULE.unproject_eig(&kp1.pt);
@@ -319,10 +299,10 @@ impl DarvisLocalMapping {
                 let ray2 = rotation_transpose2 * (*xn2);
                 let cos_parallax_rays = ray1.dot(&ray2) / (ray1.norm() * ray2.norm());
                 let (cos_parallax_stereo1, cos_parallax_stereo2) = (cos_parallax_rays + 1.0, cos_parallax_rays + 1.0);
-                if stereo1 {
+                if right1 {
                     // TODO (Stereo)
                     // cosParallaxStereo1 = cos(2*atan2(mpCurrentKeyFrame->mb/2,mpCurrentKeyFrame->mvDepth[idx1]));
-                } else if stereo2 {
+                } else if right2 {
                     // TODO (Stereo)
                     //cosParallaxStereo2 = cos(2*atan2(neighbor_kf->mb/2,neighbor_kf->mvDepth[idx2]));
                 }
@@ -331,11 +311,11 @@ impl DarvisLocalMapping {
                 let x3_d;
                 let good_parallax_with_imu = cos_parallax_rays < 0.9996 && self.sensor.is_imu();
                 let good_parallax_wo_imu = cos_parallax_rays < 0.9998 && !self.sensor.is_imu();
-                if cos_parallax_rays < cos_parallax_stereo && cos_parallax_rays > 0.0 && (stereo1 || stereo2 || good_parallax_with_imu || good_parallax_wo_imu) {
-                    x3_d = camera::triangulate(xn1, xn2, translation1, translation2);
-                } else if stereo1 && cos_parallax_stereo1 < cos_parallax_stereo2 {
+                if cos_parallax_rays < cos_parallax_stereo && cos_parallax_rays > 0.0 && (right1 || right2 || good_parallax_with_imu || good_parallax_wo_imu) {
+                    x3_d = geometric_tools::triangulate(xn1, xn2, pose1, pose2);
+                } else if right1 && cos_parallax_stereo1 < cos_parallax_stereo2 {
                     x3_d = CAMERA_MODULE.unproject_stereo(current_kf, idx1);
-                } else if stereo2 && cos_parallax_stereo2 < cos_parallax_stereo1 {
+                } else if right2 && cos_parallax_stereo2 < cos_parallax_stereo1 {
                     x3_d = CAMERA_MODULE.unproject_stereo(neighbor_kf, idx2);
                 } else {
                     continue // No stereo and very low parallax
@@ -361,22 +341,23 @@ impl DarvisLocalMapping {
                 let x1 = rotation1.row(0).transpose().dot(&x3_d_nalg) + (*translation1)[0];
                 let y1 = rotation1.row(1).transpose().dot(&x3_d_nalg) + (*translation1)[1];
                 let invz1 = 1.0 / z1;
-                
-                if !stereo1 {
-                    let uv1 = CAMERA_MODULE.project(DVVector3::new_with(x1, y1, z1));
-                    let err_x1 = uv1.0 as f32 - kp1.pt.x;
-                    let err_y1 = uv1.1 as f32 - kp1.pt.y;
-                    if (err_x1 * err_x1  + err_y1 * err_y1) > 5.991 * sigma_square1 {
-                        continue
-                    }
-                } else {
+
+                if right1 {
+                    todo!("TODO STEREO");
                     let u1 = CAMERA_MODULE.get_fx() * x1 * invz1 + CAMERA_MODULE.get_cx();
                     let u1_r = u1 - CAMERA_MODULE.stereo_baseline_times_fx * invz1;
                     let v1 = CAMERA_MODULE.get_fy() * y1 * invz1 + CAMERA_MODULE.get_cy();
                     let err_x1 = u1 as f32 - kp1.pt.x;
                     let err_y1 = v1 as f32 - kp1.pt.y;
-                    let err_x1_r = u1_r as f32 - kp1_ur;
+                    let err_x1_r = u1_r as f32 - kp1_ur.unwrap();
                     if (err_x1 * err_x1  + err_y1 * err_y1 + err_x1_r * err_x1_r) > 7.8 * sigma_square1 {
+                        continue
+                    }
+                } else {
+                    let uv1 = CAMERA_MODULE.project(DVVector3::new_with(x1, y1, z1));
+                    let err_x1 = uv1.0 as f32 - kp1.pt.x;
+                    let err_y1 = uv1.1 as f32 - kp1.pt.y;
+                    if (err_x1 * err_x1  + err_y1 * err_y1) > 5.991 * sigma_square1 {
                         continue
                     }
                 }
@@ -387,22 +368,22 @@ impl DarvisLocalMapping {
                 let y2 = rotation2.row(1).transpose().dot(&x3_d_nalg) + (*translation2)[1];
                 let invz2 = 1.0 / z2;
 
-                if !stereo2 {
-                    let uv2 = CAMERA_MODULE.project(DVVector3::new_with(x2, y2, z2)); // TODO(STEREO): This should be camera2, not camera
-                    let err_x2 = uv2.0 as f32 - kp2.pt.x;
-                    let err_y2 = uv2.1 as f32 - kp2.pt.y;
-                    if (err_x2 * err_x2  + err_y2 * err_y2) > 5.991 * sigma_square2 {
-                        continue
-                    }
-
-                } else {
+                if right2 {
+                    todo!("TODO STEREO");
                     let u2 = CAMERA_MODULE.get_fx() * x2 * invz2 + CAMERA_MODULE.get_cx();// TODO(STEREO): This should be camera2, not camera
                     let u2_r = u2 - CAMERA_MODULE.stereo_baseline_times_fx * invz2;
                     let v2 = CAMERA_MODULE.get_fy() * y2 * invz2 + CAMERA_MODULE.get_cy();// TODO(STEREO): This should be camera2, not camera
                     let err_x2 = u2 as f32 - kp2.pt.x;
                     let err_y2 = v2 as f32 - kp2.pt.y;
-                    let err_x2_r = u2_r as f32- kp2_ur;
+                    let err_x2_r = u2_r as f32 - kp2_ur.unwrap();
                     if (err_x2 * err_x2  + err_y2 * err_y2 + err_x2_r * err_x2_r) > 7.8 * sigma_square2 {
+                        continue
+                    }
+                } else {
+                    let uv2 = CAMERA_MODULE.project(DVVector3::new_with(x2, y2, z2)); // TODO(STEREO): This should be camera2, not camera
+                    let err_x2 = uv2.0 as f32 - kp2.pt.x;
+                    let err_y2 = uv2.1 as f32 - kp2.pt.y;
+                    if (err_x2 * err_x2  + err_y2 * err_y2) > 5.991 * sigma_square2 {
                         continue
                     }
                 }
@@ -428,110 +409,98 @@ impl DarvisLocalMapping {
                     continue;
                 }
 
-                // Triangulation is succesfull
-                // TODO LOCAL MAPPING
-                // let new_mp_msg = MapWriteMsg::create_new_mappoint(
-                //     MapPoint::<PrelimMapPoint>::new(x3D, self.current_keyframe_id, map.id),
-                //     vec![(self.current_keyframe_id, num_keypoints, idx1), (neighbor_id, num_keypoints, idx2)]
-                // );
-                // map_actor.send_new(new_mp_msg).unwrap();
+                // Triangulation is successful
+                let new_mp_msg = MapWriteMsg::create_new_mappoint(
+                    MapPoint::<PrelimMapPoint>::new(x3_d.unwrap(), self.current_keyframe_id, map.id),
+                    vec![(self.current_keyframe_id, current_kf.features.num_keypoints, idx1), (neighbor_id, neighbor_kf.features.num_keypoints, idx2)]
+                );
+                map_actor.send_new(new_mp_msg).unwrap();
             }
         }
     }
 
     fn search_in_neighbors(&self) {
-        // TODO LOCAL MAPPING
-        // // Retrieve neighbor keyframes
-        // int nn = 10;
-        // if(mbMonocular)
-        //     nn=30;
-        // const vector<KeyFrame*> vpNeighKFs = mpCurrentKeyFrame->GetBestCovisibilityKeyFrames(nn);
-        // vector<KeyFrame*> vpTargetKFs;
-        // for(vector<KeyFrame*>::const_iterator vit=vpNeighKFs.begin(), vend=vpNeighKFs.end(); vit!=vend; vit++)
-        // {
-        //     KeyFrame* pKFi = *vit;
-        //     if(pKFi->isBad() || pKFi->mnFuseTargetForKF == mpCurrentKeyFrame->mnId)
-        //         continue;
-        //     vpTargetKFs.push_back(pKFi);
-        //     pKFi->mnFuseTargetForKF = mpCurrentKeyFrame->mnId;
-        // }
+        // Retrieve neighbor keyframes
+        let nn = match self.sensor.frame() {
+            FrameSensor::Mono => 30,
+            FrameSensor::Stereo | FrameSensor::Rgbd => 10,
+        };
 
-        // // Add some covisible of covisible
-        // // Extend to some second neighbors if abort is not requested
-        // for(int i=0, imax=vpTargetKFs.size(); i<imax; i++)
-        // {
-        //     const vector<KeyFrame*> vpSecondNeighKFs = vpTargetKFs[i]->GetBestCovisibilityKeyFrames(20);
-        //     for(vector<KeyFrame*>::const_iterator vit2=vpSecondNeighKFs.begin(), vend2=vpSecondNeighKFs.end(); vit2!=vend2; vit2++)
-        //     {
-        //         KeyFrame* pKFi2 = *vit2;
-        //         if(pKFi2->isBad() || pKFi2->mnFuseTargetForKF==mpCurrentKeyFrame->mnId || pKFi2->mnId==mpCurrentKeyFrame->mnId)
-        //             continue;
-        //         vpTargetKFs.push_back(pKFi2);
-        //         pKFi2->mnFuseTargetForKF=mpCurrentKeyFrame->mnId;
-        //     }
-        //     if (mbAbortBA)
-        //         break;
-        // }
+        let map = self.map.read();
+        let current_kf = map.get_keyframe(&self.current_keyframe_id).unwrap();
+        let mut target_kfs = HashSet::<i32>::from_iter(current_kf.get_connections(nn));
 
-        // // Extend to temporal neighbors
-        // if(mbInertial)
-        // {
-        //     KeyFrame* pKFi = mpCurrentKeyFrame->mPrevKF;
-        //     while(vpTargetKFs.size()<20 && pKFi)
-        //     {
-        //         if(pKFi->isBad() || pKFi->mnFuseTargetForKF==mpCurrentKeyFrame->mnId)
-        //         {
-        //             pKFi = pKFi->mPrevKF;
-        //             continue;
-        //         }
-        //         vpTargetKFs.push_back(pKFi);
-        //         pKFi->mnFuseTargetForKF=mpCurrentKeyFrame->mnId;
-        //         pKFi = pKFi->mPrevKF;
-        //     }
-        // }
+        // Add some covisible of covisible
+        // Extend to some second neighbors if abort is not requested
+        let new_kfs = target_kfs.iter().map(|kf_id| {
+            map.get_keyframe(&kf_id).unwrap().get_connections(20)
+        }).flatten().collect::<Vec<i32>>();
+        target_kfs.extend(new_kfs);
 
-        // // Search matches by projection from current KF in target KFs
-        // ORBmatcher matcher;
-        // vector<MapPoint*> vpMapPointMatches = mpCurrentKeyFrame->GetMapPointMatches();
-        // for(vector<KeyFrame*>::iterator vit=vpTargetKFs.begin(), vend=vpTargetKFs.end(); vit!=vend; vit++)
-        // {
-        //     KeyFrame* pKFi = *vit;
+        // TODO (design): mbAbortBA.. ORBSLAM will abort additional work if there are too many keyframes in the msg queue.
+        // if (mbAbortBA)
+        //     break;
 
-        //     matcher.Fuse(pKFi,vpMapPointMatches);
-        //     if(pKFi->NLeft != -1) matcher.Fuse(pKFi,vpMapPointMatches,true);
-        // }
+        // Extend to temporal neighbors
+        match self.sensor.is_imu() {
+            true => {
+                // TODO (IMU)
+                // KeyFrame* pKFi = mpCurrentKeyFrame->mPrevKF;
+                // while(vpTargetKFs.size()<20 && pKFi)
+                // {
+                //     if(pKFi->isBad() || pKFi->mnFuseTargetForKF==mpCurrentKeyFrame->mnId)
+                //     {
+                //         pKFi = pKFi->mPrevKF;
+                //         continue;
+                //     }
+                //     vpTargetKFs.push_back(pKFi);
+                //     pKFi->mnFuseTargetForKF=mpCurrentKeyFrame->mnId;
+                //     pKFi = pKFi->mPrevKF;
+                // }
+            }
+            false => {},
+        }
 
+        let mut to_fuse = Vec::new();
+        // Search matches by projection from current KF in target KFs
+        let mappoint_matches = current_kf.mappoint_matches.iter().map(|(_, (mp_id, _))| {
+            map.get_mappoint(&mp_id).unwrap()
+        }).collect::<Vec<&MapPoint<FullMapPoint>>>();
+        for kf_id in &target_kfs {
+            let kf = map.get_keyframe(&kf_id).unwrap();
+            to_fuse.extend(orbmatcher::fuse(kf_id, &map, 3.0, false));
+            to_fuse.extend(
+                match self.sensor.frame() {
+                    FrameSensor::Stereo => orbmatcher::fuse(kf_id, &map, 3.0, true),
+                    FrameSensor::Mono | FrameSensor::Rgbd => vec![],
+                }
+            )
+        }
 
+        // TODO (design): mbAbortBA
         // if (mbAbortBA)
         //     return;
 
-        // // Search matches by projection from target KFs in current KF
-        // vector<MapPoint*> vpFuseCandidates;
-        // vpFuseCandidates.reserve(vpTargetKFs.size()*vpMapPointMatches.size());
+        // Search matches by projection from target KFs in current KF
+        let fuse_candidates = HashSet::<i32>::from_iter(
+            target_kfs.iter().map(|kf_id| {
+                let kf = map.get_keyframe(&kf_id).unwrap();
+                let mappoints_kf = &kf.mappoint_matches;
+                mappoints_kf.iter().map(|(_, (mp_id, _))| *mp_id)
+            }).flatten()
+        );
+        let fuse_candidates_vec = fuse_candidates.iter().map(|mp| map.get_mappoint(&mp).unwrap()).collect::<Vec<&MapPoint<FullMapPoint>>>();
+        to_fuse.extend(orbmatcher::fuse(&self.current_keyframe_id, &map, 3.0, false));
+        to_fuse.extend(
+            match self.sensor.frame() {
+                FrameSensor::Stereo => orbmatcher::fuse(&self.current_keyframe_id, &map, 3.0, true),
+                FrameSensor::Mono | FrameSensor::Rgbd => vec![]
+            }
+        );
 
-        // for(vector<KeyFrame*>::iterator vitKF=vpTargetKFs.begin(), vendKF=vpTargetKFs.end(); vitKF!=vendKF; vitKF++)
-        // {
-        //     KeyFrame* pKFi = *vitKF;
-
-        //     vector<MapPoint*> vpMapPointsKFi = pKFi->GetMapPointMatches();
-
-        //     for(vector<MapPoint*>::iterator vitMP=vpMapPointsKFi.begin(), vendMP=vpMapPointsKFi.end(); vitMP!=vendMP; vitMP++)
-        //     {
-        //         MapPoint* pMP = *vitMP;
-        //         if(!pMP)
-        //             continue;
-        //         if(pMP->isBad() || pMP->mnFuseCandidateForKF == mpCurrentKeyFrame->mnId)
-        //             continue;
-        //         pMP->mnFuseCandidateForKF = mpCurrentKeyFrame->mnId;
-        //         vpFuseCandidates.push_back(pMP);
-        //     }
-        // }
-
-        // matcher.Fuse(mpCurrentKeyFrame,vpFuseCandidates);
-        // if(mpCurrentKeyFrame->NLeft != -1) matcher.Fuse(mpCurrentKeyFrame,vpFuseCandidates,true);
-
-
-        // // Update points
+        todo!("TODO LOCAL MAPPING"); // this should be incorporated into call to map
+        // call every map edit msg in to_fuse
+        // Update points
         // vpMapPointMatches = mpCurrentKeyFrame->GetMapPointMatches();
         // for(size_t i=0, iend=vpMapPointMatches.size(); i<iend; i++)
         // {
@@ -545,169 +514,148 @@ impl DarvisLocalMapping {
         //         }
         //     }
         // }
-
-        // // Update connections in covisibility graph
+        // Update connections in covisibility graph
         // mpCurrentKeyFrame->UpdateConnections();
     }
 
-    fn keyframe_culling(&self) {
-        // TODO LOCAL MAPPING
-        // // Check redundant keyframes (only local keyframes)
-        // // A keyframe is considered redundant if the 90% of the MapPoints it sees, are seen
-        // // in at least other 3 keyframes (in the same or finer scale)
-        // // We only consider close stereo points
-        // const int Nd = 21;
-        // mpCurrentKeyFrame->UpdateBestCovisibles();
-        // vector<KeyFrame*> vpLocalKeyFrames = mpCurrentKeyFrame->GetVectorCovisibleKeyFrames();
+    fn keyframe_culling(&self, context: & axiom::prelude::Context) {
+        // Check redundant keyframes (only local keyframes)
+        // A keyframe is considered redundant if the 90% of the MapPoints it sees, are seen
+        // in at least other 3 keyframes (in the same or finer scale)
+        // We only consider close stereo points
+        // mpCurrentKeyFrame->UpdateBestCovisibles(); // TODO: I think we don't need this because the covisibility keyframes struct organizes itself but double check
+        let map = self.map.read();
+        let current_kf = map.get_keyframe(&self.current_keyframe_id).unwrap();
+        let local_keyframes = current_kf.get_connections(i32::MAX);
 
-        // float redundant_th;
-        // if(!mbInertial)
-        //     redundant_th = 0.9;
-        // else if (mbMonocular)
-        //     redundant_th = 0.9;
-        // else
-        //     redundant_th = 0.5;
+        let redundant_th = match self.sensor {
+            Sensor(_, ImuSensor::None) | Sensor(FrameSensor::Mono, _) => 0.9,
+            _ => 0.5
+        };
 
-        // const bool bInitImu = mpAtlas->isImuInitialized();
-        // int count=0;
+        // Compute last KF from optimizable window:
+        let nd = 21;
+        let last_id = match self.sensor.is_imu() {
+            true => {
+                // int count = 0;
+                // KeyFrame* aux_KF = mpCurrentKeyFrame;
+                // while(count<Nd && aux_KF->mPrevKF)
+                // {
+                //     aux_KF = aux_KF->mPrevKF;
+                //     count++;
+                // }
+                // last_ID = aux_KF->mnId;
+            }
+            false => {} // set to 0,
+        };
 
-        // // Compoute last KF from optimizable window:
-        // unsigned int last_ID;
-        // if (mbInertial)
-        // {
-        //     int count = 0;
-        //     KeyFrame* aux_KF = mpCurrentKeyFrame;
-        //     while(count<Nd && aux_KF->mPrevKF)
-        //     {
-        //         aux_KF = aux_KF->mPrevKF;
-        //         count++;
-        //     }
-        //     last_ID = aux_KF->mnId;
-        // }
+        for i in 0..min(100, local_keyframes.len()) {
+            let kf_id = local_keyframes[i];
+            if kf_id == map.initial_kf_id {
+                continue
+            }
+            let keyframe = map.get_keyframe(&kf_id).unwrap();
+            let mappoints = &keyframe.mappoint_matches;
 
+            let th_obs = 3;
+            let mut num_mps = 0;
+            let mut num_redundant_obs = 0;
 
+            for (idx, (mp_id, _)) in mappoints {
+                if !self.sensor.is_mono() {
+                    let mv_depth = keyframe.features.get_mv_depth(*idx as usize).unwrap();
+                    let th_depth = GLOBAL_PARAMS.get::<i32>(CAMERA, "thdepth") as f32;
+                    if mv_depth > th_depth || mv_depth < 0.0 {
+                        continue
+                    }
+                }
+                let mp = map.get_mappoint(mp_id).unwrap();
+                num_mps += 1;
 
-        // for(vector<KeyFrame*>::iterator vit=vpLocalKeyFrames.begin(), vend=vpLocalKeyFrames.end(); vit!=vend; vit++)
-        // {
-        //     count++;
-        //     KeyFrame* pKF = *vit;
+                if mp.get_observations().len() > th_obs {
+                    let scale_level = keyframe.features.get_octave(*idx as usize);
+                    let mut num_obs = 0;
+                    for obs_kf_id in mp.get_observations().keys() {
+                        if *obs_kf_id == kf_id {
+                            continue
+                        }
+                        let (left_index, right_index) = mp.get_observations().get_observation(obs_kf_id);
+                        let obs_kf = map.get_keyframe(obs_kf_id).unwrap();
+                        let scale_level_i = match self.sensor.frame() {
+                            FrameSensor::Stereo => {
+                                let right_level = if right_index != -1 { obs_kf.features.get_octave(right_index as usize)} else { -1 };
+                                let left_level = if left_index != -1 { obs_kf.features.get_octave(left_index as usize)} else { -1 };
+                                if left_level == -1 || left_level > right_level {
+                                    right_level
+                                } else {
+                                    left_level
+                                }
+                            },
+                            _ => {
+                                obs_kf.features.get_octave(left_index as usize)
+                            }
+                        };
+                        if scale_level_i <= scale_level + 1 {
+                            num_obs += 1;
+                            if num_obs > th_obs { break; }
+                        }
+                    }
 
-        //     if((pKF->mnId==pKF->GetMap()->GetInitKFid()) || pKF->isBad())
-        //         continue;
-        //     const vector<MapPoint*> vpMapPoints = pKF->GetMapPointMatches();
+                    if num_obs > th_obs {
+                        num_redundant_obs += 1;
+                    }
+                }
+            }
 
-        //     int nObs = 3;
-        //     const int thObs=nObs;
-        //     int nRedundantObservations=0;
-        //     int nMPs=0;
-        //     for(size_t i=0, iend=vpMapPoints.size(); i<iend; i++)
-        //     {
-        //         MapPoint* pMP = vpMapPoints[i];
-        //         if(pMP)
-        //         {
-        //             if(!pMP->isBad())
-        //             {
-        //                 if(!mbMonocular)
-        //                 {
-        //                     if(pKF->mvDepth[i]>pKF->mThDepth || pKF->mvDepth[i]<0)
-        //                         continue;
-        //                 }
+            if (num_redundant_obs as f64) > redundant_th * (num_mps as f64) {
+                match self.sensor.is_imu() {
+                    true => {
+                        // TODO (IMU)
+                        // if (mpAtlas->KeyFramesInMap()<=Nd)
+                        //     continue;
 
-        //                 nMPs++;
-        //                 if(pMP->Observations()>thObs)
-        //                 {
-        //                     const int &scaleLevel = (pKF -> NLeft == -1) ? pKF->mvKeysUn[i].octave
-        //                                                                 : (i < pKF -> NLeft) ? pKF -> mvKeys[i].octave
-        //                                                                                     : pKF -> mvKeysRight[i].octave;
-        //                     const map<KeyFrame*, tuple<int,int>> observations = pMP->GetObservations();
-        //                     int nObs=0;
-        //                     for(map<KeyFrame*, tuple<int,int>>::const_iterator mit=observations.begin(), mend=observations.end(); mit!=mend; mit++)
-        //                     {
-        //                         KeyFrame* pKFi = mit->first;
-        //                         if(pKFi==pKF)
-        //                             continue;
-        //                         tuple<int,int> indexes = mit->second;
-        //                         int leftIndex = get<0>(indexes), rightIndex = get<1>(indexes);
-        //                         int scaleLeveli = -1;
-        //                         if(pKFi -> NLeft == -1)
-        //                             scaleLeveli = pKFi->mvKeysUn[leftIndex].octave;
-        //                         else {
-        //                             if (leftIndex != -1) {
-        //                                 scaleLeveli = pKFi->mvKeys[leftIndex].octave;
-        //                             }
-        //                             if (rightIndex != -1) {
-        //                                 int rightLevel = pKFi->mvKeysRight[rightIndex - pKFi->NLeft].octave;
-        //                                 scaleLeveli = (scaleLeveli == -1 || scaleLeveli > rightLevel) ? rightLevel
-        //                                                                                             : scaleLeveli;
-        //                             }
-        //                         }
+                        // if(pKF->mnId>(mpCurrentKeyFrame->mnId-2))
+                        //     continue;
 
-        //                         if(scaleLeveli<=scaleLevel+1)
-        //                         {
-        //                             nObs++;
-        //                             if(nObs>thObs)
-        //                                 break;
-        //                         }
-        //                     }
-        //                     if(nObs>thObs)
-        //                     {
-        //                         nRedundantObservations++;
-        //                     }
-        //                 }
-        //             }
-        //         }
-        //     }
+                        // if(pKF->mPrevKF && pKF->mNextKF)
+                        // {
+                        //     const float t = pKF->mNextKF->mTimeStamp-pKF->mPrevKF->mTimeStamp;
 
-        //     if(nRedundantObservations>redundant_th*nMPs)
-        //     {
-        //         if (mbInertial)
-        //         {
-        //             if (mpAtlas->KeyFramesInMap()<=Nd)
-        //                 continue;
-
-        //             if(pKF->mnId>(mpCurrentKeyFrame->mnId-2))
-        //                 continue;
-
-        //             if(pKF->mPrevKF && pKF->mNextKF)
-        //             {
-        //                 const float t = pKF->mNextKF->mTimeStamp-pKF->mPrevKF->mTimeStamp;
-
-        //                 if((bInitImu && (pKF->mnId<last_ID) && t<3.) || (t<0.5))
-        //                 {
-        //                     pKF->mNextKF->mpImuPreintegrated->MergePrevious(pKF->mpImuPreintegrated);
-        //                     pKF->mNextKF->mPrevKF = pKF->mPrevKF;
-        //                     pKF->mPrevKF->mNextKF = pKF->mNextKF;
-        //                     pKF->mNextKF = NULL;
-        //                     pKF->mPrevKF = NULL;
-        //                     pKF->SetBadFlag();
-        //                 }
-        //                 else if(!mpCurrentKeyFrame->GetMap()->GetIniertialBA2() && ((pKF->GetImuPosition()-pKF->mPrevKF->GetImuPosition()).norm()<0.02) && (t<3))
-        //                 {
-        //                     pKF->mNextKF->mpImuPreintegrated->MergePrevious(pKF->mpImuPreintegrated);
-        //                     pKF->mNextKF->mPrevKF = pKF->mPrevKF;
-        //                     pKF->mPrevKF->mNextKF = pKF->mNextKF;
-        //                     pKF->mNextKF = NULL;
-        //                     pKF->mPrevKF = NULL;
-        //                     pKF->SetBadFlag();
-        //                 }
-        //             }
-        //         }
-        //         else
-        //         {
-        //             pKF->SetBadFlag();
-        //         }
-        //     }
-        //     if((count > 20 && mbAbortBA) || count>100)
-        //     {
-        //         break;
-        //     }
-        // }
+                        //     if((bInitImu && (pKF->mnId<last_ID) && t<3.) || (t<0.5))
+                        //     {
+                        //         pKF->mNextKF->mpImuPreintegrated->MergePrevious(pKF->mpImuPreintegrated);
+                        //         pKF->mNextKF->mPrevKF = pKF->mPrevKF;
+                        //         pKF->mPrevKF->mNextKF = pKF->mNextKF;
+                        //         pKF->mNextKF = NULL;
+                        //         pKF->mPrevKF = NULL;
+                        //         pKF->SetBadFlag();
+                        //     }
+                        //     else if(!mpCurrentKeyFrame->GetMap()->GetIniertialBA2() && ((pKF->GetImuPosition()-pKF->mPrevKF->GetImuPosition()).norm()<0.02) && (t<3))
+                        //     {
+                        //         pKF->mNextKF->mpImuPreintegrated->MergePrevious(pKF->mpImuPreintegrated);
+                        //         pKF->mNextKF->mPrevKF = pKF->mPrevKF;
+                        //         pKF->mPrevKF->mNextKF = pKF->mNextKF;
+                        //         pKF->mNextKF = NULL;
+                        //         pKF->mPrevKF = NULL;
+                        //         pKF->SetBadFlag();
+                        //     }
+                        // }
+                    },
+                    false => {
+                        let map_msg = MapWriteMsg::delete_keyframe(kf_id);
+                        context.system.find_aid_by_name(MAP_ACTOR).unwrap().send_new(map_msg).unwrap();
+                    }
+                }
+            }
+            // TODO (design): mbAbortBA
+            // if((count > 20 && mbAbortBA) { break; }
+        }
     }
 
     fn send_to_loop_closing(&self, context: Context) {
         let loopclosing = context.system.find_aid_by_name(LOOP_CLOSING).unwrap();
         let actor_msg = GLOBAL_PARAMS.get::<String>(LOOP_CLOSING, "actor_message");
-        // TODO LOCAL MAPPING
+        todo!("TODO LOCAL MAPPING");
         // match actor_msg.as_ref() {
         //     "KeyFrameMsg" => {
         //         loopclosing.send_new(KeyFrameMsg{ kf: new_kf }).unwrap();

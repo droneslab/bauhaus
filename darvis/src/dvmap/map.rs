@@ -84,7 +84,7 @@ impl Map {
 
             // Add observation kf->mp
             self.keyframes.get_mut(&kf_id).map(|kf| {
-                kf.add_mappoint(&mp, *index as u32, false);
+                kf.add_mappoint(mp.get_id(), *index as u32, false);
             });
         }
 
@@ -136,7 +136,7 @@ impl Map {
 
                 // Add observation kf->mp
                 self.keyframes.get_mut(&new_kf_id).map(|kf| {
-                    kf.add_mappoint(&mp, *index, false);
+                    kf.add_mappoint(*mp_id, *index, false);
                 });
 
                 // Update normal and depth
@@ -169,6 +169,92 @@ impl Map {
                 }
             });
         info!("map::discard_mappoint;{}", id);
+    }
+
+    pub fn discard_keyframe(&mut self, kf_to_delete: &Id) {
+        if *kf_to_delete == self.initial_kf_id {
+            return;
+        }
+
+        // let kf = self.get_keyframe(kf_to_delete).unwrap();
+        // for conn_kf in kf.get_connections(i32::MAX) {
+        //     self.keyframes.get_mut(&conn_kf).unwrap().erase_connection(kf_to_delete);
+        // }
+
+        // for (_, (mp_id, _)) in kf.mappoint_matches {
+        //     self.get_mappoint(&mp_id).unwrap().erase_observation(kf_to_delete);
+        // }
+
+        // self.keyframes.remove(kf_to_delete);
+
+        todo!("TODO LOCAL MAPPING");
+        // // Update Spanning Tree
+        // set<KeyFrame*> sParentCandidates;
+        // if(mpParent)
+        //     sParentCandidates.insert(mpParent);
+
+        // // Assign at each iteration one children with a parent (the pair with highest covisibility weight)
+        // // Include that children as new parent candidate for the rest
+        // while(!mspChildrens.empty())
+        // {
+        //     bool bContinue = false;
+
+        //     int max = -1;
+        //     KeyFrame* pC;
+        //     KeyFrame* pP;
+
+        //     for(set<KeyFrame*>::iterator sit=mspChildrens.begin(), send=mspChildrens.end(); sit!=send; sit++)
+        //     {
+        //         KeyFrame* pKF = *sit;
+        //         if(pKF->isBad())
+        //             continue;
+
+        //         // Check if a parent candidate is connected to the keyframe
+        //         vector<KeyFrame*> vpConnected = pKF->GetVectorCovisibleKeyFrames();
+        //         for(size_t i=0, iend=vpConnected.size(); i<iend; i++)
+        //         {
+        //             for(set<KeyFrame*>::iterator spcit=sParentCandidates.begin(), spcend=sParentCandidates.end(); spcit!=spcend; spcit++)
+        //             {
+        //                 if(vpConnected[i]->mnId == (*spcit)->mnId)
+        //                 {
+        //                     int w = pKF->GetWeight(vpConnected[i]);
+        //                     if(w>max)
+        //                     {
+        //                         pC = pKF;
+        //                         pP = vpConnected[i];
+        //                         max = w;
+        //                         bContinue = true;
+        //                     }
+        //                 }
+        //             }
+        //         }
+        //     }
+
+        //     if(bContinue)
+        //     {
+        //         pC->ChangeParent(pP);
+        //         sParentCandidates.insert(pC);
+        //         mspChildrens.erase(pC);
+        //     }
+        //     else
+        //         break;
+        // }
+
+        // // If a children has no covisibility links with any parent candidate, assign to the original parent of this KF
+        // if(!mspChildrens.empty())
+        // {
+        //     for(set<KeyFrame*>::iterator sit=mspChildrens.begin(); sit!=mspChildrens.end(); sit++)
+        //     {
+        //         (*sit)->ChangeParent(mpParent);
+        //     }
+        // }
+
+        // if(mpParent){
+        //     mpParent->EraseChild(this);
+        //     mTcp = mTcw * mpParent->GetPoseInverse();
+        // }
+        // mbBad = true;
+        info!("map::discard_keyframe;{}", kf_to_delete);
     }
 
     pub fn create_initial_map_monocular(&mut self, inidata: &Initialization) -> Option<(Pose, i32, i32, HashSet<Id>)> {
@@ -356,5 +442,59 @@ impl Map {
             }
         }
 
+    }
+
+    pub fn replace_mappoint(&self, mp_to_replace: &Id, mp: &Id) {
+        todo!("TODO LOCAL MAPPING");
+        // if(pMP->mnId==this->mnId)
+        //     return;
+
+        // int nvisible, nfound;
+        // map<KeyFrame*,tuple<int,int>> obs;
+        // {
+        //     unique_lock<mutex> lock1(mMutexFeatures);
+        //     unique_lock<mutex> lock2(mMutexPos);
+        //     obs=mObservations;
+        //     mObservations.clear();
+        //     mbBad=true;
+        //     nvisible = mnVisible;
+        //     nfound = mnFound;
+        //     mpReplaced = pMP;
+        // }
+
+        // for(map<KeyFrame*,tuple<int,int>>::iterator mit=obs.begin(), mend=obs.end(); mit!=mend; mit++)
+        // {
+        //     // Replace measurement in keyframe
+        //     KeyFrame* pKF = mit->first;
+
+        //     tuple<int,int> indexes = mit -> second;
+        //     int leftIndex = get<0>(indexes), rightIndex = get<1>(indexes);
+
+        //     if(!pMP->IsInKeyFrame(pKF))
+        //     {
+        //         if(leftIndex != -1){
+        //             pKF->ReplaceMapPointMatch(leftIndex, pMP);
+        //             pMP->AddObservation(pKF,leftIndex);
+        //         }
+        //         if(rightIndex != -1){
+        //             pKF->ReplaceMapPointMatch(rightIndex, pMP);
+        //             pMP->AddObservation(pKF,rightIndex);
+        //         }
+        //     }
+        //     else
+        //     {
+        //         if(leftIndex != -1){
+        //             pKF->EraseMapPointMatch(leftIndex);
+        //         }
+        //         if(rightIndex != -1){
+        //             pKF->EraseMapPointMatch(rightIndex);
+        //         }
+        //     }
+        // }
+        // pMP->IncreaseFound(nfound);
+        // pMP->IncreaseVisible(nvisible);
+        // pMP->ComputeDistinctiveDescriptors();
+
+        // mpMap->EraseMapPoint(this);
     }
 }

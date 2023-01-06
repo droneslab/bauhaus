@@ -827,7 +827,7 @@ pub fn optimize_pose(frame: &mut Frame, map: &ReadOnlyWrapper<Map>) -> Option<(i
     for i in 0..frame.features.num_keypoints as u32 {
         match frame.mappoint_matches.get(&i) {
             Some((mp_id, _)) => {
-                let keypoint = &frame.features.get_keypoint(i as usize);
+                let (keypoint, _) = &frame.features.get_keypoint(i as usize);
 
                 let edge = match sensor.frame() {
                     crate::FrameSensor::Stereo => {
@@ -1055,7 +1055,7 @@ pub fn global_bundle_adjustment(map: &Map, loop_kf: i32, iterations: i32) -> BAR
                     if left_index != -1 {
                         n_edges += 1;
 
-                        let keypoint = map.get_keyframe(kf_id).unwrap().features.get_keypoint(left_index as usize);
+                        let (keypoint, _) = map.get_keyframe(kf_id).unwrap().features.get_keypoint(left_index as usize);
                         optimizer.pin_mut().add_edge_monocular_binary(
                             false, mp_vertex_id, *kf_id,
                             keypoint.octave, keypoint.pt.x, keypoint.pt.y,

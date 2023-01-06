@@ -68,7 +68,7 @@ impl Initialization {
         if !self.ready_to_initializate && current_frame.features.num_keypoints > 100 {
             // Set Reference Frame
             for i in 0..current_frame.features.num_keypoints as usize {
-                self.prev_matched.push(current_frame.features.get_keypoint(i).pt.clone()); // TODO (clone)
+                self.prev_matched.push(current_frame.features.get_keypoint(i).0.pt.clone()); // TODO (clone)
             }
 
             match self.sensor.imu() {

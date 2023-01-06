@@ -22,7 +22,6 @@ pub enum CameraType {
 pub struct Camera {
     pub camera_type: CameraType,
 
-    // K in ORBSLAM3 is matrix with the following items:
     pub k_matrix: DVMatrix,
 
     // Constants
@@ -30,10 +29,8 @@ pub struct Camera {
     pub stereo_baseline: f64, //mb
     pub th_depth: i32, //mThDepth
     pub dist_coef: Option<Vec<f32>>, //mDistCoef
-    // tvr: Option<TwoViewReconstruction>, // If we duplicate camera and have this pointer in here pointing to the same underlying tvr in C++, it is not thread safe
 }
 
-// TODO: I don't think we should duplicate camera in each kf/mp, I think we just need one reference?
 impl Camera {
     pub fn new(camera_type: CameraType) -> Result<Camera, Box<dyn std::error::Error>> {
         // Implementation only for PinholeCamera, see:
@@ -118,7 +115,6 @@ impl Camera {
             &mut vb_triangulated
         );
 
-        // debug!("pose {:?} \n vP3D {:?} \n reconstructed: {}", pose, v_p3d.vec.len(), reconstructed);
         info!("pose in tvr {:?}", pose);
 
         (reconstructed, pose.into(), v_p3d.into(), vb_triangulated) 
@@ -159,38 +155,9 @@ impl Camera {
 
     pub fn project(&self, pos: DVVector3<f64>) -> (f64, f64) {
         // Eigen::Vector2f Pinhole::project(const Eigen::Vector3f &v3D)
-
-        // mvParameters in orbslam are:
-        // 0 = fx, 1 = fy, 2 = cx, 3 = cy
         (
             self.get_fx() * pos[0] / pos[2] + self.get_cx(),
             self.get_fy() * pos[1] / pos[2] + self.get_cy()
         )
     }
-}
-
-pub fn triangulate(
-    xn1: DVVector3<f64>, xn2: DVVector3<f64>,
-    translation1: DVVector3<f64>, translation2: DVVector3<f64>
-) -> Option<DVVector3<f64>> {
-    todo!("TODO LOCAL MAPPING");
-    // bool GeometricTools::Triangulate(Eigen::Vector3f &x_c1, Eigen::Vector3f &x_c2,Eigen::Matrix<float,3,4> &Tc1w ,Eigen::Matrix<float,3,4> &Tc2w , Eigen::Vector3f &x3D)
-
-//     Eigen::Matrix4f A;
-//     A.block<1,4>(0,0) = x_c1(0) * Tc1w.block<1,4>(2,0) - Tc1w.block<1,4>(0,0);
-//     A.block<1,4>(1,0) = x_c1(1) * Tc1w.block<1,4>(2,0) - Tc1w.block<1,4>(1,0);
-//     A.block<1,4>(2,0) = x_c2(0) * Tc2w.block<1,4>(2,0) - Tc2w.block<1,4>(0,0);
-//     A.block<1,4>(3,0) = x_c2(1) * Tc2w.block<1,4>(2,0) - Tc2w.block<1,4>(1,0);
-
-//     Eigen::JacobiSVD<Eigen::Matrix4f> svd(A, Eigen::ComputeFullV);
-
-//     Eigen::Vector4f x3Dh = svd.matrixV().col(3);
-
-//     if(x3Dh(3)==0)
-//         return false;
-
-//     // Euclidean coordinates
-//     x3D = x3Dh.head(3)/x3Dh(3);
-
-//     return true;
 }
