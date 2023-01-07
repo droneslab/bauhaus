@@ -73,7 +73,7 @@ impl Initialization {
 
             match self.sensor.imu() {
                 ImuSensor::Some => {
-                    //TODO: (IMU) 
+                    todo!("IMU");
                     //Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/4452a3c4ab75b1cde34e5505a36ec3f9edcdc4c4/src/Tracking.cc#L2467
 
                     // if(mpImuPreintegratedFromLastKF)

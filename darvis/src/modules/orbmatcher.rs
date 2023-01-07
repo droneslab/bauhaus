@@ -1,14 +1,13 @@
 use std::collections::{HashMap, HashSet};
 use std::f64::INFINITY;
-use dvcore::config::{GLOBAL_PARAMS, Sensor};
-use dvcore::matrix::{DVVectorOfi32, DVVectorOfPoint2f, DVVector3};
-use log::{debug};
-use opencv::core::{Point2f, KeyPoint};
+use dvcore::config::{GLOBAL_PARAMS, Sensor, FrameSensor};
+use dvcore::matrix::{DVVectorOfPoint2f, DVVector3};
+use log::{debug, warn};
+use opencv::core::{KeyPoint};
 use opencv::prelude::*;
-use parking_lot::{MappedRwLockReadGuard, RawRwLock};
+use parking_lot::{MappedRwLockReadGuard};
 use crate::actors::tracking_backend::TrackedMapPointData;
 use crate::dvmap::map_actor::MapWriteMsg;
-use crate::dvmap::mappoint::{MapPoint, FullMapPoint};
 use crate::dvmap::keyframe::{KeyFrame, FullKeyFrame};
 use crate::registered_modules::{MATCHER, FEATURE_DETECTION, CAMERA};
 use crate::{
@@ -145,7 +144,7 @@ pub fn search_by_projection(
     frame: &mut Frame, mappoints: &HashSet<Id>, th: i32,
     check_orientation: bool, ratio: f64,
     track_in_view: &HashMap<Id, TrackedMapPointData>, track_in_view_right: &HashMap<Id, TrackedMapPointData>, 
-    map: &ReadOnlyWrapper<Map>
+    map: &ReadOnlyWrapper<Map>, sensor: Sensor
 ) -> Result<i32, Box<dyn std::error::Error>> {
     // Search matches between Frame keypoints and projected MapPoints. Returns number of matches
     // Used to track the local map (Tracking)
@@ -189,13 +188,18 @@ pub fn search_by_projection(
                         }
                     }
 
-                    // TODO (Stereo)
-                    // if(F.Nleft == -1 && F.mvuRight[idx]>0)
-                    // {
-                    //     const float er = fabs(pMP->mTrackProjXR-F.mvuRight[idx]);
-                    //     if(er>r*F.mvScaleFactors[nPredictedLevel])
-                    //         continue;
-                    // }
+                    match sensor.frame() {
+                        FrameSensor::Stereo => {
+                            todo!("Stereo")
+                            // if(F.Nleft == -1 && F.mvuRight[idx]>0)
+                            // {
+                            //     const float er = fabs(pMP->mTrackProjXR-F.mvuRight[idx]);
+                            //     if(er>r*F.mvScaleFactors[nPredictedLevel])
+                            //         continue;
+                            // }
+                        },
+                        _ => {}
+                    }
 
                     let descriptors = frame.features.descriptors.row(idx).unwrap();
                     let dist = descriptor_distance(&best_descriptor, &descriptors);
@@ -220,12 +224,17 @@ pub fn search_by_projection(
                     if best_level.0 != best_level.1 || (best_dist.0 as f64) <= (ratio * best_dist.1 as f64) {
                         frame.add_mappoint(best_idx as u32, *mp_id, false);
 
-                        // TODO (Stereo)
-                        // if(F.Nleft != -1 && F.mvLeftToRightMatch[bestIdx] != -1){ //Also match with the stereo observation at right camera
-                        //     F.mvpMapPoints[F.mvLeftToRightMatch[bestIdx] + F.Nleft] = pMP;
-                        //     nmatches++;
-                        //     right++;
-                        // }
+                        match sensor.frame() {
+                            FrameSensor::Stereo => {
+                                todo!("Stereo")
+                                // if(F.Nleft != -1 && F.mvLeftToRightMatch[bestIdx] != -1){ //Also match with the stereo observation at right camera
+                                //     F.mvpMapPoints[F.mvLeftToRightMatch[bestIdx] + F.Nleft] = pMP;
+                                //     nmatches++;
+                                //     right++;
+                                // }
+                            },
+                            _ => {}
+                        }
 
                         num_matches += 1;
                     }
@@ -233,74 +242,80 @@ pub fn search_by_projection(
             }
         }
 
-        // TODO (Stereo) Basically repeated code above with some small changes to which functions they call
-        // if(F.Nleft != -1 && pMP->mbTrackInViewR){
-        //     const int &nPredictedLevel = pMP->mnTrackScaleLevelR;
-        //     if(nPredictedLevel != -1){
-        //         float r = RadiusByViewingCos(pMP->mTrackViewCosR);
+        match sensor.frame() {
+            FrameSensor::Stereo => {
+                todo!("Stereo");
+                // Basically repeated code above with some small changes to which functions they call
+                // if(F.Nleft != -1 && pMP->mbTrackInViewR){
+                //     const int &nPredictedLevel = pMP->mnTrackScaleLevelR;
+                //     if(nPredictedLevel != -1){
+                //         float r = RadiusByViewingCos(pMP->mTrackViewCosR);
 
-        //         const vector<size_t> vIndices =
-        //                 F.GetFeaturesInArea(pMP->mTrackProjXR,pMP->mTrackProjYR,r*F.mvScaleFactors[nPredictedLevel],nPredictedLevel-1,nPredictedLevel,true);
+                //         const vector<size_t> vIndices =
+                //                 F.GetFeaturesInArea(pMP->mTrackProjXR,pMP->mTrackProjYR,r*F.mvScaleFactors[nPredictedLevel],nPredictedLevel-1,nPredictedLevel,true);
 
-        //         if(vIndices.empty())
-        //             continue;
+                //         if(vIndices.empty())
+                //             continue;
 
-        //         const cv::Mat MPdescriptor = pMP->GetDescriptor();
+                //         const cv::Mat MPdescriptor = pMP->GetDescriptor();
 
-        //         int bestDist=256;
-        //         int bestLevel= -1;
-        //         int bestDist2=256;
-        //         int bestLevel2 = -1;
-        //         int bestIdx =-1 ;
+                //         int bestDist=256;
+                //         int bestLevel= -1;
+                //         int bestDist2=256;
+                //         int bestLevel2 = -1;
+                //         int bestIdx =-1 ;
 
-        //         // Get best and second matches with near keypoints
-        //         for(vector<size_t>::const_iterator vit=vIndices.begin(), vend=vIndices.end(); vit!=vend; vit++)
-        //         {
-        //             const size_t idx = *vit;
+                //         // Get best and second matches with near keypoints
+                //         for(vector<size_t>::const_iterator vit=vIndices.begin(), vend=vIndices.end(); vit!=vend; vit++)
+                //         {
+                //             const size_t idx = *vit;
 
-        //             if(F.mvpMapPoints[idx + F.Nleft])
-        //                 if(F.mvpMapPoints[idx + F.Nleft]->Observations()>0)
-        //                     continue;
-
-
-        //             const cv::Mat &d = F.mDescriptors.row(idx + F.Nleft);
-
-        //             const int dist = DescriptorDistance(MPdescriptor,d);
-
-        //             if(dist<bestDist)
-        //             {
-        //                 bestDist2=bestDist;
-        //                 bestDist=dist;
-        //                 bestLevel2 = bestLevel;
-        //                 bestLevel = F.mvKeysRight[idx].octave;
-        //                 bestIdx=idx;
-        //             }
-        //             else if(dist<bestDist2)
-        //             {
-        //                 bestLevel2 = F.mvKeysRight[idx].octave;
-        //                 bestDist2=dist;
-        //             }
-        //         }
-
-        //         // Apply ratio to second match (only if best and second are in the same scale level)
-        //         if(bestDist<=TH_HIGH)
-        //         {
-        //             if(bestLevel==bestLevel2 && bestDist>mfNNratio*bestDist2)
-        //                 continue;
-
-        //             if(F.Nleft != -1 && F.mvRightToLeftMatch[bestIdx] != -1){ //Also match with the stereo observation at right camera
-        //                 F.mvpMapPoints[F.mvRightToLeftMatch[bestIdx]] = pMP;
-        //                 nmatches++;
-        //                 left++;
-        //             }
+                //             if(F.mvpMapPoints[idx + F.Nleft])
+                //                 if(F.mvpMapPoints[idx + F.Nleft]->Observations()>0)
+                //                     continue;
 
 
-        //             F.mvpMapPoints[bestIdx + F.Nleft]=pMP;
-        //             nmatches++;
-        //             right++;
-        //         }
-        //     }
-        // }
+                //             const cv::Mat &d = F.mDescriptors.row(idx + F.Nleft);
+
+                //             const int dist = DescriptorDistance(MPdescriptor,d);
+
+                //             if(dist<bestDist)
+                //             {
+                //                 bestDist2=bestDist;
+                //                 bestDist=dist;
+                //                 bestLevel2 = bestLevel;
+                //                 bestLevel = F.mvKeysRight[idx].octave;
+                //                 bestIdx=idx;
+                //             }
+                //             else if(dist<bestDist2)
+                //             {
+                //                 bestLevel2 = F.mvKeysRight[idx].octave;
+                //                 bestDist2=dist;
+                //             }
+                //         }
+
+                //         // Apply ratio to second match (only if best and second are in the same scale level)
+                //         if(bestDist<=TH_HIGH)
+                //         {
+                //             if(bestLevel==bestLevel2 && bestDist>mfNNratio*bestDist2)
+                //                 continue;
+
+                //             if(F.Nleft != -1 && F.mvRightToLeftMatch[bestIdx] != -1){ //Also match with the stereo observation at right camera
+                //                 F.mvpMapPoints[F.mvRightToLeftMatch[bestIdx]] = pMP;
+                //                 nmatches++;
+                //                 left++;
+                //             }
+
+
+                //             F.mvpMapPoints[bestIdx + F.Nleft]=pMP;
+                //             nmatches++;
+                //             right++;
+                //         }
+                //     }
+                // }
+            },
+            _ => {}
+        }
     }
 
     return Ok(num_matches);
@@ -315,7 +330,8 @@ pub fn search_by_projection_with_threshold (
     map: &ReadOnlyWrapper<Map>, sensor: Sensor
 ) -> Result<i32, Box<dyn std::error::Error>> {
     // int ORBmatcher::SearchByProjection(Frame &CurrentFrame, const Frame &LastFrame, const float th, const bool bMono)
-    // TODO (Stereo): This function should work for stereo as well as RGBD as long as get_all_keypoints() returns
+    warn!("TODO STEREO...search_by_projection_with_threshold... ");
+    // This function should work for stereo as well as RGBD as long as get_all_keypoints() returns
     // a concatenated list of left keypoints and right keypoints (there is a to do for this in features.rs). BUT
     // double check that the descriptors works correctly. Instead of splitting descriptors into discriptors_left and right,
     // I have all of them in one long vec. I THINK this should be fine, but double check.
@@ -391,7 +407,7 @@ pub fn search_by_projection_with_threshold (
                     }
                 }
 
-                // TODO: Not sure what this is doing
+                warn!("Unfinished code, not sure what this is doing in search_by_projection_with_threshold");
                 // Nleft == -1 if the left camera has no extracted keypoints which would happen in the
                 // non-stereo case. But mvuRight is > 0 ONLY in the stereo case! So is this ever true?
                 // if(CurrentFrame.Nleft == -1 && CurrentFrame.mvuRight[i2]>0)
@@ -444,7 +460,7 @@ pub fn search_by_projection_reloc (
     // int SearchByProjection(Frame &CurrentFrame, KeyFrame* pKF, const std::set<MapPoint*> &sAlreadyFound, const float th, const int ORBdist);
     // Project MapPoints seen in KeyFrame into the Frame and search matches.
     // Used in relocalisation (Tracking)
-    todo!("TODO (Relocalization)");
+    todo!("Relocalization");
 }
 
 // Project MapPoints using a Similarity Transformation and search matches.
@@ -677,9 +693,6 @@ pub fn search_for_triangulation(
 
 
 
-    todo!("TODO LOCAL MAPPING");
-
-
     // Find matches between not tracked keypoints
     // Matching speed-up by ORB Vocabulary
     // Compare only ORB that share the same node
@@ -858,14 +871,13 @@ pub fn fuse(kf_id: &i32, map: &MappedRwLockReadGuard<Map>, th: f32, is_right: bo
     let keyframe = map.get_keyframe(kf_id).unwrap();
     let (tcw, ow, camera) = match is_right {
         true => {
-            todo!("TODO (Stereo)");
+            todo!("Stereo");
             // Tcw = pKF->GetRightPose();
             // Ow = pKF->GetRightCameraCenter();
             // pCamera = pKF->mpCamera2;
         },
         false => {
             (keyframe.pose.get_translation(), keyframe.get_camera_center(), CAMERA)
-            // TODO (Stereo) ... CAMERA should be changed to the left camera
         }
     };
 
@@ -874,8 +886,7 @@ pub fn fuse(kf_id: &i32, map: &MappedRwLockReadGuard<Map>, th: f32, is_right: bo
     for (idx1, (mp_id, _)) in &keyframe.mappoint_matches {
         let mappoint = map.get_mappoint(&mp_id).unwrap();
 
-        // TODO LOCAL MAPPING: Do I need this? Seems like it should always be true if we're looping through a keyframe's matches.
-        // Why would a keyframe have a mp match but the mp match not have the keyframe?
+        warn!("TODO local mapping...do I need this section? Seems like ti should always be true if we're looping through a keyframes matches. Why would a keyframe have an mp match but the mp match not have the keyframe?");
         // if(pMP->IsInKeyFrame(pKF))
         // {
         //     count_isinKF++;
@@ -940,7 +951,7 @@ pub fn fuse(kf_id: &i32, map: &MappedRwLockReadGuard<Map>, th: f32, is_right: bo
 
             let (kpx, kpy, ex, ey, e2);
             if keyframe.features.get_mv_right(idx2 as usize).is_some() {
-                todo!("TODO (Stereo)");
+                todo!("Stereo");
                 // Check reprojection error in stereo
                 // const float &kpx = kp.pt.x;
                 // const float &kpy = kp.pt.y;
@@ -978,7 +989,7 @@ pub fn fuse(kf_id: &i32, map: &MappedRwLockReadGuard<Map>, th: f32, is_right: bo
                 let mappoint_in_kf_id = keyframe.get_mappoint(&(best_idx as u32));
                 let mappoint_in_kf = map.get_mappoint(&mappoint_in_kf_id).unwrap();
                 if mappoint_in_kf.get_observations().len() > mappoint.get_observations().len() {
-                    // TODO LOCAL MAPPING : verify that the order of mp_id and mappoint_in_kf_id is right
+                    warn!("Verify that the order of mp_id and mappoint_in_kf_id is right");
                     to_fuse.push(MapWriteMsg::replace_mappoint(*mp_id, mappoint_in_kf_id));
                 } else {
                     to_fuse.push(MapWriteMsg::replace_mappoint(mappoint_in_kf_id, *mp_id));

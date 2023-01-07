@@ -38,11 +38,15 @@ impl Frame {
         im_width: i32, im_height: i32
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let sensor = GLOBAL_PARAMS.get::<Sensor>(SYSTEM_SETTINGS, "sensor");
+        let imu_bias = match sensor.is_imu() {
+            true => todo!("IMU"),
+            false => None
+        };
         let frame = Frame{
             id,
             timestamp: Utc::now(),
             features: Features::new(keypoints_vec, descriptors_vec, im_width, im_height, sensor)?,
-            imu_bias: None, // TODO (IMU)
+            imu_bias: imu_bias,
             sensor,
             ..Default::default()
         };
@@ -123,7 +127,7 @@ impl Frame {
         // 3D in camera coordinates
         let (mr, mt, twc);
         if is_right {
-            todo!("TODO (stereo)");
+            todo!("Stereo");
             // let rrl = mTrl.rotationMatrix();
             // let trl = mTrl.translation();
             // mr = rrl * mRcw;
@@ -143,7 +147,7 @@ impl Frame {
         if pc_z < 0.0 { return None; }
 
         let (uvx, uvy) = match is_right {
-            true => todo!("TODO (stereo)"), //self.camera2.project(pos_camera),
+            true => todo!("Stereo"), //self.camera2.project(pos_camera),
             false => CAMERA_MODULE.project(DVVector3::new(pos_camera))
         };
         if !self.features.image_bounds.check_bounds(uvx, uvy) {

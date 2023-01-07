@@ -84,11 +84,11 @@ impl Features {
                 )
             },
             FrameSensor::Rgbd => {
-                todo!("TODO (RGBD)");
+                todo!("RGBD");
                 // mv_right and mv_depth size should be same as keypoints, if there isn't a value for an index it should be 0
             },
             FrameSensor::Stereo => {
-                todo!("TODO (Stereo)");
+                todo!("Stereo");
                 // mv_right and mv_depth size should be same as keypoints, if there isn't a value for an index it should be 0
             }
 
@@ -105,8 +105,8 @@ impl Features {
     pub fn get_all_keypoints(&self) -> &DVVectorOfKeyPoint {
         match &self.keypoints {
             KeyPoints::Mono{keypoints_un, ..} | KeyPoints::Rgbd{keypoints_un, ..} => keypoints_un,
-            KeyPoints::Stereo{keypoints_left, keypoints_right, ..} => {
-                todo!("TODO (Stereo), need to concat keypoints_left and keypoints_right
+            KeyPoints::Stereo{keypoints_left, keypoints_right, ..} => { 
+                todo!("Stereo, need to concat keypoints_left and keypoints_right
                     but can we do this without copying?")
             },
             KeyPoints::Empty => panic!("Keypoints should not be empty")

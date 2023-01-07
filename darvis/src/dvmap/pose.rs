@@ -41,11 +41,12 @@ impl Pose {
     pub fn inverse(&self) -> Pose{
         Pose(self.0.inverse())
     }
-
-    pub fn as_matrix(&self) -> Matrix3x4<f64> {
-        let binding = self.0.rotation.to_rotation_matrix();
+}
+impl From<Pose> for Matrix3x4<f64> {
+    fn from(pose: Pose) -> Matrix3x4<f64> {
+        let binding = pose.0.rotation.to_rotation_matrix();
         let r = binding.matrix();
-        let t = *self.get_translation();
+        let t = *pose.get_translation();
         let matrix = nalgebra::Matrix3x4::new(
             r[(0,0)], r[(0,1)], r[(0,2)], t[0],
             r[(1,0)], r[(1,1)], r[(1,2)], t[1],
@@ -55,11 +56,11 @@ impl Pose {
         matrix
     }
 }
-impl From<Pose> for [f64; 4] {
-    fn from(pose: Pose) -> [f64; 4] { [pose.0.rotation.w, pose.0.rotation.i, pose.0.rotation.j, pose.0.rotation.k] }
+impl From<Pose> for g2o::RotationVector {
+    fn from(pose: Pose) -> g2o::RotationVector { [pose.0.rotation.w, pose.0.rotation.i, pose.0.rotation.j, pose.0.rotation.k] }
 }
-impl From<Pose> for [f64; 3] {
-    fn from(pose: Pose) -> [f64; 3]  { [pose.0.translation.x, pose.0.translation.y, pose.0.translation.z] }
+impl From<Pose> for g2o::TranslationVector {
+    fn from(pose: Pose) -> g2o::TranslationVector  { [pose.0.translation.x, pose.0.translation.y, pose.0.translation.z] }
 }
 
 impl Mul for Pose {

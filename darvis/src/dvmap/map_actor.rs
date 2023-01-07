@@ -21,7 +21,7 @@ impl MapActor {//+ std::marker::Send + std::marker::Sync
         aid
     }
 
-    async fn handle(self, context: Context, message: Message) -> ActorResult<Self> {
+    async fn handle(self, _context: Context, message: Message) -> ActorResult<Self> {
         if let Some(msg) = message.content_as::<MapWriteMsg>() {
             let mut write_lock = self.map.write();
             let msg = &*msg;
@@ -40,7 +40,7 @@ impl MapActor {//+ std::marker::Send + std::marker::Sync
                 },
 
                 MapEditTarget::MapPoint__New { mp ,observations_to_add } => {
-                    let new_mp_id = write_lock.insert_mappoint_to_map(mp, observations_to_add);
+                    let _ = write_lock.insert_mappoint_to_map(mp, observations_to_add);
 
                 },
 
@@ -61,7 +61,7 @@ impl MapActor {//+ std::marker::Send + std::marker::Sync
                 },
 
                 MapEditTarget::KeyFrame__Delete { id } => {
-                    let new_kf_id = write_lock.discard_keyframe(id);
+                    let _ = write_lock.discard_keyframe(id);
                 },
                 MapEditTarget::MapPoint__AddObservation {mp_id, kf_id, index} => {
                     let num_keypoints = write_lock.get_keyframe(kf_id).unwrap().features.num_keypoints;

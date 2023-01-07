@@ -24,6 +24,6 @@ impl Relocalization {
     }
 
     pub fn run(&self) -> bool {
-        todo!("TODO (Relocalization)");
+        todo!("Relocalization");
     }
 }

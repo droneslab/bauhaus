@@ -1,7 +1,7 @@
 use std::fmt;
 use cxx::{UniquePtr, let_cxx_string};
 use dvcore::{matrix::DVMatrix, config::{GLOBAL_PARAMS, SYSTEM_SETTINGS}};
-use log::info;
+use log::{info, warn};
 use opencv::prelude::Boxed;
 
 lazy_static! {
@@ -27,18 +27,15 @@ impl DVVocabulary {
         }
     }
     pub fn transform(&self, descriptors: &DVMatrix, bow: & mut BoW) {
-        unsafe {
-            // Avoid cloning here?
-            let mut bla: dvos3binding::ffi::WrapBindCVMat = descriptors.clone().into();
+        warn!("TODO...might be unnecessary clone");
+        let mut bla: dvos3binding::ffi::WrapBindCVMat = descriptors.clone().into();
 
-            self.vocabulary.transform(
-                &mut bla,
-                bow.bow_vec.pin_mut(),
-                bow.feat_vec.pin_mut(),
-                4
-            );
-        }
-
+        self.vocabulary.transform(
+            &mut bla,
+            bow.bow_vec.pin_mut(),
+            bow.feat_vec.pin_mut(),
+            4
+        );
     }
 }
 

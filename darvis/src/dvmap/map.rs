@@ -153,7 +153,7 @@ impl Map {
             }
 
             // Update Connections
-            Map::update_connections(&self.mappoints, &mut self.keyframes, & new_kf_id, &new_kf_id);
+            Map::update_connections(&self.mappoints, &mut self.keyframes, & self.initial_kf_id, &new_kf_id);
         }
 
         new_kf_id
@@ -163,97 +163,93 @@ impl Map {
         self.mappoints
             .remove(id)
             .map(|mappoint| {
-                for kf_id in mappoint.get_observations().keys() {
-                    let indexes = mappoint.get_observations().get_observation(kf_id);
-                    self.keyframes.get_mut(kf_id).unwrap().erase_mappoint_match(indexes);
+                let obs = mappoint.get_observations();
+                for (kf_id, indexes) in obs {
+                    self.keyframes.get_mut(kf_id).unwrap().erase_mappoint_match(*indexes);
                 }
             });
+
         info!("map::discard_mappoint;{}", id);
     }
 
     pub fn discard_keyframe(&mut self, kf_to_delete: &Id) {
+        warn!("TODO... not sure this works (discard_keyframe)");
         if *kf_to_delete == self.initial_kf_id {
             return;
         }
 
-        // let kf = self.get_keyframe(kf_to_delete).unwrap();
-        // for conn_kf in kf.get_connections(i32::MAX) {
-        //     self.keyframes.get_mut(&conn_kf).unwrap().erase_connection(kf_to_delete);
-        // }
+        let (connections1, matches1, parent1, mut children1);
+        {
+            let kf = self.get_keyframe(kf_to_delete).unwrap();
+            connections1 = kf.get_connections(i32::MAX);
+            matches1 = kf.mappoint_matches.clone();
+            parent1 = kf.full_kf_info.parent;
+            children1 = kf.full_kf_info.children.clone();
+        }
+        for conn_kf in connections1 {
+            self.keyframes.get_mut(&conn_kf).unwrap().erase_connection(kf_to_delete);
+        }
 
-        // for (_, (mp_id, _)) in kf.mappoint_matches {
-        //     self.get_mappoint(&mp_id).unwrap().erase_observation(kf_to_delete);
-        // }
+        for (_, (mp_id, _)) in matches1 {
+            let delete_mappoint = self.mappoints.get_mut(&mp_id).unwrap().erase_observation(kf_to_delete);
+            if delete_mappoint {
+                self.discard_mappoint(&mp_id);
+            }
+        }
 
-        // self.keyframes.remove(kf_to_delete);
+        // Update Spanning Tree
+        let mut parent_candidates = HashSet::new();
+        if parent1.is_some() {
+            parent_candidates.insert(parent1.unwrap());
+        } 
 
-        todo!("TODO LOCAL MAPPING");
-        // // Update Spanning Tree
-        // set<KeyFrame*> sParentCandidates;
-        // if(mpParent)
-        //     sParentCandidates.insert(mpParent);
+        // Assign at each iteration one children with a parent (the pair with highest covisibility weight)
+        // Include that children as new parent candidate for the rest
+        let mut continue_loop = true;
+        warn!("TODO... this might be an infinite loop?");
 
-        // // Assign at each iteration one children with a parent (the pair with highest covisibility weight)
-        // // Include that children as new parent candidate for the rest
-        // while(!mspChildrens.empty())
-        // {
-        //     bool bContinue = false;
+        while !children1.is_empty() {
+            let (mut max, mut child_id, mut parent_id) = (-1, -1, -1);
 
-        //     int max = -1;
-        //     KeyFrame* pC;
-        //     KeyFrame* pP;
+            for child_kf_id in &children1 {
+                let child_kf = self.keyframes.get(&child_kf_id).unwrap();
+                let connected_kfs = child_kf.get_connections(i32::MAX);
 
-        //     for(set<KeyFrame*>::iterator sit=mspChildrens.begin(), send=mspChildrens.end(); sit!=send; sit++)
-        //     {
-        //         KeyFrame* pKF = *sit;
-        //         if(pKF->isBad())
-        //             continue;
+                // Check if a parent candidate is connected to the keyframe
+                for connected_kf_id in &connected_kfs {
+                    for parent_candidate_id in &parent_candidates {
+                        if connected_kf_id == parent_candidate_id {
+                            let weight = child_kf.get_weight(connected_kf_id);
+                            if weight > max {
+                                child_id = *child_kf_id;
+                                parent_id = *connected_kf_id;
+                                max = weight;
+                                continue_loop = true;
+                            }
+                        }
+                    }
+                }
+            }
 
-        //         // Check if a parent candidate is connected to the keyframe
-        //         vector<KeyFrame*> vpConnected = pKF->GetVectorCovisibleKeyFrames();
-        //         for(size_t i=0, iend=vpConnected.size(); i<iend; i++)
-        //         {
-        //             for(set<KeyFrame*>::iterator spcit=sParentCandidates.begin(), spcend=sParentCandidates.end(); spcit!=spcend; spcit++)
-        //             {
-        //                 if(vpConnected[i]->mnId == (*spcit)->mnId)
-        //                 {
-        //                     int w = pKF->GetWeight(vpConnected[i]);
-        //                     if(w>max)
-        //                     {
-        //                         pC = pKF;
-        //                         pP = vpConnected[i];
-        //                         max = w;
-        //                         bContinue = true;
-        //                     }
-        //                 }
-        //             }
-        //         }
-        //     }
+            if continue_loop {
+                self.keyframes.get_mut(&child_id).unwrap().change_parent(Some(parent_id));
+                parent_candidates.insert(parent_id);
+                children1.remove(&child_id);
+            } else {
+                break;
+            }
+        }
 
-        //     if(bContinue)
-        //     {
-        //         pC->ChangeParent(pP);
-        //         sParentCandidates.insert(pC);
-        //         mspChildrens.erase(pC);
-        //     }
-        //     else
-        //         break;
-        // }
+        // If a children has no covisibility links with any parent candidate, assign to the original parent of this KF
+        for child_id in &children1 {
+            self.keyframes.get_mut(&child_id).unwrap().change_parent(parent1);
+        }
 
-        // // If a children has no covisibility links with any parent candidate, assign to the original parent of this KF
-        // if(!mspChildrens.empty())
-        // {
-        //     for(set<KeyFrame*>::iterator sit=mspChildrens.begin(); sit!=mspChildrens.end(); sit++)
-        //     {
-        //         (*sit)->ChangeParent(mpParent);
-        //     }
-        // }
+        if parent1.is_some() {
+            self.keyframes.get_mut(&parent1.unwrap()).unwrap().erase_child(*kf_to_delete);
+        }
+        self.keyframes.remove(kf_to_delete);
 
-        // if(mpParent){
-        //     mpParent->EraseChild(this);
-        //     mTcp = mTcw * mpParent->GetPoseInverse();
-        // }
-        // mbBad = true;
         info!("map::discard_keyframe;{}", kf_to_delete);
     }
 
@@ -261,9 +257,10 @@ impl Map {
         // TODO (design) - we have to do some pretty gross things with calling functions in this section
         // so that we can have multiple references to parts of the map. This should get cleaned up, but I'm not sure how.
 
-        // TODO (IMU)
-        // if(mSensor == System::IMU_MONOCULAR)
-        //     pKFini->mpImuPreintegrated = (IMU::Preintegrated*)(NULL);
+        match self.sensor {
+            Sensor(FrameSensor::Mono, ImuSensor::Some) => todo!("IMU"), // pKFini->mpImuPreintegrated = (IMU::Preintegrated*)(NULL);
+            _ => {}
+        }
 
         if self.last_kf_id == 0 {
             self.initial_kf_id = self.last_kf_id + 1;
@@ -293,11 +290,10 @@ impl Map {
             // Create mappoint
             let point = inidata.p3d.get(kf1_index).unwrap();
             let world_pos = DVVector3::new_with(point.x as f64, point.y as f64, point.z as f64);
-            let new_mp_id = self.insert_mappoint_to_map(
+            let _ = self.insert_mappoint_to_map(
                 &MapPoint::<PrelimMapPoint>::new(world_pos, curr_kf_id, self.id),
                 &vec![(initial_kf_id, num_keypoints, kf1_index), (curr_kf_id, num_keypoints, *kf2_index as usize)]
             );
-            let new_mp = self.mappoints.get_mut(&new_mp_id).unwrap();
         }
         debug!("monocular initialization, created {} mps", count);
 
@@ -305,7 +301,6 @@ impl Map {
         Map::update_connections(& self.mappoints, &mut self.keyframes, & self.initial_kf_id, &initial_kf_id);
         Map::update_connections(& self.mappoints, &mut self.keyframes, & self.initial_kf_id, &curr_kf_id);
 
-        // // Pranay : Bundle adjustment is giving pose that is results is negative median depth ???
         // Bundle Adjustment
         let optimized_poses = optimizer::global_bundle_adjustment(self, 0, 20);
         self.update_after_ba(optimized_poses);
@@ -342,9 +337,9 @@ impl Map {
                 .map(|mp| mp.update_norm_and_depth(norm_and_depth));
         }
 
-        // TODO (IMU)
         match self.sensor {
             Sensor(FrameSensor::Mono, ImuSensor::Some) => {
+                todo!("IMU");
             //     pKFcur->mPrevKF = pKFini;
             //     pKFini->mNextKF = pKFcur;
             //     pKFcur->mpImuPreintegrated = mpImuPreintegratedFromLastKF;
@@ -422,7 +417,7 @@ impl Map {
             if optimized_poses.loop_kf_is_first_kf {
                 self.keyframes.get_mut(&kf_id).unwrap().pose = pose;
             } else {
-                // TODO (MVP)
+                todo!("MVP");
                 // pKF->mTcwGBA = Sophus::SE3d(SE3quat.rotation(),SE3quat.translation()).cast<float>();
                 // pKF->mnBAGlobalForKF = nLoopKF;
             }
@@ -436,7 +431,7 @@ impl Map {
                     self.mappoints.get_mut(&mp_id).unwrap().update_norm_and_depth(norm_and_depth.unwrap());
                 }
             } else {
-                // TODO (MVP)
+                todo!("MVP");
                 // pMP->mPosGBA = vPoint->estimate().cast<float>();
                 // pMP->mnBAGlobalForKF = nLoopKF;
             }

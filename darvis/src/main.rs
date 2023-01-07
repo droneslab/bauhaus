@@ -57,13 +57,13 @@ fn main() {
             let img = imgcodecs::imread(&path, imgcodecs::IMREAD_GRAYSCALE).unwrap();
             let tracking_frontend = actor_system.find_aid_by_name(TRACKING_FRONTEND).unwrap();
 
-            info!("Read image;{}", path);
+            info!("Read image {}", path);
             if use_visualizer {
                 let vis_id = actor_system.find_aid_by_name(VISUALIZER).unwrap();
                 vis_id.send_new(VisPathMsg::new(path.to_string())).unwrap();
             }
 
-            // TODO (need?) Check ORBSLAM3 frame loader, image gets scaled and resized
+            warn!("TODO... Check ORBSLAM3 frame loader, image gets scaled and resized");
             // After looking into it for a while, I think not. They have the code to scale,
             // but then never set the variable mImageScale to anything but 1.0
             // https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/Examples/RGB-D/rgbd_tum.cc#L89
