@@ -8,10 +8,10 @@ use opencv::prelude::*;
 use parking_lot::{MappedRwLockReadGuard};
 use crate::actors::tracking_backend::TrackedMapPointData;
 use crate::dvmap::map_actor::MapWriteMsg;
-use crate::dvmap::keyframe::{KeyFrame, FullKeyFrame};
+use crate::dvmap::keyframe::{Frame, FullKeyFrame};
 use crate::registered_modules::{MATCHER, FEATURE_DETECTION, CAMERA};
 use crate::{
-    dvmap::{frame::Frame, map::Id, map::Map},
+    dvmap::{keyframe::InitialFrame, map::Id, map::Map},
     lockwrap::ReadOnlyWrapper,
 };
 
@@ -42,8 +42,8 @@ lazy_static! {
 }
 
 pub fn search_for_initialization(
-    f1: &Frame,
-    f2: &Frame,
+    f1: &Frame<InitialFrame>,
+    f2: &Frame<InitialFrame>,
     vb_prev_matched: &mut DVVectorOfPoint2f,
     window_size: i32,
 ) -> (i32, Vec<i32>) {
@@ -141,7 +141,7 @@ pub fn search_for_initialization(
 }
 
 pub fn search_by_projection(
-    frame: &mut Frame, mappoints: &HashSet<Id>, th: i32,
+    frame: &mut Frame<InitialFrame>, mappoints: &HashSet<Id>, th: i32,
     check_orientation: bool, ratio: f64,
     track_in_view: &HashMap<Id, TrackedMapPointData>, track_in_view_right: &HashMap<Id, TrackedMapPointData>, 
     map: &ReadOnlyWrapper<Map>, sensor: Sensor
@@ -324,7 +324,7 @@ pub fn search_by_projection(
 // Project MapPoints tracked in last frame into the current frame and search matches.
 // Used to track from previous frame (Tracking)
 pub fn search_by_projection_with_threshold (
-    current_frame: &mut Frame, last_frame: &Frame, th: i32,
+    current_frame: &mut Frame<InitialFrame>, last_frame: &Frame<InitialFrame>, th: i32,
     should_check_orientation: bool, ratio: f64,
     track_in_view: &HashMap<Id, TrackedMapPointData>, track_in_view_right: &HashMap<Id, TrackedMapPointData>,
     map: &ReadOnlyWrapper<Map>, sensor: Sensor
@@ -452,7 +452,7 @@ pub fn search_by_projection_with_threshold (
 // Sofiya: other searchbyprojection functions we will have to implement later:
 
 pub fn search_by_projection_reloc (
-    current_frame: &mut Frame, keyframe: &KeyFrame<FullKeyFrame>,
+    current_frame: &mut Frame<InitialFrame>, keyframe: &Frame<FullKeyFrame>,
     th: i32, should_check_orientation: bool, ratio: f64,
     track_in_view: &HashMap<Id, TrackedMapPointData>, track_in_view_right: &HashMap<Id, TrackedMapPointData>,
     map: &ReadOnlyWrapper<Map>, sensor: Sensor
@@ -472,7 +472,7 @@ pub fn search_by_projection_reloc (
 // int SearchByProjection(KeyFrame* pKF, Sophus::Sim3<float> &Scw, const std::vector<MapPoint*> &vpPoints, const std::vector<KeyFrame*> &vpPointsKFs, std::vector<MapPoint*> &vpMatched, std::vector<KeyFrame*> &vpMatchedKF, int th, float ratioHamming=1.0);
 
 pub fn search_by_bow_f(
-    kf: &KeyFrame<FullKeyFrame>, frame: &mut Frame, should_check_orientation: bool, ratio: f64
+    kf: &Frame<FullKeyFrame>, frame: &mut Frame<InitialFrame>, should_check_orientation: bool, ratio: f64
 ) -> Result<HashMap<u32, Id>, Box<dyn std::error::Error>> {
     // int SearchByBoW(KeyFrame *pKF, Frame &F, std::vector<MapPoint*> &vpMapPointMatches);
     frame.clear_mappoints();
@@ -573,7 +573,7 @@ pub fn search_by_bow_f(
 }
 
 pub fn search_by_bow_kf(
-    kf_1 : &KeyFrame<FullKeyFrame>, kf_2 : &KeyFrame<FullKeyFrame>, should_check_orientation: bool, 
+    kf_1 : &Frame<FullKeyFrame>, kf_2 : &Frame<FullKeyFrame>, should_check_orientation: bool, 
     ratio: f64, map: &ReadOnlyWrapper<Map>
 ) -> Result<HashMap<u32, Id>, Box<dyn std::error::Error>> {
     // int SearchByBoW(KeyFrame *pKF1, KeyFrame* pKF2, std::vector<MapPoint*> &vpMatches12);
@@ -651,7 +651,7 @@ pub fn search_by_bow_kf(
 }
 
 pub fn search_for_triangulation(
-    kf_1 : &KeyFrame<FullKeyFrame>, kf_2 : &KeyFrame<FullKeyFrame>,
+    kf_1 : &Frame<FullKeyFrame>, kf_2 : &Frame<FullKeyFrame>,
     should_check_orientation: bool, only_stereo: bool, course: bool, ratio: f64,
     map: &ReadOnlyWrapper<Map>
 ) -> Result<HashMap<usize, usize>, Box<dyn std::error::Error>> {
@@ -659,7 +659,7 @@ pub fn search_for_triangulation(
     //Compute epipole in second image
     let translation_1 = kf_1.pose;
     let translation_2 = kf_2.pose;
-    let translation_inverse_2 = kf_2.pose.inverse(); // for convenience
+    let translation_inverse_2 = kf_2.pose.unwrap().inverse(); // for convenience
     let cw = kf_1.get_camera_center();
     // let c2 = *translation_inverse_2.get_translation() * *cw;
     // Eigen::Vector3f Cw = pKF1->GetCameraCenter();
@@ -877,7 +877,7 @@ pub fn fuse(kf_id: &i32, map: &MappedRwLockReadGuard<Map>, th: f32, is_right: bo
             // pCamera = pKF->mpCamera2;
         },
         false => {
-            (keyframe.pose.get_translation(), keyframe.get_camera_center(), CAMERA)
+            (keyframe.pose.unwrap().get_translation(), keyframe.get_camera_center(), CAMERA)
         }
     };
 

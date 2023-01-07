@@ -66,7 +66,7 @@ impl MapActor {//+ std::marker::Send + std::marker::Sync
                 MapEditTarget::MapPoint__AddObservation {mp_id, kf_id, index} => {
                     let num_keypoints = write_lock.get_keyframe(kf_id).unwrap().features.num_keypoints;
                     write_lock.mappoints.get_mut(mp_id).unwrap().add_observation(&kf_id, num_keypoints, *index as u32);
-                    write_lock.keyframes.get_mut(kf_id).unwrap().add_mappoint(*mp_id, *index as u32, false);
+                    write_lock.keyframes.get_mut(kf_id).unwrap().add_mappoint(*index as u32, *mp_id, false);
                 },
                 MapEditTarget::MapPoint__Replace {mp_to_replace, mp} => {
                     write_lock.replace_mappoint(mp_to_replace, mp);
@@ -87,7 +87,7 @@ enum MapEditTarget {
     // #[serde(bound = "")] If using serialize/deserialize, uncomment this
     CreateInitialMapMonocular{initialization_data: Initialization, callback_actor: axiom::actors::Aid},
     CreateInitialMapStereo{initialization_data: Initialization, callback_actor: axiom::actors::Aid},
-    KeyFrame__New{kf: KeyFrame<PrelimKeyFrame>, callback_actor: axiom::actors::Aid},
+    KeyFrame__New{kf: Frame<PrelimKeyFrame>, callback_actor: axiom::actors::Aid},
     KeyFrame__Delete{id: Id},
     Map__ResetActive(),
     MapPoint__New{mp: MapPoint<PrelimMapPoint>, observations_to_add: Vec<(Id, u32, usize)>},
@@ -120,7 +120,7 @@ impl MapWriteMsg {
             target: MapEditTarget::CreateInitialMapStereo{initialization_data, callback_actor},
         }
     }
-    pub fn new_keyframe(kf: KeyFrame<PrelimKeyFrame>, callback_actor: axiom::actors::Aid) -> MapWriteMsg {
+    pub fn new_keyframe(kf: Frame<PrelimKeyFrame>, callback_actor: axiom::actors::Aid) -> MapWriteMsg {
         Self {
             target: MapEditTarget::KeyFrame__New {kf, callback_actor},
         }

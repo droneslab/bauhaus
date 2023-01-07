@@ -2,7 +2,7 @@ use log::{info, warn};
 use opencv::{prelude::{Mat, MatTrait, Boxed, MatTraitConst}, core::{Scalar, Point3f, CV_64F, KeyPoint, Point}};
 use dvcore::{config::*, matrix::{DVMatrix, DVVectorOfPoint3f, DVVector3, DVVectorOfi32}};
 use crate::{
-    dvmap::{pose::{Pose, Rotation}, keyframe::{KeyFrame, FullKeyFrame}},
+    dvmap::{pose::{Pose, Rotation}, keyframe::{Frame, FullKeyFrame}},
     matrix::DVVectorOfKeyPoint, registered_modules::CAMERA
 };
 
@@ -131,7 +131,7 @@ impl Camera {
         )
     }
 
-    pub fn unproject_stereo(&self, kf: &KeyFrame<FullKeyFrame>, idx: usize) -> Option<DVVector3<f64>> {
+    pub fn unproject_stereo(&self, kf: &Frame<FullKeyFrame>, idx: usize) -> Option<DVVector3<f64>> {
         todo!("TODO (Stereo)");
         // bool KeyFrame::UnprojectStereo(int i, Eigen::Vector3f &x3D)
         // {

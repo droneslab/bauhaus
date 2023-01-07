@@ -7,7 +7,7 @@ use dvcore::{
 };
 use log::{info, warn, debug};
 use nalgebra::Matrix3;
-use crate::{dvmap::{frame::Frame, pose::Pose, map::{Map, Id}, keyframe::{KeyFrame, PrelimKeyFrame, FullKeyFrame}}, registered_modules::{FEATURE_DETECTION, CAMERA}};
+use crate::{dvmap::{keyframe::InitialFrame, pose::Pose, map::{Map, Id}, keyframe::{Frame, PrelimKeyFrame, FullKeyFrame}}, registered_modules::{FEATURE_DETECTION, CAMERA}};
 
 lazy_static! {
     pub static ref INV_LEVEL_SIGMA2: Vec<f32> = {
@@ -38,7 +38,7 @@ lazy_static! {
 }
 // int Optimizer::PoseInertialOptimizationLastFrame(Frame *pFrame, bool bRecInit)
 // but bRecInit is always set to false
-pub fn pose_inertial_optimization_last_frame(frame: &mut Frame, map: &ReadOnlyWrapper<Map>) -> i32 {
+pub fn pose_inertial_optimization_last_frame(frame: &mut Frame<InitialFrame>, map: &ReadOnlyWrapper<Map>) -> i32 {
     todo!("IMU... Optimizer::PoseInertialOptimizationLastFrame(&mCurrentFrame)");
     // let mut optimizer = g2o::ffi::new_sparse_optimizer(2);
 
@@ -434,7 +434,7 @@ pub fn pose_inertial_optimization_last_frame(frame: &mut Frame, map: &ReadOnlyWr
 
 //int Optimizer::PoseInertialOptimizationLastKeyFrame(Frame *pFrame, bool bRecInit)
 // but bRecInit is always set to false
-pub fn pose_inertial_optimization_last_keyframe(frame: &mut Frame) -> i32 {
+pub fn pose_inertial_optimization_last_keyframe(frame: &mut Frame<InitialFrame>) -> i32 {
     todo!("IMU... Optimizer::PoseInertialOptimizationLastKeyFrame(&mCurrentFrame)");
     // let mut optimizer = g2o::ffi::new_sparse_optimizer(2);
 
@@ -795,7 +795,7 @@ pub fn pose_inertial_optimization_last_keyframe(frame: &mut Frame) -> i32 {
     // return nInitialCorrespondences-nBad;
 }
 
-pub fn optimize_pose(frame: &mut Frame, map: &ReadOnlyWrapper<Map>) -> Option<(i32, Pose)> {
+pub fn optimize_pose(frame: &mut Frame<InitialFrame>, map: &ReadOnlyWrapper<Map>) -> Option<(i32, Pose)> {
     //int Optimizer::PoseOptimization(Frame *pFrame)
     let sensor: Sensor = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "sensor");
 
@@ -1017,7 +1017,7 @@ pub fn global_bundle_adjustment(map: &Map, loop_kf: i32, iterations: i32) -> BAR
     for (id, kf) in keyframes {
         optimizer.pin_mut().add_frame_vertex(
             *id,
-            (kf.pose).into(),
+            (kf.pose.unwrap()).into(),
             *id == map.initial_kf_id
         );
         kf_vertex_ids.push(*id);
@@ -1111,7 +1111,7 @@ pub fn global_bundle_adjustment(map: &Map, loop_kf: i32, iterations: i32) -> BAR
 }
 
 pub fn local_bundle_adjustment(
-    map: &Map, keyframe: &KeyFrame<FullKeyFrame>,
+    map: &Map, keyframe: &Frame<FullKeyFrame>,
     force_stop_flag: bool,
     num_opt_kf: i32,num_fixed_kf: i32, num_mps: i32, num_edges: i32
 ) -> BAResult {

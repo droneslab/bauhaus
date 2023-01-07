@@ -1,47 +1,247 @@
 use std::{collections::{HashMap, HashSet}, cmp::min};
 use chrono::{DateTime, Utc};
 use derivative::Derivative;
-use dvcore::{matrix::{DVVector3}};
+use dvcore::{matrix::{DVVector3, DVVectorOfKeyPoint, DVMatrix}, config::{Sensor, GLOBAL_PARAMS, SYSTEM_SETTINGS, FrameSensor}};
 use log::{error, info, debug, warn};
 use serde::{Deserialize, Serialize};
-use crate::{dvmap::{map::Id, pose::Pose, frame::*},modules::{imu::*},};
+use crate::{dvmap::{map::Id, pose::Pose},modules::{imu::*, camera::CAMERA_MODULE}, actors::tracking_backend::TrackedMapPointData,};
 use super::{mappoint::{MapPoint, FullMapPoint}, map::{Map}, features::Features, bow::{BoW, self}};
 
-// Typestate...Keyframe information that is ALWAYS available, regardless of keyframe state.
+// TODO... If it's getting a little messy in this file, we can always separate out the different types of frame/keyframe states into their own files.
+
+// Typestate...Frame/KeyFrame information that is ALWAYS available, regardless of frame/keyframe state.
 // Uncomment this if doing serialization/deserialization: unsafe impl<S: SensorType> Sync for KeyFrame<S> {}
 #[derive(Debug, Clone, Derivative)]
 #[derivative(Default)]
-pub struct KeyFrame<K: KeyFrameState> {
+pub struct Frame<K: FrameState> {
+    pub frame_id: Id,
     pub timestamp: DateTime<Utc>,
-    pub frame_id: Id, // Id of frame it is based on
-    pub pose: Pose,
+    pub pose: Option<Pose>,
+
+    // Image and reference KF //
+    pub ref_kf_id: Option<Id>, //mpReferenceKF
 
     // Vision //
     pub features: Features, // KeyPoints, stereo coordinate and descriptors (all associated by an index)
     pub bow: Option<BoW>,
 
-    // Mappoints
-    // Note: u32 is index in array, Id is mappoint Id ... equal to vector in ORBSLAM3
-    // because it just allocates an N-size vector and has a bunch of empty entries
-    pub mappoint_matches: HashMap::<u32, (Id, bool)>, // mvpmappoints 
-
-    // scale: f64,
-    // depth_threshold: f64,
+    // Mappoints //
+    // Note: u32 is index in array, Id is mappoint Id, bool is if it's an oultier
+    // equal to the vec in ORBSLAM3 bc it just allocates an N-size vector and has a bunch of empty entries
+    pub mappoint_matches: HashMap::<u32, (Id, bool)>, // mvpmappoints , mvbOutlier
 
     // IMU //
     // Preintegrated IMU measurements from previous keyframe
     pub imu_bias: Option<IMUBias>,
     pub imu_preintegrated: Option<IMUPreIntegrated>,
+
+    // Idk where to put this
+    // depth_threshold: u64,
+    pub sensor: Sensor,
+
+    // scale: f64,
+    // depth_threshold: f64,
+
     // pub imu_calib: IMUCalib,
     pub full_kf_info: K,
 
     // Don't add these in!! read explanations below
     // mnTrackReferenceForFrame ... used in tracking to decide whether to add a kf/mp into tracking's local map. redundant and easy to mess up/get out of sync. Search for this globally to see an example of how to avoid using it.
 }
+
+pub trait FrameState: Send + Sync {}
+impl FrameState for InitialFrame {}
+impl FrameState for PrelimKeyFrame {}
+impl FrameState for FullKeyFrame {}
+
+// Functions valid on ALL types of Frames/KeyFrames
+impl<T: FrameState> Frame<T> {
+    pub fn add_mappoint(&mut self, index: u32, mp_id: Id, is_outlier: bool) {
+        self.mappoint_matches.insert(index, (mp_id, is_outlier));
+    }
+        pub fn delete_mappoint_match(&mut self, index: u32) {
+        self.mappoint_matches.remove(&index);
+        // Sofiya: removed the code that set's mappoint's last_frame_seen to the frame ID
+        // I'm not sure we want to be using this
+    }
+
+    pub fn clear_mappoints(&mut self) {
+        self.mappoint_matches = HashMap::new();
+    }
+
+    pub fn is_mp_outlier(&self, index: &u32) -> bool {
+        self.mappoint_matches.get(index).unwrap().1
+    }
+
+    pub fn set_mp_outlier(&mut self, index: &u32, is_outlier: bool) {
+        self.mappoint_matches
+            .entry(*index)
+            .and_modify(|(_, iso)| *iso = is_outlier);
+    }
+
+    pub fn discard_outliers(&mut self) -> i32 {
+        let mps_at_start = self.mappoint_matches.len() as i32;
+        self.mappoint_matches.retain(|_, (_, is_outlier)| !*is_outlier);
+        mps_at_start - self.mappoint_matches.len() as i32
+    }
+
+    pub fn get_num_mappoints_with_observations(&self, map: &Map) -> i32 {
+        (&self.mappoint_matches)
+            .into_iter()
+            .filter(|(_, (mp_id, _))| map.get_mappoint(mp_id).unwrap().get_observations().len() > 0)
+            .count() as i32
+    }
+
+    pub fn delete_mappoints_without_observations(&mut self, map: &Map) {
+        self.mappoint_matches
+            .retain(|_, (mp_id, _)| map.get_mappoint(mp_id).unwrap().get_observations().len() > 0);
+    }
+
+    pub fn check_close_tracked_mappoints(&self) -> (i32, i32) {
+        self.features.check_close_tracked_mappoints(CAMERA_MODULE.th_depth as f32, &self.mappoint_matches)
+    }
+}
+
+// Basic frame read from the image file, not upgraded to a keyframe yet
 #[derive(Clone, Debug, Default, Copy, Serialize, Deserialize)]
-pub struct PrelimKeyFrame {} // prelimary map item created locally but not inserted into the map yet
+pub struct InitialFrame {}
+
+impl Frame<InitialFrame> {
+    pub fn new(
+        frame_id: Id, keypoints_vec: DVVectorOfKeyPoint, descriptors_vec: DVMatrix,
+        im_width: i32, im_height: i32
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        let sensor = GLOBAL_PARAMS.get::<Sensor>(SYSTEM_SETTINGS, "sensor");
+        let imu_bias = match sensor.is_imu() {
+            true => todo!("IMU"),
+            false => None
+        };
+        let frame = Self {
+            frame_id,
+            timestamp: Utc::now(),
+            features: Features::new(keypoints_vec, descriptors_vec, im_width, im_height, sensor)?,
+            imu_bias: imu_bias,
+            sensor,
+            ..Default::default()
+        };
+        Ok(frame)
+    }
+
+    pub fn compute_bow(&mut self) {
+        if self.bow.is_none() {
+            self.bow = Some(BoW::new());
+            bow::VOCABULARY.transform(&self.features.descriptors, &mut self.bow.as_mut().unwrap());
+        }
+    }
+
+    pub fn is_in_frustum(&self, mp_id: Id, viewing_cos_limit: f64, map: &Map) -> (Option<TrackedMapPointData>, Option<TrackedMapPointData>) {
+        // Combination of:
+        // bool Frame::isInFrustum(MapPoint *pMP, float viewingCosLimit)
+        // bool Frame::isInFrustumChecks(MapPoint *pMP, float viewingCosLimit, bool bRight)
+        let mappoint = map.get_mappoint(&mp_id).unwrap();
+
+        let left = self.check_frustum(mp_id, viewing_cos_limit, &mappoint, false);
+        let right = match self.sensor.frame() {
+            FrameSensor::Stereo => { self.check_frustum(mp_id, viewing_cos_limit, &mappoint, true) },
+            _ => { None }
+        };
+        (left, right)
+    }
+
+    fn check_frustum(&self, mp_id: Id, viewing_cos_limit: f64, mappoint: &MapPoint<FullMapPoint>, is_right: bool) -> Option<TrackedMapPointData> {
+        // 3D in absolute coordinates
+        let pos = mappoint.position;
+
+        // 3D in camera coordinates
+        let (mr, mt, twc);
+        if is_right {
+            todo!("Stereo");
+            // let rrl = mTrl.rotationMatrix();
+            // let trl = mTrl.translation();
+            // mr = rrl * mRcw;
+            // mt = rrl * mtcw + trl;
+            // twc = mRwc * mTlr.translation() + mOw;
+        } else {
+            mr = self.pose.unwrap().get_rotation(); // mr = mRcw
+            mt = self.pose.unwrap().get_translation(); // mt = mtcw;
+            twc = self.pose.unwrap().inverse().get_translation(); // twc = mOw;
+        }
+        let pos_camera = *mr * *pos + *mt;
+        let pc_dist = pos_camera.norm();
+
+        // Check positive depth
+        let pc_z = pos_camera[2];
+        let inv_z = 1.0 / pc_z;
+        if pc_z < 0.0 { return None; }
+
+        let (uvx, uvy) = match is_right {
+            true => todo!("Stereo"), //self.camera2.project(pos_camera),
+            false => CAMERA_MODULE.project(DVVector3::new(pos_camera))
+        };
+        if !self.features.image_bounds.check_bounds(uvx, uvy) {
+            return None;
+        }
+
+        // Check distance is in the scale invariance region of the MapPoint
+        let max_distance = mappoint.get_max_distance_invariance();
+        let min_distance = mappoint.get_min_distance_invariance();
+        let po = *pos - *twc;
+        let dist = po.norm();
+        if dist < min_distance || dist > max_distance {
+            return None;
+        }
+
+        // Check viewing angle
+        let pn = mappoint.get_normal();
+        let view_cos = po.dot(&*pn) / dist;
+        if view_cos < viewing_cos_limit {
+            return None;
+        }
+
+        // Data used by the tracking
+        Some(TrackedMapPointData {
+            predicted_level: mappoint.predict_scale(&dist),
+            view_cos: view_cos,
+            proj_x: uvx,
+            proj_y: uvy,
+            track_depth: pc_dist,
+        })
+    }
+
+
+    pub fn get_features_in_area(&self, x: &f64, y: &f64, r: f64, min_level: i32, max_level: i32) -> Vec<u32> {
+        self.features.get_features_in_area(x, y, r, min_level, max_level, &self.features.image_bounds)
+    }
+}
+
+// A frame upgraded to a prelimary keyframe, created locally but not inserted into the map yet
+#[derive(Clone, Debug, Default, Copy, Serialize, Deserialize)]
+pub struct PrelimKeyFrame {}
+
+impl Frame<PrelimKeyFrame> {
+    pub fn new(frame: &Frame<InitialFrame>) -> Frame<PrelimKeyFrame> {
+        if frame.pose.is_none() {
+            panic!("Frame needs a pose before converting to KeyFrame!");
+        }
+        Frame {
+            timestamp: frame.timestamp,
+            frame_id: frame.frame_id,
+            mappoint_matches: frame.mappoint_matches.clone(),
+            pose: frame.pose,
+            features: frame.features.clone(),
+            imu_bias: frame.imu_bias,
+            imu_preintegrated: frame.imu_preintegrated,
+            full_kf_info: PrelimKeyFrame{},
+            bow: frame.bow.clone(),
+            ref_kf_id: frame.ref_kf_id,
+            sensor: frame.sensor,
+        }
+    }
+}
+
+// Full keyframe inserted into the map with the following additional fields
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
-pub struct FullKeyFrame { // Full map item inserted into the map with the following additional fields
+pub struct FullKeyFrame {
     pub id: Id,
     pub origin_map_id: Id, // mnOriginMapId
 
@@ -77,32 +277,9 @@ pub struct FullKeyFrame { // Full map item inserted into the map with the follow
     // pub mnMergeCorrectedForKF: u64,
     // pub mnBALocalForMerge: u64,
 }
-pub trait KeyFrameState: Send + Sync {}
-impl KeyFrameState for PrelimKeyFrame {}
-impl KeyFrameState for FullKeyFrame {}
 
-impl<T: KeyFrameState> KeyFrame<T> {
-
-}
-
-impl KeyFrame<PrelimKeyFrame> {
-    pub fn new(frame: &Frame) -> KeyFrame<PrelimKeyFrame> {
-        KeyFrame {
-            timestamp: frame.timestamp,
-            frame_id: frame.id,
-            mappoint_matches: frame.mappoint_matches.clone(),
-            pose: frame.pose.unwrap(),
-            features: frame.features.clone(),
-            imu_bias: frame.imu_bias,
-            imu_preintegrated: frame.imu_preintegrated,
-            full_kf_info: PrelimKeyFrame{},
-            bow: frame.bow.clone()
-        }
-    }
-}
-
-impl KeyFrame<FullKeyFrame> {
-    pub(super) fn new(prelim_keyframe: &KeyFrame<PrelimKeyFrame>, origin_map_id: Id, id: Id) -> Self {
+impl Frame<FullKeyFrame> {
+    pub(super) fn new(prelim_keyframe: &Frame<PrelimKeyFrame>, origin_map_id: Id, id: Id) -> Self {
         let bow = match &prelim_keyframe.bow {
             Some(bow) => Some(bow.clone()),
             None => {
@@ -127,6 +304,8 @@ impl KeyFrame<FullKeyFrame> {
                 origin_map_id,
                 ..Default::default()
             },
+            ref_kf_id: prelim_keyframe.ref_kf_id,
+            sensor: prelim_keyframe.sensor
         }
     }
 
@@ -137,11 +316,6 @@ impl KeyFrame<FullKeyFrame> {
     }
     pub fn has_mappoint(&self, index: &u32) -> bool {
         self.mappoint_matches.get(index).is_some()
-    }
-
-    pub fn add_mappoint(&mut self, mp_id: Id, index: u32, is_outlier: bool) {
-        // KeyFrame::AddMapPoint(MapPoint *pMP, const size_t &idx)
-        self.mappoint_matches.insert(index, (mp_id, is_outlier));
     }
 
     pub fn erase_mappoint_match(&mut self, (left_index, right_index): (i32, i32)) {
@@ -234,7 +408,7 @@ impl KeyFrame<FullKeyFrame> {
     }
 
     pub fn get_camera_center(&self) -> DVVector3<f64> {
-        self.pose.inverse().get_translation()
+        self.pose.unwrap().inverse().get_translation()
         // Note: In Orbslam, this is: mTwc.translation()
         // and mTwc is inverse of the pose
     }
@@ -252,9 +426,9 @@ impl KeyFrame<FullKeyFrame> {
         }
 
         let mut depths = Vec::new();
-        let rot = self.pose.get_rotation();
+        let rot = self.pose.unwrap().get_rotation();
         let rcw2 = rot.row(2);
-        let zcw = self.pose.get_translation()[2];
+        let zcw = self.pose.unwrap().get_translation()[2];
 
         for (_, (mp_id, _)) in &self.mappoint_matches {
             let world_pos = *(mappoints.get(mp_id).unwrap().position);

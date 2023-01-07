@@ -5,7 +5,8 @@ use dvcore::matrix::DVVectorOfPoint2f;
 use log::debug;
 use opencv::core::Point2f;
 use dvcore::{matrix::DVVectorOfPoint3f, config::Sensor, matrix::DVVectorOfi32};
-use crate::dvmap::{frame::Frame, pose::Pose};
+use crate::dvmap::keyframe::Frame;
+use crate::dvmap::{keyframe::InitialFrame, pose::Pose};
 use crate::modules::camera::{Camera, CAMERA_MODULE};
 
 use super::orbmatcher;
@@ -18,9 +19,9 @@ pub struct Initialization {
     pub prev_matched: DVVectorOfPoint2f,// std::vector<cv::Point2f> mvbPrevMatched;
     pub p3d: DVVectorOfPoint3f,// std::vector<cv::Point3f> mvIniP3D;
     pub ready_to_initializate: bool,
-    pub initial_frame: Option<Frame>,
-    pub last_frame: Option<Frame>,
-    pub current_frame: Option<Frame>,
+    pub initial_frame: Option<Frame<InitialFrame>>,
+    pub last_frame: Option<Frame<InitialFrame>>,
+    pub current_frame: Option<Frame<InitialFrame>>,
     sensor: Sensor,
 }
 
@@ -40,7 +41,7 @@ impl Initialization {
         }
     }
 
-    pub fn try_initialize(&mut self, current_frame: &Frame) -> Result<bool, Box<dyn std::error::Error>> {
+    pub fn try_initialize(&mut self, current_frame: &Frame<InitialFrame>) -> Result<bool, Box<dyn std::error::Error>> {
         // Only set once at beginning
         if self.initial_frame.is_none() {
             self.initial_frame = Some(current_frame.clone());
@@ -88,7 +89,7 @@ impl Initialization {
             self.ready_to_initializate = true;
             return Ok(false);
         } else {
-            debug!("Current frame ID {}", current_frame.id);
+            debug!("Current frame ID {}", current_frame.frame_id);
 
             if current_frame.features.num_keypoints <=100 || matches!(self.sensor.imu(), ImuSensor::Some) && last_frame.timestamp - initial_frame.timestamp > Duration::seconds(1) {
                 self.ready_to_initializate = false;

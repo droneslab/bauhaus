@@ -10,7 +10,7 @@ use crate::{
     registered_modules::{LOCAL_MAPPING, TRACKING_BACKEND, SHUTDOWN},
     dvmap::{
         map::Map, map_actor::MapWriteMsg, map_actor::{MAP_ACTOR}, map::Id,
-        keyframe::KeyFrame, frame::Frame, pose::Pose, mappoint::{MapPoint, FullMapPoint},
+        keyframe::{Frame, InitialFrame, PrelimKeyFrame}, pose::Pose, mappoint::{MapPoint, FullMapPoint},
     },
     modules::{camera::Camera, camera::CameraType, imu::{ImuModule}, optimizer::{self}, orbmatcher, map_initialization::Initialization, relocalization::Relocalization},
 };
@@ -59,8 +59,8 @@ pub struct DarvisTrackingBack {
 
     // Frames
     last_frame_id: Id,
-    current_frame: Frame,
-    last_frame: Option<Frame>,
+    current_frame: Frame<InitialFrame>,
+    last_frame: Option<Frame<InitialFrame>>,
 
     // KeyFrames
     ref_kf_id: Option<Id>,
@@ -124,7 +124,7 @@ impl DarvisTrackingBack {
 
         // Sofiya interface: creating new frame
         self.last_frame_id += 1;
-        self.current_frame = match Frame::new(
+        self.current_frame = match Frame::<InitialFrame>::new(
             self.last_frame_id, 
             msg.keypoints.clone(), // TODO (msg copy)
             msg.descriptors.clone(), // TODO (msg copy)
@@ -305,7 +305,7 @@ impl DarvisTrackingBack {
                         match self.current_frame.ref_kf_id {
                             Some(ref_kf_id) => {
                                 TrajectoryMessage::new(
-                                    current_pose * self.map.read().get_keyframe(&ref_kf_id).unwrap().pose.inverse(),
+                                    current_pose * self.map.read().get_keyframe(&ref_kf_id).unwrap().pose.unwrap().inverse(),
                                     self.current_frame.ref_kf_id.unwrap(),
                                     self.current_frame.timestamp
                                 )
@@ -395,7 +395,7 @@ impl DarvisTrackingBack {
         // Create "visual odometry" points if in Localization Mode
         self.update_last_frame();
 
-        let enough_frames_to_reset_imu = self.current_frame.id <= self.relocalization.last_reloc_frame_id + (self.frames_to_reset_imu as i32);
+        let enough_frames_to_reset_imu = self.current_frame.frame_id <= self.relocalization.last_reloc_frame_id + (self.frames_to_reset_imu as i32);
         if self.map.read().imu_initialized && enough_frames_to_reset_imu {
             // Predict state with IMU if it is initialized and it doesnt need reset
             self.imu.predict_state();
@@ -481,7 +481,7 @@ impl DarvisTrackingBack {
                 None => { return; }
             }
         }
-        self.last_frame.as_mut().unwrap().pose = Some(reference_kf_pose);
+        self.last_frame.as_mut().unwrap().pose = reference_kf_pose;
 
         if self.sensor.is_mono() || self.frames_since_last_kf == 0 {
             return;
@@ -565,7 +565,7 @@ impl DarvisTrackingBack {
         self.update_local_points();
         self.search_local_points();
 
-        if !self.map.read().imu_initialized || (self.current_frame.id <= self.relocalization.last_reloc_frame_id + (self.frames_to_reset_imu as i32)) {
+        if !self.map.read().imu_initialized || (self.current_frame.frame_id <= self.relocalization.last_reloc_frame_id + (self.frames_to_reset_imu as i32)) {
             optimizer::optimize_pose(&mut self.current_frame, &self.map)
                 .map(|(_,pose)| self.current_frame.pose = Some(pose) );
         } else if !self.map_updated {
@@ -607,7 +607,7 @@ impl DarvisTrackingBack {
 
         // Decide if the tracking was succesful
         // More restrictive if there was a relocalization recently
-        if self.current_frame.id < self.relocalization.last_reloc_frame_id + (self.max_frames as i32) && self.matches_in_frame<50 {
+        if self.current_frame.frame_id < self.relocalization.last_reloc_frame_id + (self.max_frames as i32) && self.matches_in_frame<50 {
             warn!("track_local_map unsuccessful; matches in frame < 50 : {}",self.matches_in_frame);
             return false;
         }
@@ -633,7 +633,7 @@ impl DarvisTrackingBack {
 
         // Each map point votes for the keyframes in which it has been observed
         let mut kf_counter = HashMap::<Id, i32>::new();
-        let frame = match !self.map.read().imu_initialized || self.current_frame.id < self.relocalization.last_reloc_frame_id + 2 {
+        let frame = match !self.map.read().imu_initialized || self.current_frame.frame_id < self.relocalization.last_reloc_frame_id + 2 {
             true => &self.current_frame,
             false => self.last_frame.as_ref().unwrap() // Using lastframe since current frame has no matches yet
         };
@@ -779,7 +779,7 @@ impl DarvisTrackingBack {
             }
 
             // If the camera has been relocalised recently, perform a coarser search
-            if self.current_frame.id < self.relocalization.last_reloc_frame_id + 2 {
+            if self.current_frame.frame_id < self.relocalization.last_reloc_frame_id + 2 {
                 th = 5;
             }
             match self.state {
@@ -803,7 +803,7 @@ impl DarvisTrackingBack {
         //CreateNewKeyFrame
         // Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Tracking.cc#L3216
 
-        let new_kf = KeyFrame::new(&self.current_frame);
+        let new_kf = Frame::<PrelimKeyFrame>::new(&self.current_frame);
 
         if self.sensor.is_imu() {
             todo!("IMU"); //Reset preintegration from last KF (Create new object)
@@ -909,7 +909,7 @@ impl DarvisTrackingBack {
 
     fn need_new_keyframe(&self) -> bool {
         let kfs_in_map = self.kfs_in_map();
-        let not_enough_frames_since_last_reloc = (self.current_frame.id < self.relocalization.last_reloc_frame_id + (self.max_frames as i32)) && (kfs_in_map > (self.max_frames as u32));
+        let not_enough_frames_since_last_reloc = (self.current_frame.frame_id < self.relocalization.last_reloc_frame_id + (self.max_frames as i32)) && (kfs_in_map > (self.max_frames as u32));
         let imu_not_initialized = self.sensor.is_imu() && !self.map.read().imu_initialized;
 
         let too_close_to_last_kf = match self.last_kf_ts {
