@@ -5,7 +5,7 @@ use log::{info, error, debug};
 use serde::{Deserialize, Serialize};
 extern crate nalgebra as na;
 use crate::{matrix::DVVector3, modules::orbmatcher::{descriptor_distance, SCALE_FACTORS}, registered_modules::FEATURE_DETECTION};
-use super::{map::{Id, Map}, keyframe::{KeyFrame, FullKeyFrame}};
+use super::{map::{Id, Map}, keyframe::{Frame, FullKeyFrame}};
 
 // Note: Implementing typestate for like here: http://cliffle.com/blog/rust-typestate/#a-simple-example-the-living-and-the-dead
 // This way we can encode mappoints that have been created but not inserted into the map as a separate type than mappoints that are legit.
@@ -334,7 +334,7 @@ impl MapPoint<FullMapPoint> {
         descriptors
     }
 
-    fn get_level(&self, kf: &KeyFrame<FullKeyFrame>) -> i32 {
+    fn get_level(&self, kf: &Frame<FullKeyFrame>) -> i32 {
         let (left_index, right_index) = self.full_mp_info.observations.get(&kf.id()).unwrap();
         // Sofiya: sometimes in orbslam, left index will be -1 even for a stereo
         // camera, if there is no second camera set. I don't know why

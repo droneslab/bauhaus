@@ -12,7 +12,7 @@ pub type Id = i32;
 pub struct Map {
     pub id: Id,
 
-    pub keyframes: HashMap<Id, KeyFrame<FullKeyFrame>>, // = mspKeyFrames
+    pub keyframes: HashMap<Id, Frame<FullKeyFrame>>, // = mspKeyFrames
     pub mappoints: HashMap<Id, MapPoint<FullMapPoint>>, // = mspMapPoints
 
     // IMU
@@ -61,8 +61,8 @@ impl Map {
     }
 
     pub fn num_keyframes(&self) -> i32 { self.keyframes.len() as i32 }
-    pub fn get_keyframe(&self, id: &Id) -> Option<&KeyFrame<FullKeyFrame>> { self.keyframes.get(id) }
-    pub fn get_all_keyframes(&self) -> &HashMap<Id, KeyFrame<FullKeyFrame>> { &self.keyframes }
+    pub fn get_keyframe(&self, id: &Id) -> Option<&Frame<FullKeyFrame>> { self.keyframes.get(id) }
+    pub fn get_all_keyframes(&self) -> &HashMap<Id, Frame<FullKeyFrame>> { &self.keyframes }
     pub fn get_mappoint(&self, id: &Id) -> Option<&MapPoint<FullMapPoint>> { self.mappoints.get(id) }
     pub fn get_all_mappoints(&self) -> &HashMap<Id, MapPoint<FullMapPoint>> { &self.mappoints }
 
@@ -84,7 +84,7 @@ impl Map {
 
             // Add observation kf->mp
             self.keyframes.get_mut(&kf_id).map(|kf| {
-                kf.add_mappoint(mp.get_id(), *index as u32, false);
+                kf.add_mappoint(*index as u32, mp.get_id(), false);
             });
         }
 
@@ -103,13 +103,13 @@ impl Map {
         return self.last_mp_id;
     }
 
-    pub fn insert_keyframe_to_map(&mut self, prelim_kf: &KeyFrame<PrelimKeyFrame>, is_initialization: bool) -> Id {
+    pub fn insert_keyframe_to_map(&mut self, prelim_kf: &Frame<PrelimKeyFrame>, is_initialization: bool) -> Id {
         // Note: I would really like this to consume the keyframe, but this brings up issues
         // with the map actor being able to take ownership of the keyframe message.
         self.last_kf_id += 1;
         let new_kf_id = self.last_kf_id;
 
-        let full_keyframe = KeyFrame::<FullKeyFrame>::new(&prelim_kf, self.id, new_kf_id);
+        let full_keyframe = Frame::<FullKeyFrame>::new(&prelim_kf, self.id, new_kf_id);
         let num_keypoints = full_keyframe.features.num_keypoints;
         self.keyframes.insert(new_kf_id, full_keyframe);
 
@@ -136,7 +136,7 @@ impl Map {
 
                 // Add observation kf->mp
                 self.keyframes.get_mut(&new_kf_id).map(|kf| {
-                    kf.add_mappoint(*mp_id, *index, false);
+                    kf.add_mappoint(*index, *mp_id, false);
                 });
 
                 // Update normal and depth
@@ -270,11 +270,11 @@ impl Map {
 
         // Create KeyFrames
         let initial_kf_id = self.insert_keyframe_to_map(
-            &KeyFrame::<PrelimKeyFrame>::new(&inidata.initial_frame.as_ref().unwrap()),
+            &Frame::<PrelimKeyFrame>::new(&inidata.initial_frame.as_ref().unwrap()),
             true
         );
         let curr_kf_id = self.insert_keyframe_to_map(
-            &KeyFrame::<PrelimKeyFrame>::new(&inidata.current_frame.as_ref().unwrap()),
+            &Frame::<PrelimKeyFrame>::new(&inidata.current_frame.as_ref().unwrap()),
             true
         );
 
@@ -320,10 +320,10 @@ impl Map {
         // Scale initial baseline
         {
             let curr_kf = self.keyframes.get_mut(&curr_kf_id).unwrap();
-            let new_trans = *(curr_kf.pose.get_translation()) * inverse_median_depth;
+            let new_trans = *(curr_kf.pose.unwrap().get_translation()) * inverse_median_depth;
             let mut new_pose = Pose::default();
             new_pose.set_translation(new_trans[0], new_trans[1], new_trans[2]);
-            curr_kf.pose = new_pose;
+            curr_kf.pose = Some(new_pose);
         }
 
         // Scale points
@@ -366,7 +366,7 @@ impl Map {
         // mpAtlas->GetCurrentMap()->mvpKeyFrameOrigins.push_back(pKFini); // I think this is a multi-maps thing
         // initID = pKFcur->mnId; // I think this is a multi-maps thing
 
-        let curr_kf_pose = self.keyframes.get_mut(&curr_kf_id).unwrap().pose;
+        let curr_kf_pose = self.keyframes.get_mut(&curr_kf_id).unwrap().pose.unwrap();
 
         // Update tracking with new info
         let relevant_mappoints = self.mappoints.keys().cloned().collect();
@@ -374,7 +374,7 @@ impl Map {
     }
 
 
-    pub fn update_connections(mappoints: &HashMap<Id, MapPoint<FullMapPoint>>, keyframes: &mut HashMap<Id, KeyFrame<FullKeyFrame>>, initial_kf_id: &i32, main_kf_id: &i32) {
+    pub fn update_connections(mappoints: &HashMap<Id, MapPoint<FullMapPoint>>, keyframes: &mut HashMap<Id, Frame<FullKeyFrame>>, initial_kf_id: &i32, main_kf_id: &i32) {
         //For all map points in keyframe check in which other keyframes are they seen
         //Increase counter for those keyframes
         let mut kf_counter = HashMap::<Id, i32>::new();
@@ -415,7 +415,7 @@ impl Map {
     pub fn update_after_ba(&mut self, optimized_poses: optimizer::BAResult) {
         for (kf_id, pose) in optimized_poses.optimized_kf_poses {
             if optimized_poses.loop_kf_is_first_kf {
-                self.keyframes.get_mut(&kf_id).unwrap().pose = pose;
+                self.keyframes.get_mut(&kf_id).unwrap().pose = Some(pose);
             } else {
                 todo!("MVP");
                 // pKF->mTcwGBA = Sophus::SE3d(SE3quat.rotation(),SE3quat.translation()).cast<float>();

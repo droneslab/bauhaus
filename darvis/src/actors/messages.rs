@@ -6,7 +6,7 @@ use dvcore::{
     matrix::{ DVVectorOfKeyPoint, DVMatrix, DVMatrixGrayscale},
 };
 use serde::{Serialize, Deserialize};
-use crate::dvmap::{keyframe::{KeyFrame, KeyFrameState}, pose::Pose, map::Id};
+use crate::dvmap::{keyframe::{Frame, FrameState}, pose::Pose, map::Id};
 
 use super::tracking_backend::TrackingState;
 
@@ -102,15 +102,15 @@ pub struct MapInitializedMsg {
 impl ActorMessage for MapInitializedMsg { }
 
 #[derive(Debug)]
-pub struct KeyFrameMsg<S: KeyFrameState> {
+pub struct KeyFrameMsg<S: FrameState> {
     // Note: if using serde to serialize/deserialize, need to
     // uncomment the following line of code. 
     // See https://github.com/serde-rs/serde/issues/1296
     // #[serde(bound = "")]
-    pub keyframe: KeyFrame<S>,
+    pub keyframe: Frame<S>,
 }
 
-impl<S: KeyFrameState + 'static> ActorMessage for KeyFrameMsg<S> {}
+impl<S: FrameState + 'static> ActorMessage for KeyFrameMsg<S> {}
 
 #[derive(Debug)]
 pub struct KeyFrameIdMsg {

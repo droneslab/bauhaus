@@ -13,7 +13,7 @@ use dvcore::{
 use log::{debug, warn};
 use crate::{
     dvmap::{
-        map_actor::MapWriteMsg, mappoint::FullMapPoint, map::Map, map_actor::MAP_ACTOR, keyframe::{KeyFrame, PrelimKeyFrame}, mappoint::{MapPoint, PrelimMapPoint}
+        map_actor::MapWriteMsg, mappoint::FullMapPoint, map::Map, map_actor::MAP_ACTOR, keyframe::{Frame, PrelimKeyFrame}, mappoint::{MapPoint, PrelimMapPoint}
     },
     modules::{optimizer, orbmatcher, imu::ImuModule, camera::CAMERA_MODULE, camera, optimizer::INV_LEVEL_SIGMA2, orbmatcher::SCALE_FACTORS, geometric_tools},
     registered_modules::{FEATURE_DETECTION, LOOP_CLOSING, MATCHER, CAMERA},
@@ -225,7 +225,7 @@ impl DarvisLocalMapping {
             // }
         }
 
-        let mut pose1 = current_kf.pose; // sophTcw1
+        let mut pose1 = current_kf.pose.unwrap(); // sophTcw1
         let mut translation1 = pose1.get_translation(); // tcw1
         let mut rotation1 = pose1.get_rotation(); // Rcw1
         let mut rotation_transpose1 = rotation1.transpose(); // Rwc1
@@ -269,7 +269,7 @@ impl DarvisLocalMapping {
                 Err(err) => panic!("Problem with search_by_bow_f {}", err)
             };
 
-            let mut pose2 = neighbor_kf.pose;
+            let mut pose2 = neighbor_kf.pose.unwrap();
             let mut translation2 = pose2.get_translation(); // tcw2
             let mut rotation2 = pose2.get_rotation(); // Rcw2
             let mut rotation_transpose2 = rotation2.transpose(); // Rwc2
@@ -286,7 +286,7 @@ impl DarvisLocalMapping {
                     ow1 = current_kf.get_right_camera_center();
                     // camera1 = mpCurrentKeyFrame->mpCamera2 TODO (STEREO) .. right now just using global CAMERA
                 } else {
-                    pose1 = current_kf.pose;
+                    pose1 = current_kf.pose.unwrap();
                     ow1 = current_kf.get_camera_center();
                     // camera1 = mpCurrentKeyFrame->mpCamera TODO (STEREO)
                 }
@@ -296,7 +296,7 @@ impl DarvisLocalMapping {
                     ow2 = neighbor_kf.get_right_camera_center();
                     // camera2 = neighbor_kf->mpCamera2 TODO (STEREO)
                 } else {
-                    pose2 = neighbor_kf.pose;
+                    pose2 = neighbor_kf.pose.unwrap();
                     ow2 = neighbor_kf.get_camera_center();
                     // camera2 = neighbor_kf->mpCamera TODO (STEREO)
                 }
