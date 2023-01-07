@@ -1,11 +1,11 @@
-use std::{fmt::Debug, collections::HashMap};
+use std::{fmt::Debug, collections::{HashMap, hash_map::Keys}};
 use array2d::Array2D;
-use dvcore::{matrix::DVMatrix, config::{Sensor, GLOBAL_PARAMS, SYSTEM_SETTINGS}};
+use dvcore::{matrix::DVMatrix, config::{Sensor, GLOBAL_PARAMS, SYSTEM_SETTINGS, FrameSensor}};
 use log::{info, error, debug};
 use serde::{Deserialize, Serialize};
 extern crate nalgebra as na;
 use crate::{matrix::DVVector3, modules::orbmatcher::{descriptor_distance, SCALE_FACTORS}, registered_modules::FEATURE_DETECTION};
-use super::{map::{Id, Map}, observations::Observations};
+use super::{map::{Id, Map}, keyframe::{KeyFrame, FullKeyFrame}};
 
 // Note: Implementing typestate for like here: http://cliffle.com/blog/rust-typestate/#a-simple-example-the-living-and-the-dead
 // This way we can encode mappoints that have been created but not inserted into the map as a separate type than mappoints that are legit.
@@ -20,7 +20,7 @@ use super::{map::{Id, Map}, observations::Observations};
 // The function in step 2 (to add a mappoint to a keyframe) takes a MapPoint<FullMapItem>
 
 // Typestate...Mappoint information that is ALWAYS available, regardless of mappoint state.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct MapPoint<M: MapPointState> {
     // List of variables set in constructor in orbslam3, don't think we need these all but copying for reference
     //     mnFirstKFid(pRefKF->mnId), mnFirstFrame(pRefKF->mnFrameId), nObs(0), mnTrackReferenceForFrame(0),
@@ -44,6 +44,8 @@ pub struct MapPoint<M: MapPointState> {
 
     // Typestate...This reassures the compiler that the parameter gets used.
     full_mp_info: M,
+
+    sensor: Sensor
 }
 
 // Typestate...State options.
@@ -54,7 +56,8 @@ pub struct FullMapPoint { // Full map item inserted into the map with the follow
     id: Id,
 
     // Observations, this is a part of "map connections" but I don't think we can avoid keeping this here.
-    observations: Observations, // mObservations ; Keyframes observing the point and associated index in keyframe
+    observations: HashMap<Id, (i32, i32)>, // mObservations ; Keyframes observing the point and associated index in keyframe
+    num_obs: i32,
 
     // Best descriptor used for fast matching
     best_descriptor: DVMatrix,
@@ -82,56 +85,14 @@ impl MapPoint<PrelimMapPoint> {
             origin_map_id,
             ref_kf_id,
             first_kf_id: ref_kf_id,
-            full_mp_info: PrelimMapPoint{} 
+            full_mp_info: PrelimMapPoint{},
+            sensor: GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "sensor")
         }
     }
-    // TODO: Two constructors, this one takes an idxF that I think is the index in observations
-    // Need to figure out why sometimes this one is called instead of the other one 
-    // MapPoint::MapPoint(const Eigen::Vector3f &Pos, Map* pMap, Frame* pFrame, const int &idxF):
-    // mnFirstKFid(-1), mnFirstFrame(pFrame->mnId), nObs(0), mnTrackReferenceForFrame(0), mnLastFrameSeen(0),
-    // mnBALocalForKF(0), mnFuseCandidateForKF(0),mnLoopPointForKF(0), mnCorrectedByKF(0),
-    // mnCorrectedReference(0), mnBAGlobalForKF(0), mpRefKF(static_cast<KeyFrame*>(NULL)), mnVisible(1),
-    // mnFound(1), mbBad(false), mpReplaced(NULL), mpMap(pMap), mnOriginMapId(pMap->GetId())
-    // {
-    //     SetWorldPos(Pos);
-
-    //     Eigen::Vector3f Ow;
-    //     if(pFrame -> Nleft == -1 || idxF < pFrame -> Nleft){
-    //         Ow = pFrame->GetCameraCenter();
-    //     }
-    //     else{
-    //         Eigen::Matrix3f Rwl = pFrame->GetRwc();
-    //         Eigen::Vector3f tlr = pFrame->GetRelativePoseTlr().translation();
-    //         Eigen::Vector3f twl = pFrame->GetOw();
-
-    //         Ow = Rwl * tlr + twl;
-    //     }
-    //     mNormalVector = mWorldPos - Ow;
-    //     mNormalVector = mNormalVector / mNormalVector.norm();
-
-    //     Eigen::Vector3f PC = mWorldPos - Ow;
-    //     const float dist = PC.norm();
-    //     const int level = (pFrame -> Nleft == -1) ? pFrame->mvKeysUn[idxF].octave
-    //                                             : (idxF < pFrame -> Nleft) ? pFrame->mvKeys[idxF].octave
-    //                                                                         : pFrame -> mvKeysRight[idxF].octave;
-    //     const float levelScaleFactor =  pFrame->mvScaleFactors[level];
-    //     const int nLevels = pFrame->mnScaleLevels;
-
-    //     mfMaxDistance = dist*levelScaleFactor;
-    //     mfMinDistance = mfMaxDistance/pFrame->mvScaleFactors[nLevels-1];
-
-    //     pFrame->mDescriptors.row(idxF).copyTo(mDescriptor);
-
-    //     // MapPoints can be created from Tracking and Local Mapping. This mutex avoid conflicts with id.
-    //     unique_lock<mutex> lock(mpMap->mMutexPointCreation);
-    //     mnId=nNextId++;
-    // }
 }
 
 impl MapPoint<FullMapPoint> {
     pub(super) fn new(prelim_mappoint: &MapPoint<PrelimMapPoint>, id: Id) -> Self {
-    let sensor: Sensor = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "sensor");
-
         Self {
             position: prelim_mappoint.position,
             origin_map_id: prelim_mappoint.origin_map_id,
@@ -139,20 +100,23 @@ impl MapPoint<FullMapPoint> {
             first_kf_id: prelim_mappoint.first_kf_id,
             full_mp_info: FullMapPoint{
                 id,
-                observations: Observations::new(sensor),
+                observations: HashMap::new(),
                 normal_vector: DVVector3::zeros::<f64>(),
                 max_distance: 0.0,
                 min_distance: 0.0,
                 nvisible: 1,
                 nfound: 1,
                 best_descriptor: DVMatrix::empty(),
+                num_obs: 0
             },
+            sensor: prelim_mappoint.sensor
         }
     }
 
     pub fn get_id(&self) -> Id { self.full_mp_info.id }
-    pub fn get_observations(&self) -> &Observations { &self.full_mp_info.observations }
+    pub fn get_observations(&self) -> &HashMap<Id, (i32, i32)> { &self.full_mp_info.observations }
     pub fn get_best_descriptor(&self) -> &DVMatrix { &self.full_mp_info.best_descriptor }
+
     pub fn get_normal(&self) -> DVVector3<f64> {
         // Eigen::Vector3f MapPoint::GetNormal() 
         self.full_mp_info.normal_vector
@@ -168,67 +132,46 @@ impl MapPoint<FullMapPoint> {
         0.8 * self.full_mp_info.min_distance
     }
 
+    pub fn get_found_ratio(&self) -> f32 {
+        self.full_mp_info.nfound as f32 / self.full_mp_info.nvisible as f32
+    }
+
+    pub fn predict_scale(&self, current_distance: &f64) -> i32 {
+        // int MapPoint::PredictScale(const float &currentDist, KeyFrame* pKF)
+        let ratio = self.full_mp_info.max_distance / current_distance;
+        let scale_factor= GLOBAL_PARAMS.get::<f64>(FEATURE_DETECTION, "scale_factor");
+        let log_scale_factor = scale_factor.log10();
+        let scale = (ratio.log10() / log_scale_factor).ceil() as i32;
+        let scale_levels = GLOBAL_PARAMS.get::<i32>(FEATURE_DETECTION, "n_levels");
+
+        let scale = if scale < 0 { 0 } else { scale };
+        if scale < 0 {
+            return 0;
+        } else if scale >= scale_levels.into() {
+            return scale_levels - 1;
+        } else {
+            return scale;
+        }
+    }
+
     pub fn increase_found(&mut self, n: &i32) {
         // void MapPoint::IncreaseFound(int n)
         self.full_mp_info.nfound += n;
     }
 
-    pub fn get_found_ratio(&self) -> f32 {
-        self.full_mp_info.nfound as f32 / self.full_mp_info.nvisible as f32
-    }
-
-    pub fn add_observation(&mut self, kf_id: &Id, num_keypoints_left_for_kf: u32, index: u32) {
-        self.full_mp_info.observations.add_observation(kf_id, num_keypoints_left_for_kf, index);
-    }
-
-    pub fn erase_observation(&mut self, kf_id: &Id) {
-        todo!("TODO LOCAL MAPPING");
-        // bool bBad=false;
-        // {
-        //     unique_lock<mutex> lock(mMutexFeatures);
-        //     if(mObservations.count(pKF))
-        //     {
-        //         tuple<int,int> indexes = mObservations[pKF];
-        //         int leftIndex = get<0>(indexes), rightIndex = get<1>(indexes);
-
-        //         if(leftIndex != -1){
-        //             if(!pKF->mpCamera2 && pKF->mvuRight[leftIndex]>=0)
-        //                 nObs-=2;
-        //             else
-        //                 nObs--;
-        //         }
-        //         if(rightIndex != -1){
-        //             nObs--;
-        //         }
-
-        //         mObservations.erase(pKF);
-
-        //         if(mpRefKF==pKF)
-        //             mpRefKF=mObservations.begin()->first;
-
-        //         // If only 2 observations or less, discard point
-        //         if(nObs<=2)
-        //             bBad=true;
-        //     }
-        // }
-
-        // if(bBad)
-        //     SetBadFlag();
-    }
-
-    pub fn get_norm_and_depth(&self, map: &Map) -> Option<(f64, f64, DVVector3<f64>)> {
+    pub(super) fn get_norm_and_depth(&self, map: &Map) -> Option<(f64, f64, DVVector3<f64>)> {
         // Part 1 of void MapPoint::UpdateNormalAndDepth()
         if self.full_mp_info.observations.is_empty() {
             return None;
         }
 
-        let (n, normal) = self.full_mp_info.observations.get_normal(map, &self.position);
+        let (n, normal) = self.get_obs_normal(map, &self.position);
 
         let ref_kf = map.get_keyframe(&self.ref_kf_id).unwrap();
         let pc = (*self.position) - (*ref_kf.get_camera_center());
         let dist = pc.norm();
 
-        let level = self.full_mp_info.observations.get_level(ref_kf);
+        let level = self.get_level(ref_kf);
         let level_scale_factor = SCALE_FACTORS[level as usize] as f64;
         let n_levels = GLOBAL_PARAMS.get::<i32>(FEATURE_DETECTION, "n_levels");
 
@@ -246,14 +189,14 @@ impl MapPoint<FullMapPoint> {
         self.full_mp_info.normal_vector = vals.2;
     }
 
-    pub fn compute_distinctive_descriptors(&self, map: &Map) -> Option<DVMatrix> {
+    pub(super) fn compute_distinctive_descriptors(&self, map: &Map) -> Option<DVMatrix> {
         // Part 1 of void MapPoint::ComputeDistinctiveDescriptors()
-        if self.full_mp_info.observations.len() == 0 {
+        if self.full_mp_info.num_obs == 0 {
             error!("mappoint::compute_distinctive_descriptors;No observations");
             return None;
         }
 
-        let descriptors = self.full_mp_info.observations.compute_descriptors(map);
+        let descriptors = self.compute_descriptors(map);
         if descriptors.len() == 0 { 
             error!("mappoint::compute_distinctive_descriptors;No descriptors");
             return None;
@@ -298,21 +241,108 @@ impl MapPoint<FullMapPoint> {
         self.full_mp_info.best_descriptor = desc;
     }
 
-    pub fn predict_scale(&self, current_distance: &f64) -> i32 {
-        // int MapPoint::PredictScale(const float &currentDist, KeyFrame* pKF)
-        let ratio = self.full_mp_info.max_distance / current_distance;
-        let scale_factor= GLOBAL_PARAMS.get::<f64>(FEATURE_DETECTION, "scale_factor");
-        let log_scale_factor = scale_factor.log10();
-        let scale = (ratio.log10() / log_scale_factor).ceil() as i32;
-        let scale_levels = GLOBAL_PARAMS.get::<i32>(FEATURE_DETECTION, "n_levels");
+    //** Observations */////////////////////////////////////////////////////////////////////////////////
+    pub fn erase_observation(&mut self, kf_id: &Id) -> bool {
+        if let Some((left_index, right_index)) = self.full_mp_info.observations.get(kf_id) {
+            if *left_index != -1 {
+                // TODO (Stereo)
+                // if(!pKF->mpCamera2 && pKF->mvuRight[leftIndex]>=0)
+                //     nObs-=2;
+                // else
+                //     nObs--;
+                self.full_mp_info.num_obs -= 1;
+            }
+            if *right_index != -1 {
+                self.full_mp_info.num_obs -= 1;
+            }
+            self.full_mp_info.observations.remove(kf_id);
 
-        let scale = if scale < 0 { 0 } else { scale };
-        if scale < 0 {
-            return 0;
-        } else if scale >= scale_levels.into() {
-            return scale_levels - 1;
+            if self.ref_kf_id == *kf_id {
+                self.ref_kf_id = *self.full_mp_info.observations.iter().next().unwrap().0; // Set to first key in hashmap
+            }
+
+            // If only 2 observations or less, discard point
+            if self.full_mp_info.num_obs <= 2 {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    pub fn add_observation(&mut self, kf_id: &Id, num_keypoints_left_for_kf: u32, index: u32) {
+        let (mut left_index, mut right_index) = match self.full_mp_info.observations.get(kf_id) {
+            Some((left, right)) => (*left, *right),
+            None => (-1, -1)
+        };
+
+        match self.sensor.frame() {
+            FrameSensor::Stereo => {
+                if index >= num_keypoints_left_for_kf {
+                    right_index = index as i32;
+                } else {
+                    left_index = index as i32;
+                }
+            },
+            _ => left_index = index as i32
+        }
+        // TODO (Stereo)
+        // if(!pKF->mpCamera2 && pKF->mvuRight[idx]>=0)
+        //     nObs+=2;
+        // else
+        //     nObs++;
+        self.full_mp_info.num_obs += 1;
+
+        self.full_mp_info.observations.insert(*kf_id, (left_index, right_index));
+    }
+
+    fn get_obs_normal(&self, map: &Map, position: &DVVector3<f64>) -> (i32, nalgebra::Vector3<f64>) { 
+        let mut normal = na::Vector3::<f64>::zeros();
+        let mut n = 0;
+        let position_opencv = **position;
+        for (id, _) in &self.full_mp_info.observations {
+            let kf = map.get_keyframe(&id).unwrap();
+            let mut camera_center = kf.get_camera_center();
+            let owi = *camera_center;
+            let normali = position_opencv - owi;
+            normal = normal + normali / normali.norm();
+            n += 1;
+
+            match self.sensor.frame() {
+                FrameSensor::Stereo => {
+                    camera_center = kf.get_right_camera_center();
+                    let owi = *camera_center;
+                    let normali = position_opencv - owi;
+                    normal = normal + normali / normali.norm();
+                    n += 1;
+                },
+                _ => {}
+            }
+        }
+        (n, normal)
+    }
+
+    fn compute_descriptors(&self, map: &Map) -> Vec::<opencv::core::Mat> {
+        let mut descriptors = Vec::<opencv::core::Mat>::new();
+        for (id, (index1, index2)) in &self.full_mp_info.observations {
+            let kf = map.get_keyframe(&id).unwrap();
+            descriptors.push(kf.features.descriptors.row(*index1 as u32).unwrap());
+            match self.sensor.frame() {
+                FrameSensor::Stereo => descriptors.push(kf.features.descriptors.row(*index2 as u32).unwrap()),
+                _ => {}
+            }
+        }
+        descriptors
+    }
+
+    fn get_level(&self, kf: &KeyFrame<FullKeyFrame>) -> i32 {
+        let (left_index, right_index) = self.full_mp_info.observations.get(&kf.id()).unwrap();
+        // Sofiya: sometimes in orbslam, left index will be -1 even for a stereo
+        // camera, if there is no second camera set. I don't know why
+        // they would do this though, like then it's not stereo...
+        if *left_index != -1 {
+            kf.features.get_octave(*left_index as usize)
         } else {
-            return scale;
+            kf.features.get_octave((right_index - kf.features.num_keypoints as i32) as usize)
         }
     }
 }

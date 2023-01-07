@@ -10,7 +10,7 @@ use dvcore::{
     config::{Sensor, GLOBAL_PARAMS, SYSTEM_SETTINGS, FrameSensor, ImuSensor},
     matrix::DVVector3
 };
-use log::debug;
+use log::{debug, warn};
 use crate::{
     dvmap::{
         map_actor::MapWriteMsg, mappoint::FullMapPoint, map::Map, map_actor::MAP_ACTOR, keyframe::{KeyFrame, PrelimKeyFrame}, mappoint::{MapPoint, PrelimMapPoint}
@@ -27,7 +27,7 @@ pub struct DarvisLocalMapping {
     sensor: Sensor,
 
     current_keyframe_id: Id, //mpCurrentKeyFrame
-    recently_added_mappoints: Vec<Id>, //mlpRecentAddedMapPoints // TODO: there is a race condition here with deleting mappoints from the map
+    recently_added_mappoints: Vec<Id>, //mlpRecentAddedMapPoints // TODO (concurrency): race condition w/ map deleting mappoints from the map
 
     // Modules
     imu: ImuModule,
@@ -47,10 +47,17 @@ impl DarvisLocalMapping {
 
     fn local_mapping(&mut self, context: Context) {
         let map_actor = context.system.find_aid_by_name(MAP_ACTOR).unwrap();
-        // TODO (Stereo): LocalMapping::ProcessNewKeyFrame pushes to mlpRecentAddedMapPoints
-        // those stereo mappoints which were added in tracking. The rest of the function
-        // is redundant here because all of it is already computed when inserting a keyframe,
-        // but the part about mlpRecentAddedMapPoints needs to be included.
+
+        match self.sensor.frame() {
+            FrameSensor::Stereo => {
+                todo!("Stereo");
+                // LocalMapping::ProcessNewKeyFrame pushes to mlpRecentAddedMapPoints
+                // those stereo mappoints which were added in tracking. The rest of the function
+                // is redundant here because all of it is already computed when inserting a keyframe,
+                // but the part about mlpRecentAddedMapPoints needs to be included.
+            },
+            _ => {}
+        }
 
         // Check recent MapPoints
         self.mappoint_culling(&map_actor);
@@ -82,7 +89,7 @@ impl DarvisLocalMapping {
         if self.map.read().num_keyframes() > 2 {
             match self.sensor.is_imu() {
                 true => { // and self.map.read().imu_initialized
-                    // TODO (IMU)
+                    todo!("IMU");
                     // float dist = (mpCurrentKeyFrame->mPrevKF->GetCameraCenter() - mpCurrentKeyFrame->GetCameraCenter()).norm() +
                     //         (mpCurrentKeyFrame->mPrevKF->mPrevKF->GetCameraCenter() - mpCurrentKeyFrame->mPrevKF->GetCameraCenter()).norm();
 
@@ -122,7 +129,7 @@ impl DarvisLocalMapping {
         self.keyframe_culling(&context);
 
         if self.sensor.is_imu() && t_init < 50.0 {
-            // TODO (IMU)
+            todo!("IMU");
             // if(mpCurrentKeyFrame->GetMap()->isImuInitialized() && mpTracker->mState==Tracking::OK) // Enter here everytime local-mapping is called
             // {
             //     if(!mpCurrentKeyFrame->GetMap()->GetIniertialBA1()){
@@ -206,7 +213,7 @@ impl DarvisLocalMapping {
         let current_kf = map.get_keyframe(&self.current_keyframe_id).unwrap();
         let neighbor_kfs = current_kf.get_connections(nn);
         if self.sensor.is_imu() {
-            // TODO (IMU)
+            todo!("IMU");
             // KeyFrame* pKF = mpCurrentKeyFrame;
             // int count=0;
             // while((vpNeighKFs.size()<=nn)&&(pKF->mPrevKF)&&(count++<nn))
@@ -249,8 +256,10 @@ impl DarvisLocalMapping {
             }
 
             // Search matches that fullfil epipolar constraint
-            // TODO (IMU): should replace falses with mpCurrentKeyFrame->GetMap()->GetIniertialBA2() and mpTracker->mState==Tracking::RECENTLY_LOST
-            let course = self.sensor.is_imu() && false && false;
+            let course = match self.sensor.is_imu() {
+                true => todo!("IMU"), // should be mpCurrentKeyFrame->GetMap()->GetIniertialBA2() && mpTracker->mState==Tracking::RECENTLY_LOST
+                false => false
+            };
             let matches = match orbmatcher::search_for_triangulation(
                 current_kf, neighbor_kf,
                 false, false, course, thresh,
@@ -300,10 +309,10 @@ impl DarvisLocalMapping {
                 let cos_parallax_rays = ray1.dot(&ray2) / (ray1.norm() * ray2.norm());
                 let (cos_parallax_stereo1, cos_parallax_stereo2) = (cos_parallax_rays + 1.0, cos_parallax_rays + 1.0);
                 if right1 {
-                    // TODO (Stereo)
+                    todo!("Stereo");
                     // cosParallaxStereo1 = cos(2*atan2(mpCurrentKeyFrame->mb/2,mpCurrentKeyFrame->mvDepth[idx1]));
                 } else if right2 {
-                    // TODO (Stereo)
+                    todo!("Stereo");
                     //cosParallaxStereo2 = cos(2*atan2(neighbor_kf->mb/2,neighbor_kf->mvDepth[idx2]));
                 }
                 let cos_parallax_stereo = cos_parallax_stereo1.min(cos_parallax_stereo2);
@@ -327,7 +336,6 @@ impl DarvisLocalMapping {
                 //Check triangulation in front of cameras
                 let x3_d_nalg = *x3_d.unwrap();
                 let z1 = rotation1.row(2).transpose().dot(&x3_d_nalg) + (*translation1)[2];
-                // float z1 = Rcw1.row(2).dot(x3D) + tcw1(2);
                 if z1 <= 0.0 {
                     continue;
                 }
@@ -343,7 +351,7 @@ impl DarvisLocalMapping {
                 let invz1 = 1.0 / z1;
 
                 if right1 {
-                    todo!("TODO STEREO");
+                    todo!("Stereo");
                     let u1 = CAMERA_MODULE.get_fx() * x1 * invz1 + CAMERA_MODULE.get_cx();
                     let u1_r = u1 - CAMERA_MODULE.stereo_baseline_times_fx * invz1;
                     let v1 = CAMERA_MODULE.get_fy() * y1 * invz1 + CAMERA_MODULE.get_cy();
@@ -369,10 +377,10 @@ impl DarvisLocalMapping {
                 let invz2 = 1.0 / z2;
 
                 if right2 {
-                    todo!("TODO STEREO");
-                    let u2 = CAMERA_MODULE.get_fx() * x2 * invz2 + CAMERA_MODULE.get_cx();// TODO(STEREO): This should be camera2, not camera
+                    todo!("Stereo");
+                    let u2 = CAMERA_MODULE.get_fx() * x2 * invz2 + CAMERA_MODULE.get_cx();// This should be camera2, not camera
                     let u2_r = u2 - CAMERA_MODULE.stereo_baseline_times_fx * invz2;
-                    let v2 = CAMERA_MODULE.get_fy() * y2 * invz2 + CAMERA_MODULE.get_cy();// TODO(STEREO): This should be camera2, not camera
+                    let v2 = CAMERA_MODULE.get_fy() * y2 * invz2 + CAMERA_MODULE.get_cy();// This should be camera2, not camera
                     let err_x2 = u2 as f32 - kp2.pt.x;
                     let err_y2 = v2 as f32 - kp2.pt.y;
                     let err_x2_r = u2_r as f32 - kp2_ur.unwrap();
@@ -380,7 +388,7 @@ impl DarvisLocalMapping {
                         continue
                     }
                 } else {
-                    let uv2 = CAMERA_MODULE.project(DVVector3::new_with(x2, y2, z2)); // TODO(STEREO): This should be camera2, not camera
+                    let uv2 = CAMERA_MODULE.project(DVVector3::new_with(x2, y2, z2));
                     let err_x2 = uv2.0 as f32 - kp2.pt.x;
                     let err_y2 = uv2.1 as f32 - kp2.pt.y;
                     if (err_x2 * err_x2  + err_y2 * err_y2) > 5.991 * sigma_square2 {
@@ -444,7 +452,7 @@ impl DarvisLocalMapping {
         // Extend to temporal neighbors
         match self.sensor.is_imu() {
             true => {
-                // TODO (IMU)
+                todo!("IMU");
                 // KeyFrame* pKFi = mpCurrentKeyFrame->mPrevKF;
                 // while(vpTargetKFs.size()<20 && pKFi)
                 // {
@@ -523,7 +531,8 @@ impl DarvisLocalMapping {
         // A keyframe is considered redundant if the 90% of the MapPoints it sees, are seen
         // in at least other 3 keyframes (in the same or finer scale)
         // We only consider close stereo points
-        // mpCurrentKeyFrame->UpdateBestCovisibles(); // TODO: I think we don't need this because the covisibility keyframes struct organizes itself but double check
+        // mpCurrentKeyFrame->UpdateBestCovisibles(); 
+        warn!("TODO... I think we don't need this because the covisibility keyframes struct organizes itself but double check");
         let map = self.map.read();
         let current_kf = map.get_keyframe(&self.current_keyframe_id).unwrap();
         let local_keyframes = current_kf.get_connections(i32::MAX);
@@ -537,6 +546,7 @@ impl DarvisLocalMapping {
         let nd = 21;
         let last_id = match self.sensor.is_imu() {
             true => {
+                todo!("Stereo");
                 // int count = 0;
                 // KeyFrame* aux_KF = mpCurrentKeyFrame;
                 // while(count<Nd && aux_KF->mPrevKF)
@@ -575,16 +585,15 @@ impl DarvisLocalMapping {
                 if mp.get_observations().len() > th_obs {
                     let scale_level = keyframe.features.get_octave(*idx as usize);
                     let mut num_obs = 0;
-                    for obs_kf_id in mp.get_observations().keys() {
+                    for (obs_kf_id, (left_index, right_index)) in mp.get_observations() {
                         if *obs_kf_id == kf_id {
                             continue
                         }
-                        let (left_index, right_index) = mp.get_observations().get_observation(obs_kf_id);
                         let obs_kf = map.get_keyframe(obs_kf_id).unwrap();
                         let scale_level_i = match self.sensor.frame() {
                             FrameSensor::Stereo => {
-                                let right_level = if right_index != -1 { obs_kf.features.get_octave(right_index as usize)} else { -1 };
-                                let left_level = if left_index != -1 { obs_kf.features.get_octave(left_index as usize)} else { -1 };
+                                let right_level = if *right_index != -1 { obs_kf.features.get_octave(*right_index as usize)} else { -1 };
+                                let left_level = if *left_index != -1 { obs_kf.features.get_octave(*left_index as usize)} else { -1 };
                                 if left_level == -1 || left_level > right_level {
                                     right_level
                                 } else {
@@ -592,7 +601,7 @@ impl DarvisLocalMapping {
                                 }
                             },
                             _ => {
-                                obs_kf.features.get_octave(left_index as usize)
+                                obs_kf.features.get_octave(*left_index as usize)
                             }
                         };
                         if scale_level_i <= scale_level + 1 {
@@ -610,7 +619,7 @@ impl DarvisLocalMapping {
             if (num_redundant_obs as f64) > redundant_th * (num_mps as f64) {
                 match self.sensor.is_imu() {
                     true => {
-                        // TODO (IMU)
+                        todo!("IMU");
                         // if (mpAtlas->KeyFramesInMap()<=Nd)
                         //     continue;
 

@@ -10,5 +10,4 @@ pub mod frame;
 pub mod pose;
 pub mod misc; //BowDB
 pub mod features;
-pub mod observations;
 pub mod bow;

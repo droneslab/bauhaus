@@ -1,3 +1,6 @@
+pub type TranslationVector = [f64; 3];
+pub type RotationVector = [f64; 4];
+
 #[cxx::bridge(namespace = "g2o")]
 pub mod ffi {
     // Shared structs with fields visible to both languages.
@@ -6,7 +9,6 @@ pub mod ffi {
     // struct BridgeEdgeSE3ProjectXYZOnlyPose {
     //     edge: SharedPtr<EdgeSE3ProjectXYZOnlyPose>
     // } 
-
     struct Pose {
         translation: [f64; 3], // in C++: array<double, 3>,
         rotation: [f64; 4] // in C++: array<double, 4> 

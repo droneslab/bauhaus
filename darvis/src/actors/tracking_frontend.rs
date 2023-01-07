@@ -98,7 +98,10 @@ impl DarvisTrackingFront {
         } else {
             self.orb_extractor_left.extractor.pin_mut().extract(&image_dv, &mut keypoints, &mut descriptors);
         }
-        // TODO (Stereo) Also call extractor_right, see Tracking::GrabImageStereo
+        match self.sensor.frame() {
+            FrameSensor::Stereo => todo!("Stereo"), //Also call extractor_right, see Tracking::GrabImageStereo,
+            _ => {}
+        }
 
         (keypoints.kp_ptr.kp_ptr, descriptors.mat_ptr.mat_ptr)
     }

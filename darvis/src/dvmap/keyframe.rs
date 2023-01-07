@@ -1,8 +1,8 @@
-use std::{collections::{HashMap}, cmp::min};
+use std::{collections::{HashMap, HashSet}, cmp::min};
 use chrono::{DateTime, Utc};
 use derivative::Derivative;
 use dvcore::{matrix::{DVVector3}};
-use log::{error, info, debug};
+use log::{error, info, debug, warn};
 use serde::{Deserialize, Serialize};
 use crate::{dvmap::{map::Id, pose::Pose, frame::*},modules::{imu::*},};
 use super::{mappoint::{MapPoint, FullMapPoint}, map::{Map}, features::Features, bow::{BoW, self}};
@@ -38,8 +38,6 @@ pub struct KeyFrame<K: KeyFrameState> {
     // Don't add these in!! read explanations below
     // mnTrackReferenceForFrame ... used in tracking to decide whether to add a kf/mp into tracking's local map. redundant and easy to mess up/get out of sync. Search for this globally to see an example of how to avoid using it.
 }
-
-// Typestate...State options.
 #[derive(Clone, Debug, Default, Copy, Serialize, Deserialize)]
 pub struct PrelimKeyFrame {} // prelimary map item created locally but not inserted into the map yet
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -49,8 +47,18 @@ pub struct FullKeyFrame { // Full map item inserted into the map with the follow
 
     // Map connections ... Parent, children, neighbors
     pub parent: Option<Id>,
-    pub children: Vec<Id>,
-    connected_keyframes: ConnectedKeyFrames,// also sometimes called covisibility keyframes in ORBSLAM3
+    pub children: HashSet<Id>,
+
+    // Connected Keyframes... also sometimes called covisibility keyframes in ORBSLAM3
+    // Note: Two ways of storing this data ...
+    // `ordered` is an ordered list of kf IDs based on weight, for fast lookup of the top N connected KFs
+    // `map` is a hashmap of kf id to weight, for fast lookup of a kf's weight
+    // This is essentially the setup in ORBSLAM3, with the additional optimization that
+    // `ordered` is only sorted when a KF with a weight > cutoff_weight is inserted
+    // (because `ordered` is only ever used for the top 30 keyframes in the vector)
+    ordered_connected_keyframes: Vec<(Id, i32)>, // mvpOrderedConnectedKeyFrames and mvOrderedWeights
+    map_connected_keyframes: HashMap<Id, i32>, // mConnectedKeyFrameWeights
+    connected_keyframes_cutoff_weight: i32,
 
     // Sofiya: I think we can clean this up and get rid of these
     // Variables used by KF database
@@ -69,10 +77,13 @@ pub struct FullKeyFrame { // Full map item inserted into the map with the follow
     // pub mnMergeCorrectedForKF: u64,
     // pub mnBALocalForMerge: u64,
 }
-
 pub trait KeyFrameState: Send + Sync {}
 impl KeyFrameState for PrelimKeyFrame {}
 impl KeyFrameState for FullKeyFrame {}
+
+impl<T: KeyFrameState> KeyFrame<T> {
+
+}
 
 impl KeyFrame<PrelimKeyFrame> {
     pub fn new(frame: &Frame) -> KeyFrame<PrelimKeyFrame> {
@@ -143,40 +154,83 @@ impl KeyFrame<FullKeyFrame> {
     }
 
     pub fn add_connection(&mut self, kf_id: &Id, weight: i32) {
-        self.full_kf_info.connected_keyframes.add_connection(kf_id, weight);
+        *self.full_kf_info.map_connected_keyframes.entry(*kf_id).or_insert(weight) = weight;
+        warn!("TODO...verify sorting in ConnectedKeyFrames, might be backwards. Not quite clear whether low weight = earlier index or vice versa");
+        if weight > self.full_kf_info.connected_keyframes_cutoff_weight { self.sort_ordered(); }
     }
 
     pub fn erase_connection(&mut self, kf_id: &Id) {
-        self.full_kf_info.connected_keyframes.erase_connection(kf_id);
-    }
-
-    pub fn get_connections(&self, num: i32) -> Vec<Id> {
-        // KeyFrame::GetBestCovisibilityKeyFrames
-        self.full_kf_info.connected_keyframes.get_connections(num)
+        if self.full_kf_info.map_connected_keyframes.contains_key(kf_id) {
+            self.full_kf_info.map_connected_keyframes.remove(kf_id);
+            self.sort_ordered();
+        }
     }
 
     pub fn insert_all_connections(&mut self, new_connections: HashMap::<Id, i32>, is_init_kf: bool) -> Option<Id> {
-        self.full_kf_info.connected_keyframes.insert_all_connections(new_connections);
+        // Turn hashmap into vector and sort by weights
+        self.full_kf_info.ordered_connected_keyframes = new_connections.iter()
+            .map(|(key, value)| { (key.clone(), value.clone()) })
+            .collect::<Vec<(Id, i32)>>(); 
+        self.sort_ordered();
+
+        self.full_kf_info.map_connected_keyframes = new_connections;
+
         if self.full_kf_info.parent.is_none() && !is_init_kf { 
-            let parent_id = self.full_kf_info.connected_keyframes.first();
-            self.change_parent(parent_id);
-            debug!("keyframe;inserted parent;{};for child;{}", parent_id, self.full_kf_info.id);
-            Some(self.full_kf_info.connected_keyframes.first())
+            let parent_id = self.full_kf_info.ordered_connected_keyframes[0].0;
+            self.change_parent(Some(parent_id));
+            debug!("inserted parent;{};for child;{}", parent_id, self.full_kf_info.id);
+            Some(self.full_kf_info.ordered_connected_keyframes[0].0)
         } else {
-            debug!("keyframe;not inserting parent for kf;{}", self.full_kf_info.id);
+            debug!("not inserting parent for kf;{};parent is already kf;{}", self.full_kf_info.id, self.full_kf_info.parent.unwrap_or(-1));
             None
         }
     }
 
-    pub fn change_parent(&mut self, id: Id) {
-        if id == self.full_kf_info.id {
+    pub fn first(&self) -> Id {
+        self.full_kf_info.ordered_connected_keyframes[0].0 //.1
+    }
+
+    pub fn get_connections(&self, num: i32) -> Vec<Id> {
+       let max_len = min(self.full_kf_info.ordered_connected_keyframes.len(), num as usize);
+       let (conections, _) : (Vec<i32>, Vec<i32>) = self.full_kf_info.ordered_connected_keyframes[0..max_len].iter().cloned().unzip();
+       debug!("keyframe connections : {:?}", conections);
+       conections
+    }
+
+    fn sort_ordered(&mut self) {
+        //KeyFrame::UpdateBestCovisibles
+        warn!("TODO...verify sorting in ConnectedKeyFrames, might be backwards. Not quite clear whether low weight = earlier index or vice versa");
+        self.full_kf_info.ordered_connected_keyframes.sort_by(|(_,w1), (_,w2)| w2.cmp(&w1));
+        let max_len = self.full_kf_info.ordered_connected_keyframes.len(); 
+        if max_len >= 30 {
+            self.full_kf_info.connected_keyframes_cutoff_weight = self.full_kf_info.ordered_connected_keyframes[30].1;
+        } else {
+            self.full_kf_info.connected_keyframes_cutoff_weight =0;
+        }
+    }
+
+    pub fn get_weight(&self, other_kf_id: &Id) -> i32 {
+        // int KeyFrame::GetWeight(KeyFrame *pKF)
+        if self.full_kf_info.map_connected_keyframes.contains_key(other_kf_id) {
+            return *self.full_kf_info.map_connected_keyframes.get(other_kf_id).unwrap();
+        } else {
+            return 0;
+        }
+    }
+
+    pub fn change_parent(&mut self, some_id: Option<Id>) {
+        if some_id.is_some() && some_id.unwrap() == self.full_kf_info.id {
             error!("keyframe::change_parent;parent and child are the same KF");
         }
-        self.full_kf_info.parent = Some(id);
+        self.full_kf_info.parent = some_id;
     }
 
     pub fn add_child(&mut self, id: Id) {
-        self.full_kf_info.children.push(id);
+        self.full_kf_info.children.insert(id);
+    }
+
+    pub fn erase_child(&mut self, id: Id) {
+        self.full_kf_info.children.remove(&id);
     }
 
     pub fn get_camera_center(&self) -> DVVector3<f64> {
@@ -186,7 +240,7 @@ impl KeyFrame<FullKeyFrame> {
     }
 
     pub fn get_right_camera_center(&self) -> DVVector3<f64> {
-        todo!("TODO (IMU)");
+        todo!("IMU");
         // NOt sure what mTlr is, it comes from the settings but might get updated somewhere.
         //    return (mTwc * mTlr).translation();
         // this needs to be generic on sensor, so it can't be called if the sensor doesn't have a right camera
@@ -230,7 +284,7 @@ impl KeyFrame<FullKeyFrame> {
     }
 
     pub fn get_right_pose(&self) -> Pose {
-        todo!("TODO (Stereo)");
+        todo!("Stereo");
         // Sophus::SE3<float> KeyFrame::GetRightPose() {
         //     unique_lock<mutex> lock(mMutexPose);
 
@@ -241,74 +295,5 @@ impl KeyFrame<FullKeyFrame> {
     pub fn get_features_in_area(&self, x: &f64, y: &f64, radius: f32, is_right: bool) -> Vec<u32> {
         todo!("TODO LOCAL MAPPING");
         // self.features.get_features_in_area(x, y, radius, &self.features.image_bounds)
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, Default)]
-struct ConnectedKeyFrames {
-    // Note: Two ways of storing this data ...
-    // `ordered` is an ordered list of kf IDs based on weight, for fast lookup of the top N connected KFs
-    // `map` is a hashmap of kf id to weight, for fast lookup of a kf's weight
-    // This is essentially the setup in ORBSLAM3, with the additional optimization that
-    // `ordered` is only sorted when a KF with a weight > cutoff_weight is inserted
-    // (because `ordered` is only ever used for the top 30 keyframes in the vector)
-    ordered: Vec<(Id, i32)>, // mvpOrderedConnectedKeyFrames and mvOrderedWeights
-    map: HashMap<Id, i32>, // mConnectedKeyFrameWeights
-    cutoff_weight: i32,
-}
-impl ConnectedKeyFrames {
-    pub(super) fn add_connection(&mut self, kf_id: &Id, weight: i32) {
-        *self.map.entry(*kf_id).or_insert(weight) = weight;
-        // TODO (verify): Sorting might be backwards? Not quite clear whether low weight = earlier index or vice versa
-        if weight > self.cutoff_weight { self.sort_ordered(); }
-    }
-
-    pub fn erase_connection(&mut self, kf_id: &Id) {
-        todo!("TODO LOCAL MAPPING");
-        // bool bUpdate = false;
-        // {
-        //     unique_lock<mutex> lock(mMutexConnections);
-        //     if(mConnectedKeyFrameWeights.count(pKF))
-        //     {
-        //         mConnectedKeyFrameWeights.erase(pKF);
-        //         bUpdate=true;
-        //     }
-        // }
-
-        // if(bUpdate)
-        //     UpdateBestCovisibles();
-    }
-
-    pub fn insert_all_connections(&mut self, new_connections: HashMap::<Id, i32>) {
-        // Turn hashmap into vector and sort by weights
-        self.ordered = new_connections.iter()
-            .map(|(key, value)| { (key.clone(), value.clone()) })
-            .collect::<Vec<(Id, i32)>>(); 
-        self.sort_ordered();
-
-        self.map = new_connections;
-    }
-
-    pub fn first(&self) -> Id {
-        self.ordered[0].0 //.1
-    }
-
-    pub fn get_connections(&self, num: i32) -> Vec<Id> {
-       let max_len = min(self.ordered.len(), num as usize);
-       let (conections, _) : (Vec<i32>, Vec<i32>) = self.ordered[0..max_len].iter().cloned().unzip();
-       debug!("keyframe connections : {:?}", conections);
-       conections
-    }
-
-    pub fn sort_ordered(&mut self) {
-        // TODO (verify): Sorting might be backwards? Not quite clear whether low weight = earlier index or vice versa
-        //KeyFrame::UpdateBestCovisibles
-        self.ordered.sort_by(|(_,w1), (_,w2)| w2.cmp(&w1));
-        let max_len = self.ordered.len(); 
-        if max_len >= 30 {
-            self.cutoff_weight = self.ordered[30].1;
-        } else {
-            self.cutoff_weight =0;
-        }
     }
 }

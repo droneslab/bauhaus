@@ -1,4 +1,4 @@
-use log::info;
+use log::{info, warn};
 use opencv::{prelude::{Mat, MatTrait, Boxed, MatTraitConst}, core::{Scalar, Point3f, CV_64F, KeyPoint, Point}};
 use dvcore::{config::*, matrix::{DVMatrix, DVVectorOfPoint3f, DVVector3, DVVectorOfi32}};
 use crate::{
@@ -49,7 +49,7 @@ impl Camera {
         *k.at_2d_mut::<f64>(1, 2)? = cy;
         *k.at_2d_mut::<f64>(2, 2)? = 1.0;
 
-        // Todo (need?) Check if we need to correct distortion from the images
+        warn!("TODO... check if we need to correct distortion from the images");
         let mut dist_coef = None;
         let sensor= GLOBAL_PARAMS.get::<Sensor>(SYSTEM_SETTINGS, "sensor");
         let k1= GLOBAL_PARAMS.get::<f64>(CAMERA, "k1") as f32;

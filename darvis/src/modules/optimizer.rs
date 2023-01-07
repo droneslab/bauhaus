@@ -3,7 +3,7 @@ extern crate g2o;
 use std::collections::{HashMap};
 use dvcore::{
     lockwrap::ReadOnlyWrapper,
-    config::{GLOBAL_PARAMS, SYSTEM_SETTINGS, Sensor},
+    config::{GLOBAL_PARAMS, SYSTEM_SETTINGS, Sensor, FrameSensor},
 };
 use log::{info, warn, debug};
 use nalgebra::Matrix3;
@@ -39,7 +39,7 @@ lazy_static! {
 // int Optimizer::PoseInertialOptimizationLastFrame(Frame *pFrame, bool bRecInit)
 // but bRecInit is always set to false
 pub fn pose_inertial_optimization_last_frame(frame: &mut Frame, map: &ReadOnlyWrapper<Map>) -> i32 {
-    // TODO IMU
+    todo!("IMU... Optimizer::PoseInertialOptimizationLastFrame(&mCurrentFrame)");
     // let mut optimizer = g2o::ffi::new_sparse_optimizer(2);
 
     // let nInitialMonoCorrespondences = 0;
@@ -430,13 +430,12 @@ pub fn pose_inertial_optimization_last_frame(frame: &mut Frame, map: &ReadOnlyWr
 
 //     return nInitialCorrespondences-nBad;
 // }
-todo!("TODO (IMU) Optimizer::PoseInertialOptimizationLastFrame(&mCurrentFrame)");
 }
 
 //int Optimizer::PoseInertialOptimizationLastKeyFrame(Frame *pFrame, bool bRecInit)
 // but bRecInit is always set to false
 pub fn pose_inertial_optimization_last_keyframe(frame: &mut Frame) -> i32 {
-    // TODO IMU
+    todo!("IMU... Optimizer::PoseInertialOptimizationLastKeyFrame(&mCurrentFrame)");
     // let mut optimizer = g2o::ffi::new_sparse_optimizer(2);
 
     // let nInitialMonoCorrespondences = 0;
@@ -794,7 +793,6 @@ pub fn pose_inertial_optimization_last_keyframe(frame: &mut Frame) -> i32 {
     // pFrame->mpcpi = new ConstraintPoseImu(VP->estimate().Rwb,VP->estimate().twb,VV->estimate(),VG->estimate(),VA->estimate(),H);
 
     // return nInitialCorrespondences-nBad;
-    todo!("TODO (IMU) Optimizer::PoseInertialOptimizationLastKeyFrame(&mCurrentFrame)");
 }
 
 pub fn optimize_pose(frame: &mut Frame, map: &ReadOnlyWrapper<Map>) -> Option<(i32, Pose)> {
@@ -832,7 +830,7 @@ pub fn optimize_pose(frame: &mut Frame, map: &ReadOnlyWrapper<Map>) -> Option<(i
                 let edge = match sensor.frame() {
                     crate::FrameSensor::Stereo => {
                         // Stereo observations
-                        todo!("TODO (Stereo)");
+                        todo!("Stereo");
                         // let edge = optimizer.create_edge_stereo(
                         //     keypoint.octave, keypoint.pt.x, keypoint.pt.y,
                         //    frame.keypoints_data.mv_right.get(mp_id).unwrap(),
@@ -896,7 +894,6 @@ pub fn optimize_pose(frame: &mut Frame, map: &ReadOnlyWrapper<Map>) -> Option<(i
         optimizer.pin_mut().optimize(iterations[iteration]);
 
         num_bad = 0;
-        // Sofiya todo; need to uncomment this
         for (index, edge) in &mut edges {
             if frame.is_mp_outlier(&index) {
                 edge.pin_mut().compute_error();
@@ -952,35 +949,40 @@ pub fn optimize_pose(frame: &mut Frame, map: &ReadOnlyWrapper<Map>) -> Option<(i
         //         e->setRobustKernel(0);
         // }
 
-        // TODO (Stereo)
-        // for(size_t i=0, iend=vpEdgesStereo.size(); i<iend; i++)
-        // {
-        //     g2o::EdgeStereoSE3ProjectXYZOnlyPose* e = vpEdgesStereo[i];
+        match sensor.frame() {
+            FrameSensor::Stereo => {
+                todo!("Stereo");
+                // for(size_t i=0, iend=vpEdgesStereo.size(); i<iend; i++)
+                // {
+                //     g2o::EdgeStereoSE3ProjectXYZOnlyPose* e = vpEdgesStereo[i];
 
-        //     const size_t idx = vnIndexEdgeStereo[i];
+                //     const size_t idx = vnIndexEdgeStereo[i];
 
-        //     if(pFrame->mappoint_outliers[idx])
-        //     {
-        //         e->computeError();
-        //     }
+                //     if(pFrame->mappoint_outliers[idx])
+                //     {
+                //         e->computeError();
+                //     }
 
-        //     const float chi2 = e->chi2();
+                //     const float chi2 = e->chi2();
 
-        //     if(chi2>chi2_stereo[it])
-        //     {
-        //         pFrame->mappoint_outliers[idx]=true;
-        //         e->setLevel(1);
-        //         nBad++;
-        //     }
-        //     else
-        //     {                
-        //         e->setLevel(0);
-        //         pFrame->mappoint_outliers[idx]=false;
-        //     }
+                //     if(chi2>chi2_stereo[it])
+                //     {
+                //         pFrame->mappoint_outliers[idx]=true;
+                //         e->setLevel(1);
+                //         nBad++;
+                //     }
+                //     else
+                //     {
+                //         e->setLevel(0);
+                //         pFrame->mappoint_outliers[idx]=false;
+                //     }
 
-        //     if(it==2)
-        //         e->setRobustKernel(0);
-        // }
+                //     if(it==2)
+                //         e->setRobustKernel(0);
+                // }
+            },
+            _ => {}
+        }
 
         if optimizer.num_edges() < 10 {
             break;
@@ -1040,22 +1042,20 @@ pub fn global_bundle_adjustment(map: &Map, loop_kf: i32, iterations: i32) -> BAR
         let mut n_edges = 0;
 
         //SET EDGES
-        for kf_id in observations.keys() {
+        for (kf_id, (left_index, right_index)) in observations {
             if !optimizer.has_vertex(mp_vertex_id) || !optimizer.has_vertex(*kf_id) {
                 continue;
             }
 
-            let (left_index, right_index) = observations.get_observation(kf_id);
-
             match sensor.frame() {
                 crate::FrameSensor::Stereo => {
-                    todo!("TODO (Stereo), Optimizer lines 194-226");
+                    todo!("Stereo, Optimizer lines 194-226");
                 },
                 _ => {
-                    if left_index != -1 {
+                    if *left_index != -1 {
                         n_edges += 1;
 
-                        let (keypoint, _) = map.get_keyframe(kf_id).unwrap().features.get_keypoint(left_index as usize);
+                        let (keypoint, _) = map.get_keyframe(kf_id).unwrap().features.get_keypoint(*left_index as usize);
                         optimizer.pin_mut().add_edge_monocular_binary(
                             false, mp_vertex_id, *kf_id,
                             keypoint.octave, keypoint.pt.x, keypoint.pt.y,
@@ -1068,9 +1068,13 @@ pub fn global_bundle_adjustment(map: &Map, loop_kf: i32, iterations: i32) -> BAR
                 }
             };
 
-            // if(pKF->mpCamera2){
-            // TODO (Stereo) Optimizer lines 229-261
-            // }
+            match sensor.frame() {
+                FrameSensor::Stereo => {
+                    todo!("Stereo, optimizer lines 229-261");
+                    // if pkf->mpcamera2...
+                },
+                _ => {}
+            }
         }
 
         if n_edges == 0 {

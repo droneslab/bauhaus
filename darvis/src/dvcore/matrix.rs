@@ -93,7 +93,7 @@ impl<'a> From<&'a DVMatrix> for dvos3binding::BindCVMatRef<'a> {
 
 impl Serialize for DVMatrix {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer {
-        todo!("(low priority) serialize");
+        todo!("serialize");
         }
 }
 impl<'de> Deserialize<'de> for DVMatrix {
@@ -101,7 +101,7 @@ impl<'de> Deserialize<'de> for DVMatrix {
     where
         D: Deserializer<'de>,
     {
-        todo!("(low priority) deserialize");
+        todo!("deserialize");
     }
 }
 
@@ -177,7 +177,7 @@ impl Serialize for DVVectorOfKeyPoint {
     where
         S: Serializer,
     {
-        todo!("(low priority) serialize");
+        todo!("serialize");
     }
 }
 impl<'de> Deserialize<'de> for DVVectorOfKeyPoint {
@@ -185,7 +185,7 @@ impl<'de> Deserialize<'de> for DVVectorOfKeyPoint {
     where
         D: Deserializer<'de>,
     {
-        todo!("(low priority) deserialize");
+        todo!("serialize");
     }
 }
 
@@ -383,7 +383,7 @@ impl<T> Serialize for DVVector3<T> {
     where
         S: Serializer,
     {
-        todo!("(low priority) serialize");
+        todo!("serialize");
     }
 }
 impl<'de, T> Deserialize<'de> for DVVector3<T> {
@@ -391,7 +391,7 @@ impl<'de, T> Deserialize<'de> for DVVector3<T> {
     where
         D: Deserializer<'de>,
     {
-        todo!("(low priority) deserialize");
+        todo!("serialize");
     }
 }
 
@@ -452,7 +452,7 @@ impl<T> Serialize for DVMatrix3<T> {
     where
         S: Serializer,
     {
-        todo!("(low priority) serialize");
+        todo!("serialize");
     }
 }
 impl<'de, T> Deserialize<'de> for DVMatrix3<T> {
@@ -460,7 +460,7 @@ impl<'de, T> Deserialize<'de> for DVMatrix3<T> {
     where
         D: Deserializer<'de>,
     {
-        todo!("(low priority) deserialize");
+        todo!("serialize");
     }
 }
 
