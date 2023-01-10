@@ -6,8 +6,7 @@ use crate::{
     dvmap::{keyframe::*, map::*},
     modules::map_initialization::Initialization, actors::messages::{MapInitializedMsg, KeyFrameIdMsg}, registered_modules::{LOCAL_MAPPING, TRACKING_BACKEND},
 };
-
-use super::mappoint::{MapPoint, PrelimMapPoint};
+use super::{mappoint::{MapPoint, PrelimMapPoint}, pose::Pose};
 
 pub static MAP_ACTOR: &str = "MAP_ACTOR"; 
 
@@ -89,13 +88,15 @@ enum MapEditTarget {
     CreateInitialMapStereo{initialization_data: Initialization, callback_actor: axiom::actors::Aid},
     KeyFrame__New{kf: Frame<PrelimKeyFrame>, callback_actor: axiom::actors::Aid},
     KeyFrame__Delete{id: Id},
-    Map__ResetActive(),
+    KeyFrame__Pose{kf_id: Id, pose: Pose},
+    Map__ResetActive{},
     MapPoint__New{mp: MapPoint<PrelimMapPoint>, observations_to_add: Vec<(Id, u32, usize)>},
     MapPoint__Position{ id: u64, pos: Vector3<f32> },
     MapPoint__Discard{id: Id},
     MapPoint__Replace{mp_to_replace: Id, mp: Id},
     MapPoint__IncreaseFound{mp_ids_and_nums: Vec::<(Id, i32)>},
-    MapPoint__AddObservation{mp_id: Id, kf_id: Id, index: usize}
+    MapPoint__AddObservation{mp_id: Id, kf_id: Id, index: usize},
+    Mappoint__Pose{mp_id: Id, pose: Pose}
 }
 pub struct MapWriteMsg {
     // #[serde(bound = "")] If using serialize/deserialize, uncomment this
@@ -107,7 +108,7 @@ impl MapWriteMsg {
     pub fn create_initial_map_monocular(
         initialization_data: Initialization,
         callback_actor: axiom::actors::Aid
-    ) -> MapWriteMsg {
+    ) -> Self {
         Self {
             target: MapEditTarget::CreateInitialMapMonocular{initialization_data, callback_actor },
         }
@@ -115,54 +116,64 @@ impl MapWriteMsg {
     pub fn create_initial_map_stereo(
         initialization_data: Initialization,
         callback_actor: axiom::actors::Aid
-    ) -> MapWriteMsg {
+    ) -> Self {
         Self {
             target: MapEditTarget::CreateInitialMapStereo{initialization_data, callback_actor},
         }
     }
-    pub fn new_keyframe(kf: Frame<PrelimKeyFrame>, callback_actor: axiom::actors::Aid) -> MapWriteMsg {
+    pub fn new_keyframe(kf: Frame<PrelimKeyFrame>, callback_actor: axiom::actors::Aid) -> Self {
         Self {
             target: MapEditTarget::KeyFrame__New {kf, callback_actor},
         }
     }
-    pub fn delete_keyframe(id: Id) -> MapWriteMsg {
+    pub fn delete_keyframe(id: Id) -> Self {
         Self {
             target: MapEditTarget::KeyFrame__Delete { id }
         }
     }
-    pub fn reset_active_map() -> MapWriteMsg {
+    pub fn edit_keyframe_pose(kf_id: Id, pose: Pose) -> Self {
         Self {
-            target: MapEditTarget::Map__ResetActive(),
+            target: MapEditTarget::KeyFrame__Pose {kf_id, pose}
         }
     }
-    pub fn create_new_mappoint(mp: MapPoint<PrelimMapPoint>, observations_to_add: Vec<(Id, u32, usize)>) -> MapWriteMsg {
+    pub fn reset_active_map() -> Self {
+        Self {
+            target: MapEditTarget::Map__ResetActive{},
+        }
+    }
+    pub fn create_new_mappoint(mp: MapPoint<PrelimMapPoint>, observations_to_add: Vec<(Id, u32, usize)>) -> Self {
         Self {
             target: MapEditTarget::MapPoint__New {mp, observations_to_add},
         }
     }
-    pub fn update_mappoint_position(kf_id: u64, pos : &Vector3<f32>) -> MapWriteMsg {
+    pub fn update_mappoint_position(kf_id: u64, pos : &Vector3<f32>) -> Self {
         Self {
             target: MapEditTarget::MapPoint__Position {id :kf_id, pos: pos.clone()},
         }
     }
-    pub fn discard_mappoint(mp_id: &Id) -> MapWriteMsg {
+    pub fn discard_mappoint(mp_id: &Id) -> Self {
         Self {
             target: MapEditTarget::MapPoint__Discard {id : mp_id.clone()},
         }
     }
-    pub fn increase_found(mp_ids_and_nums: Vec<(Id, i32)>) -> MapWriteMsg {
+    pub fn increase_found(mp_ids_and_nums: Vec<(Id, i32)>) -> Self {
         Self {
             target: MapEditTarget::MapPoint__IncreaseFound { mp_ids_and_nums },
         }
     }
-    pub fn replace_mappoint(mp_to_replace: Id, mp: Id) -> MapWriteMsg {
+    pub fn replace_mappoint(mp_to_replace: Id, mp: Id) -> Self {
         Self {
             target: MapEditTarget::MapPoint__Replace{mp_to_replace, mp},
         }
     }
-    pub fn add_observation(mp_id: Id, kf_id: Id, index: usize) -> MapWriteMsg {
+    pub fn add_observation(mp_id: Id, kf_id: Id, index: usize) -> Self {
         Self {
             target: MapEditTarget::MapPoint__AddObservation{mp_id, kf_id, index}
+        }
+    }
+    pub fn edit_mappoint_pose(mp_id: Id, pose: Pose) -> Self {
+        Self {
+            target: MapEditTarget::Mappoint__Pose {mp_id, pose}
         }
     }
 }

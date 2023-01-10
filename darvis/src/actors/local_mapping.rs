@@ -172,7 +172,8 @@ impl DarvisLocalMapping {
             // }
         }
 
-        self.send_to_loop_closing(context);
+        let loopclosing = context.system.find_aid_by_name(LOOP_CLOSING).unwrap();
+        loopclosing.send_new(KeyFrameIdMsg{ keyframe_id: self.current_keyframe_id }).unwrap();
     }
 
     fn mappoint_culling(&mut self, map_actor: &Aid) {
@@ -418,11 +419,12 @@ impl DarvisLocalMapping {
                 }
 
                 // Triangulation is successful
-                let new_mp_msg = MapWriteMsg::create_new_mappoint(
-                    MapPoint::<PrelimMapPoint>::new(x3_d.unwrap(), self.current_keyframe_id, map.id),
-                    vec![(self.current_keyframe_id, current_kf.features.num_keypoints, idx1), (neighbor_id, neighbor_kf.features.num_keypoints, idx2)]
-                );
-                map_actor.send_new(new_mp_msg).unwrap();
+                map_actor.send_new(
+                    MapWriteMsg::create_new_mappoint(
+                        MapPoint::<PrelimMapPoint>::new(x3_d.unwrap(), self.current_keyframe_id, map.id),
+                        vec![(self.current_keyframe_id, current_kf.features.num_keypoints, idx1), (neighbor_id, neighbor_kf.features.num_keypoints, idx2)]
+                    )
+                ).unwrap();
             }
         }
     }
@@ -531,8 +533,10 @@ impl DarvisLocalMapping {
         // A keyframe is considered redundant if the 90% of the MapPoints it sees, are seen
         // in at least other 3 keyframes (in the same or finer scale)
         // We only consider close stereo points
-        // mpCurrentKeyFrame->UpdateBestCovisibles(); 
+
         warn!("TODO... I think we don't need this because the covisibility keyframes struct organizes itself but double check");
+        // mpCurrentKeyFrame->UpdateBestCovisibles(); 
+
         let map = self.map.read();
         let current_kf = map.get_keyframe(&self.current_keyframe_id).unwrap();
         let local_keyframes = current_kf.get_connections(i32::MAX);
@@ -556,7 +560,7 @@ impl DarvisLocalMapping {
                 // }
                 // last_ID = aux_KF->mnId;
             }
-            false => {} // set to 0,
+            false => {} // set to 0 when finishing stereo code
         };
 
         for i in 0..min(100, local_keyframes.len()) {
@@ -659,21 +663,6 @@ impl DarvisLocalMapping {
             // TODO (design): mbAbortBA
             // if((count > 20 && mbAbortBA) { break; }
         }
-    }
-
-    fn send_to_loop_closing(&self, context: Context) {
-        let loopclosing = context.system.find_aid_by_name(LOOP_CLOSING).unwrap();
-        let actor_msg = GLOBAL_PARAMS.get::<String>(LOOP_CLOSING, "actor_message");
-        todo!("TODO LOCAL MAPPING");
-        // match actor_msg.as_ref() {
-        //     "KeyFrameMsg" => {
-        //         loopclosing.send_new(KeyFrameMsg{ kf: new_kf }).unwrap();
-        //     },
-        //     _ => {
-        //         warn!("tracking_backend::create_new_keyframe;invalid message type, selecting KeyFrameMsg");
-        //         loopclosing.send_new(KeyFrameMsg{ kf: new_kf }).unwrap();
-        //     },
-        // }
     }
 }
 

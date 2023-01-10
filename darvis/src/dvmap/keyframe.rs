@@ -350,21 +350,23 @@ impl Frame<FullKeyFrame> {
         self.full_kf_info.map_connected_keyframes = new_connections;
 
         if self.full_kf_info.parent.is_none() && !is_init_kf { 
-            let parent_id = self.full_kf_info.ordered_connected_keyframes[0].0;
+            let parent_id = self.first_connected_kf();
             self.change_parent(Some(parent_id));
             debug!("inserted parent;{};for child;{}", parent_id, self.full_kf_info.id);
-            Some(self.full_kf_info.ordered_connected_keyframes[0].0)
+            Some(self.first_connected_kf())
         } else {
             debug!("not inserting parent for kf;{};parent is already kf;{}", self.full_kf_info.id, self.full_kf_info.parent.unwrap_or(-1));
             None
         }
     }
 
-    pub fn first(&self) -> Id {
+    fn first_connected_kf(&self) -> Id {
         self.full_kf_info.ordered_connected_keyframes[0].0 //.1
     }
 
     pub fn get_connections(&self, num: i32) -> Vec<Id> {
+        //vector<KeyFrame*> KeyFrame::GetVectorCovisibleKeyFrames(), KeyFrame::GetConnectedKeyFrames
+        // To get all connections, pass in i32::MAX as `num`
        let max_len = min(self.full_kf_info.ordered_connected_keyframes.len(), num as usize);
        let (conections, _) : (Vec<i32>, Vec<i32>) = self.full_kf_info.ordered_connected_keyframes[0..max_len].iter().cloned().unzip();
        debug!("keyframe connections : {:?}", conections);
