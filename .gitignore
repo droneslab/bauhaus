@@ -1,3 +1,14 @@
-/target
-Cargo.lock
-/data
+**/target
+**/Cargo.lock
+**/data
+
+**/orb_slam3/lib/*
+**/lib/**
+**/build/**
+**/CMakeCache.txt
+**/CMakeFiles/**
+**/output.log
+**/vocabulary/*
+
+**/.vscode/**
+darvis/results/trajectory.txt
