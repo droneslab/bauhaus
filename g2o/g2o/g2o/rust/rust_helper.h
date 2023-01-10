@@ -48,7 +48,8 @@ namespace g2o {
         );
         unique_ptr<g2o::EdgeSE3ProjectXYZ> add_edge_monocular_binary(
             bool robust_kernel, int vertex1, int vertex2,
-            int keypoint_octave, float keypoint_pt_x, float keypoint_pt_y, float invSigma2
+            int keypoint_octave, float keypoint_pt_x, float keypoint_pt_y, float invSigma2,
+            int huber_delta
         );
         void _add_edge_stereo() const;
         int num_edges() const;

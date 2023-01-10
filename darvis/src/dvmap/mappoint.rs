@@ -33,7 +33,7 @@ pub struct MapPoint<M: MapPointState> {
     // Sofiya: it would be nice if we could guarantee that the connections are updated/correct
     // rather than duplicating all these connections across all the objects and hoping we remember
     // to update them correctly after a map modification
-    origin_map_id: Id,
+    pub origin_map_id: Id,
     ref_kf_id: Id, // mpRefKF
     pub first_kf_id: Id, // mnFirstKFid
 

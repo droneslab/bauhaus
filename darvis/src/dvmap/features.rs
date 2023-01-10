@@ -114,6 +114,7 @@ impl Features {
     }
 
     pub fn get_keypoint(&self, index: usize) -> (KeyPoint, bool) {
+        // equivalent to mvKeysUn[leftIndex] or mvKeysUn[rightIndex]
         // Return keypoint and whether it is in the right frame or not
         match &self.keypoints {
             KeyPoints::Mono{keypoints_un, ..} | KeyPoints::Rgbd{keypoints_un, ..} => (keypoints_un.get(index).unwrap(), false),
@@ -137,6 +138,7 @@ impl Features {
     }
 
     pub fn get_mv_right(&self, i: usize) -> Option<f32> {
+        // mvuRight
         match &self.keypoints {
             KeyPoints::Mono{..} | KeyPoints::Rgbd{..}  => None,
             KeyPoints::Stereo{mv_right, ..}  => Some(mv_right[i]),

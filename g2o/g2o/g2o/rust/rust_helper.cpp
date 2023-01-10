@@ -167,7 +167,8 @@ namespace g2o {
 
     std::unique_ptr<g2o::EdgeSE3ProjectXYZ> BridgeSparseOptimizer::add_edge_monocular_binary(
         bool robust_kernel, int vertex1, int vertex2,
-        int keypoint_octave, float keypoint_pt_x, float keypoint_pt_y, float invSigma2
+        int keypoint_octave, float keypoint_pt_x, float keypoint_pt_y, float invSigma2,
+        int huber_delta
     ) {
         Eigen::Matrix<double,2,1> obs;
         obs << keypoint_pt_x, keypoint_pt_y;
@@ -181,7 +182,11 @@ namespace g2o {
         if (robust_kernel) {
             RobustKernelHuber * rk = new RobustKernelHuber;
             edge->setRobustKernel(rk);
-            rk->setDelta(thHuber2D);
+            if (huber_delta == 0) {
+                rk->setDelta(thHuber2D);
+            } else if (huber_delta == 1) {
+                rk->setDelta(thHuberMono);
+            }
         }
 
         // Pranay : Important camera settings

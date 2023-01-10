@@ -71,6 +71,7 @@ pub mod ffi {
             keypoint_pt_x: f32,
             keypoint_pt_y: f32,
             invSigma2: f32,
+            huber_delta: i32
         ) -> UniquePtr<EdgeSE3ProjectXYZ>;
         // fn set_edge_worldpos(
         //     self: &BridgeSparseOptimizer,
@@ -111,6 +112,9 @@ pub mod ffi {
         #[rust_name = "compute_error"]
         fn computeError(self: Pin<&mut EdgeSE3ProjectXYZOnlyPose>);
         fn chi2(self: &EdgeSE3ProjectXYZOnlyPose) -> f64;
+        fn chi2(self: &EdgeSE3ProjectXYZ) -> f64;
+        #[rust_name = "is_depth_positive"]
+        fn isDepthPositive(self: &EdgeSE3ProjectXYZ) -> bool;
         fn set_robust_kernel(self: Pin<&mut EdgeSE3ProjectXYZOnlyPose>, reset: bool);
     }
 }

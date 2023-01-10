@@ -130,7 +130,7 @@ public:
     // std::cout << "Sofiya2: " << v2->estimate() << std::endl;
   }
 
-  bool isDepthPositive() {
+  bool isDepthPositive() const {
     const VertexSE3Expmap* v1 = static_cast<const VertexSE3Expmap*>(_vertices[1]);
     const VertexSBAPointXYZ* v2 = static_cast<const VertexSBAPointXYZ*>(_vertices[0]);
     return (v1->estimate().map(v2->estimate()))(2)>0.0;
@@ -162,7 +162,7 @@ public:
     _error = obs - cam_project(v1->estimate().map(v2->estimate()),bf);
   }
 
-  bool isDepthPositive() {
+  bool isDepthPositive() const {
     const VertexSE3Expmap* v1 = static_cast<const VertexSE3Expmap*>(_vertices[1]);
     const VertexSBAPointXYZ* v2 = static_cast<const VertexSBAPointXYZ*>(_vertices[0]);
     return (v1->estimate().map(v2->estimate()))(2)>0.0;
@@ -192,7 +192,7 @@ public:
     _error = obs-cam_project(v1->estimate().map(Xw));
   }
 
-  bool isDepthPositive() {
+  bool isDepthPositive() const {
     const VertexSE3Expmap* v1 = static_cast<const VertexSE3Expmap*>(_vertices[0]);
     return (v1->estimate().map(Xw))(2)>0.0;
   }
@@ -225,7 +225,7 @@ public:
     _error = obs - cam_project(v1->estimate().map(Xw));
   }
 
-  bool isDepthPositive() {
+  bool isDepthPositive() const {
     const VertexSE3Expmap* v1 = static_cast<const VertexSE3Expmap*>(_vertices[0]);
     return (v1->estimate().map(Xw))(2)>0.0;
   }
