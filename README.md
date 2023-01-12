@@ -141,11 +141,30 @@ let max_features: i32 = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "max_features");
 ```
 Where ``max_features`` is the key you added in the config file.
 
-## Debugging
+## Debugging and different build/run options
 
-To instead run with address sanitizer to check memory errors from the ffi bindings, run:
+To build and run in DEBUG mode (fast building, slow execution), do:
 ```
-RUSTFLAGS="-Z sanitizer=address" cargo run --target x86_64-unknown-linux-gnu /datasets/ config.yaml
+cargo build
+cargo run [DATASET] config.yaml
+```
+
+To build and run in RELEASE mode (slow building, fast execution), do:
+```
+cargo build --release
+cargo run --release [DATASET] config.yaml
+```
+
+To run with gdb, do:
+```
+cargo build    # Either debug build or release build works
+rust-gdb --args target/debug/bindarvis [DATASET] config.yaml
+```
+Regular gdb (instead of rust-gdb) is also fine, but doesn't work in all cases, [like this one](https://users.rust-lang.org/t/printing-single-vector-elements-in-gdb/16890/4).
+
+To run with address sanitizer to check memory errors from the ffi bindings, do:
+```
+RUSTFLAGS="-Z sanitizer=address" cargo run --target x86_64-unknown-linux-gnu [DATASET] config.yaml
 ```
 
 ---
