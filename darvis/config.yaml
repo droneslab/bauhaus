@@ -206,7 +206,7 @@ actors:
        name: LOCAL_MAPPING
        file: local_mapping
        actor_message: KeyFrameMsg
-       actor_function: tracking_backend
+       actor_function: local_mapping
        address: localhost
        port: !!str 7780
        multithreaded: false
