@@ -7,7 +7,7 @@ use opencv::core::Point2f;
 use dvcore::{lockwrap::ReadOnlyWrapper, plugin_functions::Function, config::*};
 use crate::{
     actors::messages::{FeatureMsg, KeyFrameMsg, MapInitializedMsg, TrajectoryMessage, TrackingStateMsg},
-    registered_modules::{LOCAL_MAPPING, TRACKING_BACKEND, SHUTDOWN},
+    registered_modules::{LOCAL_MAPPING, TRACKING_BACKEND, SHUTDOWN, TRACKING_FRONTEND},
     dvmap::{
         map::Map, map_actor::MapWriteMsg, map_actor::{MAP_ACTOR}, map::Id,
         keyframe::{Frame, InitialFrame, PrelimKeyFrame}, pose::Pose, mappoint::{MapPoint, FullMapPoint},
@@ -15,7 +15,7 @@ use crate::{
     modules::{camera::Camera, camera::CameraType, imu::{ImuModule}, optimizer::{self}, orbmatcher, map_initialization::Initialization, relocalization::Relocalization},
 };
 
-use super::messages::{InitialMapMsg, KeyFrameIdMsg, LastKeyFrameUpdatedMsg};
+use super::messages::{KeyFrameIdMsg, LastKeyFrameUpdatedMsg};
 
 #[derive(Default, Debug, Clone)]
 pub struct TrackedMapPointData {
@@ -1012,16 +1012,20 @@ impl Function for DarvisTrackingBack {
             self.state = TrackingState::Ok;
             // Sofiya: ORBSLAM also sets lastkeyframeid, but I think we can get away without it
 
-            context.system.find_aid_by_name("TRACKING_FRONTEND").unwrap().send_new(
-                TrackingStateMsg { state: TrackingState::Ok }
+            context.system.find_aid_by_name(TRACKING_FRONTEND).unwrap().send_new(
+                TrackingStateMsg { 
+                    state: TrackingState::Ok,
+                    init_id: msg.ini_kf_id
+                }
             ).unwrap();
-            context.system.find_aid_by_name("LOCAL_MAPPING").unwrap().send_new(
-                InitialMapMsg { kf: msg.ini_kf_id }
+            context.system.find_aid_by_name(LOCAL_MAPPING).unwrap().send_new(
+                KeyFrameIdMsg { keyframe_id: msg.ini_kf_id }
             ).unwrap();
         } else if let Some(msg) = message.content_as::<KeyFrameIdMsg>() {
             // Received from the map actor after it inserts a keyframe
+            info!("Sending keyframe ID {} to local mapping", msg.keyframe_id);
             self.current_frame.ref_kf_id = Some(msg.keyframe_id);
-            context.system.find_aid_by_name("LOCAL_MAPPING").unwrap().send_new(
+            context.system.find_aid_by_name(LOCAL_MAPPING).unwrap().send_new(
                 KeyFrameIdMsg { keyframe_id: msg.keyframe_id }
             ).unwrap();
         } else if let Some(msg) = message.content_as::<LastKeyFrameUpdatedMsg>() {

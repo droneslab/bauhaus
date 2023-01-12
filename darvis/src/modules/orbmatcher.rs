@@ -475,7 +475,7 @@ pub fn search_by_bow_f(
     kf: &Frame<FullKeyFrame>, frame: &mut Frame<InitialFrame>, should_check_orientation: bool, ratio: f64
 ) -> Result<HashMap<u32, Id>, Box<dyn std::error::Error>> {
     // int SearchByBoW(KeyFrame *pKF, Frame &F, std::vector<MapPoint*> &vpMapPointMatches);
-    frame.clear_mappoints();
+    // frame.clear_mappoints();
     let mut matches = HashMap::<u32, Id>::new();
 
     let factor = 1.0 / (HISTO_LENGTH as f32);
