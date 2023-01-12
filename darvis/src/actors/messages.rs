@@ -44,7 +44,8 @@ impl TrajectoryMessage {
 
 #[derive(Debug)]
 pub struct TrackingStateMsg {
-    pub state: TrackingState
+    pub state: TrackingState,
+    pub init_id: Id
 }
 impl ActorMessage for TrackingStateMsg {}
 
@@ -121,17 +122,3 @@ impl ActorMessage for KeyFrameIdMsg {}
 #[derive(Debug)]
 pub struct LastKeyFrameUpdatedMsg {}
 impl ActorMessage for LastKeyFrameUpdatedMsg {}
-
-// Sofiya: When KF has been added to the map already, so instead of sending the keyframe data,
-// send the keyframe Id. This is only for initialization, so maybe we can figure out a way to
-// combine this logic into one keyframe message?
-#[derive(Debug)]
-pub struct InitialMapMsg {
-    // Note: if using serde to serialize/deserialize, need to
-    // uncomment the following line of code. 
-    // See https://github.com/serde-rs/serde/issues/1296
-    // #[serde(bound = "")]
-    pub kf: Id,
-}
-
-impl ActorMessage for InitialMapMsg {}

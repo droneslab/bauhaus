@@ -8,6 +8,7 @@ use std::{sync::Arc, fmt};
 use std::fmt::Debug;
 use opencv::{prelude::*,types::{VectorOfKeyPoint},};
 use dvcore::{matrix::*,lockwrap::ReadOnlyWrapper,plugin_functions::Function,config::*,};
+use crate::dvmap::map::Id;
 use crate::{
     registered_modules::{TRACKING_BACKEND, FEATURE_DETECTION, CAMERA},
     actors::{messages::{ImageMsg, FeatureMsg,},},
@@ -55,6 +56,9 @@ pub struct DarvisTrackingFront {
     orb_extractor_right: Option<DVORBextractor>,
     orb_extractor_ini: Option<DVORBextractor>,
     map_initialized: bool,
+    last_id: Id,
+    init_id: Id,
+    max_frames: i32,
     sensor: Sensor
 }
 
@@ -75,6 +79,9 @@ impl DarvisTrackingFront {
             orb_extractor_right,
             orb_extractor_ini,
             map_initialized: false,
+            init_id: 0,
+            last_id: 0,
+            max_frames: GLOBAL_PARAMS.get::<f64>(SYSTEM_SETTINGS, "fps") as i32,
             sensor,
         }
     }
@@ -83,6 +90,7 @@ impl DarvisTrackingFront {
         let image: Mat = (&message.frame).into(); // Taking ownership of message should not fail
         let (keypoints, descriptors) = self.extract_features(&image);
         self.send_message_to_backend(context, image, keypoints, descriptors);
+        self.last_id += 1;
     }
 
     fn extract_features(&mut self, image: &opencv::core::Mat) -> (VectorOfKeyPoint, Mat) {
@@ -91,7 +99,7 @@ impl DarvisTrackingFront {
         let mut descriptors: dvos3binding::ffi::WrapBindCVMat = DVMatrix::default().into();
         let mut keypoints: dvos3binding::ffi::WrapBindCVKeyPoints = DVVectorOfKeyPoint::empty().into();
 
-        if self.map_initialized {
+        if self.map_initialized && (self.last_id - self.init_id < self.max_frames) {
             self.orb_extractor_left.extractor.pin_mut().extract(&image_dv, &mut keypoints, &mut descriptors);
         } else if self.sensor.is_mono() {
             self.orb_extractor_ini.as_mut().unwrap().extractor.pin_mut().extract(&image_dv, &mut keypoints, &mut descriptors);
@@ -140,7 +148,10 @@ impl Function for DarvisTrackingFront {
             self.tracking_frontend(context, image_msg);
         } else if let Some(tracking_state_msg) = message.content_as::<TrackingStateMsg>() {
             match tracking_state_msg.state {
-                TrackingState::Ok => { self.map_initialized = true; },
+                TrackingState::Ok => { 
+                    self.map_initialized = true;
+                    self.init_id = tracking_state_msg.init_id
+                },
                 _ => {}
             };
         }
