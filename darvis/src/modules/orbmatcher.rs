@@ -326,7 +326,6 @@ pub fn search_by_projection(
 pub fn search_by_projection_with_threshold (
     current_frame: &mut Frame<InitialFrame>, last_frame: &Frame<InitialFrame>, th: i32,
     should_check_orientation: bool, ratio: f64,
-    track_in_view: &HashMap<Id, TrackedMapPointData>, track_in_view_right: &HashMap<Id, TrackedMapPointData>,
     map: &ReadOnlyWrapper<Map>, sensor: Sensor
 ) -> Result<i32, Box<dyn std::error::Error>> {
     // int ORBmatcher::SearchByProjection(Frame &CurrentFrame, const Frame &LastFrame, const float th, const bool bMono)
@@ -653,52 +652,42 @@ pub fn search_by_bow_kf(
 pub fn search_for_triangulation(
     kf_1 : &Frame<FullKeyFrame>, kf_2 : &Frame<FullKeyFrame>,
     should_check_orientation: bool, only_stereo: bool, course: bool, ratio: f64,
-    map: &ReadOnlyWrapper<Map>
+    map: &ReadOnlyWrapper<Map>, sensor: Sensor
 ) -> Result<HashMap<usize, usize>, Box<dyn std::error::Error>> {
     //int ORBmatcher::SearchForTriangulation(KeyFrame *pKF1, KeyFrame *pKF2, vector<pair<size_t, size_t> > &vMatchedPairs, const bool bOnlyStereo, const bool bCoarse)
     //Compute epipole in second image
-    let translation_1 = kf_1.pose;
-    let translation_2 = kf_2.pose;
+    let translation_1 = kf_1.pose.unwrap();
+    let translation_2 = kf_2.pose.unwrap();
     let translation_inverse_2 = kf_2.pose.unwrap().inverse(); // for convenience
-    let cw = kf_1.get_camera_center();
-    // let c2 = *translation_inverse_2.get_translation() * *cw;
-    // Eigen::Vector3f Cw = pKF1->GetCameraCenter();
-    // Eigen::Vector3f C2 = T2w * Cw;
+    let cw = *kf_1.get_camera_center();
+    let temp = *translation_1.get_translation();
+    let c2 = temp.component_mul(&cw);
 
-    // Eigen::Vector2f ep = pKF2->mpCamera->project(C2);
-    // Sophus::SE3f T12;
-    // Sophus::SE3f Tll, Tlr, Trl, Trr;
-    // Eigen::Matrix3f R12; // for fastest computation
-    // Eigen::Vector3f t12; // for fastest computation
+    let ep = CAMERA_MODULE.project(DVVector3::new(c2));
 
-    // GeometricCamera* pCamera1 = pKF1->mpCamera, *pCamera2 = pKF2->mpCamera;
-
-    // if(!pKF1->mpCamera2 && !pKF2->mpCamera2){
-    //     T12 = T1w * Tw2;
-    //     R12 = T12.rotationMatrix();
-    //     t12 = T12.translation();
-    // }
-    // else{
-    //     Sophus::SE3f Tr1w = pKF1->GetRightPose();
-    //     Sophus::SE3f Twr2 = pKF2->GetRightPoseInverse();
-    //     Tll = T1w * Tw2;
-    //     Tlr = T1w * Twr2;
-    //     Trl = Tr1w * Tw2;
-    //     Trr = Tr1w * Twr2;
-    // }
-
-    // Eigen::Matrix3f Rll = Tll.rotationMatrix(), Rlr  = Tlr.rotationMatrix(), Rrl  = Trl.rotationMatrix(), Rrr  = Trr.rotationMatrix();
-    // Eigen::Vector3f tll = Tll.translation(), tlr = Tlr.translation(), trl = Trl.translation(), trr = Trr.translation();
-
-
-
+    let (mut pose12, mut r12, mut t12);
+    if matches!(sensor.frame(), FrameSensor::Stereo) {
+            todo!("Stereo");
+            // Sophus::SE3f Tr1w = pKF1->GetRightPose();
+            // Sophus::SE3f Twr2 = pKF2->GetRightPoseInverse();
+            // Tll = T1w * Tw2;
+            // Tlr = T1w * Twr2;
+            // Trl = Tr1w * Tw2;
+            // Trr = Tr1w * Twr2;
+            // Eigen::Matrix3f Rll = Tll.rotationMatrix(), Rlr  = Tlr.rotationMatrix(), Rrl  = Trl.rotationMatrix(), Rrr  = Trr.rotationMatrix();
+            // Eigen::Vector3f tll = Tll.translation(), tlr = Tlr.translation(), trl = Trl.translation(), trr = Trr.translation();
+    } else {
+        pose12 = translation_1 * translation_2; // T12 ... which is different than t12
+        r12 = pose12.get_rotation();
+        t12 = pose12.get_translation();
+    }
 
     // Find matches between not tracked keypoints
     // Matching speed-up by ORB Vocabulary
     // Compare only ORB that share the same node
 
     let mut num_matches = 0;
-    let mut matches = HashMap::<u32, Id>::new();
+    let mut matches = HashMap::<usize, usize>::new();
     let matched_already = HashMap::<u32, u32>::new();
 
     let keypoints_1 = kf_1.features.get_all_keypoints();
@@ -720,11 +709,17 @@ pub fn search_for_triangulation(
                     };
                     let mappoint = kf_1.mappoint_matches.get(&index_kf_1);
 
-                    // const bool bStereo1 = (!pKF1->mpCamera2 && pKF1->mvuRight[idx1]>=0);
-
-                    // if(bOnlyStereo)
-                    //     if(!bStereo1)
-                    //         continue;
+                    let stereo1 = match sensor.frame() {
+                        FrameSensor::Stereo => {
+                            todo!("Stereo");
+                            let stereo1 = false; // const bool bStereo1 = (!pKF1->mpCamera2 && pKF1->mvuRight[idx1]>=0);
+                            if only_stereo && !stereo1 {
+                                continue
+                            }
+                            stereo1
+                        },
+                        _ => false
+                    };
 
                     let (kp1, right1) = kf_1.features.get_keypoint(index_kf_1 as usize);
 
@@ -739,11 +734,17 @@ pub fn search_for_triangulation(
                         };
                         let mappoint = kf_2.mappoint_matches.get(&index_kf_2);
 
-                        // const bool bStereo2 = (!pKF2->mpCamera2 &&  pKF2->mvuRight[idx2]>=0);
-
-                        // if(bOnlyStereo)
-                        //     if(!bStereo2)
-                        //         continue;
+                        let stereo2 = match sensor.frame() {
+                            FrameSensor::Stereo => {
+                                todo!("Stereo");
+                                let stereo2 = false; // const bool bStereo2 = (!pKF2->mpCamera2 &&  pKF2->mvuRight[idx2]>=0);
+                                if only_stereo && !stereo2 {
+                                    continue
+                                }
+                                stereo2
+                            },
+                            _ => false
+                        };
 
                         let descriptors_kf_2 = kf_2.features.descriptors.row(*index_kf_2)?;
                         let dist = descriptor_distance(&descriptors_kf_1, &descriptors_kf_2);
@@ -753,16 +754,15 @@ pub fn search_for_triangulation(
 
                         let (kp2, right2) = kf_2.features.get_keypoint(*index_kf_2 as usize);
 
-                        // if(!bStereo1 && !bStereo2 && !pKF1->mpCamera2)
-                        // {
-                        //     const float distex = ep(0)-kp2.pt.x;
-                        //     const float distey = ep(1)-kp2.pt.y;
-                        //     if(distex*distex+distey*distey<100*pKF2->mvScaleFactors[kp2.octave])
-                        //     {
-                        //         continue;
-                        //     }
-                        // }
+                        if !stereo1 && !stereo2 { // && !kf1->mpCamera2 ... TODO STEREO
+                            let dist_ex = (ep.0 as f32) - kp2.pt.x;
+                            let dist_ey = (ep.1 as f32) - kp2.pt.y;
+                            if dist_ex * dist_ex + dist_ey * dist_ey < 100.0 * SCALE_FACTORS[kp2.octave as usize] {
+                                continue
+                            }
+                        }
 
+                        // TODO (Stereo)
                         // if(pKF1->mpCamera2 && pKF2->mpCamera2){
                         //     if(bRight1 && bRight2){
                         //         R12 = Rrr;
@@ -796,74 +796,47 @@ pub fn search_for_triangulation(
                         //         pCamera1 = pKF1->mpCamera;
                         //         pCamera2 = pKF2->mpCamera;
                         //     }
-
-                        // if(bCoarse || pCamera1->epipolarConstrain(pCamera2,kp1,kp2,R12,t12,pKF1->mvLevelSigma2[kp1.octave],pKF2->mvLevelSigma2[kp2.octave])) // MODIFICATION_2
-                        // {
-                        //     bestIdx2 = idx2;
-                        //     bestDist = dist;
                         // }
 
-
-                    // if(bestIdx2>=0)
-                    // {
-                    //     const cv::KeyPoint &kp2 = (pKF2 -> NLeft == -1) ? pKF2->mvKeysUn[bestIdx2]
-                    //                                                     : (bestIdx2 < pKF2 -> NLeft) ? pKF2 -> mvKeys[bestIdx2]
-                    //                                                                                  : pKF2 -> mvKeysRight[bestIdx2 - pKF2 -> NLeft];
-                    //     vMatches12[idx1]=bestIdx2;
-                    //     nmatches++;
-
-                    //     if(mbCheckOrientation)
-                    //     {
-                    //         float rot = kp1.angle-kp2.angle;
-                    //         if(rot<0.0)
-                    //             rot+=360.0f;
-                    //         int bin = round(rot*factor);
-                    //         if(bin==HISTO_LENGTH)
-                    //             bin=0;
-                    //         assert(bin>=0 && bin<HISTO_LENGTH);
-                    //         rotHist[bin].push_back(idx1);
-                    //     }
-                    // }
-    //                     if dist < best_dist.0 {
-    //                         best_dist.1 = best_dist.0;
-    //                         best_dist.0 = dist;
-    //                         best_index = *index_kf_2 as i32;
-    //                     } else if dist < best_dist.1 {
-    //                         best_dist.1 = dist;
-    //                     }
-    //                 }
-
-    //                 if best_dist.0 <= TH_LOW {
-    //                     let mp_id = &kf_2.get_mappoint(&(best_index as u32));
-
-    //                     if (best_dist.0 as f64) < ratio * (best_dist.1 as f64) {
-    //                         matches.insert(index_kf_1, *mp_id); // for Kf_1
-
-    //                         if should_check_orientation {
-    //                             check_orientation_1(
-    //                                 &kf_1.features.get_keypoint(index_kf_1 as usize),
-    //                                 &kf_2.features.get_keypoint(best_index as usize),
-    //                                 &mut rot_hist, factor, best_index
-    //                             );
-    //                         }
-    //                         num_matches += 1;
-    //                     }
+                        if course || CAMERA_MODULE.epipolar_constrain(&kp1, &kp2, *r12, *t12, INV_LEVEL_SIGMA2[kp1.octave as usize], INV_LEVEL_SIGMA2[kp2.octave as usize]) {
+                            best_index = *index_kf_2 as i32;
+                            best_dist = dist;
+                        }
                     }
 
-                }
+                    if best_index >= 0 {
+                        let (kp2, _) = kf_2.features.get_keypoint(best_index as usize);
+                        matches.insert(index_kf_1 as usize, best_index as usize);
+                        if should_check_orientation {
+                            check_orientation_1(
+                                &kp1,
+                                &kp2,
+                                &mut rot_hist, factor, best_index
+                            );
 
+                        }
+                    }
+                }
             }
         }
     }
 
     if should_check_orientation {
-        check_orientation_2(&rot_hist, &mut matches)
+        let (ind_1, ind_2, ind_3) = compute_three_maxima(&rot_hist,HISTO_LENGTH);
+        for i in 0..HISTO_LENGTH {
+            if i == ind_1 || i == ind_2 || i == ind_3 {
+                continue;
+            }
+            for j in 0..rot_hist[i as usize].len() {
+                let key = rot_hist[i as usize][j];
+                if matches.contains_key(&(key as usize)) {
+                    matches.remove(&(key as usize));
+                }
+            }
+        }
     };
 
-    // return Ok(matches);
-
-    // return nmatches;
-        todo!("TODO LOCAL MAPPING");
+    return Ok(matches);
 }
 
 pub fn fuse(kf_id: &i32, map: &MappedRwLockReadGuard<Map>, th: f32, is_right: bool) -> Vec<MapWriteMsg> {
@@ -886,7 +859,7 @@ pub fn fuse(kf_id: &i32, map: &MappedRwLockReadGuard<Map>, th: f32, is_right: bo
     for (idx1, (mp_id, _)) in &keyframe.mappoint_matches {
         let mappoint = map.get_mappoint(&mp_id).unwrap();
 
-        warn!("TODO local mapping...do I need this section? Seems like ti should always be true if we're looping through a keyframes matches. Why would a keyframe have an mp match but the mp match not have the keyframe?");
+        //TODO local mapping...do I need this section? Seems like ti should always be true if we're looping through a keyframes matches. Why would a keyframe have an mp match but the mp match not have the keyframe?
         // if(pMP->IsInKeyFrame(pKF))
         // {
         //     count_isinKF++;
@@ -942,7 +915,7 @@ pub fn fuse(kf_id: &i32, map: &MappedRwLockReadGuard<Map>, th: f32, is_right: bo
         let mut best_idx = -1;
 
         for idx2 in indices {
-            let (kp, right) = keyframe.features.get_keypoint(idx2 as usize);
+            let (kp, is_right) = keyframe.features.get_keypoint(idx2 as usize);
             let kp_level = kp.octave;
 
             if kp_level < predicted_level - 1 || kp_level > predicted_level {
@@ -950,7 +923,7 @@ pub fn fuse(kf_id: &i32, map: &MappedRwLockReadGuard<Map>, th: f32, is_right: bo
             }
 
             let (kpx, kpy, ex, ey, e2);
-            if keyframe.features.get_mv_right(idx2 as usize).is_some() {
+            if is_right {
                 todo!("Stereo");
                 // Check reprojection error in stereo
                 // const float &kpx = kp.pt.x;

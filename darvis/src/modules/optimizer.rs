@@ -1,15 +1,15 @@
 extern crate g2o;
 
-use std::collections::{HashMap};
-use cxx::{unique_ptr, UniquePtr};
+use std::collections::HashMap;
+use cxx::UniquePtr;
 use dvcore::{
     lockwrap::ReadOnlyWrapper,
     config::{GLOBAL_PARAMS, SYSTEM_SETTINGS, Sensor, FrameSensor},
 };
-use log::{info, warn, debug};
+use log::{info, warn};
 use nalgebra::Matrix3;
-use crate::{dvmap::{keyframe::InitialFrame, pose::Pose, map::{Map, Id}, keyframe::{Frame, PrelimKeyFrame, FullKeyFrame}, map_actor::MapWriteMsg}, registered_modules::{FEATURE_DETECTION, CAMERA}};
-use g2o::ffi::{EdgeSE3ProjectXYZOnlyPose, EdgeSE3ProjectXYZ};
+use crate::{dvmap::{keyframe::InitialFrame, pose::Pose, map::{Map, Id}, keyframe::{Frame, FullKeyFrame}, map_actor::MapWriteMsg}, registered_modules::{FEATURE_DETECTION, CAMERA}};
+use g2o::ffi::EdgeSE3ProjectXYZ;
 
 lazy_static! {
     pub static ref INV_LEVEL_SIGMA2: Vec<f32> = {
@@ -436,7 +436,7 @@ pub fn pose_inertial_optimization_last_frame(frame: &mut Frame<InitialFrame>, ma
 
 //int Optimizer::PoseInertialOptimizationLastKeyFrame(Frame *pFrame, bool bRecInit)
 // but bRecInit is always set to false
-pub fn pose_inertial_optimization_last_keyframe(frame: &mut Frame<InitialFrame>) -> i32 {
+pub fn pose_inertial_optimization_last_keyframe(_frame: &mut Frame<InitialFrame>) -> i32 {
     todo!("IMU... Optimizer::PoseInertialOptimizationLastKeyFrame(&mCurrentFrame)");
     // let mut optimizer = g2o::ffi::new_sparse_optimizer(2);
 
@@ -1044,7 +1044,7 @@ pub fn global_bundle_adjustment(map: &Map, loop_kf: i32, iterations: i32) -> BAR
         let mut n_edges = 0;
 
         //SET EDGES
-        for (kf_id, (left_index, right_index)) in observations {
+        for (kf_id, (left_index, _right_index)) in observations {
             if !optimizer.has_vertex(mp_vertex_id) || !optimizer.has_vertex(*kf_id) {
                 continue;
             }
@@ -1228,8 +1228,8 @@ pub fn local_bundle_adjustment(
     // Set MapPoint vertices
     let mut all_mp_vertices = Vec::new();
     let mut all_edges_mono = Vec::new();
-    let mut all_edges_stereo = Vec::<(Id, UniquePtr<EdgeSE3ProjectXYZ>)>::new(); //vpEdgesStereo
-    let mut all_edges_body = Vec::<(Id, UniquePtr<EdgeSE3ProjectXYZ>)>::new(); // vpEdgesBody
+    let all_edges_stereo = Vec::<(Id, UniquePtr<EdgeSE3ProjectXYZ>)>::new(); //vpEdgesStereo
+    let all_edges_body = Vec::<(Id, UniquePtr<EdgeSE3ProjectXYZ>)>::new(); // vpEdgesBody
 
     for mp_id in &local_mappoints {
         let mp = map.get_mappoint(mp_id).unwrap();
@@ -1254,7 +1254,6 @@ pub fn local_bundle_adjustment(
                     todo!("Stereo");
                     if *left_index != -1 && kf.features.get_mv_right(*left_index as usize).unwrap() >= 0.0 {
                         // Stereo observation
-                        todo!("Stereo");
                         // This is still the left observation, but because it is stereo it needs to be 
 
                         // const cv::KeyPoint &kpUn = pKFi->mvKeysUn[leftIndex];
@@ -1363,7 +1362,7 @@ pub fn local_bundle_adjustment(
         }
     }
 
-    for (mp_id, edge) in all_edges_body {
+    for (_mp_id, _edge) in all_edges_body {
         todo!("Stereo");
         // ORB_SLAM3::EdgeSE3ProjectXYZToBody* e = vpEdgesBody[i];
         // MapPoint* pMP = vpMapPointEdgeBody[i];
@@ -1378,7 +1377,7 @@ pub fn local_bundle_adjustment(
         // }
     }
 
-    for (mp_id, edge) in all_edges_stereo {
+    for (_mp_id, _edge) in all_edges_stereo {
         todo!("Stereo");
         // g2o::EdgeStereoSE3ProjectXYZ* e = vpEdgesStereo[i];
         // MapPoint* pMP = vpMapPointEdgeStereo[i];

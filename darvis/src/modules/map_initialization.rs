@@ -1,13 +1,11 @@
-use std::collections::HashMap;
 use chrono::Duration;
 use dvcore::config::{GLOBAL_PARAMS, SYSTEM_SETTINGS, FrameSensor, ImuSensor};
 use dvcore::matrix::DVVectorOfPoint2f;
 use log::debug;
-use opencv::core::Point2f;
-use dvcore::{matrix::DVVectorOfPoint3f, config::Sensor, matrix::DVVectorOfi32};
+use dvcore::{matrix::DVVectorOfPoint3f, config::Sensor};
 use crate::dvmap::keyframe::Frame;
 use crate::dvmap::{keyframe::InitialFrame, pose::Pose};
-use crate::modules::camera::{Camera, CAMERA_MODULE};
+use crate::modules::camera::{CAMERA_MODULE};
 
 use super::orbmatcher;
 

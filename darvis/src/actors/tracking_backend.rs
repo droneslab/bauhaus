@@ -6,13 +6,13 @@ use log::{warn, info, debug, error};
 use opencv::core::Point2f;
 use dvcore::{lockwrap::ReadOnlyWrapper, plugin_functions::Function, config::*};
 use crate::{
-    actors::messages::{FeatureMsg, KeyFrameMsg, MapInitializedMsg, TrajectoryMessage, TrackingStateMsg},
+    actors::messages::{FeatureMsg, MapInitializedMsg, TrajectoryMessage, TrackingStateMsg},
     registered_modules::{LOCAL_MAPPING, TRACKING_BACKEND, SHUTDOWN, TRACKING_FRONTEND},
     dvmap::{
         map::Map, map_actor::MapWriteMsg, map_actor::{MAP_ACTOR}, map::Id,
         keyframe::{Frame, InitialFrame, PrelimKeyFrame}, pose::Pose, mappoint::{MapPoint, FullMapPoint},
     },
-    modules::{camera::Camera, camera::CameraType, imu::{ImuModule}, optimizer::{self}, orbmatcher, map_initialization::Initialization, relocalization::Relocalization},
+    modules::{imu::{ImuModule}, optimizer::{self}, orbmatcher, map_initialization::Initialization, relocalization::Relocalization},
 };
 
 use super::messages::{KeyFrameIdMsg, LastKeyFrameUpdatedMsg};
@@ -28,11 +28,7 @@ pub struct TrackedMapPointData {
     // and sets either the normal (left) versions or the right versions, depending on which camera it is.
     // When writing the stereo code, don't duplicate all the fields like they did.
 }
-impl TrackedMapPointData {
-    pub fn new() -> Self {
-        Self { ..Default::default() }
-    }
-}
+impl TrackedMapPointData {}
 
 #[derive(Debug, Clone, Copy, Default)]
 pub enum TrackingState {
@@ -175,7 +171,7 @@ impl DarvisTrackingBack {
                                     _ => MapWriteMsg::create_initial_map_stereo(self.initialization.clone(), tracking_actor)
                                 };
                                 map_actor.send_new(msg).unwrap();
-                                info!("Sent initialization info to map");
+                                debug!("Sent initialization info to map");
                                 self.state = TrackingState::WaitForMapResponse;
                             }
                         },
@@ -417,8 +413,6 @@ impl DarvisTrackingBack {
             th,
             self.sensor.is_mono(),
             0.6,
-            &self.track_in_view,
-            &self.track_in_view_r,
             &self.map,
             self.sensor
         )?;
@@ -433,8 +427,6 @@ impl DarvisTrackingBack {
                 2 * th,
                 self.sensor.is_mono(),
                 0.6,
-                &self.track_in_view,
-                &self.track_in_view_r,
                 &self.map,
                 self.sensor
             )?;
@@ -767,14 +759,12 @@ impl DarvisTrackingBack {
                 _ => 1
             };
             if self.map.read().imu_initialized {
-                todo!("IMU");
                 if self.map.read().imu_ba2 {
                     th = 2;
                 } else {
                     th = 6;
                 }
             } else if !self.map.read().imu_initialized && self.sensor.is_imu() {
-                todo!("IMU");
                 th = 10;
             }
 
@@ -1028,7 +1018,7 @@ impl Function for DarvisTrackingBack {
             context.system.find_aid_by_name(LOCAL_MAPPING).unwrap().send_new(
                 KeyFrameIdMsg { keyframe_id: msg.keyframe_id }
             ).unwrap();
-        } else if let Some(msg) = message.content_as::<LastKeyFrameUpdatedMsg>() {
+        } else if let Some(_) = message.content_as::<LastKeyFrameUpdatedMsg>() {
             // Received from local mapping after it culls and creates new MPs for the last inserted KF
             self.state = TrackingState::Ok;
         }

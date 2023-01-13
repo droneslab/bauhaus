@@ -1,5 +1,4 @@
 use dvcore::matrix::DVVector3;
-use log::warn;
 
 use crate::dvmap::pose::Pose;
 
@@ -8,7 +7,7 @@ pub fn triangulate(
     pose1: Pose, pose2: Pose
 ) -> Option<DVVector3<f64>> {
     // bool GeometricTools::Triangulate(Eigen::Vector3f &x_c1, Eigen::Vector3f &x_c2,Eigen::Matrix<float,3,4> &Tc1w ,Eigen::Matrix<float,3,4> &Tc2w , Eigen::Vector3f &x3D)
-    warn!("Verify...This part might be wrong");
+    // TODO Verify...This part might be wrong
 
     let mut matrix = nalgebra::Matrix4::<f64>::default();
     let pose1m: nalgebra::Matrix3x4<f64> = pose1.into();

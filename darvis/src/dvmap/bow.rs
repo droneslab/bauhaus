@@ -2,7 +2,6 @@ use std::fmt;
 use cxx::{UniquePtr, let_cxx_string};
 use dvcore::{matrix::DVMatrix, config::{GLOBAL_PARAMS, SYSTEM_SETTINGS}};
 use log::{info, warn};
-use opencv::prelude::Boxed;
 
 lazy_static! {
     pub static ref VOCABULARY: DVVocabulary = {

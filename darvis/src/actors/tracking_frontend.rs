@@ -1,18 +1,16 @@
 extern crate g2o;
 
 use axiom::prelude::*;
-use cxx::{UniquePtr, CxxVector};
-use log::{ warn, debug};
-use std::pin::Pin;
+use cxx::{UniquePtr};
+use log::{ warn};
 use std::{sync::Arc, fmt};
 use std::fmt::Debug;
 use opencv::{prelude::*,types::{VectorOfKeyPoint},};
-use dvcore::{matrix::*,lockwrap::ReadOnlyWrapper,plugin_functions::Function,config::*,};
+use dvcore::{matrix::*,plugin_functions::Function,config::*,};
 use crate::dvmap::map::Id;
 use crate::{
     registered_modules::{TRACKING_BACKEND, FEATURE_DETECTION, CAMERA},
     actors::{messages::{ImageMsg, FeatureMsg,},},
-    dvmap::{map::Map},
 };
 
 use super::messages::TrackingStateMsg;

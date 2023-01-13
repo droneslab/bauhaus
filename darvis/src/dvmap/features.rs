@@ -6,7 +6,6 @@ use std::collections::{HashMap};
 use std::fmt::Debug;
 use dvcore::config::FrameSensor;
 use dvcore::config::{*};
-use log::debug;
 use opencv::prelude::{Mat, MatTraitConst, MatTrait};
 use opencv::types::{VectorOff32};
 use serde::{Deserialize, Serialize};
@@ -297,9 +296,9 @@ impl ImageBounds {
     pub fn new(im_width: i32, im_height: i32, dist_coef: &Option<Vec<f32>>) -> ImageBounds {
         //ComputeImageBounds
         let min_x = 0.0;
-        let mut max_x = 0.0;
+        let max_x;
         let min_y = 0.0;
-        let mut max_y = 0.0;
+        let max_y;
 
         match dist_coef {
             Some(vec) => {
@@ -359,16 +358,12 @@ impl Grid {
 
     fn initialize_grid() -> Vec<Vec<Vec<usize>>> {
         let mut grid = Vec::new();
-        for i in 0.. FRAME_GRID_COLS  {
-            let mut row = Vec::new(); //vec![];
-            for j in 0..FRAME_GRID_ROWS
-            {
+        for _ in 0..FRAME_GRID_COLS  {
+            let mut row = Vec::new();
+            for _ in 0..FRAME_GRID_ROWS {
                 row.push(Vec::new());
-                
             }
             grid.push(row);
-            // let row = vec![Vec::new(); FRAME_GRID_COLS];
-            // grid.push(row);
         }
         //println!("Grid row col : {:?}, {:?}", FRAME_GRID_ROWS, FRAME_GRID_COLS);
         grid
