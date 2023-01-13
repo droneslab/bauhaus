@@ -1,6 +1,5 @@
 use std::ops::Mul;
 use dvcore::matrix::{DVVector3, DVMatrix3};
-use log::debug;
 use nalgebra::{Isometry3, Rotation3, Quaternion, Translation3,geometry::UnitQuaternion, Vector3, Matrix3, Matrix3x4};
 use serde::{Deserialize, Serialize};
 

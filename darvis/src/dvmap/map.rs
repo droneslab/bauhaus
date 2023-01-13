@@ -1,6 +1,6 @@
 use std::{collections::{HashMap, HashSet}};
 use log::{info, warn, error, debug};
-use dvcore::{matrix::{DVVector3, DVVectorOfPoint3f}, config::{Sensor, GLOBAL_PARAMS, SYSTEM_SETTINGS, FrameSensor, ImuSensor}};
+use dvcore::{matrix::{DVVector3}, config::{Sensor, GLOBAL_PARAMS, SYSTEM_SETTINGS, FrameSensor, ImuSensor}};
 use crate::{
     dvmap::{keyframe::*, mappoint::*, pose::Pose},
     modules::{map_initialization::Initialization, optimizer::{self}}
@@ -440,7 +440,7 @@ impl Map {
     }
 
     pub fn replace_mappoint(&self, mp_to_replace: &Id, mp: &Id) {
-        todo!("TODO LOCAL MAPPING");
+        todo!("LOCAL MAPPING");
         // if(pMP->mnId==this->mnId)
         //     return;
 

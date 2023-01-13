@@ -13,9 +13,9 @@ use dvcore::{
 use log::{debug, warn};
 use crate::{
     dvmap::{
-        map_actor::MapWriteMsg, mappoint::FullMapPoint, map::Map, map_actor::MAP_ACTOR, keyframe::{Frame, PrelimKeyFrame}, mappoint::{MapPoint, PrelimMapPoint}
+        map_actor::MapWriteMsg, mappoint::FullMapPoint, map::Map, map_actor::MAP_ACTOR, mappoint::{MapPoint, PrelimMapPoint}
     },
-    modules::{optimizer, orbmatcher, imu::ImuModule, camera::CAMERA_MODULE, camera, optimizer::INV_LEVEL_SIGMA2, orbmatcher::SCALE_FACTORS, geometric_tools},
+    modules::{optimizer, orbmatcher, imu::ImuModule, camera::CAMERA_MODULE, optimizer::INV_LEVEL_SIGMA2, orbmatcher::SCALE_FACTORS, geometric_tools},
     registered_modules::{FEATURE_DETECTION, LOOP_CLOSING, MATCHER, CAMERA},
     Id,
     actors::messages::{Reset, KeyFrameIdMsg, LastKeyFrameUpdatedMsg}
@@ -227,9 +227,9 @@ impl DarvisLocalMapping {
         }
 
         let mut pose1 = current_kf.pose.unwrap(); // sophTcw1
-        let mut translation1 = pose1.get_translation(); // tcw1
-        let mut rotation1 = pose1.get_rotation(); // Rcw1
-        let mut rotation_transpose1 = rotation1.transpose(); // Rwc1
+        let translation1 = pose1.get_translation(); // tcw1
+        let rotation1 = pose1.get_rotation(); // Rcw1
+        let rotation_transpose1 = rotation1.transpose(); // Rwc1
         let mut ow1 = current_kf.get_camera_center();
 
         // Search matches with epipolar restriction and triangulate
@@ -264,16 +264,16 @@ impl DarvisLocalMapping {
             let matches = match orbmatcher::search_for_triangulation(
                 current_kf, neighbor_kf,
                 false, false, course, thresh,
-                &self.map
+                &self.map, self.sensor
             ) {
                 Ok(matches) => matches,
                 Err(err) => panic!("Problem with search_by_bow_f {}", err)
             };
 
             let mut pose2 = neighbor_kf.pose.unwrap();
-            let mut translation2 = pose2.get_translation(); // tcw2
-            let mut rotation2 = pose2.get_rotation(); // Rcw2
-            let mut rotation_transpose2 = rotation2.transpose(); // Rwc2
+            let translation2 = pose2.get_translation(); // tcw2
+            let rotation2 = pose2.get_rotation(); // Rcw2
+            let rotation_transpose2 = rotation2.transpose(); // Rwc2
 
             // Triangulate each match
             for (idx1, idx2) in matches {
@@ -349,10 +349,10 @@ impl DarvisLocalMapping {
                 let sigma_square1 = INV_LEVEL_SIGMA2[kp1.octave as usize];
                 let x1 = rotation1.row(0).transpose().dot(&x3_d_nalg) + (*translation1)[0];
                 let y1 = rotation1.row(1).transpose().dot(&x3_d_nalg) + (*translation1)[1];
-                let invz1 = 1.0 / z1;
 
                 if right1 {
                     todo!("Stereo");
+                    let invz1 = 1.0 / z1;
                     let u1 = CAMERA_MODULE.get_fx() * x1 * invz1 + CAMERA_MODULE.get_cx();
                     let u1_r = u1 - CAMERA_MODULE.stereo_baseline_times_fx * invz1;
                     let v1 = CAMERA_MODULE.get_fy() * y1 * invz1 + CAMERA_MODULE.get_cy();
@@ -375,10 +375,10 @@ impl DarvisLocalMapping {
                 let sigma_square2 = INV_LEVEL_SIGMA2[kp2.octave as usize];
                 let x2 = rotation2.row(0).transpose().dot(&x3_d_nalg) + (*translation2)[0];
                 let y2 = rotation2.row(1).transpose().dot(&x3_d_nalg) + (*translation2)[1];
-                let invz2 = 1.0 / z2;
 
                 if right2 {
                     todo!("Stereo");
+                    let invz2 = 1.0 / z2;
                     let u2 = CAMERA_MODULE.get_fx() * x2 * invz2 + CAMERA_MODULE.get_cx();// This should be camera2, not camera
                     let u2_r = u2 - CAMERA_MODULE.stereo_baseline_times_fx * invz2;
                     let v2 = CAMERA_MODULE.get_fy() * y2 * invz2 + CAMERA_MODULE.get_cy();// This should be camera2, not camera
@@ -547,10 +547,10 @@ impl DarvisLocalMapping {
         };
 
         // Compute last KF from optimizable window:
-        let nd = 21;
         let last_id = match self.sensor.is_imu() {
             true => {
                 todo!("Stereo");
+                let nd = 21;
                 // int count = 0;
                 // KeyFrame* aux_KF = mpCurrentKeyFrame;
                 // while(count<Nd && aux_KF->mPrevKF)

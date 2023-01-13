@@ -2,7 +2,7 @@ use std::{collections::{HashMap, HashSet}, cmp::min};
 use chrono::{DateTime, Utc};
 use derivative::Derivative;
 use dvcore::{matrix::{DVVector3, DVVectorOfKeyPoint, DVMatrix}, config::{Sensor, GLOBAL_PARAMS, SYSTEM_SETTINGS, FrameSensor}};
-use log::{error, info, debug, warn};
+use log::{error, debug, warn};
 use serde::{Deserialize, Serialize};
 use crate::{dvmap::{map::Id, pose::Pose},modules::{imu::*, camera::CAMERA_MODULE}, actors::tracking_backend::TrackedMapPointData,};
 use super::{mappoint::{MapPoint, FullMapPoint}, map::{Map}, features::Features, bow::{BoW, self}};
@@ -59,7 +59,7 @@ impl<T: FrameState> Frame<T> {
     pub fn add_mappoint(&mut self, index: u32, mp_id: Id, is_outlier: bool) {
         self.mappoint_matches.insert(index, (mp_id, is_outlier));
     }
-        pub fn delete_mappoint_match(&mut self, index: u32) {
+    pub fn delete_mappoint_match(&mut self, index: u32) {
         self.mappoint_matches.remove(&index);
         // Sofiya: removed the code that set's mappoint's last_frame_seen to the frame ID
         // I'm not sure we want to be using this

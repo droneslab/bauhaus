@@ -1,10 +1,10 @@
 use axiom::{prelude::*, message::ActorMessage};
-use log::{info, warn, debug};
+use log::{info, warn};
 use nalgebra::Vector3;
 use crate::{
     lockwrap::ReadWriteWrapper,
     dvmap::{keyframe::*, map::*},
-    modules::map_initialization::Initialization, actors::messages::{MapInitializedMsg, KeyFrameIdMsg}, registered_modules::{LOCAL_MAPPING, TRACKING_BACKEND},
+    modules::map_initialization::Initialization, actors::messages::{MapInitializedMsg, KeyFrameIdMsg},
 };
 use super::{mappoint::{MapPoint, PrelimMapPoint}, pose::Pose};
 
@@ -91,7 +91,6 @@ enum MapEditTarget {
     KeyFrame__Pose{kf_id: Id, pose: Pose},
     Map__ResetActive{},
     MapPoint__New{mp: MapPoint<PrelimMapPoint>, observations_to_add: Vec<(Id, u32, usize)>},
-    MapPoint__Position{ id: u64, pos: Vector3<f32> },
     MapPoint__Discard{id: Id},
     MapPoint__Replace{mp_to_replace: Id, mp: Id},
     MapPoint__IncreaseFound{mp_ids_and_nums: Vec::<(Id, i32)>},
@@ -144,11 +143,6 @@ impl MapWriteMsg {
     pub fn create_new_mappoint(mp: MapPoint<PrelimMapPoint>, observations_to_add: Vec<(Id, u32, usize)>) -> Self {
         Self {
             target: MapEditTarget::MapPoint__New {mp, observations_to_add},
-        }
-    }
-    pub fn update_mappoint_position(kf_id: u64, pos : &Vector3<f32>) -> Self {
-        Self {
-            target: MapEditTarget::MapPoint__Position {id :kf_id, pos: pos.clone()},
         }
     }
     pub fn discard_mappoint(mp_id: &Id) -> Self {
