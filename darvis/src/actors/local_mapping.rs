@@ -1,4 +1,4 @@
-use std::cmp::min;
+use std::{cmp::min, time::Duration};
 use std::collections::HashSet;
 use std::f64::INFINITY;
 use std::iter::FromIterator;
@@ -11,6 +11,7 @@ use dvcore::{
     matrix::DVVector3
 };
 use log::{debug, warn};
+use crate::registered_modules::LOCAL_MAPPING;
 use crate::{
     dvmap::{
         map_actor::MapWriteMsg, mappoint::FullMapPoint, map::Map, map_actor::MAP_ACTOR, mappoint::{MapPoint, PrelimMapPoint}
@@ -47,6 +48,7 @@ impl DarvisLocalMapping {
 
     fn local_mapping(&mut self, context: Context) {
         let map_actor = context.system.find_aid_by_name(MAP_ACTOR).unwrap();
+        debug!("Local mapping working on kf {}", self.current_keyframe_id);
 
         match self.sensor.frame() {
             FrameSensor::Stereo => {
@@ -63,17 +65,19 @@ impl DarvisLocalMapping {
         self.mappoint_culling(&map_actor);
 
         // Triangulate new MapPoints
-        self.create_new_mappoints(&map_actor);
-        // Inform tracking that we are done with creating new mappoints. Needed because tracking fails if new points are not created
-        // before track_with_reference_keyframe, so to avoid the race condition we have it wait until the new points are ready.
-        context.system.find_aid_by_name("TRACKING_BACKEND").unwrap().send_new(LastKeyFrameUpdatedMsg{}).unwrap();
-        debug!("Local mapping finished creating new mappoints");
+        let new_mappoints = self.create_new_mappoints();
+        // Paper note: what's interesting is axiom will actually give a runtime error if the rate of sending messages
+        // exceeds the ability of the actor to handle the messages. Normally we would create a new mappoint in the loop above,
+        // but that sends messages to the map actor too frequently. So, we batch all the messages into one and send when we are done.
+        map_actor.send_new(
+            MapWriteMsg::create_many_mappoints(new_mappoints, context.system.find_aid_by_name(LOCAL_MAPPING).unwrap())
+        ).unwrap();
 
         // TODO (design): mbAbortBA
         // But idk how to check the queue size from within the callback
         // if(!CheckNewKeyFrames()) {
                 // Find more matches in neighbor keyframes and fuse point duplications
-                self.search_in_neighbors();
+                self.search_in_neighbors(&context);
         // }
 
         let t_init = 0.0; // Sofiya: idk what this is for but it's used all over the place
@@ -115,7 +119,7 @@ impl DarvisLocalMapping {
                     let force_stop_flag = false; // mbAbortBA
                     let map = self.map.read();
                     let current_keyframe = map.get_keyframe(&self.current_keyframe_id).unwrap();
-                    optimizer::local_bundle_adjustment(&self.map.read(), current_keyframe, force_stop_flag, 0, 0,0, 0);
+                    optimizer::local_bundle_adjustment(&self.map.read(), current_keyframe);
                 }
             }
         }
@@ -199,13 +203,12 @@ impl DarvisLocalMapping {
         });
     }
 
-    fn create_new_mappoints(&self, map_actor: &Aid) {
+    fn create_new_mappoints(&self) -> Vec<(MapPoint<PrelimMapPoint>, Vec<(i32, u32, usize)>)> {
         // Retrieve neighbor keyframes in covisibility graph
         let nn = match self.sensor.is_mono() {
             true => 30,
             false => 10
         };
-        let thresh = 0.6;
         let ratio_factor = 1.5 * GLOBAL_PARAMS.get::<f64>(FEATURE_DETECTION, "scale_factor");
         let fpt = GLOBAL_PARAMS.get::<f64>(MATCHER, "far_points_threshold");
         let far_points_th = if fpt == 0.0 { INFINITY } else { fpt };
@@ -232,6 +235,7 @@ impl DarvisLocalMapping {
         let rotation_transpose1 = rotation1.transpose(); // Rwc1
         let mut ow1 = current_kf.get_camera_center();
 
+        let mut new_mappoints = Vec::new();
         // Search matches with epipolar restriction and triangulate
         for neighbor_id in neighbor_kfs {
             // TODO (design): ORBSLAM will abort additional work if there are too many keyframes in the msg queue.
@@ -246,6 +250,7 @@ impl DarvisLocalMapping {
                 true => {
                     let median_depth_neigh = neighbor_kf.compute_scene_median_depth(map.get_all_mappoints(), 2);
                     if baseline / median_depth_neigh < 0.01 {
+                        debug!("Local mapping create new mappoints, continuing bc baseline");
                         continue
                     }
                 },
@@ -263,8 +268,8 @@ impl DarvisLocalMapping {
             };
             let matches = match orbmatcher::search_for_triangulation(
                 current_kf, neighbor_kf,
-                false, false, course, thresh,
-                &self.map, self.sensor
+                false, false, course,
+                self.sensor
             ) {
                 Ok(matches) => matches,
                 Err(err) => panic!("Problem with search_by_bow_f {}", err)
@@ -352,16 +357,16 @@ impl DarvisLocalMapping {
 
                 if right1 {
                     todo!("Stereo");
-                    let invz1 = 1.0 / z1;
-                    let u1 = CAMERA_MODULE.get_fx() * x1 * invz1 + CAMERA_MODULE.get_cx();
-                    let u1_r = u1 - CAMERA_MODULE.stereo_baseline_times_fx * invz1;
-                    let v1 = CAMERA_MODULE.get_fy() * y1 * invz1 + CAMERA_MODULE.get_cy();
-                    let err_x1 = u1 as f32 - kp1.pt.x;
-                    let err_y1 = v1 as f32 - kp1.pt.y;
-                    let err_x1_r = u1_r as f32 - kp1_ur.unwrap();
-                    if (err_x1 * err_x1  + err_y1 * err_y1 + err_x1_r * err_x1_r) > 7.8 * sigma_square1 {
-                        continue
-                    }
+                    // let invz1 = 1.0 / z1;
+                    // let u1 = CAMERA_MODULE.get_fx() * x1 * invz1 + CAMERA_MODULE.get_cx();
+                    // let u1_r = u1 - CAMERA_MODULE.stereo_baseline_times_fx * invz1;
+                    // let v1 = CAMERA_MODULE.get_fy() * y1 * invz1 + CAMERA_MODULE.get_cy();
+                    // let err_x1 = u1 as f32 - kp1.pt.x;
+                    // let err_y1 = v1 as f32 - kp1.pt.y;
+                    // let err_x1_r = u1_r as f32 - kp1_ur.unwrap();
+                    // if (err_x1 * err_x1  + err_y1 * err_y1 + err_x1_r * err_x1_r) > 7.8 * sigma_square1 {
+                    //     continue
+                    // }
                 } else {
                     let uv1 = CAMERA_MODULE.project(DVVector3::new_with(x1, y1, z1));
                     let err_x1 = uv1.0 as f32 - kp1.pt.x;
@@ -378,16 +383,16 @@ impl DarvisLocalMapping {
 
                 if right2 {
                     todo!("Stereo");
-                    let invz2 = 1.0 / z2;
-                    let u2 = CAMERA_MODULE.get_fx() * x2 * invz2 + CAMERA_MODULE.get_cx();// This should be camera2, not camera
-                    let u2_r = u2 - CAMERA_MODULE.stereo_baseline_times_fx * invz2;
-                    let v2 = CAMERA_MODULE.get_fy() * y2 * invz2 + CAMERA_MODULE.get_cy();// This should be camera2, not camera
-                    let err_x2 = u2 as f32 - kp2.pt.x;
-                    let err_y2 = v2 as f32 - kp2.pt.y;
-                    let err_x2_r = u2_r as f32 - kp2_ur.unwrap();
-                    if (err_x2 * err_x2  + err_y2 * err_y2 + err_x2_r * err_x2_r) > 7.8 * sigma_square2 {
-                        continue
-                    }
+                    // let invz2 = 1.0 / z2;
+                    // let u2 = CAMERA_MODULE.get_fx() * x2 * invz2 + CAMERA_MODULE.get_cx();// This should be camera2, not camera
+                    // let u2_r = u2 - CAMERA_MODULE.stereo_baseline_times_fx * invz2;
+                    // let v2 = CAMERA_MODULE.get_fy() * y2 * invz2 + CAMERA_MODULE.get_cy();// This should be camera2, not camera
+                    // let err_x2 = u2 as f32 - kp2.pt.x;
+                    // let err_y2 = v2 as f32 - kp2.pt.y;
+                    // let err_x2_r = u2_r as f32 - kp2_ur.unwrap();
+                    // if (err_x2 * err_x2  + err_y2 * err_y2 + err_x2_r * err_x2_r) > 7.8 * sigma_square2 {
+                    //     continue
+                    // }
                 } else {
                     let uv2 = CAMERA_MODULE.project(DVVector3::new_with(x2, y2, z2));
                     let err_x2 = uv2.0 as f32 - kp2.pt.x;
@@ -419,17 +424,16 @@ impl DarvisLocalMapping {
                 }
 
                 // Triangulation is successful
-                map_actor.send_new(
-                    MapWriteMsg::create_new_mappoint(
-                        MapPoint::<PrelimMapPoint>::new(x3_d.unwrap(), self.current_keyframe_id, map.id),
-                        vec![(self.current_keyframe_id, current_kf.features.num_keypoints, idx1), (neighbor_id, neighbor_kf.features.num_keypoints, idx2)]
-                    )
-                ).unwrap();
+                new_mappoints.push((
+                    MapPoint::<PrelimMapPoint>::new(x3_d.unwrap(), self.current_keyframe_id, map.id),
+                    vec![(self.current_keyframe_id, current_kf.features.num_keypoints, idx1), (neighbor_id, neighbor_kf.features.num_keypoints, idx2)]
+                ));
             }
         }
+        new_mappoints
     }
 
-    fn search_in_neighbors(&self) {
+    fn search_in_neighbors(&self, context: &Context) {
         // Retrieve neighbor keyframes
         let nn = match self.sensor.frame() {
             FrameSensor::Mono => 30,
@@ -473,15 +477,12 @@ impl DarvisLocalMapping {
 
         let mut to_fuse = Vec::new();
         // Search matches by projection from current KF in target KFs
-        let mappoint_matches = current_kf.mappoint_matches.iter().map(|(_, (mp_id, _))| {
-            map.get_mappoint(&mp_id).unwrap()
-        }).collect::<Vec<&MapPoint<FullMapPoint>>>();
+        let mappoint_matches = current_kf.mappoint_matches.iter().map(|(_, (mp_id, _))| {*mp_id}).collect::<Vec<Id>>();
         for kf_id in &target_kfs {
-            let kf = map.get_keyframe(&kf_id).unwrap();
-            to_fuse.extend(orbmatcher::fuse(kf_id, &map, 3.0, false));
+            to_fuse.extend(orbmatcher::fuse(kf_id, &mappoint_matches, &map, 3.0, false));
             to_fuse.extend(
                 match self.sensor.frame() {
-                    FrameSensor::Stereo => orbmatcher::fuse(kf_id, &map, 3.0, true),
+                    FrameSensor::Stereo => orbmatcher::fuse(kf_id, &mappoint_matches, &map, 3.0, true),
                     FrameSensor::Mono | FrameSensor::Rgbd => vec![],
                 }
             )
@@ -492,40 +493,25 @@ impl DarvisLocalMapping {
         //     return;
 
         // Search matches by projection from target KFs in current KF
-        let fuse_candidates = HashSet::<i32>::from_iter(
+        let fuse_candidates = HashSet::<Id>::from_iter(
             target_kfs.iter().map(|kf_id| {
                 let kf = map.get_keyframe(&kf_id).unwrap();
                 let mappoints_kf = &kf.mappoint_matches;
                 mappoints_kf.iter().map(|(_, (mp_id, _))| *mp_id)
             }).flatten()
         );
-        let fuse_candidates_vec = fuse_candidates.iter().map(|mp| map.get_mappoint(&mp).unwrap()).collect::<Vec<&MapPoint<FullMapPoint>>>();
-        to_fuse.extend(orbmatcher::fuse(&self.current_keyframe_id, &map, 3.0, false));
+        let fuse_candidates_vec = fuse_candidates.iter().map(|mp| *mp).collect::<Vec<Id>>();
+        to_fuse.extend(orbmatcher::fuse(&self.current_keyframe_id, &fuse_candidates_vec,  &map, 3.0, false));
         to_fuse.extend(
             match self.sensor.frame() {
-                FrameSensor::Stereo => orbmatcher::fuse(&self.current_keyframe_id, &map, 3.0, true),
+                FrameSensor::Stereo => orbmatcher::fuse(&self.current_keyframe_id, &fuse_candidates_vec, &map, 3.0, true),
                 FrameSensor::Mono | FrameSensor::Rgbd => vec![]
             }
         );
 
-        todo!("TODO LOCAL MAPPING"); // this should be incorporated into call to map
-        // call every map edit msg in to_fuse
-        // Update points
-        // vpMapPointMatches = mpCurrentKeyFrame->GetMapPointMatches();
-        // for(size_t i=0, iend=vpMapPointMatches.size(); i<iend; i++)
-        // {
-        //     MapPoint* pMP=vpMapPointMatches[i];
-        //     if(pMP)
-        //     {
-        //         if(!pMP->isBad())
-        //         {
-        //             pMP->ComputeDistinctiveDescriptors();
-        //             pMP->UpdateNormalAndDepth();
-        //         }
-        //     }
-        // }
-        // Update connections in covisibility graph
-        // mpCurrentKeyFrame->UpdateConnections();
+        for msg in to_fuse {
+            context.system.find_aid_by_name(MAP_ACTOR).unwrap().send_new(msg).unwrap();
+        }
     }
 
     fn keyframe_culling(&self, context: & axiom::prelude::Context) {
@@ -534,7 +520,7 @@ impl DarvisLocalMapping {
         // in at least other 3 keyframes (in the same or finer scale)
         // We only consider close stereo points
 
-        warn!("TODO... I think we don't need this because the covisibility keyframes struct organizes itself but double check");
+        //TODO... I think we don't need this because the covisibility keyframes struct organizes itself but double check
         // mpCurrentKeyFrame->UpdateBestCovisibles(); 
 
         let map = self.map.read();
@@ -547,10 +533,11 @@ impl DarvisLocalMapping {
         };
 
         // Compute last KF from optimizable window:
-        let last_id = match self.sensor.is_imu() {
+        let _last_id = match self.sensor.is_imu() {
             true => {
                 todo!("Stereo");
-                let nd = 21;
+                // let nd = 21;
+
                 // int count = 0;
                 // KeyFrame* aux_KF = mpCurrentKeyFrame;
                 // while(count<Nd && aux_KF->mPrevKF)

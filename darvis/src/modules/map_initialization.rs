@@ -1,3 +1,11 @@
+// Sofiya note: I fully tested this file and the output matches what we would
+// expect from ORBSLAM3. search_for_initialization finds 1 fewer match than ORBSLAM
+// which is fine, and the homography and reconstruction in reconstruct_with_two_views
+// are slightly different (also fine, I applied the homography on the matches and it looks ok).
+// The slight difference is because of the seed used in the random number generator in
+// TwoViewReconstruction (this line of code: DUtils::Random::SeedRandOnce(0);). This is weird
+// but also fine.
+
 use chrono::Duration;
 use dvcore::config::{GLOBAL_PARAMS, SYSTEM_SETTINGS, FrameSensor, ImuSensor};
 use dvcore::matrix::DVVectorOfPoint2f;
@@ -87,8 +95,6 @@ impl Initialization {
             self.ready_to_initializate = true;
             return Ok(false);
         } else {
-            debug!("Current frame ID {}", current_frame.frame_id);
-
             if current_frame.features.num_keypoints <=100 || matches!(self.sensor.imu(), ImuSensor::Some) && last_frame.timestamp - initial_frame.timestamp > Duration::seconds(1) {
                 self.ready_to_initializate = false;
                 return Ok(false);
@@ -102,7 +108,8 @@ impl Initialization {
                 100
             );
             self.mp_matches = mp_matches;
-            debug!("MonocularInitialization, search for initialization.. {} matches", num_matches);
+            // SOFIYA TEST: COULD WRITE A TEST HERE .. match to mono_initialization_matches.txt
+            // debug!("MonocularInitialization, search for initialization.. {:?}", self.mp_matches);
 
             // Check if there are enough correspondences
             if num_matches < 100 {
@@ -110,16 +117,15 @@ impl Initialization {
                 return Ok(false);
             };
 
-            let (reconstruct_success, tcw, v_p3d, vb_triangulated) = CAMERA_MODULE.reconstruct_with_two_views(
+            if let Some((tcw, v_p3d, vb_triangulated)) = CAMERA_MODULE.reconstruct_with_two_views(
                 initial_frame.features.get_all_keypoints(),
                 current_frame.features.get_all_keypoints(),
                 & self.mp_matches,
-            );
-            self.p3d = v_p3d;
+            ) {
+                self.p3d = v_p3d;
 
-            if reconstruct_success {
                 for index in 0..self.mp_matches.len() {
-                    if !vb_triangulated[index as usize] {
+                    if self.mp_matches[index] >= 0 && !vb_triangulated[index as usize] {
                         self.mp_matches[index] = -1;
                         num_matches -= 1;
                     }

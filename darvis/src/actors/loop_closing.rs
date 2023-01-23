@@ -30,7 +30,7 @@ impl DarvisLoopClosing {
         }
     }
 
-    fn loop_closing(&mut self, context: Context, msg: Arc<KeyFrameIdMsg>) {
+    fn loop_closing(&mut self, _context: Context, _msg: Arc<KeyFrameIdMsg>) {
 
 //             if(mpLastCurrentKF)
 //             {

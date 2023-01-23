@@ -2,7 +2,7 @@ extern crate g2o;
 
 use axiom::prelude::*;
 use cxx::{UniquePtr};
-use log::{ warn};
+use log::{ warn, info};
 use std::{sync::Arc, fmt};
 use std::fmt::Debug;
 use opencv::{prelude::*,types::{VectorOfKeyPoint},};
@@ -16,9 +16,9 @@ use crate::{
 use super::messages::TrackingStateMsg;
 use super::tracking_backend::TrackingState;
 
-struct DVORBextractor {
-    extractor: UniquePtr<dvos3binding::ffi::ORBextractor>,
-    max_features: i32
+pub struct DVORBextractor {
+    pub extractor: UniquePtr<dvos3binding::ffi::ORBextractor>,
+    pub max_features: i32
 }
 impl DVORBextractor {
     pub fn new(max_features: i32) -> Self {

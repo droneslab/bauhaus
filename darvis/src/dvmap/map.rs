@@ -56,6 +56,7 @@ impl Map {
             id: 0, // TODO (Multimaps): this should increase when new maps are made
             sensor,
             last_kf_id: -1,
+            last_mp_id: -1,
             ..Default::default()
         }
     }
@@ -75,7 +76,6 @@ impl Map {
 
         let full_mappoint = MapPoint::<FullMapPoint>::new(mp, self.last_mp_id);
         self.mappoints.insert(self.last_mp_id, full_mappoint);
-        // info!("insert_mappoint_to_map;{}", self.last_mp_id);
 
         let mp = self.mappoints.get_mut(&new_mp_id).unwrap();
         for (kf_id, num_keypoints, index) in observations_to_add {
@@ -281,8 +281,8 @@ impl Map {
         let mut count = 0;
         for kf1_index in 0..inidata.mp_matches.len() {
             // Get index for kf1 and kf2
-            let kf2_index = inidata.mp_matches.get(kf1_index).unwrap();
-            if *kf2_index == -1 {
+            let kf2_index = inidata.mp_matches[kf1_index];
+            if kf2_index == -1 {
                 continue;
             }
             count +=1;
@@ -292,7 +292,7 @@ impl Map {
             let world_pos = DVVector3::new_with(point.x as f64, point.y as f64, point.z as f64);
             let _ = self.insert_mappoint_to_map(
                 &MapPoint::<PrelimMapPoint>::new(world_pos, curr_kf_id, self.id),
-                &vec![(initial_kf_id, num_keypoints, kf1_index), (curr_kf_id, num_keypoints, *kf2_index as usize)]
+                &vec![(initial_kf_id, num_keypoints, kf1_index), (curr_kf_id, num_keypoints, kf2_index as usize)]
             );
         }
         debug!("monocular initialization, created {} mps", count);
@@ -406,7 +406,6 @@ impl Map {
         let parent_kf_id = keyframes.get_mut(main_kf_id).unwrap().insert_all_connections(kf_counter, main_kf_id == initial_kf_id);
         if parent_kf_id.is_some() {
             parent_kf_id.map(|parent_kf| {
-                debug!("parent_kf {}  , {} -> {}", initial_kf_id, parent_kf, main_kf_id);
                 keyframes.get_mut(&parent_kf).unwrap().add_child(*main_kf_id);
             });
         }
@@ -439,7 +438,7 @@ impl Map {
 
     }
 
-    pub fn replace_mappoint(&self, mp_to_replace: &Id, mp: &Id) {
+    pub fn replace_mappoint(&self, _mp_to_replace: &Id, _mp: &Id) {
         todo!("LOCAL MAPPING");
         // if(pMP->mnId==this->mnId)
         //     return;
@@ -491,5 +490,23 @@ impl Map {
         // pMP->ComputeDistinctiveDescriptors();
 
         // mpMap->EraseMapPoint(this);
+
+
+        // Update points
+        // vpMapPointMatches = mpCurrentKeyFrame->GetMapPointMatches();
+        // for(size_t i=0, iend=vpMapPointMatches.size(); i<iend; i++)
+        // {
+        //     MapPoint* pMP=vpMapPointMatches[i];
+        //     if(pMP)
+        //     {
+        //         if(!pMP->isBad())
+        //         {
+        //             pMP->ComputeDistinctiveDescriptors();
+        //             pMP->UpdateNormalAndDepth();
+        //         }
+        //     }
+        // }
+        // Update connections in covisibility graph
+        // mpCurrentKeyFrame->UpdateConnections();
     }
 }

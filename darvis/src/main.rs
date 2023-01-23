@@ -20,6 +20,7 @@ mod actors;
 mod registered_modules;
 mod dvmap;
 mod modules;
+mod tests;
 
 pub static RESULTS_FOLDER: &str = "results";
 
@@ -34,7 +35,7 @@ fn main() {
     let img_dir = args[1].to_owned();
     let config_file = args[2].to_owned();
 
-    if let Some((actor_info, module_info)) = load_config(&config_file) {
+    if let Some((actor_info, _module_info)) = load_config(&config_file) {
         // Load config, including custom settings and actor information
         let img_paths = generate_image_paths(img_dir);
         let writeable_map = ReadWriteWrapper::new(Map::new());
@@ -108,7 +109,6 @@ fn initialize_actor_system(modules: Vec::<base::ActorConf>, writeable_map: &Read
         let _ = system.spawn().name(&actor_conf.name).with(
             FeatureManager::new(
                 &actor_conf.actor_function,
-                &actor_conf.actor_function, 
                 writeable_map.read_only()
             ),
             FeatureManager::handle

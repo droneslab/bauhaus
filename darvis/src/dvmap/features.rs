@@ -104,7 +104,7 @@ impl Features {
     pub fn get_all_keypoints(&self) -> &DVVectorOfKeyPoint {
         match &self.keypoints {
             KeyPoints::Mono{keypoints_un, ..} | KeyPoints::Rgbd{keypoints_un, ..} => keypoints_un,
-            KeyPoints::Stereo{keypoints_left, keypoints_right, ..} => { 
+            KeyPoints::Stereo{  ..} => { 
                 todo!("Stereo, need to concat keypoints_left and keypoints_right
                     but can we do this without copying?")
             },
@@ -251,7 +251,7 @@ impl Features {
 
                 for j in 0..v_cell.len() {
                     //TODO (Stereo) Need to update this if stereo images are processed
-                    let (kp_un, is_right) = &self.get_keypoint(v_cell[j]);
+                    let (kp_un, _is_right) = &self.get_keypoint(v_cell[j]);
                     if check_levels {
                         if kp_un.octave < min_level as i32 {
                             continue;
@@ -301,7 +301,7 @@ impl ImageBounds {
         let max_y;
 
         match dist_coef {
-            Some(vec) => {
+            Some(_vec) => {
                 todo!("mid priority: implement code if dist_coef is non-zero");
                 // cv::Mat mat(4,2,CV_32F);
                 // mat.at<float>(0,0)=0.0; mat.at<float>(0,1)=0.0;
