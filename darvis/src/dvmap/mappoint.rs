@@ -1,6 +1,6 @@
 use std::{fmt::Debug, collections::{HashMap}};
 use dvcore::{matrix::DVMatrix, config::{Sensor, GLOBAL_PARAMS, SYSTEM_SETTINGS, FrameSensor}};
-use log::{error};
+use log::{error, debug};
 extern crate nalgebra as na;
 use crate::{matrix::DVVector3, modules::orbmatcher::{descriptor_distance, SCALE_FACTORS}, registered_modules::FEATURE_DETECTION};
 use super::{map::{Id, Map}, keyframe::{Frame, FullKeyFrame}};
@@ -134,6 +134,10 @@ impl MapPoint<FullMapPoint> {
         self.full_mp_info.nfound as f32 / self.full_mp_info.nvisible as f32
     }
 
+    pub fn is_in_keyframe(&self, kf_id: Id) -> bool {
+        self.full_mp_info.observations.contains_key(&kf_id)
+    }
+
     pub fn predict_scale(&self, current_distance: &f64) -> i32 {
         // int MapPoint::PredictScale(const float &currentDist, KeyFrame* pKF)
         let ratio = self.full_mp_info.max_distance / current_distance;
@@ -155,6 +159,11 @@ impl MapPoint<FullMapPoint> {
     pub fn increase_found(&mut self, n: &i32) {
         // void MapPoint::IncreaseFound(int n)
         self.full_mp_info.nfound += n;
+    }
+
+    pub fn increase_visible(&mut self) {
+        // void MapPoint::IncreaseVisible(int n)
+        self.full_mp_info.nvisible += 1;
     }
 
     pub(super) fn get_norm_and_depth(&self, map: &Map) -> Option<(f64, f64, DVVector3<f64>)> {

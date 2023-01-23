@@ -49,7 +49,7 @@ impl Camera {
         *k.at_2d_mut::<f64>(1, 2)? = cy;
         *k.at_2d_mut::<f64>(2, 2)? = 1.0;
 
-        warn!("TODO... check if we need to correct distortion from the images");
+        //TODO... check if we need to correct distortion from the images
         let mut dist_coef = None;
         let sensor= GLOBAL_PARAMS.get::<Sensor>(SYSTEM_SETTINGS, "sensor");
         let k1= GLOBAL_PARAMS.get::<f64>(CAMERA, "k1") as f32;
@@ -90,7 +90,7 @@ impl Camera {
         v_keys1: &DVVectorOfKeyPoint, 
         v_keys2: &DVVectorOfKeyPoint,
         matches: &Vec<i32>,
-    ) -> (bool, Pose, DVVectorOfPoint3f, Vec<bool>) {
+    ) -> Option<(Pose, DVVectorOfPoint3f, Vec<bool>)> {
         let mut tvr = dvos3binding::ffi::new_two_view_reconstruction(
             self.get_fx() as f32,
             self.get_cx() as f32,
@@ -114,10 +114,11 @@ impl Camera {
             &mut v_p3d,
             &mut vb_triangulated
         );
-
-        debug!("pose in tvr {:?}", pose);
-
-        (reconstructed, pose.into(), v_p3d.into(), vb_triangulated) 
+        if reconstructed {
+            return Some((pose.into(), v_p3d.into(), vb_triangulated));
+        } else {
+            return None;
+        }
     }
 
     pub fn unproject_eig(&self, kp: &opencv::core::Point2f) -> DVVector3<f64> {

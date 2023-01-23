@@ -9,6 +9,7 @@ use parking_lot::{MappedRwLockReadGuard};
 use crate::actors::tracking_backend::TrackedMapPointData;
 use crate::dvmap::map_actor::MapWriteMsg;
 use crate::dvmap::keyframe::{Frame, FullKeyFrame};
+use crate::dvmap::mappoint::{MapPoint, FullMapPoint};
 use crate::registered_modules::{MATCHER, FEATURE_DETECTION, CAMERA};
 use crate::{
     dvmap::{keyframe::InitialFrame, map::Id, map::Map},
@@ -107,7 +108,7 @@ pub fn search_for_initialization(
                     check_orientation_1(
                         &f1.features.get_keypoint(i1 as usize).0,
                         &f2.features.get_keypoint(best_idx2 as usize).0,
-                        &mut rot_hist, factor, i1 as i32
+                        &mut rot_hist, factor, i1 as u32
                     );
                 }
             }
@@ -122,7 +123,7 @@ pub fn search_for_initialization(
             }
             for j in 0..rot_hist[i as usize].len() {
                 let key = rot_hist[i as usize][j];
-                if vn_matches12[ key as usize] >= 0 {
+                if vn_matches12[key as usize] >= 0 {
                     vn_matches12[key as usize] = -1;
                     n_matches -= 1;
                 }
@@ -135,15 +136,13 @@ pub fn search_for_initialization(
             *vb_prev_matched.get(i1).as_mut().unwrap() = f2.features.get_keypoint(*match12 as usize).0.pt;
         }
     }
-    debug!("new matches: {}", n_matches);
 
     (n_matches, vn_matches12)
 }
 
 pub fn search_by_projection(
-    frame: &mut Frame<InitialFrame>, mappoints: &HashSet<Id>, th: i32,
-    check_orientation: bool, ratio: f64,
-    track_in_view: &HashMap<Id, TrackedMapPointData>, track_in_view_right: &HashMap<Id, TrackedMapPointData>, 
+    frame: &mut Frame<InitialFrame>, mappoints: &HashSet<Id>, th: i32, ratio: f64,
+    track_in_view: &HashMap<Id, TrackedMapPointData>, _track_in_view_right: &HashMap<Id, TrackedMapPointData>, 
     map: &ReadOnlyWrapper<Map>, sensor: Sensor
 ) -> Result<i32, Box<dyn std::error::Error>> {
     // Search matches between Frame keypoints and projected MapPoints. Returns number of matches
@@ -325,11 +324,11 @@ pub fn search_by_projection(
 // Used to track from previous frame (Tracking)
 pub fn search_by_projection_with_threshold (
     current_frame: &mut Frame<InitialFrame>, last_frame: &Frame<InitialFrame>, th: i32,
-    should_check_orientation: bool, ratio: f64,
+    should_check_orientation: bool,
     map: &ReadOnlyWrapper<Map>, sensor: Sensor
 ) -> Result<i32, Box<dyn std::error::Error>> {
     // int ORBmatcher::SearchByProjection(Frame &CurrentFrame, const Frame &LastFrame, const float th, const bool bMono)
-    warn!("TODO STEREO...search_by_projection_with_threshold... ");
+    // TODO STEREO...search_by_projection_with_threshold...
     // This function should work for stereo as well as RGBD as long as get_all_keypoints() returns
     // a concatenated list of left keypoints and right keypoints (there is a to do for this in features.rs). BUT
     // double check that the descriptors works correctly. Instead of splitting descriptors into discriptors_left and right,
@@ -357,6 +356,9 @@ pub fn search_by_projection_with_threshold (
 
     let forward = tlc[2] > CAMERA_MODULE.stereo_baseline && !sensor.is_mono();
     let backward = -tlc[2] > CAMERA_MODULE.stereo_baseline && !sensor.is_mono();
+
+    debug!("search by projection keypoints {:?}", last_frame.features.get_all_keypoints().len());
+    debug!("search by projection mappoint matches {:?}", last_frame.mappoint_matches);
 
     for idx1 in 0..last_frame.features.get_all_keypoints().len() {
         if last_frame.mappoint_matches.contains_key(&(idx1 as u32)) && !last_frame.is_mp_outlier(&(idx1 as u32)) {
@@ -406,7 +408,7 @@ pub fn search_by_projection_with_threshold (
                     }
                 }
 
-                warn!("Unfinished code, not sure what this is doing in search_by_projection_with_threshold");
+                // TODO Stereo: Unfinished code, not sure what this is doing in search_by_projection_with_threshold
                 // Nleft == -1 if the left camera has no extracted keypoints which would happen in the
                 // non-stereo case. But mvuRight is > 0 ONLY in the stereo case! So is this ever true?
                 // if(CurrentFrame.Nleft == -1 && CurrentFrame.mvuRight[i2]>0)
@@ -432,7 +434,7 @@ pub fn search_by_projection_with_threshold (
                     check_orientation_1(
                         &last_frame.features.get_keypoint(idx1 as usize).0,
                         &current_frame.features.get_keypoint(best_idx as usize).0,
-                        &mut rot_hist, factor, best_idx
+                        &mut rot_hist, factor, best_idx as u32
                     );
                 }
                 num_matches += 1;
@@ -450,11 +452,11 @@ pub fn search_by_projection_with_threshold (
 
 // Sofiya: other searchbyprojection functions we will have to implement later:
 
-pub fn search_by_projection_reloc (
-    current_frame: &mut Frame<InitialFrame>, keyframe: &Frame<FullKeyFrame>,
-    th: i32, should_check_orientation: bool, ratio: f64,
-    track_in_view: &HashMap<Id, TrackedMapPointData>, track_in_view_right: &HashMap<Id, TrackedMapPointData>,
-    map: &ReadOnlyWrapper<Map>, sensor: Sensor
+pub fn _search_by_projection_reloc (
+    _current_frame: &mut Frame<InitialFrame>, _keyframe: &Frame<FullKeyFrame>,
+    _th: i32, _should_check_orientation: bool, _ratio: f64,
+    _track_in_view: &HashMap<Id, TrackedMapPointData>, _track_in_view_right: &HashMap<Id, TrackedMapPointData>,
+    _map: &ReadOnlyWrapper<Map>, _sensor: Sensor
 ) -> Result<i32, Box<dyn std::error::Error>> {
     // int SearchByProjection(Frame &CurrentFrame, KeyFrame* pKF, const std::set<MapPoint*> &sAlreadyFound, const float th, const int ORBdist);
     // Project MapPoints seen in KeyFrame into the Frame and search matches.
@@ -522,6 +524,7 @@ pub fn search_by_bow_f(
 
                         let dist = descriptor_distance(&descriptors_kf, &descriptors_f);
                         let no_left = frame.features.has_left_kp().map_or(true, |n_left| *index_f < n_left);
+                        // TODO (stereo): I'm not sure if below works in the stereo case
                         update_bests(
                             dist, *index_f as i32,
                             &mut best_dist_left, &mut best_index_left,
@@ -542,7 +545,7 @@ pub fn search_by_bow_f(
                                 check_orientation_1(
                                     &kf.features.get_keypoint(index_kf as usize).0,
                                     &frame.features.get_keypoint(best_index_left as usize).0,
-                                    &mut rot_hist, factor, best_index_left
+                                    &mut rot_hist, factor, best_index_left as u32
                                 );
                             };
                         }
@@ -552,8 +555,8 @@ pub fn search_by_bow_f(
                             if should_check_orientation {
                                 check_orientation_1(
                                     &kf.features.get_keypoint(index_kf as usize).0,
-                                    &frame.features.get_keypoint(best_index_left as usize).0,
-                                    &mut rot_hist, factor, best_index_left
+                                    &frame.features.get_keypoint(best_index_right as usize).0,
+                                    &mut rot_hist, factor, best_index_right as u32
                                 );
                             };
                         }
@@ -562,28 +565,22 @@ pub fn search_by_bow_f(
             }
         }
     }
-    debug!("initial matches {}", matches.len());
+    let pre = matches.len();
     if should_check_orientation {
         check_orientation_2(&rot_hist, &mut matches)
     };
-    debug!("final matches {}", matches.len());
+    debug!("Search by bow matches, before orientation: {}, after: {}", pre, matches.len());
 
     return Ok(matches);
 }
 
 pub fn search_by_bow_kf(
     kf_1 : &Frame<FullKeyFrame>, kf_2 : &Frame<FullKeyFrame>, should_check_orientation: bool, 
-    ratio: f64, map: &ReadOnlyWrapper<Map>
+    ratio: f64
 ) -> Result<HashMap<u32, Id>, Box<dyn std::error::Error>> {
     // int SearchByBoW(KeyFrame *pKF1, KeyFrame* pKF2, std::vector<MapPoint*> &vpMatches12);
-    // Sofiya: THis is EXTREMELY similar to the other search_by_bow, the only difference is
-    // this does not check left and right matches and sets the mappoint in kf_match_edits
-    // a little differently. Can we combine?
     let mut num_matches = 0;
     let mut matches = HashMap::<u32, Id>::new();
-
-    let keypoints_1 = kf_1.features.get_all_keypoints();
-    let keypoints_2 = kf_2.features.get_all_keypoints();
 
     let factor = 1.0 / (HISTO_LENGTH as f32);
     let mut rot_hist = construct_rotation_histogram();
@@ -629,7 +626,7 @@ pub fn search_by_bow_kf(
                                 check_orientation_1(
                                     &kf_1.features.get_keypoint(index_kf_1 as usize).0,
                                     &kf_2.features.get_keypoint(best_index as usize).0,
-                                    &mut rot_hist, factor, best_index
+                                    &mut rot_hist, factor, index_kf_1
                                 );
                             }
                             num_matches += 1;
@@ -651,21 +648,21 @@ pub fn search_by_bow_kf(
 
 pub fn search_for_triangulation(
     kf_1 : &Frame<FullKeyFrame>, kf_2 : &Frame<FullKeyFrame>,
-    should_check_orientation: bool, only_stereo: bool, course: bool, ratio: f64,
-    map: &ReadOnlyWrapper<Map>, sensor: Sensor
+    should_check_orientation: bool, only_stereo: bool, course: bool,
+    sensor: Sensor
 ) -> Result<HashMap<usize, usize>, Box<dyn std::error::Error>> {
     //int ORBmatcher::SearchForTriangulation(KeyFrame *pKF1, KeyFrame *pKF2, vector<pair<size_t, size_t> > &vMatchedPairs, const bool bOnlyStereo, const bool bCoarse)
     //Compute epipole in second image
-    let translation_1 = kf_1.pose.unwrap();
-    let translation_2 = kf_2.pose.unwrap();
-    let translation_inverse_2 = kf_2.pose.unwrap().inverse(); // for convenience
-    let cw = *kf_1.get_camera_center();
+    let translation_1 = kf_1.pose.unwrap(); // T1w
+    let translation_2 = kf_2.pose.unwrap(); // T2w
+    let translation_inverse_2 = kf_2.pose.unwrap().inverse(); // Tw2
+    let cw = *kf_1.get_camera_center(); // Cw
     let temp = *translation_1.get_translation();
-    let c2 = temp.component_mul(&cw);
+    let c2 = temp.component_mul(&cw); // c2
 
     let ep = CAMERA_MODULE.project(DVVector3::new(c2));
 
-    let (mut pose12, mut r12, mut t12);
+    let (pose12, r12, t12);
     if matches!(sensor.frame(), FrameSensor::Stereo) {
             todo!("Stereo");
             // Sophus::SE3f Tr1w = pKF1->GetRightPose();
@@ -677,7 +674,7 @@ pub fn search_for_triangulation(
             // Eigen::Matrix3f Rll = Tll.rotationMatrix(), Rlr  = Tlr.rotationMatrix(), Rrl  = Trl.rotationMatrix(), Rrr  = Trr.rotationMatrix();
             // Eigen::Vector3f tll = Tll.translation(), tlr = Tlr.translation(), trl = Trl.translation(), trr = Trr.translation();
     } else {
-        pose12 = translation_1 * translation_2; // T12 ... which is different than t12
+        pose12 = translation_1 * translation_inverse_2; // T12 ... which is different than t12
         r12 = pose12.get_rotation();
         t12 = pose12.get_translation();
     }
@@ -686,12 +683,8 @@ pub fn search_for_triangulation(
     // Matching speed-up by ORB Vocabulary
     // Compare only ORB that share the same node
 
-    let mut num_matches = 0;
     let mut matches = HashMap::<usize, usize>::new();
     let matched_already = HashMap::<u32, u32>::new();
-
-    let keypoints_1 = kf_1.features.get_all_keypoints();
-    let keypoints_2 = kf_2.features.get_all_keypoints();
 
     let factor = 1.0 / (HISTO_LENGTH as f32);
     let mut rot_hist = construct_rotation_histogram();
@@ -707,21 +700,20 @@ pub fn search_for_triangulation(
                     if kf_1.mappoint_matches.contains_key(&index_kf_1) {
                         continue
                     };
-                    let mappoint = kf_1.mappoint_matches.get(&index_kf_1);
 
                     let stereo1 = match sensor.frame() {
                         FrameSensor::Stereo => {
                             todo!("Stereo");
-                            let stereo1 = false; // const bool bStereo1 = (!pKF1->mpCamera2 && pKF1->mvuRight[idx1]>=0);
-                            if only_stereo && !stereo1 {
-                                continue
-                            }
-                            stereo1
+                            // let stereo1 = false; // const bool bStereo1 = (!pKF1->mpCamera2 && pKF1->mvuRight[idx1]>=0);
+                            // if only_stereo && !stereo1 {
+                            //     continue
+                            // }
+                            // stereo1
                         },
                         _ => false
                     };
 
-                    let (kp1, right1) = kf_1.features.get_keypoint(index_kf_1 as usize);
+                    let (kp1, _right1) = kf_1.features.get_keypoint(index_kf_1 as usize);
 
                     let mut best_dist = TH_LOW;
                     let mut best_index = -1;
@@ -732,16 +724,15 @@ pub fn search_for_triangulation(
                         if kf_2.mappoint_matches.contains_key(&index_kf_2) || matched_already.contains_key(index_kf_2) {
                             continue
                         };
-                        let mappoint = kf_2.mappoint_matches.get(&index_kf_2);
 
                         let stereo2 = match sensor.frame() {
                             FrameSensor::Stereo => {
                                 todo!("Stereo");
-                                let stereo2 = false; // const bool bStereo2 = (!pKF2->mpCamera2 &&  pKF2->mvuRight[idx2]>=0);
-                                if only_stereo && !stereo2 {
-                                    continue
-                                }
-                                stereo2
+                                // let stereo2 = false; // const bool bStereo2 = (!pKF2->mpCamera2 &&  pKF2->mvuRight[idx2]>=0);
+                                // if only_stereo && !stereo2 {
+                                //     continue
+                                // }
+                                // stereo2
                             },
                             _ => false
                         };
@@ -752,7 +743,7 @@ pub fn search_for_triangulation(
                             continue
                         }
 
-                        let (kp2, right2) = kf_2.features.get_keypoint(*index_kf_2 as usize);
+                        let (kp2, _right2) = kf_2.features.get_keypoint(*index_kf_2 as usize);
 
                         if !stereo1 && !stereo2 { // && !kf1->mpCamera2 ... TODO STEREO
                             let dist_ex = (ep.0 as f32) - kp2.pt.x;
@@ -811,7 +802,7 @@ pub fn search_for_triangulation(
                             check_orientation_1(
                                 &kp1,
                                 &kp2,
-                                &mut rot_hist, factor, best_index
+                                &mut rot_hist, factor, index_kf_1
                             );
 
                         }
@@ -839,10 +830,11 @@ pub fn search_for_triangulation(
     return Ok(matches);
 }
 
-pub fn fuse(kf_id: &i32, map: &MappedRwLockReadGuard<Map>, th: f32, is_right: bool) -> Vec<MapWriteMsg> {
+pub fn fuse(kf_id: &Id, fuse_candidates: &Vec<Id>, map: &MappedRwLockReadGuard<Map>, th: f32, is_right: bool) -> Vec<MapWriteMsg> {
     // int ORBmatcher::Fuse(KeyFrame *pKF, const vector<MapPoint *> &vpMapPoints, const float th, const bool bRight)
     let keyframe = map.get_keyframe(kf_id).unwrap();
-    let (tcw, ow, camera) = match is_right {
+
+    let (tcw, ow, _camera) = match is_right {
         true => {
             todo!("Stereo");
             // Tcw = pKF->GetRightPose();
@@ -856,15 +848,11 @@ pub fn fuse(kf_id: &i32, map: &MappedRwLockReadGuard<Map>, th: f32, is_right: bo
 
     let mut to_fuse = Vec::new();
 
-    for (idx1, (mp_id, _)) in &keyframe.mappoint_matches {
+    for mp_id in fuse_candidates {
         let mappoint = map.get_mappoint(&mp_id).unwrap();
-
-        //TODO local mapping...do I need this section? Seems like ti should always be true if we're looping through a keyframes matches. Why would a keyframe have an mp match but the mp match not have the keyframe?
-        // if(pMP->IsInKeyFrame(pKF))
-        // {
-        //     count_isinKF++;
-        //     continue;
-        // }
+        if mappoint.is_in_keyframe(keyframe.id()) {
+            continue;
+        }
 
         let p_3d_w = mappoint.position;
         let p_3d_c = (*tcw).component_mul(&*p_3d_w);
@@ -881,8 +869,6 @@ pub fn fuse(kf_id: &i32, map: &MappedRwLockReadGuard<Map>, th: f32, is_right: bo
         if !keyframe.features.is_in_image(uv.0, uv.1) {
             continue;
         }
-
-        let ur = uv.0 - CAMERA_MODULE.stereo_baseline_times_fx * inv_z;
 
         let max_distance = mappoint.get_max_distance_invariance();
         let min_distance = mappoint.get_min_distance_invariance();
@@ -925,6 +911,8 @@ pub fn fuse(kf_id: &i32, map: &MappedRwLockReadGuard<Map>, th: f32, is_right: bo
             let (kpx, kpy, ex, ey, e2);
             if is_right {
                 todo!("Stereo");
+                // let ur = uv.0 - CAMERA_MODULE.stereo_baseline_times_fx * inv_z;
+
                 // Check reprojection error in stereo
                 // const float &kpx = kp.pt.x;
                 // const float &kpy = kp.pt.y;
@@ -984,7 +972,7 @@ pub fn descriptor_distance(a : &Mat, b: &Mat) -> i32 {
 fn check_orientation_1(
     keypoint_1: &KeyPoint, keypoint_2: &KeyPoint,
     rot_hist: &mut Vec<Vec<u32>>, factor: f32,
-    best_index: i32
+    idx: u32
 ) {
     let mut rot = keypoint_1.angle - keypoint_2.angle;
     if rot < 0.0 {
@@ -995,7 +983,7 @@ fn check_orientation_1(
         bin = 0;
     }
     assert!(bin >= 0 && bin < HISTO_LENGTH );
-    rot_hist[bin as usize].push(best_index as u32);
+    rot_hist[bin as usize].push(idx);
 }
 
 fn check_orientation_2(rot_hist: &Vec<Vec<u32>>, matches: &mut HashMap<u32, Id>) {

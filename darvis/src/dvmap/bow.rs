@@ -26,7 +26,7 @@ impl DVVocabulary {
         }
     }
     pub fn transform(&self, descriptors: &DVMatrix, bow: & mut BoW) {
-        warn!("TODO...might be unnecessary clone");
+        //TODO...might be unnecessary clone
         let mut bla: dvos3binding::ffi::WrapBindCVMat = descriptors.clone().into();
 
         self.vocabulary.transform(

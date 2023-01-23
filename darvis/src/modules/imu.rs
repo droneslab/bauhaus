@@ -21,6 +21,7 @@ impl ImuModule {
     }
 
     pub fn preintegrate(&self) {
+        // void Tracking::PreintegrateIMU()
         self.check_imu_sensor();
         todo!("IMU: PreintegrateIMU");
     }
@@ -28,16 +29,11 @@ impl ImuModule {
     pub fn initialize(&self) {
         self.check_imu_sensor();
         //void LocalMapping::InitializeIMU(float priorG, float priorA, bool bFIBA)
-        let (prior_g, prior_a, fiba) = match self.sensor.frame() {
+        let (_prior_g, _prior_a, _fiba) = match self.sensor.frame() {
             FrameSensor::Mono => (1e2, 1e10, true),
             FrameSensor::Stereo | FrameSensor::Rgbd => (1e2, 1e5, true),
         };
         todo!("IMU: initialize");
-    }
-
-    pub fn reset_frame_imu(&self) -> bool {
-        self.check_imu_sensor();
-        todo!("IMU: ResetFrameIMU");
     }
 
     fn check_imu_sensor(&self) {

@@ -32,7 +32,7 @@ pub static MATCHER: &str = "MATCHER";
 /// let orb_extract_fn = getmethod("orb_extract".to_string(), "orb_extract".to_string());
 /// ```
 /// 
-pub fn getmethod(fnname: &String, id: &String, map: ReadOnlyWrapper<Map>) -> FunctionProxy
+pub fn getmethod(fnname: &String, map: ReadOnlyWrapper<Map>) -> FunctionProxy
 {
     match fnname.as_ref()
     {
@@ -51,8 +51,8 @@ pub struct FeatureManager {
 }
 
 impl FeatureManager {
-    pub fn new(fnname: &String, id: &String, map: ReadOnlyWrapper<Map>) -> FeatureManager {
-        FeatureManager { object: getmethod(fnname, id, map) }
+    pub fn new(fnname: &String, map: ReadOnlyWrapper<Map>) -> FeatureManager {
+        FeatureManager { object: getmethod(fnname, map) }
     }
 
     pub async fn handle(mut self, _context: axiom::prelude::Context, message: Message) -> ActorResult<Self> {
