@@ -7,3 +7,5 @@ pub mod optimizer; // Optimization code, uses g2o crate to call g2o in C++
 pub mod imu;
 pub mod map_initialization;
 pub mod relocalization;
+
+pub mod sim3solver;

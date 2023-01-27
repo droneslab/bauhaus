@@ -7,6 +7,7 @@ use dvcore::config::{GLOBAL_PARAMS, Sensor};
 use dvcore::matrix::{DVVectorOfi32, DVVectorOfPoint2f};
 use dvos3binding::ffi::WrapBindCVVectorOfPoint2f;
 use log::{debug};
+use nalgebra::Similarity3;
 use opencv::core::{Point2f, KeyPoint};
 use opencv::features2d::BFMatcher;
 use opencv::prelude::*;
@@ -451,10 +452,253 @@ pub fn search_by_projection_with_threshold (
 // Project MapPoints using a Similarity Transformation and search matches.
 // Used in loop detection (Loop Closing)
 // int SearchByProjection(KeyFrame* pKF, Sophus::Sim3<float> &Scw, const std::vector<MapPoint*> &vpPoints, std::vector<MapPoint*> &vpMatched, int th, float ratioHamming=1.0);
+pub fn search_by_projection_sim3(
+    p_current_kf: &KeyFrame<FullKeyFrame>,
+    scw: &Similarity3<f64>,
+    vp_map_points: &Vec<i32>,
+    vp_matched_map_points: &mut Vec<i32>,
+    th: i32,
+    ratio_hamming: f32
+) -> Result<i32, Box<dyn std::error::Error>>
+{
+
+    todo!("search_by_projection_sim3 not implemented yet");
+
+    // // Get Calibration Parameters for later projection
+    // const float &fx = pKF->fx;
+    // const float &fy = pKF->fy;
+    // const float &cx = pKF->cx;
+    // const float &cy = pKF->cy;
+
+    // Sophus::SE3f Tcw = Sophus::SE3f(Scw.rotationMatrix(),Scw.translation()/Scw.scale());
+    // Eigen::Vector3f Ow = Tcw.inverse().translation();
+
+    // // Set of MapPoints already found in the KeyFrame
+    // set<MapPoint*> spAlreadyFound(vpMatched.begin(), vpMatched.end());
+    // spAlreadyFound.erase(static_cast<MapPoint*>(NULL));
+
+    // int nmatches=0;
+
+    // // For each Candidate MapPoint Project and Match
+    // for(int iMP=0, iendMP=vpPoints.size(); iMP<iendMP; iMP++)
+    // {
+    //     MapPoint* pMP = vpPoints[iMP];
+
+    //     // Discard Bad MapPoints and already found
+    //     if(pMP->isBad() || spAlreadyFound.count(pMP))
+    //         continue;
+
+    //     // Get 3D Coords.
+    //     Eigen::Vector3f p3Dw = pMP->GetWorldPos();
+
+    //     // Transform into Camera Coords.
+    //     Eigen::Vector3f p3Dc = Tcw * p3Dw;
+
+    //     // Depth must be positive
+    //     if(p3Dc(2)<0.0)
+    //         continue;
+
+    //     // Project into Image
+    //     const Eigen::Vector2f uv = pKF->mpCamera->project(p3Dc);
+
+    //     // Point must be inside the image
+    //     if(!pKF->IsInImage(uv(0),uv(1)))
+    //         continue;
+
+    //     // Depth must be inside the scale invariance region of the point
+    //     const float maxDistance = pMP->GetMaxDistanceInvariance();
+    //     const float minDistance = pMP->GetMinDistanceInvariance();
+    //     Eigen::Vector3f PO = p3Dw-Ow;
+    //     const float dist = PO.norm();
+
+    //     if(dist<minDistance || dist>maxDistance)
+    //         continue;
+
+    //     // Viewing angle must be less than 60 deg
+    //     Eigen::Vector3f Pn = pMP->GetNormal();
+
+    //     if(PO.dot(Pn)<0.5*dist)
+    //         continue;
+
+    //     int nPredictedLevel = pMP->PredictScale(dist,pKF);
+
+    //     // Search in a radius
+    //     const float radius = th*pKF->mvScaleFactors[nPredictedLevel];
+
+    //     const vector<size_t> vIndices = pKF->GetFeaturesInArea(uv(0),uv(1),radius);
+
+    //     if(vIndices.empty())
+    //         continue;
+
+    //     // Match to the most similar keypoint in the radius
+    //     const cv::Mat dMP = pMP->GetDescriptor();
+
+    //     int bestDist = 256;
+    //     int bestIdx = -1;
+    //     for(vector<size_t>::const_iterator vit=vIndices.begin(), vend=vIndices.end(); vit!=vend; vit++)
+    //     {
+    //         const size_t idx = *vit;
+    //         if(vpMatched[idx])
+    //             continue;
+
+    //         const int &kpLevel= pKF->mvKeysUn[idx].octave;
+
+    //         if(kpLevel<nPredictedLevel-1 || kpLevel>nPredictedLevel)
+    //             continue;
+
+    //         const cv::Mat &dKF = pKF->mDescriptors.row(idx);
+
+    //         const int dist = DescriptorDistance(dMP,dKF);
+
+    //         if(dist<bestDist)
+    //         {
+    //             bestDist = dist;
+    //             bestIdx = idx;
+    //         }
+    //     }
+
+    //     if(bestDist<=TH_LOW*ratioHamming)
+    //     {
+    //         vpMatched[bestIdx]=pMP;
+    //         nmatches++;
+    //     }
+
+    // }
+
+    // return nmatches;
+}
+
+
+
 
 // Project MapPoints using a Similarity Transformation and search matches.
 // Used in Place Recognition (Loop Closing and Merging)
 // int SearchByProjection(KeyFrame* pKF, Sophus::Sim3<float> &Scw, const std::vector<MapPoint*> &vpPoints, const std::vector<KeyFrame*> &vpPointsKFs, std::vector<MapPoint*> &vpMatched, std::vector<KeyFrame*> &vpMatchedKF, int th, float ratioHamming=1.0);
+pub fn search_by_projection_sim3_kfs(
+    p_current_kf: &KeyFrame<FullKeyFrame>,
+    scw: &mut Similarity3<f64>,
+    vp_map_points: &mut Vec<i32>,
+    vp_map_points_kfs: &mut Vec<i32>,
+    vp_matched_map_points: &mut Vec<i32>,
+    vp_matched_kf: &mut Vec<i32>,
+    th: i32,
+    ratio_hamming: f32
+) -> Result<i32, Box<dyn std::error::Error>>
+{
+
+    todo!("search_by_projection_sim3_kfs not implemented yet");
+        // // Get Calibration Parameters for later projection
+        // const float &fx = pKF->fx;
+        // const float &fy = pKF->fy;
+        // const float &cx = pKF->cx;
+        // const float &cy = pKF->cy;
+
+        // Sophus::SE3f Tcw = Sophus::SE3f(Scw.rotationMatrix(),Scw.translation()/Scw.scale());
+        // Eigen::Vector3f Ow = Tcw.inverse().translation();
+
+        // // Set of MapPoints already found in the KeyFrame
+        // set<MapPoint*> spAlreadyFound(vpMatched.begin(), vpMatched.end());
+        // spAlreadyFound.erase(static_cast<MapPoint*>(NULL));
+
+        // int nmatches=0;
+
+        // // For each Candidate MapPoint Project and Match
+        // for(int iMP=0, iendMP=vpPoints.size(); iMP<iendMP; iMP++)
+        // {
+        //     MapPoint* pMP = vpPoints[iMP];
+        //     KeyFrame* pKFi = vpPointsKFs[iMP];
+
+        //     // Discard Bad MapPoints and already found
+        //     if(pMP->isBad() || spAlreadyFound.count(pMP))
+        //         continue;
+
+        //     // Get 3D Coords.
+        //     Eigen::Vector3f p3Dw = pMP->GetWorldPos();
+
+        //     // Transform into Camera Coords.
+        //     Eigen::Vector3f p3Dc = Tcw * p3Dw;
+
+        //     // Depth must be positive
+        //     if(p3Dc(2)<0.0)
+        //         continue;
+
+        //     // Project into Image
+        //     const float invz = 1/p3Dc(2);
+        //     const float x = p3Dc(0)*invz;
+        //     const float y = p3Dc(1)*invz;
+
+        //     const float u = fx*x+cx;
+        //     const float v = fy*y+cy;
+
+        //     // Point must be inside the image
+        //     if(!pKF->IsInImage(u,v))
+        //         continue;
+
+        //     // Depth must be inside the scale invariance region of the point
+        //     const float maxDistance = pMP->GetMaxDistanceInvariance();
+        //     const float minDistance = pMP->GetMinDistanceInvariance();
+        //     Eigen::Vector3f PO = p3Dw-Ow;
+        //     const float dist = PO.norm();
+
+        //     if(dist<minDistance || dist>maxDistance)
+        //         continue;
+
+        //     // Viewing angle must be less than 60 deg
+        //     Eigen::Vector3f Pn = pMP->GetNormal();
+
+        //     if(PO.dot(Pn)<0.5*dist)
+        //         continue;
+
+        //     int nPredictedLevel = pMP->PredictScale(dist,pKF);
+
+        //     // Search in a radius
+        //     const float radius = th*pKF->mvScaleFactors[nPredictedLevel];
+
+        //     const vector<size_t> vIndices = pKF->GetFeaturesInArea(u,v,radius);
+
+        //     if(vIndices.empty())
+        //         continue;
+
+        //     // Match to the most similar keypoint in the radius
+        //     const cv::Mat dMP = pMP->GetDescriptor();
+
+        //     int bestDist = 256;
+        //     int bestIdx = -1;
+        //     for(vector<size_t>::const_iterator vit=vIndices.begin(), vend=vIndices.end(); vit!=vend; vit++)
+        //     {
+        //         const size_t idx = *vit;
+        //         if(vpMatched[idx])
+        //             continue;
+
+        //         const int &kpLevel= pKF->mvKeysUn[idx].octave;
+
+        //         if(kpLevel<nPredictedLevel-1 || kpLevel>nPredictedLevel)
+        //             continue;
+
+        //         const cv::Mat &dKF = pKF->mDescriptors.row(idx);
+
+        //         const int dist = DescriptorDistance(dMP,dKF);
+
+        //         if(dist<bestDist)
+        //         {
+        //             bestDist = dist;
+        //             bestIdx = idx;
+        //         }
+        //     }
+
+        //     if(bestDist<=TH_LOW*ratioHamming)
+        //     {
+        //         vpMatched[bestIdx] = pMP;
+        //         vpMatchedKF[bestIdx] = pKFi;
+        //         nmatches++;
+        //     }
+
+        // }
+
+        // return nmatches;
+}
+
+
 
 pub fn search_by_bow_f(
     kf : &KeyFrame<FullKeyFrame>, frame : &mut Frame, should_check_orientation: bool, 
