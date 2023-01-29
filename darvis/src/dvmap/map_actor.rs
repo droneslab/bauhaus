@@ -3,9 +3,11 @@ use log::{info, warn, debug};
 use nalgebra::Vector3;
 use crate::{
     lockwrap::ReadWriteWrapper,
-    dvmap::{keyframe::*, map::*},
+    dvmap::{keyframe::*, map::*, pose::*, mappoint::*},
     modules::map_initialization::Initialization, actors::messages::MapInitializedMsg,
 };
+
+use super::mappoint::MapPoint;
 
 pub static MAP_ACTOR: &str = "MAP_ACTOR"; 
 
@@ -51,6 +53,26 @@ impl MapActor {//+ std::marker::Send + std::marker::Sync
                     // Note: called by local mapping
                     write_lock.insert_keyframe_to_map(kf);
                 },
+                MapEditTarget::KeyFrame_Update_Pose { kf_id, pose }=> {
+                    // Note: called by loop closing
+                    write_lock.update_keyframe_pose(kf_id, pose);
+                },
+                MapEditTarget::MapPoint__Update { id, mappoint }    => {
+                    // Note: called by loop closing
+                    write_lock.update_mappoint(id, mappoint);
+                },
+                MapEditTarget::KeyFrame_MapPoint__Add { kp_id, mappoint, index } => {
+                    // Note: called by local mapping
+                    write_lock.add_mappoint_to_keyframe(kp_id, mappoint, index);
+                },
+                MapEditTarget::KeyFrame_Update { kf_id, keyframe } => {
+                    // Note: called by local mapping
+                    write_lock.update_keyframe(kf_id, keyframe);
+                },
+                MapEditTarget::Map_Increase_Change_Index => {
+                    // Note: called by local mapping
+                    write_lock.increase_change_index();
+                },
 
                 _ => {
                     warn!("invalid message type to map actor");
@@ -89,10 +111,15 @@ enum MapEditTarget {
     CreateInitialMapMonocular{initialization_data: Initialization, tracking_actor: axiom::actors::Aid},
     CreateInitialMapStereo{initialization_data: Initialization, tracking_actor: axiom::actors::Aid},
     KeyFrame__New{kf: KeyFrame<PrelimKeyFrame>},
+    KeyFrame_Update_Pose{kf_id: Id, pose: Pose},
     Map__ResetActive(),
     MapPoint__Position{ id: u64, pos: Vector3<f32> },
     MapPoint__Discard{id: Id},
     MapPoint_IncreaseFound{mp_ids_and_nums: Vec::<(Id, i32)>},
+    MapPoint__Update{ id: Id, mappoint: MapPoint<FullMapPoint> },
+    KeyFrame_MapPoint__Add{ kp_id: Id, mappoint: MapPoint<FullMapPoint>, index: u32 },
+    KeyFrame_Update{ kf_id: Id, keyframe: KeyFrame<FullKeyFrame> },
+    Map_Increase_Change_Index{},
 }
 pub struct MapWriteMsg {
     // #[serde(bound = "")] If using serialize/deserialize, uncomment this
@@ -142,6 +169,33 @@ impl MapWriteMsg {
             target: MapEditTarget::MapPoint_IncreaseFound { mp_ids_and_nums },
         }
     }
+    pub fn update_keyframe_pose(kf_id: &Id, pose: &Pose) -> MapWriteMsg {
+        Self {
+            target: MapEditTarget::KeyFrame_Update_Pose {kf_id: kf_id.clone(), pose: pose.clone()},
+        }
+    }
+
+    pub fn update_mappoint(mp_id: &Id, mappoint: MapPoint<FullMapPoint>) -> MapWriteMsg {
+        Self {
+            target: MapEditTarget::MapPoint__Update {id : mp_id.clone(), mappoint: mappoint},
+        }
+    }
+    pub fn add_mappoint_to_keyframe(kp_id: &Id, mappoint: MapPoint<FullMapPoint>, index: u32) -> MapWriteMsg {
+        Self {
+            target: MapEditTarget::KeyFrame_MapPoint__Add {kp_id : kp_id.clone(), mappoint: mappoint, index: index},
+        }
+    }
+    pub fn update_keyframe(kf_id: &Id, keyframe: KeyFrame<FullKeyFrame>) -> MapWriteMsg {
+        Self {
+            target: MapEditTarget::KeyFrame_Update {kf_id: kf_id.clone(), keyframe: keyframe},
+        }
+    }
+    pub fn increase_change_index() -> MapWriteMsg {
+        Self {
+            target: MapEditTarget::Map_Increase_Change_Index{},
+        }
+    }
+
 }
 
 

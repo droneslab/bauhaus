@@ -55,6 +55,7 @@ pub struct FullKeyFrame { // Full map item inserted into the map with the follow
     pub parent: Option<Id>,
     pub children: Vec<Id>,
     connected_keyframes: ConnectedKeyFrames,// also sometimes called covisibility keyframes in ORBSLAM3
+    pub loop_edges: Vec<Id>, // mLoopEdges
 
     // Sofiya: I think we can clean this up and get rid of these
     // Variables used by KF database
@@ -182,6 +183,14 @@ impl KeyFrame<FullKeyFrame> {
         self.full_kf_info.children.push(id);
     }
 
+    pub fn erase_child(&mut self, id: Id) {
+        self.full_kf_info.children.retain(|&x| x != id);
+    }
+
+    pub fn get_children(&self) -> Vec<Id> {
+        self.full_kf_info.children.clone()
+    }
+
     pub fn get_camera_center(&self) -> DVVector3<f64> {
         self.pose.inverse().get_translation()
         // Note: In Orbslam, this is: mTwc.translation()
@@ -232,6 +241,15 @@ impl KeyFrame<FullKeyFrame> {
 
         num_points
     }
+
+    pub fn add_loop_edge(&mut self, id: Id) {
+        self.full_kf_info.loop_edges.push(id);
+    }
+
+    pub fn get_loop_edges(&self) -> &Vec<Id> {
+        &self.full_kf_info.loop_edges
+    }
+
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]

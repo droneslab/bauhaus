@@ -1415,6 +1415,27 @@ pub fn optimize_sim3(kf1 : &KeyFrame<FullKeyFrame>,
 }
 
 
+pub fn optimize_essential_graph(
+    map: &Map, 
+    loop_kf: &KeyFrame<FullKeyFrame>,
+    curr_kf: &KeyFrame<FullKeyFrame>,
+    NonCorrectedSim3 : HashMap::<Id, Pose>,
+    CorrectedSim3 : HashMap::<Id, Pose>,
+    LoopConnections : HashMap::<Id, HashSet::<Id>>,
+    b_fixed_scale: bool
+) -> BAResult {
+    // OptimizeEssentialGraph(Map* pMap, 
+    //     KeyFrame* pLoopKF,
+    //     KeyFrame* pCurKF,
+    //     const LoopClosing::KeyFrameAndPose &NonCorrectedSim3,
+    //     const LoopClosing::KeyFrameAndPose &CorrectedSim3,
+    //     const map<KeyFrame *, set<KeyFrame *> > &LoopConnections,
+    //     const bool &bFixScale);
+
+    todo!("TODO: Loop Closing, optimize essential graph");
+}
+
+
 
 pub fn local_bundle_adjustment(
     map: &Map, keyframe: &KeyFrame<PrelimKeyFrame>,

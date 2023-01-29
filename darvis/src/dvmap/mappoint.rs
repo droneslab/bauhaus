@@ -7,6 +7,8 @@ extern crate nalgebra as na;
 use crate::{matrix::DVVector3, modules::orbmatcher::{descriptor_distance, SCALE_FACTORS}, registered_modules::FEATURE_DETECTION};
 use super::{map::{Id, Map}, observations::Observations};
 
+use nalgebra::{Similarity3};
+
 // Note: Implementing typestate for like here: http://cliffle.com/blog/rust-typestate/#a-simple-example-the-living-and-the-dead
 // This way we can encode mappoints that have been created but not inserted into the map as a separate type than mappoints that are legit.
 // This prevents making the following mistake:
@@ -43,6 +45,10 @@ pub struct MapPoint<M: MapPointState> {
 
     // Typestate...This reassures the compiler that the parameter gets used.
     full_mp_info: M,
+
+    // following are used by loop closing
+    pub mnCorrectedByKF: Id,
+    pub mnCorrectedReference: Id,
 }
 
 // Typestate...State options.
@@ -68,6 +74,7 @@ pub struct FullMapPoint { // Full map item inserted into the map with the follow
     // following two are only set by tracking and only checked by local mapping for mappoint culling, but not sure what the diff is b/w visible and found
     nvisible: i32, //mnvisible
     nfound: i32, //mnfound
+
 }
 
 pub trait MapPointState {}
@@ -80,7 +87,9 @@ impl MapPoint<PrelimMapPoint> {
             position,
             origin_map_id,
             ref_kf,
-            full_mp_info: PrelimMapPoint{} 
+            full_mp_info: PrelimMapPoint{},
+            mnCorrectedByKF: -1,
+            mnCorrectedReference: -1
         }
     }
     // TODO: Two constructors, this one takes an idxF that I think is the index in observations
@@ -134,6 +143,8 @@ impl MapPoint<FullMapPoint> {
             position: prelim_mappoint.position,
             origin_map_id: prelim_mappoint.origin_map_id,
             ref_kf: prelim_mappoint.ref_kf,
+            mnCorrectedByKF: prelim_mappoint.mnCorrectedByKF,
+            mnCorrectedReference: prelim_mappoint.mnCorrectedReference,  
             full_mp_info: FullMapPoint{
                 id,
                 observations: Observations::new(sensor),
@@ -142,7 +153,7 @@ impl MapPoint<FullMapPoint> {
                 min_distance: 0.0,
                 nvisible: 1,
                 nfound: 1,
-                best_descriptor: DVMatrix::empty(),
+                best_descriptor: DVMatrix::empty(),              
             },
         }
     }
@@ -272,4 +283,17 @@ impl MapPoint<FullMapPoint> {
         }
     }
     
+}
+
+
+pub trait Similarity3_Map 
+{
+    fn map(&self, p3d : DVVector3<f64>) -> DVVector3<f64>;
+}
+
+impl Similarity3_Map for Similarity3<f64> {
+    fn map(&self, p3d : DVVector3<f64>) -> DVVector3<f64> {
+        //s*(r*xyz) + t;
+        self.transform_point(p3d).coords
+    }
 }

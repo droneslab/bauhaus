@@ -1,4 +1,4 @@
-use std::{collections::{HashMap, HashSet}};
+use std::{collections::{HashMap, HashSet}, sync::Arc};
 use log::{info, warn, error, debug};
 use dvcore::{matrix::{DVVector3}, config::{Sensor, GLOBAL_PARAMS, SYSTEM_SETTINGS, FrameSensor, ImuSensor}};
 use crate::{
@@ -45,7 +45,7 @@ pub struct Map {
     // mbFail: bool
     // nNextId: : u32
     // mbImuInitialized: bool
-    // mnMapChange: bool
+    mnMapChange: i32,
     // mnMapChangeNotified: bool
     // mnBigChangeIdx: i32
 
@@ -319,6 +319,44 @@ impl Map {
 
     }
 
+    pub fn update_keyframe_pose(&mut self, kf_id: &Id, pose: &Pose) {
+        self.keyframes.get_mut(kf_id).unwrap().pose = *pose;
+    }
+
+    pub fn update_mappoint(&mut self, mp_id: &Id, mappoint: &MapPoint<FullMapPoint>) {
+        let mut curr_mappoint = mappoint.clone(); 
+        curr_mappoint.update_norm_and_depth(curr_mappoint.get_norm_and_depth(self).unwrap());
+        self.mappoints.insert(*mp_id, curr_mappoint);        
+    }
+
+    pub fn keyframe_add_mappoint(&mut self, kf_id: &Id, mappoint: &MapPoint<FullMapPoint>, index: u32) {    
+
+        let new_mp_id = Map::insert_mappoint_to_map(
+            &mut self.last_mp_id,
+            &mut self.mappoints,
+            mappoint
+        );
+        let new_mp = self.mappoints.get_mut(&new_mp_id).unwrap();
+        
+        self.keyframes.get_mut(&kf_id).map(|kf| {
+            kf.add_mappoint(&new_mp, index as u32, false);
+            new_mp.add_observation(&kf.id(), kf.features.num_keypoints, index as u32);
+        });
+
+        let best_descriptor = self.mappoints.get(&new_mp_id)
+        .and_then(|mp| mp.compute_distinctive_descriptors(&self));
+        if best_descriptor.is_some() {
+            self.mappoints.get_mut(&new_mp_id).map(|mp| mp.update_distinctive_descriptors(best_descriptor.unwrap()));
+        }
+
+
+    }
+
+    pub fn update_keyframe(&mut self, kf_id: &Id, keyframe: KeyFrame<FullKeyFrame>)  
+    {
+        self.keyframes.insert(*kf_id, keyframe);
+    }
+
 
     pub fn insert_mappoint_to_map(last_mp_id: &mut i32, mappoints: &mut HashMap<Id, MapPoint<FullMapPoint>>, mp: MapPoint<PrelimMapPoint>) -> Id {
         *last_mp_id += 1;
@@ -351,4 +389,13 @@ impl Map {
             warn!("KeyframeDatabase for the map is None; Please initialize the map with KeyframeDatabase");
         }
     }
+
+    pub fn increase_change_index(&mut self) {
+        self.mnMapChange += 1;
+    }
+
+    pub fn get_map_change_index(&self) -> i32 {
+        return self.mnMapChange;
+    }
+    
 }
