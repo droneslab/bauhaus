@@ -511,7 +511,7 @@ impl DarvisLoopClosing {
         //void LoopClosing::MergeLocal()
         fn merge_local(&mut self)
         {
-            //todo!("Implement merge_local");
+
             let numTemporalKFs = 25; //int numTemporalKFs = 25; //Temporal KFs in the local window if the map is inertial.
 
             //Relationship to rebuild the essential graph, it is used two times, first in the local window and later in the rest of the map
@@ -1214,7 +1214,6 @@ impl DarvisLoopClosing {
         //bool LoopClosing::DetectCommonRegionsFromBoW(std::vector<KeyFrame*> &vpBowCand, KeyFrame* &pMatchedKF2, KeyFrame* &pLastCurrentKF, g2o::Sim3 &g2oScw, int &nNumCoincidences, std::vector<MapPoint*> &vpMPs, std::vector<MapPoint*> &vpMatchedMPs)
         fn detect_common_regions_from_bow(&self, vpBowCand : &Vec<i32>, pMatchedKF2 : &KeyFrame<FullKeyFrame>, pLastCurrentKF : &KeyFrame<FullKeyFrame>,  g2oScw: &Similarity3<f64>, nNumCoincidences : i32, vpMPs: &mut Vec<i32>,  vpMatchedMPs : &mut Vec<i32>) -> bool
         {
-            //todo!("Implement detect_common_regions_from_bow");
             // Pranay : Interesting heuristics used here
             let bow_matches = 20;// int nBoWMatches = 20;
             let bow_inlilers = 15;// int nBoWInliers = 15;
@@ -1636,155 +1635,6 @@ impl DarvisLoopClosing {
         {
             self.mbRunningGBA
         }
-
-        /* 
-        fn correct_loop(&mut self) {
-            // Send a stop signal to Local Mapping
-            // Avoid new keyframes are inserted while correcting the loop
-
-            //Pranay : (TODO) send local mapping msg to stop and empty queue. 
-            //self.local_mapper.request_stop();
-            //self.local_mapper.empty_queue(); // Process keyframes in the queue
-        
-            // If a Global Bundle Adjustment is running, abort it
-            if self.is_running_gba() {
-                debug!("Stopping Global Bundle Adjustment...");
-                //let mut lock = self.mutex_gba.lock().unwrap();
-                self.mb_stop_gba = true;
-                self.mn_full_ba_idx += 1;
-
-                todo!("Implement running GBA as thread");
-                // if let Some(ref thread_gba) = self.mp_thread_gba {
-                //     thread_gba.detach();
-                //     delete(thread_gba);
-                // }
-
-                debug!("  Done!!");
-            }
-        
-            //Pranay : (TODO) wait flag for local mapping stopped after stop msg
-            // Wait until Local Mapping has effectively stopped
-            // while !self.local_mapper.is_stopped() {
-            //     thread::sleep(Duration::from_millis(1000));
-            // }
-        
-            //Pranay : [Please check] if following line is needed, if yes need to send an actor msg instead
-            // Ensure current keyframe is updated
-            //self.current_kf.unwrap().update_connections();
-        
-            // Retrieve keyframes connected to the current keyframe and compute corrected Sim3 pose by propagation
-            self.mvp_current_connected_kfs = self.current_kf.unwrap().get_connections(30);
-            self.mvp_current_connected_kfs.push(self.current_kf);
-        
-            let mut corrected_sim3 = HashMap::new();
-            let mut non_corrected_sim3 = HashMap::new();
-            corrected_sim3.insert(self.current_kf, self.mg2o_loop_scw);
-            let twc = self.current_kf.get_pose_inverse();
-            let tcw = self.current_kf.get_pose();
-            let g2o_scw = g2o::Sim3::new(
-                tcw.unit_quaternion().cast::<f64>(),
-                tcw.translation().cast::<f64>(),
-                1.0,
-            );
-            non_corrected_sim3.insert(self.current_kf, g2o_scw);
-        
-            // Update keyframe pose with corrected Sim3. First transform Sim3 to SE3 (scale translation)
-            let corrected_tcw = se3d::SE3::new(
-                self.mg2o_loop_scw.rotation(),
-                self.mg2o_loop_scw.translation() / self.mg2o_loop_scw.scale(),
-            );
-            self.current_kf.set_pose(corrected_tcw.cast::<f32>());
-        
-            let loop_map = self.current_kf.get_map();
-        
-            let mut lock = loop_map.mutex_map_update.lock().unwrap();
-        
-            let b_imu_init = loop_map.is_imu_initialized();
-        
-            for kf in self.mvp_current_connected_kfs.iter() {
-                if kf != self.current_kf {
-                    let tiw = kf.get
-                    let tic = (tiw * twc).cast::<f64>();
-                    let g2o_sic = g2o::Sim3::new(
-                        tic.unit_quaternion(),
-                        tic.translation(),
-                        1.0,
-                    );
-                    non_corrected_sim3.insert(kf, g2o_sic);
-                }
-            }
-        
-            // Correct all MapPoints obsrved by current keyframe and neighbors, so that they align with the other side of the loop
-            for kf in self.mvp_current_connected_kfs.iter() {
-                if kf != self.current_kf {
-                    for mb in kf.map_points.iter() {
-                        if let Some(mp) = mb {
-                            if !mp.is_corrected() {
-                                mp.correct_loop(self.current_kf, non_corrected_sim3, corrected_sim3, b_imu_init);
-                            }
-                        }
-                    }
-                }
-            }
-        
-            // Now loop_map.mvpKeyFrameOrigins has the previous loop keyframes, we must set to nullptr the pointers
-            // in loop_map.mvpKeyFrameOrigins of keyframes not in the current connected KFs
-            for kf in loop_map.key_frames.iter() {
-                if !self.current_kf.is_neighbor(kf) {
-                    loop_map.key_frame_origins.remove(kf);
-                }
-            }
-        
-            // Project MapPoints observed in the neighborhood of the loop keyframe
-            // into the current keyframe and neighbors using corrected poses.
-            // Fuse duplications.
-            for kf in self.mvp_current_connected_kfs.iter() {
-                if kf != self.current_kf {
-                    for mb in kf.map_points.iter() {
-                        if let Some(mp) = mb {
-                            if !mp.is_bad() {
-                                mp.lock_mut().project(corrected_sim3, Some(&loop_map));
-                            }
-                        }
-                    }
-                }
-            }
-
-            self.current_kf.lock_mut().project_map_points(Some(&loop_map), 3, Some(&self.loop_map_matches));
-
-            // Attention! Extra loop correction
-            if self.b_loop_correction {
-                for kf in self.mvp_current_connected_kfs.iter() {
-                    if kf != self.current_kf {
-                        for mb in kf.map_points.iter() {
-                            if let Some(mp) = mb {
-                                if !mp.is_bad() {
-                                    mp.lock_mut().project(corrected_sim3, Some(&loop_map));
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-
-            loop_map.invalidate();
-
-            // Loop closed. Release Local Mapping.            
-
-            //cout << "Loop closed!" << endl;
-            self.mp_local_mapper.lock().unwrap().release();
-
-            // Stop loop if error too large
-            if self.b_loop_correction && self.b_stop_loop {
-                self.b_loop = false;
-                
-                //break;
-            }
-
-            self.current_kf = kf_loop_closer;
-        }
-        */      
 
         //void LoopClosing::CorrectLoop()
         fn correct_loop(&mut self, context: Context)
