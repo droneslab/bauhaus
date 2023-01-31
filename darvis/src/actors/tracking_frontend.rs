@@ -1,26 +1,24 @@
 extern crate g2o;
 
 use axiom::prelude::*;
-use cxx::{UniquePtr, CxxVector};
-use log::{ warn, debug};
-use std::pin::Pin;
+use cxx::{UniquePtr};
+use log::{ warn, info};
 use std::{sync::Arc, fmt};
 use std::fmt::Debug;
 use opencv::{prelude::*,types::{VectorOfKeyPoint},};
-use dvcore::{matrix::*,lockwrap::ReadOnlyWrapper,plugin_functions::Function,config::*,};
+use dvcore::{matrix::*,plugin_functions::Function,config::*,};
 use crate::dvmap::map::Id;
 use crate::{
     registered_modules::{TRACKING_BACKEND, FEATURE_DETECTION, CAMERA},
     actors::{messages::{ImageMsg, FeatureMsg,},},
-    dvmap::{map::Map},
 };
 
 use super::messages::TrackingStateMsg;
 use super::tracking_backend::TrackingState;
 
-struct DVORBextractor {
-    extractor: UniquePtr<dvos3binding::ffi::ORBextractor>,
-    max_features: i32
+pub struct DVORBextractor {
+    pub extractor: UniquePtr<dvos3binding::ffi::ORBextractor>,
+    pub max_features: i32
 }
 impl DVORBextractor {
     pub fn new(max_features: i32) -> Self {

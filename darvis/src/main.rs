@@ -5,11 +5,11 @@ use axiom::prelude::*;
 use chrono::{DateTime, Utc};
 use fern::colors::{ColoredLevelConfig, Color};
 use glob::glob;
-use log::{warn, info, debug};
+use log::{warn, info};
 use spin_sleep::LoopHelper;
 #[macro_use]
 extern crate lazy_static;
-use opencv::{imgcodecs, prelude::*};
+use opencv::{imgcodecs};
 
 use dvcore::{*, lockwrap::ReadWriteWrapper, config::*};
 use crate::actors::{messages::{ImageMsg, ShutdownMessage, TrajectoryMessage, VisPathMsg}};
@@ -20,6 +20,7 @@ mod actors;
 mod registered_modules;
 mod dvmap;
 mod modules;
+mod tests;
 
 pub static RESULTS_FOLDER: &str = "results";
 
@@ -34,7 +35,7 @@ fn main() {
     let img_dir = args[1].to_owned();
     let config_file = args[2].to_owned();
 
-    if let Some((actor_info, module_info)) = load_config(&config_file) {
+    if let Some((actor_info, _module_info)) = load_config(&config_file) {
         // Load config, including custom settings and actor information
         let img_paths = generate_image_paths(img_dir);
         let writeable_map = ReadWriteWrapper::new(Map::new());
@@ -57,13 +58,13 @@ fn main() {
             let img = imgcodecs::imread(&path, imgcodecs::IMREAD_GRAYSCALE).unwrap();
             let tracking_frontend = actor_system.find_aid_by_name(TRACKING_FRONTEND).unwrap();
 
-            info!("Read image {}", path);
+            info!("Read image {}", path.split("/").last().unwrap().split(".").nth(0).unwrap());
             if use_visualizer {
                 let vis_id = actor_system.find_aid_by_name(VISUALIZER).unwrap();
                 vis_id.send_new(VisPathMsg::new(path.to_string())).unwrap();
             }
 
-            warn!("TODO... Check ORBSLAM3 frame loader, image gets scaled and resized");
+            // ORBSLAM3 frame loader scales and resizes image, do we need this?
             // After looking into it for a while, I think not. They have the code to scale,
             // but then never set the variable mImageScale to anything but 1.0
             // https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/Examples/RGB-D/rgbd_tum.cc#L89
@@ -108,7 +109,6 @@ fn initialize_actor_system(modules: Vec::<base::ActorConf>, writeable_map: &Read
         let _ = system.spawn().name(&actor_conf.name).with(
             FeatureManager::new(
                 &actor_conf.actor_function,
-                &actor_conf.actor_function, 
                 writeable_map.read_only()
             ),
             FeatureManager::handle
