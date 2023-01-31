@@ -17,6 +17,8 @@
 */
 
 #include "TwoViewReconstruction.h"
+#include <opencv2/core/eigen.hpp>
+
 
 #include "Converter.h"
 #include "GeometricTools.h"
@@ -150,6 +152,31 @@ namespace orb_slam3
 
         float minParallax = 1.0;
 
+        // Don't delete this
+        // Code to print out an image showing the homography, so we can test if the homography makes sense
+        // If you want to use this you'll need to manually change the image pngs below to whatever you're testing 
+        // cv::Mat H_mat(3, 3, CV_64FC1);
+        // cv::eigen2cv(H, H_mat);
+        // cv::Mat img_draw_matches;
+        // auto img1 = cv::imread("/home/sofiya/dataset/sequences/00/image_0/000000.png",cv::IMREAD_UNCHANGED);
+        // auto img2 = cv::imread("/home/sofiya/dataset/sequences/00/image_0/000001.png",cv::IMREAD_UNCHANGED);
+        // hconcat(img1, img2, img_draw_matches);
+        // for (size_t i = 0; i < mvMatches12.size(); i++)
+        // {
+        //     const cv::KeyPoint &kp1 = mvKeys1[mvMatches12[i].first];
+        //     cv::Mat pt1bla = (cv::Mat_<double>(3,1) << kp1.pt.x, kp1.pt.y, 1);
+        //     cv::Mat pt1;
+        //     cv::Mat killme;
+        //     pt1bla.convertTo(pt1, CV_64FC1);
+        //     H_mat.convertTo(killme, CV_64FC1);
+        //     cv::Mat pt2 = killme * pt1;
+        //     pt2 /= pt2.at<double>(2);
+        //     cv::Point start(kp1.pt.x, kp1.pt.y);
+        //     cv::Point end( (int) (img1.cols + pt2.at<double>(0)), (int) pt2.at<double>(1) );
+        //     cv::line(img_draw_matches, start, end, cv::Scalar(255), 2);
+        // }
+        // cv::imwrite("test_homography.png", img_draw_matches);
+
         // Try to reconstruct from homography or fundamental depending on the ratio (0.40-0.45)
         if(RH>0.50) // if(RH>0.40)
         {
@@ -201,7 +228,6 @@ namespace orb_slam3
             H12i = H21i.inverse();
 
             currentScore = CheckHomography(H21i, H12i, vbCurrentInliers, mSigma);
-
             if(currentScore>score)
             {
                 H21 = H21i;

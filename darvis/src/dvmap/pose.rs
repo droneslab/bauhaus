@@ -1,6 +1,5 @@
 use std::ops::Mul;
 use dvcore::matrix::{DVVector3, DVMatrix3};
-use log::debug;
 use nalgebra::{Isometry3, Rotation3, Quaternion, Translation3,geometry::UnitQuaternion, Vector3, Matrix3, Matrix3x4};
 use serde::{Deserialize, Serialize};
 
@@ -42,6 +41,15 @@ impl Pose {
         Pose(self.0.inverse())
     }
 }
+
+impl Mul for Pose {
+    type Output = Pose;
+
+    fn mul(self, _other: Pose) -> Pose {
+        Pose(self.0 * _other.0)
+    }
+}
+
 impl From<Pose> for Matrix3x4<f64> {
     fn from(pose: Pose) -> Matrix3x4<f64> {
         let binding = pose.0.rotation.to_rotation_matrix();
@@ -56,18 +64,21 @@ impl From<Pose> for Matrix3x4<f64> {
         matrix
     }
 }
+
 impl From<Pose> for g2o::RotationVector {
     fn from(pose: Pose) -> g2o::RotationVector { [pose.0.rotation.w, pose.0.rotation.i, pose.0.rotation.j, pose.0.rotation.k] }
 }
+
 impl From<Pose> for g2o::TranslationVector {
     fn from(pose: Pose) -> g2o::TranslationVector  { [pose.0.translation.x, pose.0.translation.y, pose.0.translation.z] }
 }
 
-impl Mul for Pose {
-    type Output = Pose;
-
-    fn mul(self, _other: Pose) -> Pose {
-        Pose(self.0 * _other.0)
+impl From<Pose> for g2o::ffi::Pose {
+    fn from(pose: Pose) -> Self { 
+        g2o::ffi::Pose {
+            translation: pose.into(),
+            rotation: pose.into()
+        }
     }
 }
 
@@ -87,14 +98,6 @@ impl From<g2o::ffi::Pose> for Pose {
             )
         );
         Pose ( Isometry3::from_parts(translation,rotation) )
-    }
-}
-impl From<Pose> for g2o::ffi::Pose {
-    fn from(pose: Pose) -> Self { 
-        g2o::ffi::Pose {
-            translation: pose.into(),
-            rotation: pose.into()
-        }
     }
 }
 

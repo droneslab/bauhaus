@@ -24,7 +24,6 @@ use opencv::{
     prelude::*, core::*,
     types::{VectorOfKeyPoint, VectorOfi32, VectorOfPoint2f, VectorOfPoint3f},
 };
-use dvos3binding::BindCVKeyPointsRef;
 extern crate nalgebra as na;
 
 //////////////////////////* OPENCV TYPES //////////////////////////
@@ -92,16 +91,16 @@ impl<'a> From<&'a DVMatrix> for dvos3binding::BindCVMatRef<'a> {
 
 
 impl Serialize for DVMatrix {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer {
+    fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error> where S: Serializer {
         todo!("serialize");
         }
 }
 impl<'de> Deserialize<'de> for DVMatrix {
-    fn deserialize<D>(deserializer: D) -> Result<DVMatrix, D::Error>
+    fn deserialize<D>(_deserializer: D) -> Result<DVMatrix, D::Error>
     where
         D: Deserializer<'de>,
     {
-        todo!("deserialize");
+        todo!("serialize");
     }
 }
 
@@ -173,7 +172,7 @@ impl<'a> From<&'a DVVectorOfKeyPoint> for dvos3binding::BindCVKeyPointsRef<'a> {
 }
 
 impl Serialize for DVVectorOfKeyPoint {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
@@ -181,7 +180,7 @@ impl Serialize for DVVectorOfKeyPoint {
     }
 }
 impl<'de> Deserialize<'de> for DVVectorOfKeyPoint {
-    fn deserialize<D>(deserializer: D) -> Result<DVVectorOfKeyPoint, D::Error>
+    fn deserialize<D>(_deserializer: D) -> Result<DVVectorOfKeyPoint, D::Error>
     where
         D: Deserializer<'de>,
     {
@@ -379,7 +378,7 @@ impl<T> Index<usize> for DVVector3<T> {
     fn index(&self, i: usize) -> &Self::Output { &self.0[i] }
 }
 impl<T> Serialize for DVVector3<T> {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
@@ -387,7 +386,7 @@ impl<T> Serialize for DVVector3<T> {
     }
 }
 impl<'de, T> Deserialize<'de> for DVVector3<T> {
-    fn deserialize<D>(deserializer: D) -> Result<DVVector3<T>, D::Error>
+    fn deserialize<D>(_deserializer: D) -> Result<DVVector3<T>, D::Error>
     where
         D: Deserializer<'de>,
     {
@@ -448,7 +447,7 @@ impl<T> Index<usize> for DVMatrix3<T> {
     }
 }
 impl<T> Serialize for DVMatrix3<T> {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
@@ -456,7 +455,7 @@ impl<T> Serialize for DVMatrix3<T> {
     }
 }
 impl<'de, T> Deserialize<'de> for DVMatrix3<T> {
-    fn deserialize<D>(deserializer: D) -> Result<DVMatrix3<T>, D::Error>
+    fn deserialize<D>(_deserializer: D) -> Result<DVMatrix3<T>, D::Error>
     where
         D: Deserializer<'de>,
     {

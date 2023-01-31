@@ -6,7 +6,6 @@ use std::collections::{HashMap};
 use std::fmt::Debug;
 use dvcore::config::FrameSensor;
 use dvcore::config::{*};
-use log::debug;
 use opencv::prelude::{Mat, MatTraitConst, MatTrait};
 use opencv::types::{VectorOff32};
 use serde::{Deserialize, Serialize};
@@ -105,7 +104,7 @@ impl Features {
     pub fn get_all_keypoints(&self) -> &DVVectorOfKeyPoint {
         match &self.keypoints {
             KeyPoints::Mono{keypoints_un, ..} | KeyPoints::Rgbd{keypoints_un, ..} => keypoints_un,
-            KeyPoints::Stereo{keypoints_left, keypoints_right, ..} => { 
+            KeyPoints::Stereo{  ..} => { 
                 todo!("Stereo, need to concat keypoints_left and keypoints_right
                     but can we do this without copying?")
             },
@@ -252,7 +251,7 @@ impl Features {
 
                 for j in 0..v_cell.len() {
                     //TODO (Stereo) Need to update this if stereo images are processed
-                    let (kp_un, is_right) = &self.get_keypoint(v_cell[j]);
+                    let (kp_un, _is_right) = &self.get_keypoint(v_cell[j]);
                     if check_levels {
                         if kp_un.octave < min_level as i32 {
                             continue;
@@ -297,12 +296,12 @@ impl ImageBounds {
     pub fn new(im_width: i32, im_height: i32, dist_coef: &Option<Vec<f32>>) -> ImageBounds {
         //ComputeImageBounds
         let min_x = 0.0;
-        let mut max_x = 0.0;
+        let max_x;
         let min_y = 0.0;
-        let mut max_y = 0.0;
+        let max_y;
 
         match dist_coef {
-            Some(vec) => {
+            Some(_vec) => {
                 todo!("mid priority: implement code if dist_coef is non-zero");
                 // cv::Mat mat(4,2,CV_32F);
                 // mat.at<float>(0,0)=0.0; mat.at<float>(0,1)=0.0;
@@ -359,16 +358,12 @@ impl Grid {
 
     fn initialize_grid() -> Vec<Vec<Vec<usize>>> {
         let mut grid = Vec::new();
-        for i in 0.. FRAME_GRID_COLS  {
-            let mut row = Vec::new(); //vec![];
-            for j in 0..FRAME_GRID_ROWS
-            {
+        for _ in 0..FRAME_GRID_COLS  {
+            let mut row = Vec::new();
+            for _ in 0..FRAME_GRID_ROWS {
                 row.push(Vec::new());
-                
             }
             grid.push(row);
-            // let row = vec![Vec::new(); FRAME_GRID_COLS];
-            // grid.push(row);
         }
         //println!("Grid row col : {:?}, {:?}", FRAME_GRID_ROWS, FRAME_GRID_COLS);
         grid

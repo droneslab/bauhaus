@@ -2,7 +2,7 @@ use std::{collections::{HashMap, HashSet}, cmp::min};
 use chrono::{DateTime, Utc};
 use derivative::Derivative;
 use dvcore::{matrix::{DVVector3, DVVectorOfKeyPoint, DVMatrix}, config::{Sensor, GLOBAL_PARAMS, SYSTEM_SETTINGS, FrameSensor}};
-use log::{error, info, debug, warn};
+use log::{error, debug, warn};
 use serde::{Deserialize, Serialize};
 use crate::{dvmap::{map::Id, pose::Pose},modules::{imu::*, camera::CAMERA_MODULE}, actors::tracking_backend::TrackedMapPointData,};
 use super::{mappoint::{MapPoint, FullMapPoint}, map::{Map}, features::Features, bow::{BoW, self}};
@@ -59,7 +59,7 @@ impl<T: FrameState> Frame<T> {
     pub fn add_mappoint(&mut self, index: u32, mp_id: Id, is_outlier: bool) {
         self.mappoint_matches.insert(index, (mp_id, is_outlier));
     }
-        pub fn delete_mappoint_match(&mut self, index: u32) {
+    pub fn delete_mappoint_match(&mut self, index: u32) {
         self.mappoint_matches.remove(&index);
         // Sofiya: removed the code that set's mappoint's last_frame_seen to the frame ID
         // I'm not sure we want to be using this
@@ -329,7 +329,7 @@ impl Frame<FullKeyFrame> {
 
     pub fn add_connection(&mut self, kf_id: &Id, weight: i32) {
         *self.full_kf_info.map_connected_keyframes.entry(*kf_id).or_insert(weight) = weight;
-        warn!("TODO...verify sorting in ConnectedKeyFrames, might be backwards. Not quite clear whether low weight = earlier index or vice versa");
+        //TODO...verify sorting in ConnectedKeyFrames, might be backwards. Not quite clear whether low weight = earlier index or vice versa
         if weight > self.full_kf_info.connected_keyframes_cutoff_weight { self.sort_ordered(); }
     }
 
@@ -352,10 +352,8 @@ impl Frame<FullKeyFrame> {
         if self.full_kf_info.parent.is_none() && !is_init_kf { 
             let parent_id = self.first_connected_kf();
             self.change_parent(Some(parent_id));
-            debug!("inserted parent;{};for child;{}", parent_id, self.full_kf_info.id);
             Some(self.first_connected_kf())
         } else {
-            debug!("not inserting parent for kf;{};parent is already kf;{}", self.full_kf_info.id, self.full_kf_info.parent.unwrap_or(-1));
             None
         }
     }
@@ -369,13 +367,12 @@ impl Frame<FullKeyFrame> {
         // To get all connections, pass in i32::MAX as `num`
        let max_len = min(self.full_kf_info.ordered_connected_keyframes.len(), num as usize);
        let (conections, _) : (Vec<i32>, Vec<i32>) = self.full_kf_info.ordered_connected_keyframes[0..max_len].iter().cloned().unzip();
-       debug!("keyframe connections : {:?}", conections);
        conections
     }
 
     fn sort_ordered(&mut self) {
         //KeyFrame::UpdateBestCovisibles
-        warn!("TODO...verify sorting in ConnectedKeyFrames, might be backwards. Not quite clear whether low weight = earlier index or vice versa");
+        //TODO...verify sorting in ConnectedKeyFrames, might be backwards. Not quite clear whether low weight = earlier index or vice versa
         self.full_kf_info.ordered_connected_keyframes.sort_by(|(_,w1), (_,w2)| w2.cmp(&w1));
         let max_len = self.full_kf_info.ordered_connected_keyframes.len(); 
         if max_len >= 30 {
@@ -468,7 +465,7 @@ impl Frame<FullKeyFrame> {
         // }
     }
 
-    pub fn get_features_in_area(&self, x: &f64, y: &f64, radius: f32, is_right: bool) -> Vec<u32> {
+    pub fn get_features_in_area(&self, _x: &f64, _y: &f64, _radius: f32, _is_right: bool) -> Vec<u32> {
         todo!("TODO LOCAL MAPPING");
         // self.features.get_features_in_area(x, y, radius, &self.features.image_bounds)
     }

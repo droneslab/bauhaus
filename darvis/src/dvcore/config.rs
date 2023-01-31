@@ -148,6 +148,7 @@ pub struct ConfigValueBox {
 
 pub fn load_config(file_name: &String) -> Option<(Vec<ActorConf>, Vec<ModuleConf>)> {
     let mut config_string = String::new();
+    println!("{}",file_name);
     let mut f = File::open(file_name).unwrap();
     f.read_to_string(&mut config_string).unwrap();
     let yaml_document = &yaml::YamlLoader::load_from_str(&config_string).unwrap()[0];
