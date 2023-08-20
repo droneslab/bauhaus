@@ -2,6 +2,10 @@
 Distributed, modulAR Visual SLAM
 
 ## Install
+TODO!! We need to update these instructions. Are we using the g2o-bindings repo?
+
+``rustup install nightly`` 
+
 1. [Install docker](https://docs.docker.com/get-docker/)
 2. (Macs only) [Download Xquartz](https://www.xquartz.org/) 
 3. Create darvis container (linux):
