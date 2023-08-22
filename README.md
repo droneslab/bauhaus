@@ -2,7 +2,10 @@
 Distributed, modulAR Visual SLAM
 
 ## Install
-TODO!! We need to update these instructions. Are we using the g2o-bindings repo?
+TODO!! We need to update these instructions.
+
+[ROS2 download instructions]([url](https://automaticaddison.com/how-to-install-ros-2-foxy-fitzroy-on-ubuntu-linux/
+))
 
 ``rustup install nightly`` 
 
