@@ -16,6 +16,12 @@ use crate::actors::{messages::{ImageMsg, ShutdownMessage, TrajectoryMessage, Vis
 use crate::dvmap::{bow::VOCABULARY, map_actor::MapActor, pose::Pose, map::Map, map::Id};
 use crate::registered_modules::{TRACKING_FRONTEND, VISUALIZER, SHUTDOWN, FeatureManager};
 
+use r2r::builtin_interfaces::msg::Duration;
+use r2r::std_msgs::msg::Int32;
+use r2r::trajectory_msgs::msg::*;
+use r2r::QosProfile;
+
+
 mod actors;
 mod registered_modules;
 mod dvmap;
@@ -46,6 +52,16 @@ fn main() {
         info!("System ready to receive messages");
 
         let use_visualizer = GLOBAL_PARAMS.get::<bool>(SYSTEM_SETTINGS, "show_ui");
+        if use_visualizer {
+            let ctx = r2r::Context::create().unwrap();
+            let mut node = r2r::Node::create(r2r::Context::create().unwrap(), "test", "").unwrap();
+            let publisher2 = node.create_publisher::<r2r::std_msgs::msg::String>("/test", QosProfile::default()).unwrap();
+
+            let msg = r2r::std_msgs::msg::String { data: format!("Hello, world!") };
+            publisher2.publish(&msg).unwrap();
+
+        }
+
         // Run loop at fps rate
         let mut loop_helper = LoopHelper::builder()
             .report_interval_s(0.5)
@@ -59,10 +75,11 @@ fn main() {
             let tracking_frontend = actor_system.find_aid_by_name(TRACKING_FRONTEND).unwrap();
 
             info!("Read image {}", path.split("/").last().unwrap().split(".").nth(0).unwrap());
-            if use_visualizer {
-                let vis_id = actor_system.find_aid_by_name(VISUALIZER).unwrap();
-                vis_id.send_new(VisPathMsg::new(path.to_string())).unwrap();
-            }
+            // if use_visualizer {
+            //     // SOFIYA: UNCOMMENT THIS
+            //     // let vis_id = actor_system.find_aid_by_name(VISUALIZER).unwrap();
+            //     // vis_id.send_new(VisPathMsg::new(path.to_string())).unwrap();
+            // }
 
             // ORBSLAM3 frame loader scales and resizes image, do we need this?
             // After looking into it for a while, I think not. They have the code to scale,

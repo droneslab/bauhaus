@@ -2,7 +2,7 @@ extern crate g2o;
 
 use axiom::prelude::*;
 use cxx::{UniquePtr};
-use log::{ warn, info};
+use log::{ warn };
 use std::{sync::Arc, fmt};
 use std::fmt::Debug;
 use opencv::{prelude::*,types::{VectorOfKeyPoint},};
