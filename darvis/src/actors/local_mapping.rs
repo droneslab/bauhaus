@@ -1,4 +1,4 @@
-use std::{cmp::min, time::Duration};
+use std::{cmp::min};
 use std::collections::HashSet;
 use std::f64::INFINITY;
 use std::iter::FromIterator;
@@ -10,16 +10,16 @@ use dvcore::{
     config::{Sensor, GLOBAL_PARAMS, SYSTEM_SETTINGS, FrameSensor, ImuSensor},
     matrix::DVVector3
 };
-use log::{debug, warn};
+use log::{debug};
 use crate::registered_modules::LOCAL_MAPPING;
 use crate::{
     dvmap::{
-        map_actor::MapWriteMsg, mappoint::FullMapPoint, map::Map, map_actor::MAP_ACTOR, mappoint::{MapPoint, PrelimMapPoint}
+        map_actor::MapWriteMsg, map::Map, map_actor::MAP_ACTOR, mappoint::{MapPoint, PrelimMapPoint}
     },
     modules::{optimizer, orbmatcher, imu::ImuModule, camera::CAMERA_MODULE, optimizer::INV_LEVEL_SIGMA2, orbmatcher::SCALE_FACTORS, geometric_tools},
     registered_modules::{FEATURE_DETECTION, LOOP_CLOSING, MATCHER, CAMERA},
     Id,
-    actors::messages::{Reset, KeyFrameIdMsg, LastKeyFrameUpdatedMsg}
+    actors::messages::{Reset, KeyFrameIdMsg}
 };
 
 #[derive(Debug, Clone, Default)]

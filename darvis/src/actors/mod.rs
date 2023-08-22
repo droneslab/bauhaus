@@ -9,7 +9,7 @@ pub mod local_mapping;
 pub mod loop_closing;
 
 /// Visualization of the Frames and Trajectory traced
-pub mod vis;
+pub mod visualizer;
 
 /// FAST Feature extraction 
 pub mod fast;

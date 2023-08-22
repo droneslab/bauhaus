@@ -40,7 +40,7 @@ pub fn getmethod(fnname: &String, map: ReadOnlyWrapper<Map>) -> FunctionProxy
         "tracking_backend" => FunctionProxy {function: Box::new(crate::actors::tracking_backend::DarvisTrackingBack::new(map))},
         "local_mapping" => FunctionProxy {function: Box::new(crate::actors::local_mapping::DarvisLocalMapping::new(map))},
         "loop_closing" => FunctionProxy {function: Box::new(crate::actors::loop_closing::DarvisLoopClosing::new(map))},
-        "vis" => FunctionProxy {function: Box::new(crate::actors::vis::DarvisVis::new())},
+        "visualizer" => FunctionProxy {function: Box::new(crate::actors::visualizer::DarvisVisualizer::new(map))},
         "fast_extract" => FunctionProxy {function: Box::new(crate::actors::fast::DarvisFast::new())},
         _ => FunctionProxy {function: Box::new(dvcore::plugin_functions::DarvisNone)},
     }

@@ -1,4 +1,4 @@
-use std::{sync::Arc, collections::{HashSet, HashMap}, process::Command};
+use std::{sync::Arc, collections::{HashSet, HashMap}};
 use axiom::prelude::*;
 use chrono::{prelude::*, Duration};
 use derivative::Derivative;
@@ -6,8 +6,9 @@ use log::{warn, info, debug, error};
 use opencv::core::Point2f;
 use dvcore::{lockwrap::ReadOnlyWrapper, plugin_functions::Function, config::*};
 use crate::{
+    actors::visualizer::VisualizeMsg,
     actors::messages::{FeatureMsg, MapInitializedMsg, TrajectoryMessage, TrackingStateMsg},
-    registered_modules::{LOCAL_MAPPING, TRACKING_BACKEND, SHUTDOWN, TRACKING_FRONTEND},
+    registered_modules::{LOCAL_MAPPING, TRACKING_BACKEND, SHUTDOWN, TRACKING_FRONTEND, VISUALIZER},
     dvmap::{
         map::Map, map_actor::MapWriteMsg, map_actor::{MAP_ACTOR}, map::Id,
         keyframe::{Frame, InitialFrame, PrelimKeyFrame}, pose::Pose, mappoint::{MapPoint, FullMapPoint},
@@ -314,72 +315,9 @@ impl DarvisTrackingBack {
             _ => TrajectoryMessage::empty()
         };
 
-        // // Visualize
-        // Command::new("sh")
-        //         .arg("-c")
-        //         .arg("rostopic pub -1 my_topic std_msgs/String \"hello there\"")
-        //         .output()
-        //         .expect("failed to execute process");
-
-// TF
-// - geometry_msgs::msg::TransformStamped
-//   trans.header.stamp = node->now();
-//   trans.transform.rotation.x = q_ItoC(0);
-//   trans.transform.rotation.y = q_ItoC(1);
-//   trans.transform.rotation.z = q_ItoC(2);
-//   trans.transform.rotation.w = q_ItoC(3);
-//   trans.transform.translation.x = p_CinI(0);
-//   trans.transform.translation.y = p_CinI(1);
-//   trans.transform.translation.z = p_CinI(2);
-
-// // path VIO
-// // - /ov_msckf/pathimu
-// // - nav_msgs::Path
-// // for item in poses, push back geometry_msgs::PoseStamped
-
-// // SLAM points
-// // - /ov_msckf/points_slam
-// // - sensor_msgs::PointCloud2
-// //   cloud.header.frame_id = "global";
-// //   cloud.header.stamp = ros::Time::now();
-// //   cloud.width = 3 * feats.size();
-// //   cloud.height = 1;
-// //   cloud.is_bigendian = false;
-// //   cloud.is_dense = false; // there may be invalid points
-
-// // MSCKF points
-// // - /ov_msckf/points_msckf
-
-// rostopic pub -1 my_topic
-
-//  nav_msgs::Odometry "{linear:  {x: 0.1, y: 0.0, z: 0.0}, angular: {x: 0.0,y: 0.0, z: 0.0}}"
-
-// child_frame_id: "global"
-// pose: {
-//     pose:
-//         position:
-//             x:
-//             y:
-//             z:
-//         orientation:
-//             x:
-//             y:
-//             z:
-//             w:
-//     covariance: 
-// }
-// twist: {
-//     twist:
-//         linear:
-//         angular:
-
-//     covariance:
-// }
-
-// geometry_msgs/PoseWithCovariance pose
-// geometry_msgs/TwistWithCovariance twist
-
-
+        warn!("Sending to visualizer");
+        let visualize_msg = VisualizeMsg{};
+        context.system.find_aid_by_name(VISUALIZER).unwrap().send_new(visualize_msg).unwrap();
         context.system.find_aid_by_name(SHUTDOWN).unwrap().send_new(trajectory_msg).unwrap();
     }
 

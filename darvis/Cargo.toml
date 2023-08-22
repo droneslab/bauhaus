@@ -13,17 +13,21 @@ path = "src/main.rs"
 name = "dvcore"
 path = "src/dvcore/lib.rs"
 
-
 [profile.release]
 debug = 1
+
 [rust]
 debuginfo-level = 1
 
+[env]
+IDL_PACKAGE_FILTER = { value = "std_msgs;r2r_minimal_node_msgs" }
+
 [dependencies]
+r2r = "0.7.5"
 g2o = { path = "../g2o" }
 dvos3binding = { path = "../orbslam-bindings" }
 once_cell = "0.1.4"
-opencv = "0.63.0"
+opencv = { version = "0.63.0", features = ["clang-runtime"] }
 nalgebra = {version = "*", features = ["serde-serialize"]}
 cv-convert = {version = '0.19.0', features = ['opencv_0-63','nalgebra_0-31']}
 chrono = { version = "0.4", features = ["serde"] }
