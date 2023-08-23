@@ -315,9 +315,11 @@ impl DarvisTrackingBack {
             _ => TrajectoryMessage::empty()
         };
 
-        warn!("Sending to visualizer");
-        let visualize_msg = VisualizeMsg{};
-        context.system.find_aid_by_name(VISUALIZER).unwrap().send_new(visualize_msg).unwrap();
+        if let Some(vis) = context.system.find_aid_by_name(VISUALIZER) {
+            warn!("Sending to visualizer");
+            let visualize_msg = VisualizeMsg{};
+            vis.send_new(visualize_msg).unwrap();
+        }
         context.system.find_aid_by_name(SHUTDOWN).unwrap().send_new(trajectory_msg).unwrap();
     }
 

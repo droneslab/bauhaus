@@ -5,7 +5,7 @@
 /// (string, bool, f64, and i32) without needing to call a specific function for each type.
 /// 
 /// To insert a new parameter into GLOBAL_PARAMS:
-///     GLOBAL_PARAMS.insert(SYSTEM_SETTINGS, "show_ui", show_ui);
+///     GLOBAL_PARAMS.insert(SYSTEM_SETTINGS, "show_visualizer", show_visualizer);
 /// To get a parameter from GLOBAL_PARAMS:
 ///     let max_features= GLOBAL_PARAMS.get::<i32>(SYSTEM_SETTINGS, "max_features".to_string());
 /// 
@@ -146,7 +146,7 @@ pub struct ConfigValueBox {
 
 
 
-pub fn load_config(file_name: &String) -> Option<(Vec<ActorConf>, Vec<ModuleConf>)> {
+pub fn load_config(file_name: &String) -> Result<(Vec<ActorConf>, Vec<ModuleConf>), Box<dyn std::error::Error>> {
     let mut config_string = String::new();
     println!("{}",file_name);
     let mut f = File::open(file_name).unwrap();
@@ -157,7 +157,7 @@ pub fn load_config(file_name: &String) -> Option<(Vec<ActorConf>, Vec<ModuleConf
 
     // Load additional custom settings from config file
     let system_settings = &yaml::YamlLoader::load_from_str(&config_string).unwrap()[0]["system_settings"];
-    add_setting_bool(SYSTEM_SETTINGS, "show_ui", &system_settings["show_ui"]);
+    add_setting_bool(SYSTEM_SETTINGS, "show_visualizer", &system_settings["show_visualizer"]);
     add_setting_bool(SYSTEM_SETTINGS, "localization_only_mode", &system_settings["localization_only_mode"]);
     add_setting_bool(SYSTEM_SETTINGS, "should_profile", &system_settings["should_profile"]);
     add_setting_string(SYSTEM_SETTINGS, "vocabulary_file", &system_settings["vocabulary_file"]);
@@ -165,13 +165,13 @@ pub fn load_config(file_name: &String) -> Option<(Vec<ActorConf>, Vec<ModuleConf
     add_setting_f64(SYSTEM_SETTINGS, "fps", &system_settings["fps"]);
 
     // Load sensor settings
-    let framesensor = match system_settings["framesensor"].as_str()? {
+    let framesensor = match system_settings["framesensor"].as_str().unwrap() {
         "Mono" => FrameSensor::Mono,
         "Stereo" => FrameSensor::Stereo,
         "RGBD" => FrameSensor::Rgbd,
         _ => panic!("Incompatible frame sensor type"),
     };
-    let imusensor = match system_settings["imusensor"].as_str()? {
+    let imusensor = match system_settings["imusensor"].as_str().unwrap() {
         "Some" => ImuSensor::Some,
         "None" => ImuSensor::None,
         _ => panic!("Incompatible IMU sensor type")
@@ -182,34 +182,34 @@ pub fn load_config(file_name: &String) -> Option<(Vec<ActorConf>, Vec<ModuleConf
 
     // Load actors
     let mut actor_info = Vec::<ActorConf>::new();
-    for actor in yaml_document["actors"].as_vec()? {
-        let h = &actor.as_hash()?;
+    for actor in yaml_document["actors"].as_vec().unwrap() {
+        let h = &actor.as_hash().unwrap();
 
-        let paths = get_val(h, "possible_paths").as_vec()?;
+        let paths = get_val(h, "possible_paths").as_vec().unwrap();
         let mut hmap = HashMap::<String, String>::new();
         for p in 0..paths.len() {
-            let path = paths[p].as_hash()?;
+            let path = paths[p].as_hash().unwrap();
             hmap.insert(
-                get_val(path, "from").as_str()?.to_string(),
-                get_val(path, "to").as_str()?.to_string(),
+                get_val(path, "from").as_str().unwrap().to_string(),
+                get_val(path, "to").as_str().unwrap().to_string(),
             );
         }
 
         let a_conf = ActorConf {
-            name: get_val(h, "name").as_str()?.to_string(),
-            file: get_val(h, "file").as_str()?.to_string(),
-            actor_message: get_val(h, "actor_message").as_str()?.to_string(),
-            actor_function: get_val(h, "actor_function").as_str()?.to_string(),
-            ip_address: get_val(h, "address").as_str()?.to_string(),
-            port: get_val(h, "port").as_str()?.to_string(),
-            multithreaded: get_val(h, "multithreaded").as_bool()?,
-            threads: get_val(h, "threads").as_i64()?,
+            name: get_val(h, "name").as_str().unwrap().to_string(),
+            file: get_val(h, "file").as_str().unwrap().to_string(),
+            actor_message: get_val(h, "actor_message").as_str().unwrap().to_string(),
+            actor_function: get_val(h, "actor_function").as_str().unwrap().to_string(),
+            ip_address: get_val(h, "address").as_str().unwrap().to_string(),
+            port: get_val(h, "port").as_str().unwrap().to_string(),
+            multithreaded: get_val(h, "multithreaded").as_bool().unwrap(),
+            threads: get_val(h, "threads").as_i64().unwrap(),
             possible_paths: hmap
         };
 
         actor_info.push(a_conf.clone());
 
-        add_settings(get_val(h, "settings").as_vec()?, &a_conf.name);
+        add_settings(get_val(h, "settings").as_vec().unwrap(), &a_conf.name);
 
         GLOBAL_PARAMS.insert(&a_conf.name, "file", a_conf.file);
         GLOBAL_PARAMS.insert(&a_conf.name, "actor_message", a_conf.actor_message);
@@ -218,16 +218,16 @@ pub fn load_config(file_name: &String) -> Option<(Vec<ActorConf>, Vec<ModuleConf
 
     // Load modules
     let mut module_info = Vec::<ModuleConf>::new();
-    for module in yaml_document["modules"].as_vec()? {
-        let h = module.as_hash()?;
+    for module in yaml_document["modules"].as_vec().unwrap() {
+        let h = module.as_hash().unwrap();
         let m_conf = ModuleConf {
-            name: get_val(h, "name").as_str()?.to_string()
+            name: get_val(h, "name").as_str().unwrap().to_string()
         };
-        add_settings(get_val(h, "settings").as_vec()?, &m_conf.name);
+        add_settings(get_val(h, "settings").as_vec().unwrap(), &m_conf.name);
         module_info.push(m_conf);
     }
 
-    Some((actor_info, module_info))
+    Ok((actor_info, module_info))
 }
 
 

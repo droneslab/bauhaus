@@ -1,5 +1,6 @@
 use axiom::prelude::*;
 use dvcore::{plugin_functions::*, lockwrap::ReadOnlyWrapper};
+use rerun::RecordingStream;
 use crate::dvmap::{map::Map};
 
 pub static SHUTDOWN: &str = "SHUTDOWN";
@@ -40,7 +41,6 @@ pub fn getmethod(fnname: &String, map: ReadOnlyWrapper<Map>) -> FunctionProxy
         "tracking_backend" => FunctionProxy {function: Box::new(crate::actors::tracking_backend::DarvisTrackingBack::new(map))},
         "local_mapping" => FunctionProxy {function: Box::new(crate::actors::local_mapping::DarvisLocalMapping::new(map))},
         "loop_closing" => FunctionProxy {function: Box::new(crate::actors::loop_closing::DarvisLoopClosing::new(map))},
-        "visualizer" => FunctionProxy {function: Box::new(crate::actors::visualizer::DarvisVisualizer::new(map))},
         "fast_extract" => FunctionProxy {function: Box::new(crate::actors::fast::DarvisFast::new())},
         _ => FunctionProxy {function: Box::new(dvcore::plugin_functions::DarvisNone)},
     }
@@ -54,9 +54,13 @@ impl FeatureManager {
     pub fn new(fnname: &String, map: ReadOnlyWrapper<Map>) -> FeatureManager {
         FeatureManager { object: getmethod(fnname, map) }
     }
+    
+    pub fn create_visualizer(map: ReadOnlyWrapper<Map>, vis_stream: RecordingStream) -> FeatureManager {
+        FeatureManager { object: FunctionProxy {function: Box::new(crate::actors::visualizer::DarvisVisualizer::new(map, vis_stream))} }
+    }
 
     pub async fn handle(mut self, _context: axiom::prelude::Context, message: Message) -> ActorResult<Self> {
         self.object.handle(_context, message).unwrap();
-        Ok(Status::done(self))    
+        Ok(Status::done(self))
     }
 }

@@ -1,11 +1,12 @@
 #![feature(map_many_mut)]
 extern crate flame;
-use std::{fs::{File, OpenOptions}, io::Write, path::Path, sync::{Arc, Mutex}, env};
+use std::{fs::{File, OpenOptions}, io::Write, path::Path, sync::{Arc, Mutex}, env, time::Duration, thread};
 use axiom::prelude::*;
 use chrono::{DateTime, Utc};
 use fern::colors::{ColoredLevelConfig, Color};
 use glob::glob;
 use log::{warn, info};
+use rerun::{RecordingStreamBuilder, RecordingStream};
 use spin_sleep::LoopHelper;
 #[macro_use]
 extern crate lazy_static;
@@ -16,12 +17,6 @@ use crate::actors::{messages::{ImageMsg, ShutdownMessage, TrajectoryMessage, Vis
 use crate::dvmap::{bow::VOCABULARY, map_actor::MapActor, pose::Pose, map::Map, map::Id};
 use crate::registered_modules::{TRACKING_FRONTEND, VISUALIZER, SHUTDOWN, FeatureManager};
 
-use r2r::builtin_interfaces::msg::Duration;
-use r2r::std_msgs::msg::Int32;
-use r2r::trajectory_msgs::msg::*;
-use r2r::QosProfile;
-
-
 mod actors;
 mod registered_modules;
 mod dvmap;
@@ -30,69 +25,72 @@ mod tests;
 
 pub static RESULTS_FOLDER: &str = "results";
 
-fn main() {
-    setup_logger().unwrap();
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    setup_logger()?;
+
+    // Process arguments
     let args: Vec<String> = env::args().collect();
     if args.len() < 3 {
-        println!("[ERROR] Invalid number of input parameters.");
-        println!("Usage: cargo run -- [PATH_TO_DATA_DIRECTORY] [PATH_TO_CONFIG_FILE]");
-        return;
+        panic!("
+            [ERROR] Invalid number of input parameters.
+            Usage: cargo run -- [PATH_TO_DATA_DIRECTORY] [PATH_TO_CONFIG_FILE]
+        ");
     }
     let img_dir = args[1].to_owned();
     let config_file = args[2].to_owned();
 
-    if let Some((actor_info, _module_info)) = load_config(&config_file) {
-        // Load config, including custom settings and actor information
-        let img_paths = generate_image_paths(img_dir);
-        let writeable_map = ReadWriteWrapper::new(Map::new());
-        let actor_system = initialize_actor_system(actor_info, &writeable_map);
-        let _map_actor_aid = MapActor::spawn(&actor_system, writeable_map);
-        VOCABULARY.access(); // Loads vocabulary
-        let shutdown_flag = create_shutdown_actor(&actor_system);  // Handle ctrl+c
-        info!("System ready to receive messages");
+    // Load config, including custom settings and actor information
+    let (actor_info, _module_info) = load_config(&config_file).expect("Could not load config");
+    let writeable_map = ReadWriteWrapper::new(Map::new());
+    let actor_system = initialize_actor_system(actor_info, &writeable_map);
 
-        let use_visualizer = GLOBAL_PARAMS.get::<bool>(SYSTEM_SETTINGS, "show_ui");
-        if use_visualizer {
-            let ctx = r2r::Context::create().unwrap();
-            let mut node = r2r::Node::create(r2r::Context::create().unwrap(), "test", "").unwrap();
-            let publisher2 = node.create_publisher::<r2r::std_msgs::msg::String>("/test", QosProfile::default()).unwrap();
+    // Launch visualizer
+    let _rt = match GLOBAL_PARAMS.get::<bool>(SYSTEM_SETTINGS, "show_visualizer") {
+        true => {
+            Some(create_visualize_actor(&actor_system, &writeable_map).expect("Could not create visualizer"))
+        },
+        false => None
+    };
 
-            let msg = r2r::std_msgs::msg::String { data: format!("Hello, world!") };
-            publisher2.publish(&msg).unwrap();
+    // Launch map actor
+    let _map_actor_aid = MapActor::spawn(&actor_system, writeable_map);
 
+    // Load vocabulary
+    VOCABULARY.access();
+    
+    // Handle ctrl+c
+    let shutdown_flag = create_shutdown_actor(&actor_system);
+
+    info!("System ready to receive messages");
+
+    // Run loop at fps rate
+    let mut loop_helper = LoopHelper::builder()
+        .report_interval_s(0.5)
+        .build_with_target_rate(GLOBAL_PARAMS.get::<f64>(SYSTEM_SETTINGS, "fps"));
+
+    // Process images
+    for path in &generate_image_paths(img_dir) {
+        if *shutdown_flag.lock().unwrap() { break; }
+        let _delta = loop_helper.loop_start(); 
+        let img = imgcodecs::imread(&path, imgcodecs::IMREAD_GRAYSCALE).expect("Could not read image.");
+        let tracking_frontend = actor_system.find_aid_by_name(TRACKING_FRONTEND).expect("Tracking frontend actor not running?");
+
+        info!("Read image {}", path.split("/").last().unwrap().split(".").nth(0).unwrap());
+        if let Some(vis_id) = actor_system.find_aid_by_name(VISUALIZER) {
+            vis_id.send_new(VisPathMsg::new(path.to_string()))?;
         }
 
-        // Run loop at fps rate
-        let mut loop_helper = LoopHelper::builder()
-            .report_interval_s(0.5)
-            .build_with_target_rate(GLOBAL_PARAMS.get::<f64>(SYSTEM_SETTINGS, "fps"));
+        // ORBSLAM3 frame loader scales and resizes image, do we need this?
+        // After looking into it for a while, I think not. They have the code to scale,
+        // but then never set the variable mImageScale to anything but 1.0
+        // https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/Examples/RGB-D/rgbd_tum.cc#L89
 
-        // Process images
-        for path in &img_paths {
-            if *shutdown_flag.lock().unwrap() { break; }
-            let _delta = loop_helper.loop_start(); 
-            let img = imgcodecs::imread(&path, imgcodecs::IMREAD_GRAYSCALE).unwrap();
-            let tracking_frontend = actor_system.find_aid_by_name(TRACKING_FRONTEND).unwrap();
-
-            info!("Read image {}", path.split("/").last().unwrap().split(".").nth(0).unwrap());
-            // if use_visualizer {
-            //     // SOFIYA: UNCOMMENT THIS
-            //     // let vis_id = actor_system.find_aid_by_name(VISUALIZER).unwrap();
-            //     // vis_id.send_new(VisPathMsg::new(path.to_string())).unwrap();
-            // }
-
-            // ORBSLAM3 frame loader scales and resizes image, do we need this?
-            // After looking into it for a while, I think not. They have the code to scale,
-            // but then never set the variable mImageScale to anything but 1.0
-            // https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/Examples/RGB-D/rgbd_tum.cc#L89
-
-            tracking_frontend.send_new(ImageMsg{frame: img.into(),}).unwrap();
-            loop_helper.loop_sleep(); 
-        }
-        actor_system.find_aid_by_name(SHUTDOWN).unwrap().send_new(ShutdownMessage{}).unwrap();
-    } else {
-        panic!("Could not load config");
+        tracking_frontend.send_new(ImageMsg{frame: img.into(),})?;
+        loop_helper.loop_sleep(); 
     }
+    actor_system.find_aid_by_name(SHUTDOWN).unwrap().send_new(ShutdownMessage{})?;
+
+    Ok(())
 }
 
 fn generate_image_paths(img_dir: String) -> Vec<String> {
@@ -115,8 +113,6 @@ fn generate_image_paths(img_dir: String) -> Vec<String> {
 fn initialize_actor_system(modules: Vec::<base::ActorConf>, writeable_map: &ReadWriteWrapper<Map>) -> ActorSystem {
     let system = ActorSystem::create(ActorSystemConfig::default());
 
-    //TODO (low priority): Use Cluster manager to do remote agent calls
-
     // Loop through the config to initialize actor system using the default config
     for actor_conf in modules {
         info!("Spawning actor;{}", &actor_conf.name);
@@ -126,20 +122,40 @@ fn initialize_actor_system(modules: Vec::<base::ActorConf>, writeable_map: &Read
         let _ = system.spawn().name(&actor_conf.name).with(
             FeatureManager::new(
                 &actor_conf.actor_function,
-                writeable_map.read_only()
+                writeable_map.read_only(),
             ),
             FeatureManager::handle
         ).unwrap();
-
-        // TODO (low priority): Identify the role of using connect_with_channels, as the system communications are working without doing the following.
-        //features.push(actname.clone());
-        // if i > 0 { 
-        //     ActorSystem::connect_with_channels(&systems.get(&features[0]).unwrap(), &system_current);            
-        // }
-        //i+=1;
     }
-
     system
+}
+
+fn create_visualize_actor(
+    actor_system: &ActorSystem, writeable_map: &ReadWriteWrapper<Map>
+) -> Result<tokio::runtime::Runtime, Box<dyn std::error::Error>> {
+    // This is cumbersome but this is the cleanest way to do it that I have found
+    // Visualization library requires running tokio runtime in current context (creating rt)
+    // We can't do this inside the actor constructor because the tokio runtime does not implement Copy, so have to do it here
+    // vis_stream needs to be created in the same context as rt (or runtime error), but visualizer actor needs vis_stream to be able to visualize anything, so have to create vis_stream here and then move into visualizer actor.
+    let rt = tokio::runtime::Runtime::new().expect("Failed to initialize visualizer -- tokio runtime");
+    let _guard = rt.enter();
+    let vis_stream = RecordingStreamBuilder::new("minimal_serve_rs").serve(
+        "0.0.0.0",
+        Default::default(),
+        Default::default(),
+        true,
+    )?;
+    actor_system.spawn().name(&"VISUALIZER".to_string()).with(
+        FeatureManager::create_visualizer(
+            writeable_map.read_only(),
+            vis_stream
+        ),
+        FeatureManager::handle
+    ).unwrap();
+
+    thread::sleep(Duration::from_secs(2)); // Give visualizer time to load
+
+    Ok(rt)
 }
 
 fn create_shutdown_actor(actor_system: &ActorSystem) -> Arc<Mutex<bool>> {
@@ -172,7 +188,7 @@ fn create_shutdown_actor(actor_system: &ActorSystem) -> Arc<Mutex<bool>> {
                 let mut file = File::create(
                     Path::new(RESULTS_FOLDER)
                     .join(GLOBAL_PARAMS.get::<String>(SYSTEM_SETTINGS, "trajectory_file_name"))
-                ).unwrap();
+                )?;
                 for i in 0..state.trajectory_poses.len() {
                     let string = format!("{:?} {:?}", state.trajectory_times[i], state.trajectory_poses[i]);
                     file.write_all(string.as_bytes())?;
@@ -181,7 +197,7 @@ fn create_shutdown_actor(actor_system: &ActorSystem) -> Arc<Mutex<bool>> {
                 if GLOBAL_PARAMS.get::<bool>(SYSTEM_SETTINGS, "should_profile") {
                     flame::dump_html(File::create(
                         Path::new(RESULTS_FOLDER).join("flamegraph.html")
-                    ).unwrap()).unwrap();
+                    )?)?;
                 }
 
                 context.system.trigger_and_await_shutdown(None);

@@ -149,7 +149,7 @@ impl MapPoint<FullMapPoint> {
         let scale = if scale < 0 { 0 } else { scale };
         if scale < 0 {
             return 0;
-        } else if scale >= scale_levels.into() {
+        } else if scale >= scale_levels {
             return scale_levels - 1;
         } else {
             return scale;
