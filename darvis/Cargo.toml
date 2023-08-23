@@ -23,11 +23,10 @@ debuginfo-level = 1
 IDL_PACKAGE_FILTER = { value = "std_msgs;r2r_minimal_node_msgs" }
 
 [dependencies]
-r2r = "0.7.5"
 g2o = { path = "../g2o" }
 dvos3binding = { path = "../orbslam-bindings" }
 once_cell = "0.1.4"
-opencv = { version = "0.63.0", features = ["clang-runtime"] }
+opencv = { version = "0.63.0"}
 nalgebra = {version = "*", features = ["serde-serialize"]}
 cv-convert = {version = '0.19.0', features = ['opencv_0-63','nalgebra_0-31']}
 chrono = { version = "0.4", features = ["serde"] }
@@ -52,3 +51,5 @@ spin_sleep = "*"
 flame = "0.2.2"
 flamer = "0.3"
 ctrlc = "3.2.3"
+rerun = {version = "0.8.1", features=["web_viewer"]}
+tokio = { version = "1.24", default-features = false }

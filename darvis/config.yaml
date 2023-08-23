@@ -7,7 +7,7 @@ master:
 
 system_settings:
       should_profile: false
-      show_ui: true
+      show_visualizer: true
       localization_only_mode: false
       vocabulary_file: "../vocabulary/ORBvoc.txt" # TODO (low priority): This does not work with ~/
       trajectory_file_name: "trajectory.txt"
@@ -115,24 +115,6 @@ modules:
 
 
 actors:
-      # -
-      #  name: VISUALIZER
-      #  file: visualizer
-      #  actor_message: VisualizeMsg
-      #  actor_function: visualizer
-      #  address: localhost
-      #  port: !!str 7778
-      #  multithreaded: false
-      #  threads: 1
-      #  possible_paths:
-      #                -
-      #                 from: FeatureDetection
-      #                 to: KFDecision
-      #                 input: feature vectors
-      #                 output: frame, feature points
-      #  settings:
-      #     -
-
       -
        name: TRACKING_FRONTEND
        file: tracking_frontend
