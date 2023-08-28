@@ -3,18 +3,21 @@ extern crate g2o;
 use axiom::prelude::*;
 use cxx::{UniquePtr};
 use log::{ warn };
+use opencv::imgcodecs;
 use std::{sync::Arc, fmt};
 use std::fmt::Debug;
 use opencv::{prelude::*,types::{VectorOfKeyPoint},};
 use dvcore::{matrix::*,plugin_functions::Function,config::*,};
 use crate::dvmap::map::Id;
+use crate::registered_modules::VISUALIZER;
 use crate::{
     registered_modules::{TRACKING_BACKEND, FEATURE_DETECTION, CAMERA},
-    actors::{messages::{ImageMsg, FeatureMsg,},},
+    actors::{
+        messages::{ImageMsg, FeatureMsg,TrackingStateMsg}, tracking_backend::TrackingState,
+        visualizer::VisFeaturesMsg
+    },
 };
 
-use super::messages::TrackingStateMsg;
-use super::tracking_backend::TrackingState;
 
 pub struct DVORBextractor {
     pub extractor: UniquePtr<dvos3binding::ffi::ORBextractor>,
@@ -85,9 +88,16 @@ impl DarvisTrackingFront {
     }
 
     pub fn tracking_frontend(&mut self, context: Context, message: Arc<ImageMsg>) {
-        let image: Mat = (&message.frame).into(); // Taking ownership of message should not fail
+        // TODO (vis): If visualizer is running, this will cause the image to be read twice! Can we figure out a way to convert the Mat into something rerun can use?
+        let image = imgcodecs::imread(&message.image_path, imgcodecs::IMREAD_GRAYSCALE).expect("Could not read image.");
+
+        // If passing image directly, uncomment this. Taking ownership of message should not fail
+        // let image: Mat = (&message.frame).into();
         let (keypoints, descriptors) = self.extract_features(&image);
-        self.send_message_to_backend(context, image, keypoints, descriptors);
+        self.pass_to_backend(&context, &image, &keypoints, descriptors);
+        if GLOBAL_PARAMS.get::<bool>(SYSTEM_SETTINGS, "show_visualizer") {
+            self.send_keypoints_to_visualizer(&context, keypoints);
+        }
         self.last_id += 1;
     }
 
@@ -112,16 +122,16 @@ impl DarvisTrackingFront {
         (keypoints.kp_ptr.kp_ptr, descriptors.mat_ptr.mat_ptr)
     }
 
-    pub fn send_message_to_backend(
-        &mut self, context: Context,
-        image: Mat, keypoints: VectorOfKeyPoint, descriptors: Mat
+    pub fn pass_to_backend(
+        &mut self, context: &Context,
+        image: &Mat, keypoints: &VectorOfKeyPoint, descriptors: Mat
     ) {
         let align_id = context.system.find_aid_by_name(TRACKING_BACKEND).unwrap();
         let new_message = GLOBAL_PARAMS.get::<String>(TRACKING_BACKEND, "actor_message");
         match new_message.as_ref() {
             "FeatureMsg" => {
                 align_id.send_new(FeatureMsg {
-                    keypoints: DVVectorOfKeyPoint::new(keypoints),
+                    keypoints: DVVectorOfKeyPoint::new(keypoints.clone()),
                     descriptors: DVMatrix::new(descriptors),
                     image_width: image.cols(),
                     image_height: image.rows(),
@@ -130,13 +140,20 @@ impl DarvisTrackingFront {
             _ => {
                 warn!("Invalid Message type: selecting FeatureMsg");
                 align_id.send_new(FeatureMsg {
-                    keypoints: DVVectorOfKeyPoint::new(keypoints),
+                    keypoints: DVVectorOfKeyPoint::new(keypoints.clone()),
                     descriptors: DVMatrix::new(descriptors),
                     image_width: image.cols(),
                     image_height: image.rows(),
                 }).unwrap();
             },
         }
+    }
+
+    pub fn send_keypoints_to_visualizer(&mut self, context: &Context, keypoints: VectorOfKeyPoint) {
+        let vis_actor = context.system.find_aid_by_name(VISUALIZER).unwrap();
+        vis_actor.send_new(VisFeaturesMsg {
+            keypoints: DVVectorOfKeyPoint::new(keypoints)
+        }).unwrap();
     }
 }
 

@@ -1,4 +1,4 @@
-use std::{sync::Arc, collections::{HashSet, HashMap}};
+use std::{sync::Arc, collections::{HashSet, HashMap}, fmt::{Display, Formatter}};
 use axiom::prelude::*;
 use chrono::{prelude::*, Duration};
 use derivative::Derivative;
@@ -6,7 +6,7 @@ use log::{warn, info, debug, error};
 use opencv::core::Point2f;
 use dvcore::{lockwrap::ReadOnlyWrapper, plugin_functions::Function, config::*};
 use crate::{
-    actors::visualizer::VisualizeMsg,
+    actors::visualizer::VisKeyFrameMsg,
     actors::messages::{FeatureMsg, MapInitializedMsg, TrajectoryMessage, TrackingStateMsg},
     registered_modules::{LOCAL_MAPPING, TRACKING_BACKEND, SHUTDOWN, TRACKING_FRONTEND, VISUALIZER},
     dvmap::{
@@ -116,8 +116,10 @@ impl DarvisTrackingBack {
         }
     }
 
-    fn handle_message(&mut self, context: axiom::prelude::Context, msg: Arc<FeatureMsg>) {
-        let map_actor = context.system.find_aid_by_name(MAP_ACTOR).unwrap();
+    fn handle_message(
+        &mut self, context: axiom::prelude::Context, msg: Arc<FeatureMsg>
+    ) -> Result<(), Box<dyn std::error::Error>>  {
+        let map_actor = context.system.find_aid_by_name(MAP_ACTOR).expect("Map actor not found");
 
         // Sofiya interface: creating new frame
         self.last_frame_id += 1;
@@ -160,7 +162,7 @@ impl DarvisTrackingBack {
                 // Look for "mbOnlyTracking" in Track() function
             },
             false => { match self.state {
-                TrackingState::WaitForMapResponse => { return; },
+                TrackingState::WaitForMapResponse => { return Ok(()); },
                 TrackingState::NotInitialized => {
                     match self.initialization.try_initialize(&self.current_frame) {
                         Ok(ready) => {
@@ -170,23 +172,23 @@ impl DarvisTrackingBack {
                                     FrameSensor::Mono => MapWriteMsg::create_initial_map_monocular(self.initialization.clone(), tracking_actor),
                                     _ => MapWriteMsg::create_initial_map_stereo(self.initialization.clone(), tracking_actor)
                                 };
-                                map_actor.send_new(msg).unwrap();
+                                map_actor.send_new(msg)?;
                                 self.state = TrackingState::WaitForMapResponse;
                             }
                         },
                         Err(msg) => info!("{}", msg)
                     }
 
-                    return;
+                    return Ok(());
                 },
                 TrackingState::Ok => {
                     let mut ok;
                     if (self.imu.velocity.is_none() && !self.map.read().imu_initialized) || self.relocalization.frames_since_lost(&self.current_frame) < 2 {
-                        ok = self.track_reference_keyframe(&map_actor).unwrap();
+                        ok = self.track_reference_keyframe(&map_actor)?;
                     } else {
-                        ok = self.track_with_motion_model().unwrap();
+                        ok = self.track_with_motion_model()?;
                         if !ok {
-                            ok = self.track_reference_keyframe(&map_actor).unwrap();
+                            ok = self.track_reference_keyframe(&map_actor)?;
                         }
                     }
                     if !ok {
@@ -217,13 +219,13 @@ impl DarvisTrackingBack {
                 TrackingState::Lost => {
                     if self.kfs_in_map() < 10 {
                         info!("Reseting current map...");
-                        map_actor.send_new(MapWriteMsg::reset_active_map()).unwrap();
+                        map_actor.send_new(MapWriteMsg::reset_active_map())?;
                     } else {
                         info!("Creating new map...");
                         self.create_new_map();
                     }
 
-                    return;
+                    return Ok(());
                 }
             }}
         };
@@ -252,9 +254,9 @@ impl DarvisTrackingBack {
             // Update motion model
             let last_frame = self.last_frame.as_ref();
             if !last_frame.is_none() && !last_frame.unwrap().pose.is_none() && !self.current_frame.pose.is_none() {
-                let last_pose = last_frame.unwrap().pose.as_ref().unwrap();
+                let last_pose = last_frame.expect("No last frame in tracking?").pose.as_ref().expect("Can't get last frame's pose?");
                 let last_twc = last_pose.inverse();
-                self.imu.velocity = Some(self.current_frame.pose.as_ref().unwrap().clone() * last_twc);
+                self.imu.velocity = Some(self.current_frame.pose.as_ref().expect("Can't get current frame?").clone() * last_twc);
             } else {
                 self.imu.velocity = None;
             }
@@ -280,47 +282,51 @@ impl DarvisTrackingBack {
             if self.kfs_in_map() <= 10  || (self.sensor.is_imu() && !self.map.read().imu_initialized) {
                 warn!("tracking_backend::handle_message;Track lost before IMU initialisation, resetting...",);
                 let map_msg = MapWriteMsg::reset_active_map();
-                map_actor.send_new(map_msg).unwrap();
-                return;
+                map_actor.send_new(map_msg)?;
+                return Ok(());
             }
 
             self.create_new_map();
-            return;
+            return Ok(());
         }
 
         if self.current_frame.ref_kf_id.is_none() {
             self.current_frame.ref_kf_id = self.ref_kf_id;
         }
 
-        let trajectory_msg = match self.state {
+        match self.state {
             TrackingState::Ok | TrackingState::RecentlyLost => {
-                match self.current_frame.pose {
-                    Some(current_pose) => {
-                        match self.current_frame.ref_kf_id {
-                            Some(ref_kf_id) => {
-                                let new_pose = current_pose * self.map.read().get_keyframe(&ref_kf_id).unwrap().pose.unwrap().inverse();
-                                self.trajectory_poses.push(new_pose);
-                                TrajectoryMessage::new(
-                                    new_pose,
-                                    self.current_frame.ref_kf_id.unwrap(),
-                                    self.current_frame.timestamp
-                                )
-                            },
-                            None => {error!("Current frame has pose but ref kf is still none.Probably a concurrency issue with map actor sending pose info back to here."); TrajectoryMessage::empty()}
-                        }
-                    },
-                    None => {error!("Tracking state is {:?} but current frame does not have a pose.", self.state); TrajectoryMessage::empty()}
+                let current_pose = self.current_frame.pose.expect(concat!("Could not parse '", stringify!($self.state), "'"));
+                    
+                    
+                    // ("Tracking state is {:?} but current frame does not have a pose.", self.state).as_str());
+                // concat!("Could not parse '", stringify!($var), "'"))
+
+                let ref_kf_id = self.current_frame.ref_kf_id.expect("Current frame has pose but ref kf is still none.Probably a concurrency issue with map actor sending pose info back to here.");
+
+                // TODO (vis): Why is this not just current_pose?
+                let new_pose = current_pose * self.map.read().get_keyframe(&ref_kf_id).expect("Can't get ref kf").pose.expect("Can't get ref kf pose").inverse();
+                self.trajectory_poses.push(new_pose);
+
+                let traj_msg = TrajectoryMessage::new(
+                    new_pose,
+                    ref_kf_id,
+                    self.current_frame.timestamp
+                );
+                context.system.find_aid_by_name(SHUTDOWN).expect("Shutdown actor is shutdown!!!!").send_new(traj_msg).unwrap();
+
+                if let Some(vis) = context.system.find_aid_by_name(VISUALIZER) {
+                    //TODO (vis): not sure if we want new_pose or current_pose here
+                    let visualize_msg = VisKeyFrameMsg{
+                        pose: new_pose
+                    };
+                    vis.send_new(visualize_msg).unwrap();
                 }
             },
-            _ => TrajectoryMessage::empty()
+            _ => {}
         };
 
-        if let Some(vis) = context.system.find_aid_by_name(VISUALIZER) {
-            warn!("Sending to visualizer");
-            let visualize_msg = VisualizeMsg{};
-            vis.send_new(visualize_msg).unwrap();
-        }
-        context.system.find_aid_by_name(SHUTDOWN).unwrap().send_new(trajectory_msg).unwrap();
+        Ok(())
     }
 
     //* MVP */
@@ -992,11 +998,17 @@ impl DarvisTrackingBack {
         todo!("Multimaps: Atlas::CreateNewMap");
     }
 }
+
 impl Function for DarvisTrackingBack {
     fn handle(&mut self, context: axiom::prelude::Context, message: Message) -> ActorResult<()>
     {
         if let Some(msg) = message.content_as::<FeatureMsg>() {
-            self.handle_message(context, msg)
+            match self.handle_message(context, msg) {
+                Ok(result) => {},
+                Err(e) => {
+                    panic!("Error in Tracking Backend: {}", e);
+                }
+            };
         } else if let Some(msg) = message.content_as::<MapInitializedMsg>() {
             self.frames_since_last_kf = 0;
             self.local_keyframes.insert(msg.curr_kf_id);
@@ -1012,7 +1024,7 @@ impl Function for DarvisTrackingBack {
                     state: TrackingState::Ok,
                     init_id: msg.ini_kf_id
                 }
-            ).unwrap();
+            )?;
             context.system.find_aid_by_name(LOCAL_MAPPING).unwrap().send_new(
                 KeyFrameIdMsg { keyframe_id: msg.ini_kf_id }
             ).unwrap();
@@ -1037,5 +1049,10 @@ impl Function for DarvisTrackingBack {
         }
 
         Ok(Status::done(()))
+        // IMPORTANT TODO!!! Pretty sure we need to be returning Self for all the actors, 
+        // but that's a problem because we dynamically dispatch the actors
+        // so self has to be boxed or sized. Not sure what the downsides to enforcing
+        // sized is, but we can't do box because that would change the function signature.
+        // We should go back and see if we want to use axiom in the first place.
     }
 }
