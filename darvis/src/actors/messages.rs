@@ -49,16 +49,6 @@ pub struct TrackingStateMsg {
 }
 impl ActorMessage for TrackingStateMsg {}
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct VisPathMsg {
-    pub last_img_path: String // last processed image path.
-}
-
-impl VisPathMsg {
-    pub fn new(last_img_path: String) -> Self {
-        Self { last_img_path }
-    }
-}
 
 pub struct Reset {}
 impl ActorMessage for Reset {}
@@ -80,7 +70,10 @@ impl ActorMessage for FeatureMsg {}
 
 #[derive(Debug)]
 pub struct ImageMsg {
-    pub frame: DVMatrixGrayscale,
+    // Uncomment this to pass the image directly instead of the path
+    // pub frame: DVMatrixGrayscale,
+    pub image_path: String,
+    // pub timestamp: DateTime<Utc>,
 }
 impl ActorMessage for ImageMsg {}
 

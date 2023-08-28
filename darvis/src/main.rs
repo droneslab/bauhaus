@@ -13,7 +13,7 @@ extern crate lazy_static;
 use opencv::{imgcodecs};
 
 use dvcore::{*, lockwrap::ReadWriteWrapper, config::*};
-use crate::actors::{messages::{ImageMsg, ShutdownMessage, TrajectoryMessage, VisPathMsg}};
+use crate::actors::{messages::{ImageMsg, ShutdownMessage, TrajectoryMessage}};
 use crate::dvmap::{bow::VOCABULARY, map_actor::MapActor, pose::Pose, map::Map, map::Id};
 use crate::registered_modules::{TRACKING_FRONTEND, VISUALIZER, SHUTDOWN, FeatureManager};
 
@@ -57,35 +57,41 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Load vocabulary
     VOCABULARY.access();
-    
+
     // Handle ctrl+c
     let shutdown_flag = create_shutdown_actor(&actor_system);
 
     info!("System ready to receive messages");
 
     // Run loop at fps rate
+    let target_fps = GLOBAL_PARAMS.get::<f64>(SYSTEM_SETTINGS, "fps");
     let mut loop_helper = LoopHelper::builder()
         .report_interval_s(0.5)
-        .build_with_target_rate(GLOBAL_PARAMS.get::<f64>(SYSTEM_SETTINGS, "fps"));
+        .build_with_target_rate(target_fps);
 
+    let current_timestamp = target_fps; // TODO (MVP): For evaluation this needs to be a real timestamp from the associated timestamp file.
     // Process images
     for path in &generate_image_paths(img_dir) {
         if *shutdown_flag.lock().unwrap() { break; }
         let _delta = loop_helper.loop_start(); 
-        let img = imgcodecs::imread(&path, imgcodecs::IMREAD_GRAYSCALE).expect("Could not read image.");
-        let tracking_frontend = actor_system.find_aid_by_name(TRACKING_FRONTEND).expect("Tracking frontend actor not running?");
+
+        if GLOBAL_PARAMS.get::<bool>(SYSTEM_SETTINGS, "show_visualizer") {
+            actor_system
+                .find_aid_by_name(VISUALIZER).expect("Visualizer could not start.")
+                .send_new(ImageMsg{image_path: path.clone()})?;
+        } else {
+            let img = imgcodecs::imread(&path, imgcodecs::IMREAD_GRAYSCALE).expect("Could not read image.");
+            let tracking_frontend = actor_system.find_aid_by_name(TRACKING_FRONTEND).expect("Tracking frontend actor not running?");
+            tracking_frontend.send_new(ImageMsg{image_path: path.clone()})?;
+        }
 
         info!("Read image {}", path.split("/").last().unwrap().split(".").nth(0).unwrap());
-        if let Some(vis_id) = actor_system.find_aid_by_name(VISUALIZER) {
-            vis_id.send_new(VisPathMsg::new(path.to_string()))?;
-        }
 
         // ORBSLAM3 frame loader scales and resizes image, do we need this?
         // After looking into it for a while, I think not. They have the code to scale,
         // but then never set the variable mImageScale to anything but 1.0
         // https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/Examples/RGB-D/rgbd_tum.cc#L89
 
-        tracking_frontend.send_new(ImageMsg{frame: img.into(),})?;
         loop_helper.loop_sleep(); 
     }
     actor_system.find_aid_by_name(SHUTDOWN).unwrap().send_new(ShutdownMessage{})?;
@@ -136,7 +142,9 @@ fn create_visualize_actor(
     // This is cumbersome but this is the cleanest way to do it that I have found
     // Visualization library requires running tokio runtime in current context (creating rt)
     // We can't do this inside the actor constructor because the tokio runtime does not implement Copy, so have to do it here
-    // vis_stream needs to be created in the same context as rt (or runtime error), but visualizer actor needs vis_stream to be able to visualize anything, so have to create vis_stream here and then move into visualizer actor.
+    // vis_stream needs to be created in the same context as rt (or else runtime error)
+    // but visualizer actor needs vis_stream to be able to visualize anything,
+    // so have to create vis_stream here and then move into visualizer actor.
     let rt = tokio::runtime::Runtime::new().expect("Failed to initialize visualizer -- tokio runtime");
     let _guard = rt.enter();
     let vis_stream = RecordingStreamBuilder::new("minimal_serve_rs").serve(

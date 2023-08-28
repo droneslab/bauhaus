@@ -118,7 +118,7 @@ impl Frame<InitialFrame> {
         };
         let frame = Self {
             frame_id,
-            timestamp: Utc::now(),
+            timestamp: Utc::now(), // TODO (mvp): This needs to be a timestamp from the dataset timestamp file, not a real timestamp.
             features: Features::new(keypoints_vec, descriptors_vec, im_width, im_height, sensor)?,
             imu_bias: imu_bias,
             sensor,
