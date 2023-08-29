@@ -1,13 +1,15 @@
 extern crate g2o;
-
-use axiom::prelude::*;
 use cxx::{UniquePtr};
+use dvcore::sensor::{Sensor, FrameSensor};
 use log::{ warn };
 use opencv::imgcodecs;
+use std::any::Any;
+use std::sync::mpsc::Receiver;
 use std::{sync::Arc, fmt};
 use std::fmt::Debug;
 use opencv::{prelude::*,types::{VectorOfKeyPoint},};
-use dvcore::{matrix::*,plugin_functions::Function,config::*,};
+use dvcore::{matrix::*,config::*,};
+use crate::{ActorSystem};
 use crate::dvmap::map::Id;
 use crate::registered_modules::VISUALIZER;
 use crate::{
@@ -18,6 +20,7 @@ use crate::{
     },
 };
 
+use super::messages::ShutdownMessage;
 
 pub struct DVORBextractor {
     pub extractor: UniquePtr<dvos3binding::ffi::ORBextractor>,
@@ -51,8 +54,9 @@ impl Debug for DVORBextractor {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct DarvisTrackingFront {
+    actor_system: ActorSystem,
     orb_extractor_left: DVORBextractor,
     orb_extractor_right: Option<DVORBextractor>,
     orb_extractor_ini: Option<DVORBextractor>,
@@ -60,11 +64,11 @@ pub struct DarvisTrackingFront {
     last_id: Id,
     init_id: Id,
     max_frames: i32,
-    sensor: Sensor
+    sensor: Sensor,
 }
 
 impl DarvisTrackingFront {
-    pub fn new() -> DarvisTrackingFront {
+    pub fn new(actor_system: ActorSystem) -> DarvisTrackingFront {
         let max_features = GLOBAL_PARAMS.get::<i32>(FEATURE_DETECTION, "max_features");
         let sensor = GLOBAL_PARAMS.get::<Sensor>(SYSTEM_SETTINGS, "sensor");
         let orb_extractor_right = match sensor.frame() {
@@ -76,6 +80,7 @@ impl DarvisTrackingFront {
             false => None
         };
         DarvisTrackingFront {
+            actor_system,
             orb_extractor_left: DVORBextractor::new(max_features),
             orb_extractor_right,
             orb_extractor_ini,
@@ -87,16 +92,36 @@ impl DarvisTrackingFront {
         }
     }
 
-    pub fn tracking_frontend(&mut self, context: Context, message: Arc<ImageMsg>) {
+    pub fn run(&mut self) {
+        loop {
+            let message = self.actor_system.receive().unwrap();
+            if let Some(msg) = <dyn Any>::downcast_ref::<ImageMsg>(&message) {
+                println!("Frontend working");
+                self.tracking_frontend(msg);
+            } else if let Some(msg) = <dyn Any>::downcast_ref::<TrackingStateMsg>(&message) {
+                match msg.state {
+                    TrackingState::Ok => { 
+                        self.map_initialized = true;
+                        self.init_id = msg.init_id
+                    },
+                    _ => {}
+                };
+            } else if let Some(_) = <dyn Any>::downcast_ref::<ShutdownMessage>(&message) {
+                break;
+            }
+        }
+    }
+
+    fn tracking_frontend(&mut self, message: &ImageMsg) {
         // TODO (vis): If visualizer is running, this will cause the image to be read twice! Can we figure out a way to convert the Mat into something rerun can use?
         let image = imgcodecs::imread(&message.image_path, imgcodecs::IMREAD_GRAYSCALE).expect("Could not read image.");
 
         // If passing image directly, uncomment this. Taking ownership of message should not fail
         // let image: Mat = (&message.frame).into();
         let (keypoints, descriptors) = self.extract_features(&image);
-        self.pass_to_backend(&context, &image, &keypoints, descriptors);
+        self.pass_to_backend(&image, &keypoints, descriptors);
         if GLOBAL_PARAMS.get::<bool>(SYSTEM_SETTINGS, "show_visualizer") {
-            self.send_keypoints_to_visualizer(&context, keypoints);
+            self.send_keypoints_to_visualizer(keypoints);
         }
         self.last_id += 1;
     }
@@ -122,54 +147,42 @@ impl DarvisTrackingFront {
         (keypoints.kp_ptr.kp_ptr, descriptors.mat_ptr.mat_ptr)
     }
 
-    pub fn pass_to_backend(
-        &mut self, context: &Context,
+    fn pass_to_backend(
+        &mut self,
         image: &Mat, keypoints: &VectorOfKeyPoint, descriptors: Mat
     ) {
-        let align_id = context.system.find_aid_by_name(TRACKING_BACKEND).unwrap();
+        let backend = self.actor_system.find("TRACKING_BACKEND").unwrap();
         let new_message = GLOBAL_PARAMS.get::<String>(TRACKING_BACKEND, "actor_message");
         match new_message.as_ref() {
             "FeatureMsg" => {
-                align_id.send_new(FeatureMsg {
-                    keypoints: DVVectorOfKeyPoint::new(keypoints.clone()),
-                    descriptors: DVMatrix::new(descriptors),
-                    image_width: image.cols(),
-                    image_height: image.rows(),
-                }).unwrap();
+                backend.send(Box::new(
+                    FeatureMsg {
+                        keypoints: DVVectorOfKeyPoint::new(keypoints.clone()),
+                        descriptors: DVMatrix::new(descriptors),
+                        image_width: image.cols(),
+                        image_height: image.rows(),
+                    }
+                )).unwrap();
             },
             _ => {
                 warn!("Invalid Message type: selecting FeatureMsg");
-                align_id.send_new(FeatureMsg {
-                    keypoints: DVVectorOfKeyPoint::new(keypoints.clone()),
-                    descriptors: DVMatrix::new(descriptors),
-                    image_width: image.cols(),
-                    image_height: image.rows(),
-                }).unwrap();
+                backend.send(Box::new(
+                    FeatureMsg {
+                        keypoints: DVVectorOfKeyPoint::new(keypoints.clone()),
+                        descriptors: DVMatrix::new(descriptors),
+                        image_width: image.cols(),
+                        image_height: image.rows(),
+                    }
+                )).unwrap();
             },
         }
     }
 
-    pub fn send_keypoints_to_visualizer(&mut self, context: &Context, keypoints: VectorOfKeyPoint) {
-        let vis_actor = context.system.find_aid_by_name(VISUALIZER).unwrap();
-        vis_actor.send_new(VisFeaturesMsg {
+    fn send_keypoints_to_visualizer(&mut self, keypoints: VectorOfKeyPoint) {
+        let vis_actor = self.actor_system.find(VISUALIZER).unwrap();
+        vis_actor.send(Box::new(VisFeaturesMsg {
             keypoints: DVVectorOfKeyPoint::new(keypoints)
-        }).unwrap();
+        })).unwrap();
     }
 }
 
-impl Function for DarvisTrackingFront {
-    fn handle(&mut self, context: axiom::prelude::Context, message: Message) -> ActorResult<()> {
-        if let Some(image_msg) = message.content_as::<ImageMsg>() {
-            self.tracking_frontend(context, image_msg);
-        } else if let Some(tracking_state_msg) = message.content_as::<TrackingStateMsg>() {
-            match tracking_state_msg.state {
-                TrackingState::Ok => { 
-                    self.map_initialized = true;
-                    self.init_id = tracking_state_msg.init_id
-                },
-                _ => {}
-            };
-        }
-        Ok(Status::done(()))
-    }
-}

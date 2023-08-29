@@ -1,4 +1,4 @@
-use dvcore::{lockwrap::ReadOnlyWrapper, config::{Sensor, FrameSensor, ImuSensor}};
+use dvcore::{lockwrap::ReadOnlyWrapper, sensor::{FrameSensor, ImuSensor, Sensor}};
 use serde::{Deserialize, Serialize};
 
 use crate::dvmap::{pose::Pose, map::Map};

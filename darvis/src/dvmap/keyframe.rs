@@ -1,7 +1,7 @@
 use std::{collections::{HashMap, HashSet}, cmp::min};
 use chrono::{DateTime, Utc};
 use derivative::Derivative;
-use dvcore::{matrix::{DVVector3, DVVectorOfKeyPoint, DVMatrix}, config::{Sensor, GLOBAL_PARAMS, SYSTEM_SETTINGS, FrameSensor}};
+use dvcore::{matrix::{DVVector3, DVVectorOfKeyPoint, DVMatrix}, config::{ GLOBAL_PARAMS, SYSTEM_SETTINGS}, sensor::{Sensor, FrameSensor}};
 use log::{error, debug, warn};
 use serde::{Deserialize, Serialize};
 use crate::{dvmap::{map::Id, pose::Pose},modules::{imu::*, camera::CAMERA_MODULE}, actors::tracking_backend::TrackedMapPointData,};

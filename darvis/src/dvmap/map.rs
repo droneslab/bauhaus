@@ -1,6 +1,6 @@
 use std::{collections::{HashMap, HashSet}};
 use log::{info, warn, error, debug};
-use dvcore::{matrix::{DVVector3}, config::{Sensor, GLOBAL_PARAMS, SYSTEM_SETTINGS, FrameSensor, ImuSensor}};
+use dvcore::{matrix::{DVVector3}, config::{GLOBAL_PARAMS, SYSTEM_SETTINGS}, sensor::{Sensor, FrameSensor, ImuSensor}};
 use crate::{
     dvmap::{keyframe::*, mappoint::*, pose::Pose},
     modules::{map_initialization::Initialization, optimizer::{self}}

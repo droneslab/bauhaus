@@ -7,7 +7,7 @@ master:
 
 system_settings:
       should_profile: false
-      show_visualizer: true
+      show_visualizer: false
       localization_only_mode: false
       vocabulary_file: "../vocabulary/ORBvoc.txt" # TODO (low priority): This does not work with ~/
       trajectory_file_name: "trajectory.txt"

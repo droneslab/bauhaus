@@ -1,7 +1,7 @@
-use std::{sync::Arc, path::Path};
+use std::{sync::Arc, path::Path, any::Any};
 
-use axiom::{message::ActorMessage, prelude::*};
-use dvcore::{plugin_functions::Function,matrix::*,};
+// use axiom::{message::ActorMessage, prelude::*};
+use dvcore::{matrix::*, base::{ActorMessage, ActorSystem},};
 use opencv::{imgcodecs, viz::WCloud};
 use rerun::{
     components::{ColorRGBA, Point3D, Radius},
@@ -16,16 +16,19 @@ use crate::{
     lockwrap::ReadOnlyWrapper
 };
 
+use super::messages::ShutdownMessage;
 
 
-#[derive(Debug, Clone)]
+
+#[derive(Debug)]
 pub struct DarvisVisualizer {
+    actor_system: ActorSystem,
     map: ReadOnlyWrapper<Map>,
     rec_stream: RecordingStream
 }
 
 impl DarvisVisualizer {
-    pub fn new(map: ReadOnlyWrapper<Map>, rec_stream: RecordingStream) -> DarvisVisualizer {
+    pub fn new(actor_system: ActorSystem, map: ReadOnlyWrapper<Map>, rec_stream: RecordingStream) -> DarvisVisualizer {
 
         // Using opencv...
         // let cw = WCloud::new(cloud, viz::Color::red());
@@ -34,7 +37,25 @@ impl DarvisVisualizer {
         // // Modify it, and it will be modified in the window.
         // cw.set_color(viz::Color::yellow());
 
-        return DarvisVisualizer{map, rec_stream};
+        return DarvisVisualizer{actor_system, map, rec_stream};
+    }
+
+    pub fn run(&mut self) {
+        loop {
+            let message = self.actor_system.receive();
+            if let Some(msg) = <dyn Any>::downcast_ref::<ImageMsg>(&message) {
+                self.draw_image(msg).expect("Visualizer could not draw image!");
+            } else if let Some(msg) = <dyn Any>::downcast_ref::<VisFeaturesMsg>(&message) {
+                self.draw_features(msg).expect("Visualizer could not draw features!");
+            } else if let Some(msg) = <dyn Any>::downcast_ref::<VisKeyFrameMsg>(&message) {
+                self.draw_new_keyframe(msg).expect("Visualizer could not draw keyframe!");
+            } else if let Some(msg) = <dyn Any>::downcast_ref::<VisMapPointsMsg>(&message) {
+                self.draw_mappoints(msg).expect("Visualizer could not draw mappoints!");
+            } else if let Some(msg) = <dyn Any>::downcast_ref::<ShutdownMessage>(&message) {
+                break;
+            }
+
+        }
     }
 
     // fn timepoint(index: usize, time: f64) -> TimePoint {
@@ -49,30 +70,30 @@ impl DarvisVisualizer {
     // }
 
 
-    pub fn draw_image(&mut self, _context: Context, message: Arc<ImageMsg>) -> ActorResult<()> {
+    pub fn draw_image(&mut self, message: &ImageMsg) -> Result<(), Box<dyn std::error::Error>> {
         // let tensor = rerun::components::Tensor::from_image_file(Path::new(&message.image_path))?;
         // // map/robot/camera/img
         // MsgSender::new("world/camera")
         //     // .with_timepoint(Timeline::new("time", TimeType::Time).into())
         //     .with_component(&[tensor])?
         //     .send(&self.rec_stream)?;
+        todo!()
 
-        Ok(Status::done(()))
     }
 
-    pub fn draw_features(&mut self, _context: Context, message: Arc<VisFeaturesMsg>) -> ActorResult<()> {
+    pub fn draw_features(&mut self, message: &VisFeaturesMsg) -> Result<(), Box<dyn std::error::Error>> {
         todo!()
         // Ok(Status::done(()))
     }
 
     // Transforms: https://www.rerun.io/docs/concepts/spaces-and-transforms#space-transformations
 
-    pub fn draw_new_keyframe(&mut self, _context: Context, message: Arc<VisKeyFrameMsg>) -> ActorResult<()> {
+    pub fn draw_new_keyframe(&mut self, message: &VisKeyFrameMsg) -> Result<(), Box<dyn std::error::Error>> {
         // Box3D : https://www.rerun.io/docs/reference/data_types/box3d
         todo!()
     }
 
-    pub fn draw_mappoints(&mut self, _context: Context, message: Arc<VisMapPointsMsg>) -> ActorResult<()> {
+    pub fn draw_mappoints(&mut self, message: &VisMapPointsMsg) -> Result<(), Box<dyn std::error::Error>> {
         // map/robot/camera/points
 
         // let points = grid(glam::Vec3::splat(-10.0), glam::Vec3::splat(10.0), 10)
@@ -91,7 +112,7 @@ impl DarvisVisualizer {
         todo!()
     }
 
-    pub fn draw_odometry() -> ActorResult<()> {
+    pub fn draw_odometry() -> Result<(), Box<dyn std::error::Error>> {
         // odometry/vel
         // python ... rr.log_scalar("odometry/vel", odom.twist.twist.linear.x)
         // object ... LineStrip3D https://docs.rs/rerun/latest/rerun/components/struct.LineStrip3D.html
@@ -99,21 +120,10 @@ impl DarvisVisualizer {
     }
 }
 
-impl Function for DarvisVisualizer {
-    fn handle(&mut self, _context: axiom::prelude::Context, message: Message) -> ActorResult<()> {
-        // Background: https://www.rerun.io/docs/getting-started/logging-rust
-        if let Some(image_msg) = message.content_as::<ImageMsg>() {
-            self.draw_image(_context, image_msg).expect("Visualizer could not draw image!");
-        } else if let Some(features_msg) = message.content_as::<VisFeaturesMsg>() {
-            self.draw_features(_context, features_msg).expect("Visualizer could not draw features!");
-        } else if let Some(kf_msg) = message.content_as::<VisKeyFrameMsg>() {
-            self.draw_new_keyframe(_context, kf_msg).expect("Visualizer could not draw keyframe!");
-        } else if let Some(mps_msg) = message.content_as::<VisMapPointsMsg>() {
-            self.draw_mappoints(_context, mps_msg).expect("Visualizer could not draw mappoints!");
-        }
-
-        Ok(Status::done(()))
-    }
+pub enum VisualizeMsg {
+    VisFeaturesMsg,
+    VisKeyFrameMsg,
+    VisMapPointsMsg
 }
 
 pub struct VisFeaturesMsg {

@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 use cxx::UniquePtr;
 use dvcore::{
     lockwrap::ReadOnlyWrapper,
-    config::{GLOBAL_PARAMS, SYSTEM_SETTINGS, Sensor, FrameSensor},
+    config::{GLOBAL_PARAMS, SYSTEM_SETTINGS}, sensor::{Sensor, FrameSensor},
 };
 use log::{info, warn, debug};
 use nalgebra::Matrix3;
@@ -830,7 +830,7 @@ pub fn optimize_pose(frame: &mut Frame<InitialFrame>, map: &ReadOnlyWrapper<Map>
                 let (keypoint, _) = &frame.features.get_keypoint(i as usize);
 
                 let edge = match sensor.frame() {
-                    crate::FrameSensor::Stereo => {
+                    FrameSensor::Stereo => {
                         // Stereo observations
                         todo!("Stereo");
                         // let edge = optimizer.create_edge_stereo(
@@ -1045,7 +1045,7 @@ pub fn global_bundle_adjustment(map: &Map, loop_kf: i32, iterations: i32) -> BAR
             }
 
             match sensor.frame() {
-                crate::FrameSensor::Stereo => {
+                FrameSensor::Stereo => {
                     todo!("Stereo, Optimizer lines 194-226");
                 },
                 _ => {
@@ -1343,11 +1343,13 @@ pub fn local_bundle_adjustment(
     let mut map_edits = Vec::new();
 
     // Check inlier observations
+    let mut to_discard = Vec::new();
     for (mp_id, edge) in all_edges_mono {
         if edge.chi2() > 5.991 || !edge.is_depth_positive() {
-            map_edits.push(MapWriteMsg::discard_mappoint(mp_id));
+            to_discard.push(*mp_id);
         }
     }
+    map_edits.push(MapWriteMsg::discard_many_mappoints(&to_discard));
 
     for (_mp_id, _edge) in all_edges_body {
         todo!("Stereo");
