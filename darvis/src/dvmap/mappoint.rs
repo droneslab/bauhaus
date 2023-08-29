@@ -1,5 +1,5 @@
 use std::{fmt::Debug, collections::{HashMap}};
-use dvcore::{matrix::DVMatrix, config::{Sensor, GLOBAL_PARAMS, SYSTEM_SETTINGS, FrameSensor}};
+use dvcore::{matrix::DVMatrix, config::{GLOBAL_PARAMS, SYSTEM_SETTINGS}, sensor::{Sensor, FrameSensor}};
 use log::{error, debug};
 extern crate nalgebra as na;
 use crate::{matrix::DVVector3, modules::orbmatcher::{descriptor_distance, SCALE_FACTORS}, registered_modules::FEATURE_DETECTION};

@@ -7,10 +7,11 @@
 // but also fine.
 
 use chrono::Duration;
-use dvcore::config::{GLOBAL_PARAMS, SYSTEM_SETTINGS, FrameSensor, ImuSensor};
+use dvcore::config::{GLOBAL_PARAMS, SYSTEM_SETTINGS};
 use dvcore::matrix::DVVectorOfPoint2f;
+use dvcore::sensor::{Sensor, FrameSensor, ImuSensor};
 use log::debug;
-use dvcore::{matrix::DVVectorOfPoint3f, config::Sensor};
+use dvcore::{matrix::DVVectorOfPoint3f};
 use crate::dvmap::keyframe::Frame;
 use crate::dvmap::{keyframe::InitialFrame, pose::Pose};
 use crate::modules::camera::{CAMERA_MODULE};

@@ -1,5 +1,7 @@
-use axiom::{prelude::*, message::ActorMessage};
-use dvcore::matrix::DVVector3;
+use std::any::Any;
+
+// use axiom::{prelude::*, message::ActorMessage};
+use dvcore::{matrix::DVVector3, base::{ActorSystem, ActorMessage}};
 use log::{info, warn, debug};
 
 use crate::{
@@ -9,89 +11,92 @@ use crate::{
 };
 use super::{mappoint::{MapPoint, PrelimMapPoint}, pose::Pose};
 
-pub static MAP_ACTOR: &str = "MAP_ACTOR"; 
-
 pub struct MapActor {
+    actor_system: ActorSystem,
     map: ReadWriteWrapper<Map>,
 }
 impl MapActor {//+ std::marker::Send + std::marker::Sync
-    pub fn spawn (actor_system: &ActorSystem, map: ReadWriteWrapper<Map>) -> Aid {
-        let mapactor = MapActor { map };
-        let aid = actor_system.spawn().name(MAP_ACTOR).with(mapactor, MapActor::handle).unwrap();
-        aid
+    pub fn new (actor_system: ActorSystem, map: ReadWriteWrapper<Map>) -> Self {
+        MapActor {
+            actor_system,
+            map
+        }
     }
 
-    async fn handle(self, _context: Context, message: Message) -> ActorResult<Self> {
-        if let Some(msg) = message.content_as::<MapWriteMsg>() {
-            let msg = &*msg;
-            let mut write_lock = self.map.write();
+    pub fn run(&mut self) {
+        loop {
+            let message = self.actor_system.receive();
+            if let Some(msg) = <dyn Any>::downcast_ref::<MapWriteMsg>(&message) {
+                let msg = &*msg;
+                let mut write_lock = self.map.write();
 
-            match &msg.target {
-                MapWriteTarget::CreateInitialMapMonocular { initialization_data, callback_actor } => {
-                    match write_lock.create_initial_map_monocular(&initialization_data) {
-                            Some((curr_kf_pose, curr_kf_id, ini_kf_id, local_mappoints)) => {
-                                callback_actor.send_new(
-                                    MapInitializedMsg {curr_kf_pose, curr_kf_id, ini_kf_id, local_mappoints}
-                                ).unwrap();
-                                info!("successfully created initial monocular map");
-                            },
-                            None => { }
-                    };
-                },
+                match &msg.target {
+                    MapWriteTarget::CreateInitialMapMonocular { initialization_data, callback_actor } => {
+                        match write_lock.create_initial_map_monocular(&initialization_data) {
+                                Some((curr_kf_pose, curr_kf_id, ini_kf_id, local_mappoints)) => {
+                                    self.actor_system.find(callback_actor).unwrap().send(Box::new(
+                                        MapInitializedMsg {curr_kf_pose, curr_kf_id, ini_kf_id, local_mappoints}
+                                    )).unwrap();
+                                    info!("successfully created initial monocular map");
+                                },
+                                None => { }
+                        };
+                    },
 
-                MapWriteTarget::MapPoint__New { mp ,observations_to_add } => {
-                    let _ = write_lock.insert_mappoint_to_map(mp, observations_to_add);
-                },
-                MapWriteTarget::MapPoint__NewMany { mps, callback_actor } => {
-                    for (mp, observations) in mps {
-                        let _ = write_lock.insert_mappoint_to_map(mp, observations);
+                    MapWriteTarget::MapPoint__New { mp ,observations_to_add } => {
+                        let _ = write_lock.insert_mappoint_to_map(mp, observations_to_add);
+                    },
+                    MapWriteTarget::MapPoint__NewMany { mps, callback_actor } => {
+                        for (mp, observations) in mps {
+                            let _ = write_lock.insert_mappoint_to_map(mp, observations);
+                        }
+                        // Inform tracking that we are done with creating new mappoints. Needed because tracking fails if new points are not created
+                        // before track_with_reference_keyframe, so to avoid the race condition we have it wait until the new points are ready.
+                        self.actor_system.find(callback_actor).unwrap().send(Box::new(LastKeyFrameUpdatedMsg{})).unwrap();
+                        debug!("Local mapping finished creating {} new mappoints", mps.len());
+                    },
+                    MapWriteTarget::MapPoint__DiscardMany { ids } => {
+                        for id in ids {
+                            write_lock.discard_mappoint(&id);
+                        }
+                    },
+
+                    MapWriteTarget::MapPoint__IncreaseFound { mp_ids_and_nums } => {
+                        for (mp, n) in mp_ids_and_nums {
+                            write_lock.mappoints.get_mut(mp).unwrap().increase_found(n);
+                        }
+                    },
+                    MapWriteTarget::MapPoint__IncreaseVisible {mp_ids} => {
+                        for mp_id in mp_ids {
+                            write_lock.mappoints.get_mut(mp_id).unwrap().increase_visible();
+                        }
+                    },
+                    MapWriteTarget::KeyFrame__New { kf, callback_actor } => {
+                        let new_kf_id = write_lock.insert_keyframe_to_map(kf, false);
+                        // Send the new keyframe ID directly back to the sender so they can use the ID 
+                        self.actor_system.find(callback_actor).unwrap().send(Box::new(KeyFrameIdMsg{keyframe_id: new_kf_id})).unwrap();
+                    },
+
+                    MapWriteTarget::KeyFrame__Delete { id } => {
+                        let _ = write_lock.discard_keyframe(id);
+                    },
+                    MapWriteTarget::MapPoint__AddObservation {mp_id, kf_id, index} => {
+                        let num_keypoints = write_lock.get_keyframe(kf_id).unwrap().features.num_keypoints;
+                        write_lock.mappoints.get_mut(mp_id).unwrap().add_observation(&kf_id, num_keypoints, *index as u32);
+                        write_lock.keyframes.get_mut(kf_id).unwrap().add_mappoint(*index as u32, *mp_id, false);
+                    },
+                    MapWriteTarget::MapPoint__Replace {mp_to_replace, mp} => {
+                        write_lock.replace_mappoint(mp_to_replace, mp);
+                    },
+                    MapWriteTarget::MapPoint__Pose{mp_id, pose} => {
+                        write_lock.mappoints.get_mut(mp_id).unwrap().position = pose.get_translation();
                     }
-                    // Inform tracking that we are done with creating new mappoints. Needed because tracking fails if new points are not created
-                    // before track_with_reference_keyframe, so to avoid the race condition we have it wait until the new points are ready.
-                    callback_actor.send_new(LastKeyFrameUpdatedMsg{}).unwrap();
-                    debug!("Local mapping finished creating {} new mappoints", mps.len());
-                },
-                MapWriteTarget::MapPoint__Discard { id } => {
-                    write_lock.discard_mappoint(&id);
-                },
-
-                MapWriteTarget::MapPoint__IncreaseFound { mp_ids_and_nums } => {
-                    for (mp, n) in mp_ids_and_nums {
-                        write_lock.mappoints.get_mut(mp).unwrap().increase_found(n);
-                    }
-                },
-                MapWriteTarget::MapPoint__IncreaseVisible {mp_ids} => {
-                    for mp_id in mp_ids {
-                        write_lock.mappoints.get_mut(mp_id).unwrap().increase_visible();
-                    }
-                },
-                MapWriteTarget::KeyFrame__New { kf, callback_actor } => {
-                    let new_kf_id = write_lock.insert_keyframe_to_map(kf, false);
-                    // Send the new keyframe ID directly back to the sender so they can use the ID 
-                    callback_actor.send_new(KeyFrameIdMsg{keyframe_id: new_kf_id}).unwrap();
-                },
-
-                MapWriteTarget::KeyFrame__Delete { id } => {
-                    let _ = write_lock.discard_keyframe(id);
-                },
-                MapWriteTarget::MapPoint__AddObservation {mp_id, kf_id, index} => {
-                    let num_keypoints = write_lock.get_keyframe(kf_id).unwrap().features.num_keypoints;
-                    write_lock.mappoints.get_mut(mp_id).unwrap().add_observation(&kf_id, num_keypoints, *index as u32);
-                    write_lock.keyframes.get_mut(kf_id).unwrap().add_mappoint(*index as u32, *mp_id, false);
-                },
-                MapWriteTarget::MapPoint__Replace {mp_to_replace, mp} => {
-                    write_lock.replace_mappoint(mp_to_replace, mp);
-                },
-                MapWriteTarget::MapPoint__Pose{mp_id, pose} => {
-                    write_lock.mappoints.get_mut(mp_id).unwrap().position = pose.get_translation();
+                    _ => {
+                        warn!("invalid message type to map actor");
+                    },
                 }
-                _ => {
-                    warn!("invalid message type to map actor");
-                },
             }
         }
-
-        Ok(Status::done(self))
     }
 }
 
@@ -100,15 +105,15 @@ impl MapActor {//+ std::marker::Send + std::marker::Sync
 enum MapWriteTarget {
     // #[serde(bound = "")] If using serialize/deserialize, uncomment this
     // BulkMsg{msgs: Vec<MapWriteMsg>}, Note: Tried this out as a way for actors to send a bunch of messages at once without having to send at a ridiculously high rate, but this doesn't work because (I think) each message needs a write lock and the actor is handling them asynchronously
-    CreateInitialMapMonocular{initialization_data: Initialization, callback_actor: axiom::actors::Aid},
-    CreateInitialMapStereo{initialization_data: Initialization, callback_actor: axiom::actors::Aid},
-    KeyFrame__New{kf: Frame<PrelimKeyFrame>, callback_actor: axiom::actors::Aid},
+    CreateInitialMapMonocular{initialization_data: Initialization, callback_actor: String},
+    CreateInitialMapStereo{initialization_data: Initialization, callback_actor: String},
+    KeyFrame__New{kf: Frame<PrelimKeyFrame>, callback_actor: String},
     KeyFrame__Delete{id: Id},
     KeyFrame__Pose{kf_id: Id, pose: Pose},
     Map__ResetActive{},
     MapPoint__New{mp: MapPoint<PrelimMapPoint>, observations_to_add: Vec<(Id, u32, usize)>},
-    MapPoint__NewMany{mps: Vec<(MapPoint<PrelimMapPoint>, Vec<(Id, u32, usize)>)>, callback_actor: axiom::actors::Aid},
-    MapPoint__Discard{id: Id},
+    MapPoint__NewMany{mps: Vec<(MapPoint<PrelimMapPoint>, Vec<(Id, u32, usize)>)>, callback_actor: String},
+    MapPoint__DiscardMany{ids: Vec<Id>},
     MapPoint__Replace{mp_to_replace: Id, mp: Id},
     MapPoint__IncreaseFound{mp_ids_and_nums: Vec::<(Id, i32)>},
     MapPoint__IncreaseVisible{mp_ids: Vec<Id>},
@@ -129,7 +134,7 @@ impl MapWriteMsg {
     // }
     pub fn create_initial_map_monocular(
         initialization_data: Initialization,
-        callback_actor: axiom::actors::Aid
+        callback_actor: String
     ) -> Self {
         Self {
             target: MapWriteTarget::CreateInitialMapMonocular{initialization_data, callback_actor },
@@ -137,13 +142,13 @@ impl MapWriteMsg {
     }
     pub fn create_initial_map_stereo(
         initialization_data: Initialization,
-        callback_actor: axiom::actors::Aid
+        callback_actor: String
     ) -> Self {
         Self {
             target: MapWriteTarget::CreateInitialMapStereo{initialization_data, callback_actor},
         }
     }
-    pub fn new_keyframe(kf: Frame<PrelimKeyFrame>, callback_actor: axiom::actors::Aid) -> Self {
+    pub fn new_keyframe(kf: Frame<PrelimKeyFrame>, callback_actor: String) -> Self {
         Self {
             target: MapWriteTarget::KeyFrame__New {kf, callback_actor},
         }
@@ -168,14 +173,14 @@ impl MapWriteMsg {
             target: MapWriteTarget::MapPoint__New {mp, observations_to_add},
         }
     }
-    pub fn create_many_mappoints(mps: Vec<(MapPoint<PrelimMapPoint>, Vec<(Id, u32, usize)>)>, callback_actor: axiom::actors::Aid) -> Self {
+    pub fn create_many_mappoints(mps: Vec<(MapPoint<PrelimMapPoint>, Vec<(Id, u32, usize)>)>, callback_actor: String) -> Self {
         Self {
             target: MapWriteTarget::MapPoint__NewMany {mps, callback_actor},
         }
     }
-    pub fn discard_mappoint(mp_id: &Id) -> Self {
+    pub fn discard_many_mappoints(ids: &Vec<Id>) -> Self {
         Self {
-            target: MapWriteTarget::MapPoint__Discard {id : mp_id.clone()},
+            target: MapWriteTarget::MapPoint__DiscardMany {ids : ids.clone()},
         }
     }
     pub fn increase_found(mp_ids_and_nums: Vec<(Id, i32)>) -> Self {

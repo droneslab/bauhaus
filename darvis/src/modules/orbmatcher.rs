@@ -1,7 +1,8 @@
 use std::collections::{HashMap, HashSet};
 use std::f64::INFINITY;
-use dvcore::config::{GLOBAL_PARAMS, Sensor, FrameSensor};
+use dvcore::config::{GLOBAL_PARAMS};
 use dvcore::matrix::{DVVectorOfPoint2f, DVVector3};
+use dvcore::sensor::{Sensor, FrameSensor};
 use log::{debug, warn};
 use opencv::core::{KeyPoint};
 use opencv::prelude::*;

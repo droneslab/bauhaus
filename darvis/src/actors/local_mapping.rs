@@ -1,29 +1,35 @@
+use std::any::Any;
 use std::{cmp::min};
 use std::collections::HashSet;
 use std::f64::INFINITY;
 use std::iter::FromIterator;
 
-use axiom::prelude::*;
+use derivative::Derivative;
+use dvcore::sensor::{Sensor, FrameSensor, ImuSensor};
 use dvcore::{
-    plugin_functions::Function,
     lockwrap::ReadOnlyWrapper,
-    config::{Sensor, GLOBAL_PARAMS, SYSTEM_SETTINGS, FrameSensor, ImuSensor},
+    config::{GLOBAL_PARAMS, SYSTEM_SETTINGS},
     matrix::DVVector3
 };
 use log::{debug};
+use crate::ActorSystem;
 use crate::registered_modules::LOCAL_MAPPING;
 use crate::{
     dvmap::{
-        map_actor::MapWriteMsg, map::Map, map_actor::MAP_ACTOR, mappoint::{MapPoint, PrelimMapPoint}
+        map_actor::MapWriteMsg, map::Map, mappoint::{MapPoint, PrelimMapPoint}
     },
     modules::{optimizer, orbmatcher, imu::ImuModule, camera::CAMERA_MODULE, optimizer::INV_LEVEL_SIGMA2, orbmatcher::SCALE_FACTORS, geometric_tools},
-    registered_modules::{FEATURE_DETECTION, LOOP_CLOSING, MATCHER, CAMERA},
+    registered_modules::{FEATURE_DETECTION, LOOP_CLOSING, MATCHER, CAMERA, MAP_ACTOR},
     Id,
     actors::messages::{Reset, KeyFrameIdMsg}
 };
 
-#[derive(Debug, Clone, Default)]
+use super::messages::ShutdownMessage;
+
+#[derive(Debug, Derivative)]
+#[derivative(Default(bound=""))]
 pub struct DarvisLocalMapping {
+    actor_system: ActorSystem,
     map: ReadOnlyWrapper<Map>,
     sensor: Sensor,
 
@@ -35,10 +41,11 @@ pub struct DarvisLocalMapping {
 }
 
 impl DarvisLocalMapping {
-    pub fn new(map: ReadOnlyWrapper<Map>) -> DarvisLocalMapping {
+    pub fn new(map: ReadOnlyWrapper<Map>, actor_system: ActorSystem) -> DarvisLocalMapping {
         let sensor: Sensor = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "sensor");
 
         DarvisLocalMapping {
+            actor_system,
             map,
             sensor,
             current_keyframe_id: -1,
@@ -46,8 +53,21 @@ impl DarvisLocalMapping {
         }
     }
 
-    fn local_mapping(&mut self, context: Context) {
-        let map_actor = context.system.find_aid_by_name(MAP_ACTOR).unwrap();
+    pub fn run(&mut self) {
+        loop {
+            let message = self.actor_system.receive();
+            if let Some(msg) = <dyn Any>::downcast_ref::<KeyFrameIdMsg>(&message) {
+                self.current_keyframe_id = msg.keyframe_id;
+                self.local_mapping();
+            } else if let Some(_) = <dyn Any>::downcast_ref::<Reset>(&message){
+                // TODO (design) need to think about how reset requests should be propagated
+            } else if let Some(_) = <dyn Any>::downcast_ref::<ShutdownMessage>(&message) {
+                break;
+            }
+        }
+    }
+
+    fn local_mapping(&mut self) {
         debug!("Local mapping working on kf {}", self.current_keyframe_id);
 
         match self.sensor.frame() {
@@ -62,22 +82,22 @@ impl DarvisLocalMapping {
         }
 
         // Check recent MapPoints
-        self.mappoint_culling(&map_actor);
+        self.mappoint_culling();
 
         // Triangulate new MapPoints
         let new_mappoints = self.create_new_mappoints();
         // Paper note: what's interesting is axiom will actually give a runtime error if the rate of sending messages
         // exceeds the ability of the actor to handle the messages. Normally we would create a new mappoint in the loop above,
         // but that sends messages to the map actor too frequently. So, we batch all the messages into one and send when we are done.
-        map_actor.send_new(
-            MapWriteMsg::create_many_mappoints(new_mappoints, context.system.find_aid_by_name(LOCAL_MAPPING).unwrap())
-        ).unwrap();
+        self.actor_system.find(MAP_ACTOR).unwrap().send(Box::new(
+            MapWriteMsg::create_many_mappoints(new_mappoints, LOCAL_MAPPING.to_string())
+        )).unwrap();
 
         // TODO (design): mbAbortBA
         // But idk how to check the queue size from within the callback
         // if(!CheckNewKeyFrames()) {
                 // Find more matches in neighbor keyframes and fuse point duplications
-                self.search_in_neighbors(&context);
+                self.search_in_neighbors();
         // }
 
         let t_init = 0.0; // Sofiya: idk what this is for but it's used all over the place
@@ -130,7 +150,7 @@ impl DarvisLocalMapping {
         }
 
         // Check redundant local Keyframes
-        self.keyframe_culling(&context);
+        self.keyframe_culling();
 
         if self.sensor.is_imu() && t_init < 50.0 {
             todo!("IMU");
@@ -176,11 +196,11 @@ impl DarvisLocalMapping {
             // }
         }
 
-        let loopclosing = context.system.find_aid_by_name(LOOP_CLOSING).unwrap();
-        loopclosing.send_new(KeyFrameIdMsg{ keyframe_id: self.current_keyframe_id }).unwrap();
+        let loopclosing = self.actor_system.find(LOOP_CLOSING).unwrap();
+        loopclosing.send(Box::new(KeyFrameIdMsg{ keyframe_id: self.current_keyframe_id })).unwrap();
     }
 
-    fn mappoint_culling(&mut self, map_actor: &Aid) {
+    fn mappoint_culling(&mut self) {
         let th_obs = match self.sensor.is_mono() {
             true => 2,
             false => 3
@@ -188,12 +208,13 @@ impl DarvisLocalMapping {
 
         let map = self.map.read();
         let current_kf_id = self.current_keyframe_id;
+        let mut to_discard = Vec::new();
         self.recently_added_mappoints.retain(|&mp_id| {
             let mappoint = map.get_mappoint(&mp_id).unwrap();
 
             if (mappoint.get_found_ratio() < 0.25) ||
             (current_kf_id - mappoint.first_kf_id >= 2 && mappoint.get_observations().len() <= th_obs) {
-                map_actor.send_new(MapWriteMsg::discard_mappoint(&mp_id)).unwrap();
+                to_discard.push(mp_id);
                 false
             } else if current_kf_id - mappoint.first_kf_id >= 3 {
                 false // mappoint should not be deleted, but remove from recently_added_mappoints
@@ -201,6 +222,8 @@ impl DarvisLocalMapping {
                 true // mappoint should not be deleted
             }
         });
+
+        self.actor_system.find(MAP_ACTOR).unwrap().send(Box::new(MapWriteMsg::discard_many_mappoints(&to_discard))).unwrap();
     }
 
     fn create_new_mappoints(&self) -> Vec<(MapPoint<PrelimMapPoint>, Vec<(i32, u32, usize)>)> {
@@ -433,7 +456,7 @@ impl DarvisLocalMapping {
         new_mappoints
     }
 
-    fn search_in_neighbors(&self, context: &Context) {
+    fn search_in_neighbors(&self) {
         // Retrieve neighbor keyframes
         let nn = match self.sensor.frame() {
             FrameSensor::Mono => 30,
@@ -510,11 +533,11 @@ impl DarvisLocalMapping {
         );
 
         for msg in to_fuse {
-            context.system.find_aid_by_name(MAP_ACTOR).unwrap().send_new(msg).unwrap();
+            self.actor_system.find(MAP_ACTOR).unwrap().send(Box::new(msg)).unwrap();
         }
     }
 
-    fn keyframe_culling(&self, context: & axiom::prelude::Context) {
+    fn keyframe_culling(&self) {
         // Check redundant keyframes (only local keyframes)
         // A keyframe is considered redundant if the 90% of the MapPoints it sees, are seen
         // in at least other 3 keyframes (in the same or finer scale)
@@ -643,26 +666,12 @@ impl DarvisLocalMapping {
                     },
                     false => {
                         let map_msg = MapWriteMsg::delete_keyframe(kf_id);
-                        context.system.find_aid_by_name(MAP_ACTOR).unwrap().send_new(map_msg).unwrap();
+                        self.actor_system.find(MAP_ACTOR).unwrap().send(Box::new(map_msg)).unwrap();
                     }
                 }
             }
             // TODO (design): mbAbortBA
             // if((count > 20 && mbAbortBA) { break; }
         }
-    }
-}
-
-impl Function for DarvisLocalMapping {
-    fn handle(&mut self, context: axiom::prelude::Context, message: Message) -> ActorResult<()>
-    {
-        if let Some(msg) = message.content_as::<KeyFrameIdMsg>() {
-            self.current_keyframe_id = msg.keyframe_id;
-            self.local_mapping(context);
-        } else if let Some(_) = message.content_as::<Reset>() {
-            // TODO (design) need to think about how reset requests should be propagated
-        }
-
-        Ok(Status::done(()))
     }
 }

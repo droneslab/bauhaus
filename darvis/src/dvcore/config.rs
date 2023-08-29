@@ -18,12 +18,12 @@ use std::io::Read;
 extern crate yaml_rust;
 use yaml_rust::yaml;
 use yaml_rust::yaml::Yaml;
-use crate::{
-    base::{ActorConf, ModuleConf},
-};
+
+use crate::sensor::{Sensor, FrameSensor, ImuSensor};
 
 pub static SYSTEM_SETTINGS: &str = "SYSTEM_SETTINGS"; 
 
+//* GLOBAL CONFIG PARAMETERS FOR LOOKUP */
 pub struct GlobalParams {
     // Lock is necessary because GLOBAL_PARAMS is a static variable
     // https://stackoverflow.com/questions/34832583/global-mutable-hashmap-in-a-library
@@ -145,6 +145,27 @@ pub struct ConfigValueBox {
 
 
 
+// * LOADING CONFIGURATION FROM FILE *//
+
+#[derive(Debug, Default, Clone)]
+// Struct holding configuration parameters for a given actor
+pub struct ActorConf{
+    pub name: String,
+    pub file: String,
+    pub actor_message: String,
+    pub actor_function: String,
+    pub ip_address: String,
+    pub port: String,
+    pub multithreaded: bool,
+    pub threads: i64,
+    pub possible_paths: HashMap<String, String>
+}
+
+#[derive(Debug, Default, Clone)]
+// Struct holding configuration parameters for a given module
+pub struct ModuleConf{
+    pub name: String
+}
 
 pub fn load_config(file_name: &String) -> Result<(Vec<ActorConf>, Vec<ModuleConf>), Box<dyn std::error::Error>> {
     let mut config_string = String::new();
@@ -274,51 +295,3 @@ fn get_val<'a>(hashmap: &'a LinkedHashMap<Yaml, Yaml>, string: &str) -> &'a Yaml
     &hashmap[&Yaml::String(string.to_string())]
 }
 
-
-// Note: sensor has to be in dvcore because ConfigValueBox needs to hold a sensor
-#[derive(Clone, Copy, Debug, Default)]
-pub enum FrameSensor {
-    #[default] Mono,
-    Stereo,
-    Rgbd,
-}
-
-#[derive(Clone, Copy, Debug, Default)]
-pub enum ImuSensor {
-    #[default] None,
-    Some
-}
-
-#[derive(Clone, Copy, Debug, Default)]
-pub struct Sensor (pub FrameSensor, pub ImuSensor);
-
-impl Sensor {
-    pub fn is_mono(&self) -> bool {
-        matches!(self.0, FrameSensor::Mono)
-    }
-    pub fn is_imu(&self) -> bool {
-        matches!(self.1, ImuSensor::Some)
-    }
-    pub fn frame(&self) -> FrameSensor {
-        self.0
-    }
-    pub fn imu(&self) -> ImuSensor {
-        self.1
-    }
-}
-
-impl fmt::Display for Sensor {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let framesensor_str = match self.0 {
-            FrameSensor::Mono => "Mono",
-            FrameSensor::Stereo => "Stereo",
-            FrameSensor::Rgbd => "Rgbd",
-        };
-        let imusensor_str = match self.1 {
-            ImuSensor::None => "No",
-            ImuSensor::Some => "Yes",
-        };
-
-        write!(f, "(Frame: {}, Imu: {})", framesensor_str, imusensor_str)
-    }
-}
