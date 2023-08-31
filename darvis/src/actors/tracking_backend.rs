@@ -1,7 +1,7 @@
-use std::{sync::{Arc, mpsc::Receiver}, collections::{HashSet, HashMap}, fmt::{Display, Formatter}, any::Any};
+use std::{collections::{HashSet, HashMap}, any::Any};
 use chrono::{prelude::*, Duration};
 use derivative::Derivative;
-use log::{warn, info, debug, error};
+use log::{warn, info, debug};
 use opencv::core::Point2f;
 use dvcore::{lockwrap::ReadOnlyWrapper, config::*, sensor::{Sensor, FrameSensor, ImuSensor}};
 use crate::{
@@ -123,7 +123,7 @@ impl DarvisTrackingBack {
 
             if let Some(msg) = <dyn Any>::downcast_ref::<FeatureMsg>(&message) {
                 match self.tracking_backend(msg) {
-                    Ok(result) => {},
+                    Ok(_result) => {},
                     Err(e) => {
                         panic!("Error in Tracking Backend: {}", e);
                     }

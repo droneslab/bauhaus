@@ -1,8 +1,7 @@
 use std::any::Any;
-
-// use axiom::{prelude::*, message::ActorMessage};
-use dvcore::{matrix::DVVector3, base::{ActorSystem, ActorMessage}};
 use log::{info, warn, debug};
+
+use dvcore::{base::{ActorSystem, ActorMessage}};
 
 use crate::{
     lockwrap::ReadWriteWrapper,
@@ -17,10 +16,7 @@ pub struct MapActor {
 }
 impl MapActor {//+ std::marker::Send + std::marker::Sync
     pub fn new (actor_system: ActorSystem, map: ReadWriteWrapper<Map>) -> Self {
-        MapActor {
-            actor_system,
-            map
-        }
+        MapActor { actor_system, map }
     }
 
     pub fn run(&mut self) {
@@ -43,9 +39,9 @@ impl MapActor {//+ std::marker::Send + std::marker::Sync
                         };
                     },
 
-                    MapWriteTarget::MapPoint__New { mp ,observations_to_add } => {
-                        let _ = write_lock.insert_mappoint_to_map(mp, observations_to_add);
-                    },
+                    // MapWriteTarget::MapPoint__New { mp ,observations_to_add } => {
+                    //     let _ = write_lock.insert_mappoint_to_map(mp, observations_to_add);
+                    // },
                     MapWriteTarget::MapPoint__NewMany { mps, callback_actor } => {
                         for (mp, observations) in mps {
                             let _ = write_lock.insert_mappoint_to_map(mp, observations);
@@ -111,7 +107,6 @@ enum MapWriteTarget {
     KeyFrame__Delete{id: Id},
     KeyFrame__Pose{kf_id: Id, pose: Pose},
     Map__ResetActive{},
-    MapPoint__New{mp: MapPoint<PrelimMapPoint>, observations_to_add: Vec<(Id, u32, usize)>},
     MapPoint__NewMany{mps: Vec<(MapPoint<PrelimMapPoint>, Vec<(Id, u32, usize)>)>, callback_actor: String},
     MapPoint__DiscardMany{ids: Vec<Id>},
     MapPoint__Replace{mp_to_replace: Id, mp: Id},
@@ -166,11 +161,6 @@ impl MapWriteMsg {
     pub fn reset_active_map() -> Self {
         Self {
             target: MapWriteTarget::Map__ResetActive{},
-        }
-    }
-    pub fn create_new_mappoint(mp: MapPoint<PrelimMapPoint>, observations_to_add: Vec<(Id, u32, usize)>) -> Self {
-        Self {
-            target: MapWriteTarget::MapPoint__New {mp, observations_to_add},
         }
     }
     pub fn create_many_mappoints(mps: Vec<(MapPoint<PrelimMapPoint>, Vec<(Id, u32, usize)>)>, callback_actor: String) -> Self {

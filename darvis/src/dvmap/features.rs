@@ -4,7 +4,7 @@
 // on the type of sensor.
 use std::collections::{HashMap};
 use std::fmt::Debug;
-use dvcore::config::{*};
+
 use dvcore::sensor::{Sensor, FrameSensor};
 use opencv::prelude::{Mat, MatTraitConst, MatTrait};
 use opencv::types::{VectorOff32};

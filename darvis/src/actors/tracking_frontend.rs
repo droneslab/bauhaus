@@ -1,11 +1,13 @@
 extern crate g2o;
 use cxx::{UniquePtr};
+use dvcore::base::{ActorMessage, Actor};
 use dvcore::sensor::{Sensor, FrameSensor};
 use log::{ warn };
 use opencv::imgcodecs;
 use std::any::Any;
+
 use std::sync::mpsc::Receiver;
-use std::{sync::Arc, fmt};
+use std::{fmt};
 use std::fmt::Debug;
 use opencv::{prelude::*,types::{VectorOfKeyPoint},};
 use dvcore::{matrix::*,config::*,};
@@ -57,6 +59,7 @@ impl Debug for DVORBextractor {
 #[derive(Debug)]
 pub struct DarvisTrackingFront {
     actor_system: ActorSystem,
+    receiver: Receiver<TrackingFrontendMsg>,
     orb_extractor_left: DVORBextractor,
     orb_extractor_right: Option<DVORBextractor>,
     orb_extractor_ini: Option<DVORBextractor>,
@@ -67,8 +70,11 @@ pub struct DarvisTrackingFront {
     sensor: Sensor,
 }
 
-impl DarvisTrackingFront {
-    pub fn new(actor_system: ActorSystem) -> DarvisTrackingFront {
+impl Actor for DarvisTrackingFront {
+    type MSG = TrackingFrontendMsg;
+    type HANDLES = ActorSystem;
+
+    fn new(receiver: Box<Receiver<Self::MSG>>, actor_system: ActorSystem) -> Self {
         let max_features = GLOBAL_PARAMS.get::<i32>(FEATURE_DETECTION, "max_features");
         let sensor = GLOBAL_PARAMS.get::<Sensor>(SYSTEM_SETTINGS, "sensor");
         let orb_extractor_right = match sensor.frame() {
@@ -80,6 +86,7 @@ impl DarvisTrackingFront {
             false => None
         };
         DarvisTrackingFront {
+            receiver: *receiver,
             actor_system,
             orb_extractor_left: DVORBextractor::new(max_features),
             orb_extractor_right,
@@ -91,10 +98,23 @@ impl DarvisTrackingFront {
             sensor,
         }
     }
+}
+
+impl DarvisTrackingFront {
 
     pub fn run(&mut self) {
         loop {
-            let message = self.actor_system.receive().unwrap();
+            let message = self.receiver.recv().unwrap();
+
+                // let b: &B = match a.as_any().downcast_ref::<B>() {
+            // let b: &ImageMsg = match message.as_any().downcast_ref::<ImageMsg>() {
+            //     Some(b) => b,
+            //     None => {
+            //         warn!("Invalid Message type: selecting ImageMsg");
+            //         continue;
+            //     }
+            // };
+            
             if let Some(msg) = <dyn Any>::downcast_ref::<ImageMsg>(&message) {
                 println!("Frontend working");
                 self.tracking_frontend(msg);
@@ -185,4 +205,15 @@ impl DarvisTrackingFront {
         })).unwrap();
     }
 }
+
+pub struct ImageFile {
+    path: String,
+}
+
+pub enum TrackingFrontendMsg {
+    Image(ImageFile),
+    Shutdown,
+}
+
+impl ActorMessage for TrackingFrontendMsg {}
 

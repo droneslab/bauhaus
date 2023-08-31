@@ -6,7 +6,7 @@ use dvcore::{
     lockwrap::ReadOnlyWrapper,
     config::{GLOBAL_PARAMS, SYSTEM_SETTINGS}, sensor::{Sensor, FrameSensor},
 };
-use log::{info, warn, debug};
+use log::{warn, debug};
 use nalgebra::Matrix3;
 use crate::{dvmap::{keyframe::InitialFrame, pose::Pose, map::{Map, Id}, keyframe::{Frame, FullKeyFrame}, map_actor::MapWriteMsg}, registered_modules::{FEATURE_DETECTION, CAMERA}};
 use g2o::ffi::EdgeSE3ProjectXYZ;

@@ -1,18 +1,15 @@
-use std::{sync::Arc, path::Path, any::Any};
+use std::{any::Any};
 
 // use axiom::{message::ActorMessage, prelude::*};
 use dvcore::{matrix::*, base::{ActorMessage, ActorSystem},};
-use opencv::{imgcodecs, viz::WCloud};
+
 use rerun::{
-    components::{ColorRGBA, Point3D, Radius},
-    demo_util::grid,
-    external::glam,
-    MsgSender, RecordingStreamBuilder, RecordingStream, time::{Timeline, TimeType},
+    RecordingStream,
 };
 
 use crate::{
     actors::messages::{ImageMsg}, 
-    dvmap::{map::Map, pose::{Translation, Rotation, Pose}},
+    dvmap::{map::Map, pose::{Pose}},
     lockwrap::ReadOnlyWrapper
 };
 
@@ -51,7 +48,7 @@ impl DarvisVisualizer {
                 self.draw_new_keyframe(msg).expect("Visualizer could not draw keyframe!");
             } else if let Some(msg) = <dyn Any>::downcast_ref::<VisMapPointsMsg>(&message) {
                 self.draw_mappoints(msg).expect("Visualizer could not draw mappoints!");
-            } else if let Some(msg) = <dyn Any>::downcast_ref::<ShutdownMessage>(&message) {
+            } else if let Some(_msg) = <dyn Any>::downcast_ref::<ShutdownMessage>(&message) {
                 break;
             }
 
@@ -70,7 +67,7 @@ impl DarvisVisualizer {
     // }
 
 
-    pub fn draw_image(&mut self, message: &ImageMsg) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn draw_image(&mut self, _message: &ImageMsg) -> Result<(), Box<dyn std::error::Error>> {
         // let tensor = rerun::components::Tensor::from_image_file(Path::new(&message.image_path))?;
         // // map/robot/camera/img
         // MsgSender::new("world/camera")
@@ -81,19 +78,19 @@ impl DarvisVisualizer {
 
     }
 
-    pub fn draw_features(&mut self, message: &VisFeaturesMsg) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn draw_features(&mut self, _message: &VisFeaturesMsg) -> Result<(), Box<dyn std::error::Error>> {
         todo!()
         // Ok(Status::done(()))
     }
 
     // Transforms: https://www.rerun.io/docs/concepts/spaces-and-transforms#space-transformations
 
-    pub fn draw_new_keyframe(&mut self, message: &VisKeyFrameMsg) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn draw_new_keyframe(&mut self, _message: &VisKeyFrameMsg) -> Result<(), Box<dyn std::error::Error>> {
         // Box3D : https://www.rerun.io/docs/reference/data_types/box3d
         todo!()
     }
 
-    pub fn draw_mappoints(&mut self, message: &VisMapPointsMsg) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn draw_mappoints(&mut self, _message: &VisMapPointsMsg) -> Result<(), Box<dyn std::error::Error>> {
         // map/robot/camera/points
 
         // let points = grid(glam::Vec3::splat(-10.0), glam::Vec3::splat(10.0), 10)

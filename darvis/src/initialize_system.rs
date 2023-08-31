@@ -1,9 +1,13 @@
-use std::{sync::{Arc, mpsc::{Sender, self}, Mutex}, thread, collections::HashMap, time::Duration, any::Any, fs::File, path::Path, io::Write};
+/// *** Initialize actor system using config file.
+// Returns mutex to shutdown flag and transmitters for first actor and shutdown actor.
+// You probably don't want to change this code.
+
+use std::{sync::{Arc, mpsc::{self, Receiver, Sender}, Mutex}, thread, collections::HashMap, time::Duration, any::Any, fs::File, path::Path, io::Write};
 
 use chrono::{DateTime, Utc};
 use dvcore::{
     config::{ActorConf, GLOBAL_PARAMS, SYSTEM_SETTINGS},
-    base::{DVSender, ActorMessage, DVReceiver, ActorSystem, DVMessageBox},
+    base::{DVSender, DVReceiver, ActorSystem, DVMessageBox, ActorChannel, Actor},
     lockwrap::{ReadWriteWrapper, ReadOnlyWrapper}
 };
 use log::{info, warn};
@@ -13,40 +17,77 @@ use crate::{
     registered_modules::{VISUALIZER, SHUTDOWN_ACTOR, MAP_ACTOR, run_actor},
     dvmap::{map_actor::MapActor,
     map::{Map, Id}, pose::Pose},
+    actors::tracking_frontend::DarvisTrackingFront,
     actors::messages::{ShutdownMessage, TrajectoryMessage}, RESULTS_FOLDER
 };
 
-// Initialize actor system using config file.
-// Returns mutex to shutdown flag and transmitters for first actor and shutdown actor.
-// You probably don't want to change this code.
+pub struct ActorBuilder<A: Actor> { 
+    pipe: Box<Receiver<A::MSG>>,
+}
+
+impl<A: Actor> ActorBuilder<A> {
+    pub fn new() -> (Box<Sender<A::MSG>>, Self) {
+        let (tx, rx) = mpsc::channel::<A::MSG>();
+        (Box::new(tx), Self { pipe: Box::new(rx) })
+    }
+    pub fn build(handles: A::HANDLES) -> A {
+        A::new(self.pipe, handles)
+    }
+}
+
+pub enum Actors {
+    TrackingFrontend(ActorBuilder<DarvisTrackingFront>),
+}
+
 pub fn initialize_actors(modules: Vec::<ActorConf>, first_actor_name: String) 
     -> Result<(Arc<std::sync::Mutex<bool>>, DVSender, DVSender), Box<dyn std::error::Error>> 
 {
     // * SET UP CHANNELS *//
     // Create transmitters and receivers for user-defined actors
-    let mut transmitters = HashMap::new();
+    let mut transmitters = HashMap::<String, Box::<dyn ActorChannel>>::new();
     let mut receivers = Vec::new();
+
+
+    let mut builders = Vec::<Actors>::new();
     for actor_conf in &modules {
-        let (tx, rx) = mpsc::channel::<DVMessageBox>();
-        transmitters.insert(actor_conf.name.clone(), tx);
-        receivers.push((actor_conf.name.clone(), rx));
+        if actor_conf.name == TRACKING_FRONTEND.to_string()  {
+            let (handle, builder) = ActorBuilder::<DarvisTrackingFront>::new();
+            builders.push(Actors::TrackingFrontend(builder));
+            transmitters.insert(actor_conf.name.clone(), handle.clone());
+        } else if false {
+            // todo!("other cases");
+        }
+    }
+
+    // build the actor system
+    let actor_sys: ActorSystem = ActorSystem { actors: transmitters.clone() };
+
+    for builder in builders {
+        match builder {
+            Actors::TrackingFrontend(builder) => {
+                let actor = builder.build(actor_sys.clone());
+                thread::spawn(move || { actor.run(); });
+
+                
+            }
+        }
     }
 
     // Create transmitters/receivers for darvis system actors
     // Don't add receivers to the receivers vec because they need to be spawned separately.
     // User-defined actors still need the transmitters to these actors.
-    let (map_tx, map_rx) = mpsc::channel::<DVMessageBox>();
-    transmitters.insert(MAP_ACTOR.to_string(), map_tx);
-    let (shutdown_tx, shutdown_rx) = mpsc::channel::<DVMessageBox>();
-    transmitters.insert(SHUTDOWN_ACTOR.to_string(), shutdown_tx);
-    let vis_rx = match GLOBAL_PARAMS.get::<bool>(SYSTEM_SETTINGS, "show_visualizer") {
-        true => {
-            let (vis_tx, vis_rx) = mpsc::channel::<DVMessageBox>();
-            transmitters.insert(VISUALIZER.to_string(), vis_tx);
-            Some(vis_rx)
-        },
-        false => None
-    };
+    // let (map_tx, map_rx) = mpsc::channel::<DVMessageBox>();
+    // transmitters.insert(MAP_ACTOR.to_string(), map_tx);
+    // let (shutdown_tx, shutdown_rx) = mpsc::channel::<DVMessageBox>();
+    // transmitters.insert(SHUTDOWN_ACTOR.to_string(), shutdown_tx);
+    // let vis_rx = match GLOBAL_PARAMS.get::<bool>(SYSTEM_SETTINGS, "show_visualizer") {
+    //     true => {
+    //         let (vis_tx, vis_rx) = mpsc::channel::<DVMessageBox>();
+    //         transmitters.insert(VISUALIZER.to_string(), vis_tx);
+    //         Some(vis_rx)
+    //     },
+    //     false => None
+    // };
 
     // * SPAWN USER-DEFINED ACTORS *//
     // Create map
@@ -200,3 +241,14 @@ fn create_shutdown_actor(actor_system: ActorSystem, shutdown_actor_txs: DVSender
     flag_clone
 }
 
+pub struct ShutdownActor {
+
+}
+impl Actor for ShutdownActor {
+    type MSG = TrackingFrontendMsg;
+    type HANDLES = ActorSystem;
+
+    fn new(receiver: Box<Receiver<Self::MSG>>, actor_system: ActorSystem) -> Self {
+
+    }
+}

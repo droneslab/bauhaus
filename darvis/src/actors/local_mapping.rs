@@ -136,7 +136,7 @@ impl DarvisLocalMapping {
                 },
                 false => {
                     // TODO (design): mbAbortBA
-                    let force_stop_flag = false; // mbAbortBA
+                    let _force_stop_flag = false; // mbAbortBA
                     let map = self.map.read();
                     let current_keyframe = map.get_keyframe(&self.current_keyframe_id).unwrap();
                     optimizer::local_bundle_adjustment(&self.map.read(), current_keyframe);

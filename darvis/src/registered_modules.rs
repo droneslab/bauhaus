@@ -1,5 +1,4 @@
-use dvcore::{lockwrap::ReadOnlyWrapper, base::{ActorSystem, Actor}};
-use rerun::RecordingStream;
+use dvcore::{lockwrap::ReadOnlyWrapper, base::{ActorSystem}};
 use crate::{dvmap::{map::Map}, };
 
 // USER-DEFINED ACTORS: add a string to name your actor here
@@ -38,7 +37,7 @@ pub fn run_actor(actor_name: String, map: ReadOnlyWrapper<Map>, actor_system: Ac
             actor.run();
         },
         _ => {
-            dvcore::base::DarvisNone::run(actor_name.clone());
+            panic!("Actor {} Not Implemented!!", actor_name);
         },
     } 
 }

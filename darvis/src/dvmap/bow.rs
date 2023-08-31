@@ -1,7 +1,7 @@
 use std::fmt;
 use cxx::{UniquePtr, let_cxx_string};
 use dvcore::{matrix::DVMatrix, config::{GLOBAL_PARAMS, SYSTEM_SETTINGS}};
-use log::{info, warn};
+use log::{info};
 
 lazy_static! {
     pub static ref VOCABULARY: DVVocabulary = {

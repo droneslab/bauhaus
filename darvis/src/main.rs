@@ -1,19 +1,15 @@
 #![feature(map_many_mut)]
 extern crate flame;
-use std::{fs::{File, OpenOptions}, io::Write, path::Path, sync::{Arc, Mutex, mpsc::{self, Receiver, Sender}}, env, time::Duration, thread, collections::HashMap, fmt::Display, any::Any};
-use actors::visualizer::VisualizeMsg;
-use chrono::{DateTime, Utc};
-use dvmap::map_actor::{MapWriteMsg, MapActor};
+use std::{fs::{OpenOptions}, io::Write, path::Path, env};
 use fern::colors::{ColoredLevelConfig, Color};
 use glob::glob;
-use log::{warn, info};
-use rerun::{RecordingStreamBuilder};
+use log::{info};
 use spin_sleep::LoopHelper;
 #[macro_use]
 extern crate lazy_static;
 
-use dvcore::{*, lockwrap::{ReadWriteWrapper, ReadOnlyWrapper}, config::*, base::{ActorSystem, ActorMessage, DVSender}};
-use crate::{actors::{messages::{ImageMsg, ShutdownMessage, TrajectoryMessage}}, registered_modules::{run_actor, TRACKING_FRONTEND, VISUALIZER}, dvmap::pose::Pose};
+use dvcore::{*, config::*, base::{ActorSystem}};
+use crate::{actors::{messages::{ImageMsg, ShutdownMessage}}, registered_modules::{TRACKING_FRONTEND, VISUALIZER}};
 use crate::dvmap::{bow::VOCABULARY, map::Id};
 
 mod actors;
@@ -47,7 +43,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         true => VISUALIZER.to_string(),
         false => TRACKING_FRONTEND.to_string()
     };
-    
+
     // Launch actor system
     let (shutdown_flag, first_actor_tx, shutdown_tx) = initialize_system::initialize_actors(actor_info.clone(), first_actor_name)?;
 
@@ -62,7 +58,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .report_interval_s(0.5)
         .build_with_target_rate(target_fps);
 
-    let current_timestamp = target_fps; // TODO (MVP): For evaluation this needs to be a real timestamp from the associated timestamp file.
+    let _current_timestamp = target_fps; // TODO (MVP): For evaluation this needs to be a real timestamp from the associated timestamp file.
     // Process images
     for path in &generate_image_paths(img_dir) {
         if *shutdown_flag.lock().unwrap() { break; }
