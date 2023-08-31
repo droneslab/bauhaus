@@ -27,16 +27,26 @@ impl Default for ActorSystem {
     }
 }
 
-pub struct DarvisNone {}
-impl DarvisNone {
-    pub fn run(name: String)  {
-        panic!("Actor {} Not Implemented!!", name);
+pub struct DarvisNone {
+    name: String,
+}
+impl Actor for DarvisNone{
+    type INPUTS = String;
+
+    fn new(name: String) -> Self {
+        DarvisNone{name}
+    }
+    fn run(&mut self)  {
+        panic!("Actor {} Not Implemented!!", self.name);
     }
 }
 
 pub trait ActorMessage {}
 
 pub trait Actor {
+    type INPUTS;
+
+    fn new(inputs: Self::INPUTS) -> Self;
     fn run(&mut self);
 }
 
