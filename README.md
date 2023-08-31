@@ -228,3 +228,9 @@ Strings are formatted like: ``TODO (string)``
 ### Design
 - Axiom framework
     - **msg copy**
+
+---
+## Misc Implementation Details
+
+### Visualizer
+Using [rerun.io](https://www.rerun.io/docs) for visualization. [Using rerun with ROS2 and python](https://www.rerun.io/docs/howto/ros2-nav-turtlebot) might be particularly interesting -- we obviously don't use ROS2 and python but the translation between ROS2 topics and rerun syntax might be helpful to know what can be visualized.
