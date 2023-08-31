@@ -20,25 +20,27 @@ pub static MAP_ACTOR: &str = "MAP_ACTOR";
 
 
 pub fn run_actor(actor_name: String, map: ReadOnlyWrapper<Map>, actor_system: ActorSystem) {
-    match actor_name.as_ref() {
+    let mut actor = match actor_name.as_ref() {
         str if str == TRACKING_FRONTEND.to_string() => {
-            let mut actor = crate::actors::tracking_frontend::DarvisTrackingFront::new(actor_system);
-            actor.run();
+            Box::new(crate::actors::tracking_frontend::DarvisTrackingFront::new(actor_system))
+            // actor.run();
         },
-        str if str == TRACKING_BACKEND.to_string() => {
-            let mut actor = crate::actors::tracking_backend::DarvisTrackingBack::new(map, actor_system);
-            actor.run();
-        },
-        str if str == LOCAL_MAPPING.to_string() => {
-            let mut actor = crate::actors::local_mapping::DarvisLocalMapping::new(map, actor_system);
-            actor.run();
-        },
-        str if str == LOOP_CLOSING.to_string() => {
-            let mut actor = crate::actors::loop_closing::DarvisLoopClosing::new(map, actor_system);
-            actor.run();
-        },
+        // str if str == TRACKING_BACKEND.to_string() => {
+        //     let mut actor = crate::actors::tracking_backend::DarvisTrackingBack::new((map, actor_system));
+        //     actor.run();
+        // },
+        // str if str == LOCAL_MAPPING.to_string() => {
+        //     let mut actor = crate::actors::local_mapping::DarvisLocalMapping::new((map, actor_system));
+        //     actor.run();
+        // },
+        // str if str == LOOP_CLOSING.to_string() => {
+        //     let mut actor = crate::actors::loop_closing::DarvisLoopClosing::new((map, actor_system));
+        //     actor.run();
+        // },
         _ => {
-            dvcore::base::DarvisNone::run(actor_name.clone());
+            Box::new(dvcore::base::DarvisNone::new(actor_name.clone()))
         },
-    } 
-}
+    };
+    actor.run();
+
+} 

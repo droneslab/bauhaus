@@ -3,7 +3,7 @@ use chrono::{prelude::*, Duration};
 use derivative::Derivative;
 use log::{warn, info, debug, error};
 use opencv::core::Point2f;
-use dvcore::{lockwrap::ReadOnlyWrapper, config::*, sensor::{Sensor, FrameSensor, ImuSensor}};
+use dvcore::{lockwrap::ReadOnlyWrapper, config::*, sensor::{Sensor, FrameSensor, ImuSensor}, base::Actor};
 use crate::{
     actors::visualizer::VisKeyFrameMsg,
     actors::messages::{FeatureMsg, MapInitializedMsg, TrajectoryMessage, TrackingStateMsg},
@@ -93,8 +93,11 @@ pub struct DarvisTrackingBack {
     sensor: Sensor,
 }
 
-impl DarvisTrackingBack {
-    pub fn new(map: ReadOnlyWrapper<Map>, actor_system: ActorSystem) -> DarvisTrackingBack {
+impl Actor for DarvisTrackingBack {
+    type INPUTS = (ReadOnlyWrapper<Map>, ActorSystem);
+
+    fn new(inputs: (ReadOnlyWrapper<Map>, ActorSystem)) -> DarvisTrackingBack {
+        let (map, actor_system) = inputs;
         // Note: This is suuuuuch a specific bug. Default::default() calls the default function 
         // for every single item in the struct, even if it is explicitly overriden (such as
         // map, camera, sensor, global_defaults, and optimizer in the below code). This means that
@@ -117,7 +120,7 @@ impl DarvisTrackingBack {
         }
     }
 
-    pub fn run(&mut self) {
+    fn run(&mut self) {
         loop {
             let message = self.actor_system.receive();
 
@@ -168,7 +171,9 @@ impl DarvisTrackingBack {
             }
         }
     }
+}
 
+impl DarvisTrackingBack {
     fn tracking_backend(
         &mut self, msg: &FeatureMsg
     ) -> Result<(), Box<dyn std::error::Error>>  {

@@ -5,6 +5,7 @@ use std::f64::INFINITY;
 use std::iter::FromIterator;
 
 use derivative::Derivative;
+use dvcore::base::Actor;
 use dvcore::sensor::{Sensor, FrameSensor, ImuSensor};
 use dvcore::{
     lockwrap::ReadOnlyWrapper,
@@ -40,8 +41,11 @@ pub struct DarvisLocalMapping {
     imu: ImuModule,
 }
 
-impl DarvisLocalMapping {
-    pub fn new(map: ReadOnlyWrapper<Map>, actor_system: ActorSystem) -> DarvisLocalMapping {
+impl Actor for DarvisLocalMapping {
+    type INPUTS = (ReadOnlyWrapper<Map>, ActorSystem);
+
+    fn new(inputs: (ReadOnlyWrapper<Map>, ActorSystem)) -> DarvisLocalMapping {
+        let (map, actor_system) = inputs;
         let sensor: Sensor = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "sensor");
 
         DarvisLocalMapping {
@@ -53,7 +57,7 @@ impl DarvisLocalMapping {
         }
     }
 
-    pub fn run(&mut self) {
+    fn run(&mut self) {
         loop {
             let message = self.actor_system.receive();
             if let Some(msg) = <dyn Any>::downcast_ref::<KeyFrameIdMsg>(&message) {
@@ -67,6 +71,10 @@ impl DarvisLocalMapping {
         }
     }
 
+
+}
+
+impl DarvisLocalMapping {
     fn local_mapping(&mut self) {
         debug!("Local mapping working on kf {}", self.current_keyframe_id);
 

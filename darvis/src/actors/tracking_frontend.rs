@@ -1,5 +1,6 @@
 extern crate g2o;
 use cxx::{UniquePtr};
+use dvcore::base::Actor;
 use dvcore::sensor::{Sensor, FrameSensor};
 use log::{ warn };
 use opencv::imgcodecs;
@@ -67,8 +68,10 @@ pub struct DarvisTrackingFront {
     sensor: Sensor,
 }
 
-impl DarvisTrackingFront {
-    pub fn new(actor_system: ActorSystem) -> DarvisTrackingFront {
+impl Actor for DarvisTrackingFront {
+    type INPUTS = ActorSystem;
+
+    fn new(actor_system: ActorSystem) -> DarvisTrackingFront {
         let max_features = GLOBAL_PARAMS.get::<i32>(FEATURE_DETECTION, "max_features");
         let sensor = GLOBAL_PARAMS.get::<Sensor>(SYSTEM_SETTINGS, "sensor");
         let orb_extractor_right = match sensor.frame() {
@@ -92,7 +95,7 @@ impl DarvisTrackingFront {
         }
     }
 
-    pub fn run(&mut self) {
+    fn run(&mut self) {
         loop {
             let message = self.actor_system.receive().unwrap();
             if let Some(msg) = <dyn Any>::downcast_ref::<ImageMsg>(&message) {
@@ -111,7 +114,9 @@ impl DarvisTrackingFront {
             }
         }
     }
+}
 
+impl DarvisTrackingFront {
     fn tracking_frontend(&mut self, message: &ImageMsg) {
         // TODO (vis): If visualizer is running, this will cause the image to be read twice! Can we figure out a way to convert the Mat into something rerun can use?
         let image = imgcodecs::imread(&message.image_path, imgcodecs::IMREAD_GRAYSCALE).expect("Could not read image.");

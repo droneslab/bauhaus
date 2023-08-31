@@ -3,6 +3,7 @@ use std::sync::Arc;
 use std::sync::mpsc::Receiver;
 // use axiom::prelude::*;
 
+use dvcore::base::Actor;
 use dvcore::{
     lockwrap::ReadOnlyWrapper,
 };
@@ -24,9 +25,11 @@ pub struct DarvisLoopClosing {
     matches_inliers: i32,
 }
 
+impl Actor for DarvisLoopClosing {
+    type INPUTS = (ReadOnlyWrapper<Map>, ActorSystem);
 
-impl DarvisLoopClosing {
-    pub fn new(map: ReadOnlyWrapper<Map>, actor_system: ActorSystem) -> DarvisLoopClosing {
+    fn new(inputs: (ReadOnlyWrapper<Map>, ActorSystem)) -> DarvisLoopClosing {
+        let (map, actor_system) = inputs;
         DarvisLoopClosing {
             actor_system,
             map,
@@ -34,7 +37,7 @@ impl DarvisLoopClosing {
         }
     }
 
-    pub fn run(&mut self) {
+    fn run(&mut self) {
         loop {
             let message = self.actor_system.receive();
             if let Some(msg) = <dyn Any>::downcast_ref::<KeyFrameIdMsg>(&message) {
@@ -45,6 +48,10 @@ impl DarvisLoopClosing {
         }
     }
 
+
+}
+
+impl DarvisLoopClosing {
     fn loop_closing(&mut self, _msg: &KeyFrameIdMsg) {
         // if(mpLastCurrentKF)
         // {
