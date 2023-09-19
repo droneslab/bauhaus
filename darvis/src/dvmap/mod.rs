@@ -1,7 +1,6 @@
 // Map implementation
-// Contains map data structures + logic for reading/writing and the map actor
+// Contains map data structures + logic for reading/writing
 
-pub mod map_actor;
 pub mod map;
 
 pub mod keyframe;

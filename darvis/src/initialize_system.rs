@@ -1,32 +1,31 @@
-use std::{sync::{Arc, mpsc::{Sender, self}, Mutex}, thread, collections::HashMap, time::Duration, any::Any, fs::File, path::Path, io::Write};
+use std::{sync::{Arc, mpsc, Mutex}, thread, collections::HashMap, time::Duration};
 
-use chrono::{DateTime, Utc};
 use dvcore::{
     config::{ActorConf, GLOBAL_PARAMS, SYSTEM_SETTINGS},
-    base::{DVSender, ActorMessage, DVReceiver, ActorSystem, DVMessageBox},
+    base::{DVSender, DVReceiver, ActorChannels, DVMessageBox, Actor},
     lockwrap::{ReadWriteWrapper, ReadOnlyWrapper}
 };
 use log::{info, warn};
-use rerun::RecordingStreamBuilder;
+use rerun::{RecordingStreamBuilder, RecordingStream};
 
 use crate::{
-    registered_modules::{VISUALIZER, SHUTDOWN_ACTOR, MAP_ACTOR, run_actor},
-    dvmap::{map_actor::MapActor,
-    map::{Map, Id}, pose::Pose},
-    actors::messages::{ShutdownMessage, TrajectoryMessage}, RESULTS_FOLDER
+    registered_actors::{VISUALIZER, SHUTDOWN_ACTOR, MAP_ACTOR, get_actor},
+    dvmap::map::Map,
+    actors::messages::ShutdownMessage,
 };
+
 
 // Initialize actor system using config file.
 // Returns mutex to shutdown flag and transmitters for first actor and shutdown actor.
 // You probably don't want to change this code.
-pub fn initialize_actors(modules: Vec::<ActorConf>, first_actor_name: String) 
+pub fn initialize_actors(config: Vec::<ActorConf>, first_actor_name: String) 
     -> Result<(Arc<std::sync::Mutex<bool>>, DVSender, DVSender), Box<dyn std::error::Error>> 
 {
     // * SET UP CHANNELS *//
     // Create transmitters and receivers for user-defined actors
     let mut transmitters = HashMap::new();
     let mut receivers = Vec::new();
-    for actor_conf in &modules {
+    for actor_conf in &config {
         let (tx, rx) = mpsc::channel::<DVMessageBox>();
         transmitters.insert(actor_conf.name.clone(), tx);
         receivers.push((actor_conf.name.clone(), rx));
@@ -53,35 +52,22 @@ pub fn initialize_actors(modules: Vec::<ActorConf>, first_actor_name: String)
     let writeable_map = ReadWriteWrapper::new(Map::new());
     // Spawn actors
     for (actor_name, receiver) in receivers {
-        info!("Spawning actor;{}", &actor_name);
-
-        // Note: read_only() is important here, otherwise all actors can
-        // access the write lock of the map
-        let map_clone = writeable_map.read_only();
-
-        let actor_system = make_actor_system(&actor_name, &transmitters, receiver);
-        thread::spawn(move || { run_actor(actor_name, map_clone, actor_system) } );
+        spawn_actor(actor_name, &transmitters, receiver, Some(&writeable_map), None);
     }
 
     // * SPAWN DARVIS SYSTEM ACTORS *//
     // Visualizer
     if GLOBAL_PARAMS.get::<bool>(SYSTEM_SETTINGS, "show_visualizer") {
-        let actor_system = make_actor_system(&VISUALIZER.to_string(), &transmitters, vis_rx.unwrap());
-        create_visualize_actor(actor_system, writeable_map.read_only())?;
+        spawn_visualize_actor(&transmitters, vis_rx.unwrap(), &writeable_map)?;
     }
 
     // Map actor
     // After this point, you cannot get a read-only clone of the map!
     // So make sure to spawn all the other actors that need the map before this.
-    let actor_system = make_actor_system(&MAP_ACTOR.to_string(), &transmitters, map_rx);
-    thread::spawn(move || { 
-        let mut map_actor = MapActor::new(actor_system, writeable_map);
-        map_actor.run();
-    } );
+    spawn_map_actor(&transmitters, map_rx, writeable_map);
 
     // Ctrl+c shutdown actor
-    let actor_system = make_actor_system(&SHUTDOWN_ACTOR.to_string(), &transmitters, shutdown_rx);
-    let shutdown_flag = create_shutdown_actor(actor_system, transmitters.get(SHUTDOWN_ACTOR).unwrap().clone());
+    let shutdown_flag = spawn_shutdown_actor(&transmitters, shutdown_rx);
 
     //* Return transmitters for the shutdown actor and first actor in the pipeline, and the ctrl+c handler flag */
     let first_actor_tx = transmitters.get(&first_actor_name).unwrap().clone();
@@ -90,22 +76,51 @@ pub fn initialize_actors(modules: Vec::<ActorConf>, first_actor_name: String)
 }
 
 
-fn make_actor_system(
-    actor_name: &String,
-    transmitters: &HashMap<String, DVSender>,
-    receiver: DVReceiver
-) -> ActorSystem {
+fn spawn_actor(
+    actor_name: String, transmitters: &HashMap<String, DVSender>, receiver: DVReceiver,
+    writeable_map: Option<&ReadWriteWrapper<Map>>, rec_stream: Option<RecordingStream>
+) {
+    info!("Spawning actor;{}", &actor_name);
+
+    // Note: read_only() is important here, otherwise all actors can
+    // access the write lock of the map
+    let map_clone = match writeable_map {
+        Some(map) => Some(map.read_only()),
+        None => None
+    };
+
     let mut txs = HashMap::new();
     for (other_actor_name, other_actor_transmitter) in transmitters {
         if *other_actor_name != *actor_name {
             txs.insert(other_actor_name.clone(), other_actor_transmitter.clone());
         }
     }
-    ActorSystem {receiver, actors: txs}
+    let actor_channels = ActorChannels {receiver, actors: txs};
+
+    thread::spawn(move || { 
+        let mut actor = get_actor(actor_name, actor_channels, map_clone, rec_stream);
+        actor.run();
+    } );
 }
 
-fn create_visualize_actor(
-    actor_system: ActorSystem, map: ReadOnlyWrapper<Map>
+fn spawn_map_actor(transmitters: &HashMap<String, DVSender>, receiver: DVReceiver, map: ReadWriteWrapper<Map> ) {
+    info!("Spawning actor;{}", MAP_ACTOR);
+    let mut txs = HashMap::new();
+    for (other_actor_name, other_actor_transmitter) in transmitters {
+        if *other_actor_name != *MAP_ACTOR.to_string() {
+            txs.insert(other_actor_name.clone(), other_actor_transmitter.clone());
+        }
+    }
+    let actor_channels = ActorChannels {receiver, actors: txs};
+
+    thread::spawn(move || { 
+        let mut map_actor = Box::new(crate::actors::map_actor::MapActor::new(actor_channels, map));
+        map_actor.run();
+    } );
+}
+
+fn spawn_visualize_actor(
+    transmitters: &HashMap<String, DVSender>, receiver: DVReceiver, map: &ReadWriteWrapper<Map>
 ) -> Result<tokio::runtime::Runtime, Box<dyn std::error::Error>> {
     // This is cumbersome but this is the cleanest way to do it that I have found
     // Visualization library requires running tokio runtime in current context (creating rt)
@@ -121,82 +136,27 @@ fn create_visualize_actor(
         Default::default(),
         true,
     )?;
-    thread::spawn(move || { 
-        let mut visualizer = crate::actors::visualizer::DarvisVisualizer::new(actor_system, map, vis_stream);
-        visualizer.run();
-     } );
 
+    spawn_actor(VISUALIZER.to_string(), transmitters, receiver, Some(map), Some(vis_stream.clone()));
 
     thread::sleep(Duration::from_secs(2)); // Give visualizer time to load
 
     Ok(rt)
 }
 
-fn create_shutdown_actor(actor_system: ActorSystem, shutdown_actor_txs: DVSender) -> Arc<Mutex<bool>> {
+fn spawn_shutdown_actor(transmitters: &HashMap<String, DVSender>, receiver: DVReceiver) -> Arc<Mutex<bool>> {
     let shutdown_flag = Arc::new(Mutex::new(false));
     let flag_clone = shutdown_flag.clone();
 
-    // Lists used to recover the full camera trajectory at the end of the execution.
-    // Basically we store the reference keyframe for each frame and its relative transformation
-    struct TrackingPoses {
-        trajectory_poses: Vec<Pose>, //mlRelativeFramePoses
-        trajectory_times: Vec<DateTime<Utc>>, //mlFrameTimes
-        trajectory_keyframes: Vec<Id>, //mlpReferences
-    }
-    let mut state = TrackingPoses{
-        trajectory_poses: Vec::new(),
-        trajectory_times: Vec::new(),
-        trajectory_keyframes: Vec::new()
-    };
+    spawn_actor(SHUTDOWN_ACTOR.to_string(), transmitters, receiver, None, None);
 
-    thread::spawn(move || {
-        loop {
-            let message = actor_system.receive();
-            if let Some(_) = <dyn Any>::downcast_ref::<ShutdownMessage>(&message) {
-                warn!("Triggered shutdown, saving trajectory info");
-                let mut file = File::create(
-                    Path::new(RESULTS_FOLDER)
-                    .join(GLOBAL_PARAMS.get::<String>(SYSTEM_SETTINGS, "trajectory_file_name"))
-                ).unwrap();
-                for i in 0..state.trajectory_poses.len() {
-                    let string = format!("{:?} {:?}", state.trajectory_times[i], state.trajectory_poses[i]);
-                    file.write_all(string.as_bytes()).unwrap();
-                }
-
-                if GLOBAL_PARAMS.get::<bool>(SYSTEM_SETTINGS, "should_profile") {
-                    flame::dump_html(File::create(
-                        Path::new(RESULTS_FOLDER).join("flamegraph.html")
-                    ).unwrap()).unwrap();
-                }
-
-                for (_, actor_tx) in &actor_system.actors {
-                    actor_tx.send(Box::new(ShutdownMessage{})).unwrap();
-                }
-            } else if let Some(msg) = <dyn Any>::downcast_ref::<TrajectoryMessage>(&message) {
-                match msg.pose {
-                    Some(pose) => {
-                        state.trajectory_poses.push(pose);
-                        state.trajectory_times.push(msg.timestamp.unwrap());
-                        state.trajectory_keyframes.push(msg.ref_kf_id.unwrap());
-                    },
-                    None => {
-                        // This can happen if tracking is lost. Duplicate last element of each vector
-                        if let Some(last) = state.trajectory_poses.last().cloned() { state.trajectory_poses.push(last); }
-                        if let Some(last) = state.trajectory_times.last().cloned() { state.trajectory_times.push(last); }
-                        if let Some(last) = state.trajectory_keyframes.last().cloned() { state.trajectory_keyframes.push(last); }
-                    }
-                };
-            }
-        }
-    });
-
+    let shutdown_transmitter = transmitters.get(SHUTDOWN_ACTOR).unwrap().clone();
     ctrlc::set_handler(move || {
         warn!("received Ctrl+C!");
         *shutdown_flag.lock().unwrap() = true;
-        shutdown_actor_txs.send(Box::new(ShutdownMessage{})).unwrap();
+        shutdown_transmitter.send(Box::new(ShutdownMessage{})).unwrap();
     })
     .expect("Error setting Ctrl-C handler");
 
     flag_clone
 }
-

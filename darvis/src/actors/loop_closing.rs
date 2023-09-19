@@ -7,7 +7,8 @@ use dvcore::base::Actor;
 use dvcore::{
     lockwrap::ReadOnlyWrapper,
 };
-use crate::ActorSystem;
+use log::warn;
+use crate::ActorChannels;
 use crate::dvmap::{map::Map};
 use crate::modules::imu::ImuModule;
 
@@ -15,7 +16,7 @@ use super::messages::{KeyFrameIdMsg, ShutdownMessage};
 
 #[derive(Debug, Default)]
 pub struct DarvisLoopClosing {
-    actor_system: ActorSystem,
+    actor_channels: ActorChannels,
     // Map
     map: ReadOnlyWrapper<Map>,
 
@@ -26,24 +27,15 @@ pub struct DarvisLoopClosing {
 }
 
 impl Actor for DarvisLoopClosing {
-    type INPUTS = (ReadOnlyWrapper<Map>, ActorSystem);
-
-    fn new(inputs: (ReadOnlyWrapper<Map>, ActorSystem)) -> DarvisLoopClosing {
-        let (map, actor_system) = inputs;
-        DarvisLoopClosing {
-            actor_system,
-            map,
-            ..Default::default()
-        }
-    }
-
     fn run(&mut self) {
         loop {
-            let message = self.actor_system.receive();
-            if let Some(msg) = <dyn Any>::downcast_ref::<KeyFrameIdMsg>(&message) {
+            let message = self.actor_channels.receive().unwrap();
+            if let Some(msg) = message.downcast_ref::<KeyFrameIdMsg>() {
                 self.loop_closing(msg);
-            } else if let Some(_) = <dyn Any>::downcast_ref::<ShutdownMessage>(&message) {
+            } else if let Some(msg) = message.downcast_ref::<ShutdownMessage>() {
                 break;
+            } else {
+                warn!("Loop Closing received unknown message type!");
             }
         }
     }
@@ -52,6 +44,16 @@ impl Actor for DarvisLoopClosing {
 }
 
 impl DarvisLoopClosing {
+        // type INPUTS = (ReadOnlyWrapper<Map>, ActorChannels);
+
+    pub fn new(map: ReadOnlyWrapper<Map>, actor_channels: ActorChannels) -> DarvisLoopClosing {
+        DarvisLoopClosing {
+            actor_channels,
+            map,
+            ..Default::default()
+        }
+    }
+
     fn loop_closing(&mut self, _msg: &KeyFrameIdMsg) {
         // if(mpLastCurrentKF)
         // {

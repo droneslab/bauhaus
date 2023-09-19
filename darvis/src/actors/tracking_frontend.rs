@@ -1,8 +1,8 @@
 extern crate g2o;
 use cxx::{UniquePtr};
-use dvcore::base::Actor;
+use dvcore::base::{Actor, Base};
 use dvcore::sensor::{Sensor, FrameSensor};
-use log::{ warn };
+use log::{ warn, info };
 use opencv::imgcodecs;
 use std::any::Any;
 use std::sync::mpsc::Receiver;
@@ -10,11 +10,11 @@ use std::{sync::Arc, fmt};
 use std::fmt::Debug;
 use opencv::{prelude::*,types::{VectorOfKeyPoint},};
 use dvcore::{matrix::*,config::*,};
-use crate::{ActorSystem};
+use crate::{ActorChannels};
 use crate::dvmap::map::Id;
-use crate::registered_modules::VISUALIZER;
+use crate::registered_actors::VISUALIZER;
 use crate::{
-    registered_modules::{TRACKING_BACKEND, FEATURE_DETECTION, CAMERA},
+    registered_actors::{TRACKING_BACKEND, FEATURE_DETECTION, CAMERA},
     actors::{
         messages::{ImageMsg, FeatureMsg,TrackingStateMsg}, tracking_backend::TrackingState,
         visualizer::VisFeaturesMsg
@@ -57,7 +57,7 @@ impl Debug for DVORBextractor {
 
 #[derive(Debug)]
 pub struct DarvisTrackingFront {
-    actor_system: ActorSystem,
+    actor_channels: ActorChannels,
     orb_extractor_left: DVORBextractor,
     orb_extractor_right: Option<DVORBextractor>,
     orb_extractor_ini: Option<DVORBextractor>,
@@ -69,9 +69,31 @@ pub struct DarvisTrackingFront {
 }
 
 impl Actor for DarvisTrackingFront {
-    type INPUTS = ActorSystem;
+    fn run(&mut self) {
+        loop {
+            let message = self.actor_channels.receive().unwrap();
 
-    fn new(actor_system: ActorSystem) -> DarvisTrackingFront {
+            if let Some(msg) = message.downcast_ref::<ImageMsg>() {
+                self.tracking_frontend(msg);
+            } else if let Some(msg) = message.downcast_ref::<TrackingStateMsg>() {
+                match msg.state {
+                    TrackingState::Ok => { 
+                        self.map_initialized = true;
+                        self.init_id = msg.init_id
+                    },
+                    _ => {}
+                };
+            } else if let Some(_) = message.downcast_ref::<ShutdownMessage>() {
+                break;
+            } else {
+                warn!("Tracking frontend received unknown message type!");
+            }
+        }
+    }
+}
+
+impl DarvisTrackingFront {
+    pub fn new(actor_channels: ActorChannels) -> DarvisTrackingFront {
         let max_features = GLOBAL_PARAMS.get::<i32>(FEATURE_DETECTION, "max_features");
         let sensor = GLOBAL_PARAMS.get::<Sensor>(SYSTEM_SETTINGS, "sensor");
         let orb_extractor_right = match sensor.frame() {
@@ -83,7 +105,7 @@ impl Actor for DarvisTrackingFront {
             false => None
         };
         DarvisTrackingFront {
-            actor_system,
+            actor_channels,
             orb_extractor_left: DVORBextractor::new(max_features),
             orb_extractor_right,
             orb_extractor_ini,
@@ -95,28 +117,6 @@ impl Actor for DarvisTrackingFront {
         }
     }
 
-    fn run(&mut self) {
-        loop {
-            let message = self.actor_system.receive().unwrap();
-            if let Some(msg) = <dyn Any>::downcast_ref::<ImageMsg>(&message) {
-                println!("Frontend working");
-                self.tracking_frontend(msg);
-            } else if let Some(msg) = <dyn Any>::downcast_ref::<TrackingStateMsg>(&message) {
-                match msg.state {
-                    TrackingState::Ok => { 
-                        self.map_initialized = true;
-                        self.init_id = msg.init_id
-                    },
-                    _ => {}
-                };
-            } else if let Some(_) = <dyn Any>::downcast_ref::<ShutdownMessage>(&message) {
-                break;
-            }
-        }
-    }
-}
-
-impl DarvisTrackingFront {
     fn tracking_frontend(&mut self, message: &ImageMsg) {
         // TODO (vis): If visualizer is running, this will cause the image to be read twice! Can we figure out a way to convert the Mat into something rerun can use?
         let image = imgcodecs::imread(&message.image_path, imgcodecs::IMREAD_GRAYSCALE).expect("Could not read image.");
@@ -156,7 +156,7 @@ impl DarvisTrackingFront {
         &mut self,
         image: &Mat, keypoints: &VectorOfKeyPoint, descriptors: Mat
     ) {
-        let backend = self.actor_system.find("TRACKING_BACKEND").unwrap();
+        let backend = self.actor_channels.find("TRACKING_BACKEND").unwrap();
         let new_message = GLOBAL_PARAMS.get::<String>(TRACKING_BACKEND, "actor_message");
         match new_message.as_ref() {
             "FeatureMsg" => {
@@ -184,7 +184,7 @@ impl DarvisTrackingFront {
     }
 
     fn send_keypoints_to_visualizer(&mut self, keypoints: VectorOfKeyPoint) {
-        let vis_actor = self.actor_system.find(VISUALIZER).unwrap();
+        let vis_actor = self.actor_channels.find(VISUALIZER).unwrap();
         vis_actor.send(Box::new(VisFeaturesMsg {
             keypoints: DVVectorOfKeyPoint::new(keypoints)
         })).unwrap();
