@@ -7,11 +7,11 @@ use log::{debug, warn};
 use opencv::core::{KeyPoint};
 use opencv::prelude::*;
 use parking_lot::{MappedRwLockReadGuard};
+use crate::actors::map_actor::MapWriteMsg;
 use crate::actors::tracking_backend::TrackedMapPointData;
-use crate::dvmap::map_actor::MapWriteMsg;
 use crate::dvmap::keyframe::{Frame, FullKeyFrame};
 use crate::dvmap::mappoint::{MapPoint, FullMapPoint};
-use crate::registered_modules::{MATCHER, FEATURE_DETECTION, CAMERA};
+use crate::registered_actors::{MATCHER, FEATURE_DETECTION, CAMERA};
 use crate::{
     dvmap::{keyframe::InitialFrame, map::Id, map::Map},
     lockwrap::ReadOnlyWrapper,

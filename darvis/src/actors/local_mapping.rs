@@ -12,25 +12,26 @@ use dvcore::{
     config::{GLOBAL_PARAMS, SYSTEM_SETTINGS},
     matrix::DVVector3
 };
-use log::{debug};
-use crate::ActorSystem;
-use crate::registered_modules::LOCAL_MAPPING;
+use log::{debug, warn};
+use crate::ActorChannels;
+use crate::actors::map_actor::MapWriteMsg;
+use crate::registered_actors::{LOCAL_MAPPING, TRACKING_BACKEND};
 use crate::{
     dvmap::{
-        map_actor::MapWriteMsg, map::Map, mappoint::{MapPoint, PrelimMapPoint}
+        map::Map, mappoint::{MapPoint, PrelimMapPoint}
     },
     modules::{optimizer, orbmatcher, imu::ImuModule, camera::CAMERA_MODULE, optimizer::INV_LEVEL_SIGMA2, orbmatcher::SCALE_FACTORS, geometric_tools},
-    registered_modules::{FEATURE_DETECTION, LOOP_CLOSING, MATCHER, CAMERA, MAP_ACTOR},
+    registered_actors::{FEATURE_DETECTION, LOOP_CLOSING, MATCHER, CAMERA, MAP_ACTOR},
     Id,
     actors::messages::{Reset, KeyFrameIdMsg}
 };
 
-use super::messages::ShutdownMessage;
+use super::messages::{ShutdownMessage, LastKeyFrameUpdatedMsg};
 
 #[derive(Debug, Derivative)]
 #[derivative(Default(bound=""))]
 pub struct DarvisLocalMapping {
-    actor_system: ActorSystem,
+    actor_channels: ActorChannels,
     map: ReadOnlyWrapper<Map>,
     sensor: Sensor,
 
@@ -42,14 +43,31 @@ pub struct DarvisLocalMapping {
 }
 
 impl Actor for DarvisLocalMapping {
-    type INPUTS = (ReadOnlyWrapper<Map>, ActorSystem);
+    fn run(&mut self) {
+        loop {
+            let message = self.actor_channels.receive().unwrap();
+            if let Some(msg) = message.downcast_ref::<KeyFrameIdMsg>() {
+                self.current_keyframe_id = msg.keyframe_id;
+                self.local_mapping();
+            } else if let Some(_) = message.downcast_ref::<Reset>() {
+                // TODO (design) need to think about how reset requests should be propagated
+            } else if let Some(_) = message.downcast_ref::<ShutdownMessage>() {
+                break;
+            } else {
+                warn!("Local Mapping received unknown message type!");
+            }
+        }
+    }
+}
 
-    fn new(inputs: (ReadOnlyWrapper<Map>, ActorSystem)) -> DarvisLocalMapping {
-        let (map, actor_system) = inputs;
+impl DarvisLocalMapping {
+        // type INPUTS = (ReadOnlyWrapper<Map>, ActorChannels);
+
+    pub fn new(map: ReadOnlyWrapper<Map>, actor_channels: ActorChannels) -> DarvisLocalMapping {
         let sensor: Sensor = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "sensor");
 
         DarvisLocalMapping {
-            actor_system,
+            actor_channels,
             map,
             sensor,
             current_keyframe_id: -1,
@@ -57,24 +75,6 @@ impl Actor for DarvisLocalMapping {
         }
     }
 
-    fn run(&mut self) {
-        loop {
-            let message = self.actor_system.receive();
-            if let Some(msg) = <dyn Any>::downcast_ref::<KeyFrameIdMsg>(&message) {
-                self.current_keyframe_id = msg.keyframe_id;
-                self.local_mapping();
-            } else if let Some(_) = <dyn Any>::downcast_ref::<Reset>(&message){
-                // TODO (design) need to think about how reset requests should be propagated
-            } else if let Some(_) = <dyn Any>::downcast_ref::<ShutdownMessage>(&message) {
-                break;
-            }
-        }
-    }
-
-
-}
-
-impl DarvisLocalMapping {
     fn local_mapping(&mut self) {
         debug!("Local mapping working on kf {}", self.current_keyframe_id);
 
@@ -97,8 +97,8 @@ impl DarvisLocalMapping {
         // Paper note: what's interesting is axiom will actually give a runtime error if the rate of sending messages
         // exceeds the ability of the actor to handle the messages. Normally we would create a new mappoint in the loop above,
         // but that sends messages to the map actor too frequently. So, we batch all the messages into one and send when we are done.
-        self.actor_system.find(MAP_ACTOR).unwrap().send(Box::new(
-            MapWriteMsg::create_many_mappoints(new_mappoints, LOCAL_MAPPING.to_string())
+        self.actor_channels.find(MAP_ACTOR).unwrap().send(Box::new(
+            MapWriteMsg::create_many_mappoints(new_mappoints, TRACKING_BACKEND)
         )).unwrap();
 
         // TODO (design): mbAbortBA
@@ -204,7 +204,7 @@ impl DarvisLocalMapping {
             // }
         }
 
-        let loopclosing = self.actor_system.find(LOOP_CLOSING).unwrap();
+        let loopclosing = self.actor_channels.find(LOOP_CLOSING).unwrap();
         loopclosing.send(Box::new(KeyFrameIdMsg{ keyframe_id: self.current_keyframe_id })).unwrap();
     }
 
@@ -231,7 +231,7 @@ impl DarvisLocalMapping {
             }
         });
 
-        self.actor_system.find(MAP_ACTOR).unwrap().send(Box::new(MapWriteMsg::discard_many_mappoints(&to_discard))).unwrap();
+        self.actor_channels.find(MAP_ACTOR).unwrap().send(Box::new(MapWriteMsg::discard_many_mappoints(&to_discard))).unwrap();
     }
 
     fn create_new_mappoints(&self) -> Vec<(MapPoint<PrelimMapPoint>, Vec<(i32, u32, usize)>)> {
@@ -541,7 +541,7 @@ impl DarvisLocalMapping {
         );
 
         for msg in to_fuse {
-            self.actor_system.find(MAP_ACTOR).unwrap().send(Box::new(msg)).unwrap();
+            self.actor_channels.find(MAP_ACTOR).unwrap().send(Box::new(msg)).unwrap();
         }
     }
 
@@ -674,7 +674,7 @@ impl DarvisLocalMapping {
                     },
                     false => {
                         let map_msg = MapWriteMsg::delete_keyframe(kf_id);
-                        self.actor_system.find(MAP_ACTOR).unwrap().send(Box::new(map_msg)).unwrap();
+                        self.actor_channels.find(MAP_ACTOR).unwrap().send(Box::new(map_msg)).unwrap();
                     }
                 }
             }

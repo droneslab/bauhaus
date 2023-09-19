@@ -1,32 +1,24 @@
 use std::any::Any;
 
 // use axiom::{prelude::*, message::ActorMessage};
-use dvcore::{matrix::DVVector3, base::{ActorSystem, ActorMessage}};
+use dvcore::{matrix::DVVector3, base::{ActorChannels, ActorMessage, Actor}};
 use log::{info, warn, debug};
 
 use crate::{
     lockwrap::ReadWriteWrapper,
-    dvmap::{keyframe::*, map::*},
+    dvmap::{keyframe::*, map::*, mappoint::{MapPoint, PrelimMapPoint}, pose::Pose},
     modules::map_initialization::Initialization, actors::messages::{MapInitializedMsg, KeyFrameIdMsg, LastKeyFrameUpdatedMsg},
 };
-use super::{mappoint::{MapPoint, PrelimMapPoint}, pose::Pose};
 
 pub struct MapActor {
-    actor_system: ActorSystem,
+    actor_system: ActorChannels,
     map: ReadWriteWrapper<Map>,
 }
-impl MapActor {//+ std::marker::Send + std::marker::Sync
-    pub fn new (actor_system: ActorSystem, map: ReadWriteWrapper<Map>) -> Self {
-        MapActor {
-            actor_system,
-            map
-        }
-    }
-
-    pub fn run(&mut self) {
+impl Actor for MapActor {
+    fn run(&mut self) {
         loop {
-            let message = self.actor_system.receive();
-            if let Some(msg) = <dyn Any>::downcast_ref::<MapWriteMsg>(&message) {
+            let message = self.actor_system.receive().unwrap();
+            if let Some(msg) = message.downcast_ref::<MapWriteMsg>() {
                 let msg = &*msg;
                 let mut write_lock = self.map.write();
 
@@ -92,10 +84,21 @@ impl MapActor {//+ std::marker::Send + std::marker::Sync
                         write_lock.mappoints.get_mut(mp_id).unwrap().position = pose.get_translation();
                     }
                     _ => {
-                        warn!("invalid message type to map actor");
+                        warn!("Map Actor received unknown message type!");
                     },
                 }
+            } else {
+                warn!("Map Actor received unknown message type!");
             }
+        }
+    }
+}
+
+impl MapActor {//+ std::marker::Send + std::marker::Sync
+    pub fn new (actor_system: ActorChannels, map: ReadWriteWrapper<Map>) -> Self {
+        MapActor {
+            actor_system,
+            map
         }
     }
 }
@@ -134,23 +137,23 @@ impl MapWriteMsg {
     // }
     pub fn create_initial_map_monocular(
         initialization_data: Initialization,
-        callback_actor: String
+        callback_actor: &str
     ) -> Self {
         Self {
-            target: MapWriteTarget::CreateInitialMapMonocular{initialization_data, callback_actor },
+            target: MapWriteTarget::CreateInitialMapMonocular{initialization_data, callback_actor: callback_actor.to_string() },
         }
     }
     pub fn create_initial_map_stereo(
         initialization_data: Initialization,
-        callback_actor: String
+        callback_actor: &str
     ) -> Self {
         Self {
-            target: MapWriteTarget::CreateInitialMapStereo{initialization_data, callback_actor},
+            target: MapWriteTarget::CreateInitialMapStereo{initialization_data, callback_actor: callback_actor.to_string()},
         }
     }
-    pub fn new_keyframe(kf: Frame<PrelimKeyFrame>, callback_actor: String) -> Self {
+    pub fn new_keyframe(kf: Frame<PrelimKeyFrame>, callback_actor: &str) -> Self {
         Self {
-            target: MapWriteTarget::KeyFrame__New {kf, callback_actor},
+            target: MapWriteTarget::KeyFrame__New {kf, callback_actor: callback_actor.to_string()},
         }
     }
     pub fn delete_keyframe(id: Id) -> Self {
@@ -173,9 +176,9 @@ impl MapWriteMsg {
             target: MapWriteTarget::MapPoint__New {mp, observations_to_add},
         }
     }
-    pub fn create_many_mappoints(mps: Vec<(MapPoint<PrelimMapPoint>, Vec<(Id, u32, usize)>)>, callback_actor: String) -> Self {
+    pub fn create_many_mappoints(mps: Vec<(MapPoint<PrelimMapPoint>, Vec<(Id, u32, usize)>)>, callback_actor: &str) -> Self {
         Self {
-            target: MapWriteTarget::MapPoint__NewMany {mps, callback_actor},
+            target: MapWriteTarget::MapPoint__NewMany {mps, callback_actor: callback_actor.to_string()},
         }
     }
     pub fn discard_many_mappoints(ids: &Vec<Id>) -> Self {

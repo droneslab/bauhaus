@@ -8,7 +8,7 @@ use dvcore::{
 };
 use log::{info, warn, debug};
 use nalgebra::Matrix3;
-use crate::{dvmap::{keyframe::InitialFrame, pose::Pose, map::{Map, Id}, keyframe::{Frame, FullKeyFrame}, map_actor::MapWriteMsg}, registered_modules::{FEATURE_DETECTION, CAMERA}};
+use crate::{dvmap::{keyframe::InitialFrame, pose::Pose, map::{Map, Id}, keyframe::{Frame, FullKeyFrame}}, registered_actors::{FEATURE_DETECTION, CAMERA}, actors::map_actor::MapWriteMsg};
 use g2o::ffi::EdgeSE3ProjectXYZ;
 
 lazy_static! {

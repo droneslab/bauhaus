@@ -1,7 +1,8 @@
 use std::{sync::Arc, path::Path, any::Any};
 
 // use axiom::{message::ActorMessage, prelude::*};
-use dvcore::{matrix::*, base::{ActorMessage, ActorSystem},};
+use dvcore::{matrix::*, base::{ActorMessage, ActorChannels, Actor},};
+use log::warn;
 use opencv::{imgcodecs, viz::WCloud};
 use rerun::{
     components::{ColorRGBA, Point3D, Radius},
@@ -22,13 +23,36 @@ use super::messages::ShutdownMessage;
 
 #[derive(Debug)]
 pub struct DarvisVisualizer {
-    actor_system: ActorSystem,
+    actor_system: ActorChannels,
     map: ReadOnlyWrapper<Map>,
     rec_stream: RecordingStream
 }
 
+impl Actor for DarvisVisualizer {
+    fn run(&mut self) {
+        loop {
+            let message = self.actor_system.receive().unwrap();
+
+            if let Some(msg) = message.downcast_ref::<ImageMsg>() {
+                self.draw_image(msg).expect("Visualizer could not draw image!");
+            } else if let Some(msg) = message.downcast_ref::<VisFeaturesMsg>() {
+                self.draw_features(msg).expect("Visualizer could not draw features!");
+            } else if let Some(msg) = message.downcast_ref::<VisKeyFrameMsg>() {
+                self.draw_new_keyframe(msg).expect("Visualizer could not draw keyframe!");
+            } else if let Some(msg) = message.downcast_ref::<VisMapPointsMsg>() {
+                self.draw_mappoints(msg).expect("Visualizer could not draw mappoints!");
+            } else if let Some(msg) = message.downcast_ref::<ShutdownMessage>() {
+                break;
+            } else {
+                warn!("Visualizer received unknown message type!");
+            }
+
+        }
+    }
+}
+
 impl DarvisVisualizer {
-    pub fn new(actor_system: ActorSystem, map: ReadOnlyWrapper<Map>, rec_stream: RecordingStream) -> DarvisVisualizer {
+    pub fn new(actor_system: ActorChannels, map: ReadOnlyWrapper<Map>, rec_stream: RecordingStream) -> DarvisVisualizer {
 
         // Using opencv...
         // let cw = WCloud::new(cloud, viz::Color::red());
@@ -39,25 +63,6 @@ impl DarvisVisualizer {
 
         return DarvisVisualizer{actor_system, map, rec_stream};
     }
-
-    pub fn run(&mut self) {
-        loop {
-            let message = self.actor_system.receive();
-            if let Some(msg) = <dyn Any>::downcast_ref::<ImageMsg>(&message) {
-                self.draw_image(msg).expect("Visualizer could not draw image!");
-            } else if let Some(msg) = <dyn Any>::downcast_ref::<VisFeaturesMsg>(&message) {
-                self.draw_features(msg).expect("Visualizer could not draw features!");
-            } else if let Some(msg) = <dyn Any>::downcast_ref::<VisKeyFrameMsg>(&message) {
-                self.draw_new_keyframe(msg).expect("Visualizer could not draw keyframe!");
-            } else if let Some(msg) = <dyn Any>::downcast_ref::<VisMapPointsMsg>(&message) {
-                self.draw_mappoints(msg).expect("Visualizer could not draw mappoints!");
-            } else if let Some(msg) = <dyn Any>::downcast_ref::<ShutdownMessage>(&message) {
-                break;
-            }
-
-        }
-    }
-
     // fn timepoint(index: usize, time: f64) -> TimePoint {
     //     let timeline_time = Timeline::new("time", TimeType::Time);
     //     let timeline_frame = Timeline::new("frame", TimeType::Sequence);

@@ -2,7 +2,7 @@ use std::{fmt::Debug, collections::{HashMap}};
 use dvcore::{matrix::DVMatrix, config::{GLOBAL_PARAMS, SYSTEM_SETTINGS}, sensor::{Sensor, FrameSensor}};
 use log::{error, debug};
 extern crate nalgebra as na;
-use crate::{matrix::DVVector3, modules::orbmatcher::{descriptor_distance, SCALE_FACTORS}, registered_modules::FEATURE_DETECTION};
+use crate::{matrix::DVVector3, modules::orbmatcher::{descriptor_distance, SCALE_FACTORS}, registered_actors::FEATURE_DETECTION};
 use super::{map::{Id, Map}, keyframe::{Frame, FullKeyFrame}};
 
 // Note: Implementing typestate for like here: http://cliffle.com/blog/rust-typestate/#a-simple-example-the-living-and-the-dead
