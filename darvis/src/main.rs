@@ -9,7 +9,7 @@ use spin_sleep::LoopHelper;
 extern crate lazy_static;
 
 use dvcore::{*, config::*, base::{ActorChannels}};
-use crate::{actors::{messages::{ImageMsg, ShutdownMessage}}, registered_actors::{TRACKING_FRONTEND, VISUALIZER}};
+use crate::{actors::{messages::{ImageMsg, ShutdownMessage, ImagePathMsg}}, registered_actors::{TRACKING_FRONTEND, VISUALIZER}};
 use crate::dvmap::{bow::VOCABULARY, map::Id};
 
 mod actors;
@@ -64,7 +64,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if *shutdown_flag.lock().unwrap() { break; }
         let _delta = loop_helper.loop_start(); 
 
-        first_actor_tx.send(Box::new(ImageMsg{image_path: path.clone()}))?;
+        first_actor_tx.send(Box::new(ImagePathMsg{image_path: path.clone()}))?;
 
         info!("Read image {}", path.split("/").last().unwrap().split(".").nth(0).unwrap());
 

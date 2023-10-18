@@ -10,7 +10,7 @@ fn main() {
     let _dst = Config::new("g2o")
                         .cxxflag(manifest_dir)
                         .build_target("g2o")
-                        .profile("0") // 0 = debug, 1, 2, or 3 = Release
+                        .profile("3") // 0 = debug, 1, 2, or 3 = Release
                         .build();
 
     println!("cargo:rustc-link-search=native=g2o/lib");

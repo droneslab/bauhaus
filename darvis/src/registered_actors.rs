@@ -1,5 +1,4 @@
 use dvcore::{lockwrap::ReadOnlyWrapper, base::{ActorChannels, Actor}};
-use rerun::RecordingStream;
 use crate::{dvmap::{map::Map}, };
 
 // USER-DEFINED ACTORS: add a string to name your actor here
@@ -20,7 +19,7 @@ pub static MAP_ACTOR: &str = "MAP_ACTOR";
 
 
 pub fn get_actor(
-    actor_name: String, actor_channels: ActorChannels, map: Option<ReadOnlyWrapper<Map>>, rec_stream: Option<RecordingStream>
+    actor_name: String, actor_channels: ActorChannels, map: Option<ReadOnlyWrapper<Map>>
 ) -> Box<dyn Actor> {
     match actor_name.as_ref() {
         str if str == TRACKING_FRONTEND.to_string() => {
@@ -36,7 +35,7 @@ pub fn get_actor(
             return Box::new(crate::actors::loop_closing::DarvisLoopClosing::new(map.expect("Loop closing needs the map!"), actor_channels))
         },
         str if str == VISUALIZER.to_string() => {
-            return Box::new(crate::actors::visualizer::DarvisVisualizer::new(actor_channels, map.expect("Visualizer needs the map!"), rec_stream.expect("Visualizer needs the recording stream!")))
+            return Box::new(crate::actors::visualizer::DarvisVisualizer::new(actor_channels, map.expect("Visualizer needs the map!")))
         },
         str if str == SHUTDOWN_ACTOR.to_string() => {
             return Box::new(crate::actors::shutdown::ShutdownActor::new(actor_channels))

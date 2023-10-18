@@ -50,6 +50,6 @@ spin_sleep = "*"
 flame = "0.2.2"
 flamer = "0.3"
 ctrlc = "3.2.3"
-rerun = {version = "0.8.1", features=["web_viewer"]}
 tokio = { version = "1.24", default-features = false }
 downcast-rs = "1.2.0"
+mcap = "*"
