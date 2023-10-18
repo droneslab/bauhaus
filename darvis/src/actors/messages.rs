@@ -5,6 +5,7 @@ use chrono::{DateTime, Utc};
 use dvcore::{
     matrix::{ DVVectorOfKeyPoint, DVMatrix, DVMatrixGrayscale}, base::ActorMessage,
 };
+use opencv::prelude::Mat;
 use serde::{Serialize, Deserialize};
 use crate::dvmap::{keyframe::{Frame, FrameState}, pose::Pose, map::Id};
 
@@ -69,14 +70,18 @@ impl ActorMessage for FeatureMsg {}
 
 
 #[derive(Debug)]
-pub struct ImageMsg {
+pub struct ImagePathMsg {
     // Uncomment this to pass the image directly instead of the path
     // pub frame: DVMatrixGrayscale,
     pub image_path: String,
     // pub timestamp: DateTime<Utc>,
 }
-impl ActorMessage for ImageMsg {}
+impl ActorMessage for ImagePathMsg {}
 
+pub struct ImageMsg {
+    pub image: Mat
+}
+impl ActorMessage for ImageMsg{}
 
 #[derive(Debug)]
 pub struct ImagesMsg {

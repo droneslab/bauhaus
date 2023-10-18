@@ -2,99 +2,99 @@
 Distributed, modulAR Visual SLAM
 
 ## Quick Start
-- **Install**
-    - **Normal install**
-        1. System dependencies
-            ```bash
-            sudo apt-get update
-            sudo apt-get install wget git cmake vim clang libclang-dev pkg-config libc6-dbg gdb valgrind libgtk2.0-dev 
-            ```
-        2. Rust 
-            ```bash
-            wget https://raw.githubusercontent.com/rust-lang/rustup/master/rustup-init.sh
-            chmod +x rustup-init.sh
-            ./rustup-init.sh -y
-            ```
-        3. OpenCV
-            ```bash
-            git clone https://github.com/opencv/opencv.git
-            cd opencv && git checkout tags/4.5.4 && cd ..
-            git clone https://github.com/opencv/opencv_contrib.git
-            cd opencv_contrib && git checkout tags/4.5.4 && cd .. 
-            cd opencv && mkdir build && cd build
-            cmake -DOPENCV_EXTRA_MODULES_PATH=../../opencv_contrib/modules -DBUILD_opencv_xfeatures2d=ON -DOPENCV_ENABLE_NONFREE=ON -DWITH_GTK=ON ..
-            make -j4 install
-            ```
-        4. Upgrade version of cmake (needed for C++ bindings)
-            ```bash
-            sudo apt remove --purge cmake && hash -r
-            sudo apt install build-essential libssl-dev
-            sudo wget https://github.com/Kitware/CMake/releases/download/v3.20.2/cmake-3.20.2.tar.gz
-            tar -zxvf cmake-3.20.2.tar.gz
-            cd cmake-3.20.2 && ./bootstrap && make && make install
-            ```
-        5. g2o bindings package
-            ```bash
-            sudo apt install libeigen3-dev
-            git clone https://github.com/ssemenova/g2o-bindings.git
-            cd g2o-bindings/g2orust/ && cargo build
-            ```
-    - **With docker**
-        1. [Install docker](https://docs.docker.com/get-docker/)
-        2. (Macs only) [Download Xquartz](https://www.xquartz.org/) 
-        3. Create darvis container (linux):
-            ```
-                cd darvis
-                ./docker_run.sh [pathToDatasetDirectory]
-            ```
-            Create darvis container (mac):
-            ```
-                cd darvis
-                ./docker_run_mac.sh [pathToDatasetDirectory]
-            ```
-    - **Using VSCode**
-        - Using compile-time code checking in VSCode typically gives errors about not finding opencv. To resolve these errors, you need to open VSCode inside the container:
-            1. Download the [Remote - Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) on VSCode
-            2. Follow [instructions for quick start](https://code.visualstudio.com/docs/remote/containers#_quick-start-open-an-existing-folder-in-a-container) to open VSCode inside container. This opens a new VSCode window
-            3. For compile-time code checking, in the new VSCode window, install [rust-analyzer extension](https://marketplace.visualstudio.com/items?itemName=matklad.rust-analyzer) 
+```bash
+# Install system dependencies 
+sudo apt-get update
+sudo apt-get install wget git cmake vim clang libclang-dev pkg-config libc6-dbg gdb valgrind libgtk2.0-dev libeigen3-dev libboost-all-dev
 
-- **Compile**
-    ```bash
-        cd darvis
-        cargo build
-    ```
-- **Run**
-    ```bash
-        cd darvis
-        cargo run /datasets/ config.yaml
-    ```
+# Install Rust
+wget https://raw.githubusercontent.com/rust-lang/rustup/master/rustup-init.sh
+chmod +x rustup-init.sh
+./rustup-init.sh -y
 
-### Different options for running/building
-- DEBUG mode (fast building, slow execution):
+# Create directories for darvis project, clone repo
+mkdir ~/darvis-home
+git clone git@github.com:droneslab/darvis.git
+mkdir ~/darvis-home/depends
+
+# Upgrade version of cmake (needed for C++ bindings)
+cd ~/darvis-home/depends
+sudo apt remove --purge cmake && hash -r
+sudo apt install build-essential libssl-dev
+sudo wget https://github.com/Kitware/CMake/releases/download/v3.20.2/cmake-3.20.2.tar.gz
+tar -zxvf cmake-3.20.2.tar.gz
+cd cmake-3.20.2 && ./bootstrap && make && make install
+
+# Install OpenCV
+cd ~/darvis-home/depends
+git clone https://github.com/opencv/opencv.git
+cd opencv && git checkout tags/4.5.4 && cd ..
+git clone https://github.com/opencv/opencv_contrib.git
+cd opencv_contrib && git checkout tags/4.5.4 && cd .. 
+cd opencv && mkdir build && cd build
+cmake -DOPENCV_EXTRA_MODULES_PATH=../../opencv_contrib/modules -DBUILD_opencv_xfeatures2d=ON -DOPENCV_ENABLE_NONFREE=ON -DWITH_GTK=ON ..
+make -j4 install
+
+# Install Pangolin
+cd ~/darvis-home/depends
+git clone --recursive https://github.com/stevenlovegrove/Pangolin.git
+cd Pangolin
+./scripts/install_prerequisites.sh recommended
+cmake -B build
+
+# Build g2o bindings
+cd ~/darvis-home/darvis/g2o/
+cargo build --release
+
+# Build darvis
+cd ~/darvis-home/darvis/darvis/
+cargo build --release
+```
+
+### Install with Docker
+To instead install with docker...
+1. [Install docker](https://docs.docker.com/get-docker/)
+2. (Macs only) [Download Xquartz](https://www.xquartz.org/) 
+3. Create darvis container (linux):
+    ```
+        cd darvis
+        ./docker_run.sh [pathToDatasetDirectory]
+    ```
+    Create darvis container (mac):
+    ```
+        cd darvis
+        ./docker_run_mac.sh [pathToDatasetDirectory]
+    ```
+4. Using rust-analyzer in VSCode typically gives errors about not finding opencv. To resolve these errors, you need to open VSCode inside the container:
+    1. Download the [Remote - Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) on VSCode
+    2. Follow [instructions for quick start](https://code.visualstudio.com/docs/remote/containers#_quick-start-open-an-existing-folder-in-a-container) to open VSCode inside container. This opens a new VSCode window
+    3. For compile-time code checking, in the new VSCode window, install [rust-analyzer extension](https://marketplace.visualstudio.com/items?itemName=matklad.rust-analyzer) 
+
+
+### Options for running/building
+- DEBUG mode (fast building, slow execution)
     ```bash
     cargo build
     cargo run [DATASET] config.yaml
     ```
 
-- RELEASE mode (slow building, fast execution):
+- RELEASE mode (slow building, fast execution)
     ```bash
     cargo build --release
     cargo run --release [DATASET] config.yaml
     ```
 
-- To use GDB:
+- To use GDB
     ```bash
     cargo build    # Either debug build or release build works
     rust-gdb --args target/debug/bindarvis [DATASET] config.yaml
     ```
-    (You can also use regular gdb, instead of rust-gdb, but [it doesn't work in all cases](https://users.rust-lang.org/t/printing-single-vector-elements-in-gdb/16890/4).)
+    You can also use regular gdb instead of rust-gdb, but [it doesn't work in all cases](https://users.rust-lang.org/t/printing-single-vector-elements-in-gdb/16890/4).
 
-- To use address sanitizer (check memory errors from the ffi bindings):
+- To use address sanitizer (check memory errors from the ffi bindings)
     ```bash
     RUSTFLAGS="-Z sanitizer=address" cargo run --target x86_64-unknown-linux-gnu [DATASET] config.yaml
     ```
-
-
 
 
 

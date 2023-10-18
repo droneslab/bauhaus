@@ -16,6 +16,7 @@ fn main() {
                     // .cxxflag("-fsanitize=address")
                     // .cflag("-fsanitize=address")
                     .build_target("orb_slam3")
+                    .profile("3") // 0 = debug, 1, 2, or 3 = Release
                     .build();
 
 

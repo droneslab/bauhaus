@@ -10,6 +10,7 @@ use std::{sync::Arc, fmt};
 use std::fmt::Debug;
 use opencv::{prelude::*,types::{VectorOfKeyPoint},};
 use dvcore::{matrix::*,config::*,};
+use crate::modules::image;
 use crate::{ActorChannels};
 use crate::dvmap::map::Id;
 use crate::registered_actors::VISUALIZER;
@@ -21,7 +22,7 @@ use crate::{
     },
 };
 
-use super::messages::ShutdownMessage;
+use super::messages::{ShutdownMessage, ImagePathMsg};
 
 pub struct DVORBextractor {
     pub extractor: UniquePtr<dvos3binding::ffi::ORBextractor>,
@@ -73,8 +74,15 @@ impl Actor for DarvisTrackingFront {
         loop {
             let message = self.actor_channels.receive().unwrap();
 
-            if let Some(msg) = message.downcast_ref::<ImageMsg>() {
-                self.tracking_frontend(msg);
+            if let Some(msg) = message.downcast_ref::<ImagePathMsg>() {
+                let image = image::read_image_file(&msg.image_path);
+                self.tracking_frontend(image);
+            } else if message.is::<ImageMsg>() {
+                if let Ok(msg) = message.downcast::<ImageMsg>() {
+                    self.tracking_frontend(msg.image);
+                } else {
+                    panic!("Failed to downcast ImageMsg");
+                }
             } else if let Some(msg) = message.downcast_ref::<TrackingStateMsg>() {
                 match msg.state {
                     TrackingState::Ok => { 
@@ -117,12 +125,7 @@ impl DarvisTrackingFront {
         }
     }
 
-    fn tracking_frontend(&mut self, message: &ImageMsg) {
-        // TODO (vis): If visualizer is running, this will cause the image to be read twice! Can we figure out a way to convert the Mat into something rerun can use?
-        let image = imgcodecs::imread(&message.image_path, imgcodecs::IMREAD_GRAYSCALE).expect("Could not read image.");
-
-        // If passing image directly, uncomment this. Taking ownership of message should not fail
-        // let image: Mat = (&message.frame).into();
+    fn tracking_frontend(&mut self, image: Mat) {
         let (keypoints, descriptors) = self.extract_features(&image);
         self.pass_to_backend(&image, &keypoints, descriptors);
         if GLOBAL_PARAMS.get::<bool>(SYSTEM_SETTINGS, "show_visualizer") {

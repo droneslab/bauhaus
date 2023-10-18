@@ -6,7 +6,6 @@ use dvcore::{
     lockwrap::{ReadWriteWrapper, ReadOnlyWrapper}
 };
 use log::{info, warn};
-use rerun::{RecordingStreamBuilder, RecordingStream};
 
 use crate::{
     registered_actors::{VISUALIZER, SHUTDOWN_ACTOR, MAP_ACTOR, get_actor},
@@ -52,13 +51,13 @@ pub fn initialize_actors(config: Vec::<ActorConf>, first_actor_name: String)
     let writeable_map = ReadWriteWrapper::new(Map::new());
     // Spawn actors
     for (actor_name, receiver) in receivers {
-        spawn_actor(actor_name, &transmitters, receiver, Some(&writeable_map), None);
+        spawn_actor(actor_name, &transmitters, receiver, Some(&writeable_map));
     }
 
     // * SPAWN DARVIS SYSTEM ACTORS *//
     // Visualizer
     if GLOBAL_PARAMS.get::<bool>(SYSTEM_SETTINGS, "show_visualizer") {
-        spawn_visualize_actor(&transmitters, vis_rx.unwrap(), &writeable_map)?;
+        spawn_actor(VISUALIZER.to_string(), &transmitters, vis_rx.unwrap(), Some(&writeable_map));
     }
 
     // Map actor
@@ -78,7 +77,7 @@ pub fn initialize_actors(config: Vec::<ActorConf>, first_actor_name: String)
 
 fn spawn_actor(
     actor_name: String, transmitters: &HashMap<String, DVSender>, receiver: DVReceiver,
-    writeable_map: Option<&ReadWriteWrapper<Map>>, rec_stream: Option<RecordingStream>
+    writeable_map: Option<&ReadWriteWrapper<Map>>
 ) {
     info!("Spawning actor;{}", &actor_name);
 
@@ -98,7 +97,7 @@ fn spawn_actor(
     let actor_channels = ActorChannels {receiver, actors: txs};
 
     thread::spawn(move || { 
-        let mut actor = get_actor(actor_name, actor_channels, map_clone, rec_stream);
+        let mut actor = get_actor(actor_name, actor_channels, map_clone);
         actor.run();
     } );
 }
@@ -119,36 +118,36 @@ fn spawn_map_actor(transmitters: &HashMap<String, DVSender>, receiver: DVReceive
     } );
 }
 
-fn spawn_visualize_actor(
-    transmitters: &HashMap<String, DVSender>, receiver: DVReceiver, map: &ReadWriteWrapper<Map>
-) -> Result<tokio::runtime::Runtime, Box<dyn std::error::Error>> {
-    // This is cumbersome but this is the cleanest way to do it that I have found
-    // Visualization library requires running tokio runtime in current context (creating rt)
-    // We can't do this inside the actor constructor because the tokio runtime does not implement Copy, so have to do it here
-    // vis_stream needs to be created in the same context as rt (or else runtime error)
-    // but visualizer actor needs vis_stream to be able to visualize anything,
-    // so have to create vis_stream here and then move into visualizer actor.
-    let rt = tokio::runtime::Runtime::new().expect("Failed to initialize visualizer -- tokio runtime");
-    let _guard = rt.enter();
-    let vis_stream = RecordingStreamBuilder::new("minimal_serve_rs").serve(
-        "0.0.0.0",
-        Default::default(),
-        Default::default(),
-        true,
-    )?;
+// fn spawn_visualize_actor(
+//     transmitters: &HashMap<String, DVSender>, receiver: DVReceiver, map: &ReadWriteWrapper<Map>
+// ) -> Result<tokio::runtime::Runtime, Box<dyn std::error::Error>> {
+//     // This is cumbersome but this is the cleanest way to do it that I have found
+//     // Visualization library requires running tokio runtime in current context (creating rt)
+//     // We can't do this inside the actor constructor because the tokio runtime does not implement Copy, so have to do it here
+//     // vis_stream needs to be created in the same context as rt (or else runtime error)
+//     // but visualizer actor needs vis_stream to be able to visualize anything,
+//     // so have to create vis_stream here and then move into visualizer actor.
+//     let rt = tokio::runtime::Runtime::new().expect("Failed to initialize visualizer -- tokio runtime");
+//     let _guard = rt.enter();
+//     let vis_stream = RecordingStreamBuilder::new("minimal_serve_rs").serve(
+//         "0.0.0.0",
+//         Default::default(),
+//         Default::default(),
+//         true,
+//     )?;
 
-    spawn_actor(VISUALIZER.to_string(), transmitters, receiver, Some(map), Some(vis_stream.clone()));
+//     spawn_actor(VISUALIZER.to_string(), transmitters, receiver, Some(map), Some(vis_stream.clone()));
 
-    thread::sleep(Duration::from_secs(2)); // Give visualizer time to load
+//     thread::sleep(Duration::from_secs(2)); // Give visualizer time to load
 
-    Ok(rt)
-}
+//     Ok(rt)
+// }
 
 fn spawn_shutdown_actor(transmitters: &HashMap<String, DVSender>, receiver: DVReceiver) -> Arc<Mutex<bool>> {
     let shutdown_flag = Arc::new(Mutex::new(false));
     let flag_clone = shutdown_flag.clone();
 
-    spawn_actor(SHUTDOWN_ACTOR.to_string(), transmitters, receiver, None, None);
+    spawn_actor(SHUTDOWN_ACTOR.to_string(), transmitters, receiver, None);
 
     let shutdown_transmitter = transmitters.get(SHUTDOWN_ACTOR).unwrap().clone();
     ctrlc::set_handler(move || {
