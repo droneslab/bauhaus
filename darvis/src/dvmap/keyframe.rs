@@ -1,21 +1,19 @@
 use std::{collections::{HashMap, HashSet}, cmp::min};
-use chrono::{DateTime, Utc};
 use derivative::Derivative;
 use dvcore::{matrix::{DVVector3, DVVectorOfKeyPoint, DVMatrix}, config::{ GLOBAL_PARAMS, SYSTEM_SETTINGS}, sensor::{Sensor, FrameSensor}};
-use log::{error, debug, warn};
+use log::{error};
 use serde::{Deserialize, Serialize};
 use crate::{dvmap::{map::Id, pose::Pose},modules::{imu::*, camera::CAMERA_MODULE}, actors::tracking_backend::TrackedMapPointData,};
-use super::{mappoint::{MapPoint, FullMapPoint}, map::{Map}, features::Features, bow::{BoW, self}};
+use super::{mappoint::{MapPoint, FullMapPoint}, map::Map, features::Features, bow::{BoW, self}};
 
 // TODO... If it's getting a little messy in this file, we can always separate out the different types of frame/keyframe states into their own files.
 
 // Typestate...Frame/KeyFrame information that is ALWAYS available, regardless of frame/keyframe state.
-// Uncomment this if doing serialization/deserialization: unsafe impl<S: SensorType> Sync for KeyFrame<S> {}
 #[derive(Debug, Clone, Derivative)]
 #[derivative(Default)]
 pub struct Frame<K: FrameState> {
     pub frame_id: Id,
-    pub timestamp: DateTime<Utc>,
+    pub timestamp: u64,
     pub pose: Option<Pose>,
 
     // Image and reference KF //
@@ -109,7 +107,8 @@ pub struct InitialFrame {}
 impl Frame<InitialFrame> {
     pub fn new(
         frame_id: Id, keypoints_vec: DVVectorOfKeyPoint, descriptors_vec: DVMatrix,
-        im_width: i32, im_height: i32
+        im_width: i32, im_height: i32,
+        timestamp: u64
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let sensor = GLOBAL_PARAMS.get::<Sensor>(SYSTEM_SETTINGS, "sensor");
         let imu_bias = match sensor.is_imu() {
@@ -118,7 +117,7 @@ impl Frame<InitialFrame> {
         };
         let frame = Self {
             frame_id,
-            timestamp: Utc::now(), // TODO (mvp): This needs to be a timestamp from the dataset timestamp file, not a real timestamp.
+            timestamp,
             features: Features::new(keypoints_vec, descriptors_vec, im_width, im_height, sensor)?,
             imu_bias: imu_bias,
             sensor,
@@ -140,15 +139,15 @@ impl Frame<InitialFrame> {
         // bool Frame::isInFrustumChecks(MapPoint *pMP, float viewingCosLimit, bool bRight)
         let mappoint = map.get_mappoint(&mp_id).unwrap();
 
-        let left = self.check_frustum(mp_id, viewing_cos_limit, &mappoint, false);
+        let left = self.check_frustum(viewing_cos_limit, &mappoint, false);
         let right = match self.sensor.frame() {
-            FrameSensor::Stereo => { self.check_frustum(mp_id, viewing_cos_limit, &mappoint, true) },
+            FrameSensor::Stereo => { self.check_frustum(viewing_cos_limit, &mappoint, true) },
             _ => { None }
         };
         (left, right)
     }
 
-    fn check_frustum(&self, mp_id: Id, viewing_cos_limit: f64, mappoint: &MapPoint<FullMapPoint>, is_right: bool) -> Option<TrackedMapPointData> {
+    fn check_frustum(&self, viewing_cos_limit: f64, mappoint: &MapPoint<FullMapPoint>, is_right: bool) -> Option<TrackedMapPointData> {
         // 3D in absolute coordinates
         let pos = mappoint.position;
 

@@ -234,7 +234,6 @@ impl From<dvos3binding::ffi::WrapBindCVVectorOfPoint3f> for DVVectorOfPoint3f {
 pub struct DVVectorOfPoint2f ( opencv::types::VectorOfPoint2f );
 unsafe impl Sync for DVVectorOfPoint2f {}
 impl DVVectorOfPoint2f {
-    // Constructors
     pub fn empty() -> Self {
         Self ( VectorOfPoint2f::new() )
     }
@@ -328,7 +327,6 @@ impl From<& DVVectorOfi32> for dvos3binding::ffi::WrapBindCVRawPtr {
 pub struct DVVector3<T> ( na::Vector3<T> ); // 3 dimensional column vector
 
 impl<T: Debug + Clone + na::Scalar + num_traits::identities::Zero + ComplexField> DVVector3<T> {
-    // Constructors
     pub fn new(vec: na::Vector3<T>) -> Self {
         DVVector3 ( vec.clone() )
     }
@@ -399,7 +397,6 @@ impl<'de, T> Deserialize<'de> for DVVector3<T> {
 pub struct DVMatrix3<T> ( na::Matrix3<T> ); // 3x3 matrix
 
 impl<T: Debug + Clone + na::Scalar + num_traits::identities::Zero + num_traits::One + ComplexField> DVMatrix3<T> {
-    // Constructors
     pub fn new(vec: na::Matrix3<T>) -> Self {
         DVMatrix3 ( vec.clone() )
     }
@@ -506,60 +503,3 @@ impl From<opencv::core::Mat> for DVMatrixGrayscale {
     }
 }
 
-
-
-// This is from the old implementation of DarvisVectorOfKeyPoint
-
-// Trait implementation for OpenCV vector of KeyPoint
-// impl DarvisVectorOfKeyPoint for VectorOfKeyPoint {
-//     /// get OpenCV vector of KeyPoint
-//     fn cv_vector_of_keypoint(&self) -> VectorOfKeyPoint {
-//         self.clone()
-//     }
-//     /// Convert opencv to Darvis vector of KeyPoint
-//     fn darvis_vector_of_keypoint(&self) -> DVVectorOfKeyPoint {
-//         let mut dmat_vkp = DVVectorOfKeyPoint::new();
-
-//         for i in 0..self.len() {
-//             let kp = self.get(i).unwrap();
-//             let dkp = DVKeyPoint {
-//                 p2f: vec![kp.pt.x, kp.pt.y],
-//                 size: kp.size,
-//                 angle: kp.angle,
-//                 response: kp.response,
-//                 octave: kp.octave,
-//                 class_id: kp.class_id
-//             };
-//             //dmat_vkp[i.try_into().unwrap()] = dkp;
-//             dmat_vkp.push(dkp);
-//         }
-//         return dmat_vkp;
-//     }
-// }
-
-// Trait implementation for Darvis vector of KeyPoint
-// impl DarvisVectorOfKeyPoint for DVVectorOfKeyPoint {
-//     /// Convert Darvis to opencv vector of KeyPoint
-//     fn cv_vector_of_keypoint(&self) -> VectorOfKeyPoint {
-//         let mut cv_vkp = VectorOfKeyPoint::new();
-
-//         for i in 0..self.len() {
-//             let dkp_instance = &self[i];
-//             let p2f = Point_::new(dkp_instance.p2f[0], dkp_instance.p2f[1]);
-//             let cvkp = KeyPoint::new_point(
-//                 p2f,
-//                 dkp_instance.size,
-//                 dkp_instance.angle,
-//                 dkp_instance.response,
-//                 dkp_instance.octave,
-//                 dkp_instance.class_id
-//             );
-//             cv_vkp.push(cvkp.unwrap());
-//         }
-//         return cv_vkp;
-//     }
-//     /// get Darvis vector of KeyPoint
-//     fn darvis_vector_of_keypoint(&self) -> DVVectorOfKeyPoint {
-//         self.clone()
-//     }
-// }

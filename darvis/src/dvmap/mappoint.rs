@@ -1,11 +1,11 @@
-use std::{fmt::Debug, collections::{HashMap}};
+use std::{fmt::Debug, collections::HashMap};
 use dvcore::{matrix::DVMatrix, config::{GLOBAL_PARAMS, SYSTEM_SETTINGS}, sensor::{Sensor, FrameSensor}};
-use log::{error, debug};
+use log::error;
 extern crate nalgebra as na;
 use crate::{matrix::DVVector3, modules::orbmatcher::{descriptor_distance, SCALE_FACTORS}, registered_actors::FEATURE_DETECTION};
 use super::{map::{Id, Map}, keyframe::{Frame, FullKeyFrame}};
 
-// Note: Implementing typestate for like here: http://cliffle.com/blog/rust-typestate/#a-simple-example-the-living-and-the-dead
+// Note: Implementing typestate like here: http://cliffle.com/blog/rust-typestate/#a-simple-example-the-living-and-the-dead
 // This way we can encode mappoints that have been created but not inserted into the map as a separate type than mappoints that are legit.
 // This prevents making the following mistake:
 // 1 - create a mappoint with MapPoint::new() with an id = -1.

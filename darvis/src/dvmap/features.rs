@@ -1,27 +1,28 @@
-// There are a lot of extra variables that are set to 0 or null
+// In ORBSLAM, there are a lot of extra variables that are set to 0 or null
 // because they are only used in stereo or IMU cases. This encapsulates 
 // "all feature data" into a struct that has different variables depending
 // on the type of sensor.
-use std::collections::{HashMap};
+
+// TODO (eventually) ... I don't think it makes the most sense to name this "features" or even to have it separate from a keyframe
+// But at the same time it's nice to hide a lot of this logic away from the keyframe. It would be good to
+// re-factor this eventually but it isn't high priority.
+
+use std::collections::HashMap;
 use std::fmt::Debug;
 use dvcore::config::{*};
 use dvcore::sensor::{Sensor, FrameSensor};
 use opencv::prelude::{Mat, MatTraitConst, MatTrait};
-use opencv::types::{VectorOff32};
+use opencv::types::VectorOff32;
 use serde::{Deserialize, Serialize};
 use opencv::core::{KeyPoint, CV_32F, Scalar};
 use crate::modules::camera::CAMERA_MODULE;
 use crate::{
     matrix::{DVMatrix, DVVectorOfKeyPoint},
-    dvmap::{map::Id},
+    dvmap::map::Id,
 };
 
-pub const FRAME_GRID_ROWS :usize = 48;
-pub const FRAME_GRID_COLS :usize = 64;
-
-// TODO (eventually) ... I don't think it makes the most sense to name this "features" or even to have it separate from a keyframe
-// But at the same time it's nice to hide a lot of this logic away from the keyframe. It would be good to
-// re-factor this eventually but it isn't high priority.
+const FRAME_GRID_ROWS :usize = 48;
+const FRAME_GRID_COLS :usize = 64;
 
 #[derive(Clone, Debug, Default)]
 enum KeyPoints {
@@ -51,7 +52,7 @@ pub struct Features {
     keypoints: KeyPoints,
     pub image_bounds: ImageBounds,
     pub descriptors: DVMatrix, // mDescriptors
-    pub grid: Grid, // Keypoints are assigned to cells in a grid to reduce matching complexity when projecting MapPoints.
+    grid: Grid, // Keypoints are assigned to cells in a grid to reduce matching complexity when projecting MapPoints.
 }
 
 impl Features {
@@ -334,7 +335,7 @@ impl ImageBounds {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct Grid {
+struct Grid {
     pub grid_element_width_inv: f64,
     pub grid_element_height_inv: f64,
     pub grid: Vec<Vec<Vec<usize>>> // mGrid
@@ -344,14 +345,6 @@ impl Grid {
         Grid {
             grid_element_width_inv: FRAME_GRID_COLS as f64/(image_bounds.max_x - image_bounds.min_x) as f64,
             grid_element_height_inv: FRAME_GRID_ROWS as f64/(image_bounds.max_y - image_bounds.min_y) as f64,
-            grid: Self::initialize_grid()
-        }
-    }
-
-    pub fn empty() -> Self {
-        Grid {
-            grid_element_width_inv: 0.0,
-            grid_element_height_inv: 0.0,
             grid: Self::initialize_grid()
         }
     }

@@ -1,7 +1,4 @@
-use std::any::Any;
-
-// use axiom::{prelude::*, message::ActorMessage};
-use dvcore::{matrix::DVVector3, base::{ActorChannels, ActorMessage, Actor}};
+use dvcore::{base::{ActorChannels, ActorMessage, Actor}};
 use log::{info, warn, debug};
 
 use crate::{
@@ -169,11 +166,6 @@ impl MapWriteMsg {
     pub fn reset_active_map() -> Self {
         Self {
             target: MapWriteTarget::Map__ResetActive{},
-        }
-    }
-    pub fn create_new_mappoint(mp: MapPoint<PrelimMapPoint>, observations_to_add: Vec<(Id, u32, usize)>) -> Self {
-        Self {
-            target: MapWriteTarget::MapPoint__New {mp, observations_to_add},
         }
     }
     pub fn create_many_mappoints(mps: Vec<(MapPoint<PrelimMapPoint>, Vec<(Id, u32, usize)>)>, callback_actor: &str) -> Self {

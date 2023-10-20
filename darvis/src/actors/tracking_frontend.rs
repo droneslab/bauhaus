@@ -1,28 +1,26 @@
 extern crate g2o;
-use cxx::{UniquePtr};
-use dvcore::base::{Actor, Base};
-use dvcore::sensor::{Sensor, FrameSensor};
-use log::{ warn, info };
-use opencv::imgcodecs;
-use std::any::Any;
-use std::sync::mpsc::Receiver;
-use std::{sync::Arc, fmt};
-use std::fmt::Debug;
-use opencv::{prelude::*,types::{VectorOfKeyPoint},};
-use dvcore::{matrix::*,config::*,};
-use crate::modules::image;
-use crate::{ActorChannels};
-use crate::dvmap::map::Id;
-use crate::registered_actors::VISUALIZER;
+use cxx::UniquePtr;
+use log::warn;
+use std::{fmt, fmt::Debug};
+use opencv::{prelude::*, types::VectorOfKeyPoint,};
+
+use dvcore::{
+    base::Actor,
+    sensor::{Sensor, FrameSensor},
+    matrix::*,
+    config::*
+};
 use crate::{
-    registered_actors::{TRACKING_BACKEND, FEATURE_DETECTION, CAMERA},
+    registered_actors::{FEATURE_DETECTION, CAMERA, VISUALIZER},
     actors::{
-        messages::{ImageMsg, FeatureMsg,TrackingStateMsg}, tracking_backend::TrackingState,
-        visualizer::VisFeaturesMsg
+        messages::{ImageMsg, FeatureMsg,TrackingStateMsg, ShutdownMessage, ImagePathMsg, VisFeaturesMsg},
+        tracking_backend::TrackingState,
     },
+    modules::image,
+    ActorChannels,
+    dvmap::map::Id
 };
 
-use super::messages::{ShutdownMessage, ImagePathMsg};
 
 pub struct DVORBextractor {
     pub extractor: UniquePtr<dvos3binding::ffi::ORBextractor>,
@@ -58,7 +56,7 @@ impl Debug for DVORBextractor {
 
 #[derive(Debug)]
 pub struct DarvisTrackingFront {
-    actor_channels: ActorChannels,
+    actor_system: ActorChannels,
     orb_extractor_left: DVORBextractor,
     orb_extractor_right: Option<DVORBextractor>,
     orb_extractor_ini: Option<DVORBextractor>,
@@ -72,17 +70,24 @@ pub struct DarvisTrackingFront {
 impl Actor for DarvisTrackingFront {
     fn run(&mut self) {
         loop {
-            let message = self.actor_channels.receive().unwrap();
+            // Note: Run-time errors ... downcasting to process message is run-time error
+
+            let message = self.actor_system.receive().unwrap();
 
             if let Some(msg) = message.downcast_ref::<ImagePathMsg>() {
                 let image = image::read_image_file(&msg.image_path);
-                self.tracking_frontend(image);
+                let (keypoints, descriptors) = self.extract_features(&image);
+                self.send_to_backend(keypoints.clone(), descriptors, &image, msg.timestamp);
+                self.send_to_visualizer(keypoints, image, msg.timestamp, &msg.image_path);
+                self.last_id += 1;
             } else if message.is::<ImageMsg>() {
                 if let Ok(msg) = message.downcast::<ImageMsg>() {
-                    self.tracking_frontend(msg.image);
+                    let (keypoints, descriptors) = self.extract_features(&msg.image);
+                    self.send_to_backend(keypoints, descriptors, &msg.image, msg.timestamp);
                 } else {
                     panic!("Failed to downcast ImageMsg");
                 }
+                self.last_id += 1;
             } else if let Some(msg) = message.downcast_ref::<TrackingStateMsg>() {
                 match msg.state {
                     TrackingState::Ok => { 
@@ -101,7 +106,7 @@ impl Actor for DarvisTrackingFront {
 }
 
 impl DarvisTrackingFront {
-    pub fn new(actor_channels: ActorChannels) -> DarvisTrackingFront {
+    pub fn new(actor_system: ActorChannels) -> DarvisTrackingFront {
         let max_features = GLOBAL_PARAMS.get::<i32>(FEATURE_DETECTION, "max_features");
         let sensor = GLOBAL_PARAMS.get::<Sensor>(SYSTEM_SETTINGS, "sensor");
         let orb_extractor_right = match sensor.frame() {
@@ -113,7 +118,7 @@ impl DarvisTrackingFront {
             false => None
         };
         DarvisTrackingFront {
-            actor_channels,
+            actor_system,
             orb_extractor_left: DVORBextractor::new(max_features),
             orb_extractor_right,
             orb_extractor_ini,
@@ -123,15 +128,6 @@ impl DarvisTrackingFront {
             max_frames: GLOBAL_PARAMS.get::<f64>(SYSTEM_SETTINGS, "fps") as i32,
             sensor,
         }
-    }
-
-    fn tracking_frontend(&mut self, image: Mat) {
-        let (keypoints, descriptors) = self.extract_features(&image);
-        self.pass_to_backend(&image, &keypoints, descriptors);
-        if GLOBAL_PARAMS.get::<bool>(SYSTEM_SETTINGS, "show_visualizer") {
-            self.send_keypoints_to_visualizer(keypoints);
-        }
-        self.last_id += 1;
     }
 
     fn extract_features(&mut self, image: &opencv::core::Mat) -> (VectorOfKeyPoint, Mat) {
@@ -155,42 +151,32 @@ impl DarvisTrackingFront {
         (keypoints.kp_ptr.kp_ptr, descriptors.mat_ptr.mat_ptr)
     }
 
-    fn pass_to_backend(
-        &mut self,
-        image: &Mat, keypoints: &VectorOfKeyPoint, descriptors: Mat
-    ) {
-        let backend = self.actor_channels.find("TRACKING_BACKEND").unwrap();
-        let new_message = GLOBAL_PARAMS.get::<String>(TRACKING_BACKEND, "actor_message");
-        match new_message.as_ref() {
-            "FeatureMsg" => {
-                backend.send(Box::new(
-                    FeatureMsg {
-                        keypoints: DVVectorOfKeyPoint::new(keypoints.clone()),
-                        descriptors: DVMatrix::new(descriptors),
-                        image_width: image.cols(),
-                        image_height: image.rows(),
-                    }
-                )).unwrap();
-            },
-            _ => {
-                warn!("Invalid Message type: selecting FeatureMsg");
-                backend.send(Box::new(
-                    FeatureMsg {
-                        keypoints: DVVectorOfKeyPoint::new(keypoints.clone()),
-                        descriptors: DVMatrix::new(descriptors),
-                        image_width: image.cols(),
-                        image_height: image.rows(),
-                    }
-                )).unwrap();
-            },
-        }
+    fn send_to_backend(&self, keypoints: VectorOfKeyPoint, descriptors: Mat, image: &Mat, timestamp: u64) {
+        // Send features to backend
+        // Note: Run-time errors ... actor lookup is runtime error
+        let backend = self.actor_system.find("TRACKING_BACKEND").unwrap();
+        backend.send(Box::new(
+            FeatureMsg {
+                keypoints: DVVectorOfKeyPoint::new(keypoints.clone()),
+                descriptors: DVMatrix::new(descriptors),
+                image_width: image.cols(),
+                image_height: image.rows(),
+                timestamp
+            }
+        )).unwrap();
     }
 
-    fn send_keypoints_to_visualizer(&mut self, keypoints: VectorOfKeyPoint) {
-        let vis_actor = self.actor_channels.find(VISUALIZER).unwrap();
-        vis_actor.send(Box::new(VisFeaturesMsg {
-            keypoints: DVVectorOfKeyPoint::new(keypoints)
-        })).unwrap();
+    fn send_to_visualizer(&mut self, keypoints: VectorOfKeyPoint, image: Mat, timestamp: u64, image_path: &String) {
+        // Send image and features to visualizer
+        if GLOBAL_PARAMS.get::<bool>(SYSTEM_SETTINGS, "show_visualizer") {
+            let vis_actor = self.actor_system.find(VISUALIZER).unwrap();
+            vis_actor.send(Box::new(VisFeaturesMsg {
+                keypoints: DVVectorOfKeyPoint::new(keypoints),
+                image,
+                timestamp,
+                image_filename: image_path.split("/").last().unwrap().split(".").nth(0).unwrap().to_string(),
+            })).unwrap();
+        }
     }
 }
 

@@ -9,7 +9,7 @@
 /// To get a parameter from GLOBAL_PARAMS:
 ///     let max_features= GLOBAL_PARAMS.get::<i32>(SYSTEM_SETTINGS, "max_features".to_string());
 /// 
-use std::{collections::HashMap, sync::RwLock, fmt};
+use std::{collections::HashMap, sync::RwLock};
 use lazy_static::*;
 use linked_hash_map::LinkedHashMap;
 
