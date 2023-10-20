@@ -118,31 +118,6 @@ fn spawn_map_actor(transmitters: &HashMap<String, DVSender>, receiver: DVReceive
     } );
 }
 
-// fn spawn_visualize_actor(
-//     transmitters: &HashMap<String, DVSender>, receiver: DVReceiver, map: &ReadWriteWrapper<Map>
-// ) -> Result<tokio::runtime::Runtime, Box<dyn std::error::Error>> {
-//     // This is cumbersome but this is the cleanest way to do it that I have found
-//     // Visualization library requires running tokio runtime in current context (creating rt)
-//     // We can't do this inside the actor constructor because the tokio runtime does not implement Copy, so have to do it here
-//     // vis_stream needs to be created in the same context as rt (or else runtime error)
-//     // but visualizer actor needs vis_stream to be able to visualize anything,
-//     // so have to create vis_stream here and then move into visualizer actor.
-//     let rt = tokio::runtime::Runtime::new().expect("Failed to initialize visualizer -- tokio runtime");
-//     let _guard = rt.enter();
-//     let vis_stream = RecordingStreamBuilder::new("minimal_serve_rs").serve(
-//         "0.0.0.0",
-//         Default::default(),
-//         Default::default(),
-//         true,
-//     )?;
-
-//     spawn_actor(VISUALIZER.to_string(), transmitters, receiver, Some(map), Some(vis_stream.clone()));
-
-//     thread::sleep(Duration::from_secs(2)); // Give visualizer time to load
-
-//     Ok(rt)
-// }
-
 fn spawn_shutdown_actor(transmitters: &HashMap<String, DVSender>, receiver: DVReceiver) -> Arc<Mutex<bool>> {
     let shutdown_flag = Arc::new(Mutex::new(false));
     let flag_clone = shutdown_flag.clone();

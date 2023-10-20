@@ -16,3 +16,6 @@ pub mod matrix;
 
 // Internal core framework trait/abstraction functions to be implemented.
 // pub mod plugin_functions;
+
+// JSON Schema definitions for visualization
+pub mod vis_schemas;

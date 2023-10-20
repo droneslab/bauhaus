@@ -1,5 +1,5 @@
 use std::{collections::HashMap, sync::mpsc::{Sender, Receiver, RecvError}};
-use downcast_rs::{DowncastSync, impl_downcast, Downcast};
+use downcast_rs::{impl_downcast, Downcast};
 
 pub type DVMessageBox = Box<dyn ActorMessage>;
 pub type DVReceiver = Receiver<DVMessageBox>;
@@ -7,6 +7,9 @@ pub type DVSender = Sender<DVMessageBox>;
 
 #[derive(Debug)]
 pub struct ActorChannels {
+    // Note: Run-time errors
+    // each actor has actorchannels struct to communicate with other actors
+    // can't make DVSender an enum depending on each actor because a collection can't hold different types
     pub actors: HashMap<String, DVSender>,
     pub receiver: DVReceiver,
 }
@@ -50,25 +53,18 @@ impl DarvisNone {
     }
 }
 impl Actor for DarvisNone{
-    // type INPUTS = String;
-
     fn run(&mut self)  {
         panic!("Actor {} Not Implemented!!", self.name);
     }
 }
 
-// pub trait ActorMessage {}
 pub trait ActorMessage: Downcast + Send {}
 impl_downcast!(ActorMessage);
-// downcast_rs::impl_downcast!(Base<T> assoc H where T: Clone, H: Copy);
 
 pub trait Base: Downcast {}
 impl_downcast!(Base);
 
 
 pub trait Actor {
-    // type INPUTS;
-
-    // fn new(inputs: Self::INPUTS) -> Self;
     fn run(&mut self);
 }

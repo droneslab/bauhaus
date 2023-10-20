@@ -1,4 +1,3 @@
-use std::any::Any;
 use std::{cmp::min};
 use std::collections::HashSet;
 use std::f64::INFINITY;
@@ -15,7 +14,7 @@ use dvcore::{
 use log::{debug, warn};
 use crate::ActorChannels;
 use crate::actors::map_actor::MapWriteMsg;
-use crate::registered_actors::{LOCAL_MAPPING, TRACKING_BACKEND};
+use crate::registered_actors::{TRACKING_BACKEND};
 use crate::{
     dvmap::{
         map::Map, mappoint::{MapPoint, PrelimMapPoint}
@@ -26,7 +25,7 @@ use crate::{
     actors::messages::{Reset, KeyFrameIdMsg}
 };
 
-use super::messages::{ShutdownMessage, LastKeyFrameUpdatedMsg};
+use super::messages::{ShutdownMessage};
 
 #[derive(Debug, Derivative)]
 #[derivative(Default(bound=""))]
@@ -61,8 +60,6 @@ impl Actor for DarvisLocalMapping {
 }
 
 impl DarvisLocalMapping {
-        // type INPUTS = (ReadOnlyWrapper<Map>, ActorChannels);
-
     pub fn new(map: ReadOnlyWrapper<Map>, actor_channels: ActorChannels) -> DarvisLocalMapping {
         let sensor: Sensor = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "sensor");
 

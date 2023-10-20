@@ -1,8 +1,7 @@
-use log::{warn, debug};
 use opencv::{prelude::{Mat, MatTrait, MatTraitConst}, core::{Scalar, CV_64F, KeyPoint}};
 use dvcore::{config::*, matrix::{DVMatrix, DVVectorOfPoint3f, DVVector3}, sensor::Sensor};
 use crate::{
-    dvmap::{pose::{Pose}, keyframe::{Frame, FullKeyFrame}},
+    dvmap::{pose::Pose, keyframe::{Frame, FullKeyFrame}},
     matrix::DVVectorOfKeyPoint, registered_actors::CAMERA
 };
 

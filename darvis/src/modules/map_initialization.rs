@@ -6,7 +6,6 @@
 // TwoViewReconstruction (this line of code: DUtils::Random::SeedRandOnce(0);). This is weird
 // but also fine.
 
-use chrono::Duration;
 use dvcore::config::{GLOBAL_PARAMS, SYSTEM_SETTINGS};
 use dvcore::matrix::DVVectorOfPoint2f;
 use dvcore::sensor::{Sensor, FrameSensor, ImuSensor};
@@ -96,7 +95,7 @@ impl Initialization {
             self.ready_to_initializate = true;
             return Ok(false);
         } else {
-            if current_frame.features.num_keypoints <=100 || matches!(self.sensor.imu(), ImuSensor::Some) && last_frame.timestamp - initial_frame.timestamp > Duration::seconds(1) {
+            if current_frame.features.num_keypoints <=100 || matches!(self.sensor.imu(), ImuSensor::Some) && last_frame.timestamp - initial_frame.timestamp > 1 {
                 self.ready_to_initializate = false;
                 return Ok(false);
             }

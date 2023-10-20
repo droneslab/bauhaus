@@ -1,15 +1,13 @@
 use std::collections::HashSet;
 
-// use axiom::message::ActorMessage;
-use chrono::{DateTime, Utc};
-use dvcore::{
-    matrix::{ DVVectorOfKeyPoint, DVMatrix, DVMatrixGrayscale}, base::ActorMessage,
-};
 use opencv::prelude::Mat;
-use serde::{Serialize, Deserialize};
-use crate::dvmap::{keyframe::{Frame, FrameState}, pose::Pose, map::Id};
-
-use super::tracking_backend::TrackingState;
+use dvcore::{
+    matrix::{ DVVectorOfKeyPoint, DVMatrix}, base::ActorMessage,
+};
+use crate::{
+    dvmap::{keyframe::{Frame, FrameState}, pose::Pose, map::Id},
+    actors::tracking_backend::TrackingState
+};
 
 // Note: Can avoid having to serialize/deserialize every message 
 // by removing Serialize,Deserialize derives and doing 
@@ -17,28 +15,41 @@ use super::tracking_backend::TrackingState;
 // Switch this in the future if we want to do anything over the network.
 // https://github.com/rsimmonsjr/axiom/issues/99
 
-// For shutdown actor
+//* VISUALIZER */
+pub struct VisFeaturesMsg {
+    pub keypoints: DVVectorOfKeyPoint,
+    pub image: Mat,
+    pub timestamp: u64,
+    pub image_filename: String,
+}
+impl ActorMessage for VisFeaturesMsg {}
+
+pub struct VisKeyFrameMsg {
+    pub pose: Pose,
+}
+impl ActorMessage for VisKeyFrameMsg {}
+
+pub struct VisMapPointsMsg {}
+impl ActorMessage for VisMapPointsMsg {}
+
+
+//* Shutdown Actor *//
 pub struct ShutdownMessage {}
 impl ActorMessage for ShutdownMessage {}
+
+#[derive(Clone)]
 pub struct TrajectoryMessage {
-    pub pose: Option<Pose>,
-    pub ref_kf_id: Option<Id>,
-    pub timestamp: Option<DateTime<Utc>>,
+    pub pose: Pose,
+    pub ref_kf_id: Id,
+    pub timestamp: u64,
 }
 impl ActorMessage for TrajectoryMessage {}
 impl TrajectoryMessage {
-    pub fn empty() -> Self {
+    pub fn new(pose: Pose, ref_kf_id: Id, timestamp: u64) -> Self {
         TrajectoryMessage{
-            pose: None,
-            ref_kf_id: None,
-            timestamp: None,
-        }
-    }
-    pub fn new(pose: Pose, ref_kf_id: Id, timestamp: DateTime<Utc>) -> Self {
-        TrajectoryMessage{
-            pose: Some(pose),
-            ref_kf_id: Some(ref_kf_id),
-            timestamp: Some(timestamp),
+            pose,
+            ref_kf_id,
+            timestamp
         }
     }
 }
@@ -54,10 +65,6 @@ impl ActorMessage for TrackingStateMsg {}
 pub struct Reset {}
 impl ActorMessage for Reset {}
 
-pub struct VisMsg {
-    pub new_pose: Pose,
-}
-impl ActorMessage for VisMsg {}
 
 #[derive(Debug)]
 pub struct FeatureMsg {
@@ -65,6 +72,7 @@ pub struct FeatureMsg {
     pub descriptors: DVMatrix,
     pub image_width: i32,
     pub image_height: i32,
+    pub timestamp: u64,
 }
 impl ActorMessage for FeatureMsg {}
 
@@ -74,12 +82,14 @@ pub struct ImagePathMsg {
     // Uncomment this to pass the image directly instead of the path
     // pub frame: DVMatrixGrayscale,
     pub image_path: String,
-    // pub timestamp: DateTime<Utc>,
+    pub timestamp: u64,
 }
 impl ActorMessage for ImagePathMsg {}
 
 pub struct ImageMsg {
-    pub image: Mat
+    pub image: Mat,
+    pub timestamp: u64,
+    pub image_path: String,
 }
 impl ActorMessage for ImageMsg{}
 
@@ -120,3 +130,6 @@ impl ActorMessage for KeyFrameIdMsg {}
 #[derive(Debug)]
 pub struct LastKeyFrameUpdatedMsg {}
 impl ActorMessage for LastKeyFrameUpdatedMsg {}
+
+
+

@@ -1,21 +1,19 @@
-use std::{sync::{Arc, mpsc::Receiver}, collections::{HashSet, HashMap}, fmt::{Display, Formatter}, any::Any};
-use chrono::{prelude::*, Duration};
+use std::collections::{HashSet, HashMap};
 use derivative::Derivative;
 use log::{warn, info, debug, error};
 use opencv::core::Point2f;
 use dvcore::{lockwrap::ReadOnlyWrapper, config::*, sensor::{Sensor, FrameSensor, ImuSensor}, base::Actor};
 use crate::{
-    actors::visualizer::VisKeyFrameMsg,
-    actors::messages::{FeatureMsg, MapInitializedMsg, TrajectoryMessage, TrackingStateMsg},
+    actors::messages::{FeatureMsg, MapInitializedMsg, TrajectoryMessage, TrackingStateMsg, KeyFrameIdMsg, LastKeyFrameUpdatedMsg, ShutdownMessage},
+    actors::map_actor::MapWriteMsg,
     registered_actors::{LOCAL_MAPPING, TRACKING_BACKEND, SHUTDOWN_ACTOR, TRACKING_FRONTEND, VISUALIZER, MAP_ACTOR},
     dvmap::{
         map::Map, map::Id,
         keyframe::{Frame, InitialFrame, PrelimKeyFrame}, pose::Pose, mappoint::{MapPoint, FullMapPoint},
     },
-    modules::{imu::{ImuModule}, optimizer::{self}, orbmatcher, map_initialization::Initialization, relocalization::Relocalization}, ActorChannels,
+    modules::{imu::ImuModule, optimizer::{self}, orbmatcher, map_initialization::Initialization, relocalization::Relocalization}, ActorChannels,
 };
 
-use super::{messages::{KeyFrameIdMsg, LastKeyFrameUpdatedMsg, ShutdownMessage}, map_actor::MapWriteMsg};
 
 #[derive(Default, Debug, Clone)]
 pub struct TrackedMapPointData {
@@ -62,7 +60,7 @@ pub struct DarvisTrackingBack {
     // KeyFrames
     ref_kf_id: Option<Id>,
     frames_since_last_kf: i32, // used instead of mnLastKeyFrameId, don't directly copy because the logic is kind of flipped
-    last_kf_ts: Option<DateTime<Utc>>,
+    last_kf_timestamp: Option<u64>,
 
     // Local map
     // TODO (design) Can we get rid of the local_ variables and pipe them through the map instead?
@@ -87,7 +85,6 @@ pub struct DarvisTrackingBack {
     localization_only_mode: bool,
     frames_to_reset_imu: u32, //mnFramesToResetIMU
     insert_kfs_when_lost: bool,
-    min_num_features: i32,
     max_frames : i64 , //mMaxFrames , Max Frames to insert keyframes and to check relocalisation
     min_frames: u32, // mMinFrames, Min Frames to insert keyframes and to check relocalisation
     sensor: Sensor,
@@ -170,7 +167,6 @@ impl DarvisTrackingBack {
             localization_only_mode: GLOBAL_PARAMS.get::<bool>(SYSTEM_SETTINGS, "localization_only_mode"),
             frames_to_reset_imu: GLOBAL_PARAMS.get::<i32>(TRACKING_BACKEND, "frames_to_reset_IMU") as u32,
             insert_kfs_when_lost: GLOBAL_PARAMS.get::<bool>(TRACKING_BACKEND, "insert_KFs_when_lost"),
-            min_num_features: GLOBAL_PARAMS.get::<i32>(TRACKING_BACKEND, "min_num_features"),
             max_frames: GLOBAL_PARAMS.get::<f64>(SYSTEM_SETTINGS, "fps") as i64,
             min_frames: 0,
             last_frame_id: -1,
@@ -189,6 +185,7 @@ impl DarvisTrackingBack {
             msg.descriptors.clone(), // TODO (msg copy)
             msg.image_width,
             msg.image_height,
+            msg.timestamp
         )?;
 
         // TODO (reset): Reset map because local mapper set the bad imu flag
@@ -266,7 +263,7 @@ impl DarvisTrackingBack {
                         self.relocalization.past_cutoff(&current_frame)
                     },
                     false => {
-                        !self.relocalization.run() && self.relocalization.sec_since_lost(&current_frame) > Duration::seconds(3)
+                        !self.relocalization.run() && self.relocalization.sec_since_lost(&current_frame) > 3
                     }
                 };
                 match relocalize_success {
@@ -375,14 +372,10 @@ impl DarvisTrackingBack {
                     ref_kf_id,
                     current_frame.timestamp
                 );
-                self.actor_channels.find(SHUTDOWN_ACTOR).unwrap().send(Box::new(traj_msg))?;
+                self.actor_channels.find(SHUTDOWN_ACTOR).unwrap().send(Box::new(traj_msg.clone()))?;
 
                 if let Some(vis) = self.actor_channels.find(VISUALIZER) {
-                    //TODO (vis): not sure if we want new_pose or current_pose here
-                    let visualize_msg = VisKeyFrameMsg{
-                        pose: new_pose
-                    };
-                    vis.send(Box::new(visualize_msg))?;
+                    vis.send(Box::new(traj_msg))?;
                 }
             },
             TrackingState::NotInitialized |  TrackingState::WaitForMapResponse | TrackingState::Lost => {
@@ -970,7 +963,7 @@ impl DarvisTrackingBack {
         // mnLastKeyFrameId = mCurrentFrame.mnId;
         // mpLastKeyFrame = pKF;
 
-        self.last_kf_ts = Some(new_kf.timestamp);
+        self.last_kf_timestamp = Some(new_kf.timestamp);
 
         // KeyFrame created here and inserted into map
         let map_actor = self.actor_channels.find(MAP_ACTOR).unwrap();
@@ -982,8 +975,8 @@ impl DarvisTrackingBack {
         let not_enough_frames_since_last_reloc = (current_frame.frame_id < self.relocalization.last_reloc_frame_id + (self.max_frames as i32)) && (kfs_in_map > (self.max_frames as u32));
         let imu_not_initialized = self.sensor.is_imu() && !self.map.read().imu_initialized;
 
-        let too_close_to_last_kf = match self.last_kf_ts {
-            Some(timestamp) => current_frame.timestamp - timestamp < Duration::milliseconds(250),
+        let too_close_to_last_kf = match self.last_kf_timestamp {
+            Some(timestamp) => current_frame.timestamp - timestamp < 0.25 as u64, // 250 milliseconds
             None => false
         };
 
@@ -1034,8 +1027,8 @@ impl DarvisTrackingBack {
         let c2 = (((matches_in_frame as f32) < tracked_mappoints * th_ref_ratio || need_to_insert_close)) && matches_in_frame > 15;
 
         // Temporal condition for Inertial cases
-        let close_to_last_kf = match self.last_kf_ts {
-            Some(timestamp) => current_frame.timestamp - timestamp < Duration::milliseconds(500),
+        let close_to_last_kf = match self.last_kf_timestamp {
+            Some(timestamp) => current_frame.timestamp - timestamp < 0.5 as u64, // 500 milliseconds
             None => false
         };
 

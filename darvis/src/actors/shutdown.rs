@@ -1,12 +1,9 @@
-use std::{any::Any, fs::File, path::Path, io::Write};
-
-use chrono::{DateTime, Utc};
-use dvcore::{base::{ActorChannels, Actor}, config::{SYSTEM_SETTINGS, GLOBAL_PARAMS}};
+use std::{fs::File, path::Path, io::Write};
 use log::warn;
 
 use crate::{dvmap::{pose::Pose, map::Id}, RESULTS_FOLDER};
-
-use super::messages::{ShutdownMessage, TrajectoryMessage};
+use dvcore::{base::{ActorChannels, Actor}, config::{SYSTEM_SETTINGS, GLOBAL_PARAMS}};
+use super::{messages::{ShutdownMessage, TrajectoryMessage, TrackingStateMsg}, tracking_backend::TrackingState};
 
 
 pub struct ShutdownActor {
@@ -14,7 +11,7 @@ pub struct ShutdownActor {
     // Lists used to recover the full camera trajectory at the end of the execution.
     // Basically we store the reference keyframe for each frame and its relative transformation
     trajectory_poses: Vec<Pose>, //mlRelativeFramePoses
-    trajectory_times: Vec<DateTime<Utc>>, //mlFrameTimes
+    trajectory_times: Vec<u64>, //mlFrameTimes
     trajectory_keyframes: Vec<Id>, //mlpReferences
 }
 
@@ -53,19 +50,19 @@ impl Actor for ShutdownActor {
                     actor_tx.send(Box::new(ShutdownMessage{})).unwrap();
                 }
             } else if let Some(msg) = message.downcast_ref::<TrajectoryMessage>() {
-                match msg.pose {
-                    Some(pose) => {
-                        self.trajectory_poses.push(pose);
-                        self.trajectory_times.push(msg.timestamp.unwrap());
-                        self.trajectory_keyframes.push(msg.ref_kf_id.unwrap());
-                    },
-                    None => {
+                self.trajectory_poses.push(msg.pose);
+                self.trajectory_times.push(msg.timestamp);
+                self.trajectory_keyframes.push(msg.ref_kf_id);
+            } else if let Some(msg) = message.downcast_ref::<TrackingStateMsg>() {
+                match msg.state {
+                    TrackingState::Lost => {
                         // This can happen if tracking is lost. Duplicate last element of each vector
                         if let Some(last) = self.trajectory_poses.last().cloned() { self.trajectory_poses.push(last); }
                         if let Some(last) = self.trajectory_times.last().cloned() { self.trajectory_times.push(last); }
                         if let Some(last) = self.trajectory_keyframes.last().cloned() { self.trajectory_keyframes.push(last); }
-                    }
-                };
+                    },
+                    _ => {}
+                }
             } else {
                 warn!("Shutdown actor received unknown message type!");
             }
