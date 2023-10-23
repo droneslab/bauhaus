@@ -1,33 +1,17 @@
-// fn main() {
-//     cxx_build::bridge("src/lib.rs")
-//         .file("src/JSONWriter.cc")
-//         .flag_if_supported("-std=c++14")
-//         .compile("foxglove");
+use std::{io::Result, path::PathBuf, env};
+fn main() -> Result<()> {
 
-//     println!("cargo:rerun-if-changed=src/lib.rs");
-//     println!("cargo:rerun-if-changed=src/JSONWriter.cc");
-//     println!("cargo:rerun-if-changed=include/JSONWriter.h");
-// }
+    let mut config = prost_build::Config::new();
+    config.file_descriptor_set_path(
+        PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR environment variable not set"))
+            .join("file_descriptor_set.bin"));
 
-
-fn main() {
-    use cmake::Config;
-
-    let _ = cxx_build::bridge("src/lib.rs");
-
-    let manifest_dir= concat!(" -I",concat!(env!("CARGO_MANIFEST_DIR"),"/   -I /usr/local/include/"));
-
-
-    let _dst = Config::new("foxglove")
-                    .cxxflag(manifest_dir)
-                    // .cxxflag("-fsanitize=address")
-                    // .cflag("-fsanitize=address")
-                    .build_target("foxglove")
-                    .profile("3") // 0 = debug, 1, 2, or 3 = Release
-                    .build();
-
-
-    println!("cargo:rustc-link-search=native=foxglove/lib");
-    println!("cargo:rustc-link-lib=static=foxglove");
-    // println!("cargo:rustc-link-arg=-fsanitize=address");
+    config.compile_protos(&[
+        "foxglove/SceneUpdate.proto", 
+        "foxglove/SceneEntityDeletion.proto",
+        "foxglove/SpherePrimitive.proto",
+        "foxglove/FrameTransform.proto",
+        "foxglove/RawImage.proto"
+        ], &[""])?;
+    Ok(())
 }

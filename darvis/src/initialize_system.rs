@@ -10,7 +10,7 @@ use log::{info, warn};
 use crate::{
     registered_actors::{VISUALIZER, SHUTDOWN_ACTOR, MAP_ACTOR, get_actor},
     dvmap::map::Map,
-    actors::messages::ShutdownMessage,
+    actors::messages::ShutdownMsg,
 };
 
 
@@ -128,7 +128,7 @@ fn spawn_shutdown_actor(transmitters: &HashMap<String, DVSender>, receiver: DVRe
     ctrlc::set_handler(move || {
         warn!("received Ctrl+C!");
         *shutdown_flag.lock().unwrap() = true;
-        shutdown_transmitter.send(Box::new(ShutdownMessage{})).unwrap();
+        shutdown_transmitter.send(Box::new(ShutdownMsg{})).unwrap();
     })
     .expect("Error setting Ctrl-C handler");
 

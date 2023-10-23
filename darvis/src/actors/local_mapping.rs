@@ -25,7 +25,7 @@ use crate::{
     actors::messages::{Reset, KeyFrameIdMsg}
 };
 
-use super::messages::{ShutdownMessage};
+use super::messages::{ShutdownMsg};
 
 #[derive(Debug, Derivative)]
 #[derivative(Default(bound=""))]
@@ -50,7 +50,7 @@ impl Actor for DarvisLocalMapping {
                 self.local_mapping();
             } else if let Some(_) = message.downcast_ref::<Reset>() {
                 // TODO (design) need to think about how reset requests should be propagated
-            } else if let Some(_) = message.downcast_ref::<ShutdownMessage>() {
+            } else if let Some(_) = message.downcast_ref::<ShutdownMsg>() {
                 break;
             } else {
                 warn!("Local Mapping received unknown message type!");

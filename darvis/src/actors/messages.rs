@@ -24,29 +24,26 @@ pub struct VisFeaturesMsg {
 }
 impl ActorMessage for VisFeaturesMsg {}
 
-pub struct VisKeyFrameMsg {
+pub struct VisUpdateMsg {
     pub pose: Pose,
+    pub timestamp: u64,
 }
-impl ActorMessage for VisKeyFrameMsg {}
-
-pub struct VisMapPointsMsg {}
-impl ActorMessage for VisMapPointsMsg {}
-
+impl ActorMessage for VisUpdateMsg {}
 
 //* Shutdown Actor *//
-pub struct ShutdownMessage {}
-impl ActorMessage for ShutdownMessage {}
+pub struct ShutdownMsg {}
+impl ActorMessage for ShutdownMsg {}
 
 #[derive(Clone)]
-pub struct TrajectoryMessage {
+pub struct TrajectoryMsg {
     pub pose: Pose,
     pub ref_kf_id: Id,
     pub timestamp: u64,
 }
-impl ActorMessage for TrajectoryMessage {}
-impl TrajectoryMessage {
+impl ActorMessage for TrajectoryMsg {}
+impl TrajectoryMsg {
     pub fn new(pose: Pose, ref_kf_id: Id, timestamp: u64) -> Self {
-        TrajectoryMessage{
+        TrajectoryMsg{
             pose,
             ref_kf_id,
             timestamp

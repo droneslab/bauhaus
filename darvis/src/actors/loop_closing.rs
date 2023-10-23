@@ -7,7 +7,7 @@ use crate::ActorChannels;
 use crate::dvmap::{map::Map};
 use crate::modules::imu::ImuModule;
 
-use super::messages::{KeyFrameIdMsg, ShutdownMessage};
+use super::messages::{KeyFrameIdMsg, ShutdownMsg};
 
 #[derive(Debug, Default)]
 pub struct DarvisLoopClosing {
@@ -27,7 +27,7 @@ impl Actor for DarvisLoopClosing {
             let message = self.actor_channels.receive().unwrap();
             if let Some(msg) = message.downcast_ref::<KeyFrameIdMsg>() {
                 self.loop_closing(msg);
-            } else if let Some(msg) = message.downcast_ref::<ShutdownMessage>() {
+            } else if let Some(msg) = message.downcast_ref::<ShutdownMsg>() {
                 break;
             } else {
                 warn!("Loop Closing received unknown message type!");
