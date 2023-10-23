@@ -3,7 +3,7 @@ use log::warn;
 
 use crate::{dvmap::{pose::Pose, map::Id}, RESULTS_FOLDER};
 use dvcore::{base::{ActorChannels, Actor}, config::{SYSTEM_SETTINGS, GLOBAL_PARAMS}};
-use super::{messages::{ShutdownMessage, TrajectoryMessage, TrackingStateMsg}, tracking_backend::TrackingState};
+use super::{messages::{ShutdownMsg, TrajectoryMsg, TrackingStateMsg}, tracking_backend::TrackingState};
 
 
 pub struct ShutdownActor {
@@ -29,7 +29,7 @@ impl Actor for ShutdownActor {
     fn run(&mut self) {
         loop {
             let message = self.actor_channels.receive().unwrap();
-            if let Some(_) = message.downcast_ref::<ShutdownMessage>() {
+            if let Some(_) = message.downcast_ref::<ShutdownMsg>() {
                 warn!("Triggered shutdown, saving trajectory info");
                 let mut file = File::create(
                     Path::new(RESULTS_FOLDER)
@@ -47,9 +47,9 @@ impl Actor for ShutdownActor {
                 }
 
                 for (_, actor_tx) in &self.actor_channels.actors {
-                    actor_tx.send(Box::new(ShutdownMessage{})).unwrap();
+                    actor_tx.send(Box::new(ShutdownMsg{})).unwrap();
                 }
-            } else if let Some(msg) = message.downcast_ref::<TrajectoryMessage>() {
+            } else if let Some(msg) = message.downcast_ref::<TrajectoryMsg>() {
                 self.trajectory_poses.push(msg.pose);
                 self.trajectory_times.push(msg.timestamp);
                 self.trajectory_keyframes.push(msg.ref_kf_id);

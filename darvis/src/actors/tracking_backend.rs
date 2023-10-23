@@ -4,7 +4,7 @@ use log::{warn, info, debug, error};
 use opencv::core::Point2f;
 use dvcore::{lockwrap::ReadOnlyWrapper, config::*, sensor::{Sensor, FrameSensor, ImuSensor}, base::Actor};
 use crate::{
-    actors::messages::{FeatureMsg, MapInitializedMsg, TrajectoryMessage, TrackingStateMsg, KeyFrameIdMsg, LastKeyFrameUpdatedMsg, ShutdownMessage},
+    actors::messages::{FeatureMsg, MapInitializedMsg, TrajectoryMsg, TrackingStateMsg, KeyFrameIdMsg, LastKeyFrameUpdatedMsg, ShutdownMsg},
     actors::map_actor::MapWriteMsg,
     registered_actors::{LOCAL_MAPPING, TRACKING_BACKEND, SHUTDOWN_ACTOR, TRACKING_FRONTEND, VISUALIZER, MAP_ACTOR},
     dvmap::{
@@ -142,7 +142,7 @@ impl Actor for DarvisTrackingBack {
             } else if let Some(_) = message.downcast_ref::<LastKeyFrameUpdatedMsg>() {
                 // Received from local mapping after it culls and creates new MPs for the last inserted KF
                 self.state = TrackingState::Ok;
-            } else if let Some(_) = message.downcast_ref::<ShutdownMessage>() {
+            } else if let Some(_) = message.downcast_ref::<ShutdownMsg>() {
                 break;
             } else {
                 warn!("Tracking backend received unknown message type!");
@@ -367,7 +367,7 @@ impl DarvisTrackingBack {
                 let new_pose = current_pose * self.map.read().get_keyframe(&ref_kf_id).expect("Can't get ref kf").pose.expect("Can't get ref kf pose").inverse();
                 self.trajectory_poses.push(new_pose);
 
-                let traj_msg = TrajectoryMessage::new(
+                let traj_msg = TrajectoryMsg::new(
                     new_pose,
                     ref_kf_id,
                     current_frame.timestamp

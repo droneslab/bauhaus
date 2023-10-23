@@ -13,7 +13,7 @@ use dvcore::{
 use crate::{
     registered_actors::{FEATURE_DETECTION, CAMERA, VISUALIZER},
     actors::{
-        messages::{ImageMsg, FeatureMsg,TrackingStateMsg, ShutdownMessage, ImagePathMsg, VisFeaturesMsg},
+        messages::{ImageMsg, FeatureMsg,TrackingStateMsg, ShutdownMsg, ImagePathMsg, VisFeaturesMsg},
         tracking_backend::TrackingState,
     },
     modules::image,
@@ -96,7 +96,7 @@ impl Actor for DarvisTrackingFront {
                     },
                     _ => {}
                 };
-            } else if let Some(_) = message.downcast_ref::<ShutdownMessage>() {
+            } else if let Some(_) = message.downcast_ref::<ShutdownMsg>() {
                 break;
             } else {
                 warn!("Tracking frontend received unknown message type!");

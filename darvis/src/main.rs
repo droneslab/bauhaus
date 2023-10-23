@@ -9,7 +9,7 @@ use spin_sleep::LoopHelper;
 extern crate lazy_static;
 
 use dvcore::{*, config::*, base::{ActorChannels}};
-use crate::{actors::{messages::{ImageMsg, ShutdownMessage, ImagePathMsg}}, registered_actors::{TRACKING_FRONTEND, VISUALIZER}};
+use crate::{actors::{messages::{ImageMsg, ShutdownMsg, ImagePathMsg}}, registered_actors::{TRACKING_FRONTEND, VISUALIZER}};
 use crate::dvmap::{bow::VOCABULARY, map::Id};
 
 mod actors;
@@ -80,7 +80,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         loop_helper.loop_sleep(); 
     }
-    shutdown_tx.send(Box::new(ShutdownMessage{}))?;
+    shutdown_tx.send(Box::new(ShutdownMsg{}))?;
 
     Ok(())
 }

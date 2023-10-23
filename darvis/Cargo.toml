@@ -23,8 +23,11 @@ debuginfo-level = 1
 IDL_PACKAGE_FILTER = { value = "std_msgs;r2r_minimal_node_msgs" }
 
 [dependencies]
+# Inside darvis github project
 g2o = { path = "../g2o" }
 dvos3binding = { path = "../orbslam-bindings" }
+foxglove = { path = "../foxglove" }
+# External dependencies
 once_cell = "0.1.4"
 opencv = { version = "0.63.0"}
 nalgebra = {version = "*", features = ["serde-serialize"]}
@@ -50,7 +53,7 @@ spin_sleep = "*"
 flame = "0.2.2"
 flamer = "0.3"
 ctrlc = "3.2.3"
-tokio = { version = "1.24", default-features = false }
 downcast-rs = "1.2.0"
 mcap = "*"
-serde_json = "*"
+prost-types = "0.12.1"
+prost = "0.12.1"

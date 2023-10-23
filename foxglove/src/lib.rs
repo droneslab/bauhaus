@@ -1,25 +1,30 @@
-// pub type TranslationVector = [f64; 3];
-// pub type RotationVector = [f64; 4];
-
-#[cxx::bridge(namespace = "foxglove")]
-pub mod ffi {
-    // Shared structs with fields visible to both languages.
-
-    struct Pose {
-        translation: [f64; 3], // in C++: array<double, 3>,
-        rotation: [f64; 4] // in C++: array<double, 4> 
+// Include the `items` module, which is generated from items.proto.
+// It is important to maintain the same structure as in the proto.
+pub mod foxglove {
+    pub mod items {
+        include!(concat!(env!("OUT_DIR"), "/foxglove.rs"));
     }
+}
 
-    unsafe extern "C++" {
-        // Note: can't use relative path because cargo hates it :(
-
-        // include!("publish.h");
-        // // Opaque types which both languages can pass around
-        // // but only C++ can see the fields.
-        // type BridgeSparseOptimizer;
-
-        // fn new_sparse_optimizer(opt_type: i32, camera_param: [f64;4]) -> UniquePtr<BridgeSparseOptimizer>;
+use foxglove::items::{self, Vector3, Pose, Quaternion, SceneUpdate, SceneEntity, Color};
 
 
-    }
+pub fn get_file_descriptor_set_bytes() -> &'static [u8] {
+    include_bytes!(concat!(env!("OUT_DIR"), "/file_descriptor_set.bin"))
+}
+
+pub fn make_pose(x: f64, y: f64, z: f64) -> Option<Pose> {
+    let position = Vector3 { x, y, z };
+
+    let orientation = Quaternion {
+        x: 0.0,
+        y: 0.0,
+        z: 0.0,
+        w: 1.0
+    };
+
+    Some(Pose {
+        position: Some(position),
+        orientation: Some(orientation),
+    })
 }

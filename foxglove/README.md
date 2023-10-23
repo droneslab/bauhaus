@@ -1,1 +1,2 @@
-C++ bindings to publish visualization messages for foxglove visualization tool
+Library to compile and use foxglove proto files
+See ``examples/straight_trajectory`` for an example of how to write to an mcap file. You should be able to open the output file in ``results/out.mcap`` and watch it in foxglove.
