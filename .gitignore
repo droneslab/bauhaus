@@ -1,5 +1,4 @@
 **/target
-**/Cargo.lock
 **/data
 
 **/orb_slam3/lib/*
