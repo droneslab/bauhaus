@@ -4,7 +4,7 @@ use log::{warn, info, debug, error};
 use opencv::core::Point2f;
 use dvcore::{lockwrap::ReadOnlyWrapper, config::*, sensor::{Sensor, FrameSensor, ImuSensor}, base::Actor};
 use crate::{
-    actors::messages::{FeatureMsg, MapInitializedMsg, TrajectoryMsg, TrackingStateMsg, KeyFrameIdMsg, LastKeyFrameUpdatedMsg, ShutdownMsg},
+    actors::messages::{FeatureMsg, MapInitializedMsg, TrajectoryMsg, TrackingStateMsg, KeyFrameIdMsg, LastKeyFrameUpdatedMsg, ShutdownMsg, DrawInitialMapMsg},
     actors::map_actor::MapWriteMsg,
     registered_actors::{LOCAL_MAPPING, TRACKING_BACKEND, SHUTDOWN_ACTOR, TRACKING_FRONTEND, VISUALIZER, MAP_ACTOR},
     dvmap::{
@@ -117,18 +117,31 @@ impl Actor for DarvisTrackingBack {
                 self.state = TrackingState::Ok;
                 // Sofiya: ORBSLAM also sets lastkeyframeid, but I think we can get away without it
 
+                // Let tracking frontend know the map is initialized
                 self.actor_channels.find(TRACKING_FRONTEND).unwrap().send(Box::new(
                     TrackingStateMsg { 
                         state: TrackingState::Ok,
                         init_id: msg.ini_kf_id
                     }
                 )).expect("Could not send to tracking frontend");
+
+                // Send first two keyframes to local mapping
                 self.actor_channels.find(LOCAL_MAPPING).unwrap().send(Box::new(
                     KeyFrameIdMsg { keyframe_id: msg.ini_kf_id }
                 )).expect("Could not send to local mapping");
                 self.actor_channels.find(LOCAL_MAPPING).unwrap().send(Box::new(
                     KeyFrameIdMsg { keyframe_id: msg.curr_kf_id }
                 )).unwrap();
+
+                // Visualize first two keyframes
+                if let Some(vis) = self.actor_channels.find(VISUALIZER) {
+                    vis.send(Box::new(
+                        DrawInitialMapMsg {
+                            kf1_id: msg.ini_kf_id, 
+                            kf2_id: msg.curr_kf_id 
+                        }
+                    )).expect("Could not send message to visualizer");
+                }
 
             } else if let Some(msg) = message.downcast_ref::<KeyFrameIdMsg>() {
                 // Received from the map actor after it inserts a keyframe
@@ -263,6 +276,10 @@ impl DarvisTrackingBack {
                         self.relocalization.past_cutoff(&current_frame)
                     },
                     false => {
+                        // TODO (relocalization): remove the call to shutdown actor. This is just to gracefully shut down instead of panicking at the todo 
+                        error!("Relocalization! Shutting down for now.");
+                        self.actor_channels.find(SHUTDOWN_ACTOR).unwrap().send(Box::new(ShutdownMsg{}))?;
+                        return Ok((current_frame, TrackingState::Lost));
                         !self.relocalization.run() && self.relocalization.sec_since_lost(&current_frame) > 3
                     }
                 };

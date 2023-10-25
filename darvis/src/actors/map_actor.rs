@@ -7,6 +7,8 @@ use crate::{
     modules::map_initialization::Initialization, actors::messages::{MapInitializedMsg, KeyFrameIdMsg, LastKeyFrameUpdatedMsg},
 };
 
+use super::messages::ShutdownMsg;
+
 pub struct MapActor {
     actor_system: ActorChannels,
     map: ReadWriteWrapper<Map>,
@@ -84,6 +86,8 @@ impl Actor for MapActor {
                         warn!("Map Actor received unknown message type!");
                     },
                 }
+            } else if let Some(_) = message.downcast_ref::<ShutdownMsg>() {
+                break;
             } else {
                 warn!("Map Actor received unknown message type!");
             }

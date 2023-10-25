@@ -14,7 +14,7 @@ pub fn write_image_file(path: &String, image: &Mat) {
     let _ = imgcodecs::imwrite(path, image, &params).expect("Could not read image.");
 }
 
-pub fn write_features(image: &Mat, keypoints: &VectorOfKeyPoint, path: &String) {
+pub fn write_features(image: &Mat, keypoints: &VectorOfKeyPoint) {
     let mut dst_img = Mat::default();
     opencv::features2d::draw_keypoints(
         image,
@@ -24,5 +24,5 @@ pub fn write_features(image: &Mat, keypoints: &VectorOfKeyPoint, path: &String) 
         opencv::features2d::DrawMatchesFlags::DEFAULT,
     );
 
-    opencv::imgcodecs::imwrite(path, &dst_img, &opencv::core::Vector::default()).unwrap();
+    // opencv::imgcodecs::imwrite(path, &dst_img, &opencv::core::Vector::default()).unwrap();
 }

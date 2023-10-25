@@ -12,6 +12,7 @@ use dvcore::{
     matrix::DVVector3
 };
 use log::{debug, warn};
+use opencv::prelude::KeyPointTraitConst;
 use crate::ActorChannels;
 use crate::actors::map_actor::MapWriteMsg;
 use crate::registered_actors::{TRACKING_BACKEND};
@@ -336,8 +337,8 @@ impl DarvisLocalMapping {
                 }
 
                 // Check parallax between rays
-                let xn1 = CAMERA_MODULE.unproject_eig(&kp1.pt);
-                let xn2 = CAMERA_MODULE.unproject_eig(&kp2.pt);
+                let xn1 = CAMERA_MODULE.unproject_eig(&kp1.pt());
+                let xn2 = CAMERA_MODULE.unproject_eig(&kp2.pt());
                 let ray1 = rotation_transpose1 * (*xn1);
                 let ray2 = rotation_transpose2 * (*xn2);
                 let cos_parallax_rays = ray1.dot(&ray2) / (ray1.norm() * ray2.norm());
@@ -379,7 +380,7 @@ impl DarvisLocalMapping {
                 }
 
                 //Check reprojection error in first keyframe
-                let sigma_square1 = INV_LEVEL_SIGMA2[kp1.octave as usize];
+                let sigma_square1 = INV_LEVEL_SIGMA2[kp1.octave() as usize];
                 let x1 = rotation1.row(0).transpose().dot(&x3_d_nalg) + (*translation1)[0];
                 let y1 = rotation1.row(1).transpose().dot(&x3_d_nalg) + (*translation1)[1];
 
@@ -389,23 +390,23 @@ impl DarvisLocalMapping {
                     // let u1 = CAMERA_MODULE.get_fx() * x1 * invz1 + CAMERA_MODULE.get_cx();
                     // let u1_r = u1 - CAMERA_MODULE.stereo_baseline_times_fx * invz1;
                     // let v1 = CAMERA_MODULE.get_fy() * y1 * invz1 + CAMERA_MODULE.get_cy();
-                    // let err_x1 = u1 as f32 - kp1.pt.x;
-                    // let err_y1 = v1 as f32 - kp1.pt.y;
+                    // let err_x1 = u1 as f32 - kp1.pt().x;
+                    // let err_y1 = v1 as f32 - kp1.pt().y;
                     // let err_x1_r = u1_r as f32 - kp1_ur.unwrap();
                     // if (err_x1 * err_x1  + err_y1 * err_y1 + err_x1_r * err_x1_r) > 7.8 * sigma_square1 {
                     //     continue
                     // }
                 } else {
                     let uv1 = CAMERA_MODULE.project(DVVector3::new_with(x1, y1, z1));
-                    let err_x1 = uv1.0 as f32 - kp1.pt.x;
-                    let err_y1 = uv1.1 as f32 - kp1.pt.y;
+                    let err_x1 = uv1.0 as f32 - kp1.pt().x;
+                    let err_y1 = uv1.1 as f32 - kp1.pt().y;
                     if (err_x1 * err_x1  + err_y1 * err_y1) > 5.991 * sigma_square1 {
                         continue
                     }
                 }
 
                 //Check reprojection error in second keyframe
-                let sigma_square2 = INV_LEVEL_SIGMA2[kp2.octave as usize];
+                let sigma_square2 = INV_LEVEL_SIGMA2[kp2.octave() as usize];
                 let x2 = rotation2.row(0).transpose().dot(&x3_d_nalg) + (*translation2)[0];
                 let y2 = rotation2.row(1).transpose().dot(&x3_d_nalg) + (*translation2)[1];
 
@@ -415,16 +416,16 @@ impl DarvisLocalMapping {
                     // let u2 = CAMERA_MODULE.get_fx() * x2 * invz2 + CAMERA_MODULE.get_cx();// This should be camera2, not camera
                     // let u2_r = u2 - CAMERA_MODULE.stereo_baseline_times_fx * invz2;
                     // let v2 = CAMERA_MODULE.get_fy() * y2 * invz2 + CAMERA_MODULE.get_cy();// This should be camera2, not camera
-                    // let err_x2 = u2 as f32 - kp2.pt.x;
-                    // let err_y2 = v2 as f32 - kp2.pt.y;
+                    // let err_x2 = u2 as f32 - kp2.pt().x;
+                    // let err_y2 = v2 as f32 - kp2.pt().y;
                     // let err_x2_r = u2_r as f32 - kp2_ur.unwrap();
                     // if (err_x2 * err_x2  + err_y2 * err_y2 + err_x2_r * err_x2_r) > 7.8 * sigma_square2 {
                     //     continue
                     // }
                 } else {
                     let uv2 = CAMERA_MODULE.project(DVVector3::new_with(x2, y2, z2));
-                    let err_x2 = uv2.0 as f32 - kp2.pt.x;
-                    let err_y2 = uv2.1 as f32 - kp2.pt.y;
+                    let err_x2 = uv2.0 as f32 - kp2.pt().x;
+                    let err_y2 = uv2.1 as f32 - kp2.pt().y;
                     if (err_x2 * err_x2  + err_y2 * err_y2) > 5.991 * sigma_square2 {
                         continue
                     }
@@ -446,7 +447,7 @@ impl DarvisLocalMapping {
                 }
 
                 let ratio_dist = dist2 / dist1;
-                let ratio_octave = (SCALE_FACTORS[kp1.octave as usize] / SCALE_FACTORS[kp2.octave as usize]) as f64;
+                let ratio_octave = (SCALE_FACTORS[kp1.octave() as usize] / SCALE_FACTORS[kp2.octave() as usize]) as f64;
                 if ratio_dist * ratio_factor < ratio_octave || ratio_dist > ratio_octave * ratio_factor {
                     continue;
                 }

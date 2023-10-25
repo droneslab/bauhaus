@@ -2,7 +2,7 @@
 mod vision_tests {
     use dvcore::{matrix::{DVVector3, DVMatrix, DVVectorOfKeyPoint}, config::{GLOBAL_PARAMS, self}, sensor::{Sensor, FrameSensor, ImuSensor}};
     use dvos3binding::ffi::WrapBindCVMat;
-    use opencv::{imgcodecs, prelude::MatTraitConst, core::{CV_8U, CV_8UC1}};
+    use opencv::{imgcodecs, prelude::{MatTraitConst, KeyPointTraitConst}, core::{CV_8U, CV_8UC1}};
 
     use crate::{modules::geometric_tools, dvmap::{pose::Pose, features::Features, bow::{BoW, self}}, actors::tracking_frontend::DVORBextractor};
     use std::{fs, env};
@@ -103,33 +103,33 @@ mod vision_tests {
         for index in 0..kps.len() as usize {
             let kp = kps.get(index).unwrap();
             let pt_x;
-            let fract = (kp.pt.x.fract() * 100.0).round() / 100.0;
+            let fract = (kp.pt().x.fract() * 100.0).round() / 100.0;
             print!("{} ",fract);
             if fract == 0.0 {
-                pt_x= format!("{}", kp.pt.x);
+                pt_x= format!("{}", kp.pt().x);
             } else if fract % 0.1 == 0.0 {
-                pt_x = format!("{:.1}", kp.pt.x);
+                pt_x = format!("{:.1}", kp.pt().x);
             } else if fract % 0.01 == 0.0 {
-                pt_x = format!("{:.2}", kp.pt.x);
+                pt_x = format!("{:.2}", kp.pt().x);
             } else {
-                pt_x = format!("{:.3}", kp.pt.x);
+                pt_x = format!("{:.3}", kp.pt().x);
             }
 
             let pt_y;
-            let fract = (kp.pt.y.fract() * 100.0).round() / 100.0;
+            let fract = (kp.pt().y.fract() * 100.0).round() / 100.0;
                         print!("{} ",fract);
 
             if fract == 0.0 {
-                pt_y = format!("{}", kp.pt.y);
+                pt_y = format!("{}", kp.pt().y);
             } else if fract % 0.1 == 0.0 {
-                pt_y = format!("{:.1}", kp.pt.y);
+                pt_y = format!("{:.1}", kp.pt().y);
             } else if fract % 0.01 == 0.0 {
-                pt_y = format!("{:.2}", kp.pt.y);
+                pt_y = format!("{:.2}", kp.pt().y);
             } else {
-                pt_y = format!("{:.3}", kp.pt.y);
+                pt_y = format!("{:.3}", kp.pt().y);
             }
 
-            real_kps.push(format!("[{}, {}] {} {} {}", pt_x, pt_y, kp.octave, kp.response, kp.size));
+            real_kps.push(format!("[{}, {}] {} {} {}", pt_x, pt_y, kp.octave(), kp.response(), kp.size()));
         }
         real_kps.join(";")
     }

@@ -1,2 +1,18 @@
 Library to compile and use foxglove proto files
-See ``examples/straight_trajectory`` for an example of how to write to an mcap file. You should be able to open the output file in ``results/out.mcap`` and watch it in foxglove.
+
+## Example 
+1. Run the example code:
+    > cargo run --example straight_trajectory 
+2. The mcap file gets saved to `results/out.mcap`
+3. Open foxglove, click `open local file`, and select `out.mcap`
+
+## Running with Darvis
+The `visualizer` actor in darvis contains the code for writing darvis visualization to the mcap file. By default it will go to `darvis/results/out.mcap` but you can change this in the config file.
+To open up the layout for the darvis visualization, click on `layout` in the top right corner of foxglove, then `import from file`. Load the file `foxglovelayout.json`.
+
+## Other utils
+Sometimes it is useful to look at the raw data in the mcap file outside of foxglove. To inspect the file, use the `mcap` executable like this:
+
+```bash
+./mcap cat results/out.mcap --json
+```

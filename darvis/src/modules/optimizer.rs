@@ -8,6 +8,7 @@ use dvcore::{
 };
 use log::{info, warn, debug};
 use nalgebra::Matrix3;
+use opencv::prelude::KeyPointTraitConst;
 use crate::{dvmap::{keyframe::InitialFrame, pose::Pose, map::{Map, Id}, keyframe::{Frame, FullKeyFrame}}, registered_actors::{FEATURE_DETECTION, CAMERA}, actors::map_actor::MapWriteMsg};
 use g2o::ffi::EdgeSE3ProjectXYZ;
 
@@ -89,7 +90,7 @@ pub fn pose_inertial_optimization_last_frame(_frame: &mut Frame<InitialFrame>, _
 //                     pFrame->mvbOutlier[i] = false;
 
 //                     Eigen::Matrix<double,2,1> obs;
-//                     obs << kpUn.pt.x, kpUn.pt.y;
+//                     obs << kpUn.pt().x, kpUn.pt().y;
 
 //                     EdgeMonoOnlyPose* e = new EdgeMonoOnlyPose(pMP->GetWorldPos(),0);
 
@@ -99,7 +100,7 @@ pub fn pose_inertial_optimization_last_frame(_frame: &mut Frame<InitialFrame>, _
 //                     // Add here uncerteinty
 //                     const float unc2 = pFrame->mpCamera->uncertainty2(obs);
 
-//                     const float invSigma2 = pFrame->mvInvLevelSigma2[kpUn.octave]/unc2;
+//                     const float invSigma2 = pFrame->mvInvLevelSigma2[kpUn.octave()]/unc2;
 //                     e->setInformation(Eigen::Matrix2d::Identity()*invSigma2);
 
 //                     g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
@@ -120,7 +121,7 @@ pub fn pose_inertial_optimization_last_frame(_frame: &mut Frame<InitialFrame>, _
 //                     kpUn = pFrame->mvKeysUn[i];
 //                     const float kp_ur = pFrame->mvuRight[i];
 //                     Eigen::Matrix<double,3,1> obs;
-//                     obs << kpUn.pt.x, kpUn.pt.y, kp_ur;
+//                     obs << kpUn.pt().x, kpUn.pt().y, kp_ur;
 
 //                     EdgeStereoOnlyPose* e = new EdgeStereoOnlyPose(pMP->GetWorldPos());
 
@@ -130,7 +131,7 @@ pub fn pose_inertial_optimization_last_frame(_frame: &mut Frame<InitialFrame>, _
 //                     // Add here uncerteinty
 //                     const float unc2 = pFrame->mpCamera->uncertainty2(obs.head(2));
 
-//                     const float &invSigma2 = pFrame->mvInvLevelSigma2[kpUn.octave]/unc2;
+//                     const float &invSigma2 = pFrame->mvInvLevelSigma2[kpUn.octave()]/unc2;
 //                     e->setInformation(Eigen::Matrix3d::Identity()*invSigma2);
 
 //                     g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
@@ -151,7 +152,7 @@ pub fn pose_inertial_optimization_last_frame(_frame: &mut Frame<InitialFrame>, _
 
 //                     kpUn = pFrame->mvKeysRight[i - Nleft];
 //                     Eigen::Matrix<double,2,1> obs;
-//                     obs << kpUn.pt.x, kpUn.pt.y;
+//                     obs << kpUn.pt().x, kpUn.pt().y;
 
 //                     EdgeMonoOnlyPose* e = new EdgeMonoOnlyPose(pMP->GetWorldPos(),1);
 
@@ -161,7 +162,7 @@ pub fn pose_inertial_optimization_last_frame(_frame: &mut Frame<InitialFrame>, _
 //                     // Add here uncerteinty
 //                     const float unc2 = pFrame->mpCamera->uncertainty2(obs);
 
-//                     const float invSigma2 = pFrame->mvInvLevelSigma2[kpUn.octave]/unc2;
+//                     const float invSigma2 = pFrame->mvInvLevelSigma2[kpUn.octave()]/unc2;
 //                     e->setInformation(Eigen::Matrix2d::Identity()*invSigma2);
 
 //                     g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
@@ -487,7 +488,7 @@ pub fn pose_inertial_optimization_last_keyframe(_frame: &mut Frame<InitialFrame>
     //                 pFrame->mvbOutlier[i] = false;
 
     //                 Eigen::Matrix<double,2,1> obs;
-    //                 obs << kpUn.pt.x, kpUn.pt.y;
+    //                 obs << kpUn.pt().x, kpUn.pt().y;
 
     //                 EdgeMonoOnlyPose* e = new EdgeMonoOnlyPose(pMP->GetWorldPos(),0);
 
@@ -497,7 +498,7 @@ pub fn pose_inertial_optimization_last_keyframe(_frame: &mut Frame<InitialFrame>
     //                 // Add here uncerteinty
     //                 const float unc2 = pFrame->mpCamera->uncertainty2(obs);
 
-    //                 const float invSigma2 = pFrame->mvInvLevelSigma2[kpUn.octave]/unc2;
+    //                 const float invSigma2 = pFrame->mvInvLevelSigma2[kpUn.octave()]/unc2;
     //                 e->setInformation(Eigen::Matrix2d::Identity()*invSigma2);
 
     //                 g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
@@ -518,7 +519,7 @@ pub fn pose_inertial_optimization_last_keyframe(_frame: &mut Frame<InitialFrame>
     //                 kpUn = pFrame->mvKeysUn[i];
     //                 const float kp_ur = pFrame->mvuRight[i];
     //                 Eigen::Matrix<double,3,1> obs;
-    //                 obs << kpUn.pt.x, kpUn.pt.y, kp_ur;
+    //                 obs << kpUn.pt().x, kpUn.pt().y, kp_ur;
 
     //                 EdgeStereoOnlyPose* e = new EdgeStereoOnlyPose(pMP->GetWorldPos());
 
@@ -528,7 +529,7 @@ pub fn pose_inertial_optimization_last_keyframe(_frame: &mut Frame<InitialFrame>
     //                 // Add here uncerteinty
     //                 const float unc2 = pFrame->mpCamera->uncertainty2(obs.head(2));
 
-    //                 const float &invSigma2 = pFrame->mvInvLevelSigma2[kpUn.octave]/unc2;
+    //                 const float &invSigma2 = pFrame->mvInvLevelSigma2[kpUn.octave()]/unc2;
     //                 e->setInformation(Eigen::Matrix3d::Identity()*invSigma2);
 
     //                 g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
@@ -549,7 +550,7 @@ pub fn pose_inertial_optimization_last_keyframe(_frame: &mut Frame<InitialFrame>
 
     //                 kpUn = pFrame->mvKeysRight[i - Nleft];
     //                 Eigen::Matrix<double,2,1> obs;
-    //                 obs << kpUn.pt.x, kpUn.pt.y;
+    //                 obs << kpUn.pt().x, kpUn.pt().y;
 
     //                 EdgeMonoOnlyPose* e = new EdgeMonoOnlyPose(pMP->GetWorldPos(),1);
 
@@ -559,7 +560,7 @@ pub fn pose_inertial_optimization_last_keyframe(_frame: &mut Frame<InitialFrame>
     //                 // Add here uncerteinty
     //                 const float unc2 = pFrame->mpCamera->uncertainty2(obs);
 
-    //                 const float invSigma2 = pFrame->mvInvLevelSigma2[kpUn.octave]/unc2;
+    //                 const float invSigma2 = pFrame->mvInvLevelSigma2[kpUn.octave()]/unc2;
     //                 e->setInformation(Eigen::Matrix2d::Identity()*invSigma2);
 
     //                 g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
@@ -834,9 +835,9 @@ pub fn optimize_pose(frame: &mut Frame<InitialFrame>, map: &ReadOnlyWrapper<Map>
                         // Stereo observations
                         todo!("Stereo");
                         // let edge = optimizer.create_edge_stereo(
-                        //     keypoint.octave, keypoint.pt.x, keypoint.pt.y,
+                        //     keypoint.octave(), keypoint.pt().x, keypoint.pt().y,
                         //    frame.keypoints_data.mv_right.get(mp_id).unwrap(),
-                        //     self.inv_level_sigma2[keypoint.octave as usize]
+                        //     self.inv_level_sigma2[keypoint.octave() as usize]
                         // );
 
                         // {
@@ -852,8 +853,8 @@ pub fn optimize_pose(frame: &mut Frame<InitialFrame>, map: &ReadOnlyWrapper<Map>
                         let map_read_lock = map.read();
                         let position = &map_read_lock.get_mappoint(&mp_id).unwrap().position;
                         let edge = optimizer.pin_mut().add_edge_monocular_unary(
-                            false, frame_vertex_id, keypoint.octave, keypoint.pt.x, keypoint.pt.y,
-                            INV_LEVEL_SIGMA2[keypoint.octave as usize],
+                            false, frame_vertex_id, keypoint.octave(), keypoint.pt().x, keypoint.pt().y,
+                            INV_LEVEL_SIGMA2[keypoint.octave() as usize],
                             (position).into()
                         );
                         // Sofiya: below code sets edge's camera to the frame's camera
@@ -1055,8 +1056,8 @@ pub fn global_bundle_adjustment(map: &Map, loop_kf: i32, iterations: i32) -> BAR
                         let (keypoint, _) = map.get_keyframe(kf_id).unwrap().features.get_keypoint(*left_index as usize);
                         optimizer.pin_mut().add_edge_monocular_binary(
                             false, id_count, *kf_vertex_ids.get(kf_id).unwrap(),
-                            keypoint.octave, keypoint.pt.x, keypoint.pt.y,
-                            INV_LEVEL_SIGMA2[keypoint.octave as usize],
+                            keypoint.octave(), keypoint.pt().x, keypoint.pt().y,
+                            INV_LEVEL_SIGMA2[keypoint.octave() as usize],
                             0
                         );
                         // Sofiya: below code sets edge's camera to the frame's camera
@@ -1245,14 +1246,14 @@ pub fn local_bundle_adjustment(
                     //     // const cv::KeyPoint &kpUn = pKFi->mvKeysUn[leftIndex];
                     //     // Eigen::Matrix<double,3,1> obs;
                     //     // const float kp_ur = pKFi->mvuRight[get<0>(mit->second)];
-                    //     // obs << kpUn.pt.x, kpUn.pt.y, kp_ur;
+                    //     // obs << kpUn.pt().x, kpUn.pt().y, kp_ur;
 
                     //     // g2o::EdgeStereoSE3ProjectXYZ* e = new g2o::EdgeStereoSE3ProjectXYZ();
 
                     //     // e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(id)));
                     //     // e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(pKFi->mnId)));
                     //     // e->setMeasurement(obs);
-                    //     // const float &invSigma2 = pKFi->mvInvLevelSigma2[kpUn.octave];
+                    //     // const float &invSigma2 = pKFi->mvInvLevelSigma2[kpUn.octave()];
                     //     // Eigen::Matrix3d Info = Eigen::Matrix3d::Identity()*invSigma2;
                     //     // e->setInformation(Info);
 
@@ -1282,14 +1283,14 @@ pub fn local_bundle_adjustment(
 
                     // //         Eigen::Matrix<double,2,1> obs;
                     // //         cv::KeyPoint kp = pKFi->mvKeysRight[rightIndex];
-                    // //         obs << kp.pt.x, kp.pt.y;
+                    // //         obs << kp.pt().x, kp.pt().y;
 
                     // //         ORB_SLAM3::EdgeSE3ProjectXYZToBody *e = new ORB_SLAM3::EdgeSE3ProjectXYZToBody();
 
                     // //         e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(id)));
                     // //         e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(pKFi->mnId)));
                     // //         e->setMeasurement(obs);
-                    // //         const float &invSigma2 = pKFi->mvInvLevelSigma2[kp.octave];
+                    // //         const float &invSigma2 = pKFi->mvInvLevelSigma2[kp.octave()];
                     // //         e->setInformation(Eigen::Matrix2d::Identity()*invSigma2);
 
                     // //         g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
@@ -1319,8 +1320,8 @@ pub fn local_bundle_adjustment(
 
                         let edge = optimizer.pin_mut().add_edge_monocular_binary(
                             false, vertex_id, kf_vertex,
-                            kp_un.octave, kp_un.pt.x, kp_un.pt.y,
-                            INV_LEVEL_SIGMA2[kp_un.octave as usize],
+                            kp_un.octave(), kp_un.pt().x, kp_un.pt().y,
+                            INV_LEVEL_SIGMA2[kp_un.octave() as usize],
                             1 // set delta of robustkernelhuber to thHuberMono
                         );
 

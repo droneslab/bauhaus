@@ -1097,6 +1097,17 @@ namespace orb_slam3 {
         return num_extracted;
     }
 
+    int ORBextractor::extract2(orb_slam3::WrapBindCVKeyPoints & keypoints, orb_slam3::WrapBindCVMat & descriptors) {
+        vector<int> lapping = {overlap_begin, overlap_end};
+
+        cout << "Just testing" << endl;
+        Mat image = cv::imread("/home/sofiya/datasets/kitti_00_0/000001.png",cv::IMREAD_GRAYSCALE); //,cv::IMREAD_UNCHANGED);
+
+        auto num_extracted = extract(image, cv::Mat(), *keypoints.kp_ptr, *descriptors.mat_ptr, lapping);
+
+        return num_extracted;
+    }
+
     int ORBextractor::extract( InputArray _image, InputArray _mask, vector<KeyPoint>& _keypoints,
                                   OutputArray _descriptors, std::vector<int> &vLappingArea)
     {
@@ -1189,7 +1200,7 @@ namespace orb_slam3 {
             float scale = mvInvScaleFactor[level];
             Size sz(cvRound((float)image.cols*scale), cvRound((float)image.rows*scale));
             Size wholeSize(sz.width + EDGE_THRESHOLD*2, sz.height + EDGE_THRESHOLD*2);
-            Mat temp(wholeSize, image.type()), masktemp;
+            Mat temp(wholeSize, image.type());
             mvImagePyramid[level] = temp(Rect(EDGE_THRESHOLD, EDGE_THRESHOLD, sz.width, sz.height));
 
             // Compute the resized image
