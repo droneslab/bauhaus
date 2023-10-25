@@ -1,4 +1,4 @@
-use opencv::{prelude::{Mat, MatTrait, MatTraitConst}, core::{Scalar, CV_64F, KeyPoint}};
+use opencv::{prelude::{Mat, MatTrait, MatTraitConst, KeyPointTraitConst}, core::{Scalar, CV_64F, KeyPoint}};
 use dvcore::{config::*, matrix::{DVMatrix, DVVectorOfPoint3f, DVVector3}, sensor::Sensor};
 use crate::{
     dvmap::{pose::Pose, keyframe::{Frame, FullKeyFrame}},
@@ -138,8 +138,8 @@ impl Camera {
         //     const float z = mvDepth[i];
         //     if(z>0)
         //     {
-        //         const float u = mvKeys[i].pt.x;
-        //         const float v = mvKeys[i].pt.y;
+        //         const float u = mvKeys[i].pt().x;
+        //         const float v = mvKeys[i].pt().y;
         //         const float x = (u-cx)*z*invfx;
         //         const float y = (v-cy)*z*invfy;
         //         Eigen::Vector3f x3Dc(x, y, z);
@@ -175,8 +175,8 @@ impl Camera {
         let f12 = k1.transpose().try_inverse().unwrap() * t12x * r12 * k2.try_inverse().unwrap();
 
         // Epipolar line in second image l = x1'F12 = [a b c]
-        let ptx = kp1.pt.x as f64;
-        let pty = kp1.pt.y as f64;
+        let ptx = kp1.pt().x as f64;
+        let pty = kp1.pt().y as f64;
         let a = ptx * f12[(0,0)] + pty * f12[(1,0)] + f12[(2,0)];
         let b = ptx * f12[(0,1)] + pty * f12[(1,1)] + f12[(2,1)];
         let c = ptx * f12[(0,2)] + pty * f12[(1,2)] + f12[(2,2)];

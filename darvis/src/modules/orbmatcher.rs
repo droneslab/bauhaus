@@ -60,7 +60,7 @@ pub fn search_for_initialization(
     let mut rot_hist = construct_rotation_histogram();
 
     for (i1, kp1) in f1.features.get_all_keypoints().iter().enumerate() {
-        let level1 = kp1.octave;
+        let level1 = kp1.octave();
         if level1 > 0 {
             continue;
         }
@@ -133,7 +133,7 @@ pub fn search_for_initialization(
 
     for (i1, match12) in vn_matches12.iter().enumerate() {
         if *match12 >= 0 {
-            *vb_prev_matched.get(i1).as_mut().unwrap() = f2.features.get_keypoint(*match12 as usize).0.pt;
+            *vb_prev_matched.get(i1).as_mut().unwrap() = f2.features.get_keypoint(*match12 as usize).0.pt();
         }
     }
 
@@ -283,12 +283,12 @@ pub fn search_by_projection(
                 //                 bestDist2=bestDist;
                 //                 bestDist=dist;
                 //                 bestLevel2 = bestLevel;
-                //                 bestLevel = F.mvKeysRight[idx].octave;
+                //                 bestLevel = F.mvKeysRight[idx].octave();
                 //                 bestIdx=idx;
                 //             }
                 //             else if(dist<bestDist2)
                 //             {
-                //                 bestLevel2 = F.mvKeysRight[idx].octave;
+                //                 bestLevel2 = F.mvKeysRight[idx].octave();
                 //                 bestDist2=dist;
                 //             }
                 //         }
@@ -357,8 +357,8 @@ pub fn search_by_projection_with_threshold (
     let forward = tlc[2] > CAMERA_MODULE.stereo_baseline && !sensor.is_mono();
     let backward = -tlc[2] > CAMERA_MODULE.stereo_baseline && !sensor.is_mono();
 
-    debug!("search by projection keypoints {:?}", last_frame.features.get_all_keypoints().len());
-    debug!("search by projection mappoint matches {:?}", last_frame.mappoint_matches);
+    // debug!("search by projection keypoints {:?}", last_frame.features.get_all_keypoints().len());
+    // debug!("search by projection mappoint matches {:?}", last_frame.mappoint_matches);
 
     for idx1 in 0..last_frame.features.get_all_keypoints().len() {
         if last_frame.mappoint_matches.contains_key(&(idx1 as u32)) && !last_frame.is_mp_outlier(&(idx1 as u32)) {
@@ -746,9 +746,9 @@ pub fn search_for_triangulation(
                         let (kp2, _right2) = kf_2.features.get_keypoint(*index_kf_2 as usize);
 
                         if !stereo1 && !stereo2 { // && !kf1->mpCamera2 ... TODO STEREO
-                            let dist_ex = (ep.0 as f32) - kp2.pt.x;
-                            let dist_ey = (ep.1 as f32) - kp2.pt.y;
-                            if dist_ex * dist_ex + dist_ey * dist_ey < 100.0 * SCALE_FACTORS[kp2.octave as usize] {
+                            let dist_ex = (ep.0 as f32) - kp2.pt().x;
+                            let dist_ey = (ep.1 as f32) - kp2.pt().y;
+                            if dist_ex * dist_ex + dist_ey * dist_ey < 100.0 * SCALE_FACTORS[kp2.octave() as usize] {
                                 continue
                             }
                         }
@@ -789,7 +789,7 @@ pub fn search_for_triangulation(
                         //     }
                         // }
 
-                        if course || CAMERA_MODULE.epipolar_constrain(&kp1, &kp2, *r12, *t12, INV_LEVEL_SIGMA2[kp1.octave as usize], INV_LEVEL_SIGMA2[kp2.octave as usize]) {
+                        if course || CAMERA_MODULE.epipolar_constrain(&kp1, &kp2, *r12, *t12, INV_LEVEL_SIGMA2[kp1.octave() as usize], INV_LEVEL_SIGMA2[kp2.octave() as usize]) {
                             best_index = *index_kf_2 as i32;
                             best_dist = dist;
                         }
@@ -902,7 +902,7 @@ pub fn fuse(kf_id: &Id, fuse_candidates: &Vec<Id>, map: &MappedRwLockReadGuard<M
 
         for idx2 in indices {
             let (kp, is_right) = keyframe.features.get_keypoint(idx2 as usize);
-            let kp_level = kp.octave;
+            let kp_level = kp.octave();
 
             if kp_level < predicted_level - 1 || kp_level > predicted_level {
                 continue;
@@ -914,8 +914,8 @@ pub fn fuse(kf_id: &Id, fuse_candidates: &Vec<Id>, map: &MappedRwLockReadGuard<M
                 // let ur = uv.0 - CAMERA_MODULE.stereo_baseline_times_fx * inv_z;
 
                 // Check reprojection error in stereo
-                // const float &kpx = kp.pt.x;
-                // const float &kpy = kp.pt.y;
+                // const float &kpx = kp.pt().x;
+                // const float &kpy = kp.pt().y;
                 // const float &kpr = pKF->mvuRight[idx];
                 // const float ex = uv(0)-kpx;
                 // const float ey = uv(1)-kpy;
@@ -925,8 +925,8 @@ pub fn fuse(kf_id: &Id, fuse_candidates: &Vec<Id>, map: &MappedRwLockReadGuard<M
                 // if(e2*pKF->mvInvLevelSigma2[kpLevel]>7.8)
                 //     continue;
             } else {
-                kpx = kp.pt.x as f64;
-                kpy = kp.pt.y as f64;
+                kpx = kp.pt().x as f64;
+                kpy = kp.pt().y as f64;
                 ex = uv.0 - kpx;
                 ey = uv.1 - kpy;
                 e2 = ex * ex + ey * ey;
@@ -974,7 +974,7 @@ fn check_orientation_1(
     rot_hist: &mut Vec<Vec<u32>>, factor: f32,
     idx: u32
 ) {
-    let mut rot = keypoint_1.angle - keypoint_2.angle;
+    let mut rot = keypoint_1.angle() - keypoint_2.angle();
     if rot < 0.0 {
         rot += 360.0;
     }

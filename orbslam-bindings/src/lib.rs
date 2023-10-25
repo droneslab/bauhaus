@@ -186,6 +186,11 @@ pub mod ffi {
             keypoints: &mut WrapBindCVKeyPoints,
             descriptors: &mut WrapBindCVMat
         ) -> i32;
+        fn extract2(
+            self: Pin<&mut ORBextractor>,
+            keypoints: &mut WrapBindCVKeyPoints,
+            descriptors: &mut WrapBindCVMat
+        ) -> i32;
 
         // Two view reconstruction
         include!("orb_slam3/src/TwoViewReconstruction.h");

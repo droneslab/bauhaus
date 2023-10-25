@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 use dvcore::config::{*};
 use dvcore::sensor::{Sensor, FrameSensor};
-use opencv::prelude::{Mat, MatTraitConst, MatTrait};
+use opencv::prelude::{Mat, MatTraitConst, MatTrait, KeyPointTraitConst};
 use opencv::types::VectorOff32;
 use serde::{Deserialize, Serialize};
 use opencv::core::{KeyPoint, CV_32F, Scalar};
@@ -148,10 +148,10 @@ impl Features {
 
     pub fn get_octave(&self, index: usize) -> i32 {
         // Note: Use this function if you ever see a code pattern like this
-        // bestLevel = (F.Nleft == -1) ? F.mvKeysUn[idx].octave
-        //                     : (idx < F.Nleft) ? F.mvKeys[idx].octave
-        //                                         : F.mvKeysRight[idx - F.Nleft].octave;
-        self.get_keypoint(index).0.octave
+        // bestLevel = (F.Nleft == -1) ? F.mvKeysUn[idx].octave()
+        //                     : (idx < F.Nleft) ? F.mvKeys[idx].octave()
+        //                                         : F.mvKeysRight[idx - F.Nleft].octave();
+        self.get_keypoint(index).0.octave()
     }
 
     pub fn check_close_tracked_mappoints( &self, th_depth: f32, mappoint_matches: &HashMap::<u32, (Id, bool)> ) -> (i32, i32) {
@@ -183,8 +183,8 @@ impl Features {
             // Fill matrix with points
             let mut mat = Mat::new_rows_cols_with_default(num_keypoints,2, CV_32F, Scalar::all(0.0))?;
             for i in 0..num_keypoints {
-                *mat.at_2d_mut::<f32>(i, 0)? = keypoints.get(i as usize)?.pt.x;
-                *mat.at_2d_mut::<f32>(i, 1)? = keypoints.get(i as usize)?.pt.y;
+                *mat.at_2d_mut::<f32>(i, 0)? = keypoints.get(i as usize)?.pt().x;
+                *mat.at_2d_mut::<f32>(i, 1)? = keypoints.get(i as usize)?.pt().y;
             }
 
             // Undistort points
@@ -206,8 +206,8 @@ impl Features {
             let mut undistorted_kp_vec = opencv::types::VectorOfKeyPoint::new();
             for i in 0..num_keypoints {
                 let mut kp = keypoints.get(i as usize)?;
-                kp.pt.x = *mat.at_2d::<f32>(i, 0)?;
-                kp.pt.y = *mat.at_2d::<f32>(i, 1)?;
+                kp.pt().x = *mat.at_2d::<f32>(i, 0)?;
+                kp.pt().y = *mat.at_2d::<f32>(i, 1)?;
                 undistorted_kp_vec.push(kp);
             }
 
@@ -254,18 +254,18 @@ impl Features {
                     //TODO (Stereo) Need to update this if stereo images are processed
                     let (kp_un, _is_right) = &self.get_keypoint(v_cell[j]);
                     if check_levels {
-                        if kp_un.octave < min_level as i32 {
+                        if kp_un.octave() < min_level as i32 {
                             continue;
                         }
                         if max_level >= 0 {
-                            if kp_un.octave > max_level as i32 {
+                            if kp_un.octave() > max_level as i32 {
                                 continue;
                             }
                         }
                     }
 
-                    let distx = kp_un.pt.x - (*x as f32);
-                    let disty = kp_un.pt.y - (*y as f32);
+                    let distx = kp_un.pt().x - (*x as f32);
+                    let disty = kp_un.pt().y - (*y as f32);
 
                     if distx.abs()<(factor_x as f32) && disty.abs() < (factor_y as f32)  {
                         indices.push(v_cell[j] as u32);
@@ -372,8 +372,8 @@ impl Grid {
     }
 
     pub fn pos_in_grid(&self, image_bounds: &ImageBounds, kp : &KeyPoint) -> Option<(i32, i32)> {
-        let pos_x = ((kp.pt.x-(image_bounds.min_x as f32))*self.grid_element_width_inv as f32).round() as i32;
-        let pos_y = ((kp.pt.y-(image_bounds.min_y as f32))*self.grid_element_height_inv as f32).round() as i32;
+        let pos_x = ((kp.pt().x-(image_bounds.min_x as f32))*self.grid_element_width_inv as f32).round() as i32;
+        let pos_y = ((kp.pt().y-(image_bounds.min_y as f32))*self.grid_element_height_inv as f32).round() as i32;
 
         //let x_in_bounds = pos_x >= 0 && pos_x < (FRAME_GRID_COLS as i32);
         //let y_in_bounds = pos_y >= 0 && pos_y < (FRAME_GRID_ROWS as i32);

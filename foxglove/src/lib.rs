@@ -6,7 +6,7 @@ pub mod foxglove {
     }
 }
 
-use foxglove::items::{self, Vector3, Pose, Quaternion, SceneUpdate, SceneEntity, Color};
+use foxglove::items::{Vector3, Pose, Quaternion};
 
 
 pub fn get_file_descriptor_set_bytes() -> &'static [u8] {

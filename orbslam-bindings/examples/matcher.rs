@@ -1,5 +1,4 @@
 extern crate dvos3binding;
-use nalgebra::{Isometry3};
 use cxx::{let_cxx_string, CxxVector, SharedPtr};
 
 use opencv::core::{CV_8UC2, CV_8UC1};

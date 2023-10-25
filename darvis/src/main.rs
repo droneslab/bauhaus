@@ -4,12 +4,13 @@ use std::{fs::OpenOptions, path::Path, env, time::SystemTime};
 use fern::colors::{ColoredLevelConfig, Color};
 use glob::glob;
 use log::info;
+use opencv::{imgcodecs, core::Vector};
 use spin_sleep::LoopHelper;
 #[macro_use]
 extern crate lazy_static;
 
-use dvcore::{*, config::*, base::{ActorChannels}};
-use crate::{actors::{messages::{ImageMsg, ShutdownMsg, ImagePathMsg}}, registered_actors::{TRACKING_FRONTEND, VISUALIZER}};
+use dvcore::{*, config::*, base::{ActorChannels}, matrix::{DVMatrix, DVVectorOfKeyPoint}};
+use crate::{actors::{messages::{ImageMsg, ShutdownMsg, ImagePathMsg}, tracking_frontend::DVORBextractor}, registered_actors::{TRACKING_FRONTEND, VISUALIZER}, modules::image};
 use crate::dvmap::{bow::VOCABULARY, map::Id};
 
 mod actors;
@@ -62,14 +63,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if *shutdown_flag.lock().unwrap() { break; }
         let _delta = loop_helper.loop_start(); 
 
+        info!("Read image {}", path.split("/").last().unwrap().split(".").nth(0).unwrap());
+
         first_actor_tx.send(Box::new(
             ImagePathMsg{
                 image_path: path.clone(),
                 timestamp: now.elapsed().unwrap().as_secs()
             }
         ))?;
-
-        info!("Read image {}", path.split("/").last().unwrap().split(".").nth(0).unwrap());
 
         // ORBSLAM3 frame loader scales and resizes image, do we need this?
         // After looking into it for a while, I think not. They have the code to scale,

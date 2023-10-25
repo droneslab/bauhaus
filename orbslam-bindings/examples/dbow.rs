@@ -1,6 +1,5 @@
 extern crate dvos3binding;
 use dvos3binding::ffi::ORBVocabulary;
-use nalgebra::{Isometry3};
 use cxx::{let_cxx_string, CxxVector, SharedPtr, UniquePtr};
 
 use opencv::core::{CV_8UC2, CV_8UC1};

@@ -107,6 +107,12 @@ pub struct MapInitializedMsg {
 }
 impl ActorMessage for MapInitializedMsg { }
 
+pub struct DrawInitialMapMsg {
+    pub kf1_id: Id,
+    pub kf2_id: Id,
+}
+impl ActorMessage for DrawInitialMapMsg { }
+
 #[derive(Debug)]
 pub struct KeyFrameMsg<S: FrameState> {
     // Note: if using serde to serialize/deserialize, need to

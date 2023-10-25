@@ -57,6 +57,7 @@ public:
     // ORB are dispersed on the image using an octree.
     // Mask is ignored in the current implementation.
     int extract_rust(const orb_slam3::WrapBindCVMat & image, orb_slam3::WrapBindCVKeyPoints & keypoints, orb_slam3::WrapBindCVMat & descriptors);
+    int extract2(orb_slam3::WrapBindCVKeyPoints & keypoints, orb_slam3::WrapBindCVMat & descriptors);
     int extract(cv::InputArray _image, cv::InputArray _mask,
                     std::vector<cv::KeyPoint>& _keypoints,
                     cv::OutputArray _descriptors, std::vector<int> &vLappingArea);

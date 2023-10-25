@@ -11,6 +11,7 @@ use dvcore::matrix::DVVectorOfPoint2f;
 use dvcore::sensor::{Sensor, FrameSensor, ImuSensor};
 use log::debug;
 use dvcore::{matrix::DVVectorOfPoint3f};
+use opencv::prelude::KeyPointTraitConst;
 use crate::dvmap::keyframe::Frame;
 use crate::dvmap::{keyframe::InitialFrame, pose::Pose};
 use crate::modules::camera::{CAMERA_MODULE};
@@ -75,7 +76,7 @@ impl Initialization {
         if !self.ready_to_initializate && current_frame.features.num_keypoints > 100 {
             // Set Reference Frame
             for i in 0..current_frame.features.num_keypoints as usize {
-                self.prev_matched.push(current_frame.features.get_keypoint(i).0.pt.clone()); // TODO (clone)
+                self.prev_matched.push(current_frame.features.get_keypoint(i).0.pt().clone()); // TODO (clone)
             }
 
             match self.sensor.imu() {

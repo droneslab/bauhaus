@@ -9,11 +9,9 @@ path = "src/lib.rs"
 #crate_type = ["staticlib"]
 
 [dependencies]
-opencv = "0.63.0"
-cxx = "1.0"
-nalgebra = {version = "*", features = ["serde-serialize"]}
+cxx = "1.0.108"
+opencv = "0.84.5"
 
 [build-dependencies]
-cxx-build = "1.0"
-cmake = "0.1.48"
-opencv = "0.63.0"
+cxx-build = "1.0.108"
+cmake = "0.1.50"
