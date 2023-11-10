@@ -1,11 +1,11 @@
 use dvcore::{lockwrap::ReadOnlyWrapper, sensor::{FrameSensor, ImuSensor, Sensor}};
 use serde::{Deserialize, Serialize};
 
-use crate::dvmap::{pose::Pose, map::Map};
+use crate::dvmap::{pose::DVPose, map::Map};
 
 #[derive(Debug, Clone, Default)]
 pub struct ImuModule {
-    pub velocity: Option<Pose>,
+    pub velocity: Option<DVPose>,
     _last_bias: Option<IMUBias>,
     sensor: Sensor
 }

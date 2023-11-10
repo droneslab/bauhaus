@@ -16,6 +16,10 @@ namespace g2o {
     }
 
     BridgeSparseOptimizer::BridgeSparseOptimizer(int opt_type, std::array<double,4> camera_param) {
+            // SOFIYA TEST
+
+        // this->xyz_edges = std::vector<RustXYZEdge>();
+        // this->xyz_onlypose_edges = std::vector<RustXYZOnlyPoseEdge>();
         if (opt_type == 1) {
             // For Optimizer::PoseOptimization and GlobalBundleAdjustemnt
             optimizer = new SparseOptimizer();
@@ -112,11 +116,8 @@ namespace g2o {
 
     SE3Quat BridgeSparseOptimizer::format_pose(Pose pose) const {
         Eigen::Vector3d trans_vec(pose.translation.data());
-        //Pranay : quaternion in nlabegra [w,x,y,z] while in eigen [x,y,z,w]
         auto rot_quat_val = pose.rotation.data();
         Eigen::Quaterniond rot_quat(rot_quat_val[0], rot_quat_val[1], rot_quat_val[2],rot_quat_val[3]);
-        // Rotation is already a quaternion in Darvis!!
-        // Don't need to do the conversion in ORBSLAM3
         return SE3Quat(rot_quat, trans_vec);
     }
 
@@ -129,11 +130,22 @@ namespace g2o {
     int BridgeSparseOptimizer::num_edges() const {
         return optimizer->edges().size();
     }
+        // SOFIYA TEST
 
-    unique_ptr<EdgeSE3ProjectXYZOnlyPose> BridgeSparseOptimizer::add_edge_monocular_unary(
+    // Note: see explanation under get_mut_edges in lib.rs for why we do this
+    // std::vector<RustXYZOnlyPoseEdge>& BridgeSparseOptimizer::get_mut_xyz_onlypose_edges() {
+    //     return this->xyz_onlypose_edges;
+    // }
+    // std::vector<RustXYZEdge>& BridgeSparseOptimizer::get_mut_xyz_edges() {
+    //     return this->xyz_edges;
+    // }
+
+
+    void BridgeSparseOptimizer::add_edge_monocular_unary(
         bool robust_kernel, int vertex_id,
         int keypoint_octave, float keypoint_pt_x, float keypoint_pt_y, float invSigma2,
-        array<double, 3> mp_world_position
+        array<double, 3> mp_world_position,
+        int mappoint_id
     ) {
         Eigen::Matrix<double,2,1> obs;
         obs << keypoint_pt_x, keypoint_pt_y;
@@ -161,11 +173,18 @@ namespace g2o {
 
         optimizer->addEdge(edge);
 
-        unique_ptr<EdgeSE3ProjectXYZOnlyPose> ptr_edge(edge);
-        return ptr_edge;
+    // SOFIYA TEST
+
+        // Note: see explanation under get_mut_edges in lib.rs for why we do this
+        // unique_ptr<EdgeSE3ProjectXYZOnlyPose> ptr_edge(edge);
+        // RustXYZOnlyPoseEdge rust_edge {
+        //     inner: std::move(ptr_edge),
+        //     mappoint_id: mappoint_id,
+        // };
+        // this->xyz_onlypose_edges.emplace(this->xyz_onlypose_edges.end(), std::move(rust_edge));
     }
 
-    std::unique_ptr<g2o::EdgeSE3ProjectXYZ> BridgeSparseOptimizer::add_edge_monocular_binary(
+    void BridgeSparseOptimizer::add_edge_monocular_binary(
         bool robust_kernel, int vertex1, int vertex2,
         int keypoint_octave, float keypoint_pt_x, float keypoint_pt_y, float invSigma2,
         int huber_delta
@@ -195,15 +214,21 @@ namespace g2o {
         edge->cx = cx;
         edge->cy = cy;
 
-        optimizer->addEdge(edge);
+        auto success = optimizer->addEdge(edge);
+        if (!success) {
+            std::cout << "Optimizer failed to add edge!!" << std::endl;
+        }
+    // SOFIYA TEST
 
-        unique_ptr<EdgeSE3ProjectXYZ> ptr_edge(edge);
-        return ptr_edge;
+        // Note: see explanation under get_mut_edges in lib.rs for why we do this
+        // unique_ptr<EdgeSE3ProjectXYZ> ptr_edge(edge);
+        // RustXYZEdge rust_edge {std::move(ptr_edge)};
+        // this->xyz_edges.emplace(this->xyz_edges.end(), std::move(rust_edge));
     }
 
     //** Optimization *//
     void BridgeSparseOptimizer::optimize(int iterations) {
-        optimizer->initializeOptimization(0);
+        optimizer->initializeOptimization();
         optimizer->optimize(iterations);
     }
 
@@ -258,7 +283,7 @@ namespace g2o {
     }
 
     // }
-    // Sofiya note: This might already be deleted when g2o deletes the sparseoptimizer?
+    // TODO (memory): This might already be deleted when g2o deletes the sparseoptimizer?
     // BridgeSparseOptimizer::~BridgeSparseOptimizer() {
     //     delete linearSolver;
     //     delete solver_ptr;

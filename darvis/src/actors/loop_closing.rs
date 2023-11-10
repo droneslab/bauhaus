@@ -27,7 +27,7 @@ impl Actor for DarvisLoopClosing {
             let message = self.actor_channels.receive().unwrap();
             if let Some(msg) = message.downcast_ref::<KeyFrameIdMsg>() {
                 self.loop_closing(msg);
-            } else if let Some(msg) = message.downcast_ref::<ShutdownMsg>() {
+            } else if let Some(_) = message.downcast_ref::<ShutdownMsg>() {
                 break;
             } else {
                 warn!("Loop Closing received unknown message type!");

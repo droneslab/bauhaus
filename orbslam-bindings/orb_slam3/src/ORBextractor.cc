@@ -1103,7 +1103,13 @@ namespace orb_slam3 {
         cout << "Just testing" << endl;
         Mat image = cv::imread("/home/sofiya/datasets/kitti_00_0/000001.png",cv::IMREAD_GRAYSCALE); //,cv::IMREAD_UNCHANGED);
 
-        auto num_extracted = extract(image, cv::Mat(), *keypoints.kp_ptr, *descriptors.mat_ptr, lapping);
+        vector<KeyPoint> kp;
+        cv::Mat desc;
+        auto num_extracted = extract(image, cv::Mat(), kp, desc, lapping);
+
+        cv::Mat output;
+        cv::drawKeypoints(image, kp, output, cv::Scalar::all(-1), cv::DrawMatchesFlags::DEFAULT);
+        cv::imwrite("000001_orb.png", output);
 
         return num_extracted;
     }
@@ -1189,6 +1195,11 @@ namespace orb_slam3 {
             }
         }
 
+        // cv::Mat output;
+        // cv::drawKeypoints(image, _keypoints, output, cv::Scalar::all(-1), cv::DrawMatchesFlags::DEFAULT);
+        // cv::imwrite("000001_orb.png", output);
+
+
         return monoIndex;
     }
 
@@ -1200,7 +1211,7 @@ namespace orb_slam3 {
             float scale = mvInvScaleFactor[level];
             Size sz(cvRound((float)image.cols*scale), cvRound((float)image.rows*scale));
             Size wholeSize(sz.width + EDGE_THRESHOLD*2, sz.height + EDGE_THRESHOLD*2);
-            Mat temp(wholeSize, image.type());
+            Mat temp(wholeSize, image.type()), masktemp;
             mvImagePyramid[level] = temp(Rect(EDGE_THRESHOLD, EDGE_THRESHOLD, sz.width, sz.height));
 
             // Compute the resized image

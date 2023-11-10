@@ -26,7 +26,7 @@ impl DVVocabulary {
         }
     }
     pub fn transform(&self, descriptors: &DVMatrix, bow: & mut BoW) {
-        //TODO...might be unnecessary clone
+        //TODO (memory)...might be unnecessary clone
         let mut bla: dvos3binding::ffi::WrapBindCVMat = descriptors.clone().into();
 
         self.vocabulary.transform(
@@ -52,7 +52,7 @@ impl BoW {
         }
     }
     pub fn clone(&self) -> Self {
-        // Sofiya: I am not sure this is thread-safe or that it works...
+        // TODO (mvp): I am not sure this is thread-safe or that it works...
         Self {
             bow_vec: self.bow_vec.clone(),
             feat_vec: self.feat_vec.clone(),

@@ -6,6 +6,7 @@ pub static TRACKING_FRONTEND: &str = "TRACKING_FRONTEND";
 pub static TRACKING_BACKEND: &str = "TRACKING_BACKEND";
 pub static LOCAL_MAPPING: &str = "LOCAL_MAPPING";
 pub static LOOP_CLOSING: &str = "LOOP_CLOSING";
+pub static VISUALIZER: &str = "VISUALIZER";
 
 // USER-DEFINED MODULES: add a string to name your module here
 pub static FEATURE_DETECTION: &str = "FEATURE_DETECTION";
@@ -14,7 +15,6 @@ pub static MATCHER: &str = "MATCHER";
 
 // DARVIS SYSTEM ACTORS
 pub static SHUTDOWN_ACTOR: &str = "SHUTDOWN";
-pub static VISUALIZER: &str = "VISUALIZER";
 pub static MAP_ACTOR: &str = "MAP_ACTOR"; 
 
 

@@ -58,6 +58,7 @@ impl Actor for DarvisNone{
     }
 }
 
+
 pub trait ActorMessage: Downcast + Send {}
 impl_downcast!(ActorMessage);
 

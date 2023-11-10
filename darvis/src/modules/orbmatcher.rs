@@ -95,7 +95,7 @@ pub fn search_for_initialization(
             }
         }
         if best_dist <= TH_LOW {
-            if best_dist < (best_dist2 as f32 *  nnratio) as i32 {
+            if (best_dist as f32) < (best_dist2 as f32 *  nnratio) {
                 if vn_matches21[best_idx2 as usize] >= 0 {
                     vn_matches12[vn_matches21[best_idx2 as usize] as usize] = -1;
                     n_matches -= 1;
@@ -450,7 +450,7 @@ pub fn search_by_projection_with_threshold (
     return Ok(num_matches);
 } 
 
-// Sofiya: other searchbyprojection functions we will have to implement later:
+// TODO (mvp): other searchbyprojection functions we will have to implement later:
 
 pub fn _search_by_projection_reloc (
     _current_frame: &mut Frame<InitialFrame>, _keyframe: &Frame<FullKeyFrame>,
@@ -579,7 +579,6 @@ pub fn search_by_bow_kf(
     ratio: f64
 ) -> Result<HashMap<u32, Id>, Box<dyn std::error::Error>> {
     // int SearchByBoW(KeyFrame *pKF1, KeyFrame* pKF2, std::vector<MapPoint*> &vpMatches12);
-    let mut num_matches = 0;
     let mut matches = HashMap::<u32, Id>::new();
 
     let factor = 1.0 / (HISTO_LENGTH as f32);
@@ -629,7 +628,6 @@ pub fn search_by_bow_kf(
                                     &mut rot_hist, factor, index_kf_1
                                 );
                             }
-                            num_matches += 1;
                         }
                     }
 
@@ -648,7 +646,7 @@ pub fn search_by_bow_kf(
 
 pub fn search_for_triangulation(
     kf_1 : &Frame<FullKeyFrame>, kf_2 : &Frame<FullKeyFrame>,
-    should_check_orientation: bool, only_stereo: bool, course: bool,
+    should_check_orientation: bool, _only_stereo: bool, course: bool,
     sensor: Sensor
 ) -> Result<HashMap<usize, usize>, Box<dyn std::error::Error>> {
     //int ORBmatcher::SearchForTriangulation(KeyFrame *pKF1, KeyFrame *pKF2, vector<pair<size_t, size_t> > &vMatchedPairs, const bool bOnlyStereo, const bool bCoarse)
@@ -657,7 +655,7 @@ pub fn search_for_triangulation(
     let translation_2 = kf_2.pose.unwrap(); // T2w
     let translation_inverse_2 = kf_2.pose.unwrap().inverse(); // Tw2
     let cw = *kf_1.get_camera_center(); // Cw
-    let temp = *translation_1.get_translation();
+    let temp = *translation_2.get_translation();
     let c2 = temp.component_mul(&cw); // c2
 
     let ep = CAMERA_MODULE.project(DVVector3::new(c2));
@@ -745,7 +743,7 @@ pub fn search_for_triangulation(
 
                         let (kp2, _right2) = kf_2.features.get_keypoint(*index_kf_2 as usize);
 
-                        if !stereo1 && !stereo2 { // && !kf1->mpCamera2 ... TODO STEREO
+                        if !stereo1 && !stereo2 { // && !kf1->mpCamera2 ... TODO (STEREO)
                             let dist_ex = (ep.0 as f32) - kp2.pt().x;
                             let dist_ey = (ep.1 as f32) - kp2.pt().y;
                             if dist_ex * dist_ex + dist_ey * dist_ey < 100.0 * SCALE_FACTORS[kp2.octave() as usize] {
@@ -789,7 +787,7 @@ pub fn search_for_triangulation(
                         //     }
                         // }
 
-                        if course || CAMERA_MODULE.epipolar_constrain(&kp1, &kp2, *r12, *t12, INV_LEVEL_SIGMA2[kp1.octave() as usize], INV_LEVEL_SIGMA2[kp2.octave() as usize]) {
+                        if course || CAMERA_MODULE.epipolar_constrain(&kp1, &kp2, *r12, *t12, INV_LEVEL_SIGMA2[kp1.octave() as usize]) {
                             best_index = *index_kf_2 as i32;
                             best_dist = dist;
                         }
@@ -862,7 +860,7 @@ pub fn fuse(kf_id: &Id, fuse_candidates: &Vec<Id>, map: &MappedRwLockReadGuard<M
             continue;
         }
 
-        let inv_z = 1.0 / p_3d_c[2];
+        let _inv_z = 1.0 / p_3d_c[2]; // Used by stereo below
         let uv = CAMERA_MODULE.project(DVVector3::new(p_3d_c));
 
         // Point must be inside the image

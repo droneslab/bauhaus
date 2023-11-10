@@ -7,7 +7,6 @@ master:
 
 system_settings:
       should_profile: false
-      show_visualizer: true
       localization_only_mode: false
       vocabulary_file: "../Vocabulary/ORBvoc.txt" # TODO (low priority): This does not work with ~/
       trajectory_file_name: "trajectory.txt"
@@ -115,6 +114,19 @@ modules:
 
 
 actors:
+      -
+       name: VISUALIZER
+       file: visualizer
+       settings:
+          - 
+            name: image_draw_type
+            value: features # options are [none, plain, features, featuresandmatches]
+            type: string
+          -
+            name: mcap_file_path
+            value: "results/out.mcap"
+            type: string
+
       -
        name: TRACKING_FRONTEND
        file: tracking_frontend

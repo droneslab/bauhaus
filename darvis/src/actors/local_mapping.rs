@@ -92,12 +92,14 @@ impl DarvisLocalMapping {
 
         // Triangulate new MapPoints
         let new_mappoints = self.create_new_mappoints();
+        let new_mp_size = new_mappoints.len();
         // Paper note: what's interesting is axiom will actually give a runtime error if the rate of sending messages
         // exceeds the ability of the actor to handle the messages. Normally we would create a new mappoint in the loop above,
         // but that sends messages to the map actor too frequently. So, we batch all the messages into one and send when we are done.
         self.actor_channels.find(MAP_ACTOR).unwrap().send(Box::new(
             MapWriteMsg::create_many_mappoints(new_mappoints, TRACKING_BACKEND)
         )).unwrap();
+        debug!("Local mapping finished creating {} new mappoints", new_mp_size);
 
         // TODO (design): mbAbortBA
         // But idk how to check the queue size from within the callback
@@ -106,7 +108,7 @@ impl DarvisLocalMapping {
                 self.search_in_neighbors();
         // }
 
-        let t_init = 0.0; // Sofiya: idk what this is for but it's used all over the place
+        let t_init = 0.0; // TODO (mvp): idk what this is for but it's used all over the place
 
         // TODO (design): mbAbortBA
         // ORBSLAM will abort additional work if there are too many keyframes in the msg queue (CheckNewKeyFrames)
@@ -142,7 +144,7 @@ impl DarvisLocalMapping {
                 },
                 false => {
                     // TODO (design): mbAbortBA
-                    let force_stop_flag = false; // mbAbortBA
+                    // let force_stop_flag = false;
                     let map = self.map.read();
                     let current_keyframe = map.get_keyframe(&self.current_keyframe_id).unwrap();
                     optimizer::local_bundle_adjustment(&self.map.read(), current_keyframe);
@@ -314,7 +316,7 @@ impl DarvisLocalMapping {
                 let (kp1, right1) = current_kf.features.get_keypoint(idx1);
                 let (kp2, right2) = neighbor_kf.features.get_keypoint(idx2);
 
-                let (mut kp1_ur, mut kp2_ur) = (None, None);
+                let (kp1_ur, kp2_ur);
                 if right1 {
                     kp1_ur = current_kf.features.get_mv_right(idx1);
                     pose1 = current_kf.get_right_pose();

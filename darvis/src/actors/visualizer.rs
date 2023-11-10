@@ -1,44 +1,60 @@
-use std::{borrow::Cow, fs::File, sync::Arc, collections::BTreeMap, fs, io::BufWriter};
+use std::{borrow::Cow, fs::File, sync::Arc, collections::{BTreeMap, HashMap, HashSet}, fs, io::BufWriter};
 use log::{warn, debug};
 use mcap::{Schema, Channel, records::MessageHeader, Writer};
-use opencv::{prelude::{Mat, MatTraitConst, MatTraitConstManual}, types::VectorOfKeyPoint};
-use foxglove::{foxglove::items::{SceneEntity, SceneUpdate, SpherePrimitive, Vector3, Quaternion, Color, FrameTransform, LinePrimitive, line_primitive, Point3, RawImage}, get_file_descriptor_set_bytes, make_pose};
+use opencv::prelude::{Mat, MatTraitConst, MatTraitConstManual};
+use foxglove::{foxglove::items::{SceneEntity, SceneUpdate, SpherePrimitive, Vector3, Quaternion, Color, FrameTransform, LinePrimitive, line_primitive, Point3, RawImage, ArrowPrimitive}, get_file_descriptor_set_bytes, make_pose};
 
 use dvcore::{
-    vis_schemas::{POSE_SCHEMA, IMAGE_SCHEMA, VisSchema},
-    base::{ActorChannels, Actor}, matrix::DVVectorOfKeyPoint,
+    base::{ActorChannels, Actor}, matrix::DVVectorOfKeyPoint, config::GLOBAL_PARAMS,
 };
 use prost_types::Timestamp;
 use crate::{
-    dvmap::{map::{Map, Id}, pose::Pose},
+    dvmap::{map::{Map, Id}, pose::DVPose},
     lockwrap::ReadOnlyWrapper,
     modules::image,
-    actors::messages::{ShutdownMsg, TrajectoryMsg, VisFeaturesMsg, DrawInitialMapMsg}
+    actors::messages::{ShutdownMsg, TrajectoryMsg, VisFeaturesMsg, VisInitialMapMsg}, registered_actors::VISUALIZER
 };
 
-// Default visual stuff
-pub static FRAME_COLOR: Color = Color { r: 1.0, g: 0.0, b: 0.0, a: 1.0 };
-pub static FRAME_SIZE: Vector3 = Vector3 { x: 0.1, y: 0.1, z: 0.1 };
-pub static TRAJECTORY_COLOR: Color = Color { r: 1.0, g: 0.0, b: 0.0, a: 1.0 };
-pub static MAPPOINT_COLOR: Color = Color { r: 0.0, g: 1.0, b: 0.0, a: 1.0 };
-pub static MAPPOINT_SIZE: Vector3 = Vector3 { x: 0.1, y: 0.1, z: 0.1 };
-pub static KEYFRAME_COLOR: Color = Color { r: 0.0, g: 0.0, b: 1.0, a: 1.0 };
-pub static KEYFRAME_SIZE: Vector3 = Vector3 { x: 0.1, y: 0.1, z: 0.1 };
+use super::messages::VisFeatureMatchMsg;
 
+// Default visual stuff //
+// Trajectory and frame
+pub static FRAME_COLOR: Color = Color { r: 1.0, g: 0.0, b: 0.0, a: 1.0 };
+pub static TRAJECTORY_COLOR: Color = Color { r: 1.0, g: 0.0, b: 0.0, a: 1.0 };
+// Mappoints and mappoint matches
+pub static MAPPOINT_COLOR: Color = Color { r: 0.0, g: 0.0, b: 1.0, a: 1.0 };
+pub static MAPPOINT_MATCH_COLOR: Color = Color { r: 0.0, g: 1.0, b: 0.0, a: 1.0 };
+pub static MAPPOINT_SIZE: Vector3 = Vector3 { x: 0.01, y: 0.01, z: 0.01 };
+//Keyframes
+pub static KEYFRAME_COLOR: Color = Color { r: 0.5, g: 0.0, b: 0.0, a: 1.0 };
+
+enum ImageDrawType {
+    NONE,
+    PLAIN,
+    FEATURES,
+    FEATURESANDMATCHES
+}
 
 pub struct DarvisVisualizer {
     actor_system: ActorChannels,
     map: ReadOnlyWrapper<Map>,
     writer: McapWriter,
 
-    current_frame_id: u64,
+    // For drawing images
+    image_channel: u16,
+    image_draw_type: ImageDrawType,
+    current_image: Option<Mat>,
+    prev_image: Option<Mat>,
+    current_keypoints: Option<DVVectorOfKeyPoint>,
+    prev_keypoints: Option<DVVectorOfKeyPoint>,
+
+    // For drawing current frame and trajectory
+    trajectory_channel: u16,
+    transform_channel: u16,
     current_update_id: u64,
-    // current_timestamp: u64,
     prev_pose: Point3,
 
-    image_channel: u16,
-    transform_channel: u16,
-    trajectory_channel: u16,
+    // For drawing mappoints, mappoint matches, and keyframes
     keyframes_channel: u16,
     mappoints_channel: u16,
 }
@@ -49,27 +65,61 @@ impl Actor for DarvisVisualizer {
             let message = self.actor_system.receive().unwrap();
 
             if let Some(msg) = message.downcast_ref::<VisFeaturesMsg>() {
-                self.draw_image(&msg.image, &msg.keypoints, msg.timestamp).expect("Visualizer could not draw image!");
-                self.current_frame_id += 1;
+
+                // DRAW IMAGE!
+                match self.image_draw_type {
+                    ImageDrawType::NONE => Ok(()),
+                    ImageDrawType::PLAIN => {
+                        // Greyscale images are encoded as mono8
+                        // For mono8 (CV_8UC1) each element is u8 -> size is 1
+                        self.draw_image(&msg.image, "mono8", 1, msg.timestamp)
+                    },
+                    ImageDrawType::FEATURES => {
+                        let image_with_features = image::write_features(&msg.image, &msg.keypoints).expect("Could not draw features to mat");
+                        // This is a color image encoded as bgr8
+                        // Each element is u8 (size is 1) * 3 (for 3 channels)
+                        self.draw_image(&image_with_features, "bgr8", 3, msg.timestamp)
+                    },
+                    ImageDrawType::FEATURESANDMATCHES => Ok(()), // Draw when matches received from tracking backend
+                }.expect("Visualizer could not draw image!");
+
+                // If drawing with features and matches, need to save current image and keypoints for when matches are received
+                //TODO (memory)... remove these clones
+                self.prev_keypoints = self.current_keypoints.clone();
+                self.prev_image = self.current_image.clone();
+                self.current_image = Some(msg.image.clone());
+                self.current_keypoints = Some(msg.keypoints.clone());
+
+            } else if let Some(msg) = message.downcast_ref::<VisFeatureMatchMsg>() {
+
+                // DRAW IMAGE WITH FEATURE MATCHES!
+                if matches!(self.image_draw_type, ImageDrawType::FEATURESANDMATCHES) && self.prev_image.is_some() {
+                    let image_with_matches = image::write_feature_matches(
+                        &self.prev_image.as_ref().unwrap(),
+                        &self.current_image.as_ref().unwrap(),
+                        &self.prev_keypoints.as_ref().unwrap(),
+                        &self.current_keypoints.as_ref().unwrap(),
+                        &msg.matches
+                    ).expect("Could not write feature matches to mat");
+
+                    // Encoding and mat element size same as for ImageDrawType::FEATURES
+                    self.draw_image(&image_with_matches, "bgr8", 3, msg.timestamp).expect("Could not draw image with matches to mat");
+                };
+
             } else if let Some(msg) = message.downcast_ref::<TrajectoryMsg>() {
-                self.update_scene(msg.pose, msg.timestamp).expect("Visualizer could not draw pose!");
-                self.current_update_id += 1;
-            } else if let Some(msg) = message.downcast_ref::<DrawInitialMapMsg>() {
-                let kf1_pose = self.map.read().get_keyframe(&msg.kf1_id).unwrap().pose.unwrap();
-                let kf1_timestamp = self.map.read().get_keyframe(&msg.kf1_id).unwrap().timestamp;
-                self.update_scene(kf1_pose, kf1_timestamp).expect("Visualizer could not draw pose!");
-                self.current_update_id += 1;
 
-                let kf2_pose = self.map.read().get_keyframe(&msg.kf2_id).unwrap().pose.unwrap();
-                let kf2_timestamp = self.map.read().get_keyframe(&msg.kf2_id).unwrap().timestamp;
-                self.update_scene(kf2_pose, kf2_timestamp).expect("Visualizer could not draw pose!");
-
-                debug!("Initialization position {:?} {:?}", kf1_pose, kf2_pose);
+                self.draw_trajectory(msg.pose, msg.timestamp).expect("Visualizer could not draw trajectory!");
+                self.draw_mappoints(&msg.mappoint_matches, msg.timestamp).expect("Visualizer could not draw mappoints!");
+                self.draw_keyframes(msg.timestamp).expect("Visualizer could not draw map!");
                 self.current_update_id += 1;
+                self.prev_pose = msg.pose.into();
             } else if let Some(_) = message.downcast_ref::<ShutdownMsg>() {
+
+                // SHUTDOWN
                 warn!("Closing mcap file");
                 self.writer.finish().expect("Could not close file");
                 break;
+
             } else {
                 warn!("Visualizer received unknown message type!");
             }
@@ -80,34 +130,25 @@ impl Actor for DarvisVisualizer {
 
 impl DarvisVisualizer {
     pub fn new(actor_system: ActorChannels, map: ReadOnlyWrapper<Map>) -> DarvisVisualizer {
-        let mut writer = McapWriter::new("results/out.mcap").unwrap();
+        let mcap_file_path = GLOBAL_PARAMS.get::<String>(VISUALIZER, "mcap_file_path");
+        let mut writer = McapWriter::new(&mcap_file_path).unwrap();
 
-        // Image 
         let image_channel = writer.create_and_add_channel(
             "foxglove.RawImage", "/camera",
         ).expect("Could not make image channel");
-
-        // Frame transforms
         let transform_channel = writer.create_and_add_channel(
             "foxglove.FrameTransform", "/frame_transforms",
         ).expect("Could not make frame transform channel");
-
-        // Frames and trajectory line
         let trajectory_channel = writer.create_and_add_channel(
             "foxglove.SceneUpdate", "/trajectory",
         ).expect("Could not make trajectory channel");
-
-        // KeyFrames
+        let mappoints_channel = writer.create_and_add_channel(
+            "foxglove.SceneUpdate", "/mappoints",
+        ).expect("Could not make mappoints channel");
         let keyframes_channel = writer.create_and_add_channel(
             "foxglove.SceneUpdate", "/keyframes",
         ).expect("Could not make keyframes channel");
 
-        // MapPoints
-        let mappoints_channel = writer.create_and_add_channel(
-            "foxglove.SceneUpdate", "/mappoints",
-        ).expect("Could not make mappoints channel");
-
-        // Transform from camera to world
         let transform = FrameTransform {
             timestamp: Some(Timestamp { seconds: 0,  nanos: 0 }),
             parent_frame_id: "world".to_string(),
@@ -117,87 +158,155 @@ impl DarvisVisualizer {
         };
         writer.write(transform_channel, transform, 0, 0).unwrap();
 
-        // Write first frame ... trajectory starts at 0,0
+        // Trajectory starts at 0,0
         let prev_pose = Point3 { x: 0.0, y: 0.0, z: 0.0 };
+
+        let image_draw_type = match GLOBAL_PARAMS.get::<String>(VISUALIZER, "image_draw_type").as_str() {
+            "none" => ImageDrawType::NONE,
+            "plain" => ImageDrawType::PLAIN,
+            "features" => ImageDrawType::FEATURES,
+            "featuresandmatches" => ImageDrawType::FEATURESANDMATCHES,
+            _ => {
+                warn!("Invalid image_draw_type specified in config. Options are none, plain, features, or featuresandmatches. Selecting plain.");
+                ImageDrawType::PLAIN
+            }
+        };
 
         return DarvisVisualizer{
             actor_system,
             map,
+            image_draw_type,
             writer,
             current_update_id: 0,
-            current_frame_id: 0,
             prev_pose,
             image_channel,
             trajectory_channel,
-            keyframes_channel,
             mappoints_channel,
+            keyframes_channel,
             transform_channel,
+            current_image: None,
+            prev_image: None,
+            current_keypoints: None,
+            prev_keypoints: None,
         };
     }
 
-    fn update_scene(&mut self, pose: Pose, timestamp: u64) -> Result<(), Box<dyn std::error::Error>> {
-        debug!("Drawing scene at timestamp {} with pose {:?}", timestamp, pose);
-        // Draw current pose as sphere
-        let current_pose_sphere = SpherePrimitive {
-            pose: Some(pose.into()),
-            size: Some(FRAME_SIZE.clone()),
-            color: Some(FRAME_COLOR.clone()),
-        };
+    fn draw_trajectory(&mut self, pose: DVPose, timestamp: u64) -> Result<(), Box<dyn std::error::Error>> {
+        debug!("Drawing trajectory at timestamp {} with pose {:?}", timestamp, pose);
 
-        // Draw line connecting prev pose to current pose
+        // Entity 1 ... current pose
+        // This entity is overwritten at every update, so only one camera is in view at all times
+        let current_pose = self.create_arrow(&pose, FRAME_COLOR.clone());
+        let pose_entity = self.create_scene_entity(
+            timestamp, "world",
+            format!("cam"),
+            vec![current_pose],
+            vec![], vec![]
+        ); // TODO (vis) make this a camera frame and publish new transform, but will this mess up the pose of previous camera objects?
+
+        // Entity 2 ... trajectory
+        // This should never be deleted or replaced
         let points = vec![self.prev_pose.clone(), pose.into()];
-        let line = LinePrimitive {
-            r#type: line_primitive::Type::LineStrip as i32,
-            pose: make_pose(0.0, 0.0, 0.0),
-            thickness: 1.0,
-            scale_invariant: true,
-            points,
-            color: Some(TRAJECTORY_COLOR.clone()),
-            colors: vec![],
-            indices: vec![],
-        };
-
-        let entity = SceneEntity {
-            timestamp: Some(Timestamp { seconds: timestamp as i64, nanos: 0 }),
-            frame_id: "world".to_string(),
-            id: self.current_update_id.to_string(),
-            lifetime: None,
-            frame_locked: false,
-            metadata: Vec::new(),
-            arrows: Vec::new(),
-            cubes: Vec::new(),
-            spheres: vec![current_pose_sphere],
-            cylinders: Vec::new(),
-            lines: vec![line],
-            triangles: Vec::new(),
-            texts: Vec::new(),
-            models: Vec::new(),
-        };
+        let trajectory_line = self.create_line(points, TRAJECTORY_COLOR.clone());
+        let traj_entity = self.create_scene_entity(
+            timestamp, "world",
+            format!("t{}", self.current_update_id.to_string()),
+            vec![],
+            vec![trajectory_line], 
+            vec![]
+        );
 
         let sceneupdate = SceneUpdate {
             deletions: vec![],
-            entities: vec![entity],
+            entities: vec![pose_entity, traj_entity]
         };
 
         self.writer.write(self.trajectory_channel, sceneupdate, timestamp, 0)?;
+        Ok(())
+    }
+
+    fn draw_keyframes(&mut self, timestamp: u64) -> Result<(), Box<dyn std::error::Error>> {
+        // Draw each keyframe
+        // Should be deleted when keyframes are deleted
+        let map = self.map.read();
+        let keyframes = map.get_all_keyframes();
+        let mut entities = Vec::<SceneEntity>::new();
+        for (id, keyframe) in keyframes {
+            let kf_arrow = self.create_arrow(&keyframe.pose.unwrap(), KEYFRAME_COLOR.clone());
+            entities.push(self.create_scene_entity(
+                timestamp, "world",
+                format!("kf {}", id),
+                vec![kf_arrow],
+                vec![], vec![]
+            ));
+        }
+
+        let sceneupdate = SceneUpdate {
+            deletions: vec![], // todo add deletions
+            entities
+        };
+
+        self.writer.write(self.keyframes_channel, sceneupdate, timestamp, 0)?;
 
         Ok(())
     }
 
-    fn draw_image(&mut self, image: &Mat, keypoints: &DVVectorOfKeyPoint, timestamp: u64) -> Result<(), Box<dyn std::error::Error>> {
-        debug!("Drawing image at timestamp {}", timestamp);
-        image::write_features(image, keypoints);
+    fn draw_mappoints(&mut self, mappoint_matches: &HashMap<u32, (Id, bool)>, timestamp: u64) -> Result<(), Box<dyn std::error::Error>> {
+        // Mappoints in map (different color if they are matches)
+        // Should be overwritten when there is new info for a mappoint
+        let mut entities = Vec::new();
+
+        let mut mappoint_match_ids = HashSet::<Id>::new();
+        for (_, (mappoint_id, _)) in mappoint_matches {
+            mappoint_match_ids.insert(*mappoint_id);
+        }
+
+        let map = self.map.read();
+        let mappoints = map.get_all_mappoints();
+        for (mappoint_id, mappoint) in mappoints {
+            let pose = DVPose::new_with_default_rot(mappoint.position);
+
+            let mp_sphere = match mappoint_match_ids.contains(mappoint_id) {
+                true => self.create_sphere(&pose, MAPPOINT_MATCH_COLOR.clone(), MAPPOINT_SIZE.clone()),
+                false => self.create_sphere(&pose, MAPPOINT_COLOR.clone(), MAPPOINT_SIZE.clone()),
+            };
+            let mp_entity = self.create_scene_entity(
+                timestamp, "world",
+                format!("mp {}", mappoint_id),
+                vec![],
+                vec![],
+                vec![mp_sphere]
+            );
+            entities.push(mp_entity);
+        }
+
+
+        let sceneupdate = SceneUpdate {
+            deletions: vec![],
+            entities
+        };
+
+        self.writer.write(self.mappoints_channel, sceneupdate, timestamp, 0)?;
+
+        Ok(())
+    }
+
+    fn draw_image(
+        &mut self, 
+        image: &Mat, encoding: &str, item_byte_size: u32, timestamp: u64
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let image_msg = RawImage {
             timestamp: Some(Timestamp { seconds: timestamp as i64, nanos: 0 }),
             frame_id: "world".to_string(),
             width: image.cols() as u32,
             height: image.rows() as u32,
-            encoding: "mono8".to_string(),
+            // To figure out the encoding you need, heading 2 in this link might be useful
+            // https://wiki.ros.org/cv_bridge/Tutorials/ConvertingBetweenROSImagesAndOpenCVImagesPython
+            encoding: encoding.to_string(),
             // Step is image cols * size of each element in bytes
-            // For mono8 (CV_8UC1) each element is u8 -> size is 1
-            // You can check this with ```size_of::<u8>()```
-            step: image.cols() as u32,
-            data: Mat::data_bytes(image)?.to_vec()
+            // If you know the type of each mat element, you can get the size in bytes with ```size_of::<T>()```
+            step: image.cols() as u32 * item_byte_size,
+            data: Mat::data_bytes(&image)?.to_vec()
         };
 
         self.writer.write(self.image_channel, image_msg, timestamp, 0)?;
@@ -205,273 +314,59 @@ impl DarvisVisualizer {
         Ok(())
     }
 
-
-    fn write_pose() {
-
+    fn create_sphere(&self, pose: &DVPose, color: Color, size: Vector3) -> SpherePrimitive {
+        SpherePrimitive {
+            pose: Some(pose.into()),
+            size: Some(size),
+            color: Some(color),
+        }
     }
 
-    fn write_trajectory() {
-
+    fn create_arrow(&self, pose: &DVPose, color: Color) -> ArrowPrimitive {
+        ArrowPrimitive { 
+            pose: Some(pose.into()),
+            color: Some(color),
+            shaft_length: 0.05,
+            shaft_diameter: 0.05,
+            head_length: 0.05,
+            head_diameter: 0.1
+        }
     }
 
-        // !! keyframes
+    fn create_line(&self, points: Vec<Point3>, color: Color) -> LinePrimitive {
+        LinePrimitive {
+            r#type: line_primitive::Type::LineStrip as i32,
+            pose: make_pose(0.0, 0.0, 0.0),
+            thickness: 1.0,
+            scale_invariant: true,
+            points,
+            color: Some(color),
+            colors: vec![],
+            indices: vec![],
+        }
+    }
 
-        // const float &w = mKeyFrameSize;
-        // const float h = w*0.75;
-        // const float z = w*0.6;
-
-        // Map* pActiveMap = mpAtlas->GetCurrentMap();
-        // // DEBUG LBA
-        // std::set<long unsigned int> sOptKFs = pActiveMap->msOptKFs;
-        // std::set<long unsigned int> sFixedKFs = pActiveMap->msFixedKFs;
-
-        // if(!pActiveMap)
-        //     return;
-
-        // const vector<KeyFrame*> vpKFs = pActiveMap->GetAllKeyFrames();
-
-        // if(bDrawKF)
-        // {
-        //     for(size_t i=0; i<vpKFs.size(); i++)
-        //     {
-        //         KeyFrame* pKF = vpKFs[i];
-        //         Eigen::Matrix4f Twc = pKF->GetPoseInverse().matrix();
-        //         unsigned int index_color = pKF->mnOriginMapId;
-
-        //         glPushMatrix();
-
-        //         glMultMatrixf((GLfloat*)Twc.data());
-
-        //         if(!pKF->GetParent()) // It is the first KF in the map
-        //         {
-        //             glLineWidth(mKeyFrameLineWidth*5);
-        //             glColor3f(1.0f,0.0f,0.0f);
-        //             glBegin(GL_LINES);
-        //         }
-        //         else
-        //         {
-        //             //cout << "Child KF: " << vpKFs[i]->mnId << endl;
-        //             glLineWidth(mKeyFrameLineWidth);
-        //             if (bDrawOptLba) {
-        //                 if(sOptKFs.find(pKF->mnId) != sOptKFs.end())
-        //                 {
-        //                     glColor3f(0.0f,1.0f,0.0f); // Green -> Opt KFs
-        //                 }
-        //                 else if(sFixedKFs.find(pKF->mnId) != sFixedKFs.end())
-        //                 {
-        //                     glColor3f(1.0f,0.0f,0.0f); // Red -> Fixed KFs
-        //                 }
-        //                 else
-        //                 {
-        //                     glColor3f(0.0f,0.0f,1.0f); // Basic color
-        //                 }
-        //             }
-        //             else
-        //             {
-        //                 glColor3f(0.0f,0.0f,1.0f); // Basic color
-        //             }
-        //             glBegin(GL_LINES);
-        //         }
-
-        //         glVertex3f(0,0,0);
-        //         glVertex3f(w,h,z);
-        //         glVertex3f(0,0,0);
-        //         glVertex3f(w,-h,z);
-        //         glVertex3f(0,0,0);
-        //         glVertex3f(-w,-h,z);
-        //         glVertex3f(0,0,0);
-        //         glVertex3f(-w,h,z);
-
-        //         glVertex3f(w,h,z);
-        //         glVertex3f(w,-h,z);
-
-        //         glVertex3f(-w,h,z);
-        //         glVertex3f(-w,-h,z);
-
-        //         glVertex3f(-w,h,z);
-        //         glVertex3f(w,h,z);
-
-        //         glVertex3f(-w,-h,z);
-        //         glVertex3f(w,-h,z);
-        //         glEnd();
-
-        //         glPopMatrix();
-
-        //         glEnd();
-        //     }
-        // }
-
-        // if(bDrawGraph)
-        // {
-        //     glLineWidth(mGraphLineWidth);
-        //     glColor4f(0.0f,1.0f,0.0f,0.6f);
-        //     glBegin(GL_LINES);
-
-        //     // cout << "-----------------Draw graph-----------------" << endl;
-        //     for(size_t i=0; i<vpKFs.size(); i++)
-        //     {
-        //         // Covisibility Graph
-        //         const vector<KeyFrame*> vCovKFs = vpKFs[i]->GetCovisiblesByWeight(100);
-        //         Eigen::Vector3f Ow = vpKFs[i]->GetCameraCenter();
-        //         if(!vCovKFs.empty())
-        //         {
-        //             for(vector<KeyFrame*>::const_iterator vit=vCovKFs.begin(), vend=vCovKFs.end(); vit!=vend; vit++)
-        //             {
-        //                 if((*vit)->mnId<vpKFs[i]->mnId)
-        //                     continue;
-        //                 Eigen::Vector3f Ow2 = (*vit)->GetCameraCenter();
-        //                 glVertex3f(Ow(0),Ow(1),Ow(2));
-        //                 glVertex3f(Ow2(0),Ow2(1),Ow2(2));
-        //             }
-        //         }
-
-        //         // Spanning tree
-        //         KeyFrame* pParent = vpKFs[i]->GetParent();
-        //         if(pParent)
-        //         {
-        //             Eigen::Vector3f Owp = pParent->GetCameraCenter();
-        //             glVertex3f(Ow(0),Ow(1),Ow(2));
-        //             glVertex3f(Owp(0),Owp(1),Owp(2));
-        //         }
-
-        //         // Loops
-        //         set<KeyFrame*> sLoopKFs = vpKFs[i]->GetLoopEdges();
-        //         for(set<KeyFrame*>::iterator sit=sLoopKFs.begin(), send=sLoopKFs.end(); sit!=send; sit++)
-        //         {
-        //             if((*sit)->mnId<vpKFs[i]->mnId)
-        //                 continue;
-        //             Eigen::Vector3f Owl = (*sit)->GetCameraCenter();
-        //             glVertex3f(Ow(0),Ow(1),Ow(2));
-        //             glVertex3f(Owl(0),Owl(1),Owl(2));
-        //         }
-        //     }
-
-        //     glEnd();
-        // }
-
-        // if(bDrawInertialGraph && pActiveMap->isImuInitialized())
-        // {
-        //     glLineWidth(mGraphLineWidth);
-        //     glColor4f(1.0f,0.0f,0.0f,0.6f);
-        //     glBegin(GL_LINES);
-
-        //     //Draw inertial links
-        //     for(size_t i=0; i<vpKFs.size(); i++)
-        //     {
-        //         KeyFrame* pKFi = vpKFs[i];
-        //         Eigen::Vector3f Ow = pKFi->GetCameraCenter();
-        //         KeyFrame* pNext = pKFi->mNextKF;
-        //         if(pNext)
-        //         {
-        //             Eigen::Vector3f Owp = pNext->GetCameraCenter();
-        //             glVertex3f(Ow(0),Ow(1),Ow(2));
-        //             glVertex3f(Owp(0),Owp(1),Owp(2));
-        //         }
-        //     }
-
-        //     glEnd();
-        // }
-
-        // vector<Map*> vpMaps = mpAtlas->GetAllMaps();
-
-        // if(bDrawKF)
-        // {
-        //     for(Map* pMap : vpMaps)
-        //     {
-        //         if(pMap == pActiveMap)
-        //             continue;
-
-        //         vector<KeyFrame*> vpKFs = pMap->GetAllKeyFrames();
-
-        //         for(size_t i=0; i<vpKFs.size(); i++)
-        //         {
-        //             KeyFrame* pKF = vpKFs[i];
-        //             Eigen::Matrix4f Twc = pKF->GetPoseInverse().matrix();
-        //             unsigned int index_color = pKF->mnOriginMapId;
-
-        //             glPushMatrix();
-
-        //             glMultMatrixf((GLfloat*)Twc.data());
-
-        //             if(!vpKFs[i]->GetParent()) // It is the first KF in the map
-        //             {
-        //                 glLineWidth(mKeyFrameLineWidth*5);
-        //                 glColor3f(1.0f,0.0f,0.0f);
-        //                 glBegin(GL_LINES);
-        //             }
-        //             else
-        //             {
-        //                 glLineWidth(mKeyFrameLineWidth);
-        //                 glColor3f(mfFrameColors[index_color][0],mfFrameColors[index_color][1],mfFrameColors[index_color][2]);
-        //                 glBegin(GL_LINES);
-        //             }
-
-        //             glVertex3f(0,0,0);
-        //             glVertex3f(w,h,z);
-        //             glVertex3f(0,0,0);
-        //             glVertex3f(w,-h,z);
-        //             glVertex3f(0,0,0);
-        //             glVertex3f(-w,-h,z);
-        //             glVertex3f(0,0,0);
-        //             glVertex3f(-w,h,z);
-
-        //             glVertex3f(w,h,z);
-        //             glVertex3f(w,-h,z);
-
-        //             glVertex3f(-w,h,z);
-        //             glVertex3f(-w,-h,z);
-
-        //             glVertex3f(-w,h,z);
-        //             glVertex3f(w,h,z);
-
-        //             glVertex3f(-w,-h,z);
-        //             glVertex3f(w,-h,z);
-        //             glEnd();
-
-        //             glPopMatrix();
-        //         }
-        //     }
-        // }
-
-        // !! mappoints
-        // Map* pActiveMap = mpAtlas->GetCurrentMap();
-        // if(!pActiveMap)
-        //     return;
-
-        // const vector<MapPoint*> &vpMPs = pActiveMap->GetAllMapPoints();
-        // const vector<MapPoint*> &vpRefMPs = pActiveMap->GetReferenceMapPoints();
-
-        // set<MapPoint*> spRefMPs(vpRefMPs.begin(), vpRefMPs.end());
-
-        // if(vpMPs.empty())
-        //     return;
-
-        // glPointSize(mPointSize);
-        // glBegin(GL_POINTS);
-        // glColor3f(0.0,0.0,0.0);
-
-        // for(size_t i=0, iend=vpMPs.size(); i<iend;i++)
-        // {
-        //     if(vpMPs[i]->isBad() || spRefMPs.count(vpMPs[i]))
-        //         continue;
-        //     Eigen::Matrix<float,3,1> pos = vpMPs[i]->GetWorldPos();
-        //     glVertex3f(pos(0),pos(1),pos(2));
-        // }
-        // glEnd();
-
-        // glPointSize(mPointSize);
-        // glBegin(GL_POINTS);
-        // glColor3f(1.0,0.0,0.0);
-
-        // for(set<MapPoint*>::iterator sit=spRefMPs.begin(), send=spRefMPs.end(); sit!=send; sit++)
-        // {
-        //     if((*sit)->isBad())
-        //         continue;
-        //     Eigen::Matrix<float,3,1> pos = (*sit)->GetWorldPos();
-        //     glVertex3f(pos(0),pos(1),pos(2));
-
-        // }
-
+    fn create_scene_entity(
+        &self, timestamp: u64, frame_id: &str, entity_id: String,
+        arrows: Vec<ArrowPrimitive>, lines: Vec<LinePrimitive>, spheres: Vec<SpherePrimitive>
+    ) -> SceneEntity {
+        SceneEntity {
+            timestamp: Some(Timestamp { seconds: timestamp as i64, nanos: 0 }),
+            frame_id: frame_id.to_string(),
+            id: entity_id,
+            lifetime: None,
+            frame_locked: false,
+            metadata: vec![],
+            arrows,
+            cubes: vec![],
+            spheres,
+            cylinders: vec![],
+            lines,
+            triangles: vec![],
+            texts: vec![],
+            models: vec![],
+        }
+    }
 }
 
 pub struct McapWriter {
@@ -533,8 +428,8 @@ impl McapWriter {
 }
 
 
-impl From<Pose> for foxglove::foxglove::items::Pose {
-    fn from(pose: Pose) -> foxglove::foxglove::items::Pose {
+impl From<&DVPose> for foxglove::foxglove::items::Pose {
+    fn from(pose: &DVPose) -> foxglove::foxglove::items::Pose {
         let trans = pose.get_translation();
         let position = Vector3 { 
             x: trans[0], 
@@ -542,11 +437,12 @@ impl From<Pose> for foxglove::foxglove::items::Pose {
             z: trans[2]
         };
 
+        let quat = pose.get_quaternion();
         let orientation = Quaternion {
-            x: 0.0,
-            y: 0.0,
-            z: 0.0,
-            w: 1.0
+            x: quat[0],
+            y: quat[1],
+            z: quat[2],
+            w: quat[3]
         };
 
         foxglove::foxglove::items::Pose {
@@ -556,8 +452,8 @@ impl From<Pose> for foxglove::foxglove::items::Pose {
     }
 }
 
-impl From<Pose> for foxglove::foxglove::items::Point3 {
-    fn from(pose: Pose) -> foxglove::foxglove::items::Point3 {
+impl From<DVPose> for foxglove::foxglove::items::Point3 {
+    fn from(pose: DVPose) -> foxglove::foxglove::items::Point3 {
         let trans = pose.get_translation();
         Point3 { 
             x: trans[0], 
@@ -566,4 +462,3 @@ impl From<Pose> for foxglove::foxglove::items::Point3 {
         }
     }
 }
-

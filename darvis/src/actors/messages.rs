@@ -1,19 +1,13 @@
-use std::collections::HashSet;
+use std::collections::{HashSet, HashMap};
 
 use opencv::prelude::Mat;
 use dvcore::{
     matrix::{ DVVectorOfKeyPoint, DVMatrix}, base::ActorMessage,
 };
 use crate::{
-    dvmap::{keyframe::{Frame, FrameState}, pose::Pose, map::Id},
+    dvmap::{keyframe::{Frame, FrameState}, pose::DVPose, map::Id},
     actors::tracking_backend::TrackingState
 };
-
-// Note: Can avoid having to serialize/deserialize every message 
-// by removing Serialize,Deserialize derives and doing 
-// "impl ActorMessage for FeatureMsg" instead of just "impl FeatureMsg".
-// Switch this in the future if we want to do anything over the network.
-// https://github.com/rsimmonsjr/axiom/issues/99
 
 //* VISUALIZER */
 pub struct VisFeaturesMsg {
@@ -23,9 +17,14 @@ pub struct VisFeaturesMsg {
     pub image_filename: String,
 }
 impl ActorMessage for VisFeaturesMsg {}
+pub struct VisFeatureMatchMsg {
+    pub matches: opencv::core::Vector<opencv::core::DMatch>,
+    pub timestamp: u64
+}
+impl ActorMessage for VisFeatureMatchMsg {}
 
 pub struct VisUpdateMsg {
-    pub pose: Pose,
+    pub pose: DVPose,
     pub timestamp: u64,
 }
 impl ActorMessage for VisUpdateMsg {}
@@ -36,20 +35,12 @@ impl ActorMessage for ShutdownMsg {}
 
 #[derive(Clone)]
 pub struct TrajectoryMsg {
-    pub pose: Pose,
+    pub pose: DVPose,
     pub ref_kf_id: Id,
+    pub mappoint_matches: HashMap<u32, (i32, bool)>,
     pub timestamp: u64,
 }
 impl ActorMessage for TrajectoryMsg {}
-impl TrajectoryMsg {
-    pub fn new(pose: Pose, ref_kf_id: Id, timestamp: u64) -> Self {
-        TrajectoryMsg{
-            pose,
-            ref_kf_id,
-            timestamp
-        }
-    }
-}
 
 #[derive(Debug)]
 pub struct TrackingStateMsg {
@@ -100,25 +91,21 @@ impl ActorMessage for ImagesMsg {}
 // Message that map sends to tracking letting it know that map has been initialized
 #[derive(Debug)]
 pub struct MapInitializedMsg {
-    pub curr_kf_pose: Pose,
+    pub curr_kf_pose: DVPose,
     pub curr_kf_id: Id,
     pub ini_kf_id: Id,
     pub local_mappoints: HashSet<Id>,
 }
 impl ActorMessage for MapInitializedMsg { }
 
-pub struct DrawInitialMapMsg {
+pub struct VisInitialMapMsg {
     pub kf1_id: Id,
     pub kf2_id: Id,
 }
-impl ActorMessage for DrawInitialMapMsg { }
+impl ActorMessage for VisInitialMapMsg { }
 
 #[derive(Debug)]
 pub struct KeyFrameMsg<S: FrameState> {
-    // Note: if using serde to serialize/deserialize, need to
-    // uncomment the following line of code. 
-    // See https://github.com/serde-rs/serde/issues/1296
-    // #[serde(bound = "")]
     pub keyframe: Frame<S>,
 }
 

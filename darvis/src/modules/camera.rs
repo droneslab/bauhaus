@@ -1,7 +1,8 @@
+use log::debug;
 use opencv::{prelude::{Mat, MatTrait, MatTraitConst, KeyPointTraitConst}, core::{Scalar, CV_64F, KeyPoint}};
 use dvcore::{config::*, matrix::{DVMatrix, DVVectorOfPoint3f, DVVector3}, sensor::Sensor};
 use crate::{
-    dvmap::{pose::Pose, keyframe::{Frame, FullKeyFrame}},
+    dvmap::{pose::DVPose, keyframe::{Frame, FullKeyFrame}},
     matrix::DVVectorOfKeyPoint, registered_actors::CAMERA
 };
 
@@ -89,7 +90,7 @@ impl Camera {
         v_keys1: &DVVectorOfKeyPoint, 
         v_keys2: &DVVectorOfKeyPoint,
         matches: &Vec<i32>,
-    ) -> Option<(Pose, DVVectorOfPoint3f, Vec<bool>)> {
+    ) -> Option<(DVPose, DVVectorOfPoint3f, Vec<bool>)> {
         let mut tvr = dvos3binding::ffi::new_two_view_reconstruction(
             self.get_fx() as f32,
             self.get_cx() as f32,
@@ -98,9 +99,9 @@ impl Camera {
             1.0, 200
         );
 
-        let mut pose = dvos3binding::ffi::Pose{
+        let mut pose = dvos3binding::ffi::Pose {
             translation: [0.0;3],
-            rotation: [0.0;4]
+            rotation: [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]
         };
         let mut v_p3d: dvos3binding::ffi::WrapBindCVVectorOfPoint3f = DVVectorOfPoint3f::empty().into();
         let mut vb_triangulated  = Vec::new();
@@ -113,6 +114,7 @@ impl Camera {
             &mut v_p3d,
             &mut vb_triangulated
         );
+
         if reconstructed {
             return Some((pose.into(), v_p3d.into(), vb_triangulated));
         } else {
@@ -161,7 +163,7 @@ impl Camera {
         )
     }
 
-    pub fn epipolar_constrain(&self, kp1: &KeyPoint, kp2: &KeyPoint, r12: nalgebra::Matrix3<f64>, t12: nalgebra::Vector3<f64>, sigma_level: f32, unc: f32) -> bool {
+    pub fn epipolar_constrain(&self, kp1: &KeyPoint, kp2: &KeyPoint, r12: nalgebra::Matrix3<f64>, t12: nalgebra::Vector3<f64>, unc: f32) -> bool {
         // bool Pinhole::epipolarConstrain(GeometricCamera* pCamera2,  const cv::KeyPoint &kp1, const cv::KeyPoint &kp2, const Eigen::Matrix3f& R12, const Eigen::Vector3f& t12, const float sigmaLevel, const float unc) {
         //Compute Fundamental Matrix
         let t12x = nalgebra::Matrix3::new(
@@ -181,7 +183,7 @@ impl Camera {
         let b = ptx * f12[(0,1)] + pty * f12[(1,1)] + f12[(2,1)];
         let c = ptx * f12[(0,2)] + pty * f12[(1,2)] + f12[(2,2)];
 
-        let num = a * ptx + b * pty + c;
+        let num = a * (kp2.pt().x as f64) + b * (kp2.pt().y as f64) + c;
         let den = a * a + b * b;
         if den == 0.0 {
             return false;

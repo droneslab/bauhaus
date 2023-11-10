@@ -14,10 +14,24 @@ pub mod ffi {
         rotation: [f64; 4] // in C++: array<double, 4> 
     }
 
-    unsafe extern "C++" {
-        // Note: can't use relative path because cargo hates it :(
+    // SOFIYA TEST
+    // Note: Workaround to have a vec of shared ptrs 
+    // https://github.com/dtolnay/cxx/issues/741
+    // Not thread safe!! Don't make this shared.
+    // See explanation below for get_mut_xyz_edges for why we do this.
+    // #[repr(C, align(16))] 
+    // struct RustXYZEdge {
+    //     inner: UniquePtr<EdgeSE3ProjectXYZ>,
+    // }
+    // // #[repr(C, align(16))] 
+    // struct RustXYZOnlyPoseEdge {
+    //     inner: UniquePtr<EdgeSE3ProjectXYZOnlyPose>,
+    //     mappoint_id: i32,
+    // }
 
+    unsafe extern "C++" {
         include!("rust_helper.h");
+
         // Opaque types which both languages can pass around
         // but only C++ can see the fields.
         type BridgeSparseOptimizer;
@@ -60,8 +74,9 @@ pub mod ffi {
             keypoint_pt_x: f32,
             keypoint_pt_y: f32,
             invSigma2: f32,
-            mp_world_position: [f64; 3]
-        ) -> UniquePtr<EdgeSE3ProjectXYZOnlyPose>;
+            mp_world_position: [f64; 3],
+            mappoint_id: i32
+        );
         fn add_edge_monocular_binary(
             self: Pin<&mut BridgeSparseOptimizer>,
             robust_kernel: bool,
@@ -72,7 +87,7 @@ pub mod ffi {
             keypoint_pt_y: f32,
             invSigma2: f32,
             huber_delta: i32
-        ) -> UniquePtr<EdgeSE3ProjectXYZ>;
+        );
         // fn set_edge_worldpos(
         //     self: &BridgeSparseOptimizer,
         //     mp_world_index: i32,
@@ -104,6 +119,18 @@ pub mod ffi {
         ) -> Pose;
 
         // optimization within edge
+        // Note: BridgeSparseOptimizer has vector of RustEdge types, call get_mut_edges to access
+        // the vec and then iterate through it and call functions on each edge inside.
+        // Kind of an annoying workaround for this problem:
+        // All items returned from C++ need to be a Unique or Shared ptr. We can return one to
+        // the edges directly and have rust manage the vector, instead of keeping the vec on
+        // the C++ side. But some functions don't need to access the edges and therefore don't
+        // do anything meaningful with the edge vec, causing the compiler to free the memory of
+        // the shared/unique ptr. But we don't want the memory freed, because it is still being
+        // used by the optimizer!
+        // SOFIYA TEST
+        // fn get_mut_xyz_edges(self: Pin<&mut BridgeSparseOptimizer>) -> Pin<&mut CxxVector<RustXYZEdge>>;
+        // fn get_mut_xyz_onlypose_edges(self: Pin<&mut BridgeSparseOptimizer>) -> Pin<&mut CxxVector<RustXYZOnlyPoseEdge>>;
         #[rust_name = "set_level"]
         fn setLevel(
             self: Pin<&mut EdgeSE3ProjectXYZOnlyPose>,
@@ -114,7 +141,7 @@ pub mod ffi {
         fn chi2(self: &EdgeSE3ProjectXYZOnlyPose) -> f64;
         fn chi2(self: &EdgeSE3ProjectXYZ) -> f64;
         #[rust_name = "is_depth_positive"]
-        fn isDepthPositive(self: &EdgeSE3ProjectXYZ) -> bool;
+        fn isDepthPositive(self: &EdgeSE3ProjectXYZOnlyPose) -> bool;
         fn set_robust_kernel(self: Pin<&mut EdgeSE3ProjectXYZOnlyPose>, reset: bool);
     }
 }

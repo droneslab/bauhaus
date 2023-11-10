@@ -9,7 +9,6 @@
 
 use std::collections::HashMap;
 use std::fmt::Debug;
-use dvcore::config::{*};
 use dvcore::sensor::{Sensor, FrameSensor};
 use opencv::prelude::{Mat, MatTraitConst, MatTrait, KeyPointTraitConst};
 use opencv::types::VectorOff32;
@@ -28,7 +27,6 @@ const FRAME_GRID_COLS :usize = 64;
 enum KeyPoints {
     #[default] Empty,
     Mono { 
-        keypoints_orig: DVVectorOfKeyPoint, // Original for visualization.
         keypoints_un: DVVectorOfKeyPoint // Undistorted keypoints actually used by the system. For stereo, this is redundant bc images must be rectified
     },
     Stereo { 
@@ -77,7 +75,7 @@ impl Features {
                     Features {
                         num_keypoints,
                         image_bounds,
-                        keypoints: KeyPoints::Mono { keypoints_orig, keypoints_un },
+                        keypoints: KeyPoints::Mono { keypoints_un },
                         descriptors: descriptors.clone(),
                         grid,
                     }
@@ -205,7 +203,7 @@ impl Features {
             // Fill undistorted keypoint vector
             let mut undistorted_kp_vec = opencv::types::VectorOfKeyPoint::new();
             for i in 0..num_keypoints {
-                let mut kp = keypoints.get(i as usize)?;
+                let kp = keypoints.get(i as usize)?;
                 kp.pt().x = *mat.at_2d::<f32>(i, 0)?;
                 kp.pt().y = *mat.at_2d::<f32>(i, 1)?;
                 undistorted_kp_vec.push(kp);

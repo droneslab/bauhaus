@@ -1,7 +1,7 @@
 # darvis
 Distributed, modulAR Visual SLAM
 
-## Quick Start
+## Installation
 ```bash
 # Install system dependencies 
 sudo apt-get update
@@ -32,7 +32,7 @@ cd opencv && git checkout tags/4.5.4 && cd ..
 git clone https://github.com/opencv/opencv_contrib.git
 cd opencv_contrib && git checkout tags/4.5.4 && cd .. 
 cd opencv && mkdir build && cd build
-cmake -DOPENCV_EXTRA_MODULES_PATH=../../opencv_contrib/modules -DBUILD_opencv_xfeatures2d=ON -DOPENCV_ENABLE_NONFREE=ON -DWITH_GTK=ON ..
+cmake -DOPENCV_EXTRA_MODULES_PATH=../../opencv_contrib/modules -DBUILD_opencv_xfeatures2d=ON -DOPENCV_ENABLE_NONFREE=ON -DWITH_GTK=ON -DWITH_EIGEN=OFF ..
 make -j4 install
 
 # Install Pangolin
@@ -51,7 +51,6 @@ cd ~/darvis-home/darvis/darvis/
 cargo build --release
 ```
 
-### Install with Docker
 To instead install with docker...
 1. [Install docker](https://docs.docker.com/get-docker/)
 2. (Macs only) [Download Xquartz](https://www.xquartz.org/) 
@@ -70,7 +69,12 @@ To instead install with docker...
     2. Follow [instructions for quick start](https://code.visualstudio.com/docs/remote/containers#_quick-start-open-an-existing-folder-in-a-container) to open VSCode inside container. This opens a new VSCode window
     3. For compile-time code checking, in the new VSCode window, install [rust-analyzer extension](https://marketplace.visualstudio.com/items?itemName=matklad.rust-analyzer) 
 
+### Common Problems
+- **Segfaults inside orbslam-bindings** 
+    - If you have two versions of OpenCV (for example, one from apt that gets downloaded when you install ROS and the one you installed in the instructions above) then you can get segfaults inside the C++ OpenCV code in `orbslam-bindings`. This occurs because C++ finds one OpenCV version (usually the ROS version) and Rust finds a different one (usually the system-installed one). The easiest workaround is just to uninstall ROS and the apt version of OpenCV. It should be possible to inform the rust OpenCV package to look for the right version with [environment variables like this](https://github.com/twistedfall/opencv-rust#environment-variables) but I have not tested it.
 
+---
+## Running
 ### Options for running/building
 - DEBUG mode (fast building, slow execution)
     ```bash
@@ -96,7 +100,16 @@ To instead install with docker...
     RUSTFLAGS="-Z sanitizer=address" cargo run --target x86_64-unknown-linux-gnu [DATASET] config.yaml
     ```
 
+### Using the Visualizer
+1. Download the [foxglove application](https://foxglove.dev/). This can be on any device (does not need to be the test device).
+2. Open foxglove, click on `layout` in the top right corner, then `import from file`. Load the file in `foxglove/foxglovelayout.json`.
+3. Make sure the `visualizer` actor in `config.yaml` is not commented out.
+4. Run the system. After the program is done, it will write the file `darvis/results/out.mcap`. 
+5. In foxglove, click `file > open local file` and load `darvis/results/out.mcap`.
 
+Currently there is no way to stream the visualization in real-time. To do that, you would need to use the [foxglove websocket](https://foxglove.dev/docs/studio/connection/custom#live-connection) but this requires compiling a custom server in C++, Python, or TypeScript. You should be able to do it with C++ with ffi bindings, but we have not implemented this (yet?).
+
+For longer datasets, the mcap file size can get unreasonably large because it saves all the images. You can turn this off by setting the `image_draw_type` setting in the visualizer actor to `none`. The other valid options are `plain` (unmodified images), `features` (detected features), and `featuresandmatches` (current and previous image with feature matches highlighted).
 
 ---
 ## Creating new modules
@@ -208,29 +221,27 @@ Where ``max_features`` is the key you added in the config file.
 
 
 ---
-## Future work, key for strings
+## Key for strings
 
 Strings are formatted like: ``TODO (string)``
 
-### Implementation
-- Sensor types
-    - **IMU**
-    - **Stereo**
-    - **RGBD**
-- Modules
-    - **relocalization**
-    - **local mapping**
-    - **loop closing**
-- Features
-    - **multimaps**
-    - **reset**
-
-### Design
-- Axiom framework
-    - **msg copy**
-
----
-## Misc Implementation Details
-
-### Visualizer
-Using [rerun.io](https://www.rerun.io/docs) for visualization. [Using rerun with ROS2 and python](https://www.rerun.io/docs/howto/ros2-nav-turtlebot) might be particularly interesting -- we obviously don't use ROS2 and python but the translation between ROS2 topics and rerun syntax might be helpful to know what can be visualized.
+- Feature implementation TO DOs
+    - **MVP**
+    - Sensor types
+        - **IMU**
+        - **Stereo**
+        - **RGBD**
+    - Modules
+        - **relocalization**
+        - **local mapping**
+        - **loop closing**
+    - Features
+        - **multimaps**
+        - **reset**
+- Design TO DOs
+    - **design**
+    - **memory** 
+- Notes
+    - **note**
+    - **paper note**
+    - **testing**

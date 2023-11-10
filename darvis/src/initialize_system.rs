@@ -1,14 +1,14 @@
-use std::{sync::{Arc, mpsc, Mutex}, thread, collections::HashMap, time::Duration};
+use std::{sync::{Arc, mpsc, Mutex}, thread, collections::HashMap};
 
 use dvcore::{
-    config::{ActorConf, GLOBAL_PARAMS, SYSTEM_SETTINGS},
+    config::ActorConf,
     base::{DVSender, DVReceiver, ActorChannels, DVMessageBox, Actor},
-    lockwrap::{ReadWriteWrapper, ReadOnlyWrapper}
+    lockwrap::ReadWriteWrapper
 };
 use log::{info, warn};
 
 use crate::{
-    registered_actors::{VISUALIZER, SHUTDOWN_ACTOR, MAP_ACTOR, get_actor},
+    registered_actors::{SHUTDOWN_ACTOR, MAP_ACTOR, get_actor},
     dvmap::map::Map,
     actors::messages::ShutdownMsg,
 };
@@ -37,14 +37,14 @@ pub fn initialize_actors(config: Vec::<ActorConf>, first_actor_name: String)
     transmitters.insert(MAP_ACTOR.to_string(), map_tx);
     let (shutdown_tx, shutdown_rx) = mpsc::channel::<DVMessageBox>();
     transmitters.insert(SHUTDOWN_ACTOR.to_string(), shutdown_tx);
-    let vis_rx = match GLOBAL_PARAMS.get::<bool>(SYSTEM_SETTINGS, "show_visualizer") {
-        true => {
-            let (vis_tx, vis_rx) = mpsc::channel::<DVMessageBox>();
-            transmitters.insert(VISUALIZER.to_string(), vis_tx);
-            Some(vis_rx)
-        },
-        false => None
-    };
+    // let vis_rx = match GLOBAL_PARAMS.get::<bool>(SYSTEM_SETTINGS, "show_visualizer") {
+    //     true => {
+    //         let (vis_tx, vis_rx) = mpsc::channel::<DVMessageBox>();
+    //         transmitters.insert(VISUALIZER.to_string(), vis_tx);
+    //         Some(vis_rx)
+    //     },
+    //     false => None
+    // };
 
     // * SPAWN USER-DEFINED ACTORS *//
     // Create map
@@ -56,9 +56,9 @@ pub fn initialize_actors(config: Vec::<ActorConf>, first_actor_name: String)
 
     // * SPAWN DARVIS SYSTEM ACTORS *//
     // Visualizer
-    if GLOBAL_PARAMS.get::<bool>(SYSTEM_SETTINGS, "show_visualizer") {
-        spawn_actor(VISUALIZER.to_string(), &transmitters, vis_rx.unwrap(), Some(&writeable_map));
-    }
+    // if GLOBAL_PARAMS.get::<bool>(SYSTEM_SETTINGS, "show_visualizer") {
+    //     spawn_actor(VISUALIZER.to_string(), &transmitters, vis_rx.unwrap(), Some(&writeable_map));
+    // }
 
     // Map actor
     // After this point, you cannot get a read-only clone of the map!
