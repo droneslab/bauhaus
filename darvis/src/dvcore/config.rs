@@ -152,13 +152,14 @@ pub struct ConfigValueBox {
 pub struct ActorConf{
     pub name: String,
     pub file: String,
-    pub actor_message: String,
-    pub actor_function: String,
-    pub ip_address: String,
-    pub port: String,
-    pub multithreaded: bool,
-    pub threads: i64,
-    pub possible_paths: HashMap<String, String>
+    // Other stuff that used to be in the config file that we are not using right now
+    // pub actor_message: String,
+    // pub actor_function: String,
+    // pub ip_address: String,
+    // pub port: String,
+    // pub multithreaded: bool,
+    // pub threads: i64,
+    // pub possible_paths: HashMap<String, String>
 }
 
 #[derive(Debug, Default, Clone)]
@@ -178,7 +179,6 @@ pub fn load_config(file_name: &String) -> Result<(Vec<ActorConf>, Vec<ModuleConf
 
     // Load additional custom settings from config file
     let system_settings = &yaml::YamlLoader::load_from_str(&config_string).unwrap()[0]["system_settings"];
-    add_setting_bool(SYSTEM_SETTINGS, "show_visualizer", &system_settings["show_visualizer"]);
     add_setting_bool(SYSTEM_SETTINGS, "localization_only_mode", &system_settings["localization_only_mode"]);
     add_setting_bool(SYSTEM_SETTINGS, "should_profile", &system_settings["should_profile"]);
     add_setting_string(SYSTEM_SETTINGS, "vocabulary_file", &system_settings["vocabulary_file"]);
@@ -206,26 +206,28 @@ pub fn load_config(file_name: &String) -> Result<(Vec<ActorConf>, Vec<ModuleConf
     for actor in yaml_document["actors"].as_vec().unwrap() {
         let h = &actor.as_hash().unwrap();
 
-        let paths = get_val(h, "possible_paths").as_vec().unwrap();
-        let mut hmap = HashMap::<String, String>::new();
-        for p in 0..paths.len() {
-            let path = paths[p].as_hash().unwrap();
-            hmap.insert(
-                get_val(path, "from").as_str().unwrap().to_string(),
-                get_val(path, "to").as_str().unwrap().to_string(),
-            );
-        }
+        // Other stuff that used to be in the config file that we aren't using right now.
+        // let paths = get_val(h, "possible_paths").as_vec().unwrap();
+        // let mut hmap = HashMap::<String, String>::new();
+        // for p in 0..paths.len() {
+        //     let path = paths[p].as_hash().unwrap();
+        //     hmap.insert(
+        //         get_val(path, "from").as_str().unwrap().to_string(),
+        //         get_val(path, "to").as_str().unwrap().to_string(),
+        //     );
+        // }
 
         let a_conf = ActorConf {
             name: get_val(h, "name").as_str().unwrap().to_string(),
             file: get_val(h, "file").as_str().unwrap().to_string(),
-            actor_message: get_val(h, "actor_message").as_str().unwrap().to_string(),
-            actor_function: get_val(h, "actor_function").as_str().unwrap().to_string(),
-            ip_address: get_val(h, "address").as_str().unwrap().to_string(),
-            port: get_val(h, "port").as_str().unwrap().to_string(),
-            multithreaded: get_val(h, "multithreaded").as_bool().unwrap(),
-            threads: get_val(h, "threads").as_i64().unwrap(),
-            possible_paths: hmap
+            // Other stuff that used to be in the config file that we are not using right now
+            // actor_message: get_val(h, "actor_message").as_str().unwrap().to_string(),
+            // actor_function: get_val(h, "actor_function").as_str().unwrap().to_string(),
+            // ip_address: get_val(h, "address").as_str().unwrap().to_string(),
+            // port: get_val(h, "port").as_str().unwrap().to_string(),
+            // multithreaded: get_val(h, "multithreaded").as_bool().unwrap(),
+            // threads: get_val(h, "threads").as_i64().unwrap(),
+            // possible_paths: hmap
         };
 
         actor_info.push(a_conf.clone());
@@ -233,8 +235,9 @@ pub fn load_config(file_name: &String) -> Result<(Vec<ActorConf>, Vec<ModuleConf
         add_settings(get_val(h, "settings").as_vec().unwrap(), &a_conf.name);
 
         GLOBAL_PARAMS.insert(&a_conf.name, "file", a_conf.file);
-        GLOBAL_PARAMS.insert(&a_conf.name, "actor_message", a_conf.actor_message);
-        GLOBAL_PARAMS.insert(&a_conf.name, "actor_function", a_conf.actor_function);
+        // Other stuff that used to be in the config file that we are not using right now
+        // GLOBAL_PARAMS.insert(&a_conf.name, "actor_message", a_conf.actor_message);
+        // GLOBAL_PARAMS.insert(&a_conf.name, "actor_function", a_conf.actor_function);
     }
 
     // Load modules

@@ -1,9 +1,9 @@
 use dvcore::{base::{ActorChannels, ActorMessage, Actor}};
-use log::{info, warn, debug};
+use log::{info, warn};
 
 use crate::{
     lockwrap::ReadWriteWrapper,
-    dvmap::{keyframe::*, map::*, mappoint::{MapPoint, PrelimMapPoint}, pose::Pose},
+    dvmap::{keyframe::*, map::*, mappoint::{MapPoint, PrelimMapPoint}, pose::DVPose},
     modules::map_initialization::Initialization, actors::messages::{MapInitializedMsg, KeyFrameIdMsg, LastKeyFrameUpdatedMsg},
 };
 
@@ -30,12 +30,10 @@ impl Actor for MapActor {
                                     )).unwrap();
                                     info!("successfully created initial monocular map");
                                 },
-                                None => { }
+                                None => { 
+                                    warn!("Could not create initial map");
+                                }
                         };
-                    },
-
-                    MapWriteTarget::MapPoint__New { mp ,observations_to_add } => {
-                        let _ = write_lock.insert_mappoint_to_map(mp, observations_to_add);
                     },
                     MapWriteTarget::MapPoint__NewMany { mps, callback_actor } => {
                         for (mp, observations) in mps {
@@ -44,7 +42,6 @@ impl Actor for MapActor {
                         // Inform tracking that we are done with creating new mappoints. Needed because tracking fails if new points are not created
                         // before track_with_reference_keyframe, so to avoid the race condition we have it wait until the new points are ready.
                         self.actor_system.find(callback_actor).unwrap().send(Box::new(LastKeyFrameUpdatedMsg{})).unwrap();
-                        debug!("Local mapping finished creating {} new mappoints", mps.len());
                     },
                     MapWriteTarget::MapPoint__DiscardMany { ids } => {
                         for id in ids {
@@ -83,7 +80,7 @@ impl Actor for MapActor {
                         write_lock.mappoints.get_mut(mp_id).unwrap().position = pose.get_translation();
                     }
                     _ => {
-                        warn!("Map Actor received unknown message type!");
+                        warn!("Map Actor received unknown target! Contents: {:?}", msg.target);
                     },
                 }
             } else if let Some(_) = message.downcast_ref::<ShutdownMsg>() {
@@ -106,24 +103,28 @@ impl MapActor {//+ std::marker::Send + std::marker::Sync
 
 /// *** Message to send map actor an edit request *** ///
 #[allow(non_camel_case_types)]
+#[derive(Debug)]
 enum MapWriteTarget {
-    // #[serde(bound = "")] If using serialize/deserialize, uncomment this
-    // BulkMsg{msgs: Vec<MapWriteMsg>}, Note: Tried this out as a way for actors to send a bunch of messages at once without having to send at a ridiculously high rate, but this doesn't work because (I think) each message needs a write lock and the actor is handling them asynchronously
+    //Note: Tried this out as a way for actors to send a bunch of messages at once without 
+    // having to send at a ridiculously high rate, but this doesn't work because (I think)
+    // each message needs a write lock and the actor is handling them asynchronously
+    // BulkMsg{msgs: Vec<MapWriteMsg>}
+
     CreateInitialMapMonocular{initialization_data: Initialization, callback_actor: String},
     CreateInitialMapStereo{initialization_data: Initialization, callback_actor: String},
     KeyFrame__New{kf: Frame<PrelimKeyFrame>, callback_actor: String},
     KeyFrame__Delete{id: Id},
-    KeyFrame__Pose{kf_id: Id, pose: Pose},
+    KeyFrame__Pose{kf_id: Id, pose: DVPose},
     Map__ResetActive{},
-    MapPoint__New{mp: MapPoint<PrelimMapPoint>, observations_to_add: Vec<(Id, u32, usize)>},
     MapPoint__NewMany{mps: Vec<(MapPoint<PrelimMapPoint>, Vec<(Id, u32, usize)>)>, callback_actor: String},
     MapPoint__DiscardMany{ids: Vec<Id>},
     MapPoint__Replace{mp_to_replace: Id, mp: Id},
     MapPoint__IncreaseFound{mp_ids_and_nums: Vec::<(Id, i32)>},
     MapPoint__IncreaseVisible{mp_ids: Vec<Id>},
     MapPoint__AddObservation{mp_id: Id, kf_id: Id, index: usize},
-    MapPoint__Pose{mp_id: Id, pose: Pose},
+    MapPoint__Pose{mp_id: Id, pose: DVPose},
 }
+#[derive(Debug)]
 pub struct MapWriteMsg {
     // #[serde(bound = "")] If using serialize/deserialize, uncomment this
     target: MapWriteTarget,
@@ -162,7 +163,7 @@ impl MapWriteMsg {
             target: MapWriteTarget::KeyFrame__Delete { id }
         }
     }
-    pub fn edit_keyframe_pose(kf_id: Id, pose: Pose) -> Self {
+    pub fn edit_keyframe_pose(kf_id: Id, pose: DVPose) -> Self {
         Self {
             target: MapWriteTarget::KeyFrame__Pose {kf_id, pose}
         }
@@ -202,7 +203,7 @@ impl MapWriteMsg {
             target: MapWriteTarget::MapPoint__AddObservation{mp_id, kf_id, index}
         }
     }
-    pub fn edit_mappoint_pose(mp_id: Id, pose: Pose) -> Self {
+    pub fn edit_mappoint_pose(mp_id: Id, pose: DVPose) -> Self {
         Self {
             target: MapWriteTarget::MapPoint__Pose {mp_id, pose}
         }

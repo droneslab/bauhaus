@@ -22,7 +22,7 @@ impl Relocalization {
         self.sec_since_lost(current_frame) > GLOBAL_PARAMS.get::<i32>(SYSTEM_SETTINGS, "recently_lost_cutoff") as u64
     }
 
-    pub fn run(&self) -> bool {
+    pub fn _run(&self) -> bool {
         todo!("Relocalization");
     }
 }

@@ -4,13 +4,12 @@ use std::{fs::OpenOptions, path::Path, env, time::SystemTime};
 use fern::colors::{ColoredLevelConfig, Color};
 use glob::glob;
 use log::info;
-use opencv::{imgcodecs, core::Vector};
 use spin_sleep::LoopHelper;
 #[macro_use]
 extern crate lazy_static;
 
-use dvcore::{*, config::*, base::{ActorChannels}, matrix::{DVMatrix, DVVectorOfKeyPoint}};
-use crate::{actors::{messages::{ImageMsg, ShutdownMsg, ImagePathMsg}, tracking_frontend::DVORBextractor}, registered_actors::{TRACKING_FRONTEND, VISUALIZER}, modules::image};
+use dvcore::{*, config::*, base::ActorChannels};
+use crate::{actors::messages::{ShutdownMsg, ImagePathMsg}, registered_actors::TRACKING_FRONTEND};
 use crate::dvmap::{bow::VOCABULARY, map::Id};
 
 mod actors;

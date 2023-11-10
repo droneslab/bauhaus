@@ -90,20 +90,6 @@ impl<'a> From<&'a DVMatrix> for dvos3binding::BindCVMatRef<'a> {
 }
 
 
-impl Serialize for DVMatrix {
-    fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error> where S: Serializer {
-        todo!("serialize");
-        }
-}
-impl<'de> Deserialize<'de> for DVMatrix {
-    fn deserialize<D>(_deserializer: D) -> Result<DVMatrix, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        todo!("serialize");
-    }
-}
-
 
 #[derive(Clone, Debug, Default)]
 pub struct DVVectorOfKeyPoint ( opencv::types::VectorOfKeyPoint );
@@ -171,22 +157,6 @@ impl<'a> From<&'a DVVectorOfKeyPoint> for dvos3binding::BindCVKeyPointsRef<'a> {
     }
 }
 
-impl Serialize for DVVectorOfKeyPoint {
-    fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        todo!("serialize");
-    }
-}
-impl<'de> Deserialize<'de> for DVVectorOfKeyPoint {
-    fn deserialize<D>(_deserializer: D) -> Result<DVVectorOfKeyPoint, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        todo!("serialize");
-    }
-}
 
 
 #[derive(Clone, Debug, Default)]
@@ -375,23 +345,6 @@ impl<T> Index<usize> for DVVector3<T> {
     type Output = T;
     fn index(&self, i: usize) -> &Self::Output { &self.0[i] }
 }
-impl<T> Serialize for DVVector3<T> {
-    fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        todo!("serialize");
-    }
-}
-impl<'de, T> Deserialize<'de> for DVVector3<T> {
-    fn deserialize<D>(_deserializer: D) -> Result<DVVector3<T>, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        todo!("serialize");
-    }
-}
-
 
 #[derive(Clone, Debug)]
 pub struct DVMatrix3<T> ( na::Matrix3<T> ); // 3x3 matrix
@@ -441,22 +394,6 @@ impl<T> Index<usize> for DVMatrix3<T> {
 
     fn index(&self, i: usize) -> &Self::Output {
         &self.0[i]
-    }
-}
-impl<T> Serialize for DVMatrix3<T> {
-    fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        todo!("serialize");
-    }
-}
-impl<'de, T> Deserialize<'de> for DVMatrix3<T> {
-    fn deserialize<D>(_deserializer: D) -> Result<DVMatrix3<T>, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        todo!("serialize");
     }
 }
 

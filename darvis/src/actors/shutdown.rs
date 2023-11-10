@@ -1,7 +1,7 @@
 use std::{fs::File, path::Path, io::Write};
 use log::warn;
 
-use crate::{dvmap::{pose::Pose, map::Id}, RESULTS_FOLDER};
+use crate::{dvmap::{pose::DVPose, map::Id}, RESULTS_FOLDER};
 use dvcore::{base::{ActorChannels, Actor}, config::{SYSTEM_SETTINGS, GLOBAL_PARAMS}};
 use super::{messages::{ShutdownMsg, TrajectoryMsg, TrackingStateMsg}, tracking_backend::TrackingState};
 
@@ -10,7 +10,7 @@ pub struct ShutdownActor {
     actor_channels: ActorChannels,
     // Lists used to recover the full camera trajectory at the end of the execution.
     // Basically we store the reference keyframe for each frame and its relative transformation
-    trajectory_poses: Vec<Pose>, //mlRelativeFramePoses
+    trajectory_poses: Vec<DVPose>, //mlRelativeFramePoses
     trajectory_times: Vec<u64>, //mlFrameTimes
     trajectory_keyframes: Vec<Id>, //mlpReferences
 }

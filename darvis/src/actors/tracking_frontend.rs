@@ -168,8 +168,7 @@ impl DarvisTrackingFront {
 
     fn send_to_visualizer(&mut self, keypoints: VectorOfKeyPoint, image: Mat, timestamp: u64, image_path: &String) {
         // Send image and features to visualizer
-        if GLOBAL_PARAMS.get::<bool>(SYSTEM_SETTINGS, "show_visualizer") {
-            let vis_actor = self.actor_system.find(VISUALIZER).unwrap();
+        if let Some(vis_actor) = self.actor_system.find(VISUALIZER) {
             vis_actor.send(Box::new(VisFeaturesMsg {
                 keypoints: DVVectorOfKeyPoint::new(keypoints),
                 image,

@@ -1,9 +1,9 @@
 use std::{collections::{HashMap, HashSet}, cmp::min};
 use derivative::Derivative;
 use dvcore::{matrix::{DVVector3, DVVectorOfKeyPoint, DVMatrix}, config::{ GLOBAL_PARAMS, SYSTEM_SETTINGS}, sensor::{Sensor, FrameSensor}};
-use log::{error};
+use log::{error, info};
 use serde::{Deserialize, Serialize};
-use crate::{dvmap::{map::Id, pose::Pose},modules::{imu::*, camera::CAMERA_MODULE}, actors::tracking_backend::TrackedMapPointData,};
+use crate::{dvmap::{map::Id, pose::DVPose},modules::{imu::*, camera::CAMERA_MODULE}, actors::tracking_backend::TrackedMapPointData,};
 use super::{mappoint::{MapPoint, FullMapPoint}, map::Map, features::Features, bow::{BoW, self}};
 
 // TODO... If it's getting a little messy in this file, we can always separate out the different types of frame/keyframe states into their own files.
@@ -14,7 +14,7 @@ use super::{mappoint::{MapPoint, FullMapPoint}, map::Map, features::Features, bo
 pub struct Frame<K: FrameState> {
     pub frame_id: Id,
     pub timestamp: u64,
-    pub pose: Option<Pose>,
+    pub pose: Option<DVPose>,
 
     // Image and reference KF //
     pub ref_kf_id: Option<Id>, //mpReferenceKF
@@ -59,7 +59,7 @@ impl<T: FrameState> Frame<T> {
     }
     pub fn delete_mappoint_match(&mut self, index: u32) {
         self.mappoint_matches.remove(&index);
-        // Sofiya: removed the code that set's mappoint's last_frame_seen to the frame ID
+        // TODO (mvp): removed the code that set's mappoint's last_frame_seen to the frame ID
         // I'm not sure we want to be using this
     }
 
@@ -259,7 +259,7 @@ pub struct FullKeyFrame {
     map_connected_keyframes: HashMap<Id, i32>, // mConnectedKeyFrameWeights
     connected_keyframes_cutoff_weight: i32,
 
-    // Sofiya: I think we can clean this up and get rid of these
+    // TODO (mvp): I think we can clean this up and get rid of these
     // Variables used by KF database
     // pub loop_query: u64, //mnLoopQuery
     // pub loop_words: i32, //mnLoopWords
@@ -455,7 +455,7 @@ impl Frame<FullKeyFrame> {
         num_points
     }
 
-    pub fn get_right_pose(&self) -> Pose {
+    pub fn get_right_pose(&self) -> DVPose {
         todo!("Stereo");
         // Sophus::SE3<float> KeyFrame::GetRightPose() {
         //     unique_lock<mutex> lock(mMutexPose);

@@ -46,6 +46,9 @@ fn main() {
     let mut keypoints: dvos3binding::ffi::WrapBindCVKeyPoints = DVVectorOfKeyPoint::empty().into();
     let mut orb_extractor = DVORBextractor::new(2000*5);
     orb_extractor.extractor.pin_mut().extract(&image_dv, &mut keypoints, &mut descriptors);
+
+    // This function reads 000001.png and prints output to image
+    // orb_extractor.extractor.pin_mut().extract2(&mut keypoints, &mut descriptors);
 }
 
 

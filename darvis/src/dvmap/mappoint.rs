@@ -3,9 +3,9 @@ use dvcore::{matrix::DVMatrix, config::{GLOBAL_PARAMS, SYSTEM_SETTINGS}, sensor:
 use log::error;
 extern crate nalgebra as na;
 use crate::{matrix::DVVector3, modules::orbmatcher::{descriptor_distance, SCALE_FACTORS}, registered_actors::FEATURE_DETECTION};
-use super::{map::{Id, Map}, keyframe::{Frame, FullKeyFrame}};
+use super::{map::{Id, Map}, keyframe::{Frame, FullKeyFrame}, pose::DVTranslation};
 
-// Note: Implementing typestate like here: http://cliffle.com/blog/rust-typestate/#a-simple-example-the-living-and-the-dead
+// Paper note: Implementing typestate like here: http://cliffle.com/blog/rust-typestate/#a-simple-example-the-living-and-the-dead
 // This way we can encode mappoints that have been created but not inserted into the map as a separate type than mappoints that are legit.
 // This prevents making the following mistake:
 // 1 - create a mappoint with MapPoint::new() with an id = -1.
@@ -25,10 +25,10 @@ pub struct MapPoint<M: MapPointState> {
     //     mnLastFrameSeen(0), mnBALocalForKF(0), mnFuseCandidateForKF(0), mnLoopPointForKF(0), mnCorrectedByKF(0),
     //     mnCorrectedReference(0), mnBAGlobalForKF(0), mpRefKF(pRefKF), mnVisible(1), mnFound(1), mbBad(false),
     //     mpReplaced(static_cast<MapPoint*>(NULL)), mfMinDistance(0), mfMaxDistance(0), 
-    pub position: DVVector3<f64>, // Sofiya: why a vector3 instead of a Pose? Same in ORBSLAM3 too but I thought mps had poses...
+    pub position: DVTranslation, 
 
     // Map connections
-    // Sofiya: it would be nice if we could guarantee that the connections are updated/correct
+    // TODO (improvement): it would be nice if we could guarantee that the connections are updated/correct
     // rather than duplicating all these connections across all the objects and hoping we remember
     // to update them correctly after a map modification
     pub origin_map_id: Id,
@@ -343,7 +343,7 @@ impl MapPoint<FullMapPoint> {
 
     fn get_level(&self, kf: &Frame<FullKeyFrame>) -> i32 {
         let (left_index, right_index) = self.full_mp_info.observations.get(&kf.id()).unwrap();
-        // Sofiya: sometimes in orbslam, left index will be -1 even for a stereo
+        // TODO (mvp): sometimes in orbslam, left index will be -1 even for a stereo
         // camera, if there is no second camera set. I don't know why
         // they would do this though, like then it's not stereo...
         if *left_index != -1 {
