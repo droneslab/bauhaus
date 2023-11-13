@@ -13,10 +13,9 @@
 namespace g2o {
     // using Edge = OptimizableGraph::Edge;
     struct Pose;
-        // SOFIYA TEST
 
-    // struct RustXYZEdge;
-    // struct RustXYZOnlyPoseEdge;
+    struct RustXYZEdge;
+    struct RustXYZOnlyPoseEdge;
 
     class BridgeSparseOptimizer {
     public:
@@ -50,15 +49,13 @@ namespace g2o {
         Pose recover_optimized_frame_pose(int vertex_id) const;
         Pose recover_optimized_mappoint_pose(int vertex_id) const;
 
-    // SOFIYA TEST
-
         // Note: see explanation under get_mut_edges in lib.rs for why we do this
-        // std::vector<RustXYZEdge> xyz_edges;
-        // std::vector<RustXYZOnlyPoseEdge> xyz_onlypose_edges;
-        // std::vector<RustXYZEdge>& get_mut_xyz_edges();
-        // std::vector<RustXYZOnlyPoseEdge>& get_mut_xyz_onlypose_edges();
+        std::vector<RustXYZEdge> xyz_edges;
+        std::vector<RustXYZOnlyPoseEdge> xyz_onlypose_edges;
+        std::vector<RustXYZEdge>& get_mut_xyz_edges();
+        std::vector<RustXYZOnlyPoseEdge>& get_mut_xyz_onlypose_edges();
 
-        // void set_robust_kernel_for_edge(int edge_id, bool reset);
+        void set_robust_kernel_for_edge(int edge_id, bool reset);
 
     private:
         SparseOptimizer * optimizer;

@@ -16,10 +16,8 @@ namespace g2o {
     }
 
     BridgeSparseOptimizer::BridgeSparseOptimizer(int opt_type, std::array<double,4> camera_param) {
-            // SOFIYA TEST
-
-        // this->xyz_edges = std::vector<RustXYZEdge>();
-        // this->xyz_onlypose_edges = std::vector<RustXYZOnlyPoseEdge>();
+        this->xyz_edges = std::vector<RustXYZEdge>();
+        this->xyz_onlypose_edges = std::vector<RustXYZOnlyPoseEdge>();
         if (opt_type == 1) {
             // For Optimizer::PoseOptimization and GlobalBundleAdjustemnt
             optimizer = new SparseOptimizer();
@@ -130,15 +128,13 @@ namespace g2o {
     int BridgeSparseOptimizer::num_edges() const {
         return optimizer->edges().size();
     }
-        // SOFIYA TEST
-
     // Note: see explanation under get_mut_edges in lib.rs for why we do this
-    // std::vector<RustXYZOnlyPoseEdge>& BridgeSparseOptimizer::get_mut_xyz_onlypose_edges() {
-    //     return this->xyz_onlypose_edges;
-    // }
-    // std::vector<RustXYZEdge>& BridgeSparseOptimizer::get_mut_xyz_edges() {
-    //     return this->xyz_edges;
-    // }
+    std::vector<RustXYZOnlyPoseEdge>& BridgeSparseOptimizer::get_mut_xyz_onlypose_edges() {
+        return this->xyz_onlypose_edges;
+    }
+    std::vector<RustXYZEdge>& BridgeSparseOptimizer::get_mut_xyz_edges() {
+        return this->xyz_edges;
+    }
 
 
     void BridgeSparseOptimizer::add_edge_monocular_unary(
@@ -173,15 +169,13 @@ namespace g2o {
 
         optimizer->addEdge(edge);
 
-    // SOFIYA TEST
-
         // Note: see explanation under get_mut_edges in lib.rs for why we do this
-        // unique_ptr<EdgeSE3ProjectXYZOnlyPose> ptr_edge(edge);
-        // RustXYZOnlyPoseEdge rust_edge {
-        //     inner: std::move(ptr_edge),
-        //     mappoint_id: mappoint_id,
-        // };
-        // this->xyz_onlypose_edges.emplace(this->xyz_onlypose_edges.end(), std::move(rust_edge));
+        unique_ptr<EdgeSE3ProjectXYZOnlyPose> ptr_edge(edge);
+        RustXYZOnlyPoseEdge rust_edge {
+            inner: std::move(ptr_edge),
+            mappoint_id: mappoint_id,
+        };
+        this->xyz_onlypose_edges.emplace(this->xyz_onlypose_edges.end(), std::move(rust_edge));
     }
 
     void BridgeSparseOptimizer::add_edge_monocular_binary(
@@ -208,7 +202,6 @@ namespace g2o {
             }
         }
 
-        // Pranay : Important camera settings
         edge->fx = fx;
         edge->fy = fy;
         edge->cx = cx;
@@ -218,12 +211,10 @@ namespace g2o {
         if (!success) {
             std::cout << "Optimizer failed to add edge!!" << std::endl;
         }
-    // SOFIYA TEST
-
         // Note: see explanation under get_mut_edges in lib.rs for why we do this
-        // unique_ptr<EdgeSE3ProjectXYZ> ptr_edge(edge);
-        // RustXYZEdge rust_edge {std::move(ptr_edge)};
-        // this->xyz_edges.emplace(this->xyz_edges.end(), std::move(rust_edge));
+        unique_ptr<EdgeSE3ProjectXYZ> ptr_edge(edge);
+        RustXYZEdge rust_edge {std::move(ptr_edge)};
+        this->xyz_edges.emplace(this->xyz_edges.end(), std::move(rust_edge));
     }
 
     //** Optimization *//
@@ -233,16 +224,18 @@ namespace g2o {
     }
 
     Pose BridgeSparseOptimizer::recover_optimized_frame_pose(int vertex_id) const {
-        // std::cout << "recover_optimized_frame_pose" << std::endl;
-        const VertexSE3Expmap* v = dynamic_cast<const VertexSE3Expmap*>(optimizer->vertex(vertex_id));
+        std::cout << "recover_optimized_frame_pose for " << vertex_id << std::endl;
+        // SOFIYA LOOK HERE
+        g2o::VertexSE3Expmap* vSE3 = static_cast<g2o::VertexSE3Expmap*>(optimizer->vertex(vertex_id));
 
-        g2o::SE3Quat SE3quat_recov = v->estimate();
-        Vector3d translation = SE3quat_recov.translation();
-        Quaterniond rotation = SE3quat_recov.rotation();
+        // const VertexSE3Expmap* v = dynamic_cast<const VertexSE3Expmap*>(optimizer->vertex(vertex_id));
 
-        // TODO (verify): make sure that quaternion order of (w,x,y,z)
-        // is the order that we use for quaternions in darvis
-        // Also, feel like there should be a cleaner way to do this?
+        g2o::SE3Quat SE3quat = vSE3->estimate();
+        Vector3d translation = SE3quat.translation();
+        Quaterniond rotation = SE3quat.rotation();
+
+        cout << "trans and rot!!! " << SE3quat << endl;
+
         Pose pose;
         pose.translation = {
             (double) translation.x(),

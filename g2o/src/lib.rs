@@ -14,20 +14,17 @@ pub mod ffi {
         rotation: [f64; 4] // in C++: array<double, 4> 
     }
 
-    // SOFIYA TEST
     // Note: Workaround to have a vec of shared ptrs 
     // https://github.com/dtolnay/cxx/issues/741
     // Not thread safe!! Don't make this shared.
     // See explanation below for get_mut_xyz_edges for why we do this.
-    // #[repr(C, align(16))] 
-    // struct RustXYZEdge {
-    //     inner: UniquePtr<EdgeSE3ProjectXYZ>,
-    // }
-    // // #[repr(C, align(16))] 
-    // struct RustXYZOnlyPoseEdge {
-    //     inner: UniquePtr<EdgeSE3ProjectXYZOnlyPose>,
-    //     mappoint_id: i32,
-    // }
+    struct RustXYZEdge {
+        inner: UniquePtr<EdgeSE3ProjectXYZ>,
+    }
+    struct RustXYZOnlyPoseEdge {
+        inner: UniquePtr<EdgeSE3ProjectXYZOnlyPose>,
+        mappoint_id: i32,
+    }
 
     unsafe extern "C++" {
         include!("rust_helper.h");
@@ -128,9 +125,8 @@ pub mod ffi {
         // do anything meaningful with the edge vec, causing the compiler to free the memory of
         // the shared/unique ptr. But we don't want the memory freed, because it is still being
         // used by the optimizer!
-        // SOFIYA TEST
-        // fn get_mut_xyz_edges(self: Pin<&mut BridgeSparseOptimizer>) -> Pin<&mut CxxVector<RustXYZEdge>>;
-        // fn get_mut_xyz_onlypose_edges(self: Pin<&mut BridgeSparseOptimizer>) -> Pin<&mut CxxVector<RustXYZOnlyPoseEdge>>;
+        fn get_mut_xyz_edges(self: Pin<&mut BridgeSparseOptimizer>) -> Pin<&mut CxxVector<RustXYZEdge>>;
+        fn get_mut_xyz_onlypose_edges(self: Pin<&mut BridgeSparseOptimizer>) -> Pin<&mut CxxVector<RustXYZOnlyPoseEdge>>;
         #[rust_name = "set_level"]
         fn setLevel(
             self: Pin<&mut EdgeSE3ProjectXYZOnlyPose>,
