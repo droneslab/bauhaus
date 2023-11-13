@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 pub type DVTranslation = DVVector3<f64>;
 pub type DVRotation = DVMatrix3<f64>;
 
-#[derive(Debug, Clone, Serialize, Deserialize, Copy, Default)]
+#[derive(Clone, Serialize, Deserialize, Copy, Default)]
 // Note: I'm not sure that Isometry3 is thread safe, could be the same problem
 // as with opencv matrices pointing to the same underlying memory even though
 // it looks like different objects in Rust. I think we need to be careful here.
@@ -125,5 +125,20 @@ impl From<dvos3binding::ffi::Pose> for DVPose {
         );
         let rotation3 = Rotation3::from_matrix_unchecked(matrix3);
         DVPose ( IsometryMatrix3::from_parts(translation, rotation3) )
+    }
+}
+
+/* Pretty print for testing */
+impl std::fmt::Debug for DVPose {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let rot = self.get_quaternion();
+        let trans = self.get_translation();
+
+        write!(
+            f,
+            "translation = [{:.3},{:.3},{:.3}], rotation = [{:.3},{:.3},{:.3},{:.3}]",
+            trans[0], trans[1], trans[2],
+            rot[0], rot[1], rot[2], rot[3],
+        )
     }
 }

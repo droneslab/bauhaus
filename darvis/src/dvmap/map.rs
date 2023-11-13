@@ -288,7 +288,7 @@ impl Map {
                 &vec![(initial_kf_id, num_keypoints, kf1_index), (curr_kf_id, num_keypoints, kf2_index as usize)]
             );
         }
-        debug!("monocular initialization, created {} mps", count);
+        debug!("monocular initialization done,created mps,{}", count);
         // for (_, mp) in &self.mappoints {
         //     print!("{:?}, ", mp.position);
         // }
@@ -298,9 +298,20 @@ impl Map {
         Map::update_connections(& self.mappoints, &mut self.keyframes, & self.initial_kf_id, &initial_kf_id);
         Map::update_connections(& self.mappoints, &mut self.keyframes, & self.initial_kf_id, &curr_kf_id);
 
+        {
+            let pose = self.keyframes.get(&curr_kf_id).unwrap().pose?;
+            debug!("KF1 pose before BA;{:?}", pose);
+        }
+
         // Bundle Adjustment
+        // SOFIYA 11/10 .. optimized pose slightly off ... need to compare mappoints info
         let optimized_poses = optimizer::global_bundle_adjustment(self, 20);
         self.update_after_ba(optimized_poses, 0);
+
+        {
+            let pose = self.keyframes.get(&curr_kf_id).unwrap().pose?;
+            debug!("KF1 pose after BA;{:?}", pose);
+        }
 
         let median_depth = self.keyframes.get_mut(&initial_kf_id)?.compute_scene_median_depth(& self.mappoints, 2);
         let inverse_median_depth = match self.sensor {
@@ -315,14 +326,19 @@ impl Map {
         }
 
         // Scale initial baseline
+        // SOFIYA 11/10 .. pose slightly off, prob due to optimization 
         {
             let curr_kf = self.keyframes.get_mut(&curr_kf_id)?;
             let new_trans = *(curr_kf.pose?.get_translation()) * inverse_median_depth;
-            let mut new_pose = DVPose::default();
-            new_pose.set_translation(new_trans[0], new_trans[1], new_trans[2]);
-            curr_kf.pose = Some(new_pose);
-            info!("Pose after edit {:?}", curr_kf.pose);
+            debug!("New trans {:?}", new_trans);
+            curr_kf.pose?.set_translation(new_trans[0], new_trans[1], new_trans[2]);
         }
+
+        {
+            let pose = self.keyframes.get(&curr_kf_id).unwrap().pose?;
+            debug!("KF1 pose after scale;{:?}", pose);
+        }
+
 
         // Scale points
         for (_, (mp_id, _)) in &self.keyframes.get(&initial_kf_id)?.mappoint_matches {
@@ -409,9 +425,11 @@ impl Map {
     pub fn update_after_ba(&mut self, optimized_poses: optimizer::BAResult, loop_kf: Id) {
         for (kf_id, pose) in optimized_poses.optimized_kf_poses {
             if loop_kf == self.initial_kf_id {
+                println!("pose v pose {:?}, {:?}", pose, self.keyframes.get_mut(&kf_id).unwrap().pose.unwrap());
                 self.keyframes.get_mut(&kf_id).unwrap().pose = Some(pose);
             } else {
                 todo!("MVP");
+                // Code from ORBSLAM, not sure if we need it
                 // pKF->mTcwGBA = Sophus::SE3d(SE3quat.rotation(),SE3quat.translation()).cast<float>();
                 // pKF->mnBAGlobalForKF = nLoopKF;
             }

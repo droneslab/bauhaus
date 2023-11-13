@@ -569,6 +569,7 @@ pub fn search_by_bow_f(
     if should_check_orientation {
         check_orientation_2(&rot_hist, &mut matches)
     };
+    // SOFIYA 11/10 .. bow matches slightly off ... 94 vs. 105
     debug!("Search by bow matches, before orientation: {}, after: {}", pre, matches.len());
 
     return Ok(matches);

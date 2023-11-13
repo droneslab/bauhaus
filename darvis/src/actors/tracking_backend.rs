@@ -192,6 +192,7 @@ impl DarvisTrackingBack {
             msg.image_height,
             msg.timestamp
         )?;
+        debug!("Tracking working on frame {}", current_frame.frame_id);
 
         // TODO (reset): Reset map because local mapper set the bad imu flag
         // Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Tracking.cc#L1808
@@ -322,7 +323,7 @@ impl DarvisTrackingBack {
             (_, TrackingState::Lost) => {
                 // Reset if the camera get lost soon after initialization
                 if self.kfs_in_map() <= 10  || (self.sensor.is_imu() && !self.map.read().imu_initialized) {
-                    warn!("tracking_backend::handle_message;Track lost before IMU initialisation, resetting...",);
+                    warn!("tracking_backend::handle_message;Track lost soon after initialization, resetting...",);
                     let map_msg = MapWriteMsg::reset_active_map();
                     self.actor_channels.find(MAP_ACTOR).unwrap().send(Box::new(map_msg))?;
                 } else {
@@ -388,7 +389,7 @@ impl DarvisTrackingBack {
     fn update_trajectory_in_logs(
         &mut self, current_pose: DVPose, ref_kf_id: Id, mappoint_matches: HashMap<u32, (Id, bool)>, timestamp: u64
     ) -> Result<(), Box<dyn std::error::Error>> {
-        info!("Current pose {:?}", current_pose);
+        info!("Current pose;{:?}", current_pose);
         // TODO (vis): Why is this not just current_pose?
         // let new_pose = current_pose * self.map.read().get_keyframe(&ref_kf_id).expect("Can't get ref kf").pose.expect("Can't get ref kf pose").inverse();
         self.trajectory_poses.push(current_pose);//new_pose);
@@ -446,6 +447,7 @@ impl DarvisTrackingBack {
 
         current_frame.pose = Some(self.last_frame.as_ref().unwrap().pose.unwrap());
 
+        // SOFIYA 11/10 ... 0 vertices to optimize, maybe forgot to call initializeOptimization()
         if let Some((_, pose)) = optimizer::optimize_pose(current_frame, &self.map) {
             current_frame.pose = Some(pose);
         }
