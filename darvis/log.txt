@@ -1,0 +1,168 @@
+==189059== Memcheck, a memory error detector
+==189059== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==189059== Using Valgrind-3.15.0 and LibVEX; rerun with -h for copyright info
+==189059== Command: target/debug/bindarvis /home/sofiya/datasets/kitti_00_0/image_0/ config.yaml
+==189059== 
+config.yaml
+SYSTEM SETTINGS
+	 SYSTEM_SETTINGS localization_only_mode = false
+	 SYSTEM_SETTINGS should_profile = false
+	 SYSTEM_SETTINGS vocabulary_file = ../Vocabulary/ORBvoc.txt
+	 SYSTEM_SETTINGS trajectory_file_name = trajectory.txt
+	 SYSTEM_SETTINGS fps = 1
+	 SENSOR = (Frame: Mono, Imu: No)
+	 VISUALIZER image_draw_type = features
+	 VISUALIZER mcap_file_path = results/out.mcap
+	 TRACKING_BACKEND recently_lost_cutoff = 5
+	 TRACKING_BACKEND frames_to_reset_IMU = 30
+	 TRACKING_BACKEND insert_KFs_when_lost = true
+	 TRACKING_BACKEND min_num_features = 2000
+	 LOCAL_MAPPING recently_lost_cutoff = 5
+	 LOCAL_MAPPING insert_KFs_when_lost = true
+	 LOCAL_MAPPING min_num_features = 2000
+	 CAMERA fx = 718.856
+	 CAMERA fy = 718.856
+	 CAMERA cx = 607.1928
+	 CAMERA cy = 185.2157
+	 CAMERA k1 = 0
+	 CAMERA k2 = 0
+	 CAMERA p1 = 0
+	 CAMERA p2 = 0
+	 CAMERA k3 = 0
+	 CAMERA width = 1241
+	 CAMERA height = 376
+	 CAMERA thdepth = 35
+	 CAMERA stereo_baseline_times_fx = 386.1448
+	 CAMERA stereo_overlapping_begin = 0
+	 CAMERA stereo_overlapping_end = 1000
+	 FEATURE_DETECTION max_features = 2000
+	 FEATURE_DETECTION scale_factor = 1.2
+	 FEATURE_DETECTION n_levels = 8
+	 FEATURE_DETECTION ini_th_fast = 20
+	 FEATURE_DETECTION min_th_fast = 7
+	 MATCHER far_points_threshold = 20
+[32m[1.415][bindarvis::initialize_system][[32mINFO[0m[32m] Spawning actor;VISUALIZER[0m
+[32m[1.54][bindarvis::initialize_system][[32mINFO[0m[32m] Spawning actor;TRACKING_FRONTEND[0m
+[32m[1.647][bindarvis::initialize_system][[32mINFO[0m[32m] Spawning actor;TRACKING_BACKEND[0m
+[32m[1.735][bindarvis::initialize_system][[32mINFO[0m[32m] Spawning actor;LOOP_CLOSING[0m
+[32m[1.816][bindarvis::initialize_system][[32mINFO[0m[32m] Spawning actor;LOCAL_MAPPING[0m
+[32m[1.98][bindarvis::initialize_system][[32mINFO[0m[32m] Spawning actor;MAP_ACTOR[0m
+[32m[2.905][bindarvis::initialize_system][[32mINFO[0m[32m] Spawning actor;SHUTDOWN[0m
+[32m[3.012][bindarvis::dvmap::bow][[32mINFO[0m[32m] Loading vocabulary[0m
+[32m[1045.21][bindarvis][[32mINFO[0m[32m] System ready to receive messages[0m
+[32m[1047.386][bindarvis][[32mINFO[0m[32m] Read image 000000[0m
+[37m[1056.814][bindarvis::actors::tracking_backend][[37mDEBUG[0m[37m] Tracking working on frame 0[0m
+[32m[1056.822][bindarvis][[32mINFO[0m[32m] Read image 000001[0m
+[32m[1057.906][bindarvis][[32mINFO[0m[32m] Read image 000002[0m
+[32m[1063.916][bindarvis][[32mINFO[0m[32m] Read image 000003[0m
+[37m[1064.86][bindarvis::actors::tracking_backend][[37mDEBUG[0m[37m] Tracking working on frame 1[0m
+[32m[1071.652][bindarvis][[32mINFO[0m[32m] Read image 000004[0m
+[32m[1227.867][bindarvis::dvmap::map][[32mINFO[0m[32m] insert keyframe to map;0[0m
+[32m[1227.873][bindarvis][[32mINFO[0m[32m] Read image 000005[0m
+==189059== Thread 11:
+==189059== Use of uninitialised value of size 8
+==189059==    at 0x54435B: DBoW2::TemplatedVocabulary<cv::Mat, DBoW2::FORB>::transform(cv::Mat const&, unsigned int&, double&, unsigned int*, int) const (TemplatedVocabulary.h:1257)
+==189059==    by 0x547CCE: DBoW2::TemplatedVocabulary<cv::Mat, DBoW2::FORB>::transform(std::vector<cv::Mat, std::allocator<cv::Mat> > const&, DBoW2::BowVector&, DBoW2::FeatureVector&, int) const (TemplatedVocabulary.h:1158)
+==189059==    by 0x54CE3D: DBoW2::ORBVocabulary::transform(orb_slam3::WrapBindCVMat const&, DBoW2::BowVector&, DBoW2::FeatureVector&, int) const (ORBVocabulary.cpp:51)
+==189059==    by 0x5437CC: DBoW2$cxxbridge1$ORBVocabulary$transform (lib.rs.cc:914)
+==189059==    by 0x5417F1: dvos3binding::ffi::ORBVocabulary::transform (lib.rs:261)
+==189059==    by 0x29359D: bindarvis::dvmap::bow::DVVocabulary::transform (bow.rs:32)
+==189059==    by 0x1649E9: bindarvis::dvmap::keyframe::Frame<bindarvis::dvmap::keyframe::FullKeyFrame>::new (keyframe.rs:287)
+==189059==    by 0x2483CF: bindarvis::dvmap::map::Map::insert_keyframe_to_map (map.rs:106)
+==189059==    by 0x249B50: bindarvis::dvmap::map::Map::create_initial_map_monocular (map.rs:269)
+==189059==    by 0x2C2760: <bindarvis::actors::map_actor::MapActor as dvcore::base::Actor>::run (map_actor.rs:26)
+==189059==    by 0x3196BB: bindarvis::initialize_system::spawn_map_actor::{{closure}} (initialize_system.rs:117)
+==189059==    by 0x317865: std::sys_common::backtrace::__rust_begin_short_backtrace (backtrace.rs:154)
+==189059==  Uninitialised value was created by a heap allocation
+==189059==    at 0x483B7F3: malloc (in /usr/lib/x86_64-linux-gnu/valgrind/vgpreload_memcheck-amd64-linux.so)
+==189059==    by 0x77CC978: cv::fastMalloc(unsigned long) (in /usr/local/lib/libopencv_core.so.4.5.4)
+==189059==    by 0x78D80AB: cv::Mat::create(int, int const*, int) (in /usr/local/lib/libopencv_core.so.4.5.4)
+==189059==    by 0x78D841C: cv::Mat::create(int, int, int) (in /usr/local/lib/libopencv_core.so.4.5.4)
+==189059==    by 0x54A763: DBoW2::FORB::fromString(cv::Mat&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) (FORB.cpp:121)
+==189059==    by 0x54DDFC: DBoW2::TemplatedVocabulary<cv::Mat, DBoW2::FORB>::loadFromTextFile(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) (TemplatedVocabulary.h:1407)
+==189059==    by 0x54E5D1: DBoW2::load_vocabulary_from_text_file(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) (ORBVocabulary.cpp:33)
+==189059==    by 0x543792: DBoW2$cxxbridge1$load_vocabulary_from_text_file (lib.rs.cc:909)
+==189059==    by 0x5417AE: dvos3binding::ffi::load_vocabulary_from_text_file (lib.rs:260)
+==189059==    by 0x293429: bindarvis::dvmap::bow::DVVocabulary::load (bow.rs:24)
+==189059==    by 0x214C78: __static_ref_initialize (bow.rs:9)
+==189059==    by 0x214C78: core::ops::function::FnOnce::call_once (function.rs:250)
+==189059==    by 0x32140F: lazy_static::lazy::Lazy<T>::get::{{closure}} (inline_lazy.rs:31)
+==189059== 
+==189059== Use of uninitialised value of size 8
+==189059==    at 0x544369: DBoW2::TemplatedVocabulary<cv::Mat, DBoW2::FORB>::transform(cv::Mat const&, unsigned int&, double&, unsigned int*, int) const (TemplatedVocabulary.h:1260)
+==189059==    by 0x547CCE: DBoW2::TemplatedVocabulary<cv::Mat, DBoW2::FORB>::transform(std::vector<cv::Mat, std::allocator<cv::Mat> > const&, DBoW2::BowVector&, DBoW2::FeatureVector&, int) const (TemplatedVocabulary.h:1158)
+==189059==    by 0x54CE3D: DBoW2::ORBVocabulary::transform(orb_slam3::WrapBindCVMat const&, DBoW2::BowVector&, DBoW2::FeatureVector&, int) const (ORBVocabulary.cpp:51)
+==189059==    by 0x5437CC: DBoW2$cxxbridge1$ORBVocabulary$transform (lib.rs.cc:914)
+==189059==    by 0x5417F1: dvos3binding::ffi::ORBVocabulary::transform (lib.rs:261)
+==189059==    by 0x29359D: bindarvis::dvmap::bow::DVVocabulary::transform (bow.rs:32)
+==189059==    by 0x1649E9: bindarvis::dvmap::keyframe::Frame<bindarvis::dvmap::keyframe::FullKeyFrame>::new (keyframe.rs:287)
+==189059==    by 0x2483CF: bindarvis::dvmap::map::Map::insert_keyframe_to_map (map.rs:106)
+==189059==    by 0x249B50: bindarvis::dvmap::map::Map::create_initial_map_monocular (map.rs:269)
+==189059==    by 0x2C2760: <bindarvis::actors::map_actor::MapActor as dvcore::base::Actor>::run (map_actor.rs:26)
+==189059==    by 0x3196BB: bindarvis::initialize_system::spawn_map_actor::{{closure}} (initialize_system.rs:117)
+==189059==    by 0x317865: std::sys_common::backtrace::__rust_begin_short_backtrace (backtrace.rs:154)
+==189059==  Uninitialised value was created by a heap allocation
+==189059==    at 0x483B7F3: malloc (in /usr/lib/x86_64-linux-gnu/valgrind/vgpreload_memcheck-amd64-linux.so)
+==189059==    by 0x77CC978: cv::fastMalloc(unsigned long) (in /usr/local/lib/libopencv_core.so.4.5.4)
+==189059==    by 0x78D80AB: cv::Mat::create(int, int const*, int) (in /usr/local/lib/libopencv_core.so.4.5.4)
+==189059==    by 0x78D841C: cv::Mat::create(int, int, int) (in /usr/local/lib/libopencv_core.so.4.5.4)
+==189059==    by 0x54A763: DBoW2::FORB::fromString(cv::Mat&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) (FORB.cpp:121)
+==189059==    by 0x54DDFC: DBoW2::TemplatedVocabulary<cv::Mat, DBoW2::FORB>::loadFromTextFile(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) (TemplatedVocabulary.h:1407)
+==189059==    by 0x54E5D1: DBoW2::load_vocabulary_from_text_file(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) (ORBVocabulary.cpp:33)
+==189059==    by 0x543792: DBoW2$cxxbridge1$load_vocabulary_from_text_file (lib.rs.cc:909)
+==189059==    by 0x5417AE: dvos3binding::ffi::load_vocabulary_from_text_file (lib.rs:260)
+==189059==    by 0x293429: bindarvis::dvmap::bow::DVVocabulary::load (bow.rs:24)
+==189059==    by 0x214C78: __static_ref_initialize (bow.rs:9)
+==189059==    by 0x214C78: core::ops::function::FnOnce::call_once (function.rs:250)
+==189059==    by 0x32140F: lazy_static::lazy::Lazy<T>::get::{{closure}} (inline_lazy.rs:31)
+==189059== 
+[32m[1229.963][bindarvis::dvmap::map][[32mINFO[0m[32m] insert keyframe to map;1[0m
+[32m[1229.966][bindarvis][[32mINFO[0m[32m] Read image 000006[0m
+[37m[1232.061][bindarvis::dvmap::map][[37mDEBUG[0m[37m] monocular initialization done,created mps,413[0m
+[32m[1232.113][bindarvis][[32mINFO[0m[32m] Read image 000007[0m
+[37m[1232.268][bindarvis::dvmap::map][[37mDEBUG[0m[37m] KF1 pose before BA;translation = [0.019,0.012,-1.000], rotation = [0.001,-0.001,0.000,1.000][0m
+[32m[1240.327][bindarvis::actors::map_actor][[32mINFO[0m[32m] successfully created initial monocular map[0m
+[37m[1241.465][bindarvis::actors::tracking_backend][[37mDEBUG[0m[37m] Tracking working on frame 2[0m
+[32m[1241.467][bindarvis][[32mINFO[0m[32m] Read image 000008[0m
+[32m[1241.647][bindarvis::actors::tracking_backend][[32mINFO[0m[32m] Current pose;translation = [0.595,-0.046,3.614], rotation = [-0.022,-0.402,-0.020,0.915][0m
+[37m[1242.765][bindarvis::actors::local_mapping][[37mDEBUG[0m[37m] Local mapping working on kf 0[0m
+Matches in local mapping ... 75
+[37m[1466.68][bindarvis::actors::local_mapping][[37mDEBUG[0m[37m] Local mapping finished creating 24 new mappoints[0m
+[37m[1467.089][bindarvis::actors::local_mapping][[37mDEBUG[0m[37m] Local mapping working on kf 1[0m
+[32m[1242.772][bindarvis][[32mINFO[0m[32m] Read image 000009[0m
+[37m[1464.678][bindarvis::actors::tracking_backend][[37mDEBUG[0m[37m] Tracking working on frame 3[0m
+[32m[1589.316][bindarvis][[32mINFO[0m[32m] Read image 000010[0m
+[32m[1593.538][bindarvis][[32mINFO[0m[32m] Read image 000011[0m
+[32m[1600.46][bindarvis][[32mINFO[0m[32m] Read image 000012[0m
+[32m[1617.824][bindarvis][[32mINFO[0m[32m] Read image 000013[0m
+Matches in local mapping ... 12
+==189059== 
+==189059== Process terminating with default action of signal 15 (SIGTERM)
+==189059==    at 0x89D873D: syscall (syscall.S:38)
+==189059==    by 0x5B1466: parking_lot_core::thread_parker::imp::ThreadParker::futex_wait (linux.rs:112)
+==189059==    by 0x5B1283: <parking_lot_core::thread_parker::imp::ThreadParker as parking_lot_core::thread_parker::ThreadParkerT>::park (linux.rs:66)
+==189059==    by 0x5BB1ED: parking_lot_core::parking_lot::park::{{closure}} (parking_lot.rs:635)
+==189059==    by 0x5B9624: with_thread_data<parking_lot_core::parking_lot::ParkResult, parking_lot_core::parking_lot::park::{closure_env#0}<parking_lot::raw_rwlock::{impl#10}::wait_for_readers::{closure_env#0}, parking_lot::raw_rwlock::{impl#10}::wait_for_readers::{closure_env#1}, parking_lot::raw_rwlock::{impl#10}::wait_for_readers::{closure_env#2}>> (parking_lot.rs:207)
+==189059==    by 0x5B9624: parking_lot_core::parking_lot::park (parking_lot.rs:600)
+==189059==    by 0x5B59F2: parking_lot::raw_rwlock::RawRwLock::wait_for_readers (raw_rwlock.rs:1013)
+==189059==    by 0x5B4F04: parking_lot::raw_rwlock::RawRwLock::lock_exclusive_slow (raw_rwlock.rs:644)
+==189059==    by 0x287944: <parking_lot::raw_rwlock::RawRwLock as lock_api::rwlock::RawRwLock>::lock_exclusive (raw_rwlock.rs:73)
+==189059==    by 0x2695A2: lock_api::rwlock::RwLock<R,T>::write (rwlock.rs:491)
+==189059==    by 0x2E2921: dvcore::lockwrap::ReadWriteWrapper<T>::write (lockwrap.rs:41)
+==189059==    by 0x2C23A2: <bindarvis::actors::map_actor::MapActor as dvcore::base::Actor>::run (map_actor.rs:22)
+==189059==    by 0x3196BB: bindarvis::initialize_system::spawn_map_actor::{{closure}} (initialize_system.rs:117)
+==189059== 
+==189059== HEAP SUMMARY:
+==189059==     in use at exit: 497,458,869 bytes in 2,317,060 blocks
+==189059==   total heap usage: 25,476,873 allocs, 23,159,813 frees, 3,292,833,430 bytes allocated
+==189059== 
+==189059== LEAK SUMMARY:
+==189059==    definitely lost: 24 bytes in 1 blocks
+==189059==    indirectly lost: 505,180 bytes in 5,844 blocks
+==189059==      possibly lost: 123,332,877 bytes in 1,105,661 blocks
+==189059==    still reachable: 373,620,788 bytes in 1,205,554 blocks
+==189059==         suppressed: 0 bytes in 0 blocks
+==189059== Rerun with --leak-check=full to see details of leaked memory
+==189059== 
+==189059== For lists of detected and suppressed errors, rerun with: -s
+==189059== ERROR SUMMARY: 2 errors from 2 contexts (suppressed: 0 from 0)

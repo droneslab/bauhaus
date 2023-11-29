@@ -884,11 +884,6 @@ pub fn optimize_pose(frame: &mut Frame<InitialFrame>, map: &ReadOnlyMap<Map>) ->
 
     let mut num_bad = 0;
     for iteration in 0..4 {
-        // Note: re: vertex.clone() ... 
-        // Creates a second shared_ptr holding shared ownership of the same
-        // object. There is still only one Object but two SharedPtr<Object>.
-        // Both pointers point to the same object on the heap.
-        // see https://cxx.rs/binding/sharedptr.html
         optimizer.pin_mut().set_vertex_estimate(
             0, 
             (*frame.pose.as_ref().unwrap()).into()
@@ -999,7 +994,7 @@ pub fn optimize_pose(frame: &mut Frame<InitialFrame>, map: &ReadOnlyMap<Map>) ->
     let pose = optimizer.recover_optimized_frame_pose(0);
     frame.pose = Some(pose.into());
 
-    trace!("Pose optimization: {} ms", now.elapsed().as_millis());
+    trace!("TRACKING BACKEND...Pose optimization: {} ms", now.elapsed().as_millis());
 
     // Return number of inliers
     return Some(initial_correspondences - num_bad);
@@ -1104,7 +1099,7 @@ pub fn global_bundle_adjustment(map: &Map, iterations: i32) -> BundleAdjustmentR
     // Optimize!
     optimizer.pin_mut().optimize(iterations, false);
 
-    trace!("Global BA: {} ms", now.elapsed().as_millis());
+    trace!("INIT/LOOP CLOSING...Global BA total: {} ms", now.elapsed().as_millis());
     BundleAdjustmentResult::new(optimizer, kf_vertex_ids, mp_vertex_ids, vec![], vec![])
 }
 
@@ -1379,7 +1374,7 @@ pub fn local_bundle_adjustment(
         // }
     }
 
-    trace!("Local BA: {} ms", now.elapsed().as_millis());
+    trace!("LOCAL MAPPING...Local BA: {} ms", now.elapsed().as_millis());
     // Recover optimized data
     BundleAdjustmentResult::new(optimizer, kf_vertex_ids, mp_vertex_ids, mps_to_discard, vec![])
 }

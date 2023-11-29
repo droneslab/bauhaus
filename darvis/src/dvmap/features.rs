@@ -37,7 +37,6 @@ enum KeyPoints {
         mv_depth: Vec<f32>, //mvDepth
     },
     Rgbd {
-        keypoints_orig: DVVectorOfKeyPoint, // Original for visualization.
         keypoints_un: DVVectorOfKeyPoint, // Undistorted keypoints actually used by the system. For stereo, this is redundant bc images must be rectified
         mv_depth: Vec<f32>, //mvDepth
     }
@@ -62,12 +61,11 @@ impl Features {
     ) -> Result<Features, Box<dyn std::error::Error>> {
         let image_bounds = ImageBounds::new(im_width, im_height, &CAMERA_MODULE.dist_coef);
         let mut grid = Grid::default(&image_bounds);
-        let keypoints_orig = keypoints.clone();
 
         match sensor.frame() {
             FrameSensor::Mono => {
-                let keypoints_un =  Self::undistort_keypoints(&keypoints_orig)?;
-                let num_keypoints = keypoints_un.len() as u32;
+                let keypoints_un = Self::undistort_keypoints(&keypoints)?;
+                let num_keypoints = keypoints.len() as u32;
 
                 // assign features to grid
                 grid.assign_features(&image_bounds, &keypoints_un);
@@ -76,7 +74,7 @@ impl Features {
                         num_keypoints,
                         image_bounds,
                         keypoints: KeyPoints::Mono { keypoints_un },
-                        descriptors: descriptors.clone(),
+                        descriptors: descriptors,
                         grid,
                     }
                 )
@@ -185,6 +183,8 @@ impl Features {
                 *mat.at_2d_mut::<f32>(i, 1)? = keypoints.get(i as usize)?.pt().y;
             }
 
+            // TODO (CLONE) ... can we do this in place? Then we don't have to construct and return keypoints_un
+
             // Undistort points
             mat = mat.reshape(2, 0)?;
             let mut undistorted = mat.clone();
@@ -201,15 +201,15 @@ impl Features {
             mat = mat.reshape(1, 0)?;
 
             // Fill undistorted keypoint vector
-            let mut undistorted_kp_vec = opencv::types::VectorOfKeyPoint::new();
+            let mut keypoints_un = opencv::types::VectorOfKeyPoint::new();
             for i in 0..num_keypoints {
                 let kp = keypoints.get(i as usize)?;
                 kp.pt().x = *mat.at_2d::<f32>(i, 0)?;
                 kp.pt().y = *mat.at_2d::<f32>(i, 1)?;
-                undistorted_kp_vec.push(kp);
+                keypoints_un.push(kp);
             }
 
-            Ok(DVVectorOfKeyPoint::new(undistorted_kp_vec))
+            Ok(DVVectorOfKeyPoint::new(keypoints_un))
         } else {
             return Ok(keypoints.clone());
         }

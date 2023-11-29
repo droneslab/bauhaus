@@ -305,8 +305,8 @@ pub struct FullKeyFrame {
 
 impl Frame<FullKeyFrame> {
     pub(super) fn new(prelim_keyframe: Frame<PrelimKeyFrame>, origin_map_id: Id, id: Id) -> Self {
-        let bow = match &prelim_keyframe.bow {
-            Some(bow) => Some(bow.clone()),
+        let bow = match prelim_keyframe.bow {
+            Some(bow) => Some(bow),
             None => {
                 let mut bow = BoW::new();
                 //debug!("mbowvector for keyframe {} with frame id {}", id, prelim_keyframe.frame_id);
@@ -318,9 +318,9 @@ impl Frame<FullKeyFrame> {
         Self {
             timestamp: prelim_keyframe.timestamp,
             frame_id: prelim_keyframe.frame_id,
-            mappoint_matches: prelim_keyframe.mappoint_matches.clone(),
+            mappoint_matches: prelim_keyframe.mappoint_matches,
             pose: prelim_keyframe.pose,
-            features: prelim_keyframe.features.clone(),
+            features: prelim_keyframe.features,
             bow,
             imu_bias: prelim_keyframe.imu_bias,
             imu_preintegrated: prelim_keyframe.imu_preintegrated,
@@ -368,7 +368,7 @@ impl Frame<FullKeyFrame> {
     pub fn insert_all_connections(&mut self, new_connections: HashMap::<Id, i32>, is_init_kf: bool) -> Option<Id> {
         // Turn hashmap into vector and sort by weights
         self.full_kf_info.ordered_connected_keyframes = new_connections.iter()
-            .map(|(key, value)| { (key.clone(), value.clone()) })
+            .map(|(key, value)| { (*key, *value) })
             .collect::<Vec<(Id, i32)>>(); 
         self.sort_ordered();
 

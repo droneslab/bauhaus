@@ -48,17 +48,21 @@ impl Actor for DarvisTrackingFront {
                     TrackingFrontendMsg::ImagePathMsg{image_path, timestamp, frame_id } => {
                         let now = std::time::Instant::now();
                         let image = image::read_image_file(&image_path);
-                        let (keypoints, descriptors) = self.extract_features(&image);
-                        self.send_to_backend(keypoints.clone(), descriptors, &image, timestamp, frame_id);
+                        let image_cols = image.cols() as u32;
+                        let image_rows = image.rows() as u32;
+                        let (keypoints, descriptors) = self.extract_features(image.clone());
+                        self.send_to_backend(keypoints.clone(), descriptors, image_cols, image_rows, timestamp, frame_id);
                         if SETTINGS.get::<bool>(SYSTEM, "show_visualizer") {
                             self.send_to_visualizer(keypoints, image, timestamp);
                         }
                         self.last_id += 1;
-                        trace!("Tracking frontend took {} ms", now.elapsed().as_millis());
+                        trace!("TRACKING FRONTEND...Total: {} ms", now.elapsed().as_millis());
                     },
                     TrackingFrontendMsg::ImageMsg{ image, timestamp, frame_id } => {
-                        let (keypoints, descriptors) = self.extract_features(&image);
-                        self.send_to_backend(keypoints, descriptors, &image, timestamp, frame_id);
+                        let image_cols = image.cols() as u32;
+                        let image_rows = image.rows() as u32;
+                        let (keypoints, descriptors) = self.extract_features(image);
+                        self.send_to_backend(keypoints, descriptors, image_cols, image_rows, timestamp, frame_id);
                         self.last_id += 1;
                     },
                     TrackingFrontendMsg::TrackingStateMsg{ state, init_id } => {
@@ -105,8 +109,9 @@ impl DarvisTrackingFront {
         }
     }
 
-    fn extract_features(&mut self, image: &opencv::core::Mat) -> (VectorOfKeyPoint, Mat) {
-        let image_dv: dvos3binding::ffi::WrapBindCVMat = DVMatrix::new(image.clone()).into();
+    fn extract_features(&mut self, image: opencv::core::Mat) -> (VectorOfKeyPoint, Mat) {
+        let now = std::time::Instant::now();
+        let image_dv: dvos3binding::ffi::WrapBindCVMat = DVMatrix::new(image).into();
 
         let mut descriptors: dvos3binding::ffi::WrapBindCVMat = DVMatrix::default().into();
         let mut keypoints: dvos3binding::ffi::WrapBindCVKeyPoints = DVVectorOfKeyPoint::empty().into();
@@ -122,20 +127,21 @@ impl DarvisTrackingFront {
             FrameSensor::Stereo => todo!("Stereo"), //Also call extractor_right, see Tracking::GrabImageStereo,
             _ => {}
         }
-
+        trace!("TRACKING FRONTEND...Feature extraction total: {} ms", now.elapsed().as_millis());
         (keypoints.kp_ptr.kp_ptr, descriptors.mat_ptr.mat_ptr)
     }
 
-    fn send_to_backend(&self, keypoints: VectorOfKeyPoint, descriptors: Mat, image: &Mat, timestamp: Timestamp, frame_id: u32) {
+    fn send_to_backend(&self, keypoints: VectorOfKeyPoint, descriptors: Mat, image_width: u32, image_height: u32, timestamp: Timestamp, frame_id: u32) {
         // Send features to backend
         // Note: Run-time errors ... actor lookup is runtime error
+        // Note: not currently sending image to backend
         let backend = self.actor_system.find("TRACKING_BACKEND");
 
         backend.send(Box::new(TrackingBackendMsg::FeatureMsg{
-            keypoints: DVVectorOfKeyPoint::new(keypoints.clone()),
+            keypoints: DVVectorOfKeyPoint::new(keypoints),
             descriptors: DVMatrix::new(descriptors),
-            image_width: image.cols() as u32,
-            image_height: image.rows() as u32,
+            image_width,
+            image_height,
             timestamp,
             frame_id: frame_id as i32
         })).unwrap();

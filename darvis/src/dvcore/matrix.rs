@@ -14,6 +14,13 @@
 /// that the shape constraint trait is satisfied, which is private in nalgebra...
 /// We can fix this but honestly I don't think it's worth it.
 
+// TODO (CLONE) ... Lot of clones in here, a large part of them are converting 
+// from a darvis structure back into nalgebra. Does it make sense to clone in
+// this case? That feels correct because then I can hold both the darvis structure
+// and the nalgebra structure without pointing to the same underlying data,
+// but that might actually not be intuitive if we expect to use into() to convert
+// rather than make copies.
+
 use std::{fmt::Debug, convert::TryInto, ops::Index};
 use std::ops::Deref;
 use opencv::platform_types::size_t;
@@ -296,7 +303,7 @@ pub struct DVVector3<T> ( nalgebra::Vector3<T> ); // 3 dimensional column vector
 
 impl<T: Debug + Clone + nalgebra::Scalar + num_traits::identities::Zero + nalgebra::ComplexField> DVVector3<T> {
     pub fn new(vec: nalgebra::Vector3<T>) -> Self {
-        DVVector3 ( vec.clone() )
+        DVVector3 ( vec )
     }
     pub fn new_with(x: T, y: T, z: T) -> Self {
         DVVector3 ( nalgebra::Vector3::<T>::new(x,y,z) )
@@ -352,7 +359,7 @@ pub struct DVMatrix3<T> ( nalgebra::Matrix3<T> ); // 3x3 matrix
 
 impl<T: Debug + Clone + nalgebra::Scalar + num_traits::identities::Zero + num_traits::One + nalgebra::ComplexField> DVMatrix3<T> {
     pub fn new(vec: nalgebra::Matrix3<T>) -> Self {
-        DVMatrix3 ( vec.clone() )
+        DVMatrix3 ( vec )
     }
     pub fn zeros<T2: Debug + Clone + nalgebra::Scalar + num_traits::identities::Zero>() -> Self {
         DVMatrix3::new(nalgebra::Matrix3::<T>::zeros())
@@ -405,7 +412,7 @@ pub struct DVMatrixGrayscale ( nalgebra::DMatrix<u8> );
 impl DVMatrixGrayscale {
     // Constructors
     pub fn new(vec: nalgebra::DMatrix<u8>) -> Self {
-        DVMatrixGrayscale ( vec.clone() )
+        DVMatrixGrayscale ( vec )
     }
 }
 // &DVMatrixGrayscale implemented instead of DVMatrixGrayscale because this avoids having to take 

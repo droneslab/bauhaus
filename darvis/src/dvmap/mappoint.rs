@@ -240,6 +240,7 @@ impl MapPoint<FullMapPoint> {
             }
         }
 
+        // TODO (CLONE) ... this could potentially be a large clone
         Some(DVMatrix::new(descriptors[best_idx].clone()))
     }
 
