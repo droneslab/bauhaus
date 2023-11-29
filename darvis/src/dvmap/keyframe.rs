@@ -1,19 +1,19 @@
 use std::{collections::{HashMap, HashSet}, cmp::min};
 use derivative::Derivative;
-use dvcore::{matrix::{DVVector3, DVVectorOfKeyPoint, DVMatrix}, config::{ GLOBAL_PARAMS, SYSTEM_SETTINGS}, sensor::{Sensor, FrameSensor}};
-use log::{error, info};
+use dvcore::{matrix::{DVVector3, DVVectorOfKeyPoint, DVMatrix}, config::{ SETTINGS, SYSTEM}, sensor::{Sensor, FrameSensor}};
+use log::{error, info, debug};
 use serde::{Deserialize, Serialize};
 use crate::{dvmap::{map::Id, pose::DVPose},modules::{imu::*, camera::CAMERA_MODULE}, actors::tracking_backend::TrackedMapPointData,};
-use super::{mappoint::{MapPoint, FullMapPoint}, map::Map, features::Features, bow::{BoW, self}};
+use super::{mappoint::{MapPoint, FullMapPoint}, map::Map, features::Features, bow::{BoW, self}, misc::Timestamp};
 
-// TODO... If it's getting a little messy in this file, we can always separate out the different types of frame/keyframe states into their own files.
+// TODO (design)... It would be nice to re-think how we do the states. We shouldn't have options in the regular Frame struct, there should be Frame generics that either have those filled in or don't. But creating more states means we have a lot more duplicated code for each function that can be called on multiple states. 
 
 // Typestate...Frame/KeyFrame information that is ALWAYS available, regardless of frame/keyframe state.
 #[derive(Debug, Clone, Derivative)]
 #[derivative(Default)]
 pub struct Frame<K: FrameState> {
     pub frame_id: Id,
-    pub timestamp: u64,
+    pub timestamp: Timestamp,
     pub pose: Option<DVPose>,
 
     // Image and reference KF //
@@ -77,10 +77,9 @@ impl<T: FrameState> Frame<T> {
             .and_modify(|(_, iso)| *iso = is_outlier);
     }
 
-    pub fn discard_outliers(&mut self) -> i32 {
-        let mps_at_start = self.mappoint_matches.len() as i32;
-        self.mappoint_matches.retain(|_, (_, is_outlier)| !*is_outlier);
-        mps_at_start - self.mappoint_matches.len() as i32
+    pub fn discard_outliers(&mut self) -> Vec<(u32, (Id, bool))> {
+        let discarded = self.mappoint_matches.extract_if(|_, (_, is_outlier)| *is_outlier).collect();
+        discarded
     }
 
     pub fn get_num_mappoints_with_observations(&self, map: &Map) -> i32 {
@@ -98,6 +97,14 @@ impl<T: FrameState> Frame<T> {
     pub fn check_close_tracked_mappoints(&self) -> (i32, i32) {
         self.features.check_close_tracked_mappoints(CAMERA_MODULE.th_depth as f32, &self.mappoint_matches)
     }
+
+    pub fn get_pose_in_world_frame(&self, map: &Map) -> DVPose {
+        let pose = self.pose.expect("Frame doesn't have a pose");
+        let ref_kf_id = self.ref_kf_id.expect("Frame doesn't have a ref kf id");
+        let ref_kf = map.get_keyframe(&ref_kf_id).expect("Can't get ref kf from map");
+        let ref_kf_pose = ref_kf.pose.expect("Ref kf doesn't have a pose");
+        pose * ref_kf_pose.inverse()
+    }
 }
 
 // Basic frame read from the image file, not upgraded to a keyframe yet
@@ -107,10 +114,10 @@ pub struct InitialFrame {}
 impl Frame<InitialFrame> {
     pub fn new(
         frame_id: Id, keypoints_vec: DVVectorOfKeyPoint, descriptors_vec: DVMatrix,
-        im_width: i32, im_height: i32,
-        timestamp: u64
+        im_width: u32, im_height: u32,
+        timestamp: Timestamp
     ) -> Result<Self, Box<dyn std::error::Error>> {
-        let sensor = GLOBAL_PARAMS.get::<Sensor>(SYSTEM_SETTINGS, "sensor");
+        let sensor = SETTINGS.get::<Sensor>(SYSTEM, "sensor");
         let imu_bias = match sensor.is_imu() {
             true => todo!("IMU"),
             false => None
@@ -218,7 +225,25 @@ impl Frame<InitialFrame> {
 pub struct PrelimKeyFrame {}
 
 impl Frame<PrelimKeyFrame> {
-    pub fn new(frame: &Frame<InitialFrame>) -> Frame<PrelimKeyFrame> {
+    pub fn new(frame: Frame<InitialFrame>) -> Frame<PrelimKeyFrame> {
+        if frame.pose.is_none() {
+            panic!("Frame needs a pose before converting to KeyFrame!");
+        }
+        Frame {
+            timestamp: frame.timestamp,
+            frame_id: frame.frame_id,
+            mappoint_matches: frame.mappoint_matches,
+            pose: frame.pose,
+            features: frame.features,
+            imu_bias: frame.imu_bias,
+            imu_preintegrated: frame.imu_preintegrated,
+            full_kf_info: PrelimKeyFrame{},
+            bow: frame.bow,
+            ref_kf_id: frame.ref_kf_id,
+            sensor: frame.sensor,
+        }
+    }
+    pub fn new_clone(frame: &Frame<InitialFrame>) -> Frame<PrelimKeyFrame> {
         if frame.pose.is_none() {
             panic!("Frame needs a pose before converting to KeyFrame!");
         }
@@ -236,6 +261,7 @@ impl Frame<PrelimKeyFrame> {
             sensor: frame.sensor,
         }
     }
+
 }
 
 // Full keyframe inserted into the map with the following additional fields
@@ -278,7 +304,7 @@ pub struct FullKeyFrame {
 }
 
 impl Frame<FullKeyFrame> {
-    pub(super) fn new(prelim_keyframe: &Frame<PrelimKeyFrame>, origin_map_id: Id, id: Id) -> Self {
+    pub(super) fn new(prelim_keyframe: Frame<PrelimKeyFrame>, origin_map_id: Id, id: Id) -> Self {
         let bow = match &prelim_keyframe.bow {
             Some(bow) => Some(bow.clone()),
             None => {
@@ -361,7 +387,7 @@ impl Frame<FullKeyFrame> {
         self.full_kf_info.ordered_connected_keyframes[0].0 //.1
     }
 
-    pub fn get_connections(&self, num: i32) -> Vec<Id> {
+    pub fn get_covisibility_keyframes(&self, num: i32) -> Vec<Id> {
         //vector<KeyFrame*> KeyFrame::GetVectorCovisibleKeyFrames(), KeyFrame::GetConnectedKeyFrames
         // To get all connections, pass in i32::MAX as `num`
        let max_len = min(self.full_kf_info.ordered_connected_keyframes.len(), num as usize);

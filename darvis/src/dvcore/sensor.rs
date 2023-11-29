@@ -1,5 +1,8 @@
+/// *** Sensor struct so we can match for sensor types in the actors. *** //
+// Could later choose to make the whole system generic on sensor type but
+// this is a big overhaul and I'm not sure it's worth it.
+// Needs to be in dvcore because ConfigValueBox needs to hold a sensor
 use std::fmt;
-
 
 #[derive(Clone, Copy, Debug, Default)]
 pub enum FrameSensor {

@@ -36,7 +36,12 @@ endif(MSVC90)
 MESSAGE("OPENCV VERSION:")
 MESSAGE(${OpenCV_VERSION})
 
-find_package (Eigen3 3.3 REQUIRED NO_MODULE)
+# Find Eigen3
+# Sofiya: Downgrading to 3.2, don't use Eigen's custom alignment (related to march=native issues)
+SET(EIGEN3_INCLUDE_DIR "$ENV{EIGEN3_INCLUDE_DIR}" )
+find_package (Eigen3 3.2 REQUIRED NO_MODULE)
+add_definitions(-DEIGEN_DONT_ALIGN) 
+
 find_package(Pangolin REQUIRED)
 
 #include(${CMAKE_CURRENT_SOURCE_DIR}/Sophus/CMakeLists.txt)

@@ -1,5 +1,5 @@
 use std::{fmt::Debug, collections::HashMap};
-use dvcore::{matrix::DVMatrix, config::{GLOBAL_PARAMS, SYSTEM_SETTINGS}, sensor::{Sensor, FrameSensor}};
+use dvcore::{matrix::DVMatrix, config::{SETTINGS, SYSTEM}, sensor::{Sensor, FrameSensor}};
 use log::error;
 extern crate nalgebra as na;
 use crate::{matrix::DVVector3, modules::orbmatcher::{descriptor_distance, SCALE_FACTORS}, registered_actors::FEATURE_DETECTION};
@@ -69,7 +69,7 @@ pub struct FullMapPoint { // Full map item inserted into the map with the follow
 
     // following two are only set by tracking and only checked by local mapping for mappoint culling, but not sure what the diff is b/w visible and found
     nvisible: i32, //mnvisible
-    nfound: i32, //mnfound
+    nfound: u32, //mnfound
 }
 
 pub trait MapPointState {}
@@ -84,13 +84,13 @@ impl MapPoint<PrelimMapPoint> {
             ref_kf_id,
             first_kf_id: ref_kf_id,
             full_mp_info: PrelimMapPoint{},
-            sensor: GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "sensor")
+            sensor: SETTINGS.get(SYSTEM, "sensor")
         }
     }
 }
 
 impl MapPoint<FullMapPoint> {
-    pub(super) fn new(prelim_mappoint: &MapPoint<PrelimMapPoint>, id: Id) -> Self {
+    pub(super) fn new(prelim_mappoint: MapPoint<PrelimMapPoint>, id: Id) -> Self {
         Self {
             position: prelim_mappoint.position,
             origin_map_id: prelim_mappoint.origin_map_id,
@@ -141,10 +141,10 @@ impl MapPoint<FullMapPoint> {
     pub fn predict_scale(&self, current_distance: &f64) -> i32 {
         // int MapPoint::PredictScale(const float &currentDist, KeyFrame* pKF)
         let ratio = self.full_mp_info.max_distance / current_distance;
-        let scale_factor= GLOBAL_PARAMS.get::<f64>(FEATURE_DETECTION, "scale_factor");
+        let scale_factor= SETTINGS.get::<f64>(FEATURE_DETECTION, "scale_factor");
         let log_scale_factor = scale_factor.log10();
         let scale = (ratio.log10() / log_scale_factor).ceil() as i32;
-        let scale_levels = GLOBAL_PARAMS.get::<i32>(FEATURE_DETECTION, "n_levels");
+        let scale_levels = SETTINGS.get::<i32>(FEATURE_DETECTION, "n_levels");
 
         let scale = if scale < 0 { 0 } else { scale };
         if scale < 0 {
@@ -156,7 +156,7 @@ impl MapPoint<FullMapPoint> {
         }
     }
 
-    pub fn increase_found(&mut self, n: &i32) {
+    pub fn increase_found(&mut self, n: u32) {
         // void MapPoint::IncreaseFound(int n)
         self.full_mp_info.nfound += n;
     }
@@ -180,7 +180,7 @@ impl MapPoint<FullMapPoint> {
 
         let level = self.get_level(ref_kf);
         let level_scale_factor = SCALE_FACTORS[level as usize] as f64;
-        let n_levels = GLOBAL_PARAMS.get::<i32>(FEATURE_DETECTION, "n_levels");
+        let n_levels = SETTINGS.get::<i32>(FEATURE_DETECTION, "n_levels");
 
         let max_distance = dist * level_scale_factor;
         let min_distance = self.full_mp_info.max_distance / (SCALE_FACTORS[(n_levels - 1) as usize] as f64);

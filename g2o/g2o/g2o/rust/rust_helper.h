@@ -13,6 +13,7 @@
 namespace g2o {
     // using Edge = OptimizableGraph::Edge;
     struct Pose;
+    struct Position;
 
     struct RustXYZEdge;
     struct RustXYZOnlyPoseEdge;
@@ -34,20 +35,21 @@ namespace g2o {
             bool robust_kernel, int vertex_id,
             int keypoint_octave, float keypoint_pt_x, float keypoint_pt_y, float invSigma2,
             array<double, 3> mp_world_position,
-            int mappoint_id
+            int mappoint_id,
+            float huber_delta
         );
         void add_edge_monocular_binary(
             bool robust_kernel, int vertex1, int vertex2,
-            int keypoint_octave, float keypoint_pt_x, float keypoint_pt_y, float invSigma2,
-            int huber_delta
+            float keypoint_pt_x, float keypoint_pt_y, float invSigma2,
+            float huber_delta
         );
         void _add_edge_stereo() const;
         int num_edges() const;
 
         // optimization
-        void optimize(int iterations);
+        void optimize(int iterations, bool online);
         Pose recover_optimized_frame_pose(int vertex_id) const;
-        Pose recover_optimized_mappoint_pose(int vertex_id) const;
+        Position recover_optimized_mappoint_pose(int vertex_id) const;
 
         // Note: see explanation under get_mut_edges in lib.rs for why we do this
         std::vector<RustXYZEdge> xyz_edges;

@@ -62,7 +62,7 @@ ENDIF(OPENMP_FOUND AND G2O_USE_OPENMP)
 # Sofiya: Removed -march=native, based on https://github.com/raulmur/ORB_SLAM2/issues/341 
 # Sofiya: Removed -O3, set cmake build type to be debug or release in build.rs instead
 SET(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE}")
-SET(CMAKE_C_FLAGS_RELEASE  "${CMAKE_C_FLAGS_RELEASE}") #  -march=native
+SET(CMAKE_C_FLAGS_RELEASE  "${CMAKE_C_FLAGS_RELEASE}") 
 
 # activate warnings !!!
 SET(g2o_C_FLAGS "${g2o_C_FLAGS} -Wall -W")
@@ -73,7 +73,10 @@ SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g ${g2o_CXX_FLAGS}") # -std=c++17
 SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g ${g2o_C_FLAGS}")
 
 # Find Eigen3
-find_package (Eigen3 3.3 REQUIRED NO_MODULE)
+# Sofiya: Downgrading to 3.2, don't use Eigen's custom alignment (related to march=native issues)
+SET(EIGEN3_INCLUDE_DIR "$ENV{EIGEN3_INCLUDE_DIR}" )
+find_package (Eigen3 3.2 REQUIRED NO_MODULE)
+add_definitions(-DEIGEN_DONT_ALIGN) 
 
 #SET(EIGEN3_INCLUDE_DIR ${G2O_EIGEN3_INCLUDE})
 #FIND_PACKAGE(Eigen3 3.1.0 REQUIRED)

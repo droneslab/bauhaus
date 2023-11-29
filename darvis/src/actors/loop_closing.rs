@@ -1,19 +1,20 @@
-use dvcore::base::Actor;
+use dvcore::actor::{Actor, ActorMessage};
 use dvcore::{
-    lockwrap::ReadOnlyWrapper,
+    maplock::ReadOnlyMap,
 };
 use log::warn;
 use crate::ActorChannels;
+use crate::dvmap::map::Id;
 use crate::dvmap::{map::Map};
 use crate::modules::imu::ImuModule;
 
-use super::messages::{KeyFrameIdMsg, ShutdownMsg};
+use super::messages::{ShutdownMsg};
 
 #[derive(Debug, Default)]
 pub struct DarvisLoopClosing {
     actor_channels: ActorChannels,
     // Map
-    map: ReadOnlyWrapper<Map>,
+    map: ReadOnlyMap<Map>,
 
     // IMU
     imu: ImuModule,
@@ -23,12 +24,17 @@ pub struct DarvisLoopClosing {
 
 impl Actor for DarvisLoopClosing {
     fn run(&mut self) {
-        loop {
+        'outer: loop {
             let message = self.actor_channels.receive().unwrap();
-            if let Some(msg) = message.downcast_ref::<KeyFrameIdMsg>() {
-                self.loop_closing(msg);
-            } else if let Some(_) = message.downcast_ref::<ShutdownMsg>() {
-                break;
+            if message.is::<LoopClosingMsg>() {
+                let msg = message.downcast::<LoopClosingMsg>().unwrap_or_else(|_| panic!("Could not downcast loop closing message!"));
+                match *msg {
+                    LoopClosingMsg::KeyFrameIdMsg{ kf_id } => {
+                        self.loop_closing(kf_id);
+                    },
+                };
+            } else if message.is::<ShutdownMsg>() {
+                break 'outer;
             } else {
                 warn!("Loop Closing received unknown message type!");
             }
@@ -41,7 +47,7 @@ impl Actor for DarvisLoopClosing {
 impl DarvisLoopClosing {
         // type INPUTS = (ReadOnlyWrapper<Map>, ActorChannels);
 
-    pub fn new(map: ReadOnlyWrapper<Map>, actor_channels: ActorChannels) -> DarvisLoopClosing {
+    pub fn new(map: ReadOnlyMap<Map>, actor_channels: ActorChannels) -> DarvisLoopClosing {
         DarvisLoopClosing {
             actor_channels,
             map,
@@ -49,7 +55,7 @@ impl DarvisLoopClosing {
         }
     }
 
-    fn loop_closing(&mut self, _msg: &KeyFrameIdMsg) {
+    fn loop_closing(&mut self, kf_id: Id) {
         // if(mpLastCurrentKF)
         // {
         //     mpLastCurrentKF->mvpLoopCandKFs.clear();
@@ -211,3 +217,9 @@ impl DarvisLoopClosing {
         // mpLastCurrentKF = mpCurrentKF;
     }
 }
+
+
+pub enum LoopClosingMsg {
+    KeyFrameIdMsg{ kf_id: Id },
+}
+impl ActorMessage for LoopClosingMsg {}

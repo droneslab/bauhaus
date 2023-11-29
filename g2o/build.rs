@@ -11,7 +11,7 @@ fn main() {
                         .cxxflag(manifest_dir)
                         .very_verbose(true)
                         .build_target("g2o")
-                        .profile("Release")
+                        .profile("RelWithDebInfo")
                         .build();
 
     println!("cargo:rustc-link-search=native=g2o/lib");

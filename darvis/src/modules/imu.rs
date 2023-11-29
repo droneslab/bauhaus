@@ -1,4 +1,4 @@
-use dvcore::{lockwrap::ReadOnlyWrapper, sensor::{FrameSensor, ImuSensor, Sensor}};
+use dvcore::{maplock::ReadOnlyMap, sensor::{FrameSensor, ImuSensor, Sensor}};
 use serde::{Deserialize, Serialize};
 
 use crate::dvmap::{pose::DVPose, map::Map};
@@ -11,7 +11,7 @@ pub struct ImuModule {
 }
 
 impl ImuModule {
-    pub fn ready(&self, map: &ReadOnlyWrapper<Map>) -> bool {
+    pub fn ready(&self, map: &ReadOnlyMap<Map>) -> bool {
         self.sensor.is_imu() && !self.velocity.is_none() && map.read().imu_initialized
     }
 

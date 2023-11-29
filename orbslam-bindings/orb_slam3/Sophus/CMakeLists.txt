@@ -31,8 +31,11 @@ ENDIF()
 # Add local path for finding packages, set the local version first
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake_modules")
 
-# Find Eigen 3 (dependency)
-find_package(Eigen3 3.3.0 REQUIRED)
+# Find Eigen3
+# Sofiya: Downgrading to 3.2, don't use Eigen's custom alignment (related to march=native issues)
+SET(EIGEN3_INCLUDE_DIR "$ENV{EIGEN3_INCLUDE_DIR}" )
+find_package (Eigen3 3.2 REQUIRED NO_MODULE)
+add_definitions(-DEIGEN_DONT_ALIGN) 
 
 # Define interface library target
 add_library(sophus INTERFACE)

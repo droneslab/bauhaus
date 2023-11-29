@@ -57,7 +57,5 @@ error-chain = "*"
 spin_sleep = "*"
 flamer = "*"
 mcap = "*"
-
-
-
+crossbeam-channel = "0.5.8"
 

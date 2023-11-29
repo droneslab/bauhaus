@@ -77,7 +77,7 @@ void RobustKernelHuber::setDeltaSqr(const double &delta, const double &deltaSqr)
 
 void RobustKernelHuber::robustify(double e, Eigen::Vector3d& rho) const
 {
-  //dsqr = _delta * _delta;
+//   dsqr = _delta * _delta;
   if (e <= dsqr) { // inlier
     rho[0] = e;
     rho[1] = 1.;

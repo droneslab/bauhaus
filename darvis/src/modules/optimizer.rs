@@ -3,17 +3,20 @@ extern crate g2o;
 use std::collections::{HashMap, HashSet};
 use cxx::UniquePtr;
 use dvcore::{
-    lockwrap::ReadOnlyWrapper,
-    config::{GLOBAL_PARAMS, SYSTEM_SETTINGS}, sensor::{Sensor, FrameSensor},
+    maplock::ReadOnlyMap,
+    config::{SETTINGS, SYSTEM}, sensor::{Sensor, FrameSensor}, matrix::DVVector3,
 };
-use log::{warn, debug};
+use log::{warn, debug, trace};
 use nalgebra::Matrix3;
 use opencv::prelude::KeyPointTraitConst;
-use crate::{dvmap::{keyframe::InitialFrame, pose::DVPose, map::{Map, Id}, keyframe::{Frame, FullKeyFrame}}, registered_actors::{FEATURE_DETECTION, CAMERA}, actors::map_actor::MapWriteMsg};
+use crate::{dvmap::{keyframe::InitialFrame, pose::{DVPose, DVTranslation}, map::{Map, Id}, keyframe::{Frame, FullKeyFrame}}, registered_actors::{FEATURE_DETECTION, CAMERA}, actors::map_actor::MapWriteMsg};
 use g2o::ffi::EdgeSE3ProjectXYZ;
 
 lazy_static! {
-    pub static ref INV_LEVEL_SIGMA2: Vec<f32> = {
+    static ref TH_HUBER_MONO: f32 = (5.991 as f32).sqrt();
+    static ref TH_HUBER_2D: f32 = (5.99 as f32).sqrt();
+    static ref TH_HUBER_3D: f32 = (7.815 as f32).sqrt();
+
     // Note: Does not change, so can have multiple copies of this.
     // ORBSLAM3 duplicates this var at every frame and keyframe,
     // but I'm pretty sure that it's set once per-system when the ORBExtractor
@@ -21,27 +24,32 @@ lazy_static! {
     // In general, I'd like to remove these kinds of variables away from the
     // frame/keyframe/mappoint implementation and into the object that actually
     // directly uses it.
-    let scale_factor = GLOBAL_PARAMS.get::<f64>(FEATURE_DETECTION, "scale_factor");
-    let max_features = GLOBAL_PARAMS.get::<i32>(FEATURE_DETECTION, "max_features");
-    let n_levels = GLOBAL_PARAMS.get::<i32>(FEATURE_DETECTION, "n_levels");
-    let mut scale_factors = vec![1.0];
-    let mut level_sigma2 = vec![1.0];
+    pub static ref INV_LEVEL_SIGMA2: Vec<f32> = {
+        let n_levels = SETTINGS.get::<i32>(FEATURE_DETECTION, "n_levels");
+        let mut inv_level_sigma2 = Vec::new();
+        for i in 0..n_levels as usize {
+            inv_level_sigma2.push(1.0 / LEVEL_SIGMA2[i]);
+        }
+        inv_level_sigma2
+    };
+    pub static ref LEVEL_SIGMA2: Vec<f32> = {
+        let scale_factor = SETTINGS.get::<f64>(FEATURE_DETECTION, "scale_factor");
+        let max_features = SETTINGS.get::<i32>(FEATURE_DETECTION, "max_features");
+        let n_levels = SETTINGS.get::<i32>(FEATURE_DETECTION, "n_levels");
+        let mut scale_factors = vec![1.0];
+        let mut level_sigma2 = vec![1.0];
 
-    for i in 1..n_levels as usize {
-        scale_factors.push(scale_factors[i-1] * (scale_factor as f32));
-        level_sigma2.push(scale_factors[i] * scale_factors[i]);
-    }
-
-    let mut inv_level_sigma2 = Vec::new();
-    for i in 0..n_levels as usize {
-        inv_level_sigma2.push(1.0 / level_sigma2[i]);
-    }
-    inv_level_sigma2
-};
+        for i in 1..n_levels as usize {
+            scale_factors.push(scale_factors[i-1] * (scale_factor as f32));
+            level_sigma2.push(scale_factors[i] * scale_factors[i]);
+        }
+        level_sigma2
+    };
 }
+
 // int Optimizer::PoseInertialOptimizationLastFrame(Frame *pFrame, bool bRecInit)
 // but bRecInit is always set to false
-pub fn pose_inertial_optimization_last_frame(_frame: &mut Frame<InitialFrame>, _map: &ReadOnlyWrapper<Map>) -> i32 {
+pub fn pose_inertial_optimization_last_frame(_frame: &mut Frame<InitialFrame>, _map: &ReadOnlyMap<Map>) -> i32 {
     todo!("IMU... Optimizer::PoseInertialOptimizationLastFrame(&mCurrentFrame)");
     // let mut optimizer = g2o::ffi::new_sparse_optimizer(2);
 
@@ -798,76 +806,70 @@ pub fn pose_inertial_optimization_last_keyframe(_frame: &mut Frame<InitialFrame>
     // return nInitialCorrespondences-nBad;
 }
 
-pub fn optimize_pose(frame: &mut Frame<InitialFrame>, map: &ReadOnlyWrapper<Map>) -> Option<(i32, DVPose)> {
+pub fn optimize_pose(frame: &mut Frame<InitialFrame>, map: &ReadOnlyMap<Map>) -> Option<(i32)> {
     //int Optimizer::PoseOptimization(Frame *pFrame)
-    let sensor: Sensor = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "sensor");
+    let now = std::time::Instant::now();
+    let sensor: Sensor = SETTINGS.get(SYSTEM, "sensor");
 
-    let fx= GLOBAL_PARAMS.get::<f64>(CAMERA, "fx");
-    let fy= GLOBAL_PARAMS.get::<f64>(CAMERA, "fy");
-    let cx= GLOBAL_PARAMS.get::<f64>(CAMERA, "cx");
-    let cy= GLOBAL_PARAMS.get::<f64>(CAMERA, "cy");
-
+    let fx= SETTINGS.get::<f64>(CAMERA, "fx");
+    let fy= SETTINGS.get::<f64>(CAMERA, "fy");
+    let cx= SETTINGS.get::<f64>(CAMERA, "cx");
+    let cy= SETTINGS.get::<f64>(CAMERA, "cy");
     let camera_param = [fx, fy, cx,cy];
 
-    let mut optimizer = g2o::ffi::new_sparse_optimizer(1, camera_param);
+    let mut optimizer = g2o::ffi::new_sparse_optimizer(2, camera_param);
 
-    // Don't need this but saving here for reference
-    // example of how to send a string to C++
-    // let_cxx_string!(vertex_name = "VertexSE3Expmap");
-
-    let frame_vertex_id = 1;
-    optimizer.pin_mut().add_frame_vertex(frame_vertex_id, (*frame.pose.as_ref().unwrap()).into(), false);
-
-    if frame.mappoint_matches.len() < 3 {
-        return None;
-    }
+    optimizer.pin_mut().add_frame_vertex(0, (*frame.pose.as_ref().unwrap()).into(), false);
 
     let mut initial_correspondences = 0;
     let mut mp_indexes = vec![];
+
     for i in 0..frame.features.num_keypoints as u32 {
-        match frame.mappoint_matches.get(&i) {
-            Some((mp_id, _)) => {
-                let (keypoint, _) = &frame.features.get_keypoint(i as usize);
-                mp_indexes.push(i);
-
-                match sensor.frame() {
-                    FrameSensor::Stereo => {
-                        // Stereo observations
-                        todo!("Stereo");
-                        // let edge = optimizer.create_edge_stereo(
-                        //     keypoint.octave(), keypoint.pt().x, keypoint.pt().y,
-                        //    frame.keypoints_data.mv_right.get(mp_id).unwrap(),
-                        //     self.inv_level_sigma2[keypoint.octave() as usize]
-                        // );
-
-                        // {
-                        //     let map_read_lock = map.read();
-                        //     let position = &map_read_lock.get_mappoint(mp_id).unwrap().position;
-                        //     optimizer.add_edge_stereo(
-                        //         i as i32, edge.clone(), (position).into()
-                        //     );
-                        // }
-                    },
-                    _ => {
-                        // Mono observations
-                        let map_read_lock = map.read();
-                        let position = &map_read_lock.get_mappoint(&mp_id).unwrap().position;
-                        optimizer.pin_mut().add_edge_monocular_unary(
-                            true, frame_vertex_id, keypoint.octave(), keypoint.pt().x, keypoint.pt().y,
-                            INV_LEVEL_SIGMA2[keypoint.octave() as usize],
-                            (position).into(),
-                            *mp_id
-                        );
-                        // TODO (mvp): below code sets edge's camera to the frame's camera
-                        // but are we sure we need it?
-                        // edge->pCamera = pFrame->mpCamera;
-                    }
-                };
-
-                initial_correspondences += 1;
-            },
-            None => {}
+        if frame.mappoint_matches.get(&i).is_none() {
+            continue;
         }
+        let mp_id = frame.mappoint_matches.get(&i).unwrap().0;
+
+        let (keypoint, _) = &frame.features.get_keypoint(i as usize);
+        mp_indexes.push(i);
+
+        match sensor.frame() {
+            FrameSensor::Stereo => {
+                // Stereo observations
+                todo!("Stereo");
+                // let edge = optimizer.create_edge_stereo(
+                //     keypoint.octave(), keypoint.pt().x, keypoint.pt().y,
+                //    frame.keypoints_data.mv_right.get(mp_id).unwrap(),
+                //     self.inv_level_sigma2[keypoint.octave() as usize]
+                // );
+
+                // {
+                //     let map_read_lock = map.read();
+                //     let position = &map_read_lock.get_mappoint(mp_id).unwrap().position;
+                //     optimizer.add_edge_stereo(
+                //         i as i32, edge.clone(), (position).into()
+                //     );
+                // }
+            },
+            _ => {
+                // Mono observations
+                frame.set_mp_outlier(& (mp_id as u32), false);
+                let map_read_lock = map.read();
+                let position = &map_read_lock.get_mappoint(&mp_id).unwrap().position;
+                optimizer.pin_mut().add_edge_monocular_unary(
+                    true, 0, keypoint.octave(), keypoint.pt().x, keypoint.pt().y,
+                    INV_LEVEL_SIGMA2[keypoint.octave() as usize],
+                    (position).into(),
+                    mp_id,
+                    *TH_HUBER_MONO
+                );
+                // TODO (mvp): below code sets edge's camera to the frame's camera
+                // but are we sure we need it?
+                // edge->pCamera = pFrame->mpCamera;
+            }
+        };
+
+        initial_correspondences += 1;
     }
 
     if initial_correspondences < 3 {
@@ -888,11 +890,11 @@ pub fn optimize_pose(frame: &mut Frame<InitialFrame>, map: &ReadOnlyWrapper<Map>
         // Both pointers point to the same object on the heap.
         // see https://cxx.rs/binding/sharedptr.html
         optimizer.pin_mut().set_vertex_estimate(
-            frame_vertex_id, 
+            0, 
             (*frame.pose.as_ref().unwrap()).into()
         );
 
-        optimizer.pin_mut().optimize(iterations[iteration]);
+        optimizer.pin_mut().optimize(iterations[iteration], false);
 
         num_bad = 0;
         let mut index = 0;
@@ -991,22 +993,26 @@ pub fn optimize_pose(frame: &mut Frame<InitialFrame>, map: &ReadOnlyWrapper<Map>
             break;
         }
     }
-    debug!("Set outliers in pose optimization,{}", num_bad);
+    // println!("Set outliers in pose optimization,{}", num_bad);
 
     // Recover optimized pose
-    let pose = optimizer.recover_optimized_frame_pose(frame_vertex_id);
+    let pose = optimizer.recover_optimized_frame_pose(0);
+    frame.pose = Some(pose.into());
+
+    trace!("Pose optimization: {} ms", now.elapsed().as_millis());
 
     // Return number of inliers
-    return Some((initial_correspondences - num_bad, pose.into()));
+    return Some(initial_correspondences - num_bad);
 }
 
-pub fn global_bundle_adjustment(map: &Map, iterations: i32) -> BAResult {
+pub fn global_bundle_adjustment(map: &Map, iterations: i32) -> BundleAdjustmentResult {
     // void Optimizer::GlobalBundleAdjustemnt(Map* pMap, int nIterations, bool* pbStopFlag, const unsigned long nLoopKF, const bool bRobust)
-    let sensor: Sensor = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "sensor");
-    let fx= GLOBAL_PARAMS.get::<f64>(CAMERA, "fx");
-    let fy= GLOBAL_PARAMS.get::<f64>(CAMERA, "fy");
-    let cx= GLOBAL_PARAMS.get::<f64>(CAMERA, "cx");
-    let cy= GLOBAL_PARAMS.get::<f64>(CAMERA, "cy");
+    let now = std::time::Instant::now();
+    let sensor: Sensor = SETTINGS.get(SYSTEM, "sensor");
+    let fx= SETTINGS.get::<f64>(CAMERA, "fx");
+    let fy= SETTINGS.get::<f64>(CAMERA, "fy");
+    let cx= SETTINGS.get::<f64>(CAMERA, "cx");
+    let cy= SETTINGS.get::<f64>(CAMERA, "cy");
     let camera_param = [fx, fy, cx,cy];
 
     let mut optimizer = g2o::ffi::new_sparse_optimizer(1, camera_param);
@@ -1015,13 +1021,13 @@ pub fn global_bundle_adjustment(map: &Map, iterations: i32) -> BAResult {
     let keyframes = map.get_all_keyframes();
     let mut kf_vertex_ids = HashMap::new();
     let mut id_count = 0;
-    for (id, kf) in keyframes {
+    for (kf_id, kf) in keyframes {
         optimizer.pin_mut().add_frame_vertex(
             id_count,
             (kf.pose.unwrap()).into(),
-            *id == map.initial_kf_id
+            *kf_id == map.initial_kf_id
         );
-        kf_vertex_ids.insert(id, id_count);
+        kf_vertex_ids.insert(*kf_id, id_count);
         id_count += 1;
     }
 
@@ -1042,9 +1048,9 @@ pub fn global_bundle_adjustment(map: &Map, iterations: i32) -> BAResult {
     for (mp_id, mappoint) in mappoints {
         optimizer.pin_mut().add_mappoint_vertex(
             id_count,
-            DVPose::new(&*mappoint.position, &Matrix3::identity()).into() // create pose out of translation only
+            DVPose::new(*mappoint.position, Matrix3::identity()).into() // create pose out of translation only
         );
-        mp_vertex_ids.insert(mp_id, id_count);
+        mp_vertex_ids.insert(*mp_id, id_count);
         // debug!("Add mappoint to vertex,{:?},{:?}", mp_id, id_count);
 
         let observations = mappoint.get_observations();
@@ -1064,13 +1070,13 @@ pub fn global_bundle_adjustment(map: &Map, iterations: i32) -> BAResult {
                     if *left_index != -1 {
                         n_edges += 1;
 
-                        let (keypoint, _) = map.get_keyframe(kf_id).unwrap().features.get_keypoint(*left_index as usize);
+                        let (keypoint, _) = map.keyframes.get(kf_id).unwrap().features.get_keypoint(*left_index as usize);
                         _edges.push(
                             optimizer.pin_mut().add_edge_monocular_binary(
                                 true, id_count, *kf_vertex_ids.get(kf_id).unwrap(),
-                                keypoint.octave(), keypoint.pt().x, keypoint.pt().y,
+                                keypoint.pt().x, keypoint.pt().y,
                                 INV_LEVEL_SIGMA2[keypoint.octave() as usize],
-                                0
+                                *TH_HUBER_2D
                             )
                         );
                         // debug!("Add edge,{},{}", id_count, *kf_vertex_ids.get(kf_id).unwrap());
@@ -1090,46 +1096,34 @@ pub fn global_bundle_adjustment(map: &Map, iterations: i32) -> BAResult {
         if n_edges == 0 {
             warn!("Removed vertex");
             optimizer.pin_mut().remove_vertex(id_count);
-        } else {
             mp_vertex_ids.remove(mp_id);
         }
         id_count += 1;
     }
 
     // Optimize!
-    optimizer.pin_mut().optimize(iterations);
+    optimizer.pin_mut().optimize(iterations, false);
 
-    // Recover optimized data
-    // Keyframes
-    let mut optimized_kf_poses = HashMap::<Id, DVPose>::new();
-    for (kf_id, vertex_id) in kf_vertex_ids {
-        let pose = optimizer.recover_optimized_frame_pose(vertex_id);
-        optimized_kf_poses.insert(*kf_id, pose.into());
-    }
-
-    //Points
-    let mut optimized_mp_poses = HashMap::<Id, DVPose>::new();
-    for (mp_id, vertex_id) in mp_vertex_ids {
-        let pose = optimizer.recover_optimized_mappoint_pose(vertex_id);
-        optimized_mp_poses.insert(*mp_id, pose.into());
-    }
-
-    BAResult { optimized_mp_poses, optimized_kf_poses, }
+    trace!("Global BA: {} ms", now.elapsed().as_millis());
+    BundleAdjustmentResult::new(optimizer, kf_vertex_ids, mp_vertex_ids, vec![], vec![])
 }
 
 pub fn local_bundle_adjustment(
-    map: &Map, keyframe: &Frame<FullKeyFrame>,
-) -> Vec<MapWriteMsg> {
+    locked_map: &ReadOnlyMap<Map>, keyframe_id: Id
+) -> BundleAdjustmentResult {
     // void Optimizer::LocalBundleAdjustment(KeyFrame *pKF, bool* pbStopFlag, Map* pMap, int& num_fixedKF, int& num_OptKF, int& num_MPs, int& num_edges)
+    let now = std::time::Instant::now();
+    let map = locked_map.read();
 
     // Local KeyFrames: First Breath Search from Current Keyframe
+    let keyframe = map.get_keyframe(&keyframe_id).unwrap();
     let mut local_keyframes = vec![keyframe.id()];
     let current_map_id = map.id;
     let mut local_ba_for_kf = HashMap::new();
     local_ba_for_kf.insert(keyframe.id(), keyframe.id());
 
-    for kf_id in keyframe.get_connections(i32::MAX) {
-        let kf = map.get_keyframe(&kf_id).unwrap();
+    for kf_id in keyframe.get_covisibility_keyframes(i32::MAX) {
+        let kf = map.keyframes.get(&kf_id).unwrap();
         local_ba_for_kf.insert(kf_id, keyframe.id());
         if kf.full_kf_info.origin_map_id == current_map_id {
             local_keyframes.push(kf_id);
@@ -1142,7 +1136,7 @@ pub fn local_bundle_adjustment(
     let mut local_ba_for_mp = HashMap::new();
 
     for kf_id in &local_keyframes {
-        let kf = map.get_keyframe(&kf_id).unwrap();
+        let kf = map.keyframes.get(&kf_id).unwrap();
         if kf.id() == map.initial_kf_id {
             num_fixed_kf += 1;
         }
@@ -1161,7 +1155,7 @@ pub fn local_bundle_adjustment(
     for mp_id in &local_mappoints {
         let mp = map.get_mappoint(&mp_id).unwrap();
         for (kf_id, (_left_index, _right_index)) in mp.get_observations() {
-            let kf = map.get_keyframe(&kf_id).unwrap();
+            let kf = map.keyframes.get(&kf_id).unwrap();
             let local_ba = match local_ba_for_kf.contains_key(kf_id) {
                 true => *local_ba_for_kf.get(kf_id).unwrap() != keyframe.id(),
                 false => true
@@ -1179,11 +1173,11 @@ pub fn local_bundle_adjustment(
     }
 
     // Setup optimizer
-    let sensor: Sensor = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "sensor");
-    let fx= GLOBAL_PARAMS.get::<f64>(CAMERA, "fx");
-    let fy= GLOBAL_PARAMS.get::<f64>(CAMERA, "fy");
-    let cx= GLOBAL_PARAMS.get::<f64>(CAMERA, "cx");
-    let cy= GLOBAL_PARAMS.get::<f64>(CAMERA, "cy");
+    let sensor: Sensor = SETTINGS.get(SYSTEM, "sensor");
+    let fx= SETTINGS.get::<f64>(CAMERA, "fx");
+    let fy= SETTINGS.get::<f64>(CAMERA, "fy");
+    let cx= SETTINGS.get::<f64>(CAMERA, "cx");
+    let cy= SETTINGS.get::<f64>(CAMERA, "cy");
     let camera_param = [fx, fy, cx,cy];
     let mut optimizer = g2o::ffi::new_sparse_optimizer(1, camera_param);
 
@@ -1203,25 +1197,25 @@ pub fn local_bundle_adjustment(
 
     // Set Local KeyFrame vertices
     let mut vertex_id = 1;
-    let mut all_kf_vertices = HashMap::new();
+    let mut kf_vertex_ids = HashMap::new();
     for kf_id in &local_keyframes {
-        let kf = map.get_keyframe(kf_id).unwrap();
+        let kf = map.keyframes.get(kf_id).unwrap();
         let set_fixed = *kf_id == map.initial_kf_id;
         optimizer.pin_mut().add_frame_vertex(vertex_id, (*kf.pose.as_ref().unwrap()).into(), set_fixed);
-        all_kf_vertices.insert(*kf_id, vertex_id);
+        kf_vertex_ids.insert(*kf_id, vertex_id);
         vertex_id += 1;
     }
 
     // Set Fixed KeyFrame vertices
     for kf_id in &fixed_cameras {
-        let kf = map.get_keyframe(kf_id).unwrap();
+        let kf = map.keyframes.get(kf_id).unwrap();
         optimizer.pin_mut().add_frame_vertex(vertex_id, (*kf.pose.as_ref().unwrap()).into(), true);
-        all_kf_vertices.insert(*kf_id, vertex_id);
+        kf_vertex_ids.insert(*kf_id, vertex_id);
         vertex_id += 1;
     }
 
     // Set MapPoint vertices
-    let mut all_mp_vertices = HashMap::new();
+    let mut mp_vertex_ids = HashMap::new();
     let all_edges_stereo = Vec::<(Id, UniquePtr<EdgeSE3ProjectXYZ>)>::new(); //vpEdgesStereo
     let all_edges_body = Vec::<(Id, UniquePtr<EdgeSE3ProjectXYZ>)>::new(); // vpEdgesBody
 
@@ -1230,14 +1224,14 @@ pub fn local_bundle_adjustment(
 
         optimizer.pin_mut().add_mappoint_vertex(
             vertex_id,
-            DVPose::new(&*mp.position, &Matrix3::identity()).into() // create pose out of translation only
+            DVPose::new(*mp.position, Matrix3::identity()).into() // create pose out of translation only
         );
-        all_mp_vertices.insert(*mp_id, vertex_id);
+        mp_vertex_ids.insert(*mp_id, vertex_id);
 
         let observations = mp.get_observations();
         // Set edges
         for (kf_id, (left_index, _right_index)) in observations {
-            let kf = map.get_keyframe(kf_id).unwrap();
+            let kf = map.keyframes.get(kf_id).unwrap();
             if kf.full_kf_info.origin_map_id != current_map_id {
                 continue
             }
@@ -1322,14 +1316,14 @@ pub fn local_bundle_adjustment(
                     // Monocular observation
                     if *left_index != -1 && kf.features.get_mv_right(*left_index as usize).is_none() {
                         let (kp_un, _) = kf.features.get_keypoint(*left_index as usize);
-                        let kf_vertex = *all_kf_vertices.get(&kf.id()).unwrap();
+                        let kf_vertex = *kf_vertex_ids.get(&kf.id()).unwrap();
                         // debug!("Adding edge {} -> {}", vertex_id, kf_vertex);
 
                         optimizer.pin_mut().add_edge_monocular_binary(
                             false, vertex_id, kf_vertex,
-                            kp_un.octave(), kp_un.pt().x, kp_un.pt().y,
+                            kp_un.pt().x, kp_un.pt().y,
                             INV_LEVEL_SIGMA2[kp_un.octave() as usize],
-                            1 // set delta of robustkernelhuber to thHuberMono
+                            *TH_HUBER_MONO
                         );
 
                         // TODO (mvp): below code sets edge's camera to the frame's camera
@@ -1345,18 +1339,15 @@ pub fn local_bundle_adjustment(
     }
 
     // Optimize
-    optimizer.pin_mut().optimize(10);
-
-    let mut map_edits = Vec::new();
+    optimizer.pin_mut().optimize(10, false);
 
     // Check inlier observations
-    let mut to_discard = Vec::new();
+    let mut mps_to_discard = Vec::new();
     for edge in optimizer.pin_mut().get_mut_xyz_onlypose_edges().iter() {
         if edge.inner.chi2() > 5.991 || !edge.inner.is_depth_positive() {
-            to_discard.push(edge.mappoint_id);
+            mps_to_discard.push(edge.mappoint_id);
         }
     }
-    map_edits.push(MapWriteMsg::discard_many_mappoints(&to_discard));
 
     for (_mp_id, _edge) in all_edges_body {
         todo!("Stereo");
@@ -1388,25 +1379,51 @@ pub fn local_bundle_adjustment(
         // }
     }
 
+    trace!("Local BA: {} ms", now.elapsed().as_millis());
     // Recover optimized data
-    //Keyframes
-    for (kf_id, vertex_id) in all_kf_vertices {
-        let pose = optimizer.recover_optimized_frame_pose(vertex_id);
-        map_edits.push(MapWriteMsg::edit_keyframe_pose(kf_id, pose.into()));
-    }
-
-    //Points
-    for (mp_id, vertex_id) in all_mp_vertices {
-        let pose = optimizer.recover_optimized_mappoint_pose(vertex_id);
-        map_edits.push(MapWriteMsg::edit_mappoint_pose(mp_id, pose.into()));
-
-    }
-
-    return map_edits;
+    BundleAdjustmentResult::new(optimizer, kf_vertex_ids, mp_vertex_ids, mps_to_discard, vec![])
 }
 
 
-pub struct BAResult {
-    pub optimized_mp_poses: HashMap::<Id, DVPose>,
-    pub optimized_kf_poses: HashMap::<Id, DVPose>,
+#[derive(Debug)]
+pub struct BundleAdjustmentResult {
+    pub new_mp_poses: HashMap::<Id, DVTranslation>,
+    pub new_kf_poses: HashMap::<Id, DVPose>,
+    pub mps_to_discard: Vec<i32>,
+    pub kfs_to_discard: Vec<i32>,
+}
+impl BundleAdjustmentResult {
+    pub fn new(
+        optimizer: UniquePtr<g2o::ffi::BridgeSparseOptimizer>, kf_vertex_ids: HashMap<i32, i32>, mp_vertex_ids: HashMap<i32, i32>,
+        mps_to_discard: Vec<i32>, kfs_to_discard: Vec<i32>
+    ) -> Self {
+        // Recover optimized data
+        // Keyframes
+        let mut new_kf_poses = HashMap::<Id, DVPose>::new();
+        for (kf_id, vertex_id) in kf_vertex_ids {
+            let pose = optimizer.recover_optimized_frame_pose(vertex_id);
+            new_kf_poses.insert(kf_id, pose.into());
+        }
+
+        //Points
+        let mut new_mp_poses = HashMap::<Id, DVTranslation>::new();
+        for (mp_id, vertex_id) in mp_vertex_ids {
+            let position = optimizer.recover_optimized_mappoint_pose(vertex_id);
+            let translation = nalgebra::Translation3::new(
+                position.translation[0] as f64,
+                position.translation[1] as f64,
+                position.translation[2] as f64
+            );
+
+            new_mp_poses.insert(mp_id, DVTranslation::new(translation.vector));
+        }
+
+        BundleAdjustmentResult { 
+            new_mp_poses,
+            new_kf_poses,
+            mps_to_discard,
+            kfs_to_discard
+        }
+
+    }
 }

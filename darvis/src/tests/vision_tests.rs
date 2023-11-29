@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod vision_tests {
-    use dvcore::{matrix::{DVVector3, DVMatrix, DVVectorOfKeyPoint}, config::{GLOBAL_PARAMS, self}, sensor::{Sensor, FrameSensor, ImuSensor}};
+    use dvcore::{matrix::{DVVector3, DVMatrix, DVVectorOfKeyPoint}, config::{SETTINGS, self}, sensor::{Sensor, FrameSensor, ImuSensor}};
     use dvos3binding::ffi::WrapBindCVMat;
     use opencv::{imgcodecs, prelude::{MatTraitConst, KeyPointTraitConst}, core::{CV_8U, CV_8UC1}};
 
