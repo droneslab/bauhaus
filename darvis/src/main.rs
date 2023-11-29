@@ -1,6 +1,7 @@
 #![feature(map_many_mut)]
+#![feature(hash_extract_if)]
 extern crate flame;
-use std::{fs::OpenOptions, path::Path, env, time::SystemTime};
+use std::{fs::{OpenOptions, File}, path::Path, env, time::{self, Duration}, io::{self, BufRead}, thread};
 use fern::colors::{ColoredLevelConfig, Color};
 use glob::glob;
 use log::info;
@@ -8,23 +9,18 @@ use spin_sleep::LoopHelper;
 #[macro_use]
 extern crate lazy_static;
 
-use dvcore::{*, config::*, base::ActorChannels};
-use crate::{actors::messages::{ShutdownMsg, ImagePathMsg}, registered_actors::TRACKING_FRONTEND};
+use dvcore::{*, config::*, actor::ActorChannels};
+use crate::{actors::{messages::{ShutdownMsg}, tracking_frontend::TrackingFrontendMsg}, registered_actors::TRACKING_FRONTEND};
 use crate::dvmap::{bow::VOCABULARY, map::Id};
 
 mod actors;
 mod registered_actors;
-mod initialize_system;
+mod spawn;
 mod dvmap;
 mod modules;
 mod tests;
 
-pub static RESULTS_FOLDER: &str = "results";
-
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    setup_logger()?;
-
-    // Process arguments
     let args: Vec<String> = env::args().collect();
     if args.len() < 3 {
         panic!("
@@ -36,49 +32,40 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config_file = args[2].to_owned();
 
     // Load config, including custom settings and actor information
-    let (actor_info, _module_info) = load_config(&config_file).expect("Could not load config");
+    let (actor_info, _module_info, log_level) = load_config(&config_file).expect("Could not load config");
 
-    // Actor that launches the pipeline
-    let first_actor_name = TRACKING_FRONTEND.to_string();
+    setup_logger(&log_level)?;
 
     // Launch actor system
-    let (shutdown_flag, first_actor_tx, shutdown_tx) = initialize_system::initialize_actors(actor_info.clone(), first_actor_name)?;
+    let first_actor_name = TRACKING_FRONTEND.to_string(); // Actor that launches the pipeline
+    let (shutdown_flag, first_actor_tx, shutdown_tx) = spawn::launch_actor_system(actor_info, first_actor_name)?;
 
     // Load vocabulary
     VOCABULARY.access();
 
-    info!("System ready to receive messages");
+    info!("System ready to receive messages!");
 
-    // Run loop at fps rate
-    let target_fps = GLOBAL_PARAMS.get::<f64>(SYSTEM_SETTINGS, "fps");
-    let mut loop_helper = LoopHelper::builder()
-        .report_interval_s(0.5)
-        .build_with_target_rate(target_fps);
-
-    let now = SystemTime::now();
-    let mut current_timestamp = 0.0; // TODO (MVP): For evaluation this needs to be a real timestamp from the associated timestamp file.
+    let mut loop_sleep = LoopSleep::new(&img_dir);
+    let timestamps = read_timestamps_file(&img_dir);
+    
     // Process images
-    for path in &generate_image_paths(img_dir) {
+    // let now = SystemTime::now();
+    let mut i = 0;
+    for path in &generate_image_paths(img_dir + "/image_0/") {
         if *shutdown_flag.lock().unwrap() { break; }
-        let _delta = loop_helper.loop_start(); 
+        loop_sleep.start();
 
-        info!("Read image {}", path.split("/").last().unwrap().split(".").nth(0).unwrap());
-
+        // For evaluation, use timestamps file to run loop and send timestamp from file instead of real time
         first_actor_tx.send(Box::new(
-            ImagePathMsg{
-                image_path: path.clone(),
-                timestamp: now.elapsed().unwrap().as_secs()
+            TrackingFrontendMsg::ImagePathMsg{
+                image_path: path.to_string(),
+                timestamp: timestamps[i],
+                frame_id: i as u32
             }
         ))?;
 
-        // ORBSLAM3 frame loader scales and resizes image, do we need this?
-        // After looking into it for a while, I think not. They have the code to scale,
-        // but then never set the variable mImageScale to anything but 1.0
-        // https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/Examples/RGB-D/rgbd_tum.cc#L89
-
-        current_timestamp += target_fps;
-
-        loop_helper.loop_sleep(); 
+        i += 1;
+        loop_sleep.sleep();
     }
     shutdown_tx.send(Box::new(ShutdownMsg{}))?;
 
@@ -102,20 +89,97 @@ fn generate_image_paths(img_dir: String) -> Vec<String> {
     img_paths
 }
 
+fn read_timestamps_file(img_dir: &String) -> Vec<f64> {
+    let file = File::open(img_dir.clone() + "/times.txt")
+        .expect("Could not open timestamps file");
+    io::BufReader::new(file).lines()
+        .map(|x| x.unwrap().parse::<f64>().unwrap())
+        .collect::<Vec<f64>>()
+}
 
-fn setup_logger() -> Result<(), fern::InitError> {
+enum LoopType {
+    Fps(LoopHelper),
+    Timestamps(Vec<f64>, i32, time::Instant),
+}
+
+struct LoopSleep {
+    loop_type: LoopType
+}
+impl LoopSleep {
+    pub fn new(img_dir: &String) -> Self {
+        let loop_type = match SETTINGS.get::<bool>(SYSTEM, "use_timestamps_file") {
+            true => {
+                // Use dataset timestamps file to run loop
+                let timestamps = read_timestamps_file(img_dir);
+                LoopType::Timestamps(timestamps, -1, time::Instant::now())
+            },
+            false => {
+                // Run loop at fps rate
+                LoopType::Fps(
+                    LoopHelper::builder()
+                        .build_with_target_rate(SETTINGS.get::<f64>(SYSTEM, "fps"))
+                )
+            }
+        };
+        LoopSleep { loop_type }
+    }
+
+    pub fn start(&mut self) {
+        match &mut self.loop_type {
+            LoopType::Timestamps(_timestamps, ref mut current_index, ref mut now) => {
+                todo!("Compile error with using timestamps file");
+                // now = &mut time::Instant::now();
+                // current_index = &mut (*current_index + 1);
+            },
+            LoopType::Fps(ref mut loop_helper) => {
+                let _delta = loop_helper.loop_start(); 
+            },
+        }
+    }
+
+    pub fn sleep(&mut self) {
+        match &mut self.loop_type {
+            LoopType::Timestamps(timestamps, current_index, now) => {
+                if *current_index == (timestamps.len() - 1) as i32 {
+                    return;
+                }
+                let next_timestamp = timestamps[(*current_index + 1) as usize];
+                // println!("timestamps {:?}", timestamps);
+                // println!("next timestamp {}", next_timestamp);
+                // println!("now {:?}", now);
+                thread::sleep(Duration::from_secs_f64(next_timestamp - now.elapsed().as_secs_f64()));
+            },
+            LoopType::Fps(ref mut loop_helper) => {
+                loop_helper.loop_sleep(); 
+            }
+        }
+    }
+}
+
+
+fn setup_logger(level: &str) -> Result<(), fern::InitError> {
     let colors = ColoredLevelConfig::new()
         .info(Color::Green)
         .warn(Color::Yellow)
-        .error(Color::Red);
+        .error(Color::Red)
+        .trace(Color::Magenta);
 
+    let results_folder = SETTINGS.get::<String>(SYSTEM, "results_folder");
+
+    let log_level = match level {
+        "trace" => log::LevelFilter::Trace,
+        "debug" => log::LevelFilter::Debug,
+        "info" => log::LevelFilter::Info,
+        "warn" => log::LevelFilter::Warn,
+        "error" => log::LevelFilter::Error,
+        _ => log::LevelFilter::Trace,
+    };
     // Two loggers in chain - one for terminal output (colored, easier to read)
     // and another for file output (not colored, info on each line deliminated by |
     // for easier parsing in python scripts)
     let start_time = chrono::Local::now();
     fern::Dispatch::new()
-    .level(log::LevelFilter::Debug)
-    .level_for("axiom", log::LevelFilter::Warn)
+    .level(log_level)
     .chain(
     fern::Dispatch::new()
             .format(move |out, message, record| {
@@ -146,7 +210,7 @@ fn setup_logger() -> Result<(), fern::InitError> {
             .chain(OpenOptions::new()
                 .write(true)
                 .create(true)
-                .open(Path::new(RESULTS_FOLDER).join("output.log"))?
+                .open(Path::new(&results_folder).join("output.log"))?
             )
     )
     .apply()?;

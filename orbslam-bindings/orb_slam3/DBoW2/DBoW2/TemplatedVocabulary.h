@@ -1178,8 +1178,8 @@ void TemplatedVocabulary<TDescriptor,F>::transform(
     unsigned int i_feature = 0;
     for(fit = features.begin(); fit < features.end(); ++fit, ++i_feature)
     {
-      WordId id;
-      NodeId nid;
+      WordId id = 0;
+      NodeId nid = 0;
       WordValue w;
       // w is idf if IDF, or 1 if BINARY
       

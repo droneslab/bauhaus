@@ -1,6 +1,6 @@
 // Testing: Fully tested, works correctly.
 
-use dvcore::config::{GLOBAL_PARAMS, SYSTEM_SETTINGS};
+use dvcore::config::{SETTINGS, SYSTEM};
 use dvcore::matrix::DVVectorOfPoint2f;
 use dvcore::sensor::{Sensor, FrameSensor, ImuSensor};
 use log::debug;
@@ -15,7 +15,7 @@ use super::orbmatcher;
 
 #[derive(Debug, Clone, Default)]
 pub struct Initialization {
-    // Initialization (Monocular)
+    // Monocular
     pub mp_matches: Vec<i32>,// ini_matches .. mvIniMatches;
     pub prev_matched: DVVectorOfPoint2f,// std::vector<cv::Point2f> mvbPrevMatched;
     pub p3d: DVVectorOfPoint3f,// std::vector<cv::Point3f> mvIniP3D;
@@ -28,7 +28,7 @@ pub struct Initialization {
 
 impl Initialization {
     pub fn new() -> Self {
-        let sensor: Sensor = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "sensor");
+        let sensor: Sensor = SETTINGS.get(SYSTEM, "sensor");
 
         Self {
             mp_matches: Vec::new(),
@@ -90,7 +90,7 @@ impl Initialization {
             self.ready_to_initialize = true;
             return Ok(false);
         } else {
-            if current_frame.features.num_keypoints <=100 || matches!(self.sensor.imu(), ImuSensor::Some) && last_frame.timestamp - initial_frame.timestamp > 1 {
+            if current_frame.features.num_keypoints <=100 || matches!(self.sensor.imu(), ImuSensor::Some) && last_frame.timestamp - initial_frame.timestamp > 1.0 {
                 self.ready_to_initialize = false;
                 return Ok(false);
             }

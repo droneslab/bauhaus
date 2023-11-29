@@ -1,9 +1,10 @@
 use std::{sync::{Arc, mpsc, Mutex}, thread, collections::HashMap};
+use crossbeam_channel::{bounded, unbounded};
 
 use dvcore::{
     config::ActorConf,
-    base::{DVSender, DVReceiver, ActorChannels, DVMessageBox, Actor},
-    lockwrap::ReadWriteWrapper
+    actor::{Sender, Receiver, ActorChannels, MessageBox, Actor},
+    maplock::ReadWriteMap
 };
 use log::{info, warn};
 
@@ -17,49 +18,36 @@ use crate::{
 // Initialize actor system using config file.
 // Returns mutex to shutdown flag and transmitters for first actor and shutdown actor.
 // You probably don't want to change this code.
-pub fn initialize_actors(config: Vec::<ActorConf>, first_actor_name: String) 
-    -> Result<(Arc<std::sync::Mutex<bool>>, DVSender, DVSender), Box<dyn std::error::Error>> 
+pub fn launch_actor_system(config: Vec::<ActorConf>, first_actor_name: String) 
+    -> Result<(Arc<std::sync::Mutex<bool>>, Sender, Sender), Box<dyn std::error::Error>> 
 {
     // * SET UP CHANNELS *//
     // Create transmitters and receivers for user-defined actors
     let mut transmitters = HashMap::new();
     let mut receivers = Vec::new();
     for actor_conf in &config {
-        let (tx, rx) = mpsc::channel::<DVMessageBox>();
+        let (tx, rx) = unbounded(); // Note: bounded channels block on send if channel is full, so use unbounded and handle drops in receive()
         transmitters.insert(actor_conf.name.clone(), tx);
-        receivers.push((actor_conf.name.clone(), rx));
+        receivers.push((actor_conf.name.clone(), actor_conf.receiver_bound.clone(), rx));
     }
 
     // Create transmitters/receivers for darvis system actors
     // Don't add receivers to the receivers vec because they need to be spawned separately.
     // User-defined actors still need the transmitters to these actors.
-    let (map_tx, map_rx) = mpsc::channel::<DVMessageBox>();
+    let (map_tx, map_rx) = unbounded();
     transmitters.insert(MAP_ACTOR.to_string(), map_tx);
-    let (shutdown_tx, shutdown_rx) = mpsc::channel::<DVMessageBox>();
+    let (shutdown_tx, shutdown_rx) = unbounded();
     transmitters.insert(SHUTDOWN_ACTOR.to_string(), shutdown_tx);
-    // let vis_rx = match GLOBAL_PARAMS.get::<bool>(SYSTEM_SETTINGS, "show_visualizer") {
-    //     true => {
-    //         let (vis_tx, vis_rx) = mpsc::channel::<DVMessageBox>();
-    //         transmitters.insert(VISUALIZER.to_string(), vis_tx);
-    //         Some(vis_rx)
-    //     },
-    //     false => None
-    // };
 
     // * SPAWN USER-DEFINED ACTORS *//
     // Create map
-    let writeable_map = ReadWriteWrapper::new(Map::new());
+    let writeable_map = ReadWriteMap::new(Map::new());
     // Spawn actors
-    for (actor_name, receiver) in receivers {
-        spawn_actor(actor_name, &transmitters, receiver, Some(&writeable_map));
+    for (actor_name, receiver_bound, receiver) in receivers {
+        spawn_actor(actor_name, &transmitters, receiver, receiver_bound, Some(&writeable_map));
     }
 
     // * SPAWN DARVIS SYSTEM ACTORS *//
-    // Visualizer
-    // if GLOBAL_PARAMS.get::<bool>(SYSTEM_SETTINGS, "show_visualizer") {
-    //     spawn_actor(VISUALIZER.to_string(), &transmitters, vis_rx.unwrap(), Some(&writeable_map));
-    // }
-
     // Map actor
     // After this point, you cannot get a read-only clone of the map!
     // So make sure to spawn all the other actors that need the map before this.
@@ -76,15 +64,15 @@ pub fn initialize_actors(config: Vec::<ActorConf>, first_actor_name: String)
 
 
 fn spawn_actor(
-    actor_name: String, transmitters: &HashMap<String, DVSender>, receiver: DVReceiver,
-    writeable_map: Option<&ReadWriteWrapper<Map>>
+    actor_name: String, transmitters: &HashMap<String, Sender>, receiver: Receiver,
+    receiver_bound: Option<usize>, writeable_map: Option<&ReadWriteMap<Map>>
 ) {
-    info!("Spawning actor;{}", &actor_name);
+    info!("Spawning actor {}", &actor_name);
 
     // Note: read_only() is important here, otherwise all actors can
     // access the write lock of the map
     let map_clone = match writeable_map {
-        Some(map) => Some(map.read_only()),
+        Some(map) => Some(map.create_read_only()),
         None => None
     };
 
@@ -94,7 +82,7 @@ fn spawn_actor(
             txs.insert(other_actor_name.clone(), other_actor_transmitter.clone());
         }
     }
-    let actor_channels = ActorChannels {receiver, actors: txs};
+    let actor_channels = ActorChannels {receiver, receiver_bound, actors: txs, my_name: actor_name.clone()};
 
     thread::spawn(move || { 
         let mut actor = get_actor(actor_name, actor_channels, map_clone);
@@ -102,15 +90,15 @@ fn spawn_actor(
     } );
 }
 
-fn spawn_map_actor(transmitters: &HashMap<String, DVSender>, receiver: DVReceiver, map: ReadWriteWrapper<Map> ) {
-    info!("Spawning actor;{}", MAP_ACTOR);
+fn spawn_map_actor(transmitters: &HashMap<String, Sender>, receiver: Receiver, map: ReadWriteMap<Map> ) {
+    info!("Spawning actor {}", MAP_ACTOR);
     let mut txs = HashMap::new();
     for (other_actor_name, other_actor_transmitter) in transmitters {
         if *other_actor_name != *MAP_ACTOR.to_string() {
             txs.insert(other_actor_name.clone(), other_actor_transmitter.clone());
         }
     }
-    let actor_channels = ActorChannels {receiver, actors: txs};
+    let actor_channels = ActorChannels {receiver, receiver_bound: None, actors: txs, my_name: "Map Actor".to_string()};
 
     thread::spawn(move || { 
         let mut map_actor = Box::new(crate::actors::map_actor::MapActor::new(actor_channels, map));
@@ -118,11 +106,11 @@ fn spawn_map_actor(transmitters: &HashMap<String, DVSender>, receiver: DVReceive
     } );
 }
 
-fn spawn_shutdown_actor(transmitters: &HashMap<String, DVSender>, receiver: DVReceiver) -> Arc<Mutex<bool>> {
+fn spawn_shutdown_actor(transmitters: &HashMap<String, Sender>, receiver: Receiver) -> Arc<Mutex<bool>> {
     let shutdown_flag = Arc::new(Mutex::new(false));
     let flag_clone = shutdown_flag.clone();
 
-    spawn_actor(SHUTDOWN_ACTOR.to_string(), transmitters, receiver, None);
+    spawn_actor(SHUTDOWN_ACTOR.to_string(), transmitters, receiver, None, None);
 
     let shutdown_transmitter = transmitters.get(SHUTDOWN_ACTOR).unwrap().clone();
     ctrlc::set_handler(move || {

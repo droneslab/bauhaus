@@ -17,14 +17,12 @@
 use std::{fmt::Debug, convert::TryInto, ops::Index};
 use std::ops::Deref;
 use opencv::platform_types::size_t;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Serialize};
 
-use na::{DMatrix, ComplexField};
 use opencv::{
     prelude::*, core::*,
-    types::{VectorOfKeyPoint, VectorOfi32, VectorOfPoint2f, VectorOfPoint3f},
 };
-extern crate nalgebra as na;
+// extern crate nalgebra as na;
 
 //////////////////////////* OPENCV TYPES //////////////////////////
 
@@ -97,7 +95,7 @@ unsafe impl Sync for DVVectorOfKeyPoint {}
 impl DVVectorOfKeyPoint {
     // Constructors
     pub fn empty() -> Self {
-        Self ( VectorOfKeyPoint::new() )
+        Self ( opencv::types::VectorOfKeyPoint::new() )
     }
     pub fn new(vec: opencv::types::VectorOfKeyPoint) -> Self {
         Self ( vec )
@@ -108,7 +106,7 @@ impl DVVectorOfKeyPoint {
 
     pub fn len(&self) -> i32 { self.0.len() as i32 }
     pub fn get(&self, index: usize) -> Result<KeyPoint, opencv::Error> { self.0.get(index) }
-    pub fn convert(&self, vec_of_points: &mut VectorOfPoint2f, index: &VectorOfi32) -> Result<(), opencv::Error> {
+    pub fn convert(&self, vec_of_points: &mut opencv::types::VectorOfPoint2f, index: &opencv::types::VectorOfi32) -> Result<(), opencv::Error> {
         opencv::core::KeyPoint::convert(&self.0, vec_of_points, index)
     }
 
@@ -165,9 +163,9 @@ unsafe impl Sync for DVVectorOfPoint3f {}
 impl DVVectorOfPoint3f {
     // Constructors
     pub fn empty() -> Self {
-        Self ( VectorOfPoint3f::new() )
+        Self ( opencv::types::VectorOfPoint3f::new() )
     }
-    pub fn new(vec: VectorOfPoint3f) -> Self {
+    pub fn new(vec: opencv::types::VectorOfPoint3f) -> Self {
         Self ( vec ) 
     }
     pub fn clone(&self) -> DVVectorOfPoint3f {
@@ -205,9 +203,9 @@ pub struct DVVectorOfPoint2f ( opencv::types::VectorOfPoint2f );
 unsafe impl Sync for DVVectorOfPoint2f {}
 impl DVVectorOfPoint2f {
     pub fn empty() -> Self {
-        Self ( VectorOfPoint2f::new() )
+        Self ( opencv::types::VectorOfPoint2f::new() )
     }
-    pub fn new(vec: VectorOfPoint2f) -> Self {
+    pub fn new(vec: opencv::types::VectorOfPoint2f) -> Self {
         Self ( vec ) 
     }
     pub fn clone(&self) -> Self {
@@ -294,23 +292,23 @@ impl From<& DVVectorOfi32> for dvos3binding::ffi::WrapBindCVRawPtr {
 //////////////////////////* Nalgebra TYPES //////////////////////////
 
 #[derive(Clone, Copy, Debug)]
-pub struct DVVector3<T> ( na::Vector3<T> ); // 3 dimensional column vector
+pub struct DVVector3<T> ( nalgebra::Vector3<T> ); // 3 dimensional column vector
 
-impl<T: Debug + Clone + na::Scalar + num_traits::identities::Zero + ComplexField> DVVector3<T> {
-    pub fn new(vec: na::Vector3<T>) -> Self {
+impl<T: Debug + Clone + nalgebra::Scalar + num_traits::identities::Zero + nalgebra::ComplexField> DVVector3<T> {
+    pub fn new(vec: nalgebra::Vector3<T>) -> Self {
         DVVector3 ( vec.clone() )
     }
     pub fn new_with(x: T, y: T, z: T) -> Self {
-        DVVector3 ( na::Vector3::<T>::new(x,y,z) )
+        DVVector3 ( nalgebra::Vector3::<T>::new(x,y,z) )
     }
-    pub fn zeros<T2: Debug + Clone + na::Scalar + num_traits::identities::Zero>() -> Self {
-        DVVector3 ( na::Vector3::<T>::zeros() )
+    pub fn zeros<T2: Debug + Clone + nalgebra::Scalar + num_traits::identities::Zero>() -> Self {
+        DVVector3 ( nalgebra::Vector3::<T>::zeros() )
     }
     pub fn clone(&self) -> Self {
         DVVector3 ( self.0.clone() )
     }
 
-    pub fn is_zero(&self) -> bool { self.0 == na::Vector3::<T>::zeros() }
+    pub fn is_zero(&self) -> bool { self.0 == nalgebra::Vector3::<T>::zeros() }
 
     // Note: I have no idea why the compiler hates these
     // Getting around it rn by calling *struct.norm() and *struct.div_assign()
@@ -318,27 +316,30 @@ impl<T: Debug + Clone + na::Scalar + num_traits::identities::Zero + ComplexField
     // pub fn div_assign(&mut self, divisor: T) { self.vec.div_assign(divisor) }
 }
 impl<T> Deref for DVVector3<T> {
-    type Target = na::Vector3<T>;
+    type Target = nalgebra::Vector3<T>;
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 // From implementations ... not sure why I need to have a separate 
 // from for DVVector3 and &DVVector3 though.
-impl<T: Debug + Clone + Copy + na::Scalar + num_traits::identities::Zero + ComplexField> From<DVVector3<T>> for [T; 3] {
+impl<T: Debug + Clone + Copy + nalgebra::Scalar + num_traits::identities::Zero + nalgebra::ComplexField> From<DVVector3<T>> for [T; 3] {
     fn from(vec: DVVector3<T>) -> [T; 3] { [vec[0], vec[1], vec[2]] }
 }
-impl<T: Debug + Clone + Copy + na::Scalar + num_traits::identities::Zero + ComplexField> From<&DVVector3<T>> for [T; 3] {
+impl<T: Debug + Clone + Copy + nalgebra::Scalar + num_traits::identities::Zero + nalgebra::ComplexField> From<&DVVector3<T>> for [T; 3] {
     fn from(vec: &DVVector3<T>) -> [T; 3] { [vec[0], vec[1], vec[2]] }
 }
-impl<T: Debug + Clone + na::Scalar + num_traits::identities::Zero> From<DVVector3<T>> for na::Vector3<T> {
-    fn from(vec: DVVector3<T>) -> na::Vector3<T> { vec.0.clone() }
+impl<T: Debug + Clone + nalgebra::Scalar + num_traits::identities::Zero> From<DVVector3<T>> for nalgebra::Vector3<T> {
+    fn from(vec: DVVector3<T>) -> nalgebra::Vector3<T> { vec.0.clone() }
 }
-impl<T: Debug + Clone + na::Scalar + num_traits::identities::Zero> From<&DVVector3<T>> for na::Vector3<T> {
-    fn from(vec: &DVVector3<T>) -> na::Vector3<T> { vec.0.clone() }
+impl<T: Debug + Clone + nalgebra::Scalar + num_traits::identities::Zero> From<&DVVector3<T>> for nalgebra::Vector3<T> {
+    fn from(vec: &DVVector3<T>) -> nalgebra::Vector3<T> { vec.0.clone() }
 }
 impl From<DVVector3<f32>> for [f64; 3] {
     fn from(vec: DVVector3<f32>) -> [f64; 3] { [vec[0] as f64, vec[1] as f64, vec[2] as f64] }
+}
+impl From<nalgebra::Vector3<f64>> for DVVector3<f64> {
+    fn from(vec: nalgebra::Vector3<f64>) -> DVVector3<f64> { DVVector3::new(vec) }
 }
 // So we can do vector3[i] without having to call a getter or setter function
 impl<T> Index<usize> for DVVector3<T> {
@@ -347,39 +348,39 @@ impl<T> Index<usize> for DVVector3<T> {
 }
 
 #[derive(Clone, Debug)]
-pub struct DVMatrix3<T> ( na::Matrix3<T> ); // 3x3 matrix
+pub struct DVMatrix3<T> ( nalgebra::Matrix3<T> ); // 3x3 matrix
 
-impl<T: Debug + Clone + na::Scalar + num_traits::identities::Zero + num_traits::One + ComplexField> DVMatrix3<T> {
-    pub fn new(vec: na::Matrix3<T>) -> Self {
+impl<T: Debug + Clone + nalgebra::Scalar + num_traits::identities::Zero + num_traits::One + nalgebra::ComplexField> DVMatrix3<T> {
+    pub fn new(vec: nalgebra::Matrix3<T>) -> Self {
         DVMatrix3 ( vec.clone() )
     }
-    pub fn zeros<T2: Debug + Clone + na::Scalar + num_traits::identities::Zero>() -> Self {
-        DVMatrix3::new(na::Matrix3::<T>::zeros())
+    pub fn zeros<T2: Debug + Clone + nalgebra::Scalar + num_traits::identities::Zero>() -> Self {
+        DVMatrix3::new(nalgebra::Matrix3::<T>::zeros())
     }
     pub fn identity() -> Self { 
-        DVMatrix3::new(na::Matrix3::<T>::identity())
+        DVMatrix3::new(nalgebra::Matrix3::<T>::identity())
     }
 
-    pub fn is_zero(&self) -> bool { self.0 == na::Matrix3::<T>::zeros() }
+    pub fn is_zero(&self) -> bool { self.0 == nalgebra::Matrix3::<T>::zeros() }
 
-    pub fn vec(&self) -> &na::Matrix3<T> { &self.0 }
-    pub fn transpose(&self) -> na::Matrix3<T> { self.0.transpose() }
+    pub fn vec(&self) -> &nalgebra::Matrix3<T> { &self.0 }
+    pub fn transpose(&self) -> nalgebra::Matrix3<T> { self.0.transpose() }
     pub fn determinant(&self) -> T { self.0.determinant() }
 
     pub fn neg_mut(&mut self) { self.0.neg_mut() }
 }
 impl<T> Deref for DVMatrix3<T> {
-    type Target = na::Matrix3<T>;
+    type Target = nalgebra::Matrix3<T>;
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 // From implementations...
-impl<T: Clone> From<DVMatrix3<T>> for na::Matrix3<T> {
-    fn from(vec: DVMatrix3<T>) -> na::Matrix3<T> { vec.0.clone() }
+impl<T: Clone> From<DVMatrix3<T>> for nalgebra::Matrix3<T> {
+    fn from(vec: DVMatrix3<T>) -> nalgebra::Matrix3<T> { vec.0.clone() }
 }
-impl<T: Clone> From<&DVMatrix3<T>> for na::Matrix3<T> {
-    fn from(vec: &DVMatrix3<T>) -> na::Matrix3<T> { vec.0.clone() }
+impl<T: Clone> From<&DVMatrix3<T>> for nalgebra::Matrix3<T> {
+    fn from(vec: &DVMatrix3<T>) -> nalgebra::Matrix3<T> { vec.0.clone() }
 }
 // Two index implementations, one for matrix3[(x,y)] and one for [(x)]
 impl<T> Index<(usize, usize)> for DVMatrix3<T> {
@@ -399,11 +400,11 @@ impl<T> Index<usize> for DVMatrix3<T> {
 
 
 #[derive(Clone, Debug)]
-pub struct DVMatrixGrayscale ( na::DMatrix<u8> );
+pub struct DVMatrixGrayscale ( nalgebra::DMatrix<u8> );
 
 impl DVMatrixGrayscale {
     // Constructors
-    pub fn new(vec: na::DMatrix<u8>) -> Self {
+    pub fn new(vec: nalgebra::DMatrix<u8>) -> Self {
         DVMatrixGrayscale ( vec.clone() )
     }
 }
@@ -427,7 +428,7 @@ impl From<&DVMatrixGrayscale> for opencv::core::Mat {
 }
 impl From<opencv::core::Mat> for DVMatrixGrayscale {
     fn from(mat: opencv::core::Mat) -> DVMatrixGrayscale {
-        let mut dmat = DMatrix::from_element(mat.rows().try_into().unwrap(), mat.cols().try_into().unwrap(), 0u8);
+        let mut dmat = nalgebra::DMatrix::from_element(mat.rows().try_into().unwrap(), mat.cols().try_into().unwrap(), 0u8);
         for i in 0..mat.rows() {
             for j in 0..mat.cols() {
                 let val = *mat.at_2d::<u8>(i, j).unwrap(); // Grayscale 1 channel uint8

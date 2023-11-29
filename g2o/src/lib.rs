@@ -13,7 +13,9 @@ pub mod ffi {
         translation: [f64; 3], // in C++: array<double, 3>,
         rotation: [f64; 4] // in C++: array<double, 4> 
     }
-
+    struct Position {
+        translation: [f64; 3],
+    }
     // Note: Workaround to have a vec of shared ptrs 
     // https://github.com/dtolnay/cxx/issues/741
     // Not thread safe!! Don't make this shared.
@@ -72,18 +74,18 @@ pub mod ffi {
             keypoint_pt_y: f32,
             invSigma2: f32,
             mp_world_position: [f64; 3],
-            mappoint_id: i32
+            mappoint_id: i32,
+            huber_delta: f32
         );
         fn add_edge_monocular_binary(
             self: Pin<&mut BridgeSparseOptimizer>,
             robust_kernel: bool,
             vertex_id_1: i32,
             vertex_id_2: i32,
-            keypoint_octave: i32,
             keypoint_pt_x: f32,
             keypoint_pt_y: f32,
             invSigma2: f32,
-            huber_delta: i32
+            huber_delta: f32
         );
         // fn set_edge_worldpos(
         //     self: &BridgeSparseOptimizer,
@@ -105,6 +107,7 @@ pub mod ffi {
         fn optimize(
             self: Pin<&mut BridgeSparseOptimizer>,
             iterations: i32,
+            online: bool,
         );
         fn recover_optimized_frame_pose(
             self: &BridgeSparseOptimizer,
@@ -113,7 +116,7 @@ pub mod ffi {
         fn recover_optimized_mappoint_pose(
             self: &BridgeSparseOptimizer,
             vertex: i32,
-        ) -> Pose;
+        ) -> Position;
 
         // optimization within edge
         // Note: BridgeSparseOptimizer has vector of RustEdge types, call get_mut_edges to access

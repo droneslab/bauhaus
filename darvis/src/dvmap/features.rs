@@ -3,7 +3,7 @@
 // "all feature data" into a struct that has different variables depending
 // on the type of sensor.
 
-// TODO (eventually) ... I don't think it makes the most sense to name this "features" or even to have it separate from a keyframe
+// TODO (design) ... I don't think it makes the most sense to name this "features" or even to have it separate from a keyframe
 // But at the same time it's nice to hide a lot of this logic away from the keyframe. It would be good to
 // re-factor this eventually but it isn't high priority.
 
@@ -57,7 +57,7 @@ impl Features {
     pub fn new(
         keypoints: DVVectorOfKeyPoint,
         descriptors: DVMatrix,
-        im_width: i32, im_height: i32,
+        im_width: u32, im_height: u32,
         sensor: Sensor
     ) -> Result<Features, Box<dyn std::error::Error>> {
         let image_bounds = ImageBounds::new(im_width, im_height, &CAMERA_MODULE.dist_coef);
@@ -292,7 +292,7 @@ pub struct ImageBounds {
 }
 
 impl ImageBounds {
-    pub fn new(im_width: i32, im_height: i32, dist_coef: &Option<Vec<f32>>) -> ImageBounds {
+    pub fn new(im_width: u32, im_height: u32, dist_coef: &Option<Vec<f32>>) -> ImageBounds {
         //ComputeImageBounds
         let min_x = 0.0;
         let max_x;

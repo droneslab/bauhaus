@@ -1,4 +1,4 @@
-use dvcore::{lockwrap::ReadOnlyWrapper, base::{ActorChannels, Actor}};
+use dvcore::{maplock::ReadOnlyMap, actor::{ActorChannels, Actor}};
 use crate::{dvmap::{map::Map}, };
 
 // USER-DEFINED ACTORS: add a string to name your actor here
@@ -19,7 +19,7 @@ pub static MAP_ACTOR: &str = "MAP_ACTOR";
 
 
 pub fn get_actor(
-    actor_name: String, actor_channels: ActorChannels, map: Option<ReadOnlyWrapper<Map>>
+    actor_name: String, actor_channels: ActorChannels, map: Option<ReadOnlyMap<Map>>
 ) -> Box<dyn Actor> {
     match actor_name.as_ref() {
         str if str == TRACKING_FRONTEND.to_string() => {
@@ -41,7 +41,7 @@ pub fn get_actor(
             return Box::new(crate::actors::shutdown::ShutdownActor::new(actor_channels))
         },
         _ => {
-            return Box::new(dvcore::base::DarvisNone::new(actor_name.clone()))
+            return Box::new(dvcore::actor::NullActor::new(actor_name.clone()))
         },
     };
 }

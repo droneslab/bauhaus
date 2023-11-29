@@ -222,12 +222,8 @@ namespace g2o {
 
       static SE3Quat exp(const Vector6d & update)
       {
-        Vector3d omega;
-        for (int i=0; i<3; i++)
-          omega[i]=update[i];
-        Vector3d upsilon;
-        for (int i=0; i<3; i++)
-          upsilon[i]=update[i+3];
+        Vector3d omega(update[0], update[1], update[2]);
+        Vector3d upsilon(update[3], update[4], update[5]);
 
         double theta = omega.norm();
         Matrix3d Omega = skew(omega);

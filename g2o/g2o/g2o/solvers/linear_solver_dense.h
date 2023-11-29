@@ -50,6 +50,7 @@ namespace g2o {
         LinearSolver<MatrixType>(),
         _reset(true)
       {
+        _cholesky = Eigen::LDLT<Eigen::MatrixXd>();
       }
 
       virtual ~LinearSolverDense()

@@ -1,16 +1,16 @@
 use derivative::Derivative;
-use dvcore::config::{GLOBAL_PARAMS, SYSTEM_SETTINGS};
-use crate::dvmap::{map::Id, keyframe::{Frame, InitialFrame}};
+use dvcore::config::{SETTINGS, SYSTEM};
+use crate::dvmap::{map::Id, keyframe::{Frame, InitialFrame}, misc::Timestamp};
 
 #[derive(Debug, Clone, Derivative)]
 #[derivative(Default)]
 pub struct Relocalization {
     pub last_reloc_frame_id: Id,
-    pub timestamp_lost: Option<u64>,
+    pub timestamp_lost: Option<Timestamp>,
 }
 
 impl Relocalization {
-    pub fn sec_since_lost(&self, current_frame: &Frame<InitialFrame>) -> u64 {
+    pub fn sec_since_lost(&self, current_frame: &Frame<InitialFrame>) -> Timestamp {
         current_frame.timestamp - self.timestamp_lost.unwrap()
     }
 
@@ -19,7 +19,7 @@ impl Relocalization {
     }
 
     pub fn past_cutoff(&self, current_frame: &Frame<InitialFrame>) -> bool {
-        self.sec_since_lost(current_frame) > GLOBAL_PARAMS.get::<i32>(SYSTEM_SETTINGS, "recently_lost_cutoff") as u64
+        self.sec_since_lost(current_frame) > SETTINGS.get::<i32>(SYSTEM, "recently_lost_cutoff") as f64
     }
 
     pub fn _run(&self) -> bool {

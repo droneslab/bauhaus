@@ -5,17 +5,14 @@ use opencv::prelude::{Mat, MatTraitConst, MatTraitConstManual};
 use foxglove::{foxglove::items::{SceneEntity, SceneUpdate, SpherePrimitive, Vector3, Quaternion, Color, FrameTransform, LinePrimitive, line_primitive, Point3, RawImage, ArrowPrimitive}, get_file_descriptor_set_bytes, make_pose};
 
 use dvcore::{
-    base::{ActorChannels, Actor}, matrix::DVVectorOfKeyPoint, config::GLOBAL_PARAMS,
+    actor::{ActorChannels, Actor, ActorMessage}, matrix::DVVectorOfKeyPoint, config::SETTINGS,
 };
-use prost_types::Timestamp;
 use crate::{
-    dvmap::{map::{Map, Id}, pose::DVPose},
-    lockwrap::ReadOnlyWrapper,
+    dvmap::{map::{Map, Id}, pose::DVPose, misc::Timestamp},
+    maplock::ReadOnlyMap,
     modules::image,
-    actors::messages::{ShutdownMsg, TrajectoryMsg, VisFeaturesMsg, VisInitialMapMsg}, registered_actors::VISUALIZER
+    actors::messages::ShutdownMsg, registered_actors::VISUALIZER
 };
-
-use super::messages::VisFeatureMatchMsg;
 
 // Default visual stuff //
 // Trajectory and frame
@@ -37,7 +34,7 @@ enum ImageDrawType {
 
 pub struct DarvisVisualizer {
     actor_system: ActorChannels,
-    map: ReadOnlyWrapper<Map>,
+    map: ReadOnlyMap<Map>,
     writer: McapWriter,
 
     // For drawing images
@@ -64,73 +61,72 @@ impl Actor for DarvisVisualizer {
         loop {
             let message = self.actor_system.receive().unwrap();
 
-            if let Some(msg) = message.downcast_ref::<VisFeaturesMsg>() {
+            if message.is::<VisualizerMsg>() {
+                let msg = message.downcast::<VisualizerMsg>().unwrap_or_else(|_| panic!("Could not downcast visualizer message!"));
+                match *msg {
+                    VisualizerMsg::VisFeaturesMsg { keypoints, image, timestamp } => {
+                        // DRAW IMAGE!
+                        match self.image_draw_type {
+                            ImageDrawType::NONE => Ok(()),
+                            ImageDrawType::PLAIN => {
+                                // Greyscale images are encoded as mono8
+                                // For mono8 (CV_8UC1) each element is u8 -> size is 1
+                                self.draw_image(&image, "mono8", 1, timestamp)
+                            },
+                            ImageDrawType::FEATURES => {
+                                let image_with_features = image::write_features(&image, &keypoints).expect("Could not draw features to mat");
+                                // This is a color image encoded as bgr8
+                                // Each element is u8 (size is 1) * 3 (for 3 channels)
+                                self.draw_image(&image_with_features, "bgr8", 3, timestamp)
+                            },
+                            ImageDrawType::FEATURESANDMATCHES => Ok(()), // Draw when matches received from tracking backend
+                        }.expect("Visualizer could not draw image!");
 
-                // DRAW IMAGE!
-                match self.image_draw_type {
-                    ImageDrawType::NONE => Ok(()),
-                    ImageDrawType::PLAIN => {
-                        // Greyscale images are encoded as mono8
-                        // For mono8 (CV_8UC1) each element is u8 -> size is 1
-                        self.draw_image(&msg.image, "mono8", 1, msg.timestamp)
+                        // If drawing with features and matches, need to save current image and keypoints for when matches are received
+                        //TODO (memory)... remove these clones
+                        self.prev_keypoints = self.current_keypoints.clone();
+                        self.prev_image = self.current_image.clone();
+                        self.current_image = Some(image.clone());
+                        self.current_keypoints = Some(keypoints.clone());
                     },
-                    ImageDrawType::FEATURES => {
-                        let image_with_features = image::write_features(&msg.image, &msg.keypoints).expect("Could not draw features to mat");
-                        // This is a color image encoded as bgr8
-                        // Each element is u8 (size is 1) * 3 (for 3 channels)
-                        self.draw_image(&image_with_features, "bgr8", 3, msg.timestamp)
+                    VisualizerMsg::VisFeatureMatchMsg { matches, timestamp } => {
+                        // DRAW IMAGE WITH FEATURE MATCHES!
+                        if matches!(self.image_draw_type, ImageDrawType::FEATURESANDMATCHES) && self.prev_image.is_some() {
+                            let image_with_matches = image::write_feature_matches(
+                                &self.prev_image.as_ref().unwrap(),
+                                &self.current_image.as_ref().unwrap(),
+                                &self.prev_keypoints.as_ref().unwrap(),
+                                &self.current_keypoints.as_ref().unwrap(),
+                                &matches
+                            ).expect("Could not write feature matches to mat");
+
+                            // Encoding and mat element size same as for ImageDrawType::FEATURES
+                            self.draw_image(&image_with_matches, "bgr8", 3, timestamp).expect("Could not draw image with matches to mat");
+                        };
                     },
-                    ImageDrawType::FEATURESANDMATCHES => Ok(()), // Draw when matches received from tracking backend
-                }.expect("Visualizer could not draw image!");
-
-                // If drawing with features and matches, need to save current image and keypoints for when matches are received
-                //TODO (memory)... remove these clones
-                self.prev_keypoints = self.current_keypoints.clone();
-                self.prev_image = self.current_image.clone();
-                self.current_image = Some(msg.image.clone());
-                self.current_keypoints = Some(msg.keypoints.clone());
-
-            } else if let Some(msg) = message.downcast_ref::<VisFeatureMatchMsg>() {
-
-                // DRAW IMAGE WITH FEATURE MATCHES!
-                if matches!(self.image_draw_type, ImageDrawType::FEATURESANDMATCHES) && self.prev_image.is_some() {
-                    let image_with_matches = image::write_feature_matches(
-                        &self.prev_image.as_ref().unwrap(),
-                        &self.current_image.as_ref().unwrap(),
-                        &self.prev_keypoints.as_ref().unwrap(),
-                        &self.current_keypoints.as_ref().unwrap(),
-                        &msg.matches
-                    ).expect("Could not write feature matches to mat");
-
-                    // Encoding and mat element size same as for ImageDrawType::FEATURES
-                    self.draw_image(&image_with_matches, "bgr8", 3, msg.timestamp).expect("Could not draw image with matches to mat");
-                };
-
-            } else if let Some(msg) = message.downcast_ref::<TrajectoryMsg>() {
-
-                self.draw_trajectory(msg.pose, msg.timestamp).expect("Visualizer could not draw trajectory!");
-                self.draw_mappoints(&msg.mappoint_matches, msg.timestamp).expect("Visualizer could not draw mappoints!");
-                self.draw_keyframes(msg.timestamp).expect("Visualizer could not draw map!");
-                self.current_update_id += 1;
-                self.prev_pose = msg.pose.into();
-            } else if let Some(_) = message.downcast_ref::<ShutdownMsg>() {
-
+                    VisualizerMsg::TrajectoryMsg { pose, mappoint_matches, timestamp } => {
+                        self.draw_trajectory(pose, timestamp).expect("Visualizer could not draw trajectory!");
+                        self.draw_mappoints(&mappoint_matches, timestamp).expect("Visualizer could not draw mappoints!");
+                        self.draw_keyframes(timestamp).expect("Visualizer could not draw map!");
+                        self.current_update_id += 1;
+                        self.prev_pose = pose.into();
+                    },
+                }
+            } else if message.is::<ShutdownMsg>() {
                 // SHUTDOWN
                 warn!("Closing mcap file");
                 self.writer.finish().expect("Could not close file");
                 break;
-
             } else {
                 warn!("Visualizer received unknown message type!");
             }
-
         }
     }
 }
 
 impl DarvisVisualizer {
-    pub fn new(actor_system: ActorChannels, map: ReadOnlyWrapper<Map>) -> DarvisVisualizer {
-        let mcap_file_path = GLOBAL_PARAMS.get::<String>(VISUALIZER, "mcap_file_path");
+    pub fn new(actor_system: ActorChannels, map: ReadOnlyMap<Map>) -> DarvisVisualizer {
+        let mcap_file_path = SETTINGS.get::<String>(VISUALIZER, "mcap_file_path");
         let mut writer = McapWriter::new(&mcap_file_path).unwrap();
 
         let image_channel = writer.create_and_add_channel(
@@ -150,18 +146,18 @@ impl DarvisVisualizer {
         ).expect("Could not make keyframes channel");
 
         let transform = FrameTransform {
-            timestamp: Some(Timestamp { seconds: 0,  nanos: 0 }),
+            timestamp: Some(prost_types::Timestamp { seconds: 0,  nanos: 0 }),
             parent_frame_id: "world".to_string(),
             child_frame_id: "camera".to_string(),
             translation: Some(Vector3{ x: 0.0, y: 0.0, z: 0.0 }),
             rotation: Some(Quaternion { x: 0.0, y: 0.0, z: 0.0, w: 1.0 }),
         };
-        writer.write(transform_channel, transform, 0, 0).unwrap();
+        writer.write(transform_channel, transform, 0.0, 0).unwrap();
 
         // Trajectory starts at 0,0
         let prev_pose = Point3 { x: 0.0, y: 0.0, z: 0.0 };
 
-        let image_draw_type = match GLOBAL_PARAMS.get::<String>(VISUALIZER, "image_draw_type").as_str() {
+        let image_draw_type = match SETTINGS.get::<String>(VISUALIZER, "image_draw_type").as_str() {
             "none" => ImageDrawType::NONE,
             "plain" => ImageDrawType::PLAIN,
             "features" => ImageDrawType::FEATURES,
@@ -191,7 +187,7 @@ impl DarvisVisualizer {
         };
     }
 
-    fn draw_trajectory(&mut self, pose: DVPose, timestamp: u64) -> Result<(), Box<dyn std::error::Error>> {
+    fn draw_trajectory(&mut self, pose: DVPose, timestamp: Timestamp) -> Result<(), Box<dyn std::error::Error>> {
         debug!("Drawing trajectory at timestamp {} with pose {:?}", timestamp, pose);
 
         // Entity 1 ... current pose
@@ -225,13 +221,12 @@ impl DarvisVisualizer {
         Ok(())
     }
 
-    fn draw_keyframes(&mut self, timestamp: u64) -> Result<(), Box<dyn std::error::Error>> {
+    fn draw_keyframes(&mut self, timestamp: Timestamp) -> Result<(), Box<dyn std::error::Error>> {
         // Draw each keyframe
         // Should be deleted when keyframes are deleted
         let map = self.map.read();
-        let keyframes = map.get_all_keyframes();
         let mut entities = Vec::<SceneEntity>::new();
-        for (id, keyframe) in keyframes {
+        for (id, keyframe) in &map.keyframes {
             let kf_arrow = self.create_arrow(&keyframe.pose.unwrap(), KEYFRAME_COLOR.clone());
             entities.push(self.create_scene_entity(
                 timestamp, "world",
@@ -242,7 +237,7 @@ impl DarvisVisualizer {
         }
 
         let sceneupdate = SceneUpdate {
-            deletions: vec![], // todo add deletions
+            deletions: vec![], // TODO (MVP) add deletions
             entities
         };
 
@@ -251,7 +246,7 @@ impl DarvisVisualizer {
         Ok(())
     }
 
-    fn draw_mappoints(&mut self, mappoint_matches: &HashMap<u32, (Id, bool)>, timestamp: u64) -> Result<(), Box<dyn std::error::Error>> {
+    fn draw_mappoints(&mut self, mappoint_matches: &HashMap<u32, (Id, bool)>, timestamp: Timestamp) -> Result<(), Box<dyn std::error::Error>> {
         // Mappoints in map (different color if they are matches)
         // Should be overwritten when there is new info for a mappoint
         let mut entities = Vec::new();
@@ -262,8 +257,7 @@ impl DarvisVisualizer {
         }
 
         let map = self.map.read();
-        let mappoints = map.get_all_mappoints();
-        for (mappoint_id, mappoint) in mappoints {
+        for (mappoint_id, mappoint) in &map.mappoints {
             let pose = DVPose::new_with_default_rot(mappoint.position);
 
             let mp_sphere = match mappoint_match_ids.contains(mappoint_id) {
@@ -293,10 +287,12 @@ impl DarvisVisualizer {
 
     fn draw_image(
         &mut self, 
-        image: &Mat, encoding: &str, item_byte_size: u32, timestamp: u64
+        image: &Mat, encoding: &str, item_byte_size: u32, timestamp: Timestamp
     ) -> Result<(), Box<dyn std::error::Error>> {
+        let (seconds, nanos) = convert_timestamp(timestamp);
+
         let image_msg = RawImage {
-            timestamp: Some(Timestamp { seconds: timestamp as i64, nanos: 0 }),
+            timestamp: Some(prost_types::Timestamp { seconds, nanos }),
             frame_id: "world".to_string(),
             width: image.cols() as u32,
             height: image.rows() as u32,
@@ -326,10 +322,10 @@ impl DarvisVisualizer {
         ArrowPrimitive { 
             pose: Some(pose.into()),
             color: Some(color),
-            shaft_length: 0.05,
-            shaft_diameter: 0.05,
+            shaft_length: 0.025,
+            shaft_diameter: 0.025,
             head_length: 0.05,
-            head_diameter: 0.1
+            head_diameter: 0.035
         }
     }
 
@@ -347,11 +343,12 @@ impl DarvisVisualizer {
     }
 
     fn create_scene_entity(
-        &self, timestamp: u64, frame_id: &str, entity_id: String,
+        &self, timestamp: Timestamp, frame_id: &str, entity_id: String,
         arrows: Vec<ArrowPrimitive>, lines: Vec<LinePrimitive>, spheres: Vec<SpherePrimitive>
     ) -> SceneEntity {
+        let (seconds, nanos) = convert_timestamp(timestamp);
         SceneEntity {
-            timestamp: Some(Timestamp { seconds: timestamp as i64, nanos: 0 }),
+            timestamp: Some(prost_types::Timestamp { seconds, nanos }),
             frame_id: frame_id.to_string(),
             id: entity_id,
             lifetime: None,
@@ -367,6 +364,13 @@ impl DarvisVisualizer {
             models: vec![],
         }
     }
+}
+
+fn convert_timestamp(timestamp: Timestamp) -> (i64, i32) {
+    let timestamp = timestamp * 10.0; // Sofiya TODO...Can remove this later, putting this in here for now so foxglove can show the results a little slower
+    let seconds = timestamp.floor();
+    let nanos = (timestamp - seconds) * 1000000000.0;
+    (seconds as i64, nanos as i32)
 }
 
 pub struct McapWriter {
@@ -405,17 +409,17 @@ impl McapWriter {
         &mut self,
         channel_id: u16,
         data: T,
-        timestamp: u64,
+        timestamp: Timestamp,
         sequence: u32,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let time_in_nsec = timestamp as u64 * 1000000000;
+        let time_in_nsec = timestamp * 10000000000.0; // Sofiya todo remove one 0 if removing line in convert_timestamp that makes it go slower
         Ok(
             self.writer.write_to_known_channel(
                 &MessageHeader {
                     channel_id,
                     sequence,
-                    log_time: time_in_nsec,
-                    publish_time: time_in_nsec,
+                    log_time: time_in_nsec as u64,
+                    publish_time: time_in_nsec as u64,
                 },
                 &data.encode_to_vec()
             )?
@@ -445,6 +449,8 @@ impl From<&DVPose> for foxglove::foxglove::items::Pose {
             w: quat[3]
         };
 
+        // println!("Pose sent to foxglove {:?} {:?}", position, orientation);
+
         foxglove::foxglove::items::Pose {
             position: Some(position),
             orientation: Some(orientation),
@@ -462,3 +468,10 @@ impl From<DVPose> for foxglove::foxglove::items::Point3 {
         }
     }
 }
+
+pub enum VisualizerMsg {
+    VisFeaturesMsg { keypoints: DVVectorOfKeyPoint, image: Mat, timestamp: Timestamp,},
+    VisFeatureMatchMsg { matches: opencv::core::Vector<opencv::core::DMatch>, timestamp: Timestamp},
+    TrajectoryMsg { pose: DVPose, mappoint_matches: HashMap<u32, (i32, bool)>, timestamp: Timestamp,},
+}
+impl ActorMessage for VisualizerMsg{}

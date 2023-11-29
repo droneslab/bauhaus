@@ -5,7 +5,7 @@ Distributed, modulAR Visual SLAM
 ```bash
 # Install system dependencies 
 sudo apt-get update
-sudo apt-get install wget git cmake vim clang libclang-dev pkg-config libc6-dbg gdb valgrind libgtk2.0-dev libeigen3-dev libboost-all-dev
+sudo apt-get install wget git cmake vim clang libclang-dev pkg-config libc6-dbg gdb valgrind libgtk2.0-dev libboost-all-dev
 
 # Install Rust
 wget https://raw.githubusercontent.com/rust-lang/rustup/master/rustup-init.sh
@@ -25,6 +25,17 @@ sudo wget https://github.com/Kitware/CMake/releases/download/v3.20.2/cmake-3.20.
 tar -zxvf cmake-3.20.2.tar.gz
 cd cmake-3.20.2 && ./bootstrap && make && make install
 
+# Install eigen
+# This installs 3.3: sudo apt-get install libeigen3-dev 
+cd ~/darvis-home/depends/
+wget https://gitlab.com/libeigen/eigen/-/archive/3.2.10/eigen-3.2.10.tar.gz
+tar –xvzf eigen-3.2.10.tar.gz
+cd eigen-3.2.10 && mkdir build && cd build
+cmake ..
+make
+sudo make install
+export EIGEN3_INCLUDE_DIR=/usr/local/include
+
 # Install OpenCV
 cd ~/darvis-home/depends
 git clone https://github.com/opencv/opencv.git
@@ -41,10 +52,6 @@ git clone --recursive https://github.com/stevenlovegrove/Pangolin.git
 cd Pangolin
 ./scripts/install_prerequisites.sh recommended
 cmake -B build
-
-# Build g2o bindings
-cd ~/darvis-home/darvis/g2o/
-cargo build --release
 
 # Build darvis
 cd ~/darvis-home/darvis/darvis/
@@ -95,10 +102,21 @@ To instead install with docker...
     ```
     You can also use regular gdb instead of rust-gdb, but [it doesn't work in all cases](https://users.rust-lang.org/t/printing-single-vector-elements-in-gdb/16890/4).
 
-- To use address sanitizer (check memory errors from the ffi bindings)
+- Check memory errors from ffi bindings:
+    - Run with address sanitizer:
+        ```bash
+        RUSTFLAGS="-Z sanitizer=address" cargo run --target x86_64-unknown-linux-gnu [DATASET] config.yaml
+        ```
+    - Run with valgrind and save output to `log.txt`:
+        ```bash
+        cargo build # Either debug or release build works
+        valgrind target/debug/bindarvis  [DATASET] config.yaml > log.txt 2>&1
+        ```
+- To compile C++ bindings with clang instead of g++, set these environment variables:
     ```bash
-    RUSTFLAGS="-Z sanitizer=address" cargo run --target x86_64-unknown-linux-gnu [DATASET] config.yaml
-    ```
+    export CXX=/usr/bin/clang++
+    export CC=/usr/bin/clang
+    ``` 
 
 ### Using the Visualizer
 1. Download the [foxglove application](https://foxglove.dev/). This can be on any device (does not need to be the test device).
@@ -209,13 +227,13 @@ All the steps below reference the module ``Visualizer`` as an example.
 ## Adding new settings in the config file
 You can add custom settings to the ``config.yaml`` file. These can be anything, but an example that is already implemented are the settings for camera calibration and ORB feature extraction.
 
-To add a new setting, under ``system_settings`` in the config file, add a new key-value pair. Supported types are ``String``, ``bool``, ``f64``, and ``i32``. You do not have to declare the type in the config file.
+To add a new setting, under ``system`` in the config file, add a new key-value pair. Supported types are ``String``, ``bool``, ``f64``, and ``i32``. You do not have to declare the type in the config file.
 
 To load the new config file to memory when initializing the system, modify the function ``load_config()`` in ``src/main.rs`` to parse for your setting and insert it into the global params. This function already has examples so just copy one of them.
 
 To use the setting in your code, reference it like:
 ```Rust
-let max_features: i32 = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "max_features");
+let max_features: i32 = SETTINGS.get(SYSTEM, "max_features");
 ```
 Where ``max_features`` is the key you added in the config file.
 

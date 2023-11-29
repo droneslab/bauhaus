@@ -1,11 +1,11 @@
 use std::fmt;
 use cxx::{UniquePtr, let_cxx_string};
-use log::{info};
-use dvcore::{matrix::DVMatrix, config::{GLOBAL_PARAMS, SYSTEM_SETTINGS}};
+use log::info;
+use dvcore::{matrix::DVMatrix, config::{SETTINGS, SYSTEM}};
 
 lazy_static! {
     pub static ref VOCABULARY: DVVocabulary = {
-        let filename = GLOBAL_PARAMS.get::<String>(SYSTEM_SETTINGS, "vocabulary_file");
+        let filename = SETTINGS.get::<String>(SYSTEM, "vocabulary_file");
         DVVocabulary::load(filename)
     };
 }
@@ -18,7 +18,7 @@ impl DVVocabulary {
     pub fn access(&self) {}
     pub fn load(filename: String) -> Self {
         let_cxx_string!(file = filename.clone());
-        info!("Loading vocabulary");
+        info!("Loading vocabulary...");
 
         Self {
             vocabulary: dvos3binding::ffi::load_vocabulary_from_text_file(&file),
@@ -40,7 +40,6 @@ impl DVVocabulary {
 
 
 pub struct BoW {
-    // BoW
     bow_vec: UniquePtr<dvos3binding::ffi::BowVector>, // mBowVec
     feat_vec: UniquePtr<dvos3binding::ffi::FeatureVector>, // mFeatVec
 }
