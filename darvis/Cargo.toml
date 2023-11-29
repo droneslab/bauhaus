@@ -14,7 +14,7 @@ name = "dvcore"
 path = "src/dvcore/lib.rs"
 
 [profile.release]
-debug = 1
+debug = true
 
 [rust]
 debuginfo-level = 1
@@ -30,7 +30,6 @@ once_cell = "*"
 chrono = { version = "*", features = ["serde"] }
 rand = "*"
 linked-hash-map = "*"
-flame = "*"
 ctrlc = "*"
 downcast-rs = "*"
 prost-types = "*"
@@ -55,7 +54,8 @@ log = "*"
 derivative = "*"
 error-chain = "*"
 spin_sleep = "*"
-flamer = "*"
+flame = "0.2.2"
+flamer = "0.5"
 mcap = "*"
 crossbeam-channel = "0.5.8"
 

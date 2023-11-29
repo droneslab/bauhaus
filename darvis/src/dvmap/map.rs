@@ -133,7 +133,7 @@ impl Map {
 
         let full_keyframe = Frame::<FullKeyFrame>::new(prelim_kf, self.id, new_kf_id);
         let num_keypoints = full_keyframe.features.num_keypoints;
-        let matches = full_keyframe.mappoint_matches.clone();
+        let matches = full_keyframe.mappoint_matches.clone(); // TODO (CLONE) ... to remove this one we need to be able to iterate over an immutable reference to matches, but we can't do that bc the inside of the loop requires mutating
         self.keyframes.insert(new_kf_id, full_keyframe);
 
         if self.keyframes.is_empty() {
@@ -199,6 +199,7 @@ impl Map {
 
         let (connections1, matches1, parent1, mut children1);
         {
+            // TODO (CLONE) ... same as other issue in map.rs, to remove this clone we need to be able to iterate over an immutable ref to matches and children while mutating other keyframes inside the loop
             let kf = self.get_keyframe(&kf_id).unwrap();
             connections1 = kf.get_covisibility_keyframes(i32::MAX);
             matches1 = kf.mappoint_matches.clone();

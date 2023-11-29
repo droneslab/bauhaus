@@ -66,7 +66,7 @@ impl Actor for ShutdownActor {
                     file.write_all(string.as_bytes()).unwrap();
                 }
 
-                if SETTINGS.get::<bool>(SYSTEM, "should_profile") {
+                if SETTINGS.get::<bool>(SYSTEM, "create_flamegraph") {
                     flame::dump_html(File::create(
                         Path::new(&self.results_folder).join("flamegraph.html")
                     ).unwrap()).unwrap();

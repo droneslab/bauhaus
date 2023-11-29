@@ -24,6 +24,8 @@ impl Actor for MapActor {
 
                 match msg.target {
                     MapWriteTarget::CreateInitialMapMonocular { mp_matches, p3d, initial_frame, current_frame } => {
+                        let now = std::time::Instant::now();
+
                         let mut write_lock = self.map.write();
                         match write_lock.create_initial_map_monocular(mp_matches, p3d, initial_frame, current_frame) {
                                 Some((curr_kf_pose, curr_kf_id, ini_kf_id, local_mappoints, curr_kf_timestamp)) => {
@@ -38,61 +40,82 @@ impl Actor for MapActor {
                                     warn!("Could not create initial map");
                                 }
                         };
+                        trace!("MAP...Create initial map: {} ms", now.elapsed().as_millis());
                     },
                     MapWriteTarget::Map__Optimization { poses } => {
+                        let now = std::time::Instant::now();
                         self.map.write().update_after_ba(poses, 0);
+                        trace!("MAP...Update after BA: {} ms", now.elapsed().as_millis());
                     },
                     MapWriteTarget::KeyFrame__New { kf } => {
+                        let now = std::time::Instant::now();
                         let kf_id = self.map.write().insert_keyframe_to_map(kf, false);
                         info!("Created keyframe {}", kf_id);
                         // Tell local mapping to process keyframe
                         self.actor_system.find(LOCAL_MAPPING).send(Box::new(LocalMappingMsg::KeyFrameIdMsg{kf_id})).unwrap();
                         // Send the new keyframe ID directly back to the sender so they can use the ID 
                         self.actor_system.find(TRACKING_BACKEND).send(Box::new(TrackingBackendMsg::KeyFrameIdMsg{kf_id})).unwrap();
+                        trace!("MAP...Insert new keyframe: {} ms", now.elapsed().as_millis());
                     },
                     MapWriteTarget::KeyFrame__Delete { id } => {
+                        let now = std::time::Instant::now();
                         self.map.write().discard_keyframe(id);
+                        trace!("MAP...Discard keyframe: {} ms", now.elapsed().as_millis());
                     },
                     MapWriteTarget::MapPoint__NewMany { mps, callback_actor } => {
+                        let now = std::time::Instant::now();
                         for (mp, observations) in mps {
                             let _ = self.map.write().insert_mappoint_to_map(mp, observations);
                         }
                         // Inform tracking that we are done with creating new mappoints. Needed because tracking fails if new points are not created
                         // before track_with_reference_keyframe, so to avoid the race condition we have it wait until the new points are ready.
                         self.actor_system.find(TRACKING_BACKEND).send(Box::new(TrackingBackendMsg::LastKeyFrameUpdatedMsg{})).unwrap();
+                        trace!("MAP...Create many new mappoints: {} ms", now.elapsed().as_millis());
                     },
                     MapWriteTarget::MapPoint__DiscardMany { ids } => {
+                        let now = std::time::Instant::now();
                         for id in ids {
                             self.map.write().discard_mappoint(&id);
                         }
+                        trace!("MAP...Discard many mappoints: {} ms", now.elapsed().as_millis());
                     },
 
                     MapWriteTarget::MapPoint__IncreaseFound { mp_ids_and_nums } => {
+                        let now = std::time::Instant::now();
                         for (mp, n) in mp_ids_and_nums {
                             self.map.write().mappoints.get_mut(&mp).unwrap().increase_found(n);
                         }
+                        trace!("MAP...Increase mappoint found: {} ms", now.elapsed().as_millis());
                     },
                     MapWriteTarget::MapPoint__IncreaseVisible {mp_ids} => {
+                        let now = std::time::Instant::now();
                         for mp_id in mp_ids {
                             self.map.write().mappoints.get_mut(&mp_id).unwrap().increase_visible();
                         }
+                        trace!("MAP...Increase mappoint visibile: {} ms", now.elapsed().as_millis());
                     },
                     MapWriteTarget::MapPoint__AddObservation {mp_id, kf_id, index} => {
+                        let now = std::time::Instant::now();
                         let num_keypoints = self.map.write().get_keyframe(&kf_id).unwrap().features.num_keypoints;
                         self.map.write().mappoints.get_mut(&mp_id).unwrap().add_observation(&kf_id, num_keypoints, index as u32);
                         self.map.write().keyframes.get_mut(&kf_id).unwrap().add_mappoint(index as u32, mp_id, false);
+                        trace!("MAP...Add observation: {} ms", now.elapsed().as_millis());
                     },
                     MapWriteTarget::MapPoint__Replace {mp_to_replace, mp} => {
+                        let now = std::time::Instant::now();
                         self.map.write().replace_mappoint(mp_to_replace, mp);
+                        trace!("MAP...Replace mappoint: {} ms", now.elapsed().as_millis());
                     },
                     MapWriteTarget::MapPoint__Pose{mp_id, pose} => {
+                        let now = std::time::Instant::now();
                         self.map.write().mappoints.get_mut(&mp_id).unwrap().position = pose.get_translation();
+                        trace!("MAP...Update mappoint pose: {} ms", now.elapsed().as_millis());
                     }
                     _ => {
                         warn!("Unimplemented target: {:?}", msg.target);
                     },
                 }
-                trace!("Map Actor took {} ms to process message", now.elapsed().as_millis());
+                trace!("MAP...Total: {} ms", now.elapsed().as_millis());
             } else if message.is::<ShutdownMsg>() {
                 break 'outer;
             } else {

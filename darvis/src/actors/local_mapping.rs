@@ -56,7 +56,7 @@ impl Actor for DarvisLocalMapping {
                         debug!("Local mapping working on kf {}", kf_id);
                         self.current_keyframe_id = kf_id;
                         self.local_mapping();
-                        trace!("Local mapping took {} ms", now.elapsed().as_millis());
+                        trace!("LOCAL MAPPING...Total: {} ms", now.elapsed().as_millis());
                     },
                     LocalMappingMsg::Reset{} => {
                         // TODO (design) need to think about how reset requests should be propagated
@@ -244,7 +244,7 @@ impl DarvisLocalMapping {
         });
         let num_to_discard = to_discard.len() as i32;
         self.actor_channels.find(MAP_ACTOR).send(Box::new(MapWriteMsg::discard_many_mappoints(to_discard))).unwrap();
-        trace!("Mappoint culling : {} ms", now.elapsed().as_millis());
+        trace!("LOCAL MAPPING...Mappoint culling : {} ms", now.elapsed().as_millis());
         return num_to_discard;
     }
 
@@ -478,7 +478,7 @@ impl DarvisLocalMapping {
                 ));
             }
         }
-        trace!("Create new mappoints : {} ms", now.elapsed().as_millis());
+        trace!("LOCAL MAPPING...Create new mappoints: {} ms", now.elapsed().as_millis());
         new_mappoints
     }
 
@@ -562,7 +562,7 @@ impl DarvisLocalMapping {
         for msg in to_fuse {
             self.actor_channels.find(MAP_ACTOR).send(Box::new(msg)).unwrap();
         }
-        trace!("Search in neighbors : {} ms", now.elapsed().as_millis());
+        trace!("LOCAL MAPPING...Search in neighbors : {} ms", now.elapsed().as_millis());
     }
 
     fn keyframe_culling(&self) -> i32 {
@@ -704,7 +704,7 @@ impl DarvisLocalMapping {
             // TODO (design): mbAbortBA
             // if((count > 20 && mbAbortBA) { break; }
         }
-        trace!("Keyframe culling : {} ms", now.elapsed().as_millis());
+        trace!("LOCAL MAPPING...Keyframe culling : {} ms", now.elapsed().as_millis());
         return num_deleted;
     }
 }

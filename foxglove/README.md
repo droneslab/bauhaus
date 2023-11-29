@@ -9,10 +9,3 @@ Library to compile and use foxglove proto files
 ## Running with Darvis
 The `visualizer` actor in darvis contains the code for writing darvis visualization to the mcap file. By default it will go to `darvis/results/out.mcap` but you can change this in the config file.
 To open up the layout for the darvis visualization, click on `layout` in the top right corner of foxglove, then `import from file`. Load the file `foxglovelayout.json`.
-
-## Other utils
-Sometimes it is useful to look at the raw data in the mcap file outside of foxglove. To inspect the file, use the `mcap` executable like this:
-
-```bash
-./mcap cat results/out.mcap --json
-```

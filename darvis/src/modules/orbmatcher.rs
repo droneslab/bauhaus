@@ -318,7 +318,7 @@ pub fn search_by_projection(
         }
     }
 
-    trace!("Search by projection: {} ms", now.elapsed().as_millis());
+    trace!("TRACKING BACKEND...Search by projection: {} ms", now.elapsed().as_millis());
     return Ok(num_matches);
 }
 
@@ -451,7 +451,7 @@ pub fn search_by_projection_with_threshold (
         check_orientation_2(&rot_hist, &mut matches)
     };
 
-    trace!("Search by projection with threshold: {} ms", now.elapsed().as_millis());
+    trace!("TRACKING BACKEND...Search by projection with threshold: {} ms", now.elapsed().as_millis());
 
     return Ok(num_matches);
 } 
@@ -594,7 +594,7 @@ pub fn search_by_bow_f(
         increase_found.push((*mp_id, 1));
     }
 
-    trace!("Search by BoW: {} ms", now.elapsed().as_millis());
+    trace!("TRACKING BACKEND...Search by BoW: {} ms", now.elapsed().as_millis());
     return Ok((matches.len() as u32, increase_found));
 }
 

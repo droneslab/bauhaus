@@ -27,7 +27,7 @@ impl<T> ReadOnlyMap<T> {
         let guard = self.inner.read().unwrap();
         let elapsed = now.elapsed().as_millis();
         if elapsed > 5 {
-            trace!("Waiting on lock for {} ms", now.elapsed().as_millis());
+            trace!("LOCKS...Read acquire: {} ms", now.elapsed().as_millis());
         }
         guard
     }

@@ -26,7 +26,8 @@ impl DVVocabulary {
         }
     }
     pub fn transform(&self, descriptors: &DVMatrix, bow: & mut BoW) {
-        //TODO (memory)...might be unnecessary clone
+        // TODO (CLONE) ... can def do this without a clone, just need to make sure the pointer stuff is correct in the into()
+        // see this function: impl From<DVMatrix> for dvos3binding::ffi::WrapBindCVMat {
         let mut bla: dvos3binding::ffi::WrapBindCVMat = descriptors.clone().into();
 
         self.vocabulary.transform(
