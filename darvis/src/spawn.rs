@@ -9,7 +9,7 @@ use dvcore::{
 use log::{info, warn};
 
 use crate::{
-    registered_actors::{SHUTDOWN_ACTOR, MAP_ACTOR, get_actor},
+    registered_actors::{SHUTDOWN_ACTOR, MAP_ACTOR, self},
     dvmap::map::Map,
     actors::messages::ShutdownMsg,
 };
@@ -85,8 +85,7 @@ fn spawn_actor(
     let actor_channels = ActorChannels {receiver, receiver_bound, actors: txs, my_name: actor_name.clone()};
 
     thread::spawn(move || { 
-        let mut actor = get_actor(actor_name, actor_channels, map_clone);
-        actor.run();
+        registered_actors::spawn(actor_name, actor_channels, map_clone);
     } );
 }
 
@@ -101,8 +100,7 @@ fn spawn_map_actor(transmitters: &HashMap<String, Sender>, receiver: Receiver, m
     let actor_channels = ActorChannels {receiver, receiver_bound: None, actors: txs, my_name: "Map Actor".to_string()};
 
     thread::spawn(move || { 
-        let mut map_actor = Box::new(crate::actors::map_actor::MapActor::new(actor_channels, map));
-        map_actor.run();
+        crate::actors::map_actor::MapActor::spawn(actor_channels, map);
     } );
 }
 

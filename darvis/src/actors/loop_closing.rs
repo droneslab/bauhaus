@@ -23,14 +23,26 @@ pub struct DarvisLoopClosing {
 }
 
 impl Actor for DarvisLoopClosing {
-    fn run(&mut self) {
+    type MapRef = ReadOnlyMap<Map>;
+
+    fn new_actorstate(actor_channels: ActorChannels, map: Self::MapRef) -> DarvisLoopClosing {
+        DarvisLoopClosing {
+            actor_channels,
+            map,
+            ..Default::default()
+        }
+    }
+
+    fn spawn(actor_channels: ActorChannels, map: Self::MapRef) {
+        let mut actor = DarvisLoopClosing::new_actorstate(actor_channels, map);
+
         'outer: loop {
-            let message = self.actor_channels.receive().unwrap();
+            let message = actor.actor_channels.receive().unwrap();
             if message.is::<LoopClosingMsg>() {
                 let msg = message.downcast::<LoopClosingMsg>().unwrap_or_else(|_| panic!("Could not downcast loop closing message!"));
                 match *msg {
                     LoopClosingMsg::KeyFrameIdMsg{ kf_id } => {
-                        self.loop_closing(kf_id);
+                        actor.loop_closing(kf_id);
                     },
                 };
             } else if message.is::<ShutdownMsg>() {
@@ -45,15 +57,6 @@ impl Actor for DarvisLoopClosing {
 }
 
 impl DarvisLoopClosing {
-        // type INPUTS = (ReadOnlyWrapper<Map>, ActorChannels);
-
-    pub fn new(map: ReadOnlyMap<Map>, actor_channels: ActorChannels) -> DarvisLoopClosing {
-        DarvisLoopClosing {
-            actor_channels,
-            map,
-            ..Default::default()
-        }
-    }
 
     fn loop_closing(&mut self, kf_id: Id) {
         // if(mpLastCurrentKF)

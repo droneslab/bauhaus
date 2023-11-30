@@ -18,8 +18,10 @@ pub struct ShutdownActor {
     trajectory_filename: String
 }
 
-impl ShutdownActor {
-    pub fn new(actor_channels: ActorChannels) -> ShutdownActor {
+impl Actor for ShutdownActor {
+    type MapRef = ();
+
+    fn new_actorstate(actor_channels: ActorChannels, _map: Self::MapRef) -> ShutdownActor {
         ShutdownActor{
             actor_channels,
             trajectory_poses: Vec::new(),
@@ -29,27 +31,27 @@ impl ShutdownActor {
             trajectory_filename: SETTINGS.get::<String>(SYSTEM, "trajectory_file_name")
         }
     }
-}
-impl Actor for ShutdownActor {
-    fn run(&mut self) {
+
+    fn spawn(actor_channels: ActorChannels, map: Self::MapRef) {
+        let mut actor = ShutdownActor::new_actorstate(actor_channels, map);
         loop {
-            let message = self.actor_channels.receive().unwrap();
+            let message = actor.actor_channels.receive().unwrap();
             if message.is::<ShutdownActorMsg>() {
                 let msg = message.downcast::<ShutdownActorMsg>().unwrap_or_else(|_| panic!("Could not downcast shutdown actor message!"));
 
                 match *msg {
                     ShutdownActorMsg::TrajectoryMsg{ pose, ref_kf_id, timestamp } => {
-                        self.trajectory_poses.push(pose);
-                        self.trajectory_times.push(timestamp);
-                        self.trajectory_keyframes.push(ref_kf_id);
+                        actor.trajectory_poses.push(pose);
+                        actor.trajectory_times.push(timestamp);
+                        actor.trajectory_keyframes.push(ref_kf_id);
                     },
                     ShutdownActorMsg::TrackingStateMsg{ state } => {
                         match state {
                             TrackingState::Lost => {
                                 // This can happen if tracking is lost. Duplicate last element of each vector
-                                self.trajectory_poses.push(self.trajectory_poses.last().unwrap().clone());
-                                self.trajectory_times.push(self.trajectory_times.last().unwrap().clone());
-                                self.trajectory_keyframes.push(self.trajectory_keyframes.last().unwrap().clone());
+                                actor.trajectory_poses.push(actor.trajectory_poses.last().unwrap().clone());
+                                actor.trajectory_times.push(actor.trajectory_times.last().unwrap().clone());
+                                actor.trajectory_keyframes.push(actor.trajectory_keyframes.last().unwrap().clone());
                             },
                             _ => {}
                         }
@@ -58,15 +60,15 @@ impl Actor for ShutdownActor {
             } else if message.is::<ShutdownMsg>() {
                 warn!("Triggered shutdown, saving trajectory info");
                 let mut file = File::create(
-                    Path::new(&self.results_folder)
-                    .join(&self.trajectory_filename)
+                    Path::new(&actor.results_folder)
+                    .join(&actor.trajectory_filename)
                 ).unwrap();
-                for i in 0..self.trajectory_poses.len() {
-                    let string = format!("{:?} {:?}", self.trajectory_times[i], self.trajectory_poses[i]);
+                for i in 0..actor.trajectory_poses.len() {
+                    let string = format!("{:?} {:?}", actor.trajectory_times[i], actor.trajectory_poses[i]);
                     file.write_all(string.as_bytes()).unwrap();
                 }
 
-                for (_, actor_tx) in &self.actor_channels.actors {
+                for (_, actor_tx) in &actor.actor_channels.actors {
                     actor_tx.send(Box::new(ShutdownMsg{})).unwrap();
                 }
             }
