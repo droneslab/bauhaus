@@ -66,12 +66,6 @@ impl Actor for ShutdownActor {
                     file.write_all(string.as_bytes()).unwrap();
                 }
 
-                if SETTINGS.get::<bool>(SYSTEM, "create_flamegraph") {
-                    flame::dump_html(File::create(
-                        Path::new(&self.results_folder).join("flamegraph.html")
-                    ).unwrap()).unwrap();
-                }
-
                 for (_, actor_tx) in &self.actor_channels.actors {
                     actor_tx.send(Box::new(ShutdownMsg{})).unwrap();
                 }

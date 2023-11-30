@@ -5,6 +5,7 @@ use dvcore::config::{SETTINGS};
 use dvcore::matrix::{DVVectorOfPoint2f, DVVector3};
 use dvcore::sensor::{Sensor, FrameSensor};
 use log::{debug, warn, trace};
+use logging_timer::time;
 use opencv::core::{KeyPoint};
 use opencv::prelude::*;
 use parking_lot::{MappedRwLockReadGuard};
@@ -142,14 +143,13 @@ pub fn search_for_initialization(
     (n_matches, vn_matches12)
 }
 
+#[time()]
 pub fn search_by_projection(
     frame: &mut Frame<InitialFrame>, mappoints: &HashSet<Id>, th: i32, ratio: f64,
     track_in_view: &HashMap<Id, TrackedMapPointData>, track_in_view_right: &HashMap<Id, TrackedMapPointData>, 
     map: &ReadOnlyMap<Map>, sensor: Sensor
 ) -> Result<i32, Box<dyn std::error::Error>> {
     // int SearchByProjection(Frame &F, const std::vector<MapPoint*> &vpMapPoints, const float th=3, const bool bFarPoints = false, const float thFarPoints = 50.0f);
-    let now = std::time::Instant::now();
-
     // Search matches between Frame keypoints and projected MapPoints. Returns number of matches
     // Used to track the local map (Tracking)
     let fpt = SETTINGS.get::<f64>(MATCHER, "far_points_threshold");
@@ -318,19 +318,19 @@ pub fn search_by_projection(
         }
     }
 
-    trace!("TRACKING BACKEND...Search by projection: {} ms", now.elapsed().as_millis());
     return Ok(num_matches);
 }
 
 // Project MapPoints tracked in last frame into the current frame and search matches.
 // Used to track from previous frame (Tracking)
+
+#[time()]
 pub fn search_by_projection_with_threshold (
     current_frame: &mut Frame<InitialFrame>, last_frame: &Frame<InitialFrame>, th: i32,
     should_check_orientation: bool,
     map: &ReadOnlyMap<Map>, sensor: Sensor
 ) -> Result<i32, Box<dyn std::error::Error>> {
     // int ORBmatcher::SearchByProjection(Frame &CurrentFrame, const Frame &LastFrame, const float th, const bool bMono)
-    let now = std::time::Instant::now();
 
     // TODO STEREO...search_by_projection_with_threshold...
     // This function should work for stereo as well as RGBD as long as get_all_keypoints() returns
@@ -451,8 +451,6 @@ pub fn search_by_projection_with_threshold (
         check_orientation_2(&rot_hist, &mut matches)
     };
 
-    trace!("TRACKING BACKEND...Search by projection with threshold: {} ms", now.elapsed().as_millis());
-
     return Ok(num_matches);
 } 
 
@@ -478,12 +476,12 @@ pub fn _search_by_projection_reloc (
 // Used in Place Recognition (Loop Closing and Merging)
 // int SearchByProjection(KeyFrame* pKF, Sophus::Sim3<float> &Scw, const std::vector<MapPoint*> &vpPoints, const std::vector<KeyFrame*> &vpPointsKFs, std::vector<MapPoint*> &vpMatched, std::vector<KeyFrame*> &vpMatchedKF, int th, float ratioHamming=1.0);
 
+#[time()]
 pub fn search_by_bow_f(
     kf: &Frame<FullKeyFrame>, frame: &mut Frame<InitialFrame>,
     should_check_orientation: bool, ratio: f64
 ) -> Result<(u32, Vec<(Id, u32)>), Box<dyn std::error::Error>> {
     // int SearchByBoW(KeyFrame *pKF, Frame &F, std::vector<MapPoint*> &vpMapPointMatches);
-    let now = std::time::Instant::now();
     frame.clear_mappoints();
     let mut matches = HashMap::<u32, Id>::new();
 
@@ -594,7 +592,6 @@ pub fn search_by_bow_f(
         increase_found.push((*mp_id, 1));
     }
 
-    trace!("TRACKING BACKEND...Search by BoW: {} ms", now.elapsed().as_millis());
     return Ok((matches.len() as u32, increase_found));
 }
 
@@ -942,7 +939,7 @@ pub fn fuse(kf_id: &Id, fuse_candidates: &Vec<Id>, map: &RwLockReadGuard<Map>, t
         // Search in a radius
         let predicted_level = mappoint.predict_scale(&dist_3d);
         let radius = th * SCALE_FACTORS[predicted_level as usize];
-        let indices = keyframe.get_features_in_area(&uv.0, &uv.1, radius, is_right);
+        let indices = keyframe.get_features_in_area(&uv.0, &uv.1, radius as f64, is_right);
         if indices.is_empty() {
             continue;
         }

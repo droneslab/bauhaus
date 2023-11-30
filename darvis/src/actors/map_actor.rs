@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use dvcore::{actor::{ActorChannels, ActorMessage, Actor}, matrix::{DVVectorOfPoint2f, DVVectorOfPoint3f}};
 use log::{info, warn, debug, trace};
+use logging_timer::timer;
 
 use crate::{
     maplock::ReadWriteMap,
@@ -13,6 +14,7 @@ pub struct MapActor {
     actor_system: ActorChannels,
     map: ReadWriteMap<Map>,
 }
+
 impl Actor for MapActor {
     fn run(&mut self) {
         'outer: loop {
@@ -20,11 +22,9 @@ impl Actor for MapActor {
             if message.is::<MapWriteMsg>() {
                 let msg = message.downcast::<MapWriteMsg>().unwrap_or_else(|_| panic!("Could not downcast map actor message!"));
 
-                let now = std::time::Instant::now();
-
                 match msg.target {
                     MapWriteTarget::CreateInitialMapMonocular { mp_matches, p3d, initial_frame, current_frame } => {
-                        let now = std::time::Instant::now();
+                        let _timer = timer!("MapActor::TotalCreateInitialMap");
 
                         let mut write_lock = self.map.write();
                         match write_lock.create_initial_map_monocular(mp_matches, p3d, initial_frame, current_frame) {
@@ -40,82 +40,70 @@ impl Actor for MapActor {
                                     warn!("Could not create initial map");
                                 }
                         };
-                        trace!("MAP...Create initial map: {} ms", now.elapsed().as_millis());
                     },
                     MapWriteTarget::Map__Optimization { poses } => {
-                        let now = std::time::Instant::now();
+                        let _timer = timer!("MapActor::TotalMapOptimization");
                         self.map.write().update_after_ba(poses, 0);
-                        trace!("MAP...Update after BA: {} ms", now.elapsed().as_millis());
                     },
                     MapWriteTarget::KeyFrame__New { kf } => {
-                        let now = std::time::Instant::now();
+                        let _timer = timer!("MapActor::TotalNewKeyFrame");
                         let kf_id = self.map.write().insert_keyframe_to_map(kf, false);
                         info!("Created keyframe {}", kf_id);
                         // Tell local mapping to process keyframe
                         self.actor_system.find(LOCAL_MAPPING).send(Box::new(LocalMappingMsg::KeyFrameIdMsg{kf_id})).unwrap();
                         // Send the new keyframe ID directly back to the sender so they can use the ID 
                         self.actor_system.find(TRACKING_BACKEND).send(Box::new(TrackingBackendMsg::KeyFrameIdMsg{kf_id})).unwrap();
-                        trace!("MAP...Insert new keyframe: {} ms", now.elapsed().as_millis());
                     },
                     MapWriteTarget::KeyFrame__Delete { id } => {
-                        let now = std::time::Instant::now();
+                        let _timer = timer!("MapActor::TotalDeleteKeyFrame");
                         self.map.write().discard_keyframe(id);
-                        trace!("MAP...Discard keyframe: {} ms", now.elapsed().as_millis());
                     },
                     MapWriteTarget::MapPoint__NewMany { mps, callback_actor } => {
-                        let now = std::time::Instant::now();
+                        let _timer = timer!("MapActor::TotalNewManyMapPoints");
+                        let mut map = self.map.write();
                         for (mp, observations) in mps {
-                            let _ = self.map.write().insert_mappoint_to_map(mp, observations);
+                            let _ = map.insert_mappoint_to_map(mp, observations);
                         }
                         // Inform tracking that we are done with creating new mappoints. Needed because tracking fails if new points are not created
                         // before track_with_reference_keyframe, so to avoid the race condition we have it wait until the new points are ready.
                         self.actor_system.find(TRACKING_BACKEND).send(Box::new(TrackingBackendMsg::LastKeyFrameUpdatedMsg{})).unwrap();
-                        trace!("MAP...Create many new mappoints: {} ms", now.elapsed().as_millis());
                     },
                     MapWriteTarget::MapPoint__DiscardMany { ids } => {
-                        let now = std::time::Instant::now();
                         for id in ids {
                             self.map.write().discard_mappoint(&id);
                         }
-                        trace!("MAP...Discard many mappoints: {} ms", now.elapsed().as_millis());
                     },
 
                     MapWriteTarget::MapPoint__IncreaseFound { mp_ids_and_nums } => {
-                        let now = std::time::Instant::now();
                         for (mp, n) in mp_ids_and_nums {
                             self.map.write().mappoints.get_mut(&mp).unwrap().increase_found(n);
                         }
-                        trace!("MAP...Increase mappoint found: {} ms", now.elapsed().as_millis());
                     },
-                    MapWriteTarget::MapPoint__IncreaseVisible {mp_ids} => {
-                        let now = std::time::Instant::now();
-                        for mp_id in mp_ids {
-                            self.map.write().mappoints.get_mut(&mp_id).unwrap().increase_visible();
-                        }
-                        trace!("MAP...Increase mappoint visibile: {} ms", now.elapsed().as_millis());
+                    MapWriteTarget::MapPoint__IncreaseVisible {id} => {//mp_ids} => {
+                        // let _timer = timer!("MapActor::TotalIncreaseVisible");
+                        // println!("Mappoint increase visible {}", mp_ids.len());
+                        // for mp_id in mp_ids {
+                            self.map.write().mappoints.get_mut(&id).unwrap().increase_visible();
+                        // }
                     },
                     MapWriteTarget::MapPoint__AddObservation {mp_id, kf_id, index} => {
-                        let now = std::time::Instant::now();
+                        let _timer = timer!("MapActor::TotalAddObservation");
                         let num_keypoints = self.map.write().get_keyframe(&kf_id).unwrap().features.num_keypoints;
                         self.map.write().mappoints.get_mut(&mp_id).unwrap().add_observation(&kf_id, num_keypoints, index as u32);
                         self.map.write().keyframes.get_mut(&kf_id).unwrap().add_mappoint(index as u32, mp_id, false);
-                        trace!("MAP...Add observation: {} ms", now.elapsed().as_millis());
                     },
                     MapWriteTarget::MapPoint__Replace {mp_to_replace, mp} => {
-                        let now = std::time::Instant::now();
+                        let _timer = timer!("MapActor::TotalReplaceMapPoint");
                         self.map.write().replace_mappoint(mp_to_replace, mp);
-                        trace!("MAP...Replace mappoint: {} ms", now.elapsed().as_millis());
                     },
                     MapWriteTarget::MapPoint__Pose{mp_id, pose} => {
-                        let now = std::time::Instant::now();
+                        let _timer = timer!("MapActor::TotalUpdateMapPointPose");
                         self.map.write().mappoints.get_mut(&mp_id).unwrap().position = pose.get_translation();
-                        trace!("MAP...Update mappoint pose: {} ms", now.elapsed().as_millis());
                     }
                     _ => {
                         warn!("Unimplemented target: {:?}", msg.target);
                     },
                 }
-                trace!("MAP...Total: {} ms", now.elapsed().as_millis());
             } else if message.is::<ShutdownMsg>() {
                 break 'outer;
             } else {
@@ -157,7 +145,7 @@ enum MapWriteTarget {
     MapPoint__DiscardMany{ids: Vec<Id>},
     MapPoint__Replace{mp_to_replace: Id, mp: Id},
     MapPoint__IncreaseFound{mp_ids_and_nums: Vec::<(Id, u32)>},
-    MapPoint__IncreaseVisible{mp_ids: Vec<Id>},
+    MapPoint__IncreaseVisible{id: Id}, //mp_ids: Vec<Id>},
     MapPoint__AddObservation{mp_id: Id, kf_id: Id, index: usize},
     MapPoint__Pose{mp_id: Id, pose: DVPose},
     Shutdown{msg: ShutdownMsg}
@@ -233,9 +221,9 @@ impl MapWriteMsg {
             target: MapWriteTarget::MapPoint__IncreaseFound { mp_ids_and_nums },
         }
     }
-    pub fn increase_visible(mp_ids: Vec<Id>) -> Self {
+    pub fn increase_visible(id: Id) -> Self { //mp_ids: Vec<Id>) -> Self {
         Self {
-            target: MapWriteTarget::MapPoint__IncreaseVisible { mp_ids },
+            target: MapWriteTarget::MapPoint__IncreaseVisible { id } //mp_ids },
         }
     }
     pub fn replace_mappoint(mp_to_replace: Id, mp: Id) -> Self {

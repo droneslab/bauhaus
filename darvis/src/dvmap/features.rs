@@ -215,7 +215,7 @@ impl Features {
         }
     }
 
-    pub fn get_features_in_area(&self, x: &f64, y: &f64, r: f64, min_level: i32, max_level: i32, image_bounds: &ImageBounds) -> Vec<u32> {
+    pub fn get_features_in_area(&self, x: &f64, y: &f64, r: f64, image_bounds: &ImageBounds, levels: Option<(i32, i32)>,) -> Vec<u32> {
         //GetFeaturesInArea
         let mut indices = Vec::<u32>::new();
         indices.reserve(self.num_keypoints as usize);
@@ -237,11 +237,12 @@ impl Features {
             return indices;
         }
 
-        let check_levels = min_level>0 || max_level>=0;
+        let check_levels = levels.is_some() && (levels.unwrap().0>0 || levels.unwrap().1>=0);
 
         for ix in min_cell_x..max_cell_x + 1 {
             for iy in min_cell_y..max_cell_y + 1 {
                 let v_cell  =&self.grid.grid[ix as usize][iy as usize];
+                // TODO (STEREO) 
                 //const vector<size_t> vCell = (!bRight) ? mGrid[ix][iy] : mGridRight[ix][iy];
 
                 if v_cell.is_empty() {
@@ -252,11 +253,11 @@ impl Features {
                     //TODO (Stereo) Need to update this if stereo images are processed
                     let (kp_un, _is_right) = &self.get_keypoint(v_cell[j]);
                     if check_levels {
-                        if kp_un.octave() < min_level as i32 {
+                        if kp_un.octave() < levels.unwrap().0 as i32 {
                             continue;
                         }
-                        if max_level >= 0 {
-                            if kp_un.octave() > max_level as i32 {
+                        if levels.unwrap().1 >= 0 {
+                            if kp_un.octave() > levels.unwrap().1 as i32 {
                                 continue;
                             }
                         }

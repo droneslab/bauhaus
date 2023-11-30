@@ -17,8 +17,8 @@ system:
       results_folder: "results"
       trajectory_file_name: "trajectory.txt"
       create_flamegraph: false
-      show_visualizer: true
-      log_level: trace # options are [trace, debug, info, warn, error]
+      show_visualizer: false
+      log_level: debug # options are [trace, debug, info, warn, error]
 
 
 modules:
