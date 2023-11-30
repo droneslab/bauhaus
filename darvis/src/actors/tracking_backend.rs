@@ -90,99 +90,9 @@ pub struct DarvisTrackingBack {
 }
 
 impl Actor for DarvisTrackingBack {
-    fn run(&mut self) {
-        'outer: loop {
-            let message = self.actor_channels.receive().unwrap();
+    type MapRef = ReadOnlyMap<Map>;
 
-            if message.is::<TrackingBackendMsg>() {
-                let msg = message.downcast::<TrackingBackendMsg>().unwrap_or_else(|_| panic!("Could not downcast tracking frontend message!"));
-                match *msg {
-                    TrackingBackendMsg::FeatureMsg { keypoints, descriptors, image_width, image_height, timestamp, frame_id } => {
-                        // Regular tracking. Received from tracking frontend
-                        let _timer = timer!("TrackingBackend::TotalRegular");
-                        debug!("Tracking working on frame {}", frame_id);
-                        self.last_frame = Some(self.current_frame);
-                        self.last_frame_id += 1;
-                        self.current_frame = Frame::<InitialFrame>::new(
-                            self.last_frame_id, 
-                            keypoints,
-                            descriptors,
-                            image_width,
-                            image_height,
-                            timestamp
-                        ).expect("Could not create frame!");
-                        match self.track() {
-                            Ok(()) => {
-                                if self.current_frame.ref_kf_id.is_none() {
-                                    self.current_frame.ref_kf_id = self.ref_kf_id;
-                                }
-
-                                match self.state {
-                                    TrackingState::Ok | TrackingState::RecentlyLost => {
-                                        self.update_trajectory_in_logs().expect("Could not save trajectory")
-                                    },
-                                    _ => {},
-                                };
-                            },
-                            Err(e) => {
-                                panic!("Error in Tracking Backend: {}", e);
-                            }
-                        };
-                    },
-                    TrackingBackendMsg::MapInitializedMsg { curr_kf_pose, curr_kf_id, ini_kf_id, local_mappoints, curr_kf_timestamp } => {
-                        // Map needs to be initialized before tracking can begin. Received from map actor
-                        let _timer = timer!("TrackingBackend::TotalMapInitialized");
-                        self.frames_since_last_kf = 0;
-                        self.local_keyframes.push(curr_kf_id);
-                        self.local_keyframes.push(ini_kf_id);
-                        self.local_mappoints = local_mappoints;
-                        self.ref_kf_id = Some(curr_kf_id);
-                        self.last_kf_timestamp = Some(curr_kf_timestamp);
-                        {
-                            let last_frame = self.last_frame.as_mut().unwrap();
-                            last_frame.ref_kf_id = Some(curr_kf_id);
-                            last_frame.pose = Some(curr_kf_pose);
-                        }
-                        self.state = TrackingState::Ok;
-
-                        self.update_trajectory_in_logs().expect("Could not save trajectory");
-
-                        // Let tracking frontend know the map is initialized
-                        self.actor_channels.find(TRACKING_FRONTEND).send(Box::new(
-                            TrackingFrontendMsg::TrackingStateMsg {
-                                state: TrackingState::Ok,
-                                init_id: ini_kf_id
-                            }
-                        )).expect("Could not send to tracking frontend");
-
-                        // Send first two keyframes to local mapping
-                        self.actor_channels.find(LOCAL_MAPPING).send(Box::new(
-                            LocalMappingMsg::KeyFrameIdMsg { kf_id: ini_kf_id }
-                        )).expect("Could not send to local mapping");
-                        self.actor_channels.find(LOCAL_MAPPING).send(Box::new(
-                            LocalMappingMsg::KeyFrameIdMsg { kf_id: curr_kf_id }
-                        )).unwrap();
-                    },
-                    TrackingBackendMsg::KeyFrameIdMsg { kf_id } => {
-                        // Received from the map actor after it inserts a keyframe
-                        self.last_frame.as_mut().unwrap().ref_kf_id = Some(kf_id);
-                    },
-                    TrackingBackendMsg::LastKeyFrameUpdatedMsg {  } => {
-                        // Received from local mapping after it culls and creates new MPs for the last inserted KF
-                        self.state = TrackingState::Ok;
-                    },
-                }
-            } else if message.is::<ShutdownMsg>() {
-                break 'outer;
-            } else {
-                warn!("Tracking backend received unknown message type!");
-            }
-        }
-    }
-}
-
-impl DarvisTrackingBack {
-    pub fn new(map: ReadOnlyMap<Map>, actor_channels: ActorChannels) -> DarvisTrackingBack {
+    fn new_actorstate(actor_channels: ActorChannels, map: Self::MapRef) -> DarvisTrackingBack {
         // Note: This is suuuuuch a specific bug. Default::default() calls the default function 
         // for every single item in the struct, even if it is explicitly overriden (such as
         // map, camera, sensor, global_defaults, and optimizer in the below code). This means that
@@ -204,7 +114,101 @@ impl DarvisTrackingBack {
         }
     }
 
+    fn spawn(actor_channels: ActorChannels, map: Self::MapRef) {
+        let mut actor = DarvisTrackingBack::new_actorstate(actor_channels, map);
 
+        'outer: loop {
+
+            let message = actor.actor_channels.receive().unwrap();
+
+            if message.is::<TrackingBackendMsg>() {
+                let msg = message.downcast::<TrackingBackendMsg>().unwrap_or_else(|_| panic!("Could not downcast tracking frontend message!"));
+                match *msg {
+                    TrackingBackendMsg::FeatureMsg { keypoints, descriptors, image_width, image_height, timestamp, frame_id } => {
+                        // Regular tracking. Received from tracking frontend
+                        let _timer = timer!("TrackingBackend::TotalRegular");
+                        debug!("Tracking working on frame {}", frame_id);
+                        actor.last_frame = Some(actor.current_frame);
+                        actor.last_frame_id += 1;
+                        actor.current_frame = Frame::<InitialFrame>::new(
+                            actor.last_frame_id, 
+                            keypoints,
+                            descriptors,
+                            image_width,
+                            image_height,
+                            timestamp
+                        ).expect("Could not create frame!");
+                        match actor.track() {
+                            Ok(()) => {
+                                if actor.current_frame.ref_kf_id.is_none() {
+                                    actor.current_frame.ref_kf_id = actor.ref_kf_id;
+                                }
+
+                                match actor.state {
+                                    TrackingState::Ok | TrackingState::RecentlyLost => {
+                                        actor.update_trajectory_in_logs().expect("Could not save trajectory")
+                                    },
+                                    _ => {},
+                                };
+                            },
+                            Err(e) => {
+                                panic!("Error in Tracking Backend: {}", e);
+                            }
+                        };
+                    },
+                    TrackingBackendMsg::MapInitializedMsg { curr_kf_pose, curr_kf_id, ini_kf_id, local_mappoints, curr_kf_timestamp } => {
+                        // Map needs to be initialized before tracking can begin. Received from map actor
+                        let _timer = timer!("TrackingBackend::TotalMapInitialized");
+                        actor.frames_since_last_kf = 0;
+                        actor.local_keyframes.push(curr_kf_id);
+                        actor.local_keyframes.push(ini_kf_id);
+                        actor.local_mappoints = local_mappoints;
+                        actor.ref_kf_id = Some(curr_kf_id);
+                        actor.last_kf_timestamp = Some(curr_kf_timestamp);
+                        {
+                            let last_frame = actor.last_frame.as_mut().unwrap();
+                            last_frame.ref_kf_id = Some(curr_kf_id);
+                            last_frame.pose = Some(curr_kf_pose);
+                        }
+                        actor.state = TrackingState::Ok;
+
+                        actor.update_trajectory_in_logs().expect("Could not save trajectory");
+
+                        // Let tracking frontend know the map is initialized
+                        actor.actor_channels.find(TRACKING_FRONTEND).send(Box::new(
+                            TrackingFrontendMsg::TrackingStateMsg {
+                                state: TrackingState::Ok,
+                                init_id: ini_kf_id
+                            }
+                        )).expect("Could not send to tracking frontend");
+
+                        // Send first two keyframes to local mapping
+                        actor.actor_channels.find(LOCAL_MAPPING).send(Box::new(
+                            LocalMappingMsg::KeyFrameIdMsg { kf_id: ini_kf_id }
+                        )).expect("Could not send to local mapping");
+                        actor.actor_channels.find(LOCAL_MAPPING).send(Box::new(
+                            LocalMappingMsg::KeyFrameIdMsg { kf_id: curr_kf_id }
+                        )).unwrap();
+                    },
+                    TrackingBackendMsg::KeyFrameIdMsg { kf_id } => {
+                        // Received from the map actor after it inserts a keyframe
+                        actor.last_frame.as_mut().unwrap().ref_kf_id = Some(kf_id);
+                    },
+                    TrackingBackendMsg::LastKeyFrameUpdatedMsg {  } => {
+                        // Received from local mapping after it culls and creates new MPs for the last inserted KF
+                        actor.state = TrackingState::Ok;
+                    },
+                }
+            } else if message.is::<ShutdownMsg>() {
+                break 'outer;
+            } else {
+                warn!("Tracking backend received unknown message type!");
+            }
+        }
+    }
+}
+
+impl DarvisTrackingBack {
     #[time("TrackingBackend::{}")]
     fn track(&mut self) -> Result<(), Box<dyn std::error::Error>>  {
         // TODO (reset): Reset map because local mapper set the bad imu flag

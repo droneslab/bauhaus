@@ -27,7 +27,7 @@ use super::{tracking_backend::TrackingBackendMsg, messages::ShutdownMsg, visuali
 
 #[derive(Debug)]
 pub struct DarvisTrackingFront {
-    actor_system: ActorChannels,
+    actor_channels: ActorChannels,
     orb_extractor_left: DVORBextractor,
     orb_extractor_right: Option<DVORBextractor>,
     orb_extractor_ini: Option<DVORBextractor>,
@@ -39,9 +39,36 @@ pub struct DarvisTrackingFront {
 }
 
 impl Actor for DarvisTrackingFront {
-    fn run(&mut self) {
+    type MapRef = ();
+
+    fn new_actorstate(actor_channels: ActorChannels, _map: Self::MapRef) -> DarvisTrackingFront {
+        let max_features = SETTINGS.get::<i32>(FEATURE_DETECTION, "max_features");
+        let sensor = SETTINGS.get::<Sensor>(SYSTEM, "sensor");
+        let orb_extractor_right = match sensor.frame() {
+            FrameSensor::Stereo => Some(DVORBextractor::new(max_features)),
+            FrameSensor::Mono | FrameSensor::Rgbd => None,
+        };
+        let orb_extractor_ini = match sensor.is_mono() {
+            true => Some(DVORBextractor::new(max_features*5)),
+            false => None
+        };
+        DarvisTrackingFront {
+            actor_channels,
+            orb_extractor_left: DVORBextractor::new(max_features),
+            orb_extractor_right,
+            orb_extractor_ini,
+            map_initialized: false,
+            init_id: 0,
+            last_id: 0,
+            max_frames: SETTINGS.get::<f64>(SYSTEM, "fps") as i32,
+            sensor,
+        }
+    }
+
+    fn spawn(actor_channels: ActorChannels, map: Self::MapRef) {
+        let mut actor = DarvisTrackingFront::new_actorstate(actor_channels, map);
         'outer: loop {
-            let message = self.actor_system.receive().unwrap();
+            let message = actor.actor_channels.receive().unwrap();
 
             if message.is::<TrackingFrontendMsg>() {
                 let msg = message.downcast::<TrackingFrontendMsg>().unwrap_or_else(|_| panic!("Could not downcast tracking frontend message!"));
@@ -51,25 +78,25 @@ impl Actor for DarvisTrackingFront {
                         let image = image::read_image_file(&image_path);
                         let image_cols = image.cols() as u32;
                         let image_rows = image.rows() as u32;
-                        let (keypoints, descriptors) = self.extract_features(image.clone());
-                        self.send_to_backend(keypoints.clone(), descriptors, image_cols, image_rows, timestamp, frame_id);
+                        let (keypoints, descriptors) = actor.extract_features(image.clone());
+                        actor.send_to_backend(keypoints.clone(), descriptors, image_cols, image_rows, timestamp, frame_id);
                         if SETTINGS.get::<bool>(SYSTEM, "show_visualizer") {
-                            self.send_to_visualizer(keypoints, image, timestamp);
+                            actor.send_to_visualizer(keypoints, image, timestamp);
                         }
-                        self.last_id += 1;
+                        actor.last_id += 1;
                     },
                     TrackingFrontendMsg::ImageMsg{ image, timestamp, frame_id } => {
                         let image_cols = image.cols() as u32;
                         let image_rows = image.rows() as u32;
-                        let (keypoints, descriptors) = self.extract_features(image);
-                        self.send_to_backend(keypoints, descriptors, image_cols, image_rows, timestamp, frame_id);
-                        self.last_id += 1;
+                        let (keypoints, descriptors) = actor.extract_features(image);
+                        actor.send_to_backend(keypoints, descriptors, image_cols, image_rows, timestamp, frame_id);
+                        actor.last_id += 1;
                     },
                     TrackingFrontendMsg::TrackingStateMsg{ state, init_id } => {
                         match state {
                             TrackingState::Ok => { 
-                                self.map_initialized = true;
-                                self.init_id = init_id
+                                actor.map_initialized = true;
+                                actor.init_id = init_id
                             },
                             _ => {}
                         };
@@ -85,30 +112,6 @@ impl Actor for DarvisTrackingFront {
 }
 
 impl DarvisTrackingFront {
-    pub fn new(actor_system: ActorChannels) -> DarvisTrackingFront {
-        let max_features = SETTINGS.get::<i32>(FEATURE_DETECTION, "max_features");
-        let sensor = SETTINGS.get::<Sensor>(SYSTEM, "sensor");
-        let orb_extractor_right = match sensor.frame() {
-            FrameSensor::Stereo => Some(DVORBextractor::new(max_features)),
-            FrameSensor::Mono | FrameSensor::Rgbd => None,
-        };
-        let orb_extractor_ini = match sensor.is_mono() {
-            true => Some(DVORBextractor::new(max_features*5)),
-            false => None
-        };
-        DarvisTrackingFront {
-            actor_system,
-            orb_extractor_left: DVORBextractor::new(max_features),
-            orb_extractor_right,
-            orb_extractor_ini,
-            map_initialized: false,
-            init_id: 0,
-            last_id: 0,
-            max_frames: SETTINGS.get::<f64>(SYSTEM, "fps") as i32,
-            sensor,
-        }
-    }
-
     #[time("TrackingFrontend::{}")]
     fn extract_features(&mut self, image: opencv::core::Mat) -> (VectorOfKeyPoint, Mat) {
         // TODO (Perf optimizations)
@@ -135,7 +138,7 @@ impl DarvisTrackingFront {
         // Send features to backend
         // Note: Run-time errors ... actor lookup is runtime error
         // Note: not currently sending image to backend
-        let backend = self.actor_system.find("TRACKING_BACKEND");
+        let backend = self.actor_channels.find("TRACKING_BACKEND");
 
         backend.send(Box::new(TrackingBackendMsg::FeatureMsg{
             keypoints: DVVectorOfKeyPoint::new(keypoints),
@@ -150,7 +153,7 @@ impl DarvisTrackingFront {
     #[time("TrackingFrontend::{}")]
     fn send_to_visualizer(&mut self, keypoints: VectorOfKeyPoint, image: Mat, timestamp: Timestamp) {
         // Send image and features to visualizer
-        self.actor_system.find(VISUALIZER).send(Box::new(VisualizerMsg::VisFeaturesMsg {
+        self.actor_channels.find(VISUALIZER).send(Box::new(VisualizerMsg::VisFeaturesMsg {
             keypoints: DVVectorOfKeyPoint::new(keypoints),
             image,
             timestamp,

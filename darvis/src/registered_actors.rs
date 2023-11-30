@@ -18,30 +18,30 @@ pub static SHUTDOWN_ACTOR: &str = "SHUTDOWN";
 pub static MAP_ACTOR: &str = "MAP_ACTOR"; 
 
 
-pub fn get_actor(
+pub fn spawn(
     actor_name: String, actor_channels: ActorChannels, map: Option<ReadOnlyMap<Map>>
-) -> Box<dyn Actor> {
+) {
     match actor_name.as_ref() {
         str if str == TRACKING_FRONTEND.to_string() => {
-            return Box::new(crate::actors::tracking_frontend::DarvisTrackingFront::new(actor_channels))
+            crate::actors::tracking_frontend::DarvisTrackingFront::spawn(actor_channels, ())
         },
         str if str == TRACKING_BACKEND.to_string() => {
-            return Box::new(crate::actors::tracking_backend::DarvisTrackingBack::new(map.expect("Tracking backend needs the map!"), actor_channels))
+            crate::actors::tracking_backend::DarvisTrackingBack::spawn(actor_channels, map.expect("Tracking backend needs the map!"))
         },
         str if str == LOCAL_MAPPING.to_string() => {
-            return Box::new(crate::actors::local_mapping::DarvisLocalMapping::new(map.expect("Local mapping needs the map!"), actor_channels))
+            crate::actors::local_mapping::DarvisLocalMapping::spawn(actor_channels, map.expect("Local mapping needs the map!"))
         },
         str if str == LOOP_CLOSING.to_string() => {
-            return Box::new(crate::actors::loop_closing::DarvisLoopClosing::new(map.expect("Loop closing needs the map!"), actor_channels))
+            crate::actors::loop_closing::DarvisLoopClosing::spawn(actor_channels, map.expect("Loop closing needs the map!"))
         },
         str if str == VISUALIZER.to_string() => {
-            return Box::new(crate::actors::visualizer::DarvisVisualizer::new(actor_channels, map.expect("Visualizer needs the map!")))
+            crate::actors::visualizer::DarvisVisualizer::spawn(actor_channels, map.expect("Visualizer needs the map!"))
         },
         str if str == SHUTDOWN_ACTOR.to_string() => {
-            return Box::new(crate::actors::shutdown::ShutdownActor::new(actor_channels))
+            crate::actors::shutdown::ShutdownActor::spawn(actor_channels, ())
         },
         _ => {
-            return Box::new(dvcore::actor::NullActor::new(actor_name.clone()))
+            dvcore::actor::NullActor::spawn(actor_channels, ())
         },
     };
 }

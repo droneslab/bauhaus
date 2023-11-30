@@ -16,9 +16,17 @@ pub struct MapActor {
 }
 
 impl Actor for MapActor {
-    fn run(&mut self) {
+    type MapRef = ReadWriteMap<Map>;
+
+    fn new_actorstate (actor_system: ActorChannels, map: Self::MapRef) -> Self {
+        MapActor { actor_system, map }
+    }
+
+    fn spawn(actor_channels: ActorChannels, map: Self::MapRef) {
+        let actor = MapActor::new_actorstate(actor_channels, map);
+
         'outer: loop {
-            let message = self.actor_system.receive().unwrap();
+            let message = actor.actor_system.receive().unwrap();
             if message.is::<MapWriteMsg>() {
                 let msg = message.downcast::<MapWriteMsg>().unwrap_or_else(|_| panic!("Could not downcast map actor message!"));
 
@@ -26,10 +34,10 @@ impl Actor for MapActor {
                     MapWriteTarget::CreateInitialMapMonocular { mp_matches, p3d, initial_frame, current_frame } => {
                         let _timer = timer!("MapActor::TotalCreateInitialMap");
 
-                        let mut write_lock = self.map.write();
+                        let mut write_lock = actor.map.write();
                         match write_lock.create_initial_map_monocular(mp_matches, p3d, initial_frame, current_frame) {
                                 Some((curr_kf_pose, curr_kf_id, ini_kf_id, local_mappoints, curr_kf_timestamp)) => {
-                                    self.actor_system.find(TRACKING_BACKEND).send(Box::new(
+                                    actor.actor_system.find(TRACKING_BACKEND).send(Box::new(
                                         TrackingBackendMsg::MapInitializedMsg {
                                             curr_kf_pose, curr_kf_id, ini_kf_id, 
                                             local_mappoints, curr_kf_timestamp
@@ -43,62 +51,62 @@ impl Actor for MapActor {
                     },
                     MapWriteTarget::Map__Optimization { poses } => {
                         let _timer = timer!("MapActor::TotalMapOptimization");
-                        self.map.write().update_after_ba(poses, 0);
+                        actor.map.write().update_after_ba(poses, 0);
                     },
                     MapWriteTarget::KeyFrame__New { kf } => {
                         let _timer = timer!("MapActor::TotalNewKeyFrame");
-                        let kf_id = self.map.write().insert_keyframe_to_map(kf, false);
+                        let kf_id = actor.map.write().insert_keyframe_to_map(kf, false);
                         info!("Created keyframe {}", kf_id);
                         // Tell local mapping to process keyframe
-                        self.actor_system.find(LOCAL_MAPPING).send(Box::new(LocalMappingMsg::KeyFrameIdMsg{kf_id})).unwrap();
+                        actor.actor_system.find(LOCAL_MAPPING).send(Box::new(LocalMappingMsg::KeyFrameIdMsg{kf_id})).unwrap();
                         // Send the new keyframe ID directly back to the sender so they can use the ID 
-                        self.actor_system.find(TRACKING_BACKEND).send(Box::new(TrackingBackendMsg::KeyFrameIdMsg{kf_id})).unwrap();
+                        actor.actor_system.find(TRACKING_BACKEND).send(Box::new(TrackingBackendMsg::KeyFrameIdMsg{kf_id})).unwrap();
                     },
                     MapWriteTarget::KeyFrame__Delete { id } => {
                         let _timer = timer!("MapActor::TotalDeleteKeyFrame");
-                        self.map.write().discard_keyframe(id);
+                        actor.map.write().discard_keyframe(id);
                     },
                     MapWriteTarget::MapPoint__NewMany { mps, callback_actor } => {
                         let _timer = timer!("MapActor::TotalNewManyMapPoints");
-                        let mut map = self.map.write();
+                        let mut map = actor.map.write();
                         for (mp, observations) in mps {
                             let _ = map.insert_mappoint_to_map(mp, observations);
                         }
                         // Inform tracking that we are done with creating new mappoints. Needed because tracking fails if new points are not created
                         // before track_with_reference_keyframe, so to avoid the race condition we have it wait until the new points are ready.
-                        self.actor_system.find(TRACKING_BACKEND).send(Box::new(TrackingBackendMsg::LastKeyFrameUpdatedMsg{})).unwrap();
+                        actor.actor_system.find(TRACKING_BACKEND).send(Box::new(TrackingBackendMsg::LastKeyFrameUpdatedMsg{})).unwrap();
                     },
                     MapWriteTarget::MapPoint__DiscardMany { ids } => {
                         for id in ids {
-                            self.map.write().discard_mappoint(&id);
+                            actor.map.write().discard_mappoint(&id);
                         }
                     },
 
                     MapWriteTarget::MapPoint__IncreaseFound { mp_ids_and_nums } => {
                         for (mp, n) in mp_ids_and_nums {
-                            self.map.write().mappoints.get_mut(&mp).unwrap().increase_found(n);
+                            actor.map.write().mappoints.get_mut(&mp).unwrap().increase_found(n);
                         }
                     },
                     MapWriteTarget::MapPoint__IncreaseVisible {id} => {//mp_ids} => {
                         // let _timer = timer!("MapActor::TotalIncreaseVisible");
                         // println!("Mappoint increase visible {}", mp_ids.len());
                         // for mp_id in mp_ids {
-                            self.map.write().mappoints.get_mut(&id).unwrap().increase_visible();
+                            actor.map.write().mappoints.get_mut(&id).unwrap().increase_visible();
                         // }
                     },
                     MapWriteTarget::MapPoint__AddObservation {mp_id, kf_id, index} => {
                         let _timer = timer!("MapActor::TotalAddObservation");
-                        let num_keypoints = self.map.write().get_keyframe(&kf_id).unwrap().features.num_keypoints;
-                        self.map.write().mappoints.get_mut(&mp_id).unwrap().add_observation(&kf_id, num_keypoints, index as u32);
-                        self.map.write().keyframes.get_mut(&kf_id).unwrap().add_mappoint(index as u32, mp_id, false);
+                        let num_keypoints = actor.map.write().get_keyframe(&kf_id).unwrap().features.num_keypoints;
+                        actor.map.write().mappoints.get_mut(&mp_id).unwrap().add_observation(&kf_id, num_keypoints, index as u32);
+                        actor.map.write().keyframes.get_mut(&kf_id).unwrap().add_mappoint(index as u32, mp_id, false);
                     },
                     MapWriteTarget::MapPoint__Replace {mp_to_replace, mp} => {
                         let _timer = timer!("MapActor::TotalReplaceMapPoint");
-                        self.map.write().replace_mappoint(mp_to_replace, mp);
+                        actor.map.write().replace_mappoint(mp_to_replace, mp);
                     },
                     MapWriteTarget::MapPoint__Pose{mp_id, pose} => {
                         let _timer = timer!("MapActor::TotalUpdateMapPointPose");
-                        self.map.write().mappoints.get_mut(&mp_id).unwrap().position = pose.get_translation();
+                        actor.map.write().mappoints.get_mut(&mp_id).unwrap().position = pose.get_translation();
                     }
                     _ => {
                         warn!("Unimplemented target: {:?}", msg.target);
@@ -109,15 +117,6 @@ impl Actor for MapActor {
             } else {
                 warn!("Map Actor received unknown message type!");
             }
-        }
-    }
-}
-
-impl MapActor {//+ std::marker::Send + std::marker::Sync
-    pub fn new (actor_system: ActorChannels, map: ReadWriteMap<Map>) -> Self {
-        MapActor {
-            actor_system,
-            map
         }
     }
 }

@@ -45,9 +45,25 @@ pub struct DarvisLocalMapping {
 }
 
 impl Actor for DarvisLocalMapping {
-    fn run(&mut self) {
+    type MapRef = ReadOnlyMap<Map>;
+
+    fn new_actorstate(actor_channels: ActorChannels, map: Self::MapRef) -> DarvisLocalMapping {
+        let sensor: Sensor = SETTINGS.get(SYSTEM, "sensor");
+
+        DarvisLocalMapping {
+            actor_channels,
+            map,
+            sensor,
+            current_keyframe_id: -1,
+            ..Default::default()
+        }
+    }
+
+    fn spawn(actor_channels: ActorChannels, map: Self::MapRef) {
+        let mut actor = DarvisLocalMapping::new_actorstate(actor_channels, map);
+
         'outer: loop {
-            let message = self.actor_channels.receive().unwrap();
+            let message = actor.actor_channels.receive().unwrap();
             if message.is::<LocalMappingMsg>() {
                 let msg = message.downcast::<LocalMappingMsg>().unwrap_or_else(|_| panic!("Could not downcast local mapping message!"));
 
@@ -55,8 +71,8 @@ impl Actor for DarvisLocalMapping {
                     LocalMappingMsg::KeyFrameIdMsg{ kf_id } => {
                         let _timer = timer!("LocalMapping::Total");
                         debug!("Local mapping working on kf {}", kf_id);
-                        self.current_keyframe_id = kf_id;
-                        self.local_mapping();
+                        actor.current_keyframe_id = kf_id;
+                        actor.local_mapping();
                     },
                     LocalMappingMsg::Reset{} => {
                         // TODO (design) need to think about how reset requests should be propagated
@@ -72,18 +88,6 @@ impl Actor for DarvisLocalMapping {
 }
 
 impl DarvisLocalMapping {
-    pub fn new(map: ReadOnlyMap<Map>, actor_channels: ActorChannels) -> DarvisLocalMapping {
-        let sensor: Sensor = SETTINGS.get(SYSTEM, "sensor");
-
-        DarvisLocalMapping {
-            actor_channels,
-            map,
-            sensor,
-            current_keyframe_id: -1,
-            ..Default::default()
-        }
-    }
-
     #[time("LocalMapping::{}")]
     fn local_mapping(&mut self) {
         match self.sensor.frame() {
