@@ -12,6 +12,7 @@ use dvcore::{
     matrix::DVVector3
 };
 use log::{debug, warn, trace};
+use logging_timer::{time, timer};
 use opencv::prelude::KeyPointTraitConst;
 use crate::ActorChannels;
 use crate::actors::loop_closing::LoopClosingMsg;
@@ -52,11 +53,10 @@ impl Actor for DarvisLocalMapping {
 
                 match *msg {
                     LocalMappingMsg::KeyFrameIdMsg{ kf_id } => {
-                        let now = std::time::Instant::now();
+                        let _timer = timer!("LocalMapping::Total");
                         debug!("Local mapping working on kf {}", kf_id);
                         self.current_keyframe_id = kf_id;
                         self.local_mapping();
-                        trace!("LOCAL MAPPING...Total: {} ms", now.elapsed().as_millis());
                     },
                     LocalMappingMsg::Reset{} => {
                         // TODO (design) need to think about how reset requests should be propagated
@@ -84,6 +84,7 @@ impl DarvisLocalMapping {
         }
     }
 
+    #[time("LocalMapping::{}")]
     fn local_mapping(&mut self) {
         match self.sensor.frame() {
             FrameSensor::Stereo => {
@@ -220,7 +221,6 @@ impl DarvisLocalMapping {
     }
 
     fn mappoint_culling(&mut self) -> i32 {
-        let now = std::time::Instant::now();
         let th_obs = match self.sensor.is_mono() {
             true => 2,
             false => 3
@@ -244,13 +244,12 @@ impl DarvisLocalMapping {
         });
         let num_to_discard = to_discard.len() as i32;
         self.actor_channels.find(MAP_ACTOR).send(Box::new(MapWriteMsg::discard_many_mappoints(to_discard))).unwrap();
-        trace!("LOCAL MAPPING...Mappoint culling : {} ms", now.elapsed().as_millis());
         return num_to_discard;
     }
 
+    #[time("LocalMapping::{}")]
     fn create_new_mappoints(&self) -> Vec<(MapPoint<PrelimMapPoint>, Vec<(i32, u32, usize)>)> {
         // Retrieve neighbor keyframes in covisibility graph
-        let now = std::time::Instant::now();
         let nn = match self.sensor.is_mono() {
             true => 30,
             false => 10
@@ -478,12 +477,11 @@ impl DarvisLocalMapping {
                 ));
             }
         }
-        trace!("LOCAL MAPPING...Create new mappoints: {} ms", now.elapsed().as_millis());
         new_mappoints
     }
 
+    #[time("LocalMapping::{}")]
     fn search_in_neighbors(&self) {
-        let now = std::time::Instant::now();
         // Retrieve neighbor keyframes
         let nn = match self.sensor.frame() {
             FrameSensor::Mono => 30,
@@ -562,15 +560,14 @@ impl DarvisLocalMapping {
         for msg in to_fuse {
             self.actor_channels.find(MAP_ACTOR).send(Box::new(msg)).unwrap();
         }
-        trace!("LOCAL MAPPING...Search in neighbors : {} ms", now.elapsed().as_millis());
     }
 
+    #[time("LocalMapping::{}")]
     fn keyframe_culling(&self) -> i32 {
         // Check redundant keyframes (only local keyframes)
         // A keyframe is considered redundant if the 90% of the MapPoints it sees, are seen
         // in at least other 3 keyframes (in the same or finer scale)
         // We only consider close stereo points
-        let now = std::time::Instant::now();
 
         //TODO... I think we don't need this because the covisibility keyframes struct organizes itself but double check
         // mpCurrentKeyFrame->UpdateBestCovisibles(); 
@@ -704,7 +701,6 @@ impl DarvisLocalMapping {
             // TODO (design): mbAbortBA
             // if((count > 20 && mbAbortBA) { break; }
         }
-        trace!("LOCAL MAPPING...Keyframe culling : {} ms", now.elapsed().as_millis());
         return num_deleted;
     }
 }

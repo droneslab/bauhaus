@@ -27,7 +27,7 @@ impl<T> ReadOnlyMap<T> {
         let guard = self.inner.read().unwrap();
         let elapsed = now.elapsed().as_millis();
         if elapsed > 5 {
-            trace!("LOCKS...Read acquire: {} ms", now.elapsed().as_millis());
+            debug!("LOCKS...Read acquire: {} ms", now.elapsed().as_millis());
         }
         guard
     }
@@ -47,7 +47,13 @@ impl<T> ReadWriteMap<T> {
 
     pub fn write(&self) -> RwLockWriteGuard<T> {
         // RwLockWriteGuard::map(self.inner.write(), |unlocked| unlocked)
-        self.inner.write().unwrap()
+        let now = Instant::now();
+        let write = self.inner.write().unwrap();
+        let elapsed = now.elapsed().as_millis();
+        if elapsed > 5 {
+            debug!("LOCKS...Write acquire: {} ms", elapsed);
+        }
+        write
     }
 
     pub fn read(&self) -> RwLockReadGuard<T> {

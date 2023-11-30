@@ -2,9 +2,10 @@ use std::{collections::{HashMap, HashSet}, cmp::min};
 use derivative::Derivative;
 use dvcore::{matrix::{DVVector3, DVVectorOfKeyPoint, DVMatrix}, config::{ SETTINGS, SYSTEM}, sensor::{Sensor, FrameSensor}};
 use log::{error, info, debug};
+use logging_timer::time;
 use serde::{Deserialize, Serialize};
 use crate::{dvmap::{map::Id, pose::DVPose},modules::{imu::*, camera::CAMERA_MODULE}, actors::tracking_backend::TrackedMapPointData,};
-use super::{mappoint::{MapPoint, FullMapPoint}, map::Map, features::Features, bow::{BoW, self}, misc::Timestamp};
+use super::{mappoint::{MapPoint, FullMapPoint}, map::{Map, MapItemHashMap}, features::Features, bow::{BoW, self}, misc::Timestamp};
 
 // TODO (design)... It would be nice to re-think how we do the states. We shouldn't have options in the regular Frame struct, there should be Frame generics that either have those filled in or don't. But creating more states means we have a lot more duplicated code for each function that can be called on multiple states. 
 
@@ -112,6 +113,7 @@ impl<T: FrameState> Frame<T> {
 pub struct InitialFrame {}
 
 impl Frame<InitialFrame> {
+    #[time("Frame<InitialFrame>::{}")]
     pub fn new(
         frame_id: Id, keypoints_vec: DVVectorOfKeyPoint, descriptors_vec: DVMatrix,
         im_width: u32, im_height: u32,
@@ -126,7 +128,7 @@ impl Frame<InitialFrame> {
             frame_id,
             timestamp,
             features: Features::new(keypoints_vec, descriptors_vec, im_width, im_height, sensor)?,
-            imu_bias: imu_bias,
+            imu_bias,
             sensor,
             ..Default::default()
         };
@@ -216,7 +218,7 @@ impl Frame<InitialFrame> {
 
 
     pub fn get_features_in_area(&self, x: &f64, y: &f64, r: f64, min_level: i32, max_level: i32) -> Vec<u32> {
-        self.features.get_features_in_area(x, y, r, min_level, max_level, &self.features.image_bounds)
+        self.features.get_features_in_area(x, y, r, &self.features.image_bounds, Some((min_level, max_level)))
     }
 }
 
@@ -225,6 +227,7 @@ impl Frame<InitialFrame> {
 pub struct PrelimKeyFrame {}
 
 impl Frame<PrelimKeyFrame> {
+    #[time("Frame<PrelimKeyFrame>::{}")]
     pub fn new(frame: Frame<InitialFrame>) -> Frame<PrelimKeyFrame> {
         if frame.pose.is_none() {
             panic!("Frame needs a pose before converting to KeyFrame!");
@@ -243,6 +246,7 @@ impl Frame<PrelimKeyFrame> {
             sensor: frame.sensor,
         }
     }
+    #[time("Frame<PrelimKeyFrame>::{}")]
     pub fn new_clone(frame: &Frame<InitialFrame>) -> Frame<PrelimKeyFrame> {
         if frame.pose.is_none() {
             panic!("Frame needs a pose before converting to KeyFrame!");
@@ -304,6 +308,7 @@ pub struct FullKeyFrame {
 }
 
 impl Frame<FullKeyFrame> {
+    #[time("Frame<FullKeyFrame>::{}")]
     pub(super) fn new(prelim_keyframe: Frame<PrelimKeyFrame>, origin_map_id: Id, id: Id) -> Self {
         let bow = match prelim_keyframe.bow {
             Some(bow) => Some(bow),
@@ -444,7 +449,7 @@ impl Frame<FullKeyFrame> {
         // this needs to be generic on sensor, so it can't be called if the sensor doesn't have a right camera
     }
 
-    pub fn compute_scene_median_depth(&self, mappoints: &HashMap<Id, MapPoint<FullMapPoint>>, q: i32) -> f64 {
+    pub fn compute_scene_median_depth(&self, mappoints: &MapItemHashMap<MapPoint<FullMapPoint>>, q: i32) -> f64 {
         if self.features.num_keypoints == 0 {
             return -1.0;
         }
@@ -490,8 +495,8 @@ impl Frame<FullKeyFrame> {
         // }
     }
 
-    pub fn get_features_in_area(&self, _x: &f64, _y: &f64, _radius: f32, _is_right: bool) -> Vec<u32> {
-        todo!("TODO LOCAL MAPPING");
-        // self.features.get_features_in_area(x, y, radius, &self.features.image_bounds)
+    pub fn get_features_in_area(&self, x: &f64, y: &f64, r: f64, b_right: bool) -> Vec<u32> {
+        self.features.get_features_in_area(x, y, r, &self.features.image_bounds, None)
     }
+
 }

@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
-use log::{info, warn, error, debug};
+use log::{info, warn, error, debug, trace};
 use dvcore::{matrix::{DVVector3, DVVectorOfPoint2f, DVVectorOfPoint3f}, config::{SETTINGS, SYSTEM}, sensor::{Sensor, FrameSensor, ImuSensor}};
+use logging_timer::time;
 use crate::{
     dvmap::{keyframe::*, mappoint::*, pose::DVPose},
     modules::{map_initialization::Initialization, optimizer::{self}}
@@ -9,13 +10,14 @@ use crate::{
 use super::misc::Timestamp;
 
 pub type Id = i32;
+pub type MapItemHashMap<T> = HashMap<Id, T, nohash_hasher::BuildNoHashHasher<Id>>;
 
 #[derive(Debug, Clone, Default)]
 pub struct Map {
     pub id: Id,
 
-    pub keyframes: HashMap<Id, Frame<FullKeyFrame>>, // = mspKeyFrames
-    pub mappoints: HashMap<Id, MapPoint<FullMapPoint>>, // = mspMapPoints
+    pub keyframes: MapItemHashMap<Frame<FullKeyFrame>>, // = mspKeyFrames
+    pub mappoints: MapItemHashMap<MapPoint<FullMapPoint>>, // = mspMapPoints
 
     // IMU
     pub imu_initialized: bool, // isImuInitialized(), set true by local mapper
@@ -60,9 +62,9 @@ impl Map {
 
     pub fn num_keyframes(&self) -> i32 { self.keyframes.len() as i32 }
     pub fn get_keyframe(&self, id: &Id) -> Option<&Frame<FullKeyFrame>> { self.keyframes.get(id) }
-    pub fn get_all_keyframes(&self) -> &HashMap<Id, Frame<FullKeyFrame>> { &self.keyframes }
+    pub fn get_all_keyframes(&self) -> &MapItemHashMap<Frame<FullKeyFrame>> { &self.keyframes }
     pub fn get_mappoint(&self, id: &Id) -> Option<&MapPoint<FullMapPoint>> { self.mappoints.get(id) }
-    pub fn get_all_mappoints(&self) -> &HashMap<Id, MapPoint<FullMapPoint>> { &self.mappoints }
+    pub fn get_all_mappoints(&self) -> &MapItemHashMap<MapPoint<FullMapPoint>> { &self.mappoints }
     pub fn print_current_map(&self, identifier: String) {
         // For debugging
         println!("PRINT MAP START;{}", identifier);
@@ -125,6 +127,7 @@ impl Map {
         return self.last_mp_id;
     }
 
+    #[time("Map::{}")]
     pub fn insert_keyframe_to_map(&mut self, prelim_kf: Frame<PrelimKeyFrame>, is_initialization: bool) -> Id {
         // Note: I would really like this to consume the keyframe, but this brings up issues
         // with the map actor being able to take ownership of the keyframe message.
@@ -178,6 +181,7 @@ impl Map {
         new_kf_id
     }
 
+    #[time("Map::{}")]
     pub fn discard_mappoint(&mut self, id: &Id) {
         self.mappoints
             .remove(id)
@@ -191,6 +195,7 @@ impl Map {
         info!("Discard mappoint {}", id);
     }
 
+    #[time("Map::{}")]
     pub fn discard_keyframe(&mut self, kf_id: Id) {
         warn!("TODO... not sure this works (discard_keyframe)");
         if kf_id == self.initial_kf_id {
@@ -273,6 +278,7 @@ impl Map {
         info!("Discard keyframe {}", kf_id);
     }
 
+    #[time("Map::{}")]
     pub fn create_initial_map_monocular(
         &mut self, mp_matches: Vec<i32>, p3d: DVVectorOfPoint3f, initial_frame: Frame<InitialFrame>, current_frame: Frame<InitialFrame>
     ) -> Option<(DVPose, i32, i32, HashSet<Id>, Timestamp)> {
@@ -400,8 +406,7 @@ impl Map {
         Some((curr_kf_pose, curr_kf_id, initial_kf_id, relevant_mappoints, curr_kf_timestamp))
     }
 
-
-    pub fn update_connections(mappoints: &HashMap<Id, MapPoint<FullMapPoint>>, keyframes: &mut HashMap<Id, Frame<FullKeyFrame>>, initial_kf_id: &i32, main_kf_id: &i32) {
+    pub fn update_connections(mappoints: &MapItemHashMap<MapPoint<FullMapPoint>>, keyframes: &mut MapItemHashMap<Frame<FullKeyFrame>>, initial_kf_id: &i32, main_kf_id: &i32) {
         //For all map points in keyframe check in which other keyframes are they seen
         //Increase counter for those keyframes
         let mut kf_counter = HashMap::<Id, i32>::new();
@@ -466,6 +471,7 @@ impl Map {
 
     }
 
+    #[time("Map::{}")]
     pub fn replace_mappoint(&self, _mp_to_replace: Id, _mp: Id) {
         todo!("LOCAL MAPPING");
         // if(pMP->mnId==this->mnId)

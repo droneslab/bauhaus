@@ -1,15 +1,12 @@
 #![feature(map_many_mut)]
 #![feature(hash_extract_if)]
-#![feature(proc_macro_hygiene)]
 
-extern crate flame;
 use std::{fs::{OpenOptions, File}, path::Path, env, time::{self, Duration}, io::{self, BufRead}, thread};
 use fern::colors::{ColoredLevelConfig, Color};
 use glob::glob;
 use log::info;
 use spin_sleep::LoopHelper;
 #[macro_use] extern crate lazy_static;
-#[macro_use] extern crate flamer;
 
 use dvcore::{*, config::*, actor::ActorChannels};
 use crate::{actors::{messages::{ShutdownMsg}, tracking_frontend::TrackingFrontendMsg}, registered_actors::TRACKING_FRONTEND};

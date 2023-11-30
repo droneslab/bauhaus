@@ -1,6 +1,7 @@
 extern crate g2o;
 use cxx::UniquePtr;
 use log::{warn, debug, trace};
+use logging_timer::{time, timer};
 use std::{fmt, fmt::Debug};
 use opencv::{prelude::*, types::VectorOfKeyPoint,};
 
@@ -46,7 +47,7 @@ impl Actor for DarvisTrackingFront {
                 let msg = message.downcast::<TrackingFrontendMsg>().unwrap_or_else(|_| panic!("Could not downcast tracking frontend message!"));
                 match *msg {
                     TrackingFrontendMsg::ImagePathMsg{image_path, timestamp, frame_id } => {
-                        let now = std::time::Instant::now();
+                        let _timer = timer!("TrackingFrontend::Total");
                         let image = image::read_image_file(&image_path);
                         let image_cols = image.cols() as u32;
                         let image_rows = image.rows() as u32;
@@ -56,7 +57,6 @@ impl Actor for DarvisTrackingFront {
                             self.send_to_visualizer(keypoints, image, timestamp);
                         }
                         self.last_id += 1;
-                        trace!("TRACKING FRONTEND...Total: {} ms", now.elapsed().as_millis());
                     },
                     TrackingFrontendMsg::ImageMsg{ image, timestamp, frame_id } => {
                         let image_cols = image.cols() as u32;
@@ -109,8 +109,9 @@ impl DarvisTrackingFront {
         }
     }
 
+    #[time("TrackingFrontend::{}")]
     fn extract_features(&mut self, image: opencv::core::Mat) -> (VectorOfKeyPoint, Mat) {
-        let now = std::time::Instant::now();
+        // TODO (Perf optimizations)
         let image_dv: dvos3binding::ffi::WrapBindCVMat = DVMatrix::new(image).into();
 
         let mut descriptors: dvos3binding::ffi::WrapBindCVMat = DVMatrix::default().into();
@@ -127,7 +128,6 @@ impl DarvisTrackingFront {
             FrameSensor::Stereo => todo!("Stereo"), //Also call extractor_right, see Tracking::GrabImageStereo,
             _ => {}
         }
-        trace!("TRACKING FRONTEND...Feature extraction total: {} ms", now.elapsed().as_millis());
         (keypoints.kp_ptr.kp_ptr, descriptors.mat_ptr.mat_ptr)
     }
 
@@ -147,6 +147,7 @@ impl DarvisTrackingFront {
         })).unwrap();
     }
 
+    #[time("TrackingFrontend::{}")]
     fn send_to_visualizer(&mut self, keypoints: VectorOfKeyPoint, image: Mat, timestamp: Timestamp) {
         // Send image and features to visualizer
         self.actor_system.find(VISUALIZER).send(Box::new(VisualizerMsg::VisFeaturesMsg {

@@ -7,6 +7,7 @@ use dvcore::{
     config::{SETTINGS, SYSTEM}, sensor::{Sensor, FrameSensor}, matrix::DVVector3,
 };
 use log::{warn, debug, trace};
+use logging_timer::time;
 use nalgebra::Matrix3;
 use opencv::prelude::KeyPointTraitConst;
 use crate::{dvmap::{keyframe::InitialFrame, pose::{DVPose, DVTranslation}, map::{Map, Id}, keyframe::{Frame, FullKeyFrame}}, registered_actors::{FEATURE_DETECTION, CAMERA}, actors::map_actor::MapWriteMsg};
@@ -806,9 +807,9 @@ pub fn pose_inertial_optimization_last_keyframe(_frame: &mut Frame<InitialFrame>
     // return nInitialCorrespondences-nBad;
 }
 
+#[time()]
 pub fn optimize_pose(frame: &mut Frame<InitialFrame>, map: &ReadOnlyMap<Map>) -> Option<(i32)> {
     //int Optimizer::PoseOptimization(Frame *pFrame)
-    let now = std::time::Instant::now();
     let sensor: Sensor = SETTINGS.get(SYSTEM, "sensor");
 
     let fx= SETTINGS.get::<f64>(CAMERA, "fx");
@@ -994,15 +995,13 @@ pub fn optimize_pose(frame: &mut Frame<InitialFrame>, map: &ReadOnlyMap<Map>) ->
     let pose = optimizer.recover_optimized_frame_pose(0);
     frame.pose = Some(pose.into());
 
-    trace!("TRACKING BACKEND...Pose optimization: {} ms", now.elapsed().as_millis());
-
     // Return number of inliers
     return Some(initial_correspondences - num_bad);
 }
 
+#[time()]
 pub fn global_bundle_adjustment(map: &Map, iterations: i32) -> BundleAdjustmentResult {
     // void Optimizer::GlobalBundleAdjustemnt(Map* pMap, int nIterations, bool* pbStopFlag, const unsigned long nLoopKF, const bool bRobust)
-    let now = std::time::Instant::now();
     let sensor: Sensor = SETTINGS.get(SYSTEM, "sensor");
     let fx= SETTINGS.get::<f64>(CAMERA, "fx");
     let fy= SETTINGS.get::<f64>(CAMERA, "fy");
@@ -1099,15 +1098,14 @@ pub fn global_bundle_adjustment(map: &Map, iterations: i32) -> BundleAdjustmentR
     // Optimize!
     optimizer.pin_mut().optimize(iterations, false);
 
-    trace!("INIT/LOOP CLOSING...Global BA total: {} ms", now.elapsed().as_millis());
     BundleAdjustmentResult::new(optimizer, kf_vertex_ids, mp_vertex_ids, vec![], vec![])
 }
 
+#[time()]
 pub fn local_bundle_adjustment(
     locked_map: &ReadOnlyMap<Map>, keyframe_id: Id
 ) -> BundleAdjustmentResult {
     // void Optimizer::LocalBundleAdjustment(KeyFrame *pKF, bool* pbStopFlag, Map* pMap, int& num_fixedKF, int& num_OptKF, int& num_MPs, int& num_edges)
-    let now = std::time::Instant::now();
     let map = locked_map.read();
 
     // Local KeyFrames: First Breath Search from Current Keyframe
@@ -1374,7 +1372,6 @@ pub fn local_bundle_adjustment(
         // }
     }
 
-    trace!("LOCAL MAPPING...Local BA: {} ms", now.elapsed().as_millis());
     // Recover optimized data
     BundleAdjustmentResult::new(optimizer, kf_vertex_ids, mp_vertex_ids, mps_to_discard, vec![])
 }
