@@ -17,7 +17,7 @@ mod vision_tests {
         load_config();
         let (image, image_cols, image_rows) = read_image("src/tests/data/image2.png");
         let (keypoints, descriptors) = extract_features(&image, 2000*5);
-        let (features, bow) = compute_bow(keypoints, descriptors, image_cols, image_rows);
+        let (features, bow) = compute_bow(keypoints, descriptors, image_cols as u32, image_rows as u32);
 
         // Test features
         let expected_features = fs::read_to_string("src/tests/data/image2_features.txt").unwrap();
@@ -43,22 +43,24 @@ mod vision_tests {
     
     fn load_config() {
         let mut path = env::current_dir().unwrap();
-        path.push("src/tests/data/config1.yaml");
+        path.push("config.yaml");
         let _ = config::load_config(&path.into_os_string().into_string().unwrap());
     }
 
     fn read_image(image_path: &str) -> (WrapBindCVMat, i32, i32){
         let image = imgcodecs::imread(&image_path, imgcodecs::IMREAD_GRAYSCALE).unwrap();
+        let cols = image.cols();
+        let rows = image.rows();
         (
-            DVMatrix::new(image.clone()).into(),
-            image.cols(),
-            image.rows()
+           (&DVMatrix::new(image)).into(),
+            cols,
+            rows
         )
     }
 
     fn extract_features(image: &WrapBindCVMat, max_features: i32) -> (DVVectorOfKeyPoint, DVMatrix) {
         let mut orb_extractor = DVORBextractor::new(max_features);
-        let mut descriptors: dvos3binding::ffi::WrapBindCVMat = DVMatrix::default().into();
+        let mut descriptors: dvos3binding::ffi::WrapBindCVMat = (&DVMatrix::default()).into();
         let mut keypoints: dvos3binding::ffi::WrapBindCVKeyPoints = DVVectorOfKeyPoint::empty().into();
         orb_extractor.extractor.pin_mut().extract(image, &mut keypoints, &mut descriptors);
         (
@@ -67,7 +69,7 @@ mod vision_tests {
         )
     }
 
-    fn compute_bow(keypoints: DVVectorOfKeyPoint, descriptors: DVMatrix, image_cols: i32, image_rows: i32) -> (Features, BoW) {
+    fn compute_bow(keypoints: DVVectorOfKeyPoint, descriptors: DVMatrix, image_cols: u32, image_rows: u32) -> (Features, BoW) {
         let sensor = Sensor(FrameSensor::Mono, ImuSensor::None);
         let features = Features::new(keypoints, descriptors, image_cols, image_rows, sensor).unwrap();
         let mut bow = BoW::new();

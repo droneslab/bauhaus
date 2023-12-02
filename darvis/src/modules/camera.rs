@@ -105,8 +105,7 @@ impl Camera {
         let mut v_p3d: dvos3binding::ffi::WrapBindCVVectorOfPoint3f = DVVectorOfPoint3f::empty().into();
         let mut vb_triangulated  = Vec::new();
 
-        // TODO (CLONE) ... should be able to get rid of these clones by changing the into() function
-        // just need to be careful with pointers
+        // TODO (CLONE) ... matrix
         let reconstructed = tvr.pin_mut().reconstruct(
             & v_keys1.clone().into(),
             & v_keys2.clone().into(),

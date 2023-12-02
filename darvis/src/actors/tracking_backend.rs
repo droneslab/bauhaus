@@ -1,56 +1,34 @@
 use std::collections::{HashSet, HashMap};
 use derivative::Derivative;
-use log::{warn, info, debug, error, trace};
-use dvcore::{maplock::ReadOnlyMap, config::*, sensor::{Sensor, FrameSensor, ImuSensor}, actor::{Actor, ActorMessage}, matrix::{DVVectorOfKeyPoint, DVMatrix}};
+use log::{warn, info, debug, error};
+use dvcore::{maplock::ReadOnlyMap, config::*, sensor::{Sensor, FrameSensor, ImuSensor}, actor::Actor};
 use logging_timer::{time, timer};
 use crate::{
-    actors::{messages::{ShutdownMsg}, shutdown::ShutdownActorMsg},
-    actors::{map_actor::MapWriteMsg, visualizer::VisualizerMsg},
+    actors::messages::{TrajectoryMsg, VisTrajectoryMsg, TrackingStateMsg, FeatureMsg, MapInitializedMsg, KeyFrameIdMsg, LastKeyFrameUpdatedMsg, ShutdownMsg},
+    actors::map_actor::MapWriteMsg,
     registered_actors::{LOCAL_MAPPING, TRACKING_BACKEND, SHUTDOWN_ACTOR, TRACKING_FRONTEND, VISUALIZER, MAP_ACTOR},
     dvmap::{
         map::Map, map::Id,
-        keyframe::{Frame, InitialFrame, PrelimKeyFrame}, pose::DVPose, mappoint::{MapPoint, FullMapPoint}, misc::Timestamp,
+        keyframe::{Frame, InitialFrame, PrelimKeyFrame}, pose::DVPose, misc::Timestamp,
     },
     modules::{imu::ImuModule, optimizer::{self}, orbmatcher, map_initialization::Initialization, relocalization::Relocalization}, ActorChannels,
 };
 
-use super::{tracking_frontend::TrackingFrontendMsg, local_mapping::LocalMappingMsg};
+use super::messages::IMUInitializedMsg;
 
 
-#[derive(Default, Debug, Clone)]
-pub struct TrackedMapPointData {
-    pub predicted_level: i32,
-    pub view_cos: f64,
-    pub proj_x: f64,
-    pub proj_y: f64,
-    pub track_depth: f64
-    // Note: orbslam also has "right" versions of each of the above fields
-    // and sets either the normal (left) versions or the right versions, depending on which camera it is.
-    // When writing the stereo code, don't duplicate all the fields like they did.
-}
 
-#[derive(Debug, Clone, Copy, Default)]
-pub enum TrackingState {
-    #[default] NotInitialized,
-    Lost,
-    RecentlyLost,
-    WaitForMapResponse,
-    Ok
-}
-
-#[derive(Debug, Derivative)]
-#[derivative(Default)]
+#[derive(Debug)]
 pub struct DarvisTrackingBack {
     actor_channels: ActorChannels,
     state: TrackingState,
 
     // Map
     map: ReadOnlyMap<Map>,
-    initialization: Initialization, // data sent to map actor to initialize new map
+    initialization: Option<Initialization>, // data sent to map actor to initialize new map
 
     // Frames
     last_frame_id: Id,
-    current_frame: Frame<InitialFrame>,
     last_frame: Option<Frame<InitialFrame>>,
 
     // KeyFrames
@@ -93,24 +71,36 @@ impl Actor for DarvisTrackingBack {
     type MapRef = ReadOnlyMap<Map>;
 
     fn new_actorstate(actor_channels: ActorChannels, map: Self::MapRef) -> DarvisTrackingBack {
-        // Note: This is suuuuuch a specific bug. Default::default() calls the default function 
-        // for every single item in the struct, even if it is explicitly overriden (such as
-        // map, camera, sensor, global_defaults, and optimizer in the below code). This means that
-        // a second map is created, DISCARDED, and then DarvisTrackingBack.map is set to the first map
-        // that we wanted in the first place. So it looks like it duplicates the map, but it doesn't actually
-        // and you shouldn't worry if you see this.
+        let sensor = SETTINGS.get::<Sensor>(SYSTEM, "sensor");
         DarvisTrackingBack {
             actor_channels,
             map,
-            sensor: SETTINGS.get::<Sensor>(SYSTEM, "sensor"),
-            initialization: Initialization::new(),
+            sensor,
+            initialization: Some(Initialization::new()),
             localization_only_mode: SETTINGS.get::<bool>(SYSTEM, "localization_only_mode"),
             frames_to_reset_imu: SETTINGS.get::<i32>(TRACKING_BACKEND, "frames_to_reset_IMU") as u32,
             insert_kfs_when_lost: SETTINGS.get::<bool>(TRACKING_BACKEND, "insert_KFs_when_lost"),
             max_frames: SETTINGS.get::<f64>(SYSTEM, "fps") as i64,
             min_frames: 0,
             last_frame_id: -1,
-            ..Default::default()
+            state: TrackingState::NotInitialized,
+            last_frame: None,
+            ref_kf_id: None,
+            frames_since_last_kf: 0,
+            last_kf_timestamp: None,
+            matches_inliers: 0,
+            local_keyframes: vec![],
+            local_mappoints: HashSet::new(),
+            track_in_view: HashMap::new(),
+            track_in_view_r: HashMap::new(),
+            kf_track_reference_for_frame: HashMap::new(),
+            mp_track_reference_for_frame: HashMap::new(),
+            last_frame_seen: HashMap::new(),
+            imu: ImuModule::new(None, None, sensor, false, false),
+            relocalization: Relocalization{last_reloc_frame_id: 0, timestamp_lost: None},
+            map_updated: false,
+            trajectory_poses: Vec::new(),
+            
         }
     }
 
@@ -118,87 +108,83 @@ impl Actor for DarvisTrackingBack {
         let mut actor = DarvisTrackingBack::new_actorstate(actor_channels, map);
 
         'outer: loop {
-
             let message = actor.actor_channels.receive().unwrap();
 
-            if message.is::<TrackingBackendMsg>() {
-                let msg = message.downcast::<TrackingBackendMsg>().unwrap_or_else(|_| panic!("Could not downcast tracking frontend message!"));
-                match *msg {
-                    TrackingBackendMsg::FeatureMsg { keypoints, descriptors, image_width, image_height, timestamp, frame_id } => {
-                        // Regular tracking. Received from tracking frontend
-                        let _timer = timer!("TrackingBackend::TotalRegular");
-                        debug!("Tracking working on frame {}", frame_id);
-                        actor.last_frame = Some(actor.current_frame);
+            if message.is::<FeatureMsg>() {
+                let msg = message.downcast::<FeatureMsg>().unwrap_or_else(|_| panic!("Could not downcast tracking frontend message!"));
+                // Regular tracking. Received from tracking frontend
+                let _timer = timer!("TrackingBackend::Total");
+                debug!("Tracking working on frame {}", msg.frame_id);
+                let mut current_frame = Frame::<InitialFrame>::new(
+                    actor.last_frame_id, 
+                    msg.keypoints,
+                    msg.descriptors,
+                    msg.image_width,
+                    msg.image_height,
+                    msg.timestamp
+                ).expect("Could not create frame!");
+                match actor.track(&mut current_frame) {
+                    Ok(()) => {
+                        if current_frame.ref_kf_id.is_none() {
+                            current_frame.ref_kf_id = actor.ref_kf_id;
+                        }
+                        actor.last_frame = Some(current_frame);
                         actor.last_frame_id += 1;
-                        actor.current_frame = Frame::<InitialFrame>::new(
-                            actor.last_frame_id, 
-                            keypoints,
-                            descriptors,
-                            image_width,
-                            image_height,
-                            timestamp
-                        ).expect("Could not create frame!");
-                        match actor.track() {
-                            Ok(()) => {
-                                if actor.current_frame.ref_kf_id.is_none() {
-                                    actor.current_frame.ref_kf_id = actor.ref_kf_id;
-                                }
 
-                                match actor.state {
-                                    TrackingState::Ok | TrackingState::RecentlyLost => {
-                                        actor.update_trajectory_in_logs().expect("Could not save trajectory")
-                                    },
-                                    _ => {},
-                                };
+                        match actor.state {
+                            TrackingState::Ok | TrackingState::RecentlyLost => {
+                                actor.update_trajectory_in_logs().expect("Could not save trajectory")
                             },
-                            Err(e) => {
-                                panic!("Error in Tracking Backend: {}", e);
-                            }
+                            _ => {},
                         };
                     },
-                    TrackingBackendMsg::MapInitializedMsg { curr_kf_pose, curr_kf_id, ini_kf_id, local_mappoints, curr_kf_timestamp } => {
-                        // Map needs to be initialized before tracking can begin. Received from map actor
-                        let _timer = timer!("TrackingBackend::TotalMapInitialized");
-                        actor.frames_since_last_kf = 0;
-                        actor.local_keyframes.push(curr_kf_id);
-                        actor.local_keyframes.push(ini_kf_id);
-                        actor.local_mappoints = local_mappoints;
-                        actor.ref_kf_id = Some(curr_kf_id);
-                        actor.last_kf_timestamp = Some(curr_kf_timestamp);
-                        {
-                            let last_frame = actor.last_frame.as_mut().unwrap();
-                            last_frame.ref_kf_id = Some(curr_kf_id);
-                            last_frame.pose = Some(curr_kf_pose);
-                        }
-                        actor.state = TrackingState::Ok;
-
-                        actor.update_trajectory_in_logs().expect("Could not save trajectory");
-
-                        // Let tracking frontend know the map is initialized
-                        actor.actor_channels.find(TRACKING_FRONTEND).send(Box::new(
-                            TrackingFrontendMsg::TrackingStateMsg {
-                                state: TrackingState::Ok,
-                                init_id: ini_kf_id
-                            }
-                        )).expect("Could not send to tracking frontend");
-
-                        // Send first two keyframes to local mapping
-                        actor.actor_channels.find(LOCAL_MAPPING).send(Box::new(
-                            LocalMappingMsg::KeyFrameIdMsg { kf_id: ini_kf_id }
-                        )).expect("Could not send to local mapping");
-                        actor.actor_channels.find(LOCAL_MAPPING).send(Box::new(
-                            LocalMappingMsg::KeyFrameIdMsg { kf_id: curr_kf_id }
-                        )).unwrap();
-                    },
-                    TrackingBackendMsg::KeyFrameIdMsg { kf_id } => {
-                        // Received from the map actor after it inserts a keyframe
-                        actor.last_frame.as_mut().unwrap().ref_kf_id = Some(kf_id);
-                    },
-                    TrackingBackendMsg::LastKeyFrameUpdatedMsg {  } => {
-                        // Received from local mapping after it culls and creates new MPs for the last inserted KF
-                        actor.state = TrackingState::Ok;
-                    },
+                    Err(e) => {
+                        panic!("Error in Tracking Backend: {}", e);
+                    }
+                };
+            } else if message.is::<MapInitializedMsg>() {
+                let msg = message.downcast::<MapInitializedMsg>().unwrap_or_else(|_| panic!("Could not downcast tracking frontend message!"));
+                // Map needs to be initialized before tracking can begin. Received from map actor
+                actor.frames_since_last_kf = 0;
+                actor.local_keyframes.push(msg.curr_kf_id);
+                actor.local_keyframes.push(msg.ini_kf_id);
+                actor.local_mappoints = msg.local_mappoints;
+                actor.ref_kf_id = Some(msg.curr_kf_id);
+                actor.last_kf_timestamp = Some(msg.curr_kf_timestamp);
+                {
+                    // Set last frame's updated info from map initialization
+                    actor.last_frame.as_mut().unwrap().ref_kf_id = Some(msg.curr_kf_id);
+                    actor.last_frame.as_mut().unwrap().pose = Some(msg.curr_kf_pose);
                 }
+                actor.state = TrackingState::Ok;
+
+                actor.update_trajectory_in_logs().expect("Could not save trajectory");
+
+                // Let tracking frontend know the map is initialized
+                actor.actor_channels.send(TRACKING_FRONTEND, Box::new(
+                    TrackingStateMsg {
+                        state: TrackingState::Ok,
+                        init_id: msg.ini_kf_id
+                    }
+                ));
+
+                // Send first two keyframes to local mapping
+                actor.actor_channels.send(LOCAL_MAPPING, Box::new(
+                    KeyFrameIdMsg { kf_id: msg.ini_kf_id }
+                ));
+                actor.actor_channels.send(LOCAL_MAPPING,Box::new(
+                    KeyFrameIdMsg { kf_id: msg.curr_kf_id }
+                ));
+            } else if message.is::<KeyFrameIdMsg>() {
+                let msg = message.downcast::<KeyFrameIdMsg>().unwrap_or_else(|_| panic!("Could not downcast tracking frontend message!"));
+
+                // Received from the map actor after it inserts a keyframe
+                actor.last_frame.as_mut().unwrap().ref_kf_id = Some(msg.kf_id);
+            } else if message.is::<LastKeyFrameUpdatedMsg>() {
+                // Received from local mapping after it culls and creates new MPs for the last inserted KF
+                actor.state = TrackingState::Ok;
+            } else if message.is::<IMUInitializedMsg>() {
+                // TODO (IMU) process message from local mapping!
             } else if message.is::<ShutdownMsg>() {
                 break 'outer;
             } else {
@@ -210,7 +196,7 @@ impl Actor for DarvisTrackingBack {
 
 impl DarvisTrackingBack {
     #[time("TrackingBackend::{}")]
-    fn track(&mut self) -> Result<(), Box<dyn std::error::Error>>  {
+    fn track(&mut self, current_frame: &mut Frame<InitialFrame>) -> Result<(), Box<dyn std::error::Error>>  {
         // TODO (reset): Reset map because local mapper set the bad imu flag
         // Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Tracking.cc#L1808
 
@@ -240,40 +226,44 @@ impl DarvisTrackingBack {
                 return Ok(());
             },
             (false, TrackingState::NotInitialized) => {
-                match self.initialization.try_initialize(&self.current_frame)? {
-                    true => {
-                        let msg = match self.sensor.frame() {
-                            FrameSensor::Mono => MapWriteMsg::create_initial_map_monocular(self.initialization.clone()), // TODO (CLONE) ... need to give up ownership of this somehow
-                            _ => MapWriteMsg::create_initial_map_stereo(self.initialization.clone(), TRACKING_BACKEND)
-                        };
-                        self.actor_channels.find(MAP_ACTOR).send(Box::new(msg))?;
-                        self.state = TrackingState::WaitForMapResponse;
-                        return Ok(());
-                    },
-                    false => {
-                        self.state = TrackingState::NotInitialized;
-                        return Ok(());
-                    }
+                if self.initialization.is_none() {
+                    self.initialization = Some(Initialization::new());
+                }
+                let init_success = self.initialization.as_mut().unwrap().try_initialize(&current_frame)?;
+                if init_success {
+                    // Give up ownership of self.initialization to avoid clone, we don't need it from now on
+                    let mut init = None;
+                    std::mem::swap(&mut init, &mut self.initialization);
+
+                    self.actor_channels.send(
+                        MAP_ACTOR,
+                        Box::new(MapWriteMsg::create_initial_map(init.unwrap()))
+                    );
+                    self.state = TrackingState::WaitForMapResponse;
+                    return Ok(());
+                } else {
+                    self.state = TrackingState::NotInitialized;
+                    return Ok(());
                 }
             },
             (false, TrackingState::Ok) => {
-                let no_motion_model = (self.imu.velocity.is_none() && !self.map.read().imu_initialized) || self.relocalization.frames_since_lost(&self.current_frame) < 2;
+                let no_motion_model = (self.imu.velocity.is_none() && !self.imu.is_initialized) || self.relocalization.frames_since_lost(&current_frame) < 2;
                 // SOFIYA...CheckReplacedInLastFrame. this might be important?
 
                 let track_success = match no_motion_model {
-                    true => self.track_reference_keyframe()?,
+                    true => self.track_reference_keyframe(current_frame)?,
                     false => {
-                        match self.track_with_motion_model()? {
+                        match self.track_with_motion_model(current_frame)? {
                             true => true,
-                            false => self.track_reference_keyframe()?
+                            false => self.track_reference_keyframe(current_frame)?
                         }
                     }
                 };
                 self.state = match track_success {
                     true => TrackingState::Ok,
                     false => {
-                        self.relocalization.timestamp_lost = Some(self.current_frame.timestamp);
-                        match self.kfs_in_map() > 10 {
+                        self.relocalization.timestamp_lost = Some(current_frame.timestamp);
+                        match self.map.read().keyframes.len() > 10 {
                             true =>{println!("State recently lost 271"); TrackingState::RecentlyLost},
                             false => TrackingState::Lost
                         }
@@ -282,16 +272,16 @@ impl DarvisTrackingBack {
             },
             (false, TrackingState::RecentlyLost) => {
                 warn!("State recently lost");
-                let relocalize_success = match self.imu.ready(&self.map) {
+                let relocalize_success = match self.imu.ready() {
                     true => {
                         let ok = self.imu.predict_state(); // TODO (IMU): I guess this should be used somewhere?
-                        self.relocalization.past_cutoff(&self.current_frame)
+                        self.relocalization.past_cutoff(&current_frame)
                     },
                     false => {
                         // TODO (relocalization): remove the call to shutdown actor and uncomment line of code below.
                         // This is just to gracefully shut down instead of panicking at the todo 
                         error!("Relocalization! Shutting down for now.");
-                        self.actor_channels.find(SHUTDOWN_ACTOR).send(Box::new(ShutdownMsg{}))?;
+                        self.actor_channels.send(SHUTDOWN_ACTOR, Box::new(ShutdownMsg{}));
                         self.state = TrackingState::Lost;
                         return Ok(());
                         // !self.relocalization.run() && self.relocalization.sec_since_lost(&current_frame) > 3
@@ -306,11 +296,11 @@ impl DarvisTrackingBack {
                 }
             },
             (false, TrackingState::Lost) => {
-                match self.kfs_in_map() < 10 {
+                match self.map.read().keyframes.len() < 10 {
                     true => {
                         warn!("Reseting current map...");
                         error!("Resetting current map! Shutting down for now.");
-                        self.actor_channels.find(SHUTDOWN_ACTOR).send(Box::new(ShutdownMsg{}))?;
+                        self.actor_channels.send(SHUTDOWN_ACTOR, Box::new(ShutdownMsg{}));
                         self.state = TrackingState::Lost;
                         return Ok(());
 
@@ -332,7 +322,7 @@ impl DarvisTrackingBack {
         // TrackingState::Ok | TrackingState::RecentlyLost | TrackingState::Lost
 
         // Track Local Map
-        let (enough_matches, matches_in_frame) = self.track_local_map();
+        let (enough_matches, matches_in_frame) = self.track_local_map(current_frame);
         if enough_matches {
             self.state = TrackingState::Ok;
         } else if matches!(self.state, TrackingState::Ok) {
@@ -341,7 +331,7 @@ impl DarvisTrackingBack {
                 warn!("IMU, Reset... Reset map because local mapper set the bad imu flag");
                 // Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Tracking.cc#L2149
             }
-            self.relocalization.timestamp_lost = Some(self.current_frame.timestamp);
+            self.relocalization.timestamp_lost = Some(current_frame.timestamp);
             self.state = TrackingState::RecentlyLost;
         }
 
@@ -353,38 +343,37 @@ impl DarvisTrackingBack {
         if enough_matches || matches!(self.state, TrackingState::RecentlyLost) {
             // Update motion model
             let last_frame = self.last_frame.as_ref();
-            if !last_frame.is_none() && !last_frame.unwrap().pose.is_none() && !self.current_frame.pose.is_none() {
+            if !last_frame.is_none() && !last_frame.unwrap().pose.is_none() && !current_frame.pose.is_none() {
                 let last_pose = last_frame.expect("No last frame in tracking?").pose.as_ref().expect("Can't get last frame's pose?");
                 let last_twc = last_pose.inverse();
-                self.imu.velocity = Some(*self.current_frame.pose.as_ref().expect("Can't get current frame?") * last_twc);
+                self.imu.velocity = Some(*current_frame.pose.as_ref().expect("Can't get current frame?") * last_twc);
             } else {
                 self.imu.velocity = None;
             }
 
             // Clean VO matches
-            self.current_frame.delete_mappoints_without_observations(&self.map.read());
+            current_frame.delete_mappoints_without_observations(&self.map.read());
 
             // Check if we need to insert a new keyframe
             let insert_if_lost_anyway = self.insert_kfs_when_lost && matches!(self.state, TrackingState::RecentlyLost) && self.sensor.is_imu();
-            let need_new_kf = self.need_new_keyframe();
-            println!("Need new keyframe: {} {:?}", need_new_kf, self.state);
+            let need_new_kf = self.need_new_keyframe(current_frame);
             if need_new_kf && (matches!(self.state, TrackingState::Ok) || insert_if_lost_anyway) {
-                self.create_new_keyframe();
+                self.create_new_keyframe(current_frame);
             }
 
             // We allow points with high innovation (considererd outliers by the Huber Function)
             // pass to the new keyframe, so that bundle adjustment will finally decide
             // if they are outliers or not. We don't want next frame to estimate its position
             // with those points so we discard them in the frame. Only has effect if lastframe is tracked
-            let _ = self.current_frame.discard_outliers();
+            let _ = current_frame.discard_outliers();
         }
 
         // Reset if the camera get lost soon after initialization
         if matches!(self.state, TrackingState::Lost) {
-            if self.kfs_in_map() <= 10  || (self.sensor.is_imu() && !self.map.read().imu_initialized) {
+            if self.map.read().keyframes.len() <= 10  || (self.sensor.is_imu() && !self.imu.is_initialized) {
                 warn!("tracking_backend::handle_message;Track lost soon after initialization, resetting...",);
                 let map_msg = MapWriteMsg::reset_active_map();
-                self.actor_channels.find(MAP_ACTOR).send(Box::new(map_msg))?;
+                self.actor_channels.send(MAP_ACTOR, Box::new(map_msg));
             } else {
                 self.create_new_map();
             }
@@ -398,64 +387,67 @@ impl DarvisTrackingBack {
         &mut self, //current_frame: &Frame<InitialFrame>
         // &mut self, current_pose: DVPose, ref_kf_id: Id, mappoint_matches: HashMap<u32, (Id, bool)>, timestamp: Timestamp
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let frame = self.last_frame.as_ref().expect("No last frame in tracking?");
         let pose_in_world;
         {
             let map = self.map.read();
-            pose_in_world = frame.get_pose_in_world_frame(&map);
+            pose_in_world = self.last_frame.as_ref().unwrap().get_pose_in_world_frame(&map);
             debug!("Current pose  {:?}", pose_in_world);
             debug!("Current pose in world frame {:?}", pose_in_world);
             self.trajectory_poses.push(pose_in_world);
         }
-        self.actor_channels.find(SHUTDOWN_ACTOR).send(Box::new(ShutdownActorMsg::TrajectoryMsg{
-            pose: pose_in_world,
-            ref_kf_id: frame.ref_kf_id.expect("Current frame needs ref kf"),
-            timestamp: frame.timestamp
-        }))?;
+        self.actor_channels.send(
+            SHUTDOWN_ACTOR, 
+            Box::new(TrajectoryMsg{
+                pose: pose_in_world,
+                ref_kf_id: self.last_frame.as_ref().unwrap().ref_kf_id.expect("Current frame needs ref kf"),
+                timestamp: self.last_frame.as_ref().unwrap().timestamp
+            })
+        );
 
         if SETTINGS.get::<bool>(SYSTEM, "show_visualizer") {
-            self.actor_channels.find(VISUALIZER).send(Box::new(VisualizerMsg::TrajectoryMsg{
+            // TODO (CLONE) ... visualizer
+            self.actor_channels.send(VISUALIZER, Box::new(VisTrajectoryMsg{
                 pose: pose_in_world,
-                mappoint_matches: frame.mappoint_matches.clone(), // TODO (CLONE) ... I don't think there's a way around this but I'm not sure
-                timestamp: frame.timestamp
-            }))?;
+                mappoint_matches: self.last_frame.as_ref().unwrap().mappoint_matches.clone(),
+                timestamp: self.last_frame.as_ref().unwrap().timestamp
+            }));
         }
 
         Ok(())
     }
 
     #[time("TrackingBackend::{}")]
-    fn track_reference_keyframe(&mut self) -> Result<bool, Box<dyn std::error::Error>> {
+    fn track_reference_keyframe(&mut self, current_frame: &mut Frame<InitialFrame>) -> Result<bool, Box<dyn std::error::Error>> {
         // Tracking::TrackReferenceKeyFrame()
         // We perform first an ORB matching with the reference keyframe
         // If enough matches are found we setup a PnP solver
 
-        self.current_frame.compute_bow();
+        current_frame.compute_bow();
         let nmatches;
         let increase_found;
         {
             let map_read_lock = self.map.read();
             let ref_kf = map_read_lock.keyframes.get(&self.ref_kf_id.unwrap()).unwrap();
 
-            (nmatches, increase_found) = orbmatcher::search_by_bow_f(ref_kf, &mut self.current_frame, true, 0.7)?;
+            (nmatches, increase_found) = orbmatcher::search_by_bow_f(ref_kf, current_frame, true, 0.7)?;
         }
 
-        println!("track reference keyframe matches {}", self.current_frame.mappoint_matches.len());
+        println!("track reference keyframe matches {}", current_frame.mappoint_matches.len());
 
         let map_msg = MapWriteMsg::increase_found(increase_found);
-        self.actor_channels.find(MAP_ACTOR).send(Box::new(map_msg))?;
+        self.actor_channels.send(MAP_ACTOR, Box::new(map_msg));
 
         if nmatches < 15 {
             warn!("track_reference_keyframe has fewer than 15 matches = {}!!\n", nmatches);
             return Ok(false);
         }
 
-        self.current_frame.pose = Some(self.last_frame.as_ref().unwrap().pose.unwrap());
+        current_frame.pose = Some(self.last_frame.as_ref().unwrap().pose.unwrap());
 
-        optimizer::optimize_pose(&mut self.current_frame, &self.map);
+        optimizer::optimize_pose(current_frame, &self.map);
 
         // Discard outliers
-        let nmatches_map = self.discard_outliers();
+        let nmatches_map = self.discard_outliers(current_frame);
         println!("track reference keyframe matches after outliers {}", nmatches_map);
 
         match self.sensor.is_imu() {
@@ -465,7 +457,7 @@ impl DarvisTrackingBack {
     }
 
     #[time("TrackingBackend::{}")]
-    fn track_with_motion_model(&mut self) -> Result<bool, Box<dyn std::error::Error>> {
+    fn track_with_motion_model(&mut self, current_frame: &mut Frame<InitialFrame>) -> Result<bool, Box<dyn std::error::Error>> {
         // Tracking::TrackWithMotionModel()
         // If tracking was successful for last frame, we use a constant
         // velocity motion model to predict the camera pose and perform
@@ -479,16 +471,16 @@ impl DarvisTrackingBack {
         // Create "visual odometry" points if in Localization Mode
         self.update_last_frame();
 
-        let enough_frames_to_reset_imu = self.current_frame.frame_id <= self.relocalization.last_reloc_frame_id + (self.frames_to_reset_imu as i32);
-        if self.map.read().imu_initialized && enough_frames_to_reset_imu {
+        let enough_frames_to_reset_imu = current_frame.frame_id <= self.relocalization.last_reloc_frame_id + (self.frames_to_reset_imu as i32);
+        if self.imu.is_initialized && enough_frames_to_reset_imu {
             // Predict state with IMU if it is initialized and it doesnt need reset
             self.imu.predict_state();
             return Ok(true);
         } else {
-            self.current_frame.pose = Some(self.imu.velocity.unwrap() * self.last_frame.as_ref().unwrap().pose.unwrap());
+            current_frame.pose = Some(self.imu.velocity.unwrap() * self.last_frame.as_ref().unwrap().pose.unwrap());
         }
 
-        self.current_frame.clear_mappoints();
+        current_frame.clear_mappoints();
 
         // Project points seen in previous frame
         let th = match self.sensor.frame() {
@@ -497,7 +489,7 @@ impl DarvisTrackingBack {
         };
 
         let mut matches = orbmatcher::search_by_projection_with_threshold(
-            &mut self.current_frame,
+            current_frame,
             self.last_frame.as_ref().unwrap(),
             th,
             self.sensor.is_mono(),
@@ -505,14 +497,14 @@ impl DarvisTrackingBack {
             self.sensor
         )?;
 
-        println!("motion model matches {}", self.current_frame.mappoint_matches.len());
+        println!("motion model matches {}", current_frame.mappoint_matches.len());
 
         // If few matches, uses a wider window search
         if matches < 20 {
             info!("tracking_backend::track_with_motion_model;not enough matches, wider window search");
-            self.current_frame.clear_mappoints();
+            current_frame.clear_mappoints();
             matches = orbmatcher::search_by_projection_with_threshold(
-                &mut self.current_frame,
+                current_frame,
                 self.last_frame.as_ref().unwrap(),
                 2 * th,
                 self.sensor.is_mono(),
@@ -521,7 +513,7 @@ impl DarvisTrackingBack {
             )?;
         }
 
-        println!("motion model matches with wider search {}", self.current_frame.mappoint_matches.len());
+        println!("motion model matches with wider search {}", current_frame.mappoint_matches.len());
 
 
         if matches < 20 {
@@ -530,10 +522,10 @@ impl DarvisTrackingBack {
         }
 
         // Optimize frame pose with all matches
-        optimizer::optimize_pose(&mut self.current_frame, &self.map);
+        optimizer::optimize_pose(current_frame, &self.map);
 
         // Discard outliers
-        let nmatches_map = self.discard_outliers();
+        let nmatches_map = self.discard_outliers(current_frame);
 
         if self.localization_only_mode {
             todo!("Localization only");
@@ -633,27 +625,27 @@ impl DarvisTrackingBack {
     }
 
     #[time("TrackingBackend::{}")]
-    fn track_local_map(&mut self) -> (bool, i32) {
+    fn track_local_map(&mut self, current_frame: &mut Frame<InitialFrame>) -> (bool, i32) {
         // bool Tracking::TrackLocalMap()
         // We have an estimation of the camera pose and some map points tracked in the frame.
         // We retrieve the local map and try to find matches to points in the local map.
-        self.update_local_keyframes();
-        self.update_local_points();
-        self.search_local_points();
+        self.update_local_keyframes(current_frame);
+        self.update_local_points(current_frame);
+        self.search_local_points(current_frame);
 
-        if !self.map.read().imu_initialized || (self.current_frame.frame_id <= self.relocalization.last_reloc_frame_id + (self.frames_to_reset_imu as i32)) {
-            optimizer::optimize_pose(&mut self.current_frame, &self.map);
+        if !self.imu.is_initialized || (current_frame.frame_id <= self.relocalization.last_reloc_frame_id + (self.frames_to_reset_imu as i32)) {
+            optimizer::optimize_pose(current_frame, &self.map);
         } else if !self.map_updated {
-            let inliers = optimizer::pose_inertial_optimization_last_frame(&mut self.current_frame, &self.map);
+            optimizer::pose_inertial_optimization_last_frame(current_frame, &self.map);
         } else {
-            let inliers = optimizer::pose_inertial_optimization_last_keyframe(&mut self.current_frame);
+            optimizer::pose_inertial_optimization_last_keyframe(current_frame);
         }
 
         self.matches_inliers = 0;
         // Update MapPoints Statistics
         let mut increase_found = Vec::new();
-        for (index, (mp_id, _)) in &self.current_frame.mappoint_matches {
-            if !self.current_frame.is_mp_outlier(&index) {
+        for (index, (mp_id, _)) in &current_frame.mappoint_matches {
+            if !current_frame.is_mp_outlier(&index) {
                 increase_found.push((*mp_id, 1));
 
                 if self.localization_only_mode {
@@ -680,11 +672,11 @@ impl DarvisTrackingBack {
 
         println!("Matches in track local map {}", self.matches_inliers);
         let map_msg = MapWriteMsg::increase_found(increase_found);
-        self.actor_channels.find(MAP_ACTOR).send(Box::new(map_msg)).unwrap();
+        self.actor_channels.send(MAP_ACTOR, Box::new(map_msg));
 
         // Decide if the tracking was succesful
         // More restrictive if there was a relocalization recently
-        if self.current_frame.frame_id < self.relocalization.last_reloc_frame_id + (self.max_frames as i32) && self.matches_inliers<50 {
+        if current_frame.frame_id < self.relocalization.last_reloc_frame_id + (self.max_frames as i32) && self.matches_inliers<50 {
             warn!("track_local_map unsuccessful; matches in frame < 50 : {}",self.matches_inliers);
             return (false, self.matches_inliers);
         }
@@ -699,7 +691,7 @@ impl DarvisTrackingBack {
         match self.sensor {
             Sensor(FrameSensor::Mono, ImuSensor::Some) => { 
                 return (
-                    !(self.matches_inliers<15 && self.map.read().imu_initialized) && !(self.matches_inliers<50 && !self.map.read().imu_initialized),
+                    !(self.matches_inliers<15 && self.imu.is_initialized) && !(self.matches_inliers<50 && !self.imu.is_initialized),
                     self.matches_inliers
                 )
             },
@@ -710,12 +702,12 @@ impl DarvisTrackingBack {
         }
     }
 
-    fn update_local_keyframes(&mut self) {
+    fn update_local_keyframes(&mut self, current_frame: &mut Frame<InitialFrame>) {
         // void Tracking::UpdateLocalKeyFrames()
         // Each map point votes for the keyframes in which it has been observed
         let mut kf_counter = HashMap::<Id, i32>::new();
-        let frame = match !self.map.read().imu_initialized || self.current_frame.frame_id < self.relocalization.last_reloc_frame_id + 2 {
-            true => &self.current_frame,
+        let frame = match !self.imu.is_initialized || current_frame.frame_id < self.relocalization.last_reloc_frame_id + 2 {
+            true => &current_frame,
             false => self.last_frame.as_ref().unwrap() // Using lastframe since current frame has no matches yet
         };
         for (_, (mp_id, _)) in &frame.mappoint_matches {
@@ -736,7 +728,7 @@ impl DarvisTrackingBack {
                 max_kf_id = kf_id;
             }
             self.local_keyframes.push(kf_id);
-            self.kf_track_reference_for_frame.insert(kf_id, self.current_frame.frame_id);
+            self.kf_track_reference_for_frame.insert(kf_id, current_frame.frame_id);
         }
 
         // Also include some keyframes that are neighbors to already-included keyframes
@@ -747,24 +739,24 @@ impl DarvisTrackingBack {
             let kf = map_read_lock.keyframes.get(&next_kf_id).unwrap();
 
             for kf_id in &kf.get_covisibility_keyframes(10) {
-                if self.kf_track_reference_for_frame.get(kf_id) != Some(&self.current_frame.frame_id) {
+                if self.kf_track_reference_for_frame.get(kf_id) != Some(&current_frame.frame_id) {
                     self.local_keyframes.push(*kf_id);
-                    self.kf_track_reference_for_frame.insert(*kf_id, self.current_frame.frame_id);
+                    self.kf_track_reference_for_frame.insert(*kf_id, current_frame.frame_id);
                     break;
                 }
             }
             for kf_id in &kf.full_kf_info.children {
-                if self.kf_track_reference_for_frame.get(kf_id) != Some(&self.current_frame.frame_id) {
+                if self.kf_track_reference_for_frame.get(kf_id) != Some(&current_frame.frame_id) {
                     self.local_keyframes.push(*kf_id);
-                    self.kf_track_reference_for_frame.insert(*kf_id, self.current_frame.frame_id);
+                    self.kf_track_reference_for_frame.insert(*kf_id, current_frame.frame_id);
                     break;
                 }
             }
     
             if let Some(parent_id) = kf.full_kf_info.parent {
-                if self.kf_track_reference_for_frame.get(&parent_id) != Some(&self.current_frame.frame_id) {
+                if self.kf_track_reference_for_frame.get(&parent_id) != Some(&current_frame.frame_id) {
                     self.local_keyframes.push(parent_id);
-                    self.kf_track_reference_for_frame.insert(parent_id, self.current_frame.frame_id);
+                    self.kf_track_reference_for_frame.insert(parent_id, current_frame.frame_id);
                 }
             };
             i += 1;
@@ -778,37 +770,37 @@ impl DarvisTrackingBack {
         }
 
         if max_kf_id != 0 {
-            self.current_frame.ref_kf_id = Some(max_kf_id);
+            current_frame.ref_kf_id = Some(max_kf_id);
             self.ref_kf_id = Some(max_kf_id);
         }
     }
 
-    fn update_local_points(&mut self) {
+    fn update_local_points(&mut self, current_frame: &mut Frame<InitialFrame>) {
         // void Tracking::UpdateLocalPoints()
         self.local_mappoints.clear();
         for kf_id in &self.local_keyframes {
             let map_read_lock = self.map.read();
             let mp_ids = &map_read_lock.keyframes.get(kf_id).unwrap().mappoint_matches;
             for (_, (mp_id, _)) in mp_ids {
-                if self.mp_track_reference_for_frame.get(mp_id) != Some(&self.current_frame.frame_id) {
+                if self.mp_track_reference_for_frame.get(mp_id) != Some(&current_frame.frame_id) {
                     self.local_mappoints.insert(*mp_id);
-                    self.mp_track_reference_for_frame.insert(*mp_id, self.current_frame.frame_id);
+                    self.mp_track_reference_for_frame.insert(*mp_id, current_frame.frame_id);
                 }
             }
         }
     }
 
     #[time("TrackingBackend::{}")]
-    fn search_local_points(&mut self) {
+    fn search_local_points(&mut self, current_frame: &mut Frame<InitialFrame>) {
         //void Tracking::SearchLocalPoints()
         // let mut mps_to_increase_visible = Vec::new();
 
         // Do not search map points already matched        
-        for (_, (id, _)) in &self.current_frame.mappoint_matches {
+        for (_, (id, _)) in &current_frame.mappoint_matches {
 //            mps_to_increase_visible.push(*id);
-            self.actor_channels.find(MAP_ACTOR).send(Box::new(MapWriteMsg::increase_visible(*id))).unwrap();
+            self.actor_channels.send(MAP_ACTOR, Box::new(MapWriteMsg::increase_visible(*id)));
 
-            self.last_frame_seen.insert(*id, self.current_frame.frame_id);
+            self.last_frame_seen.insert(*id, current_frame.frame_id);
             self.track_in_view.remove(id);
             self.track_in_view_r.remove(id);
         }
@@ -816,12 +808,12 @@ impl DarvisTrackingBack {
         // Project points in frame and check its visibility
         let mut to_match = 0;
         for mp_id in &self.local_mappoints {
-            if self.last_frame_seen.get(mp_id) == Some(&self.current_frame.frame_id) {
+            if self.last_frame_seen.get(mp_id) == Some(&current_frame.frame_id) {
                 continue;
             }
             // Project (this fills MapPoint variables for matching)
             let map_read_lock = self.map.read();
-            let (tracked_data_left, tracked_data_right) = self.current_frame.is_in_frustum(*mp_id, 0.5, &*map_read_lock);
+            let (tracked_data_left, tracked_data_right) = current_frame.is_in_frustum(*mp_id, 0.5, &*map_read_lock);
             if tracked_data_left.is_some() || tracked_data_right.is_some() {
                 // mps_to_increase_visible.push(*mp_id);
                 self.actor_channels.find(MAP_ACTOR).send(Box::new(MapWriteMsg::increase_visible(*mp_id))).unwrap();
@@ -841,18 +833,18 @@ impl DarvisTrackingBack {
                 FrameSensor::Rgbd => 3,
                 _ => 1
             };
-            if self.map.read().imu_initialized {
-                if self.map.read().imu_ba2 {
+            if self.imu.is_initialized {
+                if self.imu.imu_ba2 {
                     th = 2;
                 } else {
                     th = 6;
                 }
-            } else if !self.map.read().imu_initialized && self.sensor.is_imu() {
+            } else if !self.imu.is_initialized && self.sensor.is_imu() {
                 th = 10;
             }
 
             // If the camera has been relocalised recently, perform a coarser search
-            if self.current_frame.frame_id < self.relocalization.last_reloc_frame_id + 2 {
+            if current_frame.frame_id < self.relocalization.last_reloc_frame_id + 2 {
                 th = 5;
             }
             match self.state {
@@ -861,7 +853,7 @@ impl DarvisTrackingBack {
             }
 
             let matches = orbmatcher::search_by_projection(
-                &mut self.current_frame,
+                current_frame,
                 &self.local_mappoints,
                 th, 0.8,
                 &self.track_in_view, &self.track_in_view_r,
@@ -871,11 +863,10 @@ impl DarvisTrackingBack {
         }
     }
 
-    #[time("TrackingBackend::{}")]
-    fn create_new_keyframe(&mut self) {
+    fn create_new_keyframe(&mut self, current_frame: &mut Frame<InitialFrame>) {
         //CreateNewKeyFrame
         // Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Tracking.cc#L3216
-        let new_kf = Frame::<PrelimKeyFrame>::new_clone(&self.current_frame); // TODO (CLONE) ... no way around this I believe
+        let new_kf = Frame::<PrelimKeyFrame>::new_clone(&current_frame);
 
         if self.sensor.is_imu() {
             todo!("IMU"); //Reset preintegration from last KF (Create new object)
@@ -974,17 +965,16 @@ impl DarvisTrackingBack {
         self.last_kf_timestamp = Some(new_kf.timestamp);
 
         // KeyFrame created here and inserted into map
-        let map_actor = self.actor_channels.find(MAP_ACTOR);
-        map_actor.send(Box::new(MapWriteMsg::new_keyframe(new_kf))).unwrap();
+        self.actor_channels.send(MAP_ACTOR, Box::new(MapWriteMsg::new_keyframe(new_kf)));
     }
 
-    fn need_new_keyframe(&self) -> bool {
-        let kfs_in_map = self.kfs_in_map();
-        let not_enough_frames_since_last_reloc = (self.current_frame.frame_id < self.relocalization.last_reloc_frame_id + (self.max_frames as i32)) && (kfs_in_map > (self.max_frames as u32));
-        let imu_not_initialized = self.sensor.is_imu() && !self.map.read().imu_initialized;
+    fn need_new_keyframe(&self, current_frame: &mut Frame<InitialFrame>) -> bool {
+        let num_kfs = self.map.read().keyframes.len();
+        let not_enough_frames_since_last_reloc = (current_frame.frame_id < self.relocalization.last_reloc_frame_id + (self.max_frames as i32)) && (num_kfs as i64 > self.max_frames);
+        let imu_not_initialized = self.sensor.is_imu() && !self.imu.is_initialized;
 
         let too_close_to_last_kf = match self.last_kf_timestamp {
-            Some(timestamp) => self.current_frame.timestamp - timestamp < 0.25, // 250 milliseconds
+            Some(timestamp) => current_frame.timestamp - timestamp < 0.25, // 250 milliseconds
             None => false
         };
 
@@ -995,7 +985,7 @@ impl DarvisTrackingBack {
         }
 
         // Tracked MapPoints in the reference keyframe
-        let min_observations = match kfs_in_map <= 2 {
+        let min_observations = match num_kfs <= 2 {
             true => 2,
             false => 3
         };
@@ -1006,7 +996,7 @@ impl DarvisTrackingBack {
             .unwrap_or(0.0);
 
         // Check how many "close" points are being tracked and how many could be potentially created.
-        let (tracked_close, non_tracked_close) = self.current_frame.check_close_tracked_mappoints();
+        let (tracked_close, non_tracked_close) = current_frame.check_close_tracked_mappoints();
         let need_to_insert_close = (tracked_close<100) && (non_tracked_close>70);
 
         // Thresholds
@@ -1017,7 +1007,7 @@ impl DarvisTrackingBack {
                 if self.matches_inliers > 350 { 0.75 } else { 0.90 }
             },
             Sensor(FrameSensor::Stereo, _) | Sensor(FrameSensor::Rgbd, ImuSensor::Some) => 0.75,
-            Sensor(FrameSensor::Rgbd, ImuSensor::None) => { if kfs_in_map < 2 { 0.4 } else { 0.75 } }
+            Sensor(FrameSensor::Rgbd, ImuSensor::None) => { if num_kfs < 2 { 0.4 } else { 0.75 } }
         }; // TODO (mvp): is Rgbd right? See ORBSLAM3 code https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Tracking.cc#L3142
 
         // Condition 1a: More than "MaxFrames" have passed from last keyframe insertion
@@ -1036,7 +1026,7 @@ impl DarvisTrackingBack {
 
         // Temporal condition for Inertial cases
         let close_to_last_kf = match self.last_kf_timestamp {
-            Some(timestamp) => self.current_frame.timestamp - timestamp < 0.5, // 500 milliseconds
+            Some(timestamp) => current_frame.timestamp - timestamp < 0.5, // 500 milliseconds
             None => false
         };
 
@@ -1057,19 +1047,14 @@ impl DarvisTrackingBack {
     }
 
     //* Helper functions */
-    fn kfs_in_map(&self) -> u32 {
-        let map_read_lock = self.map.read();
-        map_read_lock.keyframes.len() as u32
-    }
-
-    fn discard_outliers(&mut self) -> i32 {
-        let discarded = self.current_frame.discard_outliers();
+    fn discard_outliers(&mut self, current_frame: &mut Frame<InitialFrame>) -> i32 {
+        let discarded = current_frame.discard_outliers();
         for (_, (mp_id, _)) in discarded {
             self.track_in_view.remove(&mp_id);
-            self.last_frame_seen.insert(mp_id, self.current_frame.frame_id);
+            self.last_frame_seen.insert(mp_id, current_frame.frame_id);
             // TODO (Stereo) ... need to remove this from track_in_view_r if the mp is seen in the right camera
         }
-        self.current_frame.get_num_mappoints_with_observations(&*self.map.read())
+        current_frame.get_num_mappoints_with_observations(&*self.map.read())
     }
 
     //* Next steps */
@@ -1078,10 +1063,23 @@ impl DarvisTrackingBack {
     }
 }
 
-pub enum TrackingBackendMsg {
-    FeatureMsg { keypoints: DVVectorOfKeyPoint, descriptors: DVMatrix, image_width: u32, image_height: u32, timestamp: Timestamp, frame_id: Id},
-    MapInitializedMsg { curr_kf_pose: DVPose, curr_kf_id: Id, ini_kf_id: Id, local_mappoints: HashSet<Id>, curr_kf_timestamp: Timestamp },
-    KeyFrameIdMsg { kf_id: Id },
-    LastKeyFrameUpdatedMsg {},
+#[derive(Default, Debug, Clone)]
+pub struct TrackedMapPointData {
+    pub predicted_level: i32,
+    pub view_cos: f64,
+    pub proj_x: f64,
+    pub proj_y: f64,
+    pub track_depth: f64
+    // Note: orbslam also has "right" versions of each of the above fields
+    // and sets either the normal (left) versions or the right versions, depending on which camera it is.
+    // When writing the stereo code, don't duplicate all the fields like they did.
 }
-impl ActorMessage for TrackingBackendMsg { }
+
+#[derive(Debug, Clone, Copy, Default)]
+pub enum TrackingState {
+    #[default] NotInitialized,
+    Lost,
+    RecentlyLost,
+    WaitForMapResponse,
+    Ok
+}

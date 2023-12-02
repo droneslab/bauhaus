@@ -1,5 +1,5 @@
 use dvcore::{maplock::ReadOnlyMap, actor::{ActorChannels, Actor}};
-use crate::{dvmap::{map::Map}, };
+use crate::dvmap::map::Map;
 
 // USER-DEFINED ACTORS: add a string to name your actor here
 pub static TRACKING_FRONTEND: &str = "TRACKING_FRONTEND";

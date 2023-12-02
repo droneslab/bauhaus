@@ -5,13 +5,14 @@ use opencv::prelude::{Mat, MatTraitConst, MatTraitConstManual};
 use foxglove::{foxglove::items::{SceneEntity, SceneUpdate, SpherePrimitive, Vector3, Quaternion, Color, FrameTransform, LinePrimitive, line_primitive, Point3, RawImage, ArrowPrimitive}, get_file_descriptor_set_bytes, make_pose};
 
 use dvcore::{
-    actor::{ActorChannels, Actor, ActorMessage}, matrix::DVVectorOfKeyPoint, config::SETTINGS,
+    actor::{ActorChannels, Actor}, matrix::DVVectorOfKeyPoint, config::SETTINGS,
 };
 use crate::{
     dvmap::{map::{Map, Id}, pose::DVPose, misc::Timestamp},
     maplock::ReadOnlyMap,
     modules::image,
-    actors::messages::ShutdownMsg, registered_actors::VISUALIZER
+    actors::messages::{ShutdownMsg, VisFeaturesMsg, VisFeatureMatchMsg, VisTrajectoryMsg},
+    registered_actors::VISUALIZER
 };
 
 // Default visual stuff //
@@ -126,57 +127,15 @@ impl Actor for DarvisVisualizer {
         loop {
             let message = actor.actor_system.receive().unwrap();
 
-            if message.is::<VisualizerMsg>() {
-                let msg = message.downcast::<VisualizerMsg>().unwrap_or_else(|_| panic!("Could not downcast visualizer message!"));
-                match *msg {
-                    VisualizerMsg::VisFeaturesMsg { keypoints, image, timestamp } => {
-                        // DRAW IMAGE!
-                        match actor.image_draw_type {
-                            ImageDrawType::NONE => Ok(()),
-                            ImageDrawType::PLAIN => {
-                                // Greyscale images are encoded as mono8
-                                // For mono8 (CV_8UC1) each element is u8 -> size is 1
-                                actor.draw_image(&image, "mono8", 1, timestamp)
-                            },
-                            ImageDrawType::FEATURES => {
-                                let image_with_features = image::write_features(&image, &keypoints).expect("Could not draw features to mat");
-                                // This is a color image encoded as bgr8
-                                // Each element is u8 (size is 1) * 3 (for 3 channels)
-                                actor.draw_image(&image_with_features, "bgr8", 3, timestamp)
-                            },
-                            ImageDrawType::FEATURESANDMATCHES => Ok(()), // Draw when matches received from tracking backend
-                        }.expect("Visualizer could not draw image!");
-
-                        // If drawing with features and matches, need to save current image and keypoints for when matches are received
-                        //TODO (memory)... remove these clones
-                        actor.prev_keypoints = actor.current_keypoints.clone();
-                        actor.prev_image = actor.current_image.clone();
-                        actor.current_image = Some(image.clone());
-                        actor.current_keypoints = Some(keypoints.clone());
-                    },
-                    VisualizerMsg::VisFeatureMatchMsg { matches, timestamp } => {
-                        // DRAW IMAGE WITH FEATURE MATCHES!
-                        if matches!(actor.image_draw_type, ImageDrawType::FEATURESANDMATCHES) && actor.prev_image.is_some() {
-                            let image_with_matches = image::write_feature_matches(
-                                &actor.prev_image.as_ref().unwrap(),
-                                &actor.current_image.as_ref().unwrap(),
-                                &actor.prev_keypoints.as_ref().unwrap(),
-                                &actor.current_keypoints.as_ref().unwrap(),
-                                &matches
-                            ).expect("Could not write feature matches to mat");
-
-                            // Encoding and mat element size same as for ImageDrawType::FEATURES
-                            actor.draw_image(&image_with_matches, "bgr8", 3, timestamp).expect("Could not draw image with matches to mat");
-                        };
-                    },
-                    VisualizerMsg::TrajectoryMsg { pose, mappoint_matches, timestamp } => {
-                        actor.draw_trajectory(pose, timestamp).expect("Visualizer could not draw trajectory!");
-                        actor.draw_mappoints(&mappoint_matches, timestamp).expect("Visualizer could not draw mappoints!");
-                        actor.draw_keyframes(timestamp).expect("Visualizer could not draw map!");
-                        actor.current_update_id += 1;
-                        actor.prev_pose = pose.into();
-                    },
-                }
+            if message.is::<VisFeaturesMsg>() {
+                let msg = message.downcast::<VisFeaturesMsg>().unwrap_or_else(|_| panic!("Could not downcast visualizer message!"));
+                actor.update_draw_image(*msg);
+            } else if message.is::<VisFeatureMatchMsg>() {
+                let msg = message.downcast::<VisFeatureMatchMsg>().unwrap_or_else(|_| panic!("Could not downcast visualizer message!"));
+                actor.update_draw_image_with_matches(*msg);
+            } else if message.is::<VisTrajectoryMsg>() {
+                let msg = message.downcast::<VisTrajectoryMsg>().unwrap_or_else(|_| panic!("Could not downcast visualizer message!"));
+                actor.update_draw_map(*msg);
             } else if message.is::<ShutdownMsg>() {
                 // SHUTDOWN
                 warn!("Closing mcap file");
@@ -190,6 +149,54 @@ impl Actor for DarvisVisualizer {
 }
 
 impl DarvisVisualizer {
+    fn update_draw_image(&mut self, msg: VisFeaturesMsg) {
+        match self.image_draw_type {
+            ImageDrawType::NONE => Ok(()),
+            ImageDrawType::PLAIN => {
+                // Greyscale images are encoded as mono8
+                // For mono8 (CV_8UC1) each element is u8 -> size is 1
+                self.draw_image(&msg.image, "mono8", 1, msg.timestamp)
+            },
+            ImageDrawType::FEATURES => {
+                let image_with_features = image::write_features(&msg.image, &msg.keypoints).expect("Could not draw features to mat");
+                // This is a color image encoded as bgr8
+                // Each element is u8 (size is 1) * 3 (for 3 channels)
+                self.draw_image(&image_with_features, "bgr8", 3, msg.timestamp)
+            },
+            ImageDrawType::FEATURESANDMATCHES => Ok(()), // Draw when matches received from tracking backend
+        }.expect("Visualizer could not draw image!");
+
+        // If drawing with features and matches, need to save current image and keypoints for when matches are received
+        //TODO (memory)... remove these clones
+        self.prev_keypoints = self.current_keypoints.clone();
+        self.prev_image = self.current_image.clone();
+        self.current_image = Some(msg.image.clone());
+        self.current_keypoints = Some(msg.keypoints.clone());
+    }
+
+    fn update_draw_image_with_matches(&mut self, msg: VisFeatureMatchMsg) {
+        if matches!(self.image_draw_type, ImageDrawType::FEATURESANDMATCHES) && self.prev_image.is_some() {
+            let image_with_matches = image::write_feature_matches(
+                &self.prev_image.as_ref().unwrap(),
+                &self.current_image.as_ref().unwrap(),
+                &self.prev_keypoints.as_ref().unwrap(),
+                &self.current_keypoints.as_ref().unwrap(),
+                &msg.matches
+            ).expect("Could not write feature matches to mat");
+
+            // Encoding and mat element size same as for ImageDrawType::FEATURES
+            self.draw_image(&image_with_matches, "bgr8", 3, msg.timestamp).expect("Could not draw image with matches to mat");
+        };
+    }
+
+    fn update_draw_map(&mut self, msg: VisTrajectoryMsg) {
+        self.draw_trajectory(msg.pose, msg.timestamp).expect("Visualizer could not draw trajectory!");
+        self.draw_mappoints(&msg.mappoint_matches, msg.timestamp).expect("Visualizer could not draw mappoints!");
+        self.draw_keyframes(msg.timestamp).expect("Visualizer could not draw map!");
+        self.current_update_id += 1;
+        self.prev_pose = msg.pose.into();
+    }
+
     fn draw_trajectory(&mut self, pose: DVPose, timestamp: Timestamp) -> Result<(), Box<dyn std::error::Error>> {
         debug!("Drawing trajectory at timestamp {} with pose {:?}", timestamp, pose);
 
@@ -263,7 +270,7 @@ impl DarvisVisualizer {
         for (mappoint_id, mappoint) in &map.mappoints {
             let pose = DVPose::new_with_default_rot(mappoint.position);
 
-            let mp_sphere = match mappoint_match_ids.contains(mappoint_id) {
+            let mp_sphere = match mappoint_match_ids.contains(&mappoint_id) {
                 true => self.create_sphere(&pose, MAPPOINT_MATCH_COLOR.clone(), MAPPOINT_SIZE.clone()),
                 false => self.create_sphere(&pose, MAPPOINT_COLOR.clone(), MAPPOINT_SIZE.clone()),
             };
@@ -471,10 +478,3 @@ impl From<DVPose> for foxglove::foxglove::items::Point3 {
         }
     }
 }
-
-pub enum VisualizerMsg {
-    VisFeaturesMsg { keypoints: DVVectorOfKeyPoint, image: Mat, timestamp: Timestamp,},
-    VisFeatureMatchMsg { matches: opencv::core::Vector<opencv::core::DMatch>, timestamp: Timestamp},
-    TrajectoryMsg { pose: DVPose, mappoint_matches: HashMap<u32, (i32, bool)>, timestamp: Timestamp,},
-}
-impl ActorMessage for VisualizerMsg{}

@@ -10,8 +10,7 @@ use super::{mappoint::{MapPoint, FullMapPoint}, map::{Map, MapItemHashMap}, feat
 // TODO (design)... It would be nice to re-think how we do the states. We shouldn't have options in the regular Frame struct, there should be Frame generics that either have those filled in or don't. But creating more states means we have a lot more duplicated code for each function that can be called on multiple states. 
 
 // Typestate...Frame/KeyFrame information that is ALWAYS available, regardless of frame/keyframe state.
-#[derive(Debug, Clone, Derivative)]
-#[derivative(Default)]
+#[derive(Debug, Clone)]
 pub struct Frame<K: FrameState> {
     pub frame_id: Id,
     pub timestamp: Timestamp,
@@ -86,13 +85,13 @@ impl<T: FrameState> Frame<T> {
     pub fn get_num_mappoints_with_observations(&self, map: &Map) -> i32 {
         (&self.mappoint_matches)
             .into_iter()
-            .filter(|(_, (mp_id, _))| map.get_mappoint(mp_id).unwrap().get_observations().len() > 0)
+            .filter(|(_, (mp_id, _))| map.mappoints.get(mp_id).unwrap().get_observations().len() > 0)
             .count() as i32
     }
 
     pub fn delete_mappoints_without_observations(&mut self, map: &Map) {
         self.mappoint_matches
-            .retain(|_, (mp_id, _)| map.get_mappoint(mp_id).unwrap().get_observations().len() > 0);
+            .retain(|_, (mp_id, _)| map.mappoints.get(mp_id).unwrap().get_observations().len() > 0);
     }
 
     pub fn check_close_tracked_mappoints(&self) -> (i32, i32) {
@@ -102,18 +101,17 @@ impl<T: FrameState> Frame<T> {
     pub fn get_pose_in_world_frame(&self, map: &Map) -> DVPose {
         let pose = self.pose.expect("Frame doesn't have a pose");
         let ref_kf_id = self.ref_kf_id.expect("Frame doesn't have a ref kf id");
-        let ref_kf = map.get_keyframe(&ref_kf_id).expect("Can't get ref kf from map");
+        let ref_kf = map.keyframes.get(&ref_kf_id).expect("Can't get ref kf from map");
         let ref_kf_pose = ref_kf.pose.expect("Ref kf doesn't have a pose");
         pose * ref_kf_pose.inverse()
     }
 }
 
 // Basic frame read from the image file, not upgraded to a keyframe yet
-#[derive(Clone, Debug, Default, Copy, Serialize, Deserialize)]
+#[derive(Clone, Debug, Copy, Serialize, Deserialize)]
 pub struct InitialFrame {}
 
 impl Frame<InitialFrame> {
-    #[time("Frame<InitialFrame>::{}")]
     pub fn new(
         frame_id: Id, keypoints_vec: DVVectorOfKeyPoint, descriptors_vec: DVMatrix,
         im_width: u32, im_height: u32,
@@ -130,7 +128,12 @@ impl Frame<InitialFrame> {
             features: Features::new(keypoints_vec, descriptors_vec, im_width, im_height, sensor)?,
             imu_bias,
             sensor,
-            ..Default::default()
+            pose: None,
+            ref_kf_id: None,
+            bow: None,
+            mappoint_matches: HashMap::new(),
+            imu_preintegrated: None,
+            full_kf_info: InitialFrame{},
         };
         Ok(frame)
     }
@@ -146,7 +149,7 @@ impl Frame<InitialFrame> {
         // Combination of:
         // bool Frame::isInFrustum(MapPoint *pMP, float viewingCosLimit)
         // bool Frame::isInFrustumChecks(MapPoint *pMP, float viewingCosLimit, bool bRight)
-        let mappoint = map.get_mappoint(&mp_id).unwrap();
+        let mappoint = map.mappoints.get(&mp_id).unwrap();
 
         let left = self.check_frustum(viewing_cos_limit, &mappoint, false);
         let right = match self.sensor.frame() {
@@ -223,11 +226,10 @@ impl Frame<InitialFrame> {
 }
 
 // A frame upgraded to a prelimary keyframe, created locally but not inserted into the map yet
-#[derive(Clone, Debug, Default, Copy, Serialize, Deserialize)]
+#[derive(Clone, Debug, Copy, Serialize, Deserialize)]
 pub struct PrelimKeyFrame {}
 
 impl Frame<PrelimKeyFrame> {
-    #[time("Frame<PrelimKeyFrame>::{}")]
     pub fn new(frame: Frame<InitialFrame>) -> Frame<PrelimKeyFrame> {
         if frame.pose.is_none() {
             panic!("Frame needs a pose before converting to KeyFrame!");
@@ -246,7 +248,6 @@ impl Frame<PrelimKeyFrame> {
             sensor: frame.sensor,
         }
     }
-    #[time("Frame<PrelimKeyFrame>::{}")]
     pub fn new_clone(frame: &Frame<InitialFrame>) -> Frame<PrelimKeyFrame> {
         if frame.pose.is_none() {
             panic!("Frame needs a pose before converting to KeyFrame!");
@@ -269,7 +270,7 @@ impl Frame<PrelimKeyFrame> {
 }
 
 // Full keyframe inserted into the map with the following additional fields
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct FullKeyFrame {
     pub id: Id,
     pub origin_map_id: Id, // mnOriginMapId
@@ -310,6 +311,8 @@ pub struct FullKeyFrame {
 impl Frame<FullKeyFrame> {
     #[time("Frame<FullKeyFrame>::{}")]
     pub(super) fn new(prelim_keyframe: Frame<PrelimKeyFrame>, origin_map_id: Id, id: Id) -> Self {
+        let timer = logging_timer::timer!("Frame<FullKeyFrame>::bow");
+
         let bow = match prelim_keyframe.bow {
             Some(bow) => Some(bow),
             None => {
@@ -319,8 +322,9 @@ impl Frame<FullKeyFrame> {
                 Some(bow)
             }
         };
+        logging_timer::finish!(timer);
 
-        Self {
+        let me = Self {
             timestamp: prelim_keyframe.timestamp,
             frame_id: prelim_keyframe.frame_id,
             mappoint_matches: prelim_keyframe.mappoint_matches,
@@ -332,11 +336,16 @@ impl Frame<FullKeyFrame> {
             full_kf_info: FullKeyFrame{
                 id,
                 origin_map_id,
-                ..Default::default()
+                parent: None,
+                children: HashSet::new(),
+                ordered_connected_keyframes: Vec::new(),
+                map_connected_keyframes: HashMap::new(),
+                connected_keyframes_cutoff_weight: 0,
             },
             ref_kf_id: prelim_keyframe.ref_kf_id,
             sensor: prelim_keyframe.sensor
-        }
+        };
+        return me;
     }
 
     pub fn id(&self) -> Id { self.full_kf_info.id }
@@ -477,7 +486,7 @@ impl Frame<FullKeyFrame> {
 
         let mut num_points = 0;
         for (_, (mp_id, _)) in &self.mappoint_matches {
-            let mappoint = map.get_mappoint(&mp_id).unwrap();
+            let mappoint = map.mappoints.get(&mp_id).unwrap();
             if mappoint.get_observations().len() >= (min_observations as usize) {
                 num_points += 1;
             }

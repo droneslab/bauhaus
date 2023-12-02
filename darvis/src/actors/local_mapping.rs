@@ -1,17 +1,17 @@
-use std::{cmp::min};
+use std::cmp::min;
 use std::collections::HashSet;
 use std::f64::INFINITY;
 use std::iter::FromIterator;
 
 use derivative::Derivative;
-use dvcore::actor::{Actor, ActorMessage};
+use dvcore::actor::Actor;
 use dvcore::sensor::{Sensor, FrameSensor, ImuSensor};
 use dvcore::{
     maplock::ReadOnlyMap,
     config::{SETTINGS, SYSTEM},
     matrix::DVVector3
 };
-use log::{debug, warn, trace};
+use log::{debug, warn};
 use logging_timer::{time, timer};
 use opencv::prelude::KeyPointTraitConst;
 use crate::ActorChannels;
@@ -28,10 +28,9 @@ use crate::{
     Id,
 };
 
-use super::messages::ShutdownMsg;
+use super::messages::{ShutdownMsg, KeyFrameIdMsg, Reset};
 
-#[derive(Debug, Derivative)]
-#[derivative(Default(bound=""))]
+#[derive(Debug)]
 pub struct DarvisLocalMapping {
     actor_channels: ActorChannels,
     map: ReadOnlyMap<Map>,
@@ -55,7 +54,8 @@ impl Actor for DarvisLocalMapping {
             map,
             sensor,
             current_keyframe_id: -1,
-            ..Default::default()
+            recently_added_mappoints: Vec::new(),
+            imu: ImuModule::new(None, None, sensor, false, false),
         }
     }
 
@@ -64,20 +64,15 @@ impl Actor for DarvisLocalMapping {
 
         'outer: loop {
             let message = actor.actor_channels.receive().unwrap();
-            if message.is::<LocalMappingMsg>() {
-                let msg = message.downcast::<LocalMappingMsg>().unwrap_or_else(|_| panic!("Could not downcast local mapping message!"));
+            if message.is::<KeyFrameIdMsg>() {
+                let _timer = timer!("LocalMapping::Total");
 
-                match *msg {
-                    LocalMappingMsg::KeyFrameIdMsg{ kf_id } => {
-                        let _timer = timer!("LocalMapping::Total");
-                        debug!("Local mapping working on kf {}", kf_id);
-                        actor.current_keyframe_id = kf_id;
-                        actor.local_mapping();
-                    },
-                    LocalMappingMsg::Reset{} => {
-                        // TODO (design) need to think about how reset requests should be propagated
-                    },
-                };
+                let msg = message.downcast::<KeyFrameIdMsg>().unwrap_or_else(|_| panic!("Could not downcast local mapping message!"));
+                debug!("Local mapping working on kf {}", msg.kf_id);
+                actor.current_keyframe_id = msg.kf_id;
+                actor.local_mapping();
+            } else if message.is::<Reset>() {
+                // TODO (design) need to think about how reset requests should be propagated
             } else if message.is::<ShutdownMsg>() {
                 break 'outer;
             } else {
@@ -88,7 +83,6 @@ impl Actor for DarvisLocalMapping {
 }
 
 impl DarvisLocalMapping {
-    #[time("LocalMapping::{}")]
     fn local_mapping(&mut self) {
         match self.sensor.frame() {
             FrameSensor::Stereo => {
@@ -133,7 +127,7 @@ impl DarvisLocalMapping {
         // {
         if self.map.read().keyframes.len() > 2 {
             match self.sensor.is_imu() {
-                true => { // and self.map.read().imu_initialized
+                true => { // and imu_initialized
                     todo!("IMU");
                     // float dist = (mpCurrentKeyFrame->mPrevKF->GetCameraCenter() - mpCurrentKeyFrame->GetCameraCenter()).norm() +
                     //         (mpCurrentKeyFrame->mPrevKF->mPrevKF->GetCameraCenter() - mpCurrentKeyFrame->mPrevKF->GetCameraCenter()).norm();
@@ -167,7 +161,7 @@ impl DarvisLocalMapping {
         }
 
         // Initialize IMU
-        if self.sensor.is_imu() && !self.map.read().imu_initialized {
+        if self.sensor.is_imu() && !self.imu.is_initialized {
             self.imu.initialize();
         }
 
@@ -234,7 +228,7 @@ impl DarvisLocalMapping {
         let current_kf_id = self.current_keyframe_id;
         let mut to_discard = Vec::new();
         self.recently_added_mappoints.retain(|&mp_id| {
-            let mappoint = map.get_mappoint(&mp_id).unwrap();
+            let mappoint = map.mappoints.get(&mp_id).unwrap();
 
             if (mappoint.get_found_ratio() < 0.25) ||
             (current_kf_id - mappoint.first_kf_id >= 2 && mappoint.get_observations().len() <= th_obs) {
@@ -263,7 +257,7 @@ impl DarvisLocalMapping {
         let far_points_th = if fpt == 0.0 { INFINITY } else { fpt };
 
         let map = self.map.read();
-        let current_kf = map.get_keyframe(&self.current_keyframe_id).unwrap();
+        let current_kf = map.keyframes.get(&self.current_keyframe_id).unwrap();
         let neighbor_kfs = current_kf.get_covisibility_keyframes(nn);
         if self.sensor.is_imu() {
             todo!("IMU");
@@ -290,7 +284,7 @@ impl DarvisLocalMapping {
             // TODO (design): ORBSLAM will abort additional work if there are too many keyframes in the msg queue.
             // if(i>0 && CheckNewKeyFrames())
             //     return;
-            let neighbor_kf = map.get_keyframe(&neighbor_id).unwrap();
+            let neighbor_kf = map.keyframes.get(&neighbor_id).unwrap();
 
             // Check first that baseline is not too short
             let mut ow2 = neighbor_kf.get_camera_center();
@@ -321,7 +315,7 @@ impl DarvisLocalMapping {
                 self.sensor
             ) {
                 Ok(matches) => matches,
-                Err(err) => panic!("Problem with search_by_bow_f {}", err)
+                Err(err) => panic!("Problem with search_for_triangulation {}", err)
             };
 
             // println!("Matches in local mapping ... {}", matches.len());
@@ -493,13 +487,13 @@ impl DarvisLocalMapping {
         };
 
         let map = self.map.read();
-        let current_kf = map.get_keyframe(&self.current_keyframe_id).unwrap();
+        let current_kf = map.keyframes.get(&self.current_keyframe_id).unwrap();
         let mut target_kfs = HashSet::<i32>::from_iter(current_kf.get_covisibility_keyframes(nn));
 
         // Add some covisible of covisible
         // Extend to some second neighbors if abort is not requested
         let new_kfs = target_kfs.iter().map(|kf_id| {
-            map.get_keyframe(&kf_id).unwrap().get_covisibility_keyframes(20)
+            map.keyframes.get(&kf_id).unwrap().get_covisibility_keyframes(20)
         }).flatten().collect::<Vec<i32>>();
         target_kfs.extend(new_kfs);
 
@@ -547,7 +541,7 @@ impl DarvisLocalMapping {
         // Search matches by projection from target KFs in current KF
         let fuse_candidates = HashSet::<Id>::from_iter(
             target_kfs.iter().map(|kf_id| {
-                let kf = map.get_keyframe(&kf_id).unwrap();
+                let kf = map.keyframes.get(&kf_id).unwrap();
                 let mappoints_kf = &kf.mappoint_matches;
                 mappoints_kf.iter().map(|(_, (mp_id, _))| *mp_id)
             }).flatten()
@@ -577,7 +571,7 @@ impl DarvisLocalMapping {
         // mpCurrentKeyFrame->UpdateBestCovisibles(); 
 
         let map = self.map.read();
-        let current_kf = map.get_keyframe(&self.current_keyframe_id).unwrap();
+        let current_kf = map.keyframes.get(&self.current_keyframe_id).unwrap();
         let local_keyframes = current_kf.get_covisibility_keyframes(i32::MAX);
 
         let redundant_th = match self.sensor {
@@ -609,7 +603,7 @@ impl DarvisLocalMapping {
             if kf_id == map.initial_kf_id {
                 continue
             }
-            let keyframe = map.get_keyframe(&kf_id).unwrap();
+            let keyframe = map.keyframes.get(&kf_id).unwrap();
             let mappoints = &keyframe.mappoint_matches;
 
             let th_obs = 3;
@@ -624,7 +618,7 @@ impl DarvisLocalMapping {
                         continue
                     }
                 }
-                let mp = map.get_mappoint(mp_id).unwrap();
+                let mp = map.mappoints.get(mp_id).unwrap();
                 num_mps += 1;
 
                 if mp.get_observations().len() > th_obs {
@@ -634,7 +628,7 @@ impl DarvisLocalMapping {
                         if *obs_kf_id == kf_id {
                             continue
                         }
-                        let obs_kf = map.get_keyframe(obs_kf_id).unwrap();
+                        let obs_kf = map.keyframes.get(obs_kf_id).unwrap();
                         let scale_level_i = match self.sensor.frame() {
                             FrameSensor::Stereo => {
                                 let right_level = if *right_index != -1 { obs_kf.features.get_octave(*right_index as usize)} else { -1 };
@@ -708,9 +702,3 @@ impl DarvisLocalMapping {
         return num_deleted;
     }
 }
-
-pub enum LocalMappingMsg {
-    KeyFrameIdMsg{ kf_id: Id },
-    Reset{},
-}
-impl ActorMessage for LocalMappingMsg { }

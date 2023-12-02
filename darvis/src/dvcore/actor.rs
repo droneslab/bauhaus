@@ -1,12 +1,10 @@
 /// *** Actor channel and actor message implementation. *** //
 
-use std::{collections::HashMap, iter::Map};
+use std::{collections::HashMap};
 use crossbeam_channel::{RecvError, unbounded};
 
 use downcast_rs::{impl_downcast, Downcast};
 use log::{info, error};
-
-use crate::maplock::ReadOnlyMap;
 
 pub type MessageBox = Box<dyn ActorMessage>;
 pub type Receiver = crossbeam_channel::Receiver<MessageBox>;
@@ -26,6 +24,10 @@ impl ActorChannels {
     pub fn find(&self, name: &str) -> &Sender {
         self.actors.get(name).expect(format!("Could not find actor {}", name).as_str())
     }
+    pub fn send(&self, actor_name: &str, message: MessageBox) {
+        self.find(actor_name).send(message).unwrap_or_else(|_| panic!("Could not send message to actor {}", actor_name));
+    }
+
     pub fn receive(&self) -> Result<MessageBox, RecvError> {
         match self.receiver_bound {
             Some(bound) => {
@@ -69,19 +71,17 @@ impl Default for ActorChannels {
     }
 }
 
-pub struct NullActor {
-    name: String,
-}
+pub struct NullActor { }
 impl NullActor {
-    pub fn new(name: String) -> Self {
-        NullActor{name}
+    pub fn new() -> Self {
+        NullActor{}
     }
 }
 impl Actor for NullActor {
     type MapRef = ();
 
     fn new_actorstate(_actor_system: ActorChannels, _map: Self::MapRef) -> Self {
-        NullActor{name: "NullActor".to_string()}
+        NullActor{}
     }
     fn spawn(_actor_system: ActorChannels, _map: Self::MapRef)  {
         error!("Actor Not Implemented!!");

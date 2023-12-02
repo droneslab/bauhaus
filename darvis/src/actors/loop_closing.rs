@@ -1,16 +1,15 @@
 use dvcore::actor::{Actor, ActorMessage};
-use dvcore::{
-    maplock::ReadOnlyMap,
-};
+use dvcore::config::{SETTINGS, SYSTEM};
+use dvcore::maplock::ReadOnlyMap;
+use dvcore::sensor::Sensor;
 use log::warn;
 use crate::ActorChannels;
-use crate::dvmap::map::Id;
-use crate::dvmap::{map::Map};
+use crate::dvmap::map::{Id, Map};
 use crate::modules::imu::ImuModule;
 
-use super::messages::{ShutdownMsg};
+use super::messages::{ShutdownMsg, IMUInitializedMsg};
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct DarvisLoopClosing {
     actor_channels: ActorChannels,
     // Map
@@ -26,10 +25,13 @@ impl Actor for DarvisLoopClosing {
     type MapRef = ReadOnlyMap<Map>;
 
     fn new_actorstate(actor_channels: ActorChannels, map: Self::MapRef) -> DarvisLoopClosing {
+        let sensor: Sensor = SETTINGS.get(SYSTEM, "sensor");
+
         DarvisLoopClosing {
             actor_channels,
             map,
-            ..Default::default()
+            imu: ImuModule::new(None, None, sensor, false, false),
+            matches_inliers: 0,
         }
     }
 
@@ -45,6 +47,8 @@ impl Actor for DarvisLoopClosing {
                         actor.loop_closing(kf_id);
                     },
                 };
+            } else if message.is::<IMUInitializedMsg>() {
+                // TODO (IMU) process message from local mapping!
             } else if message.is::<ShutdownMsg>() {
                 break 'outer;
             } else {
