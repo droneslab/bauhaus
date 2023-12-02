@@ -4,11 +4,11 @@ use dvcore::config::{SETTINGS, SYSTEM};
 use dvcore::matrix::DVVectorOfPoint2f;
 use dvcore::sensor::{Sensor, FrameSensor, ImuSensor};
 use log::debug;
-use dvcore::{matrix::DVVectorOfPoint3f};
+use dvcore::matrix::DVVectorOfPoint3f;
 use opencv::prelude::KeyPointTraitConst;
 use crate::dvmap::keyframe::Frame;
 use crate::dvmap::{keyframe::InitialFrame, pose::DVPose};
-use crate::modules::camera::{CAMERA_MODULE};
+use crate::modules::camera::CAMERA_MODULE;
 
 use super::orbmatcher;
 

@@ -95,7 +95,11 @@ To instead install with docker...
     cargo run --release [DATASET] config.yaml
     ```
 
-- To use GDB
+- Print timing of some functions (functions using ``#[time()]`` proc macro and calls to ``timer!`` macro)
+    ```bash
+    RUST_BACKTRACE=1 RUST_LOG=debug cargo run --release ~/datasets/kitti_00_0/ config.yaml
+    ```
+- Use GDB
     ```bash
     cargo build    # Either debug build or release build works
     rust-gdb --args target/debug/bindarvis [DATASET] config.yaml
@@ -112,7 +116,7 @@ To instead install with docker...
         cargo build # Either debug or release build works
         valgrind target/debug/bindarvis  [DATASET] config.yaml > log.txt 2>&1
         ```
-- To compile C++ bindings with clang instead of g++, set these environment variables:
+- Compile C++ bindings with clang instead of g++, set these environment variables:
     ```bash
     export CXX=/usr/bin/clang++
     export CC=/usr/bin/clang

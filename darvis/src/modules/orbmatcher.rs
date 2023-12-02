@@ -1,14 +1,13 @@
 use std::collections::{HashMap, HashSet};
 use std::f64::INFINITY;
 use std::sync::RwLockReadGuard;
-use dvcore::config::{SETTINGS};
+use dvcore::config::SETTINGS;
 use dvcore::matrix::{DVVectorOfPoint2f, DVVector3};
 use dvcore::sensor::{Sensor, FrameSensor};
-use log::{debug, warn, trace};
+use log::warn;
 use logging_timer::time;
-use opencv::core::{KeyPoint};
+use opencv::core::KeyPoint;
 use opencv::prelude::*;
-use parking_lot::{MappedRwLockReadGuard};
 use crate::actors::map_actor::MapWriteMsg;
 use crate::actors::tracking_backend::TrackedMapPointData;
 use crate::dvmap::keyframe::{Frame, FullKeyFrame};
@@ -143,7 +142,7 @@ pub fn search_for_initialization(
     (n_matches, vn_matches12)
 }
 
-#[time()]
+#[time("TrackingBackend::{}")]
 pub fn search_by_projection(
     frame: &mut Frame<InitialFrame>, mappoints: &HashSet<Id>, th: i32, ratio: f64,
     track_in_view: &HashMap<Id, TrackedMapPointData>, track_in_view_right: &HashMap<Id, TrackedMapPointData>, 
@@ -158,7 +157,7 @@ pub fn search_by_projection(
 
     for mp_id in mappoints {
         let map = map.read();
-        let mp = map.get_mappoint(mp_id).unwrap();
+        let mp = map.mappoints.get(mp_id).unwrap();
         if let Some(mp_data) = track_in_view.get(mp_id) {
             if mp_data.track_depth > far_points_th {
                 continue;
@@ -186,7 +185,7 @@ pub fn search_by_projection(
                 // Get best and second matches with near keypoints
                 for idx in indices {
                     if let Some((id, _)) = frame.mappoint_matches.get(&idx) {
-                        if map.get_mappoint(id).unwrap().get_observations().len() > 0 {
+                        if map.mappoints.get(id).unwrap().get_observations().len() > 0 {
                             continue;
                         }
                     }
@@ -245,7 +244,7 @@ pub fn search_by_projection(
             }
         }
 
-        if let Some(mp_data) = track_in_view_right.get(mp_id) {
+        if let Some(_mp_data) = track_in_view_right.get(mp_id) {
             todo!("Stereo");
             // Basically repeated code above with some small changes to which functions they call
             // if(F.Nleft != -1 && pMP->mbTrackInViewR){
@@ -324,7 +323,7 @@ pub fn search_by_projection(
 // Project MapPoints tracked in last frame into the current frame and search matches.
 // Used to track from previous frame (Tracking)
 
-#[time()]
+#[time("TrackingBackend::{}")]
 pub fn search_by_projection_with_threshold (
     current_frame: &mut Frame<InitialFrame>, last_frame: &Frame<InitialFrame>, th: i32,
     should_check_orientation: bool,
@@ -369,7 +368,7 @@ pub fn search_by_projection_with_threshold (
             // Project
             let map = map.read();
             let mp_id = &last_frame.mappoint_matches.get(&(idx1 as u32)).unwrap().0;
-            let mappoint = map.get_mappoint(mp_id).unwrap();
+            let mappoint = map.mappoints.get(mp_id).unwrap();
             let x_3d_w = mappoint.position;
             let x_3d_c = (*rcw) * (*x_3d_w) + (*tcw);
 
@@ -407,7 +406,7 @@ pub fn search_by_projection_with_threshold (
 
             for idx2 in indices_2 {
                 if let Some((id, _)) = current_frame.mappoint_matches.get(&idx2) {
-                    if map.get_mappoint(id).unwrap().get_observations().len() > 0 {
+                    if map.mappoints.get(id).unwrap().get_observations().len() > 0 {
                         continue;
                     }
                 }
@@ -476,7 +475,7 @@ pub fn _search_by_projection_reloc (
 // Used in Place Recognition (Loop Closing and Merging)
 // int SearchByProjection(KeyFrame* pKF, Sophus::Sim3<float> &Scw, const std::vector<MapPoint*> &vpPoints, const std::vector<KeyFrame*> &vpPointsKFs, std::vector<MapPoint*> &vpMatched, std::vector<KeyFrame*> &vpMatchedKF, int th, float ratioHamming=1.0);
 
-#[time()]
+#[time("TrackingBackend::{}")]
 pub fn search_by_bow_f(
     kf: &Frame<FullKeyFrame>, frame: &mut Frame<InitialFrame>,
     should_check_orientation: bool, ratio: f64
@@ -581,7 +580,6 @@ pub fn search_by_bow_f(
             j = lower_bound(&frame_featvec, &kf_featvec, j, i);
         }
     }
-    let pre = matches.len();
     if should_check_orientation {
         check_orientation_2(&rot_hist, &mut matches)
     };
@@ -882,7 +880,7 @@ pub fn search_for_triangulation(
 
 pub fn fuse(kf_id: &Id, fuse_candidates: &Vec<Id>, map: &RwLockReadGuard<Map>, th: f32, is_right: bool) -> Vec<MapWriteMsg> {
     // int ORBmatcher::Fuse(KeyFrame *pKF, const vector<MapPoint *> &vpMapPoints, const float th, const bool bRight)
-    let keyframe = map.get_keyframe(kf_id).unwrap();
+    let keyframe = map.keyframes.get(kf_id).unwrap();
 
     let (tcw, ow, _camera) = match is_right {
         true => {
@@ -899,7 +897,7 @@ pub fn fuse(kf_id: &Id, fuse_candidates: &Vec<Id>, map: &RwLockReadGuard<Map>, t
     let mut to_fuse = Vec::new();
 
     for mp_id in fuse_candidates {
-        let mappoint = map.get_mappoint(&mp_id).unwrap();
+        let mappoint = map.mappoints.get(&mp_id).unwrap();
         if mappoint.is_in_keyframe(keyframe.id()) {
             continue;
         }
@@ -998,7 +996,7 @@ pub fn fuse(kf_id: &Id, fuse_candidates: &Vec<Id>, map: &RwLockReadGuard<Map>, t
         if best_dist <= TH_LOW {
             if keyframe.has_mappoint(&(best_idx as u32)) {
                 let mappoint_in_kf_id = keyframe.get_mappoint(&(best_idx as u32));
-                let mappoint_in_kf = map.get_mappoint(&mappoint_in_kf_id).unwrap();
+                let mappoint_in_kf = map.mappoints.get(&mappoint_in_kf_id).unwrap();
                 if mappoint_in_kf.get_observations().len() > mappoint.get_observations().len() {
                     warn!("Verify that the order of mp_id and mappoint_in_kf_id is right");
                     to_fuse.push(MapWriteMsg::replace_mappoint(*mp_id, mappoint_in_kf_id));

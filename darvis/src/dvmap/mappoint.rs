@@ -174,7 +174,7 @@ impl MapPoint<FullMapPoint> {
 
         let (n, normal) = self.get_obs_normal(map, &self.position);
 
-        let ref_kf = map.get_keyframe(&self.ref_kf_id).unwrap();
+        let ref_kf = map.keyframes.get(&self.ref_kf_id).unwrap();
         let pc = (*self.position) - (*ref_kf.get_camera_center());
         let dist = pc.norm();
 
@@ -240,7 +240,7 @@ impl MapPoint<FullMapPoint> {
             }
         }
 
-        // TODO (CLONE) ... this could potentially be a large clone
+        // TODO (CLONE) ... misc
         Some(DVMatrix::new(descriptors[best_idx].clone()))
     }
 
@@ -308,7 +308,7 @@ impl MapPoint<FullMapPoint> {
         let mut n = 0;
         let position_opencv = **position;
         for (id, _) in &self.full_mp_info.observations {
-            let kf = map.get_keyframe(&id).unwrap();
+            let kf = map.keyframes.get(&id).unwrap();
             let mut camera_center = kf.get_camera_center();
             let owi = *camera_center;
             let normali = position_opencv - owi;
@@ -332,7 +332,7 @@ impl MapPoint<FullMapPoint> {
     fn compute_descriptors(&self, map: &Map) -> Vec::<opencv::core::Mat> {
         let mut descriptors = Vec::<opencv::core::Mat>::new();
         for (id, (index1, index2)) in &self.full_mp_info.observations {
-            let kf = map.get_keyframe(&id).unwrap();
+            let kf = map.keyframes.get(&id).unwrap();
             descriptors.push(kf.features.descriptors.row(*index1 as u32).unwrap());
             match self.sensor.frame() {
                 FrameSensor::Stereo => descriptors.push(kf.features.descriptors.row(*index2 as u32).unwrap()),

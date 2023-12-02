@@ -2,6 +2,7 @@ use std::fmt;
 use cxx::{UniquePtr, let_cxx_string};
 use log::info;
 use dvcore::{matrix::DVMatrix, config::{SETTINGS, SYSTEM}};
+use logging_timer::time;
 
 lazy_static! {
     pub static ref VOCABULARY: DVVocabulary = {
@@ -25,13 +26,13 @@ impl DVVocabulary {
             filename,
         }
     }
+    #[time("BoW::{}")]
     pub fn transform(&self, descriptors: &DVMatrix, bow: & mut BoW) {
-        // TODO (CLONE) ... can def do this without a clone, just need to make sure the pointer stuff is correct in the into()
-        // see this function: impl From<DVMatrix> for dvos3binding::ffi::WrapBindCVMat {
-        let mut bla: dvos3binding::ffi::WrapBindCVMat = descriptors.clone().into();
+        let descriptors2: dvos3binding::ffi::WrapBindCVMat = descriptors.into();
 
+        // TODO (timing) ... this takes 73ms, need to compare to ORBSLAM
         self.vocabulary.transform(
-            &mut bla,
+            & descriptors2,
             bow.bow_vec.pin_mut(),
             bow.feat_vec.pin_mut(),
             4

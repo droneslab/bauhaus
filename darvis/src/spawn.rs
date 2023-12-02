@@ -1,9 +1,9 @@
-use std::{sync::{Arc, mpsc, Mutex}, thread, collections::HashMap};
-use crossbeam_channel::{bounded, unbounded};
+use std::{sync::{Arc, Mutex}, thread, collections::HashMap};
+use crossbeam_channel::unbounded;
 
 use dvcore::{
     config::ActorConf,
-    actor::{Sender, Receiver, ActorChannels, MessageBox, Actor},
+    actor::{Sender, Receiver, ActorChannels, Actor},
     maplock::ReadWriteMap
 };
 use log::{info, warn};

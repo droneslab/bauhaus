@@ -3,16 +3,27 @@ use serde::{Deserialize, Serialize};
 
 use crate::dvmap::{pose::DVPose, map::Map};
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct ImuModule {
     pub velocity: Option<DVPose>,
+    pub is_initialized: bool, // isImuInitialized(), set true by local mapper
+    pub imu_ba2: bool, // mbIMU_BA2
     _last_bias: Option<IMUBias>,
     sensor: Sensor
 }
 
 impl ImuModule {
-    pub fn ready(&self, map: &ReadOnlyMap<Map>) -> bool {
-        self.sensor.is_imu() && !self.velocity.is_none() && map.read().imu_initialized
+    pub fn new(velocity: Option<DVPose>, last_bias: Option<IMUBias>, sensor: Sensor, is_initialized: bool, imu_ba2: bool) -> Self {
+        Self {
+            velocity,
+            _last_bias: last_bias,
+            sensor: sensor,
+            is_initialized,
+            imu_ba2
+        }
+    }
+    pub fn ready(&self) -> bool {
+        self.sensor.is_imu() && !self.velocity.is_none() && self.is_initialized
     }
 
     pub fn predict_state(&self) -> bool {

@@ -183,7 +183,8 @@ impl Features {
                 *mat.at_2d_mut::<f32>(i, 1)? = keypoints.get(i as usize)?.pt().y;
             }
 
-            // TODO (CLONE) ... can we do this in place? Then we don't have to construct and return keypoints_un
+            // TODO (CLONE) ... misc
+            // can we do this in place? Then we don't have to construct and return keypoints_un
 
             // Undistort points
             mat = mat.reshape(2, 0)?;

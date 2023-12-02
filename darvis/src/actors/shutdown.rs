@@ -1,9 +1,9 @@
-use std::{fs::File, path::Path, io::Write, collections::HashMap};
+use std::{fs::File, path::Path, io::Write};
 use log::warn;
 
 use crate::dvmap::{pose::DVPose, map::Id, misc::Timestamp};
-use dvcore::{actor::{ActorChannels, Actor, ActorMessage}, config::{SYSTEM, SETTINGS}};
-use super::{messages::{ShutdownMsg}, tracking_backend::TrackingState};
+use dvcore::{actor::{ActorChannels, Actor}, config::{SYSTEM, SETTINGS}};
+use super::{messages::{ShutdownMsg, TrajectoryMsg, TrackingStateMsg}, tracking_backend::TrackingState};
 
 
 pub struct ShutdownActor {
@@ -36,27 +36,23 @@ impl Actor for ShutdownActor {
         let mut actor = ShutdownActor::new_actorstate(actor_channels, map);
         loop {
             let message = actor.actor_channels.receive().unwrap();
-            if message.is::<ShutdownActorMsg>() {
-                let msg = message.downcast::<ShutdownActorMsg>().unwrap_or_else(|_| panic!("Could not downcast shutdown actor message!"));
+            if message.is::<TrajectoryMsg>() {
+                let msg = message.downcast::<TrajectoryMsg>().unwrap_or_else(|_| panic!("Could not downcast shutdown actor message!"));
+                actor.trajectory_poses.push(msg.pose);
+                actor.trajectory_times.push(msg.timestamp);
+                actor.trajectory_keyframes.push(msg.ref_kf_id);
+            } else if message.is::<TrackingStateMsg>() {
+                let msg = message.downcast::<TrackingStateMsg>().unwrap_or_else(|_| panic!("Could not downcast shutdown actor message!"));
 
-                match *msg {
-                    ShutdownActorMsg::TrajectoryMsg{ pose, ref_kf_id, timestamp } => {
-                        actor.trajectory_poses.push(pose);
-                        actor.trajectory_times.push(timestamp);
-                        actor.trajectory_keyframes.push(ref_kf_id);
+                match msg.state {
+                    TrackingState::Lost => {
+                        // This can happen if tracking is lost. Duplicate last element of each vector
+                        actor.trajectory_poses.push(actor.trajectory_poses.last().unwrap().clone());
+                        actor.trajectory_times.push(actor.trajectory_times.last().unwrap().clone());
+                        actor.trajectory_keyframes.push(actor.trajectory_keyframes.last().unwrap().clone());
                     },
-                    ShutdownActorMsg::TrackingStateMsg{ state } => {
-                        match state {
-                            TrackingState::Lost => {
-                                // This can happen if tracking is lost. Duplicate last element of each vector
-                                actor.trajectory_poses.push(actor.trajectory_poses.last().unwrap().clone());
-                                actor.trajectory_times.push(actor.trajectory_times.last().unwrap().clone());
-                                actor.trajectory_keyframes.push(actor.trajectory_keyframes.last().unwrap().clone());
-                            },
-                            _ => {}
-                        }
-                    },
-                };
+                    _ => {}
+                }
             } else if message.is::<ShutdownMsg>() {
                 warn!("Triggered shutdown, saving trajectory info");
                 let mut file = File::create(
@@ -64,7 +60,7 @@ impl Actor for ShutdownActor {
                     .join(&actor.trajectory_filename)
                 ).unwrap();
                 for i in 0..actor.trajectory_poses.len() {
-                    let string = format!("{:?} {:?}", actor.trajectory_times[i], actor.trajectory_poses[i]);
+                    let string = format!("{:?} {:?}\n", actor.trajectory_times[i], actor.trajectory_poses[i]);
                     file.write_all(string.as_bytes()).unwrap();
                 }
 
@@ -75,9 +71,3 @@ impl Actor for ShutdownActor {
         }
     }
 }
-
-pub enum ShutdownActorMsg {
-    TrajectoryMsg{ pose: DVPose, ref_kf_id: Id, timestamp: Timestamp,},
-    TrackingStateMsg{ state: TrackingState },
-}
-impl ActorMessage for ShutdownActorMsg {}

@@ -9,7 +9,7 @@ use spin_sleep::LoopHelper;
 #[macro_use] extern crate lazy_static;
 
 use dvcore::{*, config::*, actor::ActorChannels};
-use crate::{actors::{messages::{ShutdownMsg}, tracking_frontend::TrackingFrontendMsg}, registered_actors::TRACKING_FRONTEND};
+use crate::{actors::messages::{ShutdownMsg, ImagePathMsg, ImageMsg}, registered_actors::TRACKING_FRONTEND, modules::image};
 use crate::dvmap::{bow::VOCABULARY, map::Id};
 
 mod actors;
@@ -54,10 +54,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if *shutdown_flag.lock().unwrap() { break; }
         loop_sleep.start();
 
+        let image = image::read_image_file(&path.to_string());
+
         // For evaluation, use timestamps file to run loop and send timestamp from file instead of real time
         first_actor_tx.send(Box::new(
-            TrackingFrontendMsg::ImagePathMsg{
-                image_path: path.to_string(),
+            ImageMsg{
+                image,
                 timestamp: timestamps[i],
                 frame_id: i as u32
             }
@@ -125,7 +127,7 @@ impl LoopSleep {
 
     pub fn start(&mut self) {
         match &mut self.loop_type {
-            LoopType::Timestamps(_timestamps, ref mut current_index, ref mut now) => {
+            LoopType::Timestamps(_timestamps, ref mut _current_index, ref mut _now) => {
                 todo!("Compile error with using timestamps file");
                 // now = &mut time::Instant::now();
                 // current_index = &mut (*current_index + 1);

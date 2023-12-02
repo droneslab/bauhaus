@@ -1,12 +1,12 @@
 extern crate g2o;
 use cxx::UniquePtr;
-use log::{warn, debug, trace};
+use log::{warn, debug};
 use logging_timer::{time, timer};
 use std::{fmt, fmt::Debug};
 use opencv::{prelude::*, types::VectorOfKeyPoint,};
 
 use dvcore::{
-    actor::{Actor, ActorMessage},
+    actor::Actor,
     sensor::{Sensor, FrameSensor},
     matrix::*,
     config::*
@@ -14,15 +14,13 @@ use dvcore::{
 use crate::{
     registered_actors::{FEATURE_DETECTION, CAMERA, VISUALIZER},
     actors::{
-        messages::{VisFeaturesMsg},
+        messages::{ShutdownMsg, ImagePathMsg, ImageMsg, TrackingStateMsg, FeatureMsg, VisFeaturesMsg},
         tracking_backend::TrackingState,
     },
     modules::image,
     ActorChannels,
     dvmap::{map::Id, misc::Timestamp}
 };
-
-use super::{tracking_backend::TrackingBackendMsg, messages::ShutdownMsg, visualizer::VisualizerMsg};
 
 
 #[derive(Debug)]
@@ -70,38 +68,63 @@ impl Actor for DarvisTrackingFront {
         'outer: loop {
             let message = actor.actor_channels.receive().unwrap();
 
-            if message.is::<TrackingFrontendMsg>() {
-                let msg = message.downcast::<TrackingFrontendMsg>().unwrap_or_else(|_| panic!("Could not downcast tracking frontend message!"));
-                match *msg {
-                    TrackingFrontendMsg::ImagePathMsg{image_path, timestamp, frame_id } => {
-                        let _timer = timer!("TrackingFrontend::Total");
-                        let image = image::read_image_file(&image_path);
-                        let image_cols = image.cols() as u32;
-                        let image_rows = image.rows() as u32;
+            if message.is::<ImagePathMsg>() {
+                let _timer = timer!("TrackingFrontend::Total-ImagePath");
+                let msg = message.downcast::<ImagePathMsg>().unwrap_or_else(|_| panic!("Could not downcast tracking frontend message!"));
+
+                let image = image::read_image_file(&msg.image_path);
+                let image_cols = image.cols() as u32;
+                let image_rows = image.rows() as u32;
+
+                // TODO (CLONE) ... visualizer
+                let (keypoints, descriptors) = match SETTINGS.get::<bool>(SYSTEM, "show_visualizer") {
+                    true => {
                         let (keypoints, descriptors) = actor.extract_features(image.clone());
-                        actor.send_to_backend(keypoints.clone(), descriptors, image_cols, image_rows, timestamp, frame_id);
-                        if SETTINGS.get::<bool>(SYSTEM, "show_visualizer") {
-                            actor.send_to_visualizer(keypoints, image, timestamp);
-                        }
-                        actor.last_id += 1;
+                        actor.send_to_visualizer(keypoints.clone(), image, msg.timestamp);
+                        (keypoints, descriptors)
                     },
-                    TrackingFrontendMsg::ImageMsg{ image, timestamp, frame_id } => {
-                        let image_cols = image.cols() as u32;
-                        let image_rows = image.rows() as u32;
+                    false => {
                         let (keypoints, descriptors) = actor.extract_features(image);
-                        actor.send_to_backend(keypoints, descriptors, image_cols, image_rows, timestamp, frame_id);
-                        actor.last_id += 1;
+                        (keypoints, descriptors)
+                    }
+                };
+                actor.send_to_backend(keypoints, descriptors, image_cols, image_rows, msg.timestamp, msg.frame_id);
+
+                actor.last_id += 1;
+            } else if message.is::<ImageMsg>() {
+                let _timer = timer!("TrackingFrontend::Total-Image");
+
+                let msg = message.downcast::<ImageMsg>().unwrap_or_else(|_| panic!("Could not downcast tracking frontend message!"));
+
+                let image_cols = msg.image.cols() as u32;
+                let image_rows = msg.image.rows() as u32;
+
+                // TODO (CLONE) ... visualizer
+                let (keypoints, descriptors) = match SETTINGS.get::<bool>(SYSTEM, "show_visualizer") {
+                    true => {
+                        let (keypoints, descriptors) = actor.extract_features(msg.image.clone());
+                        actor.send_to_visualizer(keypoints.clone(), msg.image, msg.timestamp);
+                        (keypoints, descriptors)
                     },
-                    TrackingFrontendMsg::TrackingStateMsg{ state, init_id } => {
-                        match state {
-                            TrackingState::Ok => { 
-                                actor.map_initialized = true;
-                                actor.init_id = init_id
-                            },
-                            _ => {}
-                        };
+                    false => {
+                        let (keypoints, descriptors) = actor.extract_features(msg.image);
+                        (keypoints, descriptors)
+                    }
+                };
+
+
+                actor.send_to_backend(keypoints, descriptors, image_cols, image_rows, msg.timestamp, msg.frame_id);
+                actor.last_id += 1;
+            } else if message.is::<TrackingStateMsg>() {
+                let msg = message.downcast::<TrackingStateMsg>().unwrap_or_else(|_| panic!("Could not downcast tracking frontend message!"));
+
+                match msg.state {
+                    TrackingState::Ok => { 
+                        actor.map_initialized = true;
+                        actor.init_id = msg.init_id
                     },
-                }
+                    _ => {}
+                };
             } else if message.is::<ShutdownMsg>() {
                 break 'outer;
             } else {
@@ -112,14 +135,12 @@ impl Actor for DarvisTrackingFront {
 }
 
 impl DarvisTrackingFront {
-    #[time("TrackingFrontend::{}")]
     fn extract_features(&mut self, image: opencv::core::Mat) -> (VectorOfKeyPoint, Mat) {
-        // TODO (Perf optimizations)
-        let image_dv: dvos3binding::ffi::WrapBindCVMat = DVMatrix::new(image).into();
-
-        let mut descriptors: dvos3binding::ffi::WrapBindCVMat = DVMatrix::default().into();
+        let image_dv: dvos3binding::ffi::WrapBindCVMat = (&DVMatrix::new(image)).into();
+        let mut descriptors: dvos3binding::ffi::WrapBindCVMat = (&DVMatrix::default()).into();
         let mut keypoints: dvos3binding::ffi::WrapBindCVKeyPoints = DVVectorOfKeyPoint::empty().into();
 
+        // TODO (timing) ... this takes ~70 ms. Kind of high? Compare to ORBSLAM
         if self.map_initialized && (self.last_id - self.init_id < self.max_frames) {
             self.orb_extractor_left.extractor.pin_mut().extract(&image_dv, &mut keypoints, &mut descriptors);
         } else if self.sensor.is_mono() {
@@ -140,7 +161,7 @@ impl DarvisTrackingFront {
         // Note: not currently sending image to backend
         let backend = self.actor_channels.find("TRACKING_BACKEND");
 
-        backend.send(Box::new(TrackingBackendMsg::FeatureMsg{
+        backend.send(Box::new(FeatureMsg{
             keypoints: DVVectorOfKeyPoint::new(keypoints),
             descriptors: DVMatrix::new(descriptors),
             image_width,
@@ -153,7 +174,7 @@ impl DarvisTrackingFront {
     #[time("TrackingFrontend::{}")]
     fn send_to_visualizer(&mut self, keypoints: VectorOfKeyPoint, image: Mat, timestamp: Timestamp) {
         // Send image and features to visualizer
-        self.actor_channels.find(VISUALIZER).send(Box::new(VisualizerMsg::VisFeaturesMsg {
+        self.actor_channels.find(VISUALIZER).send(Box::new(VisFeaturesMsg {
             keypoints: DVVectorOfKeyPoint::new(keypoints),
             image,
             timestamp,
@@ -192,12 +213,4 @@ impl Debug for DVORBextractor {
         f.debug_struct("DVORBextractor")
          .finish()
     }
-}
-
-impl ActorMessage for TrackingFrontendMsg { }
-
-pub enum TrackingFrontendMsg {
-    ImagePathMsg{ image_path: String, timestamp: Timestamp, frame_id: u32},
-    ImageMsg{ image: Mat, timestamp: Timestamp, frame_id: u32 },
-    TrackingStateMsg{state: TrackingState, init_id: Id},
 }

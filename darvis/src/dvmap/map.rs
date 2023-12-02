@@ -1,27 +1,23 @@
 use std::collections::{HashMap, HashSet};
-use log::{info, warn, error, debug, trace};
-use dvcore::{matrix::{DVVector3, DVVectorOfPoint2f, DVVectorOfPoint3f}, config::{SETTINGS, SYSTEM}, sensor::{Sensor, FrameSensor, ImuSensor}};
+use log::{info, warn, error};
+use dvcore::{matrix::{DVVector3, DVVectorOfPoint3f}, config::{SETTINGS, SYSTEM}, sensor::{Sensor, FrameSensor, ImuSensor}};
 use logging_timer::time;
 use crate::{
     dvmap::{keyframe::*, mappoint::*, pose::DVPose},
-    modules::{map_initialization::Initialization, optimizer::{self}}
+    modules::optimizer::{self}
 };
 
 use super::misc::Timestamp;
 
 pub type Id = i32;
-pub type MapItemHashMap<T> = HashMap<Id, T, nohash_hasher::BuildNoHashHasher<Id>>;
+pub type MapItemHashMap<T> = HashMap<Id, T, nohash_hasher::BuildNoHashHasher<Id>>; // Faster performance
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct Map {
     pub id: Id,
 
     pub keyframes: MapItemHashMap<Frame<FullKeyFrame>>, // = mspKeyFrames
     pub mappoints: MapItemHashMap<MapPoint<FullMapPoint>>, // = mspMapPoints
-
-    // IMU
-    pub imu_initialized: bool, // isImuInitialized(), set true by local mapper
-    pub imu_ba2: bool, // mbIMU_BA2
 
     // KeyFrames
     last_kf_id: Id, // = mnMaxKFid
@@ -55,16 +51,12 @@ impl Map {
             sensor,
             last_kf_id: -1,
             last_mp_id: -1,
-            imu_initialized: false,
-            ..Default::default()
+            initial_kf_id: -1,
+            keyframes: MapItemHashMap::default(),
+            mappoints: MapItemHashMap::default(),
         }
     }
 
-    pub fn num_keyframes(&self) -> i32 { self.keyframes.len() as i32 }
-    pub fn get_keyframe(&self, id: &Id) -> Option<&Frame<FullKeyFrame>> { self.keyframes.get(id) }
-    pub fn get_all_keyframes(&self) -> &MapItemHashMap<Frame<FullKeyFrame>> { &self.keyframes }
-    pub fn get_mappoint(&self, id: &Id) -> Option<&MapPoint<FullMapPoint>> { self.mappoints.get(id) }
-    pub fn get_all_mappoints(&self) -> &MapItemHashMap<MapPoint<FullMapPoint>> { &self.mappoints }
     pub fn print_current_map(&self, identifier: String) {
         // For debugging
         println!("PRINT MAP START;{}", identifier);
@@ -75,7 +67,7 @@ impl Map {
                 print!("{},", connection);
             };
             print!(";");
-            for (index, (mp_id, _)) in &kf.mappoint_matches {
+            for (_index, (mp_id, _)) in &kf.mappoint_matches {
                 print!("{},", mp_id);
             };
             println!("");
@@ -83,7 +75,7 @@ impl Map {
         for (id, mp) in &self.mappoints {
             print!("PRINT MAP MP;{};{:?}", id, mp.position);
             print!(";");
-            for (kf_id, indexes) in mp.get_observations() {
+            for (kf_id, _indexes) in mp.get_observations() {
                 print!("{},", kf_id);
             };
             println!("");
@@ -93,8 +85,6 @@ impl Map {
 
     ////* &mut self ... behind map actor */////////////////////////////////////////////////////
     pub fn insert_mappoint_to_map(&mut self, mp: MapPoint<PrelimMapPoint>, observations_to_add: Vec<(Id, u32, usize)>) -> Id {
-        // Note: I would really like this to consume the mp, but this brings up issues
-        // with the map actor being able to take ownership of the message.
         self.last_mp_id += 1;
         let new_mp_id = self.last_mp_id;
 
@@ -133,10 +123,7 @@ impl Map {
         // with the map actor being able to take ownership of the keyframe message.
         self.last_kf_id += 1;
         let new_kf_id = self.last_kf_id;
-
         let full_keyframe = Frame::<FullKeyFrame>::new(prelim_kf, self.id, new_kf_id);
-        let num_keypoints = full_keyframe.features.num_keypoints;
-        let matches = full_keyframe.mappoint_matches.clone(); // TODO (CLONE) ... to remove this one we need to be able to iterate over an immutable reference to matches, but we can't do that bc the inside of the loop requires mutating
         self.keyframes.insert(new_kf_id, full_keyframe);
 
         if self.keyframes.is_empty() {
@@ -145,33 +132,33 @@ impl Map {
         }
 
         // Update mp connections after insertion
-        // Note: In ORBSLAM, this code is copied in a bunch of places. Pulled into here
-        // and generalized a bit so we can guarantee it runs every time it needs to.
-        // is_initialization check is because initialization does a very similar task
-        // but different enough that it's not worth it to generalize it to here.
+        // Note: This should run during most normal keyframe insertions, but not 
+        // when inserting the first two keyframes in initialization, because this
+        // already happens when inserting the mappoints in initialization.
         if !is_initialization {
-            for (index, (mp_id, _is_outlier)) in matches {
-                let mp = self.mappoints.get_mut(&mp_id).unwrap();
+            let full_keyframe = self.keyframes.get(&new_kf_id).unwrap();
+            let num_keypoints = full_keyframe.features.num_keypoints;
 
-                // Add observation for mp->kf
-                mp.add_observation(&new_kf_id, num_keypoints, index);
+            for (index, (mp_id, _is_outlier)) in full_keyframe.mappoint_matches.iter() {
+                {
+                    // Add observation for mp->kf
+                    let mp = self.mappoints.get_mut(&mp_id).unwrap();
+                    mp.add_observation(&new_kf_id, num_keypoints, *index);
+                }
 
-                // Add observation kf->mp
-                self.keyframes.get_mut(&new_kf_id).map(|kf| {
-                    kf.add_mappoint(index, mp_id, false);
-                });
+                let norm_and_depth;
+                let best_descriptor;
+                {
+                    let mp = self.mappoints.get(&mp_id).unwrap();
+                    norm_and_depth = mp.get_norm_and_depth(&self).unwrap();
+                    best_descriptor = mp.compute_distinctive_descriptors(&self).unwrap();
+                }
 
-                // Update normal and depth
-                let norm_and_depth = self.mappoints.get(&mp_id)
-                    .and_then(|mp| {mp.get_norm_and_depth(&self)}).unwrap();
-                self.mappoints.get_mut(&mp_id)
-                    .map(|mp| mp.update_norm_and_depth(norm_and_depth));
-
-                // Compute distinctive descriptors
-                let best_descriptor = self.mappoints.get(&mp_id)
-                    .and_then(|mp| mp.compute_distinctive_descriptors(&self)).unwrap();
-                self.mappoints.get_mut(&mp_id)
-                    .map(|mp| mp.update_distinctive_descriptors(best_descriptor));
+                {
+                    let mp = self.mappoints.get_mut(&mp_id).unwrap();
+                    mp.update_norm_and_depth(norm_and_depth);
+                    mp.update_distinctive_descriptors(best_descriptor);
+                }
             }
 
             // Update Connections
@@ -204,8 +191,9 @@ impl Map {
 
         let (connections1, matches1, parent1, mut children1);
         {
-            // TODO (CLONE) ... same as other issue in map.rs, to remove this clone we need to be able to iterate over an immutable ref to matches and children while mutating other keyframes inside the loop
-            let kf = self.get_keyframe(&kf_id).unwrap();
+            // TODO (CLONE) ... map mutability
+            // same as other issue in map.rs, to remove this clone we need to be able to iterate over an immutable ref to matches and children while mutating other keyframes inside the loop
+            let kf = self.keyframes.get(&kf_id).unwrap();
             connections1 = kf.get_covisibility_keyframes(i32::MAX);
             matches1 = kf.mappoint_matches.clone();
             parent1 = kf.full_kf_info.parent;
@@ -278,7 +266,6 @@ impl Map {
         info!("Discard keyframe {}", kf_id);
     }
 
-    #[time("Map::{}")]
     pub fn create_initial_map_monocular(
         &mut self, mp_matches: Vec<i32>, p3d: DVVectorOfPoint3f, initial_frame: Frame<InitialFrame>, current_frame: Frame<InitialFrame>
     ) -> Option<(DVPose, i32, i32, HashSet<Id>, Timestamp)> {
@@ -327,18 +314,14 @@ impl Map {
             );
         }
         info!("Monocular initialization created new map with {} mappoints", count);
-        
+
         // Update Connections
         Map::update_connections(& self.mappoints, &mut self.keyframes, & self.initial_kf_id, &initial_kf_id);
         Map::update_connections(& self.mappoints, &mut self.keyframes, & self.initial_kf_id, &curr_kf_id);
 
-        // self.print_current_map("after update connections".to_string());
-
         // Bundle Adjustment
         let optimized_poses = optimizer::global_bundle_adjustment(self, 20);
         self.update_after_ba(optimized_poses, 0);
-
-        // self.print_current_map("after BA".to_string());
 
         let median_depth = self.keyframes.get_mut(&initial_kf_id)?.compute_scene_median_depth(& self.mappoints, 2);
         let inverse_median_depth = match self.sensor {

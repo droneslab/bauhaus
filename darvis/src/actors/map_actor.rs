@@ -1,14 +1,14 @@
-use std::collections::HashMap;
-
-use dvcore::{actor::{ActorChannels, ActorMessage, Actor}, matrix::{DVVectorOfPoint2f, DVVectorOfPoint3f}};
-use log::{info, warn, debug, trace};
+use dvcore::{actor::{ActorChannels, ActorMessage, Actor}, matrix::DVVectorOfPoint3f};
+use log::{info, warn};
 use logging_timer::timer;
 
 use crate::{
     maplock::ReadWriteMap,
-    dvmap::{keyframe::*, map::*, mappoint::{MapPoint, PrelimMapPoint}, pose::{DVPose, DVTranslation}},
-    modules::{map_initialization::Initialization, optimizer::BundleAdjustmentResult}, actors::{messages::{ShutdownMsg}, tracking_backend::TrackingBackendMsg, local_mapping::LocalMappingMsg}, registered_actors::{TRACKING_BACKEND, LOCAL_MAPPING},
+    dvmap::{keyframe::*, map::*, mappoint::{MapPoint, PrelimMapPoint}, pose::DVPose},
+    modules::{map_initialization::Initialization, optimizer::BundleAdjustmentResult}, actors::messages::{ShutdownMsg, KeyFrameIdMsg}, registered_actors::{TRACKING_BACKEND, LOCAL_MAPPING},
 };
+
+use super::messages::{MapInitializedMsg, LastKeyFrameUpdatedMsg};
 
 pub struct MapActor {
     actor_system: ActorChannels,
@@ -31,18 +31,19 @@ impl Actor for MapActor {
                 let msg = message.downcast::<MapWriteMsg>().unwrap_or_else(|_| panic!("Could not downcast map actor message!"));
 
                 match msg.target {
-                    MapWriteTarget::CreateInitialMapMonocular { mp_matches, p3d, initial_frame, current_frame } => {
-                        let _timer = timer!("MapActor::TotalCreateInitialMap");
+                    MapWriteTarget::CreateInitialMap { mp_matches, p3d, initial_frame, current_frame } => {
+                        let _timer = timer!("MapActor::Total-CreateInitialMap");
+                        // TODO (STEREO) - Add option to make the map monocular or stereo
 
                         let mut write_lock = actor.map.write();
                         match write_lock.create_initial_map_monocular(mp_matches, p3d, initial_frame, current_frame) {
                                 Some((curr_kf_pose, curr_kf_id, ini_kf_id, local_mappoints, curr_kf_timestamp)) => {
-                                    actor.actor_system.find(TRACKING_BACKEND).send(Box::new(
-                                        TrackingBackendMsg::MapInitializedMsg {
+                                    actor.actor_system.send(TRACKING_BACKEND, Box::new(
+                                        MapInitializedMsg {
                                             curr_kf_pose, curr_kf_id, ini_kf_id, 
                                             local_mappoints, curr_kf_timestamp
                                         }
-                                    )).unwrap();
+                                    ));
                                 },
                                 None => { 
                                     warn!("Could not create initial map");
@@ -50,31 +51,31 @@ impl Actor for MapActor {
                         };
                     },
                     MapWriteTarget::Map__Optimization { poses } => {
-                        let _timer = timer!("MapActor::TotalMapOptimization");
+                        let _timer = timer!("MapActor::Total-MapOptimization");
                         actor.map.write().update_after_ba(poses, 0);
                     },
                     MapWriteTarget::KeyFrame__New { kf } => {
-                        let _timer = timer!("MapActor::TotalNewKeyFrame");
+                        let _timer = timer!("MapActor::Total-NewKeyFrame");
                         let kf_id = actor.map.write().insert_keyframe_to_map(kf, false);
                         info!("Created keyframe {}", kf_id);
                         // Tell local mapping to process keyframe
-                        actor.actor_system.find(LOCAL_MAPPING).send(Box::new(LocalMappingMsg::KeyFrameIdMsg{kf_id})).unwrap();
+                        actor.actor_system.find(LOCAL_MAPPING).send(Box::new(KeyFrameIdMsg{kf_id})).unwrap();
                         // Send the new keyframe ID directly back to the sender so they can use the ID 
-                        actor.actor_system.find(TRACKING_BACKEND).send(Box::new(TrackingBackendMsg::KeyFrameIdMsg{kf_id})).unwrap();
+                        actor.actor_system.find(TRACKING_BACKEND).send(Box::new(KeyFrameIdMsg{kf_id})).unwrap();
                     },
                     MapWriteTarget::KeyFrame__Delete { id } => {
-                        let _timer = timer!("MapActor::TotalDeleteKeyFrame");
+                        let _timer = timer!("MapActor::Total-DeleteKeyFrame");
                         actor.map.write().discard_keyframe(id);
                     },
                     MapWriteTarget::MapPoint__NewMany { mps, callback_actor } => {
-                        let _timer = timer!("MapActor::TotalNewManyMapPoints");
+                        let _timer = timer!("MapActor::Total-NewManyMapPoints");
                         let mut map = actor.map.write();
                         for (mp, observations) in mps {
                             let _ = map.insert_mappoint_to_map(mp, observations);
                         }
                         // Inform tracking that we are done with creating new mappoints. Needed because tracking fails if new points are not created
                         // before track_with_reference_keyframe, so to avoid the race condition we have it wait until the new points are ready.
-                        actor.actor_system.find(TRACKING_BACKEND).send(Box::new(TrackingBackendMsg::LastKeyFrameUpdatedMsg{})).unwrap();
+                        actor.actor_system.send(&callback_actor, Box::new(LastKeyFrameUpdatedMsg{}));
                     },
                     MapWriteTarget::MapPoint__DiscardMany { ids } => {
                         for id in ids {
@@ -95,17 +96,18 @@ impl Actor for MapActor {
                         // }
                     },
                     MapWriteTarget::MapPoint__AddObservation {mp_id, kf_id, index} => {
-                        let _timer = timer!("MapActor::TotalAddObservation");
-                        let num_keypoints = actor.map.write().get_keyframe(&kf_id).unwrap().features.num_keypoints;
-                        actor.map.write().mappoints.get_mut(&mp_id).unwrap().add_observation(&kf_id, num_keypoints, index as u32);
-                        actor.map.write().keyframes.get_mut(&kf_id).unwrap().add_mappoint(index as u32, mp_id, false);
+                        let _timer = timer!("MapActor::Total-AddObservation");
+                        let num_keypoints = actor.map.write().keyframes.get(&kf_id).expect(&format!("Could not get kf {}", kf_id)).features.num_keypoints;
+                        let mut write = actor.map.write();
+                        write.mappoints.get_mut(&mp_id).unwrap().add_observation(&kf_id, num_keypoints, index as u32);
+                        write.keyframes.get_mut(&kf_id).unwrap().add_mappoint(index as u32, mp_id, false);
                     },
                     MapWriteTarget::MapPoint__Replace {mp_to_replace, mp} => {
-                        let _timer = timer!("MapActor::TotalReplaceMapPoint");
+                        let _timer = timer!("MapActor::Total-ReplaceMapPoint");
                         actor.map.write().replace_mappoint(mp_to_replace, mp);
                     },
                     MapWriteTarget::MapPoint__Pose{mp_id, pose} => {
-                        let _timer = timer!("MapActor::TotalUpdateMapPointPose");
+                        let _timer = timer!("MapActor::Total-UpdateMapPointPose");
                         actor.map.write().mappoints.get_mut(&mp_id).unwrap().position = pose.get_translation();
                     }
                     _ => {
@@ -130,11 +132,10 @@ enum MapWriteTarget {
     // each message needs a write lock and the actor is handling them asynchronously
     // BulkMsg{msgs: Vec<MapWriteMsg>}
 
-    CreateInitialMapMonocular{
+    CreateInitialMap{
         mp_matches: Vec<i32>, p3d: DVVectorOfPoint3f, initial_frame: Frame<InitialFrame>, 
         current_frame: Frame<InitialFrame>
     },
-    CreateInitialMapStereo{initialization_data: Initialization, callback_actor: String},
     KeyFrame__New{kf: Frame<PrelimKeyFrame>},
     KeyFrame__Delete{id: Id},
     KeyFrame__Pose{kf_id: Id, pose: DVPose},
@@ -162,22 +163,14 @@ impl MapWriteMsg {
     //         target: MapWriteTarget::BulkMsg{msgs}
     //     }
     // }
-    pub fn create_initial_map_monocular(ini_data: Initialization,) -> Self {
+    pub fn create_initial_map(ini_data: Initialization) -> Self {
         Self {
-            target: MapWriteTarget::CreateInitialMapMonocular{
+            target: MapWriteTarget::CreateInitialMap{
                 mp_matches: ini_data.mp_matches,
                 p3d: ini_data.p3d,
                 initial_frame: ini_data.initial_frame.unwrap(), 
                 current_frame: ini_data.current_frame.unwrap(),
             },
-        }
-    }
-    pub fn create_initial_map_stereo(
-        initialization_data: Initialization,
-        callback_actor: &str
-    ) -> Self {
-        Self {
-            target: MapWriteTarget::CreateInitialMapStereo{initialization_data, callback_actor: callback_actor.to_string()},
         }
     }
     pub fn new_keyframe(kf: Frame<PrelimKeyFrame>) -> Self {
