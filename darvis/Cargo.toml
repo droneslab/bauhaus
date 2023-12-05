@@ -16,6 +16,7 @@ path = "src/dvcore/lib.rs"
 [profile.release]
 debug = true
 codegen-units = 1
+incremental = true
 lto = "fat"
 
 [rust]

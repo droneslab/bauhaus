@@ -69,7 +69,6 @@ impl Actor for DarvisTrackingFront {
             let message = actor.actor_channels.receive().unwrap();
 
             if message.is::<ImagePathMsg>() {
-                let _timer = timer!("TrackingFrontend::Total-ImagePath");
                 let msg = message.downcast::<ImagePathMsg>().unwrap_or_else(|_| panic!("Could not downcast tracking frontend message!"));
 
                 let image = image::read_image_file(&msg.image_path);
@@ -92,7 +91,7 @@ impl Actor for DarvisTrackingFront {
 
                 actor.last_id += 1;
             } else if message.is::<ImageMsg>() {
-                let _timer = timer!("TrackingFrontend::Total-Image");
+                // TODO (timing) ... 30 ms
 
                 let msg = message.downcast::<ImageMsg>().unwrap_or_else(|_| panic!("Could not downcast tracking frontend message!"));
 

@@ -45,6 +45,11 @@ impl ActorChannels {
             None => self.receiver.recv(),
         }
     }
+    
+    pub fn queue_len(&self) -> usize {
+        self.receiver.len()
+    }
+
     pub fn copy_transmitters(&self, actor_name: &String) -> HashMap<String, Sender> {
         let mut txs = HashMap::new();
         for (other_actor_name, other_actor_transmitter) in &self.actors {

@@ -26,11 +26,11 @@ impl DVVocabulary {
             filename,
         }
     }
-    #[time("BoW::{}")]
+
     pub fn transform(&self, descriptors: &DVMatrix, bow: & mut BoW) {
         let descriptors2: dvos3binding::ffi::WrapBindCVMat = descriptors.into();
 
-        // TODO (timing) ... this takes 73ms, need to compare to ORBSLAM
+        // TODO (timing) ... this takes 24ms, need to compare to ORBSLAM
         self.vocabulary.transform(
             & descriptors2,
             bow.bow_vec.pin_mut(),
