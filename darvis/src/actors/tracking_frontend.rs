@@ -1,20 +1,186 @@
 extern crate g2o;
+use cxx::UniquePtr;
+use log::{warn, debug};
+use logging_timer::{time, timer};
+use std::{fmt, fmt::Debug};
+use opencv::{prelude::*, types::VectorOfKeyPoint,};
 
-use axiom::prelude::*;
-use cxx::{UniquePtr};
-use log::{ warn, info};
-use std::{sync::Arc, fmt};
-use std::fmt::Debug;
-use opencv::{prelude::*,types::{VectorOfKeyPoint},};
-use dvcore::{matrix::*,plugin_functions::Function,config::*,};
-use crate::dvmap::map::Id;
+use dvcore::{
+    actor::Actor,
+    sensor::{Sensor, FrameSensor},
+    matrix::*,
+    config::*
+};
 use crate::{
-    registered_modules::{TRACKING_BACKEND, FEATURE_DETECTION, CAMERA},
-    actors::{messages::{ImageMsg, FeatureMsg,},},
+    registered_actors::{FEATURE_DETECTION, CAMERA, VISUALIZER},
+    actors::{
+        messages::{ShutdownMsg, ImagePathMsg, ImageMsg, TrackingStateMsg, FeatureMsg, VisFeaturesMsg},
+        tracking_backend::TrackingState,
+    },
+    modules::image,
+    ActorChannels,
+    dvmap::{map::Id, misc::Timestamp}
 };
 
-use super::messages::TrackingStateMsg;
-use super::tracking_backend::TrackingState;
+
+#[derive(Debug)]
+pub struct DarvisTrackingFront {
+    actor_channels: ActorChannels,
+    orb_extractor_left: DVORBextractor,
+    orb_extractor_right: Option<DVORBextractor>,
+    orb_extractor_ini: Option<DVORBextractor>,
+    map_initialized: bool,
+    last_id: Id,
+    init_id: Id,
+    max_frames: i32,
+    sensor: Sensor,
+}
+
+impl Actor for DarvisTrackingFront {
+    type MapRef = ();
+
+    fn new_actorstate(actor_channels: ActorChannels, _map: Self::MapRef) -> DarvisTrackingFront {
+        let max_features = SETTINGS.get::<i32>(FEATURE_DETECTION, "max_features");
+        let sensor = SETTINGS.get::<Sensor>(SYSTEM, "sensor");
+        let orb_extractor_right = match sensor.frame() {
+            FrameSensor::Stereo => Some(DVORBextractor::new(max_features)),
+            FrameSensor::Mono | FrameSensor::Rgbd => None,
+        };
+        let orb_extractor_ini = match sensor.is_mono() {
+            true => Some(DVORBextractor::new(max_features*5)),
+            false => None
+        };
+        DarvisTrackingFront {
+            actor_channels,
+            orb_extractor_left: DVORBextractor::new(max_features),
+            orb_extractor_right,
+            orb_extractor_ini,
+            map_initialized: false,
+            init_id: 0,
+            last_id: 0,
+            max_frames: SETTINGS.get::<f64>(SYSTEM, "fps") as i32,
+            sensor,
+        }
+    }
+
+    fn spawn(actor_channels: ActorChannels, map: Self::MapRef) {
+        let mut actor = DarvisTrackingFront::new_actorstate(actor_channels, map);
+        'outer: loop {
+            let message = actor.actor_channels.receive().unwrap();
+
+            if message.is::<ImagePathMsg>() {
+                let msg = message.downcast::<ImagePathMsg>().unwrap_or_else(|_| panic!("Could not downcast tracking frontend message!"));
+
+                let image = image::read_image_file(&msg.image_path);
+                let image_cols = image.cols() as u32;
+                let image_rows = image.rows() as u32;
+
+                // TODO (CLONE) ... visualizer
+                let (keypoints, descriptors) = match SETTINGS.get::<bool>(SYSTEM, "show_visualizer") {
+                    true => {
+                        let (keypoints, descriptors) = actor.extract_features(image.clone());
+                        actor.send_to_visualizer(keypoints.clone(), image, msg.timestamp);
+                        (keypoints, descriptors)
+                    },
+                    false => {
+                        let (keypoints, descriptors) = actor.extract_features(image);
+                        (keypoints, descriptors)
+                    }
+                };
+                actor.send_to_backend(keypoints, descriptors, image_cols, image_rows, msg.timestamp, msg.frame_id);
+
+                actor.last_id += 1;
+            } else if message.is::<ImageMsg>() {
+                // TODO (timing) ... 30 ms
+
+                let msg = message.downcast::<ImageMsg>().unwrap_or_else(|_| panic!("Could not downcast tracking frontend message!"));
+
+                let image_cols = msg.image.cols() as u32;
+                let image_rows = msg.image.rows() as u32;
+
+                // TODO (CLONE) ... visualizer
+                let (keypoints, descriptors) = match SETTINGS.get::<bool>(SYSTEM, "show_visualizer") {
+                    true => {
+                        let (keypoints, descriptors) = actor.extract_features(msg.image.clone());
+                        actor.send_to_visualizer(keypoints.clone(), msg.image, msg.timestamp);
+                        (keypoints, descriptors)
+                    },
+                    false => {
+                        let (keypoints, descriptors) = actor.extract_features(msg.image);
+                        (keypoints, descriptors)
+                    }
+                };
+
+
+                actor.send_to_backend(keypoints, descriptors, image_cols, image_rows, msg.timestamp, msg.frame_id);
+                actor.last_id += 1;
+            } else if message.is::<TrackingStateMsg>() {
+                let msg = message.downcast::<TrackingStateMsg>().unwrap_or_else(|_| panic!("Could not downcast tracking frontend message!"));
+
+                match msg.state {
+                    TrackingState::Ok => { 
+                        actor.map_initialized = true;
+                        actor.init_id = msg.init_id
+                    },
+                    _ => {}
+                };
+            } else if message.is::<ShutdownMsg>() {
+                break 'outer;
+            } else {
+                warn!("Tracking frontend received unknown message type!");
+            }
+        }
+    }
+}
+
+impl DarvisTrackingFront {
+    fn extract_features(&mut self, image: opencv::core::Mat) -> (VectorOfKeyPoint, Mat) {
+        let image_dv: dvos3binding::ffi::WrapBindCVMat = (&DVMatrix::new(image)).into();
+        let mut descriptors: dvos3binding::ffi::WrapBindCVMat = (&DVMatrix::default()).into();
+        let mut keypoints: dvos3binding::ffi::WrapBindCVKeyPoints = DVVectorOfKeyPoint::empty().into();
+
+        // TODO (timing) ... this takes ~70 ms. Kind of high? Compare to ORBSLAM
+        if self.map_initialized && (self.last_id - self.init_id < self.max_frames) {
+            self.orb_extractor_left.extractor.pin_mut().extract(&image_dv, &mut keypoints, &mut descriptors);
+        } else if self.sensor.is_mono() {
+            self.orb_extractor_ini.as_mut().unwrap().extractor.pin_mut().extract(&image_dv, &mut keypoints, &mut descriptors);
+        } else {
+            self.orb_extractor_left.extractor.pin_mut().extract(&image_dv, &mut keypoints, &mut descriptors);
+        }
+        match self.sensor.frame() {
+            FrameSensor::Stereo => todo!("Stereo"), //Also call extractor_right, see Tracking::GrabImageStereo,
+            _ => {}
+        }
+        (keypoints.kp_ptr.kp_ptr, descriptors.mat_ptr.mat_ptr)
+    }
+
+    fn send_to_backend(&self, keypoints: VectorOfKeyPoint, descriptors: Mat, image_width: u32, image_height: u32, timestamp: Timestamp, frame_id: u32) {
+        // Send features to backend
+        // Note: Run-time errors ... actor lookup is runtime error
+        // Note: not currently sending image to backend
+        let backend = self.actor_channels.find("TRACKING_BACKEND");
+
+        backend.send(Box::new(FeatureMsg{
+            keypoints: DVVectorOfKeyPoint::new(keypoints),
+            descriptors: DVMatrix::new(descriptors),
+            image_width,
+            image_height,
+            timestamp,
+            frame_id: frame_id as i32
+        })).unwrap();
+    }
+
+    #[time("TrackingFrontend::{}")]
+    fn send_to_visualizer(&mut self, keypoints: VectorOfKeyPoint, image: Mat, timestamp: Timestamp) {
+        // Send image and features to visualizer
+        self.actor_channels.find(VISUALIZER).send(Box::new(VisFeaturesMsg {
+            keypoints: DVVectorOfKeyPoint::new(keypoints),
+            image,
+            timestamp,
+        })).unwrap();
+    }
+}
+
 
 pub struct DVORBextractor {
     pub extractor: UniquePtr<dvos3binding::ffi::ORBextractor>,
@@ -26,12 +192,12 @@ impl DVORBextractor {
             max_features,
             extractor: dvos3binding::ffi::new_orb_extractor(
                 max_features,
-                GLOBAL_PARAMS.get::<f64>(FEATURE_DETECTION, "scale_factor") as f32,
-                GLOBAL_PARAMS.get::<i32>(FEATURE_DETECTION, "n_levels"),
-                GLOBAL_PARAMS.get::<i32>(FEATURE_DETECTION, "ini_th_fast"),
-                GLOBAL_PARAMS.get::<i32>(FEATURE_DETECTION, "min_th_fast"),
-                GLOBAL_PARAMS.get::<i32>(CAMERA, "stereo_overlapping_begin"),
-                GLOBAL_PARAMS.get::<i32>(CAMERA, "stereo_overlapping_end")
+                SETTINGS.get::<f64>(FEATURE_DETECTION, "scale_factor") as f32,
+                SETTINGS.get::<i32>(FEATURE_DETECTION, "n_levels"),
+                SETTINGS.get::<i32>(FEATURE_DETECTION, "ini_th_fast"),
+                SETTINGS.get::<i32>(FEATURE_DETECTION, "min_th_fast"),
+                SETTINGS.get::<i32>(CAMERA, "stereo_overlapping_begin"),
+                SETTINGS.get::<i32>(CAMERA, "stereo_overlapping_end")
             )
         }
     }
@@ -45,114 +211,5 @@ impl Debug for DVORBextractor {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("DVORBextractor")
          .finish()
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct DarvisTrackingFront {
-    orb_extractor_left: DVORBextractor,
-    orb_extractor_right: Option<DVORBextractor>,
-    orb_extractor_ini: Option<DVORBextractor>,
-    map_initialized: bool,
-    last_id: Id,
-    init_id: Id,
-    max_frames: i32,
-    sensor: Sensor
-}
-
-impl DarvisTrackingFront {
-    pub fn new() -> DarvisTrackingFront {
-        let max_features = GLOBAL_PARAMS.get::<i32>(FEATURE_DETECTION, "max_features");
-        let sensor = GLOBAL_PARAMS.get::<Sensor>(SYSTEM_SETTINGS, "sensor");
-        let orb_extractor_right = match sensor.frame() {
-            FrameSensor::Stereo => Some(DVORBextractor::new(max_features)),
-            FrameSensor::Mono | FrameSensor::Rgbd => None,
-        };
-        let orb_extractor_ini = match sensor.is_mono() {
-            true => Some(DVORBextractor::new(max_features*5)),
-            false => None
-        };
-        DarvisTrackingFront {
-            orb_extractor_left: DVORBextractor::new(max_features),
-            orb_extractor_right,
-            orb_extractor_ini,
-            map_initialized: false,
-            init_id: 0,
-            last_id: 0,
-            max_frames: GLOBAL_PARAMS.get::<f64>(SYSTEM_SETTINGS, "fps") as i32,
-            sensor,
-        }
-    }
-
-    pub fn tracking_frontend(&mut self, context: Context, message: Arc<ImageMsg>) {
-        let image: Mat = (&message.frame).into(); // Taking ownership of message should not fail
-        let (keypoints, descriptors) = self.extract_features(&image);
-        self.send_message_to_backend(context, image, keypoints, descriptors);
-        self.last_id += 1;
-    }
-
-    fn extract_features(&mut self, image: &opencv::core::Mat) -> (VectorOfKeyPoint, Mat) {
-        let image_dv: dvos3binding::ffi::WrapBindCVMat = DVMatrix::new(image.clone()).into();
-
-        let mut descriptors: dvos3binding::ffi::WrapBindCVMat = DVMatrix::default().into();
-        let mut keypoints: dvos3binding::ffi::WrapBindCVKeyPoints = DVVectorOfKeyPoint::empty().into();
-
-        if self.map_initialized && (self.last_id - self.init_id < self.max_frames) {
-            self.orb_extractor_left.extractor.pin_mut().extract(&image_dv, &mut keypoints, &mut descriptors);
-        } else if self.sensor.is_mono() {
-            self.orb_extractor_ini.as_mut().unwrap().extractor.pin_mut().extract(&image_dv, &mut keypoints, &mut descriptors);
-        } else {
-            self.orb_extractor_left.extractor.pin_mut().extract(&image_dv, &mut keypoints, &mut descriptors);
-        }
-        match self.sensor.frame() {
-            FrameSensor::Stereo => todo!("Stereo"), //Also call extractor_right, see Tracking::GrabImageStereo,
-            _ => {}
-        }
-
-        (keypoints.kp_ptr.kp_ptr, descriptors.mat_ptr.mat_ptr)
-    }
-
-    pub fn send_message_to_backend(
-        &mut self, context: Context,
-        image: Mat, keypoints: VectorOfKeyPoint, descriptors: Mat
-    ) {
-        let align_id = context.system.find_aid_by_name(TRACKING_BACKEND).unwrap();
-        let new_message = GLOBAL_PARAMS.get::<String>(TRACKING_BACKEND, "actor_message");
-        match new_message.as_ref() {
-            "FeatureMsg" => {
-                align_id.send_new(FeatureMsg {
-                    keypoints: DVVectorOfKeyPoint::new(keypoints),
-                    descriptors: DVMatrix::new(descriptors),
-                    image_width: image.cols(),
-                    image_height: image.rows(),
-                }).unwrap();
-            },
-            _ => {
-                warn!("Invalid Message type: selecting FeatureMsg");
-                align_id.send_new(FeatureMsg {
-                    keypoints: DVVectorOfKeyPoint::new(keypoints),
-                    descriptors: DVMatrix::new(descriptors),
-                    image_width: image.cols(),
-                    image_height: image.rows(),
-                }).unwrap();
-            },
-        }
-    }
-}
-
-impl Function for DarvisTrackingFront {
-    fn handle(&mut self, context: axiom::prelude::Context, message: Message) -> ActorResult<()> {
-        if let Some(image_msg) = message.content_as::<ImageMsg>() {
-            self.tracking_frontend(context, image_msg);
-        } else if let Some(tracking_state_msg) = message.content_as::<TrackingStateMsg>() {
-            match tracking_state_msg.state {
-                TrackingState::Ok => { 
-                    self.map_initialized = true;
-                    self.init_id = tracking_state_msg.init_id
-                },
-                _ => {}
-            };
-        }
-        Ok(Status::done(()))
     }
 }

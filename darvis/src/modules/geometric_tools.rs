@@ -1,11 +1,10 @@
 use dvcore::matrix::DVVector3;
-use log::debug;
 
-use crate::dvmap::pose::Pose;
+use crate::dvmap::pose::DVPose;
 
 pub fn triangulate(
     x_c1: DVVector3<f64>, x_c2: DVVector3<f64>,
-    pose1: Pose, pose2: Pose
+    pose1: DVPose, pose2: DVPose
 ) -> Option<DVVector3<f64>> {
     // bool GeometricTools::Triangulate(Eigen::Vector3f &x_c1, Eigen::Vector3f &x_c2,Eigen::Matrix<float,3,4> &Tc1w ,Eigen::Matrix<float,3,4> &Tc2w , Eigen::Vector3f &x3D)
 

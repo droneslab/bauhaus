@@ -1,9 +1,8 @@
-use log::{warn, debug};
-use opencv::{prelude::{Mat, MatTrait, MatTraitConst}, core::{Scalar, CV_64F, KeyPoint}};
-use dvcore::{config::*, matrix::{DVMatrix, DVVectorOfPoint3f, DVVector3}};
+use opencv::{prelude::{Mat, MatTrait, MatTraitConst, KeyPointTraitConst}, core::{Scalar, CV_64F, KeyPoint}};
+use dvcore::{config::*, matrix::{DVMatrix, DVVectorOfPoint3f, DVVector3, DVMatrix3}, sensor::Sensor};
 use crate::{
-    dvmap::{pose::{Pose}, keyframe::{Frame, FullKeyFrame}},
-    matrix::DVVectorOfKeyPoint, registered_modules::CAMERA
+    dvmap::{pose::DVPose, keyframe::{Frame, FullKeyFrame}},
+    matrix::DVVectorOfKeyPoint, registered_actors::CAMERA
 };
 
 
@@ -37,10 +36,10 @@ impl Camera {
         // - void Tracking::newParameterLoader
         // - GeometricCamera* Atlas::AddCamera(GeometricCamera* pCam)
         // - void Settings::readCamera1(cv::FileStorage &fSettings) 
-        let fx= GLOBAL_PARAMS.get::<f64>(CAMERA, "fx");
-        let fy= GLOBAL_PARAMS.get::<f64>(CAMERA, "fy");
-        let cx= GLOBAL_PARAMS.get::<f64>(CAMERA, "cx");
-        let cy= GLOBAL_PARAMS.get::<f64>(CAMERA, "cy");
+        let fx= SETTINGS.get::<f64>(CAMERA, "fx");
+        let fy= SETTINGS.get::<f64>(CAMERA, "fy");
+        let cx= SETTINGS.get::<f64>(CAMERA, "cx");
+        let cy= SETTINGS.get::<f64>(CAMERA, "cy");
 
         let mut k = Mat::new_rows_cols_with_default(3,3, CV_64F, Scalar::all(0.0))?;
         *k.at_2d_mut::<f64>(0, 0)? = fx;
@@ -51,13 +50,13 @@ impl Camera {
 
         //TODO... check if we need to correct distortion from the images
         let mut dist_coef = None;
-        let sensor= GLOBAL_PARAMS.get::<Sensor>(SYSTEM_SETTINGS, "sensor");
-        let k1= GLOBAL_PARAMS.get::<f64>(CAMERA, "k1") as f32;
+        let sensor= SETTINGS.get::<Sensor>(SYSTEM, "sensor");
+        let k1= SETTINGS.get::<f64>(CAMERA, "k1") as f32;
         if sensor.is_mono() && k1 != 0.0 {
-            let k2 = GLOBAL_PARAMS.get::<f64>(CAMERA, "k2") as f32;
-            let p1 = GLOBAL_PARAMS.get::<f64>(CAMERA, "p1") as f32;
-            let p2 = GLOBAL_PARAMS.get::<f64>(CAMERA, "p2") as f32;
-            let k3 = GLOBAL_PARAMS.get::<f64>(CAMERA, "k3") as f32;
+            let k2 = SETTINGS.get::<f64>(CAMERA, "k2") as f32;
+            let p1 = SETTINGS.get::<f64>(CAMERA, "p1") as f32;
+            let p2 = SETTINGS.get::<f64>(CAMERA, "p2") as f32;
+            let k3 = SETTINGS.get::<f64>(CAMERA, "k3") as f32;
             if k3 != 0.0 {
                 dist_coef = Some(vec![k1, k2, p1, p2, k3]);
             } else {
@@ -65,8 +64,8 @@ impl Camera {
             }
         }
 
-        let stereo_baseline_times_fx= GLOBAL_PARAMS.get::<f64>(CAMERA, "stereo_baseline_times_fx");
-        let th_depth= GLOBAL_PARAMS.get::<i32>(CAMERA, "thdepth");
+        let stereo_baseline_times_fx= SETTINGS.get::<f64>(CAMERA, "stereo_baseline_times_fx");
+        let th_depth= SETTINGS.get::<i32>(CAMERA, "thdepth");
         let stereo_baseline = stereo_baseline_times_fx / fx;
 
         Ok(Camera {
@@ -90,7 +89,7 @@ impl Camera {
         v_keys1: &DVVectorOfKeyPoint, 
         v_keys2: &DVVectorOfKeyPoint,
         matches: &Vec<i32>,
-    ) -> Option<(Pose, DVVectorOfPoint3f, Vec<bool>)> {
+    ) -> Option<(DVPose, DVVectorOfPoint3f, Vec<bool>)> {
         let mut tvr = dvos3binding::ffi::new_two_view_reconstruction(
             self.get_fx() as f32,
             self.get_cx() as f32,
@@ -99,13 +98,14 @@ impl Camera {
             1.0, 200
         );
 
-        let mut pose = dvos3binding::ffi::Pose{
+        let mut pose = dvos3binding::ffi::Pose {
             translation: [0.0;3],
-            rotation: [0.0;4]
+            rotation: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
         };
         let mut v_p3d: dvos3binding::ffi::WrapBindCVVectorOfPoint3f = DVVectorOfPoint3f::empty().into();
         let mut vb_triangulated  = Vec::new();
 
+        // TODO (CLONE) ... matrix
         let reconstructed = tvr.pin_mut().reconstruct(
             & v_keys1.clone().into(),
             & v_keys2.clone().into(),
@@ -114,6 +114,7 @@ impl Camera {
             &mut v_p3d,
             &mut vb_triangulated
         );
+
         if reconstructed {
             return Some((pose.into(), v_p3d.into(), vb_triangulated));
         } else {
@@ -139,8 +140,8 @@ impl Camera {
         //     const float z = mvDepth[i];
         //     if(z>0)
         //     {
-        //         const float u = mvKeys[i].pt.x;
-        //         const float v = mvKeys[i].pt.y;
+        //         const float u = mvKeys[i].pt().x;
+        //         const float v = mvKeys[i].pt().y;
         //         const float x = (u-cx)*z*invfx;
         //         const float y = (v-cy)*z*invfy;
         //         Eigen::Vector3f x3Dc(x, y, z);
@@ -162,46 +163,47 @@ impl Camera {
         )
     }
 
-    pub fn epipolar_constrain(&self, kp1: &KeyPoint, kp2: &KeyPoint, r12: nalgebra::Matrix3<f64>, t12: nalgebra::Vector3<f64>, sigma_level: f32, unc: f32) -> bool {
+    pub fn epipolar_constrain(&self, kp1: &KeyPoint, kp2: &KeyPoint, r12: &DVMatrix3<f64>, t12: &DVVector3<f64>, unc: f32) -> bool {
         // bool Pinhole::epipolarConstrain(GeometricCamera* pCamera2,  const cv::KeyPoint &kp1, const cv::KeyPoint &kp2, const Eigen::Matrix3f& R12, const Eigen::Vector3f& t12, const float sigmaLevel, const float unc) {
         //Compute Fundamental Matrix
+        let rot = **r12;
+        let trans = *t12;
         let t12x = nalgebra::Matrix3::new(
-            0.0, -t12[2], t12[1],
-            t12[2], 0.0, -t12[0],
-            -t12[1], t12[0], 0.0
+            0.0, -trans[2], trans[1],
+            trans[2], 0.0, -trans[0],
+            -trans[1], trans[0], 0.0
         );
 
         let k1 = self.k_matrix_convert();
         let k2 = self.k_matrix_convert(); // TODO (Stereo) this should be whatever camera kf2 uses, the K1 above should be whatevere camera kf1 uses
-        let f12 = k1.transpose().try_inverse().unwrap() * t12x * r12 * k2.try_inverse().unwrap();
+        let f12 = k1.transpose().try_inverse().unwrap() * t12x * rot * k2.try_inverse().unwrap();
 
         // Epipolar line in second image l = x1'F12 = [a b c]
-        let ptx = kp1.pt.x as f64;
-        let pty = kp1.pt.y as f64;
+        let ptx = kp1.pt().x as f64;
+        let pty = kp1.pt().y as f64;
         let a = ptx * f12[(0,0)] + pty * f12[(1,0)] + f12[(2,0)];
         let b = ptx * f12[(0,1)] + pty * f12[(1,1)] + f12[(2,1)];
         let c = ptx * f12[(0,2)] + pty * f12[(1,2)] + f12[(2,2)];
 
-        let num = a * ptx + b * pty + c;
+        let num = a * (kp2.pt().x as f64) + b * (kp2.pt().y as f64) + c;
         let den = a * a + b * b;
         if den == 0.0 {
             return false;
         }
         let dsqr = num * num / den;
 
-        // Tbh it kind of annoys me that we're always doing these f64/f32 and i32/u32/usize conversions when there isn't
-        // usually a good reason for why we have any variable be one or the other in the first place, but it would be too
-        // much work to overhaul it all now
+        // Note: we're always doing these f64/f32 and i32/u32/usize conversions when there isn't
+        // usually a good reason for why we have any variable be one or the other in the first place.
         dsqr < 3.84 * (unc as f64)
     }
 
     fn k_matrix_convert(&self) -> nalgebra::Matrix3<f64> {
         // current k_matrix representation is opencv matrix, sometimes we need that or other times we need an nalgebra matrix
-        // too lazy to make a nice into() in the dvmatrix implementation
-        let fx= GLOBAL_PARAMS.get::<f64>(CAMERA, "fx");
-        let fy= GLOBAL_PARAMS.get::<f64>(CAMERA, "fy");
-        let cx= GLOBAL_PARAMS.get::<f64>(CAMERA, "cx");
-        let cy= GLOBAL_PARAMS.get::<f64>(CAMERA, "cy");
+        // Could be an into() if we made a KMatrix type but not sure if it's needed
+        let fx= SETTINGS.get::<f64>(CAMERA, "fx");
+        let fy= SETTINGS.get::<f64>(CAMERA, "fy");
+        let cx= SETTINGS.get::<f64>(CAMERA, "cx");
+        let cy= SETTINGS.get::<f64>(CAMERA, "cy");
         nalgebra::Matrix3::new(
             fx, 0.0, cx,
             0.0, fy, cy,

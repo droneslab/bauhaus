@@ -1,18 +1,12 @@
-/// Tracking front end  ... feature extraction and initialization
 pub mod tracking_frontend;
-
-/// Tracking back end ... Alignment of two frames and getting alignment translation and rotation.
 pub mod tracking_backend;
-
 pub mod local_mapping;
-
 pub mod loop_closing;
 
-/// Visualization of the Frames and Trajectory traced
-pub mod vis;
+// Darvis-defined actors
+pub mod map_actor;
+pub mod visualizer;
+pub mod shutdown; // handles CTRL+C
 
-/// FAST Feature extraction 
-pub mod fast;
-
-// Messages sent to/from actors
+// General messages sent to/from actors
 pub mod messages;

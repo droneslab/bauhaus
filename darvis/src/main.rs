@@ -1,81 +1,76 @@
 #![feature(map_many_mut)]
-extern crate flame;
-use std::{fs::{File, OpenOptions}, io::Write, path::Path, sync::{Arc, Mutex}, env};
-use axiom::prelude::*;
-use chrono::{DateTime, Utc};
+#![feature(hash_extract_if)]
+
+use std::{fs::{OpenOptions, File}, path::Path, env, time::{self, Duration}, io::{self, BufRead}, thread};
 use fern::colors::{ColoredLevelConfig, Color};
 use glob::glob;
-use log::{warn, info};
+use log::info;
 use spin_sleep::LoopHelper;
-#[macro_use]
-extern crate lazy_static;
-use opencv::{imgcodecs};
+#[macro_use] extern crate lazy_static;
 
-use dvcore::{*, lockwrap::ReadWriteWrapper, config::*};
-use crate::actors::{messages::{ImageMsg, ShutdownMessage, TrajectoryMessage, VisPathMsg}};
-use crate::dvmap::{bow::VOCABULARY, map_actor::MapActor, pose::Pose, map::Map, map::Id};
-use crate::registered_modules::{TRACKING_FRONTEND, VISUALIZER, SHUTDOWN, FeatureManager};
+use dvcore::{*, config::*, actor::ActorChannels};
+use crate::{actors::messages::{ShutdownMsg, ImagePathMsg, ImageMsg}, registered_actors::TRACKING_FRONTEND, modules::image};
+use crate::dvmap::{bow::VOCABULARY, map::Id};
 
 mod actors;
-mod registered_modules;
+mod registered_actors;
+mod spawn;
 mod dvmap;
 mod modules;
 mod tests;
 
-pub static RESULTS_FOLDER: &str = "results";
-
-fn main() {
-    setup_logger().unwrap();
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
     if args.len() < 3 {
-        println!("[ERROR] Invalid number of input parameters.");
-        println!("Usage: cargo run -- [PATH_TO_DATA_DIRECTORY] [PATH_TO_CONFIG_FILE]");
-        return;
+        panic!("
+            [ERROR] Invalid number of input parameters.
+            Usage: cargo run -- [PATH_TO_DATA_DIRECTORY] [PATH_TO_CONFIG_FILE]
+        ");
     }
     let img_dir = args[1].to_owned();
     let config_file = args[2].to_owned();
 
-    if let Some((actor_info, _module_info)) = load_config(&config_file) {
-        // Load config, including custom settings and actor information
-        let img_paths = generate_image_paths(img_dir);
-        let writeable_map = ReadWriteWrapper::new(Map::new());
-        let actor_system = initialize_actor_system(actor_info, &writeable_map);
-        let _map_actor_aid = MapActor::spawn(&actor_system, writeable_map);
-        VOCABULARY.access(); // Loads vocabulary
-        let shutdown_flag = create_shutdown_actor(&actor_system);  // Handle ctrl+c
-        info!("System ready to receive messages");
+    // Load config, including custom settings and actor information
+    let (actor_info, _module_info, log_level) = load_config(&config_file).expect("Could not load config");
 
-        let use_visualizer = GLOBAL_PARAMS.get::<bool>(SYSTEM_SETTINGS, "show_ui");
-        // Run loop at fps rate
-        let mut loop_helper = LoopHelper::builder()
-            .report_interval_s(0.5)
-            .build_with_target_rate(GLOBAL_PARAMS.get::<f64>(SYSTEM_SETTINGS, "fps"));
+    setup_logger(&log_level)?;
 
-        // Process images
-        for path in &img_paths {
-            if *shutdown_flag.lock().unwrap() { break; }
-            let _delta = loop_helper.loop_start(); 
-            let img = imgcodecs::imread(&path, imgcodecs::IMREAD_GRAYSCALE).unwrap();
-            let tracking_frontend = actor_system.find_aid_by_name(TRACKING_FRONTEND).unwrap();
+    // Launch actor system
+    let first_actor_name = TRACKING_FRONTEND.to_string(); // Actor that launches the pipeline
+    let (shutdown_flag, first_actor_tx, shutdown_tx) = spawn::launch_actor_system(actor_info, first_actor_name)?;
 
-            info!("Read image {}", path.split("/").last().unwrap().split(".").nth(0).unwrap());
-            if use_visualizer {
-                let vis_id = actor_system.find_aid_by_name(VISUALIZER).unwrap();
-                vis_id.send_new(VisPathMsg::new(path.to_string())).unwrap();
+    // Load vocabulary
+    VOCABULARY.access();
+
+    info!("System ready to receive messages!");
+
+    let mut loop_sleep = LoopSleep::new(&img_dir);
+    let timestamps = read_timestamps_file(&img_dir);
+    
+    // Process images
+    // let now = SystemTime::now();
+    let mut i = 0;
+    for path in &generate_image_paths(img_dir + "/image_0/") {
+        if *shutdown_flag.lock().unwrap() { break; }
+        loop_sleep.start();
+
+        let image = image::read_image_file(&path.to_string());
+
+        // For evaluation, use timestamps file to run loop and send timestamp from file instead of real time
+        first_actor_tx.send(Box::new(
+            ImageMsg{
+                image,
+                timestamp: timestamps[i],
+                frame_id: i as u32
             }
+        ))?;
 
-            // ORBSLAM3 frame loader scales and resizes image, do we need this?
-            // After looking into it for a while, I think not. They have the code to scale,
-            // but then never set the variable mImageScale to anything but 1.0
-            // https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/Examples/RGB-D/rgbd_tum.cc#L89
-
-            tracking_frontend.send_new(ImageMsg{frame: img.into(),}).unwrap();
-            loop_helper.loop_sleep(); 
-        }
-        actor_system.find_aid_by_name(SHUTDOWN).unwrap().send_new(ShutdownMessage{}).unwrap();
-    } else {
-        panic!("Could not load config");
+        i += 1;
+        loop_sleep.sleep();
     }
+    shutdown_tx.send(Box::new(ShutdownMsg{}))?;
+
+    Ok(())
 }
 
 fn generate_image_paths(img_dir: String) -> Vec<String> {
@@ -95,122 +90,97 @@ fn generate_image_paths(img_dir: String) -> Vec<String> {
     img_paths
 }
 
-fn initialize_actor_system(modules: Vec::<base::ActorConf>, writeable_map: &ReadWriteWrapper<Map>) -> ActorSystem {
-    let system = ActorSystem::create(ActorSystemConfig::default());
-
-    //TODO (low priority): Use Cluster manager to do remote agent calls
-
-    // Loop through the config to initialize actor system using the default config
-    for actor_conf in modules {
-        info!("Spawning actor;{}", &actor_conf.name);
-
-        // Note: read_only() is important here, otherwise all actors can
-        // access the write lock of the map
-        let _ = system.spawn().name(&actor_conf.name).with(
-            FeatureManager::new(
-                &actor_conf.actor_function,
-                writeable_map.read_only()
-            ),
-            FeatureManager::handle
-        ).unwrap();
-
-        // TODO (low priority): Identify the role of using connect_with_channels, as the system communications are working without doing the following.
-        //features.push(actname.clone());
-        // if i > 0 { 
-        //     ActorSystem::connect_with_channels(&systems.get(&features[0]).unwrap(), &system_current);            
-        // }
-        //i+=1;
-    }
-
-    system
+fn read_timestamps_file(img_dir: &String) -> Vec<f64> {
+    let file = File::open(img_dir.clone() + "/times.txt")
+        .expect("Could not open timestamps file");
+    io::BufReader::new(file).lines()
+        .map(|x| x.unwrap().parse::<f64>().unwrap())
+        .collect::<Vec<f64>>()
 }
 
-fn create_shutdown_actor(actor_system: &ActorSystem) -> Arc<Mutex<bool>> {
-    let shutdown_flag = Arc::new(Mutex::new(false));
-    let flag_clone = shutdown_flag.clone();
+enum LoopType {
+    Fps(LoopHelper),
+    Timestamps(Vec<f64>, i32, time::Instant),
+}
 
-    // Lists used to recover the full camera trajectory at the end of the execution.
-    // Basically we store the reference keyframe for each frame and its relative transformation
-    struct TrackingPoses {
-        trajectory_poses: Vec<Pose>, //mlRelativeFramePoses
-        trajectory_times: Vec<DateTime<Utc>>, //mlFrameTimes
-        trajectory_keyframes: Vec<Id>, //mlpReferences
-    }
-    let state = TrackingPoses{
-        trajectory_poses: Vec::new(),
-        trajectory_times: Vec::new(),
-        trajectory_keyframes: Vec::new()
-    };
-
-    // Creating shutdown actor allows us to use actor_system
-    // after ctrlc handler moves data into its handle function.
-    let shutdown_actor = actor_system
-    .spawn()
-    .name(SHUTDOWN)
-    .with(
-        state,
-        |mut state: TrackingPoses, context: Context, message: Message| async move {
-            if let Some(_) = message.content_as::<ShutdownMessage>() {
-                warn!("Triggered shutdown, saving trajectory info");
-                let mut file = File::create(
-                    Path::new(RESULTS_FOLDER)
-                    .join(GLOBAL_PARAMS.get::<String>(SYSTEM_SETTINGS, "trajectory_file_name"))
-                ).unwrap();
-                for i in 0..state.trajectory_poses.len() {
-                    let string = format!("{:?} {:?}", state.trajectory_times[i], state.trajectory_poses[i]);
-                    file.write_all(string.as_bytes())?;
-                }
-
-                if GLOBAL_PARAMS.get::<bool>(SYSTEM_SETTINGS, "should_profile") {
-                    flame::dump_html(File::create(
-                        Path::new(RESULTS_FOLDER).join("flamegraph.html")
-                    ).unwrap()).unwrap();
-                }
-
-                context.system.trigger_and_await_shutdown(None);
-            } else if let Some(message) = message.content_as::<TrajectoryMessage>() {
-                    match message.pose {
-                        Some(pose) => {
-                            state.trajectory_poses.push(pose);
-                            state.trajectory_times.push(message.timestamp.unwrap());
-                            state.trajectory_keyframes.push(message.ref_kf_id.unwrap());
-                        },
-                        None => {
-                            // This can happen if tracking is lost. Duplicate last element of each vector
-                            if let Some(last) = state.trajectory_poses.last().cloned() { state.trajectory_poses.push(last); }
-                            if let Some(last) = state.trajectory_times.last().cloned() { state.trajectory_times.push(last); }
-                            if let Some(last) = state.trajectory_keyframes.last().cloned() { state.trajectory_keyframes.push(last); }
-                        }
-                    };
+struct LoopSleep {
+    loop_type: LoopType
+}
+impl LoopSleep {
+    pub fn new(img_dir: &String) -> Self {
+        let loop_type = match SETTINGS.get::<bool>(SYSTEM, "use_timestamps_file") {
+            true => {
+                // Use dataset timestamps file to run loop
+                let timestamps = read_timestamps_file(img_dir);
+                LoopType::Timestamps(timestamps, -1, time::Instant::now())
+            },
+            false => {
+                // Run loop at fps rate
+                LoopType::Fps(
+                    LoopHelper::builder()
+                        .build_with_target_rate(SETTINGS.get::<f64>(SYSTEM, "fps"))
+                )
             }
-            Ok(Status::done(state))
+        };
+        LoopSleep { loop_type }
+    }
+
+    pub fn start(&mut self) {
+        match &mut self.loop_type {
+            LoopType::Timestamps(_timestamps, ref mut _current_index, ref mut _now) => {
+                todo!("Compile error with using timestamps file");
+                // now = &mut time::Instant::now();
+                // current_index = &mut (*current_index + 1);
+            },
+            LoopType::Fps(ref mut loop_helper) => {
+                let _delta = loop_helper.loop_start(); 
+            },
         }
-    )
-    .expect("Error creating shutdown actor");
+    }
 
-    ctrlc::set_handler(move || {
-        warn!("received Ctrl+C!");
-        *shutdown_flag.lock().unwrap() = true;
-        shutdown_actor.send_new(ShutdownMessage{}).unwrap();
-    })
-    .expect("Error setting Ctrl-C handler");
-
-    flag_clone
+    pub fn sleep(&mut self) {
+        match &mut self.loop_type {
+            LoopType::Timestamps(timestamps, current_index, now) => {
+                if *current_index == (timestamps.len() - 1) as i32 {
+                    return;
+                }
+                let next_timestamp = timestamps[(*current_index + 1) as usize];
+                // println!("timestamps {:?}", timestamps);
+                // println!("next timestamp {}", next_timestamp);
+                // println!("now {:?}", now);
+                thread::sleep(Duration::from_secs_f64(next_timestamp - now.elapsed().as_secs_f64()));
+            },
+            LoopType::Fps(ref mut loop_helper) => {
+                loop_helper.loop_sleep(); 
+            }
+        }
+    }
 }
 
-fn setup_logger() -> Result<(), fern::InitError> {
+
+fn setup_logger(level: &str) -> Result<(), fern::InitError> {
     let colors = ColoredLevelConfig::new()
         .info(Color::Green)
         .warn(Color::Yellow)
-        .error(Color::Red);
+        .error(Color::Red)
+        .trace(Color::Magenta);
 
+    let results_folder = SETTINGS.get::<String>(SYSTEM, "results_folder");
+
+    let log_level = match level {
+        "trace" => log::LevelFilter::Trace,
+        "debug" => log::LevelFilter::Debug,
+        "info" => log::LevelFilter::Info,
+        "warn" => log::LevelFilter::Warn,
+        "error" => log::LevelFilter::Error,
+        _ => log::LevelFilter::Trace,
+    };
     // Two loggers in chain - one for terminal output (colored, easier to read)
     // and another for file output (not colored, info on each line deliminated by |
     // for easier parsing in python scripts)
     let start_time = chrono::Local::now();
     fern::Dispatch::new()
-    .level(log::LevelFilter::Debug)
-    .level_for("axiom", log::LevelFilter::Warn)
+    .level(log_level)
     .chain(
     fern::Dispatch::new()
             .format(move |out, message, record| {
@@ -232,16 +202,17 @@ fn setup_logger() -> Result<(), fern::InitError> {
     fern::Dispatch::new()
             .format(move |out, message, record| {
                 out.finish(format_args!(
-                    "{time}|{target}|{message}",
+                    "{time}|{target}|{level}|{message}",
                     time = (chrono::Local::now() - start_time).num_milliseconds() as f64  / 1000.0,
                     target = record.target(),
+                    level = record.level(),
                     message = message
                 ))
             })
             .chain(OpenOptions::new()
                 .write(true)
                 .create(true)
-                .open(Path::new(RESULTS_FOLDER).join("output.log"))?
+                .open(Path::new(&results_folder).join("output.log"))?
             )
     )
     .apply()?;

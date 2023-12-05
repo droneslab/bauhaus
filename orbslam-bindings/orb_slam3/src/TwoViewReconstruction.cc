@@ -60,10 +60,18 @@ namespace orb_slam3
         T21.translation[0] = translation(0);
         T21.translation[1] = translation(1);
         T21.translation[2] = translation(2);
-        T21.rotation[0] = rotation(0);
-        T21.rotation[1] = rotation(1);
-        T21.rotation[2] = rotation(2);
-        T21.rotation[3] = rotation(3);
+        // Assigning (0,1) to (1,0) here is not an error! 
+        T21.rotation[0][0] = rotation.coeff(0,0);
+        T21.rotation[0][1] = rotation.coeff(1,0);
+        T21.rotation[0][2] = rotation.coeff(2,0);
+        T21.rotation[1][0] = rotation.coeff(0,1);
+        T21.rotation[1][1] = rotation.coeff(1,1);
+        T21.rotation[1][2] = rotation.coeff(2,1);
+        T21.rotation[2][0] = rotation.coeff(0,2);
+        T21.rotation[2][1] = rotation.coeff(1,2);
+        T21.rotation[2][2] = rotation.coeff(2,2);
+
+        // Note: T21.rotation = rotation.data() might work?
 
         return result;
     }
@@ -75,7 +83,7 @@ namespace orb_slam3
     TwoViewReconstruction::TwoViewReconstruction(float fx, float cx, float fy, float cy, float sigma, int iterations) {
         Eigen::Matrix3f K;
         K << fx, 0.f, cx, 0.f, fy, cy, 0.f, 0.f, 1.f;
-        mK = K;
+        mK = K; 
 
         mSigma = sigma;
         mSigma2 = sigma*sigma;
@@ -87,6 +95,9 @@ namespace orb_slam3
         Eigen::Matrix3f &rotation, Eigen::Vector3f &translation,
         vector<cv::Point3f> &vP3D, rust::Vec<bool> &vbTriangulated
     ) {
+        mvKeys1.clear();
+        mvKeys2.clear();
+
         mvKeys1 = vKeys1;
         mvKeys2 = vKeys2;
 
@@ -155,11 +166,11 @@ namespace orb_slam3
         // Don't delete this
         // Code to print out an image showing the homography, so we can test if the homography makes sense
         // If you want to use this you'll need to manually change the image pngs below to whatever you're testing 
-        // cv::Mat H_mat(3, 3, CV_64FC1);
-        // cv::eigen2cv(H, H_mat);
+        // cv::Mat F_mat(3, 3, CV_64FC1);
+        // cv::eigen2cv(F, F_mat);
         // cv::Mat img_draw_matches;
-        // auto img1 = cv::imread("/home/sofiya/dataset/sequences/00/image_0/000000.png",cv::IMREAD_UNCHANGED);
-        // auto img2 = cv::imread("/home/sofiya/dataset/sequences/00/image_0/000001.png",cv::IMREAD_UNCHANGED);
+        // auto img1 = cv::imread("/home/sofiya/datasets/kitti_00_0/image_0/000000.png",cv::IMREAD_UNCHANGED);
+        // auto img2 = cv::imread("/home/sofiya/dataset/kitti_00_0/image_0/000001.png",cv::IMREAD_UNCHANGED);
         // hconcat(img1, img2, img_draw_matches);
         // for (size_t i = 0; i < mvMatches12.size(); i++)
         // {
@@ -168,7 +179,7 @@ namespace orb_slam3
         //     cv::Mat pt1;
         //     cv::Mat killme;
         //     pt1bla.convertTo(pt1, CV_64FC1);
-        //     H_mat.convertTo(killme, CV_64FC1);
+        //     F_mat.convertTo(killme, CV_64FC1);
         //     cv::Mat pt2 = killme * pt1;
         //     pt2 /= pt2.at<double>(2);
         //     cv::Point start(kp1.pt.x, kp1.pt.y);
@@ -249,7 +260,7 @@ namespace orb_slam3
         Normalize(mvKeys1,vPn1, T1);
         Normalize(mvKeys2,vPn2, T2);
         Eigen::Matrix3f T2t = T2.transpose();
-
+        
         // Best Results variables
         score = 0.0;
         vbMatchesInliers = vector<bool>(N,false);

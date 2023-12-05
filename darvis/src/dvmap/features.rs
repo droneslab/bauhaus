@@ -1,33 +1,32 @@
-// There are a lot of extra variables that are set to 0 or null
+// In ORBSLAM, there are a lot of extra variables that are set to 0 or null
 // because they are only used in stereo or IMU cases. This encapsulates 
 // "all feature data" into a struct that has different variables depending
 // on the type of sensor.
-use std::collections::{HashMap};
+
+// TODO (design) ... I don't think it makes the most sense to name this "features" or even to have it separate from a keyframe
+// But at the same time it's nice to hide a lot of this logic away from the keyframe. It would be good to
+// re-factor this eventually but it isn't high priority.
+
+use std::collections::HashMap;
 use std::fmt::Debug;
-use dvcore::config::FrameSensor;
-use dvcore::config::{*};
-use opencv::prelude::{Mat, MatTraitConst, MatTrait};
-use opencv::types::{VectorOff32};
+use dvcore::sensor::{Sensor, FrameSensor};
+use opencv::prelude::{Mat, MatTraitConst, MatTrait, KeyPointTraitConst};
+use opencv::types::VectorOff32;
 use serde::{Deserialize, Serialize};
 use opencv::core::{KeyPoint, CV_32F, Scalar};
 use crate::modules::camera::CAMERA_MODULE;
 use crate::{
     matrix::{DVMatrix, DVVectorOfKeyPoint},
-    dvmap::{map::Id},
+    dvmap::map::Id,
 };
 
-pub const FRAME_GRID_ROWS :usize = 48;
-pub const FRAME_GRID_COLS :usize = 64;
-
-// TODO (eventually) ... I don't think it makes the most sense to name this "features" or even to have it separate from a keyframe
-// But at the same time it's nice to hide a lot of this logic away from the keyframe. It would be good to
-// re-factor this eventually but it isn't high priority.
+const FRAME_GRID_ROWS :usize = 48;
+const FRAME_GRID_COLS :usize = 64;
 
 #[derive(Clone, Debug, Default)]
 enum KeyPoints {
     #[default] Empty,
     Mono { 
-        keypoints_orig: DVVectorOfKeyPoint, // Original for visualization.
         keypoints_un: DVVectorOfKeyPoint // Undistorted keypoints actually used by the system. For stereo, this is redundant bc images must be rectified
     },
     Stereo { 
@@ -38,7 +37,6 @@ enum KeyPoints {
         mv_depth: Vec<f32>, //mvDepth
     },
     Rgbd {
-        keypoints_orig: DVVectorOfKeyPoint, // Original for visualization.
         keypoints_un: DVVectorOfKeyPoint, // Undistorted keypoints actually used by the system. For stereo, this is redundant bc images must be rectified
         mv_depth: Vec<f32>, //mvDepth
     }
@@ -51,24 +49,23 @@ pub struct Features {
     keypoints: KeyPoints,
     pub image_bounds: ImageBounds,
     pub descriptors: DVMatrix, // mDescriptors
-    pub grid: Grid, // Keypoints are assigned to cells in a grid to reduce matching complexity when projecting MapPoints.
+    grid: Grid, // Keypoints are assigned to cells in a grid to reduce matching complexity when projecting MapPoints.
 }
 
 impl Features {
     pub fn new(
         keypoints: DVVectorOfKeyPoint,
         descriptors: DVMatrix,
-        im_width: i32, im_height: i32,
+        im_width: u32, im_height: u32,
         sensor: Sensor
     ) -> Result<Features, Box<dyn std::error::Error>> {
         let image_bounds = ImageBounds::new(im_width, im_height, &CAMERA_MODULE.dist_coef);
         let mut grid = Grid::default(&image_bounds);
-        let keypoints_orig = keypoints.clone();
 
         match sensor.frame() {
             FrameSensor::Mono => {
-                let keypoints_un =  Self::undistort_keypoints(&keypoints_orig)?;
-                let num_keypoints = keypoints_un.len() as u32;
+                let keypoints_un = Self::undistort_keypoints(&keypoints)?;
+                let num_keypoints = keypoints.len() as u32;
 
                 // assign features to grid
                 grid.assign_features(&image_bounds, &keypoints_un);
@@ -76,8 +73,8 @@ impl Features {
                     Features {
                         num_keypoints,
                         image_bounds,
-                        keypoints: KeyPoints::Mono { keypoints_orig, keypoints_un },
-                        descriptors: descriptors.clone(),
+                        keypoints: KeyPoints::Mono { keypoints_un },
+                        descriptors: descriptors,
                         grid,
                     }
                 )
@@ -147,10 +144,10 @@ impl Features {
 
     pub fn get_octave(&self, index: usize) -> i32 {
         // Note: Use this function if you ever see a code pattern like this
-        // bestLevel = (F.Nleft == -1) ? F.mvKeysUn[idx].octave
-        //                     : (idx < F.Nleft) ? F.mvKeys[idx].octave
-        //                                         : F.mvKeysRight[idx - F.Nleft].octave;
-        self.get_keypoint(index).0.octave
+        // bestLevel = (F.Nleft == -1) ? F.mvKeysUn[idx].octave()
+        //                     : (idx < F.Nleft) ? F.mvKeys[idx].octave()
+        //                                         : F.mvKeysRight[idx - F.Nleft].octave();
+        self.get_keypoint(index).0.octave()
     }
 
     pub fn check_close_tracked_mappoints( &self, th_depth: f32, mappoint_matches: &HashMap::<u32, (Id, bool)> ) -> (i32, i32) {
@@ -182,9 +179,12 @@ impl Features {
             // Fill matrix with points
             let mut mat = Mat::new_rows_cols_with_default(num_keypoints,2, CV_32F, Scalar::all(0.0))?;
             for i in 0..num_keypoints {
-                *mat.at_2d_mut::<f32>(i, 0)? = keypoints.get(i as usize)?.pt.x;
-                *mat.at_2d_mut::<f32>(i, 1)? = keypoints.get(i as usize)?.pt.y;
+                *mat.at_2d_mut::<f32>(i, 0)? = keypoints.get(i as usize)?.pt().x;
+                *mat.at_2d_mut::<f32>(i, 1)? = keypoints.get(i as usize)?.pt().y;
             }
+
+            // TODO (CLONE) ... misc
+            // can we do this in place? Then we don't have to construct and return keypoints_un
 
             // Undistort points
             mat = mat.reshape(2, 0)?;
@@ -202,21 +202,21 @@ impl Features {
             mat = mat.reshape(1, 0)?;
 
             // Fill undistorted keypoint vector
-            let mut undistorted_kp_vec = opencv::types::VectorOfKeyPoint::new();
+            let mut keypoints_un = opencv::types::VectorOfKeyPoint::new();
             for i in 0..num_keypoints {
-                let mut kp = keypoints.get(i as usize)?;
-                kp.pt.x = *mat.at_2d::<f32>(i, 0)?;
-                kp.pt.y = *mat.at_2d::<f32>(i, 1)?;
-                undistorted_kp_vec.push(kp);
+                let kp = keypoints.get(i as usize)?;
+                kp.pt().x = *mat.at_2d::<f32>(i, 0)?;
+                kp.pt().y = *mat.at_2d::<f32>(i, 1)?;
+                keypoints_un.push(kp);
             }
 
-            Ok(DVVectorOfKeyPoint::new(undistorted_kp_vec))
+            Ok(DVVectorOfKeyPoint::new(keypoints_un))
         } else {
             return Ok(keypoints.clone());
         }
     }
 
-    pub fn get_features_in_area(&self, x: &f64, y: &f64, r: f64, min_level: i32, max_level: i32, image_bounds: &ImageBounds) -> Vec<u32> {
+    pub fn get_features_in_area(&self, x: &f64, y: &f64, r: f64, image_bounds: &ImageBounds, levels: Option<(i32, i32)>,) -> Vec<u32> {
         //GetFeaturesInArea
         let mut indices = Vec::<u32>::new();
         indices.reserve(self.num_keypoints as usize);
@@ -238,11 +238,12 @@ impl Features {
             return indices;
         }
 
-        let check_levels = min_level>0 || max_level>=0;
+        let check_levels = levels.is_some() && (levels.unwrap().0>0 || levels.unwrap().1>=0);
 
         for ix in min_cell_x..max_cell_x + 1 {
             for iy in min_cell_y..max_cell_y + 1 {
                 let v_cell  =&self.grid.grid[ix as usize][iy as usize];
+                // TODO (STEREO) 
                 //const vector<size_t> vCell = (!bRight) ? mGrid[ix][iy] : mGridRight[ix][iy];
 
                 if v_cell.is_empty() {
@@ -253,18 +254,18 @@ impl Features {
                     //TODO (Stereo) Need to update this if stereo images are processed
                     let (kp_un, _is_right) = &self.get_keypoint(v_cell[j]);
                     if check_levels {
-                        if kp_un.octave < min_level as i32 {
+                        if kp_un.octave() < levels.unwrap().0 as i32 {
                             continue;
                         }
-                        if max_level >= 0 {
-                            if kp_un.octave > max_level as i32 {
+                        if levels.unwrap().1 >= 0 {
+                            if kp_un.octave() > levels.unwrap().1 as i32 {
                                 continue;
                             }
                         }
                     }
 
-                    let distx = kp_un.pt.x - (*x as f32);
-                    let disty = kp_un.pt.y - (*y as f32);
+                    let distx = kp_un.pt().x - (*x as f32);
+                    let disty = kp_un.pt().y - (*y as f32);
 
                     if distx.abs()<(factor_x as f32) && disty.abs() < (factor_y as f32)  {
                         indices.push(v_cell[j] as u32);
@@ -293,7 +294,7 @@ pub struct ImageBounds {
 }
 
 impl ImageBounds {
-    pub fn new(im_width: i32, im_height: i32, dist_coef: &Option<Vec<f32>>) -> ImageBounds {
+    pub fn new(im_width: u32, im_height: u32, dist_coef: &Option<Vec<f32>>) -> ImageBounds {
         //ComputeImageBounds
         let min_x = 0.0;
         let max_x;
@@ -334,7 +335,7 @@ impl ImageBounds {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct Grid {
+struct Grid {
     pub grid_element_width_inv: f64,
     pub grid_element_height_inv: f64,
     pub grid: Vec<Vec<Vec<usize>>> // mGrid
@@ -344,14 +345,6 @@ impl Grid {
         Grid {
             grid_element_width_inv: FRAME_GRID_COLS as f64/(image_bounds.max_x - image_bounds.min_x) as f64,
             grid_element_height_inv: FRAME_GRID_ROWS as f64/(image_bounds.max_y - image_bounds.min_y) as f64,
-            grid: Self::initialize_grid()
-        }
-    }
-
-    pub fn empty() -> Self {
-        Grid {
-            grid_element_width_inv: 0.0,
-            grid_element_height_inv: 0.0,
             grid: Self::initialize_grid()
         }
     }
@@ -379,8 +372,8 @@ impl Grid {
     }
 
     pub fn pos_in_grid(&self, image_bounds: &ImageBounds, kp : &KeyPoint) -> Option<(i32, i32)> {
-        let pos_x = ((kp.pt.x-(image_bounds.min_x as f32))*self.grid_element_width_inv as f32).round() as i32;
-        let pos_y = ((kp.pt.y-(image_bounds.min_y as f32))*self.grid_element_height_inv as f32).round() as i32;
+        let pos_x = ((kp.pt().x-(image_bounds.min_x as f32))*self.grid_element_width_inv as f32).round() as i32;
+        let pos_y = ((kp.pt().y-(image_bounds.min_y as f32))*self.grid_element_height_inv as f32).round() as i32;
 
         //let x_in_bounds = pos_x >= 0 && pos_x < (FRAME_GRID_COLS as i32);
         //let y_in_bounds = pos_y >= 0 && pos_y < (FRAME_GRID_ROWS as i32);

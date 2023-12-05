@@ -1,8 +1,8 @@
 [package]
 name = "darvis"
 version = "0.1.0"
-authors = ["TJ Chase <tbchase@buffalo.edu>"]
-edition = "2018"
+authors = ["Sofiya Semenova <sofiyase@buffalo.edu>", "Pranay Meshram <pranaywa@buffalo.edu>", "TJ Chase <tbchase@buffalo.edu>"]
+edition = "2021"
 
 
 [[bin]]
@@ -13,38 +13,52 @@ path = "src/main.rs"
 name = "dvcore"
 path = "src/dvcore/lib.rs"
 
-
 [profile.release]
-debug = 1
+debug = true
+codegen-units = 1
+incremental = true
+lto = "fat"
+
 [rust]
 debuginfo-level = 1
+
+[env]
+IDL_PACKAGE_FILTER = { value = "std_msgs;r2r_minimal_node_msgs" }
 
 [dependencies]
 g2o = { path = "../g2o" }
 dvos3binding = { path = "../orbslam-bindings" }
-once_cell = "0.1.4"
-opencv = "0.63.0"
-nalgebra = {version = "*", features = ["serde-serialize"]}
-cv-convert = {version = '0.19.0', features = ['opencv_0-63','nalgebra_0-31']}
-chrono = { version = "0.4", features = ["serde"] }
+foxglove = { path = "../foxglove" }
+once_cell = "*"
+chrono = { version = "*", features = ["serde"] }
+rand = "*"
+linked-hash-map = "*"
+ctrlc = "*"
+downcast-rs = "*"
+prost-types = "*"
+prost = "*"
+
+opencv = "0.84.5"
+nalgebra = {version = "0.32.3", features = ["serde-serialize"]}
+cv-convert = {version = '0.25.0', default_features = false, features = ['opencv_0-84','nalgebra_0-32']}
+cxx = "1.0"
+
+yaml-rust = "*"
+parking_lot = "*"
+num-traits = "*"
+fern = {version = "*", features = ["colored"] }
+array2d = "*"
+lazy_static = "*"
+env_logger = "*"
 glob = "*"
 serde = "*"
-axiom = "*"
-env_logger = "*"
-yaml-rust = "0.4"
-lazy_static = "*"
-parking_lot = "0.11"
-rand = "0.7.3"
-cxx = "1.0.80"
-array2d = "*"
-num-traits = "0.2"
 simba = "*"
 log = "*"
-fern = {version = "0.6", features = ["colored"] }
 derivative = "*"
 error-chain = "*"
-linked-hash-map = "0.5.6"
 spin_sleep = "*"
-flame = "0.2.2"
-flamer = "0.3"
-ctrlc = "3.2.3"
+mcap = "*"
+crossbeam-channel = "0.5.8"
+
+logging_timer = "1.1.0"
+nohash-hasher = "0.2.0"

@@ -1097,6 +1097,23 @@ namespace orb_slam3 {
         return num_extracted;
     }
 
+    int ORBextractor::extract2(orb_slam3::WrapBindCVKeyPoints & keypoints, orb_slam3::WrapBindCVMat & descriptors) {
+        vector<int> lapping = {overlap_begin, overlap_end};
+
+        cout << "Just testing" << endl;
+        Mat image = cv::imread("/home/sofiya/datasets/kitti_00_0/000001.png",cv::IMREAD_GRAYSCALE); //,cv::IMREAD_UNCHANGED);
+
+        vector<KeyPoint> kp;
+        cv::Mat desc;
+        auto num_extracted = extract(image, cv::Mat(), kp, desc, lapping);
+
+        cv::Mat output;
+        cv::drawKeypoints(image, kp, output, cv::Scalar::all(-1), cv::DrawMatchesFlags::DEFAULT);
+        cv::imwrite("000001_orb.png", output);
+
+        return num_extracted;
+    }
+
     int ORBextractor::extract( InputArray _image, InputArray _mask, vector<KeyPoint>& _keypoints,
                                   OutputArray _descriptors, std::vector<int> &vLappingArea)
     {
@@ -1177,6 +1194,11 @@ namespace orb_slam3 {
                 i++;
             }
         }
+
+        // cv::Mat output;
+        // cv::drawKeypoints(image, _keypoints, output, cv::Scalar::all(-1), cv::DrawMatchesFlags::DEFAULT);
+        // cv::imwrite("000001_orb.png", output);
+
 
         return monoIndex;
     }

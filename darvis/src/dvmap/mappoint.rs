@@ -1,11 +1,11 @@
-use std::{fmt::Debug, collections::{HashMap}};
-use dvcore::{matrix::DVMatrix, config::{Sensor, GLOBAL_PARAMS, SYSTEM_SETTINGS, FrameSensor}};
-use log::{error, debug};
+use std::{fmt::Debug, collections::HashMap};
+use dvcore::{matrix::DVMatrix, config::{SETTINGS, SYSTEM}, sensor::{Sensor, FrameSensor}};
+use log::error;
 extern crate nalgebra as na;
-use crate::{matrix::DVVector3, modules::orbmatcher::{descriptor_distance, SCALE_FACTORS}, registered_modules::FEATURE_DETECTION};
-use super::{map::{Id, Map}, keyframe::{Frame, FullKeyFrame}};
+use crate::{matrix::DVVector3, modules::orbmatcher::{descriptor_distance, SCALE_FACTORS}, registered_actors::FEATURE_DETECTION};
+use super::{map::{Id, Map}, keyframe::{Frame, FullKeyFrame}, pose::DVTranslation};
 
-// Note: Implementing typestate for like here: http://cliffle.com/blog/rust-typestate/#a-simple-example-the-living-and-the-dead
+// Paper note: Implementing typestate like here: http://cliffle.com/blog/rust-typestate/#a-simple-example-the-living-and-the-dead
 // This way we can encode mappoints that have been created but not inserted into the map as a separate type than mappoints that are legit.
 // This prevents making the following mistake:
 // 1 - create a mappoint with MapPoint::new() with an id = -1.
@@ -25,10 +25,10 @@ pub struct MapPoint<M: MapPointState> {
     //     mnLastFrameSeen(0), mnBALocalForKF(0), mnFuseCandidateForKF(0), mnLoopPointForKF(0), mnCorrectedByKF(0),
     //     mnCorrectedReference(0), mnBAGlobalForKF(0), mpRefKF(pRefKF), mnVisible(1), mnFound(1), mbBad(false),
     //     mpReplaced(static_cast<MapPoint*>(NULL)), mfMinDistance(0), mfMaxDistance(0), 
-    pub position: DVVector3<f64>, // Sofiya: why a vector3 instead of a Pose? Same in ORBSLAM3 too but I thought mps had poses...
+    pub position: DVTranslation, 
 
     // Map connections
-    // Sofiya: it would be nice if we could guarantee that the connections are updated/correct
+    // TODO (improvement): it would be nice if we could guarantee that the connections are updated/correct
     // rather than duplicating all these connections across all the objects and hoping we remember
     // to update them correctly after a map modification
     pub origin_map_id: Id,
@@ -69,7 +69,7 @@ pub struct FullMapPoint { // Full map item inserted into the map with the follow
 
     // following two are only set by tracking and only checked by local mapping for mappoint culling, but not sure what the diff is b/w visible and found
     nvisible: i32, //mnvisible
-    nfound: i32, //mnfound
+    nfound: u32, //mnfound
 }
 
 pub trait MapPointState {}
@@ -84,13 +84,13 @@ impl MapPoint<PrelimMapPoint> {
             ref_kf_id,
             first_kf_id: ref_kf_id,
             full_mp_info: PrelimMapPoint{},
-            sensor: GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "sensor")
+            sensor: SETTINGS.get(SYSTEM, "sensor")
         }
     }
 }
 
 impl MapPoint<FullMapPoint> {
-    pub(super) fn new(prelim_mappoint: &MapPoint<PrelimMapPoint>, id: Id) -> Self {
+    pub(super) fn new(prelim_mappoint: MapPoint<PrelimMapPoint>, id: Id) -> Self {
         Self {
             position: prelim_mappoint.position,
             origin_map_id: prelim_mappoint.origin_map_id,
@@ -141,22 +141,22 @@ impl MapPoint<FullMapPoint> {
     pub fn predict_scale(&self, current_distance: &f64) -> i32 {
         // int MapPoint::PredictScale(const float &currentDist, KeyFrame* pKF)
         let ratio = self.full_mp_info.max_distance / current_distance;
-        let scale_factor= GLOBAL_PARAMS.get::<f64>(FEATURE_DETECTION, "scale_factor");
+        let scale_factor= SETTINGS.get::<f64>(FEATURE_DETECTION, "scale_factor");
         let log_scale_factor = scale_factor.log10();
         let scale = (ratio.log10() / log_scale_factor).ceil() as i32;
-        let scale_levels = GLOBAL_PARAMS.get::<i32>(FEATURE_DETECTION, "n_levels");
+        let scale_levels = SETTINGS.get::<i32>(FEATURE_DETECTION, "n_levels");
 
         let scale = if scale < 0 { 0 } else { scale };
         if scale < 0 {
             return 0;
-        } else if scale >= scale_levels.into() {
+        } else if scale >= scale_levels {
             return scale_levels - 1;
         } else {
             return scale;
         }
     }
 
-    pub fn increase_found(&mut self, n: &i32) {
+    pub fn increase_found(&mut self, n: u32) {
         // void MapPoint::IncreaseFound(int n)
         self.full_mp_info.nfound += n;
     }
@@ -174,13 +174,13 @@ impl MapPoint<FullMapPoint> {
 
         let (n, normal) = self.get_obs_normal(map, &self.position);
 
-        let ref_kf = map.get_keyframe(&self.ref_kf_id).unwrap();
+        let ref_kf = map.keyframes.get(&self.ref_kf_id).unwrap();
         let pc = (*self.position) - (*ref_kf.get_camera_center());
         let dist = pc.norm();
 
         let level = self.get_level(ref_kf);
         let level_scale_factor = SCALE_FACTORS[level as usize] as f64;
-        let n_levels = GLOBAL_PARAMS.get::<i32>(FEATURE_DETECTION, "n_levels");
+        let n_levels = SETTINGS.get::<i32>(FEATURE_DETECTION, "n_levels");
 
         let max_distance = dist * level_scale_factor;
         let min_distance = self.full_mp_info.max_distance / (SCALE_FACTORS[(n_levels - 1) as usize] as f64);
@@ -240,6 +240,7 @@ impl MapPoint<FullMapPoint> {
             }
         }
 
+        // TODO (CLONE) ... misc
         Some(DVMatrix::new(descriptors[best_idx].clone()))
     }
 
@@ -307,7 +308,7 @@ impl MapPoint<FullMapPoint> {
         let mut n = 0;
         let position_opencv = **position;
         for (id, _) in &self.full_mp_info.observations {
-            let kf = map.get_keyframe(&id).unwrap();
+            let kf = map.keyframes.get(&id).unwrap();
             let mut camera_center = kf.get_camera_center();
             let owi = *camera_center;
             let normali = position_opencv - owi;
@@ -331,7 +332,7 @@ impl MapPoint<FullMapPoint> {
     fn compute_descriptors(&self, map: &Map) -> Vec::<opencv::core::Mat> {
         let mut descriptors = Vec::<opencv::core::Mat>::new();
         for (id, (index1, index2)) in &self.full_mp_info.observations {
-            let kf = map.get_keyframe(&id).unwrap();
+            let kf = map.keyframes.get(&id).unwrap();
             descriptors.push(kf.features.descriptors.row(*index1 as u32).unwrap());
             match self.sensor.frame() {
                 FrameSensor::Stereo => descriptors.push(kf.features.descriptors.row(*index2 as u32).unwrap()),
@@ -343,7 +344,7 @@ impl MapPoint<FullMapPoint> {
 
     fn get_level(&self, kf: &Frame<FullKeyFrame>) -> i32 {
         let (left_index, right_index) = self.full_mp_info.observations.get(&kf.id()).unwrap();
-        // Sofiya: sometimes in orbslam, left index will be -1 even for a stereo
+        // TODO (mvp): sometimes in orbslam, left index will be -1 even for a stereo
         // camera, if there is no second camera set. I don't know why
         // they would do this though, like then it's not stereo...
         if *left_index != -1 {

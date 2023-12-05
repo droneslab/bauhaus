@@ -1,30 +1,25 @@
-// Sofiya note: I fully tested this file and the output matches what we would
-// expect from ORBSLAM3. search_for_initialization finds 1 fewer match than ORBSLAM
-// which is fine, and the homography and reconstruction in reconstruct_with_two_views
-// are slightly different (also fine, I applied the homography on the matches and it looks ok).
-// The slight difference is because of the seed used in the random number generator in
-// TwoViewReconstruction (this line of code: DUtils::Random::SeedRandOnce(0);). This is weird
-// but also fine.
+// Testing: Fully tested, works correctly.
 
-use chrono::Duration;
-use dvcore::config::{GLOBAL_PARAMS, SYSTEM_SETTINGS, FrameSensor, ImuSensor};
+use dvcore::config::{SETTINGS, SYSTEM};
 use dvcore::matrix::DVVectorOfPoint2f;
+use dvcore::sensor::{Sensor, FrameSensor, ImuSensor};
 use log::debug;
-use dvcore::{matrix::DVVectorOfPoint3f, config::Sensor};
+use dvcore::matrix::DVVectorOfPoint3f;
+use opencv::prelude::KeyPointTraitConst;
 use crate::dvmap::keyframe::Frame;
-use crate::dvmap::{keyframe::InitialFrame, pose::Pose};
-use crate::modules::camera::{CAMERA_MODULE};
+use crate::dvmap::{keyframe::InitialFrame, pose::DVPose};
+use crate::modules::camera::CAMERA_MODULE;
 
 use super::orbmatcher;
 
 
 #[derive(Debug, Clone, Default)]
 pub struct Initialization {
-    // Initialization (Monocular)
+    // Monocular
     pub mp_matches: Vec<i32>,// ini_matches .. mvIniMatches;
     pub prev_matched: DVVectorOfPoint2f,// std::vector<cv::Point2f> mvbPrevMatched;
     pub p3d: DVVectorOfPoint3f,// std::vector<cv::Point3f> mvIniP3D;
-    pub ready_to_initializate: bool,
+    pub ready_to_initialize: bool,
     pub initial_frame: Option<Frame<InitialFrame>>,
     pub last_frame: Option<Frame<InitialFrame>>,
     pub current_frame: Option<Frame<InitialFrame>>,
@@ -33,13 +28,13 @@ pub struct Initialization {
 
 impl Initialization {
     pub fn new() -> Self {
-        let sensor: Sensor = GLOBAL_PARAMS.get(SYSTEM_SETTINGS, "sensor");
+        let sensor: Sensor = SETTINGS.get(SYSTEM, "sensor");
 
         Self {
             mp_matches: Vec::new(),
             prev_matched: DVVectorOfPoint2f::empty(),
             p3d: DVVectorOfPoint3f::empty(),
-            ready_to_initializate: false,
+            ready_to_initialize: false,
             initial_frame: None,
             last_frame: None,
             current_frame: None,
@@ -72,10 +67,10 @@ impl Initialization {
         let initial_frame = self.initial_frame.as_ref().unwrap();
         let last_frame = self.last_frame.as_ref().unwrap();
 
-        if !self.ready_to_initializate && current_frame.features.num_keypoints > 100 {
+        if !self.ready_to_initialize && current_frame.features.num_keypoints > 100 {
             // Set Reference Frame
             for i in 0..current_frame.features.num_keypoints as usize {
-                self.prev_matched.push(current_frame.features.get_keypoint(i).0.pt.clone()); // TODO (clone)
+                self.prev_matched.push(current_frame.features.get_keypoint(i).0.pt().clone());
             }
 
             match self.sensor.imu() {
@@ -92,11 +87,11 @@ impl Initialization {
                 },
                 _ => {}
             }
-            self.ready_to_initializate = true;
+            self.ready_to_initialize = true;
             return Ok(false);
         } else {
-            if current_frame.features.num_keypoints <=100 || matches!(self.sensor.imu(), ImuSensor::Some) && last_frame.timestamp - initial_frame.timestamp > Duration::seconds(1) {
-                self.ready_to_initializate = false;
+            if current_frame.features.num_keypoints <=100 || matches!(self.sensor.imu(), ImuSensor::Some) && last_frame.timestamp - initial_frame.timestamp > 1.0 {
+                self.ready_to_initialize = false;
                 return Ok(false);
             }
 
@@ -108,12 +103,12 @@ impl Initialization {
                 100
             );
             self.mp_matches = mp_matches;
-            // SOFIYA TEST: COULD WRITE A TEST HERE .. match to mono_initialization_matches.txt
+            // TODO (test): COULD WRITE A TEST HERE .. match to mono_initialization_matches.txt
             // debug!("MonocularInitialization, search for initialization.. {:?}", self.mp_matches);
 
             // Check if there are enough correspondences
             if num_matches < 100 {
-                self.ready_to_initializate = false;
+                self.ready_to_initialize = false;
                 return Ok(false);
             };
 
@@ -131,7 +126,7 @@ impl Initialization {
                     }
                 }
 
-                self.initial_frame.as_mut().unwrap().pose = Some(Pose::default());
+                self.initial_frame.as_mut().unwrap().pose = Some(DVPose::default());
                 self.current_frame.as_mut().unwrap().pose = Some(tcw);
 
                 return Ok(true);
