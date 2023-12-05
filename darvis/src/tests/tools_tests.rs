@@ -2,7 +2,7 @@
 mod tools_tests {
     use dvcore::matrix::DVVector3;
 
-    use crate::{modules::geometric_tools, dvmap::pose::Pose};
+    use crate::{modules::geometric_tools, dvmap::pose::DVPose};
 
     use super::*;
 
@@ -31,8 +31,8 @@ mod tools_tests {
         let result = geometric_tools::triangulate(
             c1,
             c2,
-            Pose::new(&translation1, &rotation1),
-            Pose::new(&translation2, &rotation2)
+            DVPose::new(translation1, rotation1),
+            DVPose::new(translation2, rotation2)
         ).unwrap();
         let result_trun = (f64::trunc(result[0]  * 10000.0) / 10000.0, f64::trunc(result[1]  * 10000.0) / 10000.0, f64::trunc(result[2]  * 10000.0) / 10000.0);
 

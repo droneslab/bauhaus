@@ -1,15 +1,15 @@
 /// *** Structs to help get/set global configuration parameters that are read from the config file. *** //
 /// 
 /// This section is a little complicated and the details don't matter too much if you're just using it.
-/// Basically, this implementation of GlobalParams allows inserting a parameter of 4 different types
+/// Basically, this implementation of Settings allows inserting a setting of 4 different types
 /// (string, bool, f64, and i32) without needing to call a specific function for each type.
 /// 
-/// To insert a new parameter into GLOBAL_PARAMS:
-///     GLOBAL_PARAMS.insert(SYSTEM_SETTINGS, "show_ui", show_ui);
-/// To get a parameter from GLOBAL_PARAMS:
-///     let max_features= GLOBAL_PARAMS.get::<i32>(SYSTEM_SETTINGS, "max_features".to_string());
+/// To insert a new parameter into SETTINGS:
+///     SETTINGS.insert(SYSTEM, "show_visualizer", show_visualizer);
+/// To get a parameter from SETTINGS:
+///     let max_features= SETTINGS.get::<i32>(SYSTEM, "max_features".to_string());
 /// 
-use std::{collections::HashMap, sync::RwLock, fmt};
+use std::{collections::HashMap, sync::RwLock};
 use lazy_static::*;
 use linked_hash_map::LinkedHashMap;
 
@@ -18,48 +18,48 @@ use std::io::Read;
 extern crate yaml_rust;
 use yaml_rust::yaml;
 use yaml_rust::yaml::Yaml;
-use crate::{
-    base::{ActorConf, ModuleConf},
-};
 
-pub static SYSTEM_SETTINGS: &str = "SYSTEM_SETTINGS"; 
+use crate::sensor::{Sensor, FrameSensor, ImuSensor};
 
-pub struct GlobalParams {
-    // Lock is necessary because GLOBAL_PARAMS is a static variable
+pub static SYSTEM: &str = "SYSTEM"; 
+
+//* GLOBAL SETTING PARAMETERS FOR LOOKUP */
+pub struct Settings {
+    // Lock is necessary because Settings is a static variable
     // https://stackoverflow.com/questions/34832583/global-mutable-hashmap-in-a-library
-    params: RwLock<HashMap<String, ConfigValueBox>>,
+    settings: RwLock<HashMap<String, SettingBox>>,
 }
 
 lazy_static! {
     #[derive(Debug)]
-    pub static ref GLOBAL_PARAMS: GlobalParams = GlobalParams {
-        params: RwLock::new(HashMap::new())
+    pub static ref SETTINGS: Settings = Settings {
+        settings: RwLock::new(HashMap::new())
     };
 }
 
-impl GlobalParams {
+impl Settings {
     pub fn get<T>(&self, module : &str, param: &str) -> T
-    where Self: OverloadedConfigParams<T> {
+    where Self: OverloadedSetting<T> {
         let key = format!("{}_{}", module, param);
-        let unlocked_params = GLOBAL_PARAMS.params.read().unwrap();
+        let unlocked_params = SETTINGS.settings.read().unwrap();
         let boxed_value = unlocked_params.get(&key).unwrap();
         return self.get_value_from_box(boxed_value);
     }
     pub fn insert<T: std::fmt::Display>(&self, namespace: &str, key_param: &str, value: T)
-    where Self: OverloadedConfigParams<T> {
+    where Self: OverloadedSetting<T> {
         let key = format!("{}_{}", namespace, key_param);
         let value = self.make_box_from_value(value);
-        let mut unlocked_params = GLOBAL_PARAMS.params.write().unwrap();
+        let mut unlocked_params = SETTINGS.settings.write().unwrap();
         unlocked_params.insert(key, value);
     }
 }
 
-impl OverloadedConfigParams<String> for GlobalParams {
-    fn get_value_from_box(&self, boxed_value : &ConfigValueBox) -> String {
+impl OverloadedSetting<String> for Settings {
+    fn get_value_from_box(&self, boxed_value : &SettingBox) -> String {
         return boxed_value.string_field.as_ref().unwrap().to_string();
     }
-    fn make_box_from_value(&self, value: String) -> ConfigValueBox {
-        return ConfigValueBox {
+    fn make_box_from_value(&self, value: String) -> SettingBox {
+        return SettingBox {
             string_field: Some(value.clone()),
             bool_field: None,
             float_field: None,
@@ -69,12 +69,12 @@ impl OverloadedConfigParams<String> for GlobalParams {
     }
 }
 
-impl OverloadedConfigParams<bool> for GlobalParams {
-    fn get_value_from_box(&self, boxed_value : &ConfigValueBox) -> bool {
+impl OverloadedSetting<bool> for Settings {
+    fn get_value_from_box(&self, boxed_value : &SettingBox) -> bool {
         return *boxed_value.bool_field.as_ref().unwrap();
     }
-    fn make_box_from_value(&self, value: bool) -> ConfigValueBox  {
-        return ConfigValueBox {
+    fn make_box_from_value(&self, value: bool) -> SettingBox  {
+        return SettingBox {
             string_field: None,
             bool_field: Some(value),
             float_field: None,
@@ -84,12 +84,12 @@ impl OverloadedConfigParams<bool> for GlobalParams {
     }
 }
 
-impl OverloadedConfigParams<f64> for GlobalParams {
-    fn get_value_from_box(&self, boxed_value : &ConfigValueBox) -> f64 {
+impl OverloadedSetting<f64> for Settings {
+    fn get_value_from_box(&self, boxed_value : &SettingBox) -> f64 {
         return *boxed_value.float_field.as_ref().unwrap();
     }
-    fn make_box_from_value(&self, value: f64) -> ConfigValueBox  {
-        return ConfigValueBox {
+    fn make_box_from_value(&self, value: f64) -> SettingBox  {
+        return SettingBox {
             string_field: None,
             bool_field: None,
             float_field: Some(value),
@@ -99,12 +99,12 @@ impl OverloadedConfigParams<f64> for GlobalParams {
     }
 }
 
-impl OverloadedConfigParams<i32> for GlobalParams {
-    fn get_value_from_box(&self, boxed_value : &ConfigValueBox) -> i32 {
+impl OverloadedSetting<i32> for Settings {
+    fn get_value_from_box(&self, boxed_value : &SettingBox) -> i32 {
         return *boxed_value.int_field.as_ref().unwrap();
     }
-    fn make_box_from_value(&self, value: i32) -> ConfigValueBox  {
-        return ConfigValueBox {
+    fn make_box_from_value(&self, value: i32) -> SettingBox  {
+        return SettingBox {
             string_field: None,
             bool_field: None,
             float_field: None,
@@ -114,12 +114,12 @@ impl OverloadedConfigParams<i32> for GlobalParams {
     }
 }
 
-impl OverloadedConfigParams<Sensor> for GlobalParams {
-    fn get_value_from_box(&self, boxed_value : &ConfigValueBox) -> Sensor {
+impl OverloadedSetting<Sensor> for Settings {
+    fn get_value_from_box(&self, boxed_value : &SettingBox) -> Sensor {
         return *boxed_value.sensor_field.as_ref().unwrap();
     }
-    fn make_box_from_value(&self, value: Sensor) -> ConfigValueBox  {
-        return ConfigValueBox {
+    fn make_box_from_value(&self, value: Sensor) -> SettingBox  {
+        return SettingBox {
             string_field: None,
             bool_field: None,
             float_field: None,
@@ -129,12 +129,12 @@ impl OverloadedConfigParams<Sensor> for GlobalParams {
     }
 }
 
-pub trait OverloadedConfigParams<T> {
-    fn get_value_from_box(&self, boxed_value : &ConfigValueBox) -> T;
-    fn make_box_from_value(&self, value: T) -> ConfigValueBox;
+pub trait OverloadedSetting<T> {
+    fn get_value_from_box(&self, boxed_value : &SettingBox) -> T;
+    fn make_box_from_value(&self, value: T) -> SettingBox;
 }
 
-pub struct ConfigValueBox {
+pub struct SettingBox {
     string_field: Option<String>,
     bool_field: Option<bool>,
     float_field: Option<f64>,
@@ -145,8 +145,23 @@ pub struct ConfigValueBox {
 
 
 
+// * LOADING CONFIGURATION FROM FILE *//
 
-pub fn load_config(file_name: &String) -> Option<(Vec<ActorConf>, Vec<ModuleConf>)> {
+#[derive(Debug, Default, Clone)]
+// Struct holding configuration parameters for a given actor
+pub struct ActorConf{
+    pub name: String,
+    pub file: String,
+    pub receiver_bound: Option<usize>,
+}
+
+#[derive(Debug, Default, Clone)]
+// Struct holding configuration parameters for a given module
+pub struct ModuleConf{
+    pub name: String
+}
+
+pub fn load_config(file_name: &String) -> Result<(Vec<ActorConf>, Vec<ModuleConf>, String), Box<dyn std::error::Error>> {
     let mut config_string = String::new();
     println!("{}",file_name);
     let mut f = File::open(file_name).unwrap();
@@ -156,78 +171,66 @@ pub fn load_config(file_name: &String) -> Option<(Vec<ActorConf>, Vec<ModuleConf
     println!("SYSTEM SETTINGS");
 
     // Load additional custom settings from config file
-    let system_settings = &yaml::YamlLoader::load_from_str(&config_string).unwrap()[0]["system_settings"];
-    add_setting_bool(SYSTEM_SETTINGS, "show_ui", &system_settings["show_ui"]);
-    add_setting_bool(SYSTEM_SETTINGS, "localization_only_mode", &system_settings["localization_only_mode"]);
-    add_setting_bool(SYSTEM_SETTINGS, "should_profile", &system_settings["should_profile"]);
-    add_setting_string(SYSTEM_SETTINGS, "vocabulary_file", &system_settings["vocabulary_file"]);
-    add_setting_string(SYSTEM_SETTINGS, "trajectory_file_name", &system_settings["trajectory_file_name"]);
-    add_setting_f64(SYSTEM_SETTINGS, "fps", &system_settings["fps"]);
+    let system_settings = &yaml::YamlLoader::load_from_str(&config_string).unwrap()[0]["system"];
+    add_setting_bool(SYSTEM, "localization_only_mode", &system_settings["localization_only_mode"]);
+    add_setting_bool(SYSTEM, "create_flamegraph", &system_settings["create_flamegraph"]);
+    add_setting_string(SYSTEM, "vocabulary_file", &system_settings["vocabulary_file"]);
+    add_setting_string(SYSTEM, "trajectory_file_name", &system_settings["trajectory_file_name"]);
+    add_setting_string(SYSTEM, "results_folder", &system_settings["results_folder"]);
+    add_setting_bool(SYSTEM, "use_timestamps_file", &system_settings["use_timestamps_file"]);
+    add_setting_f64(SYSTEM, "fps", &system_settings["fps"]);
+    add_setting_bool(SYSTEM, "show_visualizer", &system_settings["show_visualizer"]);
+    let log_level = system_settings["log_level"].as_str().unwrap().to_owned();
 
     // Load sensor settings
-    let framesensor = match system_settings["framesensor"].as_str()? {
+    let framesensor = match system_settings["framesensor"].as_str().unwrap() {
         "Mono" => FrameSensor::Mono,
         "Stereo" => FrameSensor::Stereo,
         "RGBD" => FrameSensor::Rgbd,
         _ => panic!("Incompatible frame sensor type"),
     };
-    let imusensor = match system_settings["imusensor"].as_str()? {
+    let imusensor = match system_settings["imusensor"].as_str().unwrap() {
         "Some" => ImuSensor::Some,
         "None" => ImuSensor::None,
         _ => panic!("Incompatible IMU sensor type")
     };
     let sensor = Sensor(framesensor, imusensor);
-    GLOBAL_PARAMS.insert(SYSTEM_SETTINGS, "sensor", sensor);
+    SETTINGS.insert(SYSTEM, "sensor", sensor);
     println!("\t {} = {}", "SENSOR", sensor);
 
     // Load actors
     let mut actor_info = Vec::<ActorConf>::new();
-    for actor in yaml_document["actors"].as_vec()? {
-        let h = &actor.as_hash()?;
-
-        let paths = get_val(h, "possible_paths").as_vec()?;
-        let mut hmap = HashMap::<String, String>::new();
-        for p in 0..paths.len() {
-            let path = paths[p].as_hash()?;
-            hmap.insert(
-                get_val(path, "from").as_str()?.to_string(),
-                get_val(path, "to").as_str()?.to_string(),
-            );
-        }
+    for actor in yaml_document["actors"].as_vec().unwrap() {
+        let h = &actor.as_hash().unwrap();
 
         let a_conf = ActorConf {
-            name: get_val(h, "name").as_str()?.to_string(),
-            file: get_val(h, "file").as_str()?.to_string(),
-            actor_message: get_val(h, "actor_message").as_str()?.to_string(),
-            actor_function: get_val(h, "actor_function").as_str()?.to_string(),
-            ip_address: get_val(h, "address").as_str()?.to_string(),
-            port: get_val(h, "port").as_str()?.to_string(),
-            multithreaded: get_val(h, "multithreaded").as_bool()?,
-            threads: get_val(h, "threads").as_i64()?,
-            possible_paths: hmap
+            name: get_val(h, "name").as_str().unwrap().to_string(),
+            file: get_val(h, "file").as_str().unwrap().to_string(),
+            receiver_bound: match get_val(h, "receiver_bound").as_i64().unwrap() == -1 {
+                true => None,
+                false => Some(get_val(h, "receiver_bound").as_i64().unwrap() as usize)
+            }
         };
 
         actor_info.push(a_conf.clone());
 
-        add_settings(get_val(h, "settings").as_vec()?, &a_conf.name);
+        add_settings(get_val(h, "settings").as_vec().unwrap(), &a_conf.name);
 
-        GLOBAL_PARAMS.insert(&a_conf.name, "file", a_conf.file);
-        GLOBAL_PARAMS.insert(&a_conf.name, "actor_message", a_conf.actor_message);
-        GLOBAL_PARAMS.insert(&a_conf.name, "actor_function", a_conf.actor_function);
+        SETTINGS.insert(&a_conf.name, "file", a_conf.file);
     }
 
     // Load modules
     let mut module_info = Vec::<ModuleConf>::new();
-    for module in yaml_document["modules"].as_vec()? {
-        let h = module.as_hash()?;
+    for module in yaml_document["modules"].as_vec().unwrap() {
+        let h = module.as_hash().unwrap();
         let m_conf = ModuleConf {
-            name: get_val(h, "name").as_str()?.to_string()
+            name: get_val(h, "name").as_str().unwrap().to_string()
         };
-        add_settings(get_val(h, "settings").as_vec()?, &m_conf.name);
+        add_settings(get_val(h, "settings").as_vec().unwrap(), &m_conf.name);
         module_info.push(m_conf);
     }
 
-    Some((actor_info, module_info))
+    Ok((actor_info, module_info, log_level))
 }
 
 
@@ -251,22 +254,22 @@ fn add_settings(settings: &Vec<Yaml>, namespace: &String) -> Option<()> {
 
 fn add_setting_bool(namespace: &str, key: &str, value: &Yaml) {
     let val = value.as_bool().unwrap();
-    GLOBAL_PARAMS.insert(&namespace, &key, val);
+    SETTINGS.insert(&namespace, &key, val);
     println!("\t {} {} = {}", namespace, key, val);
 }
 fn add_setting_i32(namespace: &str, key: &str, value: &Yaml) {
     let val = value.as_i64().unwrap() as i32;
-    GLOBAL_PARAMS.insert(&namespace, &key, val);
+    SETTINGS.insert(&namespace, &key, val);
     println!("\t {} {} = {}", namespace, key, val);
 }
 fn add_setting_f64(namespace: &str, key: &str, value: &Yaml) {
     let val = value.as_f64().unwrap();
-    GLOBAL_PARAMS.insert(&namespace, &key, val);
+    SETTINGS.insert(&namespace, &key, val);
     println!("\t {} {} = {}", namespace, key, val);
 }
 fn add_setting_string(namespace: &str, key: &str, value: &Yaml) {
     let val = value.as_str().unwrap().to_string();
-    GLOBAL_PARAMS.insert(&namespace, &key, val.clone());
+    SETTINGS.insert(&namespace, &key, val.clone());
     println!("\t {} {} = {}", namespace, key, val);
 }
 
@@ -274,51 +277,3 @@ fn get_val<'a>(hashmap: &'a LinkedHashMap<Yaml, Yaml>, string: &str) -> &'a Yaml
     &hashmap[&Yaml::String(string.to_string())]
 }
 
-
-// Note: sensor has to be in dvcore because ConfigValueBox needs to hold a sensor
-#[derive(Clone, Copy, Debug, Default)]
-pub enum FrameSensor {
-    #[default] Mono,
-    Stereo,
-    Rgbd,
-}
-
-#[derive(Clone, Copy, Debug, Default)]
-pub enum ImuSensor {
-    #[default] None,
-    Some
-}
-
-#[derive(Clone, Copy, Debug, Default)]
-pub struct Sensor (pub FrameSensor, pub ImuSensor);
-
-impl Sensor {
-    pub fn is_mono(&self) -> bool {
-        matches!(self.0, FrameSensor::Mono)
-    }
-    pub fn is_imu(&self) -> bool {
-        matches!(self.1, ImuSensor::Some)
-    }
-    pub fn frame(&self) -> FrameSensor {
-        self.0
-    }
-    pub fn imu(&self) -> ImuSensor {
-        self.1
-    }
-}
-
-impl fmt::Display for Sensor {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let framesensor_str = match self.0 {
-            FrameSensor::Mono => "Mono",
-            FrameSensor::Stereo => "Stereo",
-            FrameSensor::Rgbd => "Rgbd",
-        };
-        let imusensor_str = match self.1 {
-            ImuSensor::None => "No",
-            ImuSensor::Some => "Yes",
-        };
-
-        write!(f, "(Frame: {}, Imu: {})", framesensor_str, imusensor_str)
-    }
-}

@@ -5,16 +5,21 @@ master:
        address: localhost
        file: main.rs
 
-system_settings:
-      should_profile: false
-      show_ui: false
+system:
       localization_only_mode: false
-      vocabulary_file: "../vocabulary/ORBvoc.txt" # TODO (low priority): This does not work with ~/
-      trajectory_file_name: "trajectory.txt"
-
-      fps: 1.0
+      vocabulary_file: "../Vocabulary/ORBvoc.txt"
       framesensor: Mono
       imusensor: None
+
+      fps: 1.0
+      use_timestamps_file: false # Instead of running at a fixed fps, use timestamps from the dataset
+
+      results_folder: "results"
+      trajectory_file_name: "trajectory.txt"
+      create_flamegraph: false
+      show_visualizer: false
+      log_level: debug # options are [trace, debug, info, warn, error]
+
 
 modules:
       - 
@@ -117,49 +122,29 @@ modules:
 actors:
       -
        name: VISUALIZER
-       file: vis
-       actor_message: VisMsg
-       actor_function: vis
-       address: localhost
-       port: !!str 7778
-       multithreaded: false
-       threads: 1
-       possible_paths:
-                     -
-                      from: FeatureDetection
-                      to: KFDecision
-                      input: feature vectors
-                      output: frame, feature points
+       file: visualizer
+       receiver_bound: -1
        settings:
+          - 
+            name: image_draw_type
+            value: none # options are [none, plain, features, featuresandmatches]
+            type: string
           -
+            name: mcap_file_path
+            value: "results/out.mcap"
+            type: string
 
       -
        name: TRACKING_FRONTEND
        file: tracking_frontend
-       actor_message: ImageMsg
-       actor_function: tracking_frontend
-       address: localhost
-       port: !!str 7779
-       multithreaded: false
-       threads: 1
-       possible_paths:
-                     -
-                      from: frameloader
-                      to: tracking_backend
-                      input: image
-                      output: keypoints, descriptors
+       receiver_bound: 1
        settings:
           -
 
       -
        name: TRACKING_BACKEND
        file: tracking_backend
-       actor_message: FeatureMsg
-       actor_function: tracking_backend
-       address: localhost
-       port: !!str 7780
-       multithreaded: false
-       threads: 1
+       receiver_bound: 1
        possible_paths:
                      -
                       from: tracking_frontend
@@ -187,12 +172,7 @@ actors:
       -
        name: LOOP_CLOSING
        file: loop_closing
-       actor_message: FeatureMsg
-       actor_function: loop_closing
-       address: localhost
-       port: !!str 7780
-       multithreaded: false
-       threads: 1
+       receiver_bound: -1
        possible_paths:
                      -
                       from: tracking_frontend
@@ -205,12 +185,7 @@ actors:
       -
        name: LOCAL_MAPPING
        file: local_mapping
-       actor_message: KeyFrameMsg
-       actor_function: local_mapping
-       address: localhost
-       port: !!str 7780
-       multithreaded: false
-       threads: 1
+       receiver_bound: -1
        possible_paths:
                      -
                       from: tracking_frontend

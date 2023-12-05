@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.8)
+cmake_minimum_required (VERSION 3.0)
 project(orb_slam3)
 
 IF(NOT CMAKE_BUILD_TYPE)
@@ -7,12 +7,12 @@ ENDIF()
 
 MESSAGE("Build type: " ${CMAKE_BUILD_TYPE})
 
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS}  -Wall  -O0 -g")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall  -O0 -g")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -g") # -std=c++17
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -g")
 
 # Sofiya: Removed -march=native, based on https://github.com/raulmur/ORB_SLAM2/issues/341 
-set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -g ")
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -g ")
+set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} ")
+set(CMAKE_CXX_FLAGS_RELEASE"${CMAKE_CXX_FLAGS_RELEASE} ")
 
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -20,15 +20,28 @@ add_definitions(-DCOMPILEDWITHC11)
 
 LIST(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake_modules)
 
-find_package(OpenCV 4.4)
+find_package(OpenCV 4.5)
    if(NOT OpenCV_FOUND)
-      message(FATAL_ERROR "OpenCV > 4.4 not found.")
+      message(FATAL_ERROR "OpenCV > 4.5 not found.")
    endif()
+
+# There seems to be an issue with MSVC8
+# see http://eigen.tuxfamily.org/bz/show_bug.cgi?id=83
+if(MSVC90)
+  add_definitions(-DEIGEN_DONT_ALIGN_STATICALLY=1)
+  message(STATUS "Disabling memory alignment for MSVC8")
+endif(MSVC90)
+
 
 MESSAGE("OPENCV VERSION:")
 MESSAGE(${OpenCV_VERSION})
 
-find_package(Eigen3 3.1.0 REQUIRED)
+# Find Eigen3
+# Sofiya: Downgrading to 3.2, don't use Eigen's custom alignment (related to march=native issues)
+SET(EIGEN3_INCLUDE_DIR "$ENV{EIGEN3_INCLUDE_DIR}" )
+find_package (Eigen3 3.2 REQUIRED NO_MODULE)
+add_definitions(-DEIGEN_DONT_ALIGN) 
+
 find_package(Pangolin REQUIRED)
 
 #include(${CMAKE_CURRENT_SOURCE_DIR}/Sophus/CMakeLists.txt)
@@ -36,7 +49,6 @@ find_package(Pangolin REQUIRED)
 include_directories(
 ${PROJECT_SOURCE_DIR}
 ${PROJECT_SOURCE_DIR}/Sophus
-${EIGEN3_INCLUDE_DIR}
 )
 
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
@@ -88,7 +100,7 @@ DBoW2/DBoW2/ORBVocabulary.h
 
 target_link_libraries(${PROJECT_NAME}
 ${OpenCV_LIBS}
-${EIGEN3_LIBS}
+Eigen3::Eigen
 ${Pangolin_LIBRARIES}
 ${PROJECT_SOURCE_DIR}/DBoW2/lib/libDBoW2.so
 -lboost_serialization

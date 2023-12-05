@@ -1,11 +1,12 @@
 use std::fmt;
 use cxx::{UniquePtr, let_cxx_string};
-use dvcore::{matrix::DVMatrix, config::{GLOBAL_PARAMS, SYSTEM_SETTINGS}};
-use log::{info, warn};
+use log::info;
+use dvcore::{matrix::DVMatrix, config::{SETTINGS, SYSTEM}};
+use logging_timer::time;
 
 lazy_static! {
     pub static ref VOCABULARY: DVVocabulary = {
-        let filename = GLOBAL_PARAMS.get::<String>(SYSTEM_SETTINGS, "vocabulary_file");
+        let filename = SETTINGS.get::<String>(SYSTEM, "vocabulary_file");
         DVVocabulary::load(filename)
     };
 }
@@ -18,19 +19,20 @@ impl DVVocabulary {
     pub fn access(&self) {}
     pub fn load(filename: String) -> Self {
         let_cxx_string!(file = filename.clone());
-        info!("Loading vocabulary");
+        info!("Loading vocabulary...");
 
         Self {
             vocabulary: dvos3binding::ffi::load_vocabulary_from_text_file(&file),
             filename,
         }
     }
-    pub fn transform(&self, descriptors: &DVMatrix, bow: & mut BoW) {
-        //TODO...might be unnecessary clone
-        let mut bla: dvos3binding::ffi::WrapBindCVMat = descriptors.clone().into();
 
+    pub fn transform(&self, descriptors: &DVMatrix, bow: & mut BoW) {
+        let descriptors2: dvos3binding::ffi::WrapBindCVMat = descriptors.into();
+
+        // TODO (timing) ... this takes 24ms, need to compare to ORBSLAM
         self.vocabulary.transform(
-            &mut bla,
+            & descriptors2,
             bow.bow_vec.pin_mut(),
             bow.feat_vec.pin_mut(),
             4
@@ -40,7 +42,6 @@ impl DVVocabulary {
 
 
 pub struct BoW {
-    // BoW
     bow_vec: UniquePtr<dvos3binding::ffi::BowVector>, // mBowVec
     feat_vec: UniquePtr<dvos3binding::ffi::FeatureVector>, // mFeatVec
 }
@@ -52,7 +53,7 @@ impl BoW {
         }
     }
     pub fn clone(&self) -> Self {
-        // Sofiya: I am not sure this is thread-safe or that it works...
+        // TODO (mvp): I am not sure this is thread-safe or that it works...
         Self {
             bow_vec: self.bow_vec.clone(),
             feat_vec: self.feat_vec.clone(),

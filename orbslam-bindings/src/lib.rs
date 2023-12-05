@@ -134,7 +134,7 @@ pub mod ffi {
     #[derive(Debug, Clone)]
     pub struct Pose {
         pub translation: [f32;3],
-        pub rotation: [f32;4]
+        pub rotation: [[f32; 3]; 3]
     }
 
     #[derive(Debug, Clone)]
@@ -183,6 +183,11 @@ pub mod ffi {
         fn extract_rust(
             self: Pin<&mut ORBextractor>,
             image: &WrapBindCVMat,
+            keypoints: &mut WrapBindCVKeyPoints,
+            descriptors: &mut WrapBindCVMat
+        ) -> i32;
+        fn extract2(
+            self: Pin<&mut ORBextractor>,
             keypoints: &mut WrapBindCVKeyPoints,
             descriptors: &mut WrapBindCVMat
         ) -> i32;
@@ -263,7 +268,7 @@ pub mod ffi {
     }
 }
 
-// Sofiya: Need to make sure these are actually safe
+// TODO (memory): Need to make sure these are actually safe
 // They should be ok as long as they are only used within a UniquePtr.
 // But can we enforce using them in a UniquePtr?
 // These are needed because:

@@ -1,12 +1,11 @@
 // Map implementation
-// Contains map data structures + logic for reading/writing and the map actor
+// Contains map data structures + logic for reading/writing
 
-pub mod map_actor;
 pub mod map;
 
 pub mod keyframe;
 pub mod mappoint;
 pub mod pose;
-pub mod misc; //BowDB
+pub mod misc;
 pub mod features;
 pub mod bow;

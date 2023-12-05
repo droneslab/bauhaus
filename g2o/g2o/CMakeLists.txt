@@ -1,4 +1,4 @@
-CMAKE_MINIMUM_REQUIRED(VERSION 2.6)
+cmake_minimum_required (VERSION 3.0)
 SET(CMAKE_LEGACY_CYGWIN_WIN32 0)
 
 PROJECT(g2o)
@@ -62,28 +62,33 @@ ENDIF(OPENMP_FOUND AND G2O_USE_OPENMP)
 # Sofiya: Removed -march=native, based on https://github.com/raulmur/ORB_SLAM2/issues/341 
 # Sofiya: Removed -O3, set cmake build type to be debug or release in build.rs instead
 SET(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE}")
-SET(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE}")
+SET(CMAKE_C_FLAGS_RELEASE  "${CMAKE_C_FLAGS_RELEASE}") 
 
 # activate warnings !!!
 SET(g2o_C_FLAGS "${g2o_C_FLAGS} -Wall -W")
 SET(g2o_CXX_FLAGS "${g2o_CXX_FLAGS} -Wall -W")
 
 # specifying compiler flags
-SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${g2o_CXX_FLAGS}")
-SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${g2o_C_FLAGS}")
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g ${g2o_CXX_FLAGS}") # -std=c++17
+SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g ${g2o_C_FLAGS}")
 
 # Find Eigen3
-SET(EIGEN3_INCLUDE_DIR ${G2O_EIGEN3_INCLUDE})
-FIND_PACKAGE(Eigen3 3.1.0 REQUIRED)
-IF(EIGEN3_FOUND)
-  SET(G2O_EIGEN3_INCLUDE ${EIGEN3_INCLUDE_DIR} CACHE PATH "Directory of Eigen3")
-ELSE(EIGEN3_FOUND)
-  SET(G2O_EIGEN3_INCLUDE "" CACHE PATH "Directory of Eigen3")
-ENDIF(EIGEN3_FOUND)
+# Sofiya: Downgrading to 3.2, don't use Eigen's custom alignment (related to march=native issues)
+SET(EIGEN3_INCLUDE_DIR "$ENV{EIGEN3_INCLUDE_DIR}" )
+find_package (Eigen3 3.2 REQUIRED NO_MODULE)
+add_definitions(-DEIGEN_DONT_ALIGN) 
 
-find_package(OpenCV 4.4)
+#SET(EIGEN3_INCLUDE_DIR ${G2O_EIGEN3_INCLUDE})
+#FIND_PACKAGE(Eigen3 3.1.0 REQUIRED)
+#IF(EIGEN3_FOUND)
+#  SET(G2O_EIGEN3_INCLUDE ${EIGEN3_INCLUDE_DIR} CACHE PATH "Directory of Eigen3")
+#ELSE(EIGEN3_FOUND)
+#  SET(G2O_EIGEN3_INCLUDE "" CACHE PATH "Directory of Eigen3")
+#ENDIF(EIGEN3_FOUND)
+
+find_package(OpenCV 4.5)
    if(NOT OpenCV_FOUND)
-      message(FATAL_ERROR "OpenCV > 4.4 not found.")
+      message(FATAL_ERROR "OpenCV > 4.5 not found.")
    endif()
 
 MESSAGE("OPENCV VERSION:")
@@ -99,7 +104,7 @@ ${g2o_SOURCE_DIR}/core
 ${g2o_SOURCE_DIR}/types
 ${g2o_SOURCE_DIR}/stuff 
 ${g2o_SOURCE_DIR}/rust
-${G2O_EIGEN3_INCLUDE})
+)
 
 # Include the subdirectories
 ADD_LIBRARY(g2o ${G2O_LIB_TYPE}
@@ -203,5 +208,6 @@ g2o/rust/rust_helper.cpp
 )
 
 target_link_libraries(g2o
+Eigen3::Eigen
 ${OpenCV_LIBS}
 )
