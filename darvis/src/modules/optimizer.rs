@@ -826,52 +826,61 @@ pub fn optimize_pose(frame: &mut Frame<InitialFrame>, map: &ReadOnlyMap<Map>) ->
     let mut initial_correspondences = 0;
     let mut mp_indexes = vec![];
 
-    for i in 0..frame.features.num_keypoints as u32 {
-        if frame.mappoint_matches.get(&i).is_none() {
-            continue;
-        }
-        let mp_id = frame.mappoint_matches.get(&i).unwrap().0;
-
-        let (keypoint, _) = &frame.features.get_keypoint(i as usize);
-        mp_indexes.push(i);
-
-        match sensor.frame() {
-            FrameSensor::Stereo => {
-                // Stereo observations
-                todo!("Stereo");
-                // let edge = optimizer.create_edge_stereo(
-                //     keypoint.octave(), keypoint.pt().x, keypoint.pt().y,
-                //    frame.keypoints_data.mv_right.get(mp_id).unwrap(),
-                //     self.inv_level_sigma2[keypoint.octave() as usize]
-                // );
-
-                // {
-                //     let map_read_lock = map.read();
-                //     let position = &map_read_lock.mappoints.get(mp_id).unwrap().position;
-                //     optimizer.add_edge_stereo(
-                //         i as i32, edge.clone(), (position).into()
-                //     );
-                // }
-            },
-            _ => {
-                // Mono observations
-                frame.set_mp_outlier(& (mp_id as u32), false);
-                let map_read_lock = map.read();
-                let position = &map_read_lock.mappoints.get(&mp_id).unwrap().position;
-                optimizer.pin_mut().add_edge_monocular_unary(
-                    true, 0, keypoint.octave(), keypoint.pt().x, keypoint.pt().y,
-                    INV_LEVEL_SIGMA2[keypoint.octave() as usize],
-                    (position).into(),
-                    mp_id,
-                    *TH_HUBER_MONO
-                );
-                // TODO (mvp): below code sets edge's camera to the frame's camera
-                // but are we sure we need it?
-                // edge->pCamera = pFrame->mpCamera;
+    {
+        // Take lock to construct factor graph
+        let map_read_lock = map.read();
+        for i in 0..frame.features.num_keypoints as u32 {
+            if frame.mappoint_matches.get(&i).is_none() {
+                continue;
             }
-        };
+            let mp_id = frame.mappoint_matches.get(&i).unwrap().0;
+            let position = match map_read_lock.mappoints.get(&mp_id) {
+                Some(mp) => mp.position,
+                None => {
+                    frame.delete_mappoint_match(i);
+                    continue;
+                },
+            };
 
-        initial_correspondences += 1;
+            let (keypoint, _) = &frame.features.get_keypoint(i as usize);
+            mp_indexes.push(i);
+
+            match sensor.frame() {
+                FrameSensor::Stereo => {
+                    // Stereo observations
+                    todo!("Stereo");
+                    // let edge = optimizer.create_edge_stereo(
+                    //     keypoint.octave(), keypoint.pt().x, keypoint.pt().y,
+                    //    frame.keypoints_data.mv_right.get(mp_id).unwrap(),
+                    //     self.inv_level_sigma2[keypoint.octave() as usize]
+                    // );
+
+                    // {
+                    //     let map_read_lock = map.read();
+                    //     let position = &map_read_lock.mappoints.get(mp_id).unwrap().position;
+                    //     optimizer.add_edge_stereo(
+                    //         i as i32, edge.clone(), (position).into()
+                    //     );
+                    // }
+                },
+                _ => {
+                    // Mono observations
+                    frame.set_mp_outlier(& (mp_id as u32), false);
+                    optimizer.pin_mut().add_edge_monocular_unary(
+                        true, 0, keypoint.octave(), keypoint.pt().x, keypoint.pt().y,
+                        INV_LEVEL_SIGMA2[keypoint.octave() as usize],
+                        (position).into(),
+                        mp_id,
+                        *TH_HUBER_MONO
+                    );
+                    // TODO (mvp): below code sets edge's camera to the frame's camera
+                    // but are we sure we need it?
+                    // edge->pCamera = pFrame->mpCamera;
+                }
+            };
+
+            initial_correspondences += 1;
+        }
     }
 
     if initial_correspondences < 3 {
@@ -1104,73 +1113,6 @@ pub fn local_bundle_adjustment(
     locked_map: &ReadOnlyMap<Map>, keyframe_id: Id
 ) -> BundleAdjustmentResult {
     // void Optimizer::LocalBundleAdjustment(KeyFrame *pKF, bool* pbStopFlag, Map* pMap, int& num_fixedKF, int& num_OptKF, int& num_MPs, int& num_edges)
-    let mut local_keyframes = vec![keyframe.id()];
-    let mut current_map_id;
-    let mut local_ba_for_kf;
-    {
-        let map = locked_map.read();
-
-        // Local KeyFrames: First Breath Search from Current Keyframe
-        let keyframe = map.keyframes.get(&keyframe_id).unwrap();
-        local_keyframes = vec![keyframe.id()];
-        let current_map_id = map.id;
-        local_ba_for_kf = HashMap::new();
-        local_ba_for_kf.insert(keyframe.id(), keyframe.id());
-
-        for kf_id in keyframe.get_covisibility_keyframes(i32::MAX) {
-            let kf = map.keyframes.get(&kf_id).unwrap();
-            local_ba_for_kf.insert(kf_id, keyframe.id());
-            if kf.full_kf_info.origin_map_id == current_map_id {
-                local_keyframes.push(kf_id);
-            }
-        }
-    }
-
-    // Local MapPoints seen in Local KeyFrames
-    let mut num_fixed_kf = 0;
-    let mut local_mappoints = Vec::<Id>::new();
-    let mut local_ba_for_mp = HashMap::new();
-
-    for kf_id in &local_keyframes {
-        let map = locked_map.read();
-        let keyframe = map.keyframes.get(&keyframe_id).unwrap();
-        let kf = map.keyframes.get(&kf_id).unwrap();
-        if kf.id() == map.initial_kf_id {
-            num_fixed_kf += 1;
-        }
-        for (_, (mp_id, _)) in &kf.mappoint_matches {
-            let mp = map.mappoints.get(&mp_id).unwrap();
-            if mp.origin_map_id == current_map_id {
-                local_mappoints.push(*mp_id);
-                local_ba_for_mp.insert(mp_id, keyframe.id());
-            }
-        }
-    }
-
-    // Fixed Keyframes. Keyframes that see Local MapPoints but that are not Local Keyframes
-    let mut fixed_cameras = Vec::new();
-    let mut ba_fixed_for_kf = HashSet::new();
-    for mp_id in &local_mappoints {
-        let map = locked_map.read();
-        let mp = map.mappoints.get(&mp_id).unwrap();
-        for (kf_id, (_left_index, _right_index)) in mp.get_observations() {
-            let kf = map.keyframes.get(&kf_id).unwrap();
-            let local_ba = match local_ba_for_kf.contains_key(kf_id) {
-                true => *local_ba_for_kf.get(kf_id).unwrap() != keyframe_id,
-                false => true
-            };
-            if local_ba && !ba_fixed_for_kf.contains(kf_id) {
-                ba_fixed_for_kf.insert(kf_id);
-                if kf.full_kf_info.origin_map_id == current_map_id {
-                    fixed_cameras.push(*kf_id);
-                }
-            }
-        }
-    }
-    if fixed_cameras.len() + num_fixed_kf == 0 {
-        warn!("LM_LBA: There are 0 fixed KF in the optimizations, LBA aborted");
-    }
-
     // Setup optimizer
     let sensor: Sensor = SETTINGS.get(SYSTEM, "sensor");
     let fx= SETTINGS.get::<f64>(CAMERA, "fx");
@@ -1180,164 +1122,224 @@ pub fn local_bundle_adjustment(
     let camera_param = [fx, fy, cx,cy];
     let mut optimizer = g2o::ffi::new_sparse_optimizer(1, camera_param);
 
-    match sensor.is_imu() {
-        true => {
-            todo!("IMU");
-            // Need to put this in the C++ constructor for BridgeSparseOptimizer::BridgeSparseOptimizer
-            // if (pMap->IsInertial())
-            //     solver->setUserLambdaInit(100.0);
-        },
-        false => {}
-    }
-
-    // TODO (design): mbAbortBA 
-    // if(pbStopFlag)
-    //     optimizer.setForceStopFlag(pbStopFlag);
-
-    // Set Local KeyFrame vertices
-    let mut vertex_id = 1;
-    let mut kf_vertex_ids = HashMap::new();
-    for kf_id in &local_keyframes {
-        let map = locked_map.read();
-        let kf = map.keyframes.get(kf_id).unwrap();
-        let set_fixed = *kf_id == map.initial_kf_id;
-        optimizer.pin_mut().add_frame_vertex(vertex_id, (*kf.pose.as_ref().unwrap()).into(), set_fixed);
-        kf_vertex_ids.insert(*kf_id, vertex_id);
-        vertex_id += 1;
-    }
-
-    // Set Fixed KeyFrame vertices
-    for kf_id in &fixed_cameras {
-        let map = locked_map.read();
-        let kf = map.keyframes.get(kf_id).unwrap();
-        optimizer.pin_mut().add_frame_vertex(vertex_id, (*kf.pose.as_ref().unwrap()).into(), true);
-        kf_vertex_ids.insert(*kf_id, vertex_id);
-        vertex_id += 1;
-    }
-
-    // Set MapPoint vertices
     let mut mp_vertex_ids = HashMap::new();
     let all_edges_stereo = Vec::<(Id, UniquePtr<EdgeSE3ProjectXYZ>)>::new(); //vpEdgesStereo
     let all_edges_body = Vec::<(Id, UniquePtr<EdgeSE3ProjectXYZ>)>::new(); // vpEdgesBody
+    let mut kf_vertex_ids = HashMap::new();
 
-    for mp_id in &local_mappoints {
+    {
+        // Construct factor graph with read lock, but don't have to have lock to optimize.
         let map = locked_map.read();
-        let mp = map.mappoints.get(mp_id).unwrap();
 
-        optimizer.pin_mut().add_mappoint_vertex(
-            vertex_id,
-            DVPose::new(*mp.position, Matrix3::identity()).into() // create pose out of translation only
-        );
-        mp_vertex_ids.insert(*mp_id, vertex_id);
+        // Local KeyFrames: First Breath Search from Current Keyframe
+        let keyframe = map.keyframes.get(&keyframe_id).unwrap();
+        let mut local_keyframes = vec![keyframe.id()];
+        let current_map_id = map.id;
+        let mut local_ba_for_kf = HashMap::new();
+        local_ba_for_kf.insert(keyframe.id(), keyframe.id());
 
-        let observations = mp.get_observations();
-        // Set edges
-        for (kf_id, (left_index, _right_index)) in observations {
-            let kf = map.keyframes.get(kf_id).unwrap();
-            if kf.full_kf_info.origin_map_id != current_map_id {
-                continue
+        for kf_id in keyframe.get_covisibility_keyframes(i32::MAX) {
+            let kf = map.keyframes.get(&kf_id).unwrap();
+            local_ba_for_kf.insert(kf_id, keyframe.id());
+            if kf.full_kf_info.origin_map_id == current_map_id {
+                local_keyframes.push(kf_id);
             }
+        }
 
+        // Local MapPoints seen in Local KeyFrames
+        let mut num_fixed_kf = 0;
+        let mut local_mappoints = Vec::<Id>::new();
+        let mut local_ba_for_mp = HashMap::new();
+        for kf_id in &local_keyframes {
+            let keyframe = map.keyframes.get(&keyframe_id).unwrap();
+            let kf = map.keyframes.get(&kf_id).unwrap();
+            if kf.id() == map.initial_kf_id {
+                num_fixed_kf += 1;
+            }
+            for (_, (mp_id, _)) in &kf.mappoint_matches {
+                let mp = map.mappoints.get(&mp_id).unwrap();
+                if mp.origin_map_id == current_map_id {
+                    local_mappoints.push(*mp_id);
+                    local_ba_for_mp.insert(mp_id, keyframe.id());
+                }
+            }
+        }
 
-            match sensor.frame() {
-                FrameSensor::Stereo => {
-                    todo!("Stereo");
-                    // if *left_index != -1 && kf.features.get_mv_right(*left_index as usize).unwrap() >= 0.0 {
-                    //     // Stereo observation
-                    //     // This is still the left observation, but because it is stereo it needs to be 
-
-                    //     // const cv::KeyPoint &kpUn = pKFi->mvKeysUn[leftIndex];
-                    //     // Eigen::Matrix<double,3,1> obs;
-                    //     // const float kp_ur = pKFi->mvuRight[get<0>(mit->second)];
-                    //     // obs << kpUn.pt().x, kpUn.pt().y, kp_ur;
-
-                    //     // g2o::EdgeStereoSE3ProjectXYZ* e = new g2o::EdgeStereoSE3ProjectXYZ();
-
-                    //     // e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(id)));
-                    //     // e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(pKFi->mnId)));
-                    //     // e->setMeasurement(obs);
-                    //     // const float &invSigma2 = pKFi->mvInvLevelSigma2[kpUn.octave()];
-                    //     // Eigen::Matrix3d Info = Eigen::Matrix3d::Identity()*invSigma2;
-                    //     // e->setInformation(Info);
-
-                    //     // g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
-                    //     // e->setRobustKernel(rk);
-                    //     // rk->setDelta(thHuberStereo);
-
-                    //     // e->fx = pKFi->fx;
-                    //     // e->fy = pKFi->fy;
-                    //     // e->cx = pKFi->cx;
-                    //     // e->cy = pKFi->cy;
-                    //     // e->bf = pKFi->mbf;
-
-                    //     // optimizer.addEdge(e);
-                    //     // vpEdgesStereo.push_back(e);
-
-                    //     // nEdges++;
-                    // } else {
-                    //     warn!("Local bundle adjustment, stereo observation... Pretty sure this line shouldn't be hit.");
-                    // }
-
-                    // // if(pKFi->mpCamera2){
-                    // //     int rightIndex = get<1>(mit->second);
-
-                    // //     if(rightIndex != -1 ){
-                    // //         rightIndex -= pKFi->NLeft;
-
-                    // //         Eigen::Matrix<double,2,1> obs;
-                    // //         cv::KeyPoint kp = pKFi->mvKeysRight[rightIndex];
-                    // //         obs << kp.pt().x, kp.pt().y;
-
-                    // //         ORB_SLAM3::EdgeSE3ProjectXYZToBody *e = new ORB_SLAM3::EdgeSE3ProjectXYZToBody();
-
-                    // //         e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(id)));
-                    // //         e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(pKFi->mnId)));
-                    // //         e->setMeasurement(obs);
-                    // //         const float &invSigma2 = pKFi->mvInvLevelSigma2[kp.octave()];
-                    // //         e->setInformation(Eigen::Matrix2d::Identity()*invSigma2);
-
-                    // //         g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
-                    // //         e->setRobustKernel(rk);
-                    // //         rk->setDelta(thHuberMono);
-
-                    // //         Sophus::SE3f Trl = pKFi-> GetRelativePoseTrl();
-                    // //         e->mTrl = g2o::SE3Quat(Trl.unit_quaternion().cast<double>(), Trl.translation().cast<double>());
-
-                    // //         e->pCamera = pKFi->mpCamera2;
-
-                    // //         optimizer.addEdge(e);
-                    // //         vpEdgesBody.push_back(e);
-                    // //         vpEdgeKFBody.push_back(pKFi);
-                    // //         vpMapPointEdgeBody.push_back(pMP);
-
-                    // //         nEdges++;
-                    // //     }
-                    // // }
-                },
-                _ => {
-                    // Monocular observation
-                    if *left_index != -1 && kf.features.get_mv_right(*left_index as usize).is_none() {
-                        let (kp_un, _) = kf.features.get_keypoint(*left_index as usize);
-                        let kf_vertex = *kf_vertex_ids.get(&kf.id()).unwrap();
-                        // debug!("Adding edge {} -> {}", vertex_id, kf_vertex);
-
-                        optimizer.pin_mut().add_edge_monocular_binary(
-                            false, vertex_id, kf_vertex,
-                            kp_un.pt().x, kp_un.pt().y,
-                            INV_LEVEL_SIGMA2[kp_un.octave() as usize],
-                            *TH_HUBER_MONO
-                        );
-
-                        // TODO (mvp): below code sets edge's camera to the frame's camera
-                        // but are we sure we need it?
-                        // edge->pCamera = pFrame->mpCamera;
-                    } else {
-                        warn!("Local bundle adjustment, monocular observation... Pretty sure this line shouldn't be hit.");
+        // Fixed Keyframes. Keyframes that see Local MapPoints but that are not Local Keyframes
+        let mut fixed_cameras = Vec::new();
+        let mut ba_fixed_for_kf = HashSet::new();
+        for mp_id in &local_mappoints {
+            let mp = map.mappoints.get(&mp_id).unwrap();
+            for (kf_id, (_left_index, _right_index)) in mp.get_observations() {
+                let kf = map.keyframes.get(&kf_id).unwrap();
+                let local_ba = match local_ba_for_kf.contains_key(kf_id) {
+                    true => *local_ba_for_kf.get(kf_id).unwrap() != keyframe_id,
+                    false => true
+                };
+                if local_ba && !ba_fixed_for_kf.contains(kf_id) {
+                    ba_fixed_for_kf.insert(kf_id);
+                    if kf.full_kf_info.origin_map_id == current_map_id {
+                        fixed_cameras.push(*kf_id);
                     }
                 }
             }
         }
-        vertex_id += 1;
+        if fixed_cameras.len() + num_fixed_kf == 0 {
+            warn!("LM_LBA: There are 0 fixed KF in the optimizations, LBA aborted");
+        }
+
+
+        match sensor.is_imu() {
+            true => {
+                todo!("IMU");
+                // Need to put this in the C++ constructor for BridgeSparseOptimizer::BridgeSparseOptimizer
+                // if (pMap->IsInertial())
+                //     solver->setUserLambdaInit(100.0);
+            },
+            false => {}
+        }
+
+        // TODO (design): mbAbortBA 
+        // if(pbStopFlag)
+        //     optimizer.setForceStopFlag(pbStopFlag);
+
+        // Set Local KeyFrame vertices
+        let mut vertex_id = 1;
+        for kf_id in &local_keyframes {
+            let kf = map.keyframes.get(kf_id).unwrap();
+            let set_fixed = *kf_id == map.initial_kf_id;
+            optimizer.pin_mut().add_frame_vertex(vertex_id, (*kf.pose.as_ref().unwrap()).into(), set_fixed);
+            kf_vertex_ids.insert(*kf_id, vertex_id);
+            vertex_id += 1;
+        }
+
+        // Set Fixed KeyFrame vertices
+        for kf_id in &fixed_cameras {
+            let kf = map.keyframes.get(kf_id).unwrap();
+            optimizer.pin_mut().add_frame_vertex(vertex_id, (*kf.pose.as_ref().unwrap()).into(), true);
+            kf_vertex_ids.insert(*kf_id, vertex_id);
+            vertex_id += 1;
+        }
+
+        // Set MapPoint vertices
+        for mp_id in &local_mappoints {
+            let mp = map.mappoints.get(mp_id).unwrap();
+
+            optimizer.pin_mut().add_mappoint_vertex(
+                vertex_id,
+                DVPose::new(*mp.position, Matrix3::identity()).into() // create pose out of translation only
+            );
+            mp_vertex_ids.insert(*mp_id, vertex_id);
+
+            let observations = mp.get_observations();
+            // Set edges
+            for (kf_id, (left_index, _right_index)) in observations {
+                let kf = map.keyframes.get(kf_id).unwrap();
+                if kf.full_kf_info.origin_map_id != current_map_id {
+                    continue
+                }
+
+
+                match sensor.frame() {
+                    FrameSensor::Stereo => {
+                        todo!("Stereo");
+                        // if *left_index != -1 && kf.features.get_mv_right(*left_index as usize).unwrap() >= 0.0 {
+                        //     // Stereo observation
+                        //     // This is still the left observation, but because it is stereo it needs to be 
+
+                        //     // const cv::KeyPoint &kpUn = pKFi->mvKeysUn[leftIndex];
+                        //     // Eigen::Matrix<double,3,1> obs;
+                        //     // const float kp_ur = pKFi->mvuRight[get<0>(mit->second)];
+                        //     // obs << kpUn.pt().x, kpUn.pt().y, kp_ur;
+
+                        //     // g2o::EdgeStereoSE3ProjectXYZ* e = new g2o::EdgeStereoSE3ProjectXYZ();
+
+                        //     // e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(id)));
+                        //     // e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(pKFi->mnId)));
+                        //     // e->setMeasurement(obs);
+                        //     // const float &invSigma2 = pKFi->mvInvLevelSigma2[kpUn.octave()];
+                        //     // Eigen::Matrix3d Info = Eigen::Matrix3d::Identity()*invSigma2;
+                        //     // e->setInformation(Info);
+
+                        //     // g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
+                        //     // e->setRobustKernel(rk);
+                        //     // rk->setDelta(thHuberStereo);
+
+                        //     // e->fx = pKFi->fx;
+                        //     // e->fy = pKFi->fy;
+                        //     // e->cx = pKFi->cx;
+                        //     // e->cy = pKFi->cy;
+                        //     // e->bf = pKFi->mbf;
+
+                        //     // optimizer.addEdge(e);
+                        //     // vpEdgesStereo.push_back(e);
+
+                        //     // nEdges++;
+                        // } else {
+                        //     warn!("Local bundle adjustment, stereo observation... Pretty sure this line shouldn't be hit.");
+                        // }
+
+                        // // if(pKFi->mpCamera2){
+                        // //     int rightIndex = get<1>(mit->second);
+
+                        // //     if(rightIndex != -1 ){
+                        // //         rightIndex -= pKFi->NLeft;
+
+                        // //         Eigen::Matrix<double,2,1> obs;
+                        // //         cv::KeyPoint kp = pKFi->mvKeysRight[rightIndex];
+                        // //         obs << kp.pt().x, kp.pt().y;
+
+                        // //         ORB_SLAM3::EdgeSE3ProjectXYZToBody *e = new ORB_SLAM3::EdgeSE3ProjectXYZToBody();
+
+                        // //         e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(id)));
+                        // //         e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(pKFi->mnId)));
+                        // //         e->setMeasurement(obs);
+                        // //         const float &invSigma2 = pKFi->mvInvLevelSigma2[kp.octave()];
+                        // //         e->setInformation(Eigen::Matrix2d::Identity()*invSigma2);
+
+                        // //         g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
+                        // //         e->setRobustKernel(rk);
+                        // //         rk->setDelta(thHuberMono);
+
+                        // //         Sophus::SE3f Trl = pKFi-> GetRelativePoseTrl();
+                        // //         e->mTrl = g2o::SE3Quat(Trl.unit_quaternion().cast<double>(), Trl.translation().cast<double>());
+
+                        // //         e->pCamera = pKFi->mpCamera2;
+
+                        // //         optimizer.addEdge(e);
+                        // //         vpEdgesBody.push_back(e);
+                        // //         vpEdgeKFBody.push_back(pKFi);
+                        // //         vpMapPointEdgeBody.push_back(pMP);
+
+                        // //         nEdges++;
+                        // //     }
+                        // // }
+                    },
+                    _ => {
+                        // Monocular observation
+                        if *left_index != -1 && kf.features.get_mv_right(*left_index as usize).is_none() {
+                            let (kp_un, _) = kf.features.get_keypoint(*left_index as usize);
+                            let kf_vertex = *kf_vertex_ids.get(&kf.id()).unwrap();
+                            // debug!("Adding edge {} -> {}", vertex_id, kf_vertex);
+
+                            optimizer.pin_mut().add_edge_monocular_binary(
+                                false, vertex_id, kf_vertex,
+                                kp_un.pt().x, kp_un.pt().y,
+                                INV_LEVEL_SIGMA2[kp_un.octave() as usize],
+                                *TH_HUBER_MONO
+                            );
+
+                            // TODO (mvp): below code sets edge's camera to the frame's camera
+                            // but are we sure we need it?
+                            // edge->pCamera = pFrame->mpCamera;
+                        } else {
+                            warn!("Local bundle adjustment, monocular observation... Pretty sure this line shouldn't be hit.");
+                        }
+                    }
+                }
+            }
+            vertex_id += 1;
+        }
     }
 
     // Optimize

@@ -382,7 +382,6 @@ impl DarvisTrackingBack {
         Ok(())
     }
 
-    #[time("TrackingBackend::{}")]
     fn update_trajectory_in_logs(
         &mut self, //current_frame: &Frame<InitialFrame>
         // &mut self, current_pose: DVPose, ref_kf_id: Id, mappoint_matches: HashMap<u32, (Id, bool)>, timestamp: Timestamp
@@ -424,18 +423,14 @@ impl DarvisTrackingBack {
 
         current_frame.compute_bow();
         let nmatches;
-        let increase_found;
         {
             let map_read_lock = self.map.read();
             let ref_kf = map_read_lock.keyframes.get(&self.ref_kf_id.unwrap()).unwrap();
 
-            (nmatches, increase_found) = orbmatcher::search_by_bow_f(ref_kf, current_frame, true, 0.7)?;
+            nmatches = orbmatcher::search_by_bow_f(ref_kf, current_frame, true, 0.7)?;
         }
 
         println!("track reference keyframe matches {}", current_frame.mappoint_matches.len());
-
-        let map_msg = MapWriteMsg::increase_found(increase_found);
-        self.actor_channels.send(MAP_ACTOR, Box::new(map_msg));
 
         if nmatches < 15 {
             warn!("track_reference_keyframe has fewer than 15 matches = {}!!\n", nmatches);
@@ -490,7 +485,7 @@ impl DarvisTrackingBack {
 
         let mut matches = orbmatcher::search_by_projection_with_threshold(
             current_frame,
-            self.last_frame.as_ref().unwrap(),
+            self.last_frame.as_mut().unwrap(),
             th,
             self.sensor.is_mono(),
             &self.map,
@@ -505,7 +500,7 @@ impl DarvisTrackingBack {
             current_frame.clear_mappoints();
             matches = orbmatcher::search_by_projection_with_threshold(
                 current_frame,
-                self.last_frame.as_ref().unwrap(),
+                self.last_frame.as_mut().unwrap(),
                 2 * th,
                 self.sensor.is_mono(),
                 &self.map,
@@ -643,10 +638,11 @@ impl DarvisTrackingBack {
 
         self.matches_inliers = 0;
         // Update MapPoints Statistics
-        let mut increase_found = Vec::new();
         for (index, (mp_id, _)) in &current_frame.mappoint_matches {
             if !current_frame.is_mp_outlier(&index) {
-                increase_found.push((*mp_id, 1));
+                self.actor_channels.send(MAP_ACTOR, Box::new(
+                    MapWriteMsg::increase_found(*mp_id, 1)
+                ));
 
                 if self.localization_only_mode {
                     let map_read_lock = self.map.read();
@@ -671,8 +667,6 @@ impl DarvisTrackingBack {
         // send this in local mapper message?
 
         println!("Matches in track local map {}", self.matches_inliers);
-        let map_msg = MapWriteMsg::increase_found(increase_found);
-        self.actor_channels.send(MAP_ACTOR, Box::new(map_msg));
 
         // Decide if the tracking was succesful
         // More restrictive if there was a relocalization recently
@@ -710,11 +704,15 @@ impl DarvisTrackingBack {
             true => &current_frame,
             false => self.last_frame.as_ref().unwrap() // Using lastframe since current frame has no matches yet
         };
-        for (_, (mp_id, _)) in &frame.mappoint_matches {
+        for (idx, (mp_id, _)) in &frame.mappoint_matches {
             let map_read_lock = self.map.read();
-            let mp = map_read_lock.mappoints.get(&mp_id).unwrap();
-            for kf_id in mp.get_observations().keys() {
-                *kf_counter.entry(*kf_id).or_insert(0) += 1;
+            if let Some(mp) = map_read_lock.mappoints.get(&mp_id) {
+                for kf_id in mp.get_observations().keys() {
+                    *kf_counter.entry(*kf_id).or_insert(0) += 1;
+                }
+            } else {
+                // frame.mappoint_matches.remove(&idx);
+                // TODO (MVP) ... remove match here!
             }
         }
 
@@ -793,11 +791,9 @@ impl DarvisTrackingBack {
     #[time("TrackingBackend::{}")]
     fn search_local_points(&mut self, current_frame: &mut Frame<InitialFrame>) {
         //void Tracking::SearchLocalPoints()
-        // let mut mps_to_increase_visible = Vec::new();
 
-        // Do not search map points already matched        
+        // Do not search map points already matched
         for (_, (id, _)) in &current_frame.mappoint_matches {
-//            mps_to_increase_visible.push(*id);
             self.actor_channels.send(MAP_ACTOR, Box::new(MapWriteMsg::increase_visible(*id)));
 
             self.last_frame_seen.insert(*id, current_frame.frame_id);
@@ -808,23 +804,28 @@ impl DarvisTrackingBack {
         // Project points in frame and check its visibility
         let mut to_match = 0;
         for mp_id in &self.local_mappoints {
-            if self.last_frame_seen.get(mp_id) == Some(&current_frame.frame_id) {
-                continue;
-            }
-            // Project (this fills MapPoint variables for matching)
-            let map_read_lock = self.map.read();
-            let (tracked_data_left, tracked_data_right) = current_frame.is_in_frustum(*mp_id, 0.5, &*map_read_lock);
-            if tracked_data_left.is_some() || tracked_data_right.is_some() {
-                // mps_to_increase_visible.push(*mp_id);
-                self.actor_channels.find(MAP_ACTOR).send(Box::new(MapWriteMsg::increase_visible(*mp_id))).unwrap();
+            match self.map.read().mappoints.get(mp_id) {
+                Some(mp) => {
+                    if self.last_frame_seen.get(mp_id) == Some(&current_frame.frame_id) {
+                        continue;
+                    }
+                    // Project (this fills MapPoint variables for matching)
+                    let (tracked_data_left, tracked_data_right) = current_frame.is_in_frustum(mp, 0.5);
+                    if tracked_data_left.is_some() || tracked_data_right.is_some() {
+                        self.actor_channels.find(MAP_ACTOR).send(Box::new(MapWriteMsg::increase_visible(*mp_id))).unwrap();
 
-                to_match += 1;
-            }
-            if let Some(d) = tracked_data_left {
-                self.track_in_view.insert(*mp_id, d);
-            }
-            if let Some(d) = tracked_data_right {
-                self.track_in_view_r.insert(*mp_id, d);
+                        to_match += 1;
+                    }
+                    if let Some(d) = tracked_data_left {
+                        self.track_in_view.insert(*mp_id, d);
+                    }
+                    if let Some(d) = tracked_data_right {
+                        self.track_in_view_r.insert(*mp_id, d);
+                    }
+                },
+                None => {
+                    continue;
+                }
             }
         }
 
@@ -854,7 +855,7 @@ impl DarvisTrackingBack {
 
             let matches = orbmatcher::search_by_projection(
                 current_frame,
-                &self.local_mappoints,
+                &mut self.local_mappoints,
                 th, 0.8,
                 &self.track_in_view, &self.track_in_view_r,
                 &self.map, self.sensor

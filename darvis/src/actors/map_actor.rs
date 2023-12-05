@@ -1,6 +1,6 @@
 use dvcore::{actor::{ActorChannels, ActorMessage, Actor}, matrix::DVVectorOfPoint3f};
 use log::{info, warn};
-use logging_timer::timer;
+use logging_timer::{timer, finish};
 
 use crate::{
     maplock::ReadWriteMap,
@@ -32,7 +32,6 @@ impl Actor for MapActor {
 
                 match msg.target {
                     MapWriteTarget::CreateInitialMap { mp_matches, p3d, initial_frame, current_frame } => {
-                        let _timer = timer!("MapActor::Total-CreateInitialMap");
                         // TODO (STEREO) - Add option to make the map monocular or stereo
 
                         let mut write_lock = actor.map.write();
@@ -51,11 +50,12 @@ impl Actor for MapActor {
                         };
                     },
                     MapWriteTarget::Map__Optimization { poses } => {
-                        let _timer = timer!("MapActor::Total-MapOptimization");
-                        actor.map.write().update_after_ba(poses, 0);
+                        // TODO (timing) ... 1.50 += 0.83
+                        let mut lock = actor.map.write();
+                        lock.update_after_ba(poses, 0);
                     },
                     MapWriteTarget::KeyFrame__New { kf } => {
-                        let _timer = timer!("MapActor::Total-NewKeyFrame");
+                        let _timer = timer!("MapActor::Total-insert_keyframe_to_map");
                         let kf_id = actor.map.write().insert_keyframe_to_map(kf, false);
                         info!("Created keyframe {}", kf_id);
                         // Tell local mapping to process keyframe
@@ -64,11 +64,15 @@ impl Actor for MapActor {
                         actor.actor_system.find(TRACKING_BACKEND).send(Box::new(KeyFrameIdMsg{kf_id})).unwrap();
                     },
                     MapWriteTarget::KeyFrame__Delete { id } => {
-                        let _timer = timer!("MapActor::Total-DeleteKeyFrame");
+                        let _timer = timer!("MapActor::Total-discard_keyframe");
                         actor.map.write().discard_keyframe(id);
                     },
+                    MapWriteTarget::MapPoint__New { mp , observations} => {
+                        // TODO (timing) ... 0.43 += 18.21
+                        let id = actor.map.write().insert_mappoint_to_map(mp, observations);
+                    },
                     MapWriteTarget::MapPoint__NewMany { mps, callback_actor } => {
-                        let _timer = timer!("MapActor::Total-NewManyMapPoints");
+                        let _timer = timer!("MapActor::Total-Many-insert_mappoint_to_map");
                         let mut map = actor.map.write();
                         for (mp, observations) in mps {
                             let _ = map.insert_mappoint_to_map(mp, observations);
@@ -78,32 +82,36 @@ impl Actor for MapActor {
                         actor.actor_system.send(&callback_actor, Box::new(LastKeyFrameUpdatedMsg{}));
                     },
                     MapWriteTarget::MapPoint__DiscardMany { ids } => {
+                        let _timer = timer!("MapActor::Total-Many-discard_mappoint");
                         for id in ids {
                             actor.map.write().discard_mappoint(&id);
                         }
                     },
-
-                    MapWriteTarget::MapPoint__IncreaseFound { mp_ids_and_nums } => {
-                        for (mp, n) in mp_ids_and_nums {
-                            actor.map.write().mappoints.get_mut(&mp).unwrap().increase_found(n);
+                    MapWriteTarget::MapPoint__Discard { id } => {
+                        // TODO (timing) ... 5.20 += 96.51
+                        actor.map.write().discard_mappoint(&id);
+                    },
+                    MapWriteTarget::MapPoint__IncreaseFound { id, amount } => {
+                        // TODO (timing) ... 0.00 += 0.02
+                        if let Some(mp) = actor.map.write().mappoints.get_mut(&id) {
+                            mp.increase_found(amount);
                         }
                     },
-                    MapWriteTarget::MapPoint__IncreaseVisible {id} => {//mp_ids} => {
-                        // let _timer = timer!("MapActor::TotalIncreaseVisible");
-                        // println!("Mappoint increase visible {}", mp_ids.len());
-                        // for mp_id in mp_ids {
-                            actor.map.write().mappoints.get_mut(&id).unwrap().increase_visible();
-                        // }
+                    MapWriteTarget::MapPoint__IncreaseVisible {id} => {
+                        // TODO (timing) ... 0.08 += 7.61
+                        if let Some(mp) = actor.map.write().mappoints.get_mut(&id) {
+                            mp.increase_visible();
+                        }
                     },
                     MapWriteTarget::MapPoint__AddObservation {mp_id, kf_id, index} => {
-                        let _timer = timer!("MapActor::Total-AddObservation");
+                        let _timer = timer!("MapActor::Total-add_observation");
                         let num_keypoints = actor.map.write().keyframes.get(&kf_id).expect(&format!("Could not get kf {}", kf_id)).features.num_keypoints;
                         let mut write = actor.map.write();
                         write.mappoints.get_mut(&mp_id).unwrap().add_observation(&kf_id, num_keypoints, index as u32);
                         write.keyframes.get_mut(&kf_id).unwrap().add_mappoint(index as u32, mp_id, false);
                     },
                     MapWriteTarget::MapPoint__Replace {mp_to_replace, mp} => {
-                        let _timer = timer!("MapActor::Total-ReplaceMapPoint");
+                        let _timer = timer!("MapActor::Total-replace_mappoint");
                         actor.map.write().replace_mappoint(mp_to_replace, mp);
                     },
                     MapWriteTarget::MapPoint__Pose{mp_id, pose} => {
@@ -141,10 +149,12 @@ enum MapWriteTarget {
     KeyFrame__Pose{kf_id: Id, pose: DVPose},
     Map__ResetActive{},
     Map__Optimization{poses: BundleAdjustmentResult},
+    MapPoint__New{mp: MapPoint<PrelimMapPoint>, observations: Vec<(Id, u32, usize)>},
     MapPoint__NewMany{mps: Vec<(MapPoint<PrelimMapPoint>, Vec<(Id, u32, usize)>)>, callback_actor: String},
     MapPoint__DiscardMany{ids: Vec<Id>},
+    MapPoint__Discard{id: Id},
     MapPoint__Replace{mp_to_replace: Id, mp: Id},
-    MapPoint__IncreaseFound{mp_ids_and_nums: Vec::<(Id, u32)>},
+    MapPoint__IncreaseFound{id: Id, amount: u32},
     MapPoint__IncreaseVisible{id: Id}, //mp_ids: Vec<Id>},
     MapPoint__AddObservation{mp_id: Id, kf_id: Id, index: usize},
     MapPoint__Pose{mp_id: Id, pose: DVPose},
@@ -203,14 +213,24 @@ impl MapWriteMsg {
             target: MapWriteTarget::MapPoint__NewMany {mps, callback_actor: callback_actor.to_string()},
         }
     }
+    pub fn create_one_mappoint(mp: MapPoint<PrelimMapPoint>, observations: Vec<(Id, u32, usize)>) -> Self {
+        Self {
+            target: MapWriteTarget::MapPoint__New {mp, observations}
+        }
+    }
     pub fn discard_many_mappoints(ids: Vec<Id>) -> Self {
         Self {
             target: MapWriteTarget::MapPoint__DiscardMany {ids},
         }
     }
-    pub fn increase_found(mp_ids_and_nums: Vec<(Id, u32)>) -> Self {
+    pub fn discard_one_mappoint(id: Id) -> Self {
         Self {
-            target: MapWriteTarget::MapPoint__IncreaseFound { mp_ids_and_nums },
+            target: MapWriteTarget::MapPoint__Discard { id }
+        }
+    }
+    pub fn increase_found(id: Id, amount: u32) -> Self {
+        Self {
+            target: MapWriteTarget::MapPoint__IncreaseFound { id, amount },
         }
     }
     pub fn increase_visible(id: Id) -> Self { //mp_ids: Vec<Id>) -> Self {

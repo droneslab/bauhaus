@@ -17,6 +17,7 @@ use opencv::prelude::KeyPointTraitConst;
 use crate::ActorChannels;
 use crate::actors::loop_closing::LoopClosingMsg;
 use crate::actors::map_actor::MapWriteMsg;
+use crate::actors::messages::LastKeyFrameUpdatedMsg;
 use crate::modules::optimizer::LEVEL_SIGMA2;
 use crate::registered_actors::TRACKING_BACKEND;
 use crate::{
@@ -37,7 +38,7 @@ pub struct DarvisLocalMapping {
     sensor: Sensor,
 
     current_keyframe_id: Id, //mpCurrentKeyFrame
-    recently_added_mappoints: Vec<Id>, //mlpRecentAddedMapPoints // TODO (concurrency): race condition w/ map deleting mappoints from the map
+    recently_added_mappoints: Vec<Id>, //mlpRecentAddedMapPoints
 
     // Modules
     imu: ImuModule,
@@ -94,38 +95,39 @@ impl DarvisLocalMapping {
             },
             _ => {}
         }
-
+        
+        self.recently_added_mappoints = self.map.read()
+            .keyframes.get(&self.current_keyframe_id).unwrap()
+            .mappoint_matches.iter()
+            .map(|(_, (mp_id, _))| {*mp_id})
+            .collect::<Vec<Id>>();
         // Check recent MapPoints
         let mps_culled = self.mappoint_culling();
 
         // Triangulate new MapPoints
-        let new_mappoints = self.create_new_mappoints();
-        let mps_created = new_mappoints.len();
+        let mps_created = self.create_new_mappoints();
         // Paper note: what's interesting is axiom will actually give a runtime error if the rate of sending messages
         // exceeds the ability of the actor to handle the messages. Normally we would create a new mappoint in the loop above,
         // but that sends messages to the map actor too frequently. So, we batch all the messages into one and send when we are done.
-        self.actor_channels.find(MAP_ACTOR).send(Box::new(
-            MapWriteMsg::create_many_mappoints(new_mappoints, TRACKING_BACKEND)
+        // self.actor_channels.find(MAP_ACTOR).send(Box::new(
+        //     MapWriteMsg::create_one_mappoint(new_mappoints, TRACKING_BACKEND)
+        // )).unwrap();
+        self.actor_channels.find(TRACKING_BACKEND).send(Box::new(
+            LastKeyFrameUpdatedMsg{}
         )).unwrap();
 
-        // TODO (design): mbAbortBA
-        // But idk how to check the queue size from within the callback
-        // if(!CheckNewKeyFrames()) {
-                // Find more matches in neighbor keyframes and fuse point duplications
-                self.search_in_neighbors();
-        // }
+        if self.actor_channels.queue_len() < 1 {
+            // Abort additional work if there are too many keyframes in the msg queue.
+            // Find more matches in neighbor keyframes and fuse point duplications
+            self.search_in_neighbors();
+        }
 
         let t_init = 0.0; // TODO (mvp): idk what this is for but it's used all over the place
 
-        // TODO (design): mbAbortBA
         // ORBSLAM will abort additional work if there are too many keyframes in the msg queue (CheckNewKeyFrames)
         // Additionally it will abort if a stop or reset is requested (stopRequested)
-        // But idk how to check the queue size from within the callback, and idk how to "look ahead" at future messages to see if
-        // a stop is requested further in the queue. Maybe the skip functionality? Maybe implementing messages with priority?
-        // All the rest of this code, up until sending to loop closing, should be under this if statement.
-        // if(!CheckNewKeyFrames() && !stopRequested())
-        // {
-        if self.map.read().keyframes.len() > 2 {
+        let kfs_in_map = self.map.read().keyframes.len();
+        if kfs_in_map > 2 && self.actor_channels.queue_len() < 1 {
             match self.sensor.is_imu() {
                 true => { // and imu_initialized
                     todo!("IMU");
@@ -226,27 +228,28 @@ impl DarvisLocalMapping {
 
         let map = self.map.read();
         let current_kf_id = self.current_keyframe_id;
-        let mut to_discard = Vec::new();
+        let mut num_to_discard = 0;
         self.recently_added_mappoints.retain(|&mp_id| {
-            let mappoint = map.mappoints.get(&mp_id).unwrap();
-
-            if (mappoint.get_found_ratio() < 0.25) ||
-            (current_kf_id - mappoint.first_kf_id >= 2 && mappoint.get_observations().len() <= th_obs) {
-                to_discard.push(mp_id);
-                false
-            } else if current_kf_id - mappoint.first_kf_id >= 3 {
-                false // mappoint should not be deleted, but remove from recently_added_mappoints
+            if let Some(mappoint) = map.mappoints.get(&mp_id) {
+                if (mappoint.get_found_ratio() < 0.25) ||
+                (current_kf_id - mappoint.first_kf_id >= 2 && mappoint.get_observations().len() <= th_obs) {
+                    num_to_discard += 1;
+                    self.actor_channels.find(MAP_ACTOR).send(Box::new(MapWriteMsg::discard_one_mappoint(mp_id))).unwrap();
+                    false
+                } else if current_kf_id - mappoint.first_kf_id >= 3 {
+                    false // mappoint should not be deleted, but remove from recently_added_mappoints
+                } else {
+                    true // mappoint should not be deleted
+                }
             } else {
-                true // mappoint should not be deleted
+                false // mappoint has already been deleted, remove from recently_added_mappoints
             }
         });
-        let num_to_discard = to_discard.len() as i32;
-        self.actor_channels.find(MAP_ACTOR).send(Box::new(MapWriteMsg::discard_many_mappoints(to_discard))).unwrap();
         return num_to_discard;
     }
 
     #[time("LocalMapping::{}")]
-    fn create_new_mappoints(&self) -> Vec<(MapPoint<PrelimMapPoint>, Vec<(i32, u32, usize)>)> {
+    fn create_new_mappoints(&self) -> i32 { //-> Vec<(MapPoint<PrelimMapPoint>, Vec<(i32, u32, usize)>)> {
         // Retrieve neighbor keyframes in covisibility graph
         let nn = match self.sensor.is_mono() {
             true => 30,
@@ -278,12 +281,15 @@ impl DarvisLocalMapping {
         let rotation_transpose1 = rotation1.transpose(); // Rwc1
         let mut ow1 = current_kf.get_camera_center();
 
-        let mut new_mappoints = Vec::new();
+        // let mut new_mappoints = Vec::new();
         // Search matches with epipolar restriction and triangulate
+        let mut mps_created = 0;
         for neighbor_id in neighbor_kfs {
-            // TODO (design): ORBSLAM will abort additional work if there are too many keyframes in the msg queue.
-            // if(i>0 && CheckNewKeyFrames())
-            //     return;
+            if self.actor_channels.queue_len() > 1 {
+                // Abort additional work if there are too many keyframes in the msg queue.
+                return 0;
+            }
+
             let neighbor_kf = map.keyframes.get(&neighbor_id).unwrap();
 
             // Check first that baseline is not too short
@@ -469,13 +475,22 @@ impl DarvisLocalMapping {
                 }
 
                 // Triangulation is successful
-                new_mappoints.push((
-                    MapPoint::<PrelimMapPoint>::new(x3_d.unwrap(), self.current_keyframe_id, map.id),
-                    vec![(self.current_keyframe_id, current_kf.features.num_keypoints, idx1), (neighbor_id, neighbor_kf.features.num_keypoints, idx2)]
-                ));
+                self.actor_channels.find(MAP_ACTOR).send(Box::new(
+                    MapWriteMsg::create_one_mappoint(
+                        MapPoint::<PrelimMapPoint>::new(x3_d.unwrap(), self.current_keyframe_id, map.id),
+                        vec![(self.current_keyframe_id, current_kf.features.num_keypoints, idx1), (neighbor_id, neighbor_kf.features.num_keypoints, idx2)]
+                    )
+                )).unwrap();
+                mps_created += 1;
+
+                // new_mappoints.push((
+                //     MapPoint::<PrelimMapPoint>::new(x3_d.unwrap(), self.current_keyframe_id, map.id),
+                //     vec![(self.current_keyframe_id, current_kf.features.num_keypoints, idx1), (neighbor_id, neighbor_kf.features.num_keypoints, idx2)]
+                // ));
             }
         }
-        new_mappoints
+        // new_mappoints
+        mps_created
     }
 
     #[time("LocalMapping::{}")]
@@ -497,9 +512,10 @@ impl DarvisLocalMapping {
         }).flatten().collect::<Vec<i32>>();
         target_kfs.extend(new_kfs);
 
-        // TODO (design): mbAbortBA.. ORBSLAM will abort additional work if there are too many keyframes in the msg queue.
-        // if (mbAbortBA)
-        //     break;
+        if self.actor_channels.queue_len() > 1 {
+            // Abort additional work if there are too many keyframes in the msg queue.
+            return;
+        }
 
         // Extend to temporal neighbors
         match self.sensor.is_imu() {
@@ -534,9 +550,11 @@ impl DarvisLocalMapping {
             )
         }
 
-        // TODO (design): mbAbortBA
-        // if (mbAbortBA)
-        //     return;
+        if self.actor_channels.queue_len() > 1 {
+            // Abort additional work if there are too many keyframes in the msg queue.
+            return;
+        }
+
 
         // Search matches by projection from target KFs in current KF
         let fuse_candidates = HashSet::<Id>::from_iter(
@@ -696,8 +714,10 @@ impl DarvisLocalMapping {
                     }
                 }
             }
-            // TODO (design): mbAbortBA
-            // if((count > 20 && mbAbortBA) { break; }
+            if i > 20 && self.actor_channels.queue_len() > 1 {
+                // Abort additional work if there are too many keyframes in the msg queue.
+                return 0;
+            }
         }
         return num_deleted;
     }

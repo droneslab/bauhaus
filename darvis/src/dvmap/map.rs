@@ -119,17 +119,19 @@ impl Map {
 
     #[time("Map::{}")]
     pub fn insert_keyframe_to_map(&mut self, prelim_kf: Frame<PrelimKeyFrame>, is_initialization: bool) -> Id {
+        // TODO (timing) ... 20ms
         // Note: I would really like this to consume the keyframe, but this brings up issues
         // with the map actor being able to take ownership of the keyframe message.
         self.last_kf_id += 1;
         let new_kf_id = self.last_kf_id;
-        let full_keyframe = Frame::<FullKeyFrame>::new(prelim_kf, self.id, new_kf_id);
-        self.keyframes.insert(new_kf_id, full_keyframe);
-
         if self.keyframes.is_empty() {
             self.initial_kf_id = new_kf_id;
             // self.lowest_kf = kf; // TODO (mvp): ORBSLAM3:Map.cc:67, used to sort mspKeyFrames. I think we can ignore?
         }
+
+        let full_keyframe = Frame::<FullKeyFrame>::new(prelim_kf, self.id, new_kf_id);
+        self.keyframes.insert(new_kf_id, full_keyframe);
+
 
         // Update mp connections after insertion
         // Note: This should run during most normal keyframe insertions, but not 
@@ -140,10 +142,12 @@ impl Map {
             let num_keypoints = full_keyframe.features.num_keypoints;
 
             for (index, (mp_id, _is_outlier)) in full_keyframe.mappoint_matches.iter() {
-                {
-                    // Add observation for mp->kf
-                    let mp = self.mappoints.get_mut(&mp_id).unwrap();
+                // Add observation for mp->kf
+                if let Some(mp) = self.mappoints.get_mut(&mp_id) {
                     mp.add_observation(&new_kf_id, num_keypoints, *index);
+                } else {
+                    continue; // Mappoint could have been deleted by local mapping 
+                    // TODO (MVP)...need to remove mappoint match in keyframe
                 }
 
                 let norm_and_depth;
@@ -168,7 +172,6 @@ impl Map {
         new_kf_id
     }
 
-    #[time("Map::{}")]
     pub fn discard_mappoint(&mut self, id: &Id) {
         self.mappoints
             .remove(id)
@@ -179,7 +182,6 @@ impl Map {
                 }
             });
 
-        info!("Discard mappoint {}", id);
     }
 
     #[time("Map::{}")]
@@ -393,11 +395,13 @@ impl Map {
         //For all map points in keyframe check in which other keyframes are they seen
         //Increase counter for those keyframes
         let mut kf_counter = HashMap::<Id, i32>::new();
-        for (_, (mp_id, _)) in &keyframes.get(main_kf_id).unwrap().mappoint_matches {
-            let mp = mappoints.get(&mp_id).unwrap();
-            for kf_id in mp.get_observations().keys() {
-                if *kf_id != *main_kf_id {
-                    *kf_counter.entry(*kf_id).or_insert(0) += 1;
+        let kf = keyframes.get_mut(main_kf_id).unwrap();
+        for (_, (mp_id, _)) in kf.mappoint_matches.iter() {
+            if let Some(mp) = mappoints.get(&mp_id) {
+                for kf_id in mp.get_observations().keys() {
+                    if *kf_id != *main_kf_id {
+                        *kf_counter.entry(*kf_id).or_insert(0) += 1;
+                    }
                 }
             }
         }
@@ -426,6 +430,7 @@ impl Map {
         }
     }
 
+    #[time("Map::{}")]
     pub fn update_after_ba(&mut self, optimized_poses: optimizer::BundleAdjustmentResult, loop_kf: Id) {
         for (kf_id, pose) in optimized_poses.new_kf_poses {
             if loop_kf == self.initial_kf_id {
@@ -440,11 +445,18 @@ impl Map {
 
         for (mp_id, position) in optimized_poses.new_mp_poses {
             if loop_kf == self.initial_kf_id {
-                self.mappoints.get_mut(&mp_id).unwrap().position = position;
-                let norm_and_depth = self.mappoints.get(&mp_id).unwrap().get_norm_and_depth(&self);
-                if norm_and_depth.is_some() {
-                    self.mappoints.get_mut(&mp_id).unwrap().update_norm_and_depth(norm_and_depth.unwrap());
-                }
+                match self.mappoints.get_mut(&mp_id) {
+                    // Possible that map actor deleted mappoint after local BA has finished but before
+                    // this message is processed
+                    Some(mp) => {
+                        mp.position = position;
+                        let norm_and_depth = self.mappoints.get(&mp_id).unwrap().get_norm_and_depth(&self);
+                        if norm_and_depth.is_some() {
+                            self.mappoints.get_mut(&mp_id).unwrap().update_norm_and_depth(norm_and_depth.unwrap());
+                        }
+                    },
+                    None => continue,
+                };
             } else {
                 todo!("MVP");
                 // pMP->mPosGBA = vPoint->estimate().cast<float>();

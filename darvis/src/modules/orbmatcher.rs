@@ -144,7 +144,7 @@ pub fn search_for_initialization(
 
 #[time("TrackingBackend::{}")]
 pub fn search_by_projection(
-    frame: &mut Frame<InitialFrame>, mappoints: &HashSet<Id>, th: i32, ratio: f64,
+    frame: &mut Frame<InitialFrame>, mappoints: &mut HashSet<Id>, th: i32, ratio: f64,
     track_in_view: &HashMap<Id, TrackedMapPointData>, track_in_view_right: &HashMap<Id, TrackedMapPointData>, 
     map: &ReadOnlyMap<Map>, sensor: Sensor
 ) -> Result<i32, Box<dyn std::error::Error>> {
@@ -155,10 +155,18 @@ pub fn search_by_projection(
     let far_points_th = if fpt == 0.0 { INFINITY } else { fpt };
     let mut num_matches = 0;
 
-    for mp_id in mappoints {
-        let map = map.read();
-        let mp = map.mappoints.get(mp_id).unwrap();
-        if let Some(mp_data) = track_in_view.get(mp_id) {
+    let map = map.read();
+    let mut local_mps_to_remove = vec![];
+    for mp_id in &*mappoints {
+        let mp = match map.mappoints.get(&mp_id) {
+            Some(mp) => mp,
+            None => {
+                // Mappoint has been deleted but tracking's local_mappoints is not updated with this info
+                local_mps_to_remove.push(*mp_id);
+                continue
+            }
+        };
+        if let Some(mp_data) = track_in_view.get(&mp_id) {
             if mp_data.track_depth > far_points_th {
                 continue;
             }
@@ -185,8 +193,12 @@ pub fn search_by_projection(
                 // Get best and second matches with near keypoints
                 for idx in indices {
                     if let Some((id, _)) = frame.mappoint_matches.get(&idx) {
-                        if map.mappoints.get(id).unwrap().get_observations().len() > 0 {
-                            continue;
+                        if let Some(mp) = map.mappoints.get(id) {
+                            if mp.get_observations().len() > 0 {
+                                continue;
+                            }
+                        } else {
+                            frame.delete_mappoint_match(idx);
                         }
                     }
 
@@ -244,7 +256,7 @@ pub fn search_by_projection(
             }
         }
 
-        if let Some(_mp_data) = track_in_view_right.get(mp_id) {
+        if let Some(_mp_data) = track_in_view_right.get(&mp_id) {
             todo!("Stereo");
             // Basically repeated code above with some small changes to which functions they call
             // if(F.Nleft != -1 && pMP->mbTrackInViewR){
@@ -317,6 +329,7 @@ pub fn search_by_projection(
         }
     }
 
+    mappoints.retain(|mp_id| !local_mps_to_remove.contains(&mp_id));
     return Ok(num_matches);
 }
 
@@ -325,7 +338,7 @@ pub fn search_by_projection(
 
 #[time("TrackingBackend::{}")]
 pub fn search_by_projection_with_threshold (
-    current_frame: &mut Frame<InitialFrame>, last_frame: &Frame<InitialFrame>, th: i32,
+    current_frame: &mut Frame<InitialFrame>, last_frame: &mut Frame<InitialFrame>, th: i32,
     should_check_orientation: bool,
     map: &ReadOnlyMap<Map>, sensor: Sensor
 ) -> Result<i32, Box<dyn std::error::Error>> {
@@ -362,85 +375,93 @@ pub fn search_by_projection_with_threshold (
 
     // debug!("search by projection keypoints {:?}", last_frame.features.get_all_keypoints().len());
     // debug!("search by projection mappoint matches {:?}", last_frame.mappoint_matches);
-
-    for idx1 in 0..last_frame.features.get_all_keypoints().len() {
-        if last_frame.mappoint_matches.contains_key(&(idx1 as u32)) && !last_frame.is_mp_outlier(&(idx1 as u32)) {
-            // Project
-            let map = map.read();
-            let mp_id = &last_frame.mappoint_matches.get(&(idx1 as u32)).unwrap().0;
-            let mappoint = map.mappoints.get(mp_id).unwrap();
-            let x_3d_w = mappoint.position;
-            let x_3d_c = (*rcw) * (*x_3d_w) + (*tcw);
-
-            let xc = x_3d_c[0];
-            let yc = x_3d_c[1];
-            let invzc = 1.0 / x_3d_c[2];
-            if invzc < 0.0 { continue; }
-
-            let u = CAMERA_MODULE.get_fx() * xc * invzc + CAMERA_MODULE.get_cx();
-            let v = CAMERA_MODULE.get_fy() * yc * invzc + CAMERA_MODULE.get_cy();
-            if !current_frame.features.image_bounds.check_bounds(u, v) {
-                continue;
-            }
-
-            let last_octave = last_frame.features.get_octave(idx1 as usize);
-
-            // Search in a window. Size depends on scale
-            let radius = ((th as f32) * SCALE_FACTORS[last_octave as usize]) as f64;
-
-            let indices_2 =
-                if forward {
-                    current_frame.get_features_in_area(&u,&v, radius, last_octave, -1)
-                } else if backward {
-                    current_frame.get_features_in_area(&u,&v, radius, 0, last_octave)
-                } else {
-                    current_frame.get_features_in_area(&u,&v, radius, last_octave-1, last_octave+1)
-                };
-            if indices_2.is_empty() {
-                continue;
-            }
-
-            let best_descriptor = mappoint.get_best_descriptor();
-            let mut best_dist = 256;
-            let mut best_idx: i32 = -1;
-
-            for idx2 in indices_2 {
-                if let Some((id, _)) = current_frame.mappoint_matches.get(&idx2) {
-                    if map.mappoints.get(id).unwrap().get_observations().len() > 0 {
+    {
+        let map = map.read();
+        for idx1 in 0..last_frame.features.get_all_keypoints().len() {
+            if last_frame.mappoint_matches.contains_key(&(idx1 as u32)) && !last_frame.is_mp_outlier(&(idx1 as u32)) {
+                // Project
+                let mp_id = &last_frame.mappoint_matches.get(&(idx1 as u32)).unwrap().0;
+                let mappoint = match map.mappoints.get(mp_id) {
+                    Some(mp) => mp,
+                    None => {
+                        // Mappoint has been deleted but not updated in last_frame yet
+                        last_frame.mappoint_matches.remove(&(idx1 as u32));
                         continue;
+                    }
+                };
+                let x_3d_w = mappoint.position;
+                let x_3d_c = (*rcw) * (*x_3d_w) + (*tcw);
+
+                let xc = x_3d_c[0];
+                let yc = x_3d_c[1];
+                let invzc = 1.0 / x_3d_c[2];
+                if invzc < 0.0 { continue; }
+
+                let u = CAMERA_MODULE.get_fx() * xc * invzc + CAMERA_MODULE.get_cx();
+                let v = CAMERA_MODULE.get_fy() * yc * invzc + CAMERA_MODULE.get_cy();
+                if !current_frame.features.image_bounds.check_bounds(u, v) {
+                    continue;
+                }
+
+                let last_octave = last_frame.features.get_octave(idx1 as usize);
+
+                // Search in a window. Size depends on scale
+                let radius = ((th as f32) * SCALE_FACTORS[last_octave as usize]) as f64;
+
+                let indices_2 =
+                    if forward {
+                        current_frame.get_features_in_area(&u,&v, radius, last_octave, -1)
+                    } else if backward {
+                        current_frame.get_features_in_area(&u,&v, radius, 0, last_octave)
+                    } else {
+                        current_frame.get_features_in_area(&u,&v, radius, last_octave-1, last_octave+1)
+                    };
+                if indices_2.is_empty() {
+                    continue;
+                }
+
+                let best_descriptor = mappoint.get_best_descriptor();
+                let mut best_dist = 256;
+                let mut best_idx: i32 = -1;
+
+                for idx2 in indices_2 {
+                    if let Some((id, _)) = current_frame.mappoint_matches.get(&idx2) {
+                        if map.mappoints.get(id).unwrap().get_observations().len() > 0 {
+                            continue;
+                        }
+                    }
+
+                    // TODO Stereo: Unfinished code, not sure what this is doing in search_by_projection_with_threshold
+                    // Nleft == -1 if the left camera has no extracted keypoints which would happen in the
+                    // non-stereo case. But mvuRight is > 0 ONLY in the stereo case! So is this ever true?
+                    // if(CurrentFrame.Nleft == -1 && CurrentFrame.mvuRight[i2]>0)
+                    // {
+                    //     const float ur = uv(0) - CurrentFrame.mbf*invzc;
+                    //     const float er = fabs(ur - CurrentFrame.mvuRight[i2]);
+                    //     if(er>radius)
+                    //         continue;
+                    // }
+
+                    let descriptor = current_frame.features.descriptors.row(idx2)?;
+                    let dist = descriptor_distance(best_descriptor, &descriptor);
+                    if dist < best_dist {
+                        best_dist = dist;
+                        best_idx = idx2 as i32;
                     }
                 }
 
-                // TODO Stereo: Unfinished code, not sure what this is doing in search_by_projection_with_threshold
-                // Nleft == -1 if the left camera has no extracted keypoints which would happen in the
-                // non-stereo case. But mvuRight is > 0 ONLY in the stereo case! So is this ever true?
-                // if(CurrentFrame.Nleft == -1 && CurrentFrame.mvuRight[i2]>0)
-                // {
-                //     const float ur = uv(0) - CurrentFrame.mbf*invzc;
-                //     const float er = fabs(ur - CurrentFrame.mvuRight[i2]);
-                //     if(er>radius)
-                //         continue;
-                // }
+                if best_dist <= TH_HIGH {
+                    current_frame.add_mappoint(best_idx as u32, *mp_id, false);
 
-                let descriptor = current_frame.features.descriptors.row(idx2)?;
-                let dist = descriptor_distance(best_descriptor, &descriptor);
-                if dist < best_dist {
-                    best_dist = dist;
-                    best_idx = idx2 as i32;
+                    if should_check_orientation {
+                        check_orientation_1(
+                            &last_frame.features.get_keypoint(idx1 as usize).0,
+                            &current_frame.features.get_keypoint(best_idx as usize).0,
+                            &mut rot_hist, factor, best_idx as u32
+                        );
+                    }
+                    num_matches += 1;
                 }
-            }
-
-            if best_dist <= TH_HIGH {
-                current_frame.add_mappoint(best_idx as u32, *mp_id, false);
-
-                if should_check_orientation {
-                    check_orientation_1(
-                        &last_frame.features.get_keypoint(idx1 as usize).0,
-                        &current_frame.features.get_keypoint(best_idx as usize).0,
-                        &mut rot_hist, factor, best_idx as u32
-                    );
-                }
-                num_matches += 1;
             }
         }
     }
@@ -479,7 +500,7 @@ pub fn _search_by_projection_reloc (
 pub fn search_by_bow_f(
     kf: &Frame<FullKeyFrame>, frame: &mut Frame<InitialFrame>,
     should_check_orientation: bool, ratio: f64
-) -> Result<(u32, Vec<(Id, u32)>), Box<dyn std::error::Error>> {
+) -> Result<u32, Box<dyn std::error::Error>> {
     // int SearchByBoW(KeyFrame *pKF, Frame &F, std::vector<MapPoint*> &vpMapPointMatches);
     frame.clear_mappoints();
     let mut matches = HashMap::<u32, Id>::new();
@@ -584,13 +605,11 @@ pub fn search_by_bow_f(
         check_orientation_2(&rot_hist, &mut matches)
     };
 
-    let mut increase_found = vec![];
     for (index, mp_id) in &matches {
         frame.add_mappoint(*index, *mp_id, false);
-        increase_found.push((*mp_id, 1));
     }
 
-    return Ok((matches.len() as u32, increase_found));
+    return Ok(matches.len() as u32);
 }
 
 pub fn search_by_bow_kf(
@@ -1004,7 +1023,7 @@ pub fn fuse(kf_id: &Id, fuse_candidates: &Vec<Id>, map: &RwLockReadGuard<Map>, t
                     to_fuse.push(MapWriteMsg::replace_mappoint(mappoint_in_kf_id, *mp_id));
                 }
             } else {
-                to_fuse.push(MapWriteMsg::add_observation(*kf_id, *mp_id, best_idx as usize));
+                to_fuse.push(MapWriteMsg::add_observation( *mp_id, *kf_id,  best_idx as usize));
             }
         }
     }

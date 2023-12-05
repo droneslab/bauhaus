@@ -23,7 +23,6 @@ pub struct ReadOnlyMap<T> {
 impl<T> ReadOnlyMap<T> {
     pub fn read(&self) -> RwLockReadGuard<T> {
         let now = Instant::now();
-        // let guard = RwLockReadGuard::map(self.inner.read(), |unlocked| unlocked);
         let guard = self.inner.read().unwrap();
         let elapsed = now.elapsed().as_millis();
         if elapsed > 5 {
@@ -46,7 +45,6 @@ impl<T> ReadWriteMap<T> {
     }
 
     pub fn write(&self) -> RwLockWriteGuard<T> {
-        // RwLockWriteGuard::map(self.inner.write(), |unlocked| unlocked)
         let now = Instant::now();
         let write = self.inner.write().unwrap();
         let elapsed = now.elapsed().as_millis();
@@ -58,7 +56,6 @@ impl<T> ReadWriteMap<T> {
 
     pub fn read(&self) -> RwLockReadGuard<T> {
         debug!("retrieving read lock in map");
-        // RwLockReadGuard::map(self.inner.read(), |unlocked| unlocked)
         self.inner.read().unwrap()
     }
 

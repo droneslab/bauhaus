@@ -26,7 +26,7 @@ pub struct Frame<K: FrameState> {
     // Mappoints //
     // Note: u32 is index in array, Id is mappoint Id, bool is if it's an oultier
     // equal to the vec in ORBSLAM3 bc it just allocates an N-size vector and has a bunch of empty entries
-    pub mappoint_matches: HashMap::<u32, (Id, bool)>, // mvpmappoints , mvbOutlier
+    pub mappoint_matches: HashMap::<u32, (Id, bool)>, // mvpmappoints , mvbOutlier // TODO (MVP) ... convert this to vector
 
     // IMU //
     // Preintegrated IMU measurements from previous keyframe
@@ -85,13 +85,25 @@ impl<T: FrameState> Frame<T> {
     pub fn get_num_mappoints_with_observations(&self, map: &Map) -> i32 {
         (&self.mappoint_matches)
             .into_iter()
-            .filter(|(_, (mp_id, _))| map.mappoints.get(mp_id).unwrap().get_observations().len() > 0)
+            .filter(|(_, (mp_id, _))| {
+                match map.mappoints.get(mp_id) {
+                    Some(mp) => mp.get_observations().len() > 0,
+                    None => false
+                }
+            })
             .count() as i32
     }
 
     pub fn delete_mappoints_without_observations(&mut self, map: &Map) {
         self.mappoint_matches
-            .retain(|_, (mp_id, _)| map.mappoints.get(mp_id).unwrap().get_observations().len() > 0);
+            .retain(
+                |_, (mp_id, _)| 
+                    if let Some(mp) = map.mappoints.get(mp_id) {
+                        mp.get_observations().len() > 0
+                    } else {
+                        false
+                    }
+                );
     }
 
     pub fn check_close_tracked_mappoints(&self) -> (i32, i32) {
@@ -145,11 +157,10 @@ impl Frame<InitialFrame> {
         }
     }
 
-    pub fn is_in_frustum(&self, mp_id: Id, viewing_cos_limit: f64, map: &Map) -> (Option<TrackedMapPointData>, Option<TrackedMapPointData>) {
+    pub fn is_in_frustum(&self, mappoint: &MapPoint<FullMapPoint>, viewing_cos_limit: f64) -> (Option<TrackedMapPointData>, Option<TrackedMapPointData>) {
         // Combination of:
         // bool Frame::isInFrustum(MapPoint *pMP, float viewingCosLimit)
         // bool Frame::isInFrustumChecks(MapPoint *pMP, float viewingCosLimit, bool bRight)
-        let mappoint = map.mappoints.get(&mp_id).unwrap();
 
         let left = self.check_frustum(viewing_cos_limit, &mappoint, false);
         let right = match self.sensor.frame() {
@@ -252,6 +263,16 @@ impl Frame<PrelimKeyFrame> {
         if frame.pose.is_none() {
             panic!("Frame needs a pose before converting to KeyFrame!");
         }
+        let bow = match &frame.bow {
+            Some(bow) => Some(bow.clone()),
+            None => {
+                let mut bow = BoW::new();
+                //debug!("mbowvector for keyframe {} with frame id {}", id, prelim_keyframe.frame_id);
+                bow::VOCABULARY.transform(&frame.features.descriptors, &mut bow);
+                Some(bow)
+            }
+        };
+
         Frame {
             timestamp: frame.timestamp,
             frame_id: frame.frame_id,
@@ -261,7 +282,7 @@ impl Frame<PrelimKeyFrame> {
             imu_bias: frame.imu_bias,
             imu_preintegrated: frame.imu_preintegrated,
             full_kf_info: PrelimKeyFrame{},
-            bow: frame.bow.clone(),
+            bow,
             ref_kf_id: frame.ref_kf_id,
             sensor: frame.sensor,
         }
@@ -309,10 +330,7 @@ pub struct FullKeyFrame {
 }
 
 impl Frame<FullKeyFrame> {
-    #[time("Frame<FullKeyFrame>::{}")]
     pub(super) fn new(prelim_keyframe: Frame<PrelimKeyFrame>, origin_map_id: Id, id: Id) -> Self {
-        let timer = logging_timer::timer!("Frame<FullKeyFrame>::bow");
-
         let bow = match prelim_keyframe.bow {
             Some(bow) => Some(bow),
             None => {
@@ -322,7 +340,6 @@ impl Frame<FullKeyFrame> {
                 Some(bow)
             }
         };
-        logging_timer::finish!(timer);
 
         let me = Self {
             timestamp: prelim_keyframe.timestamp,
