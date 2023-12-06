@@ -14,7 +14,7 @@
 /// that the shape constraint trait is satisfied, which is private in nalgebra...
 /// We can fix this but honestly I don't think it's worth it.
 
-// TODO (CLONE) ... matrix
+// TODO (timing) ... clones in matrix
 // Lot of clones in here, a large part of them are converting 
 // from a darvis structure back into nalgebra. Does it make sense to clone in
 // this case? That feels correct because then I can hold both the darvis structure

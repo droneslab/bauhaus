@@ -1,7 +1,7 @@
 use opencv::{prelude::{Mat, MatTrait, MatTraitConst, KeyPointTraitConst}, core::{Scalar, CV_64F, KeyPoint}};
 use dvcore::{config::*, matrix::{DVMatrix, DVVectorOfPoint3f, DVVector3, DVMatrix3}, sensor::Sensor};
 use crate::{
-    dvmap::{pose::DVPose, keyframe::{Frame, FullKeyFrame}},
+    dvmap::{pose::DVPose, keyframe::{Frame, KeyFrame}},
     matrix::DVVectorOfKeyPoint, registered_actors::CAMERA
 };
 
@@ -48,7 +48,6 @@ impl Camera {
         *k.at_2d_mut::<f64>(1, 2)? = cy;
         *k.at_2d_mut::<f64>(2, 2)? = 1.0;
 
-        //TODO... check if we need to correct distortion from the images
         let mut dist_coef = None;
         let sensor= SETTINGS.get::<Sensor>(SYSTEM, "sensor");
         let k1= SETTINGS.get::<f64>(CAMERA, "k1") as f32;
@@ -105,7 +104,7 @@ impl Camera {
         let mut v_p3d: dvos3binding::ffi::WrapBindCVVectorOfPoint3f = DVVectorOfPoint3f::empty().into();
         let mut vb_triangulated  = Vec::new();
 
-        // TODO (CLONE) ... matrix
+        // TODO (timing) ... cloning vkeys1 and 2
         let reconstructed = tvr.pin_mut().reconstruct(
             & v_keys1.clone().into(),
             & v_keys2.clone().into(),
@@ -133,7 +132,7 @@ impl Camera {
         )
     }
 
-    pub fn unproject_stereo(&self, _kf: &Frame<FullKeyFrame>, _idx: usize) -> Option<DVVector3<f64>> {
+    pub fn unproject_stereo(&self, _kf: &KeyFrame, _idx: usize) -> Option<DVVector3<f64>> {
         todo!("TODO (Stereo)");
         // bool KeyFrame::UnprojectStereo(int i, Eigen::Vector3f &x3D)
         // {

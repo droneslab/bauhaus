@@ -1,5 +1,5 @@
 use std::collections::{HashMap, HashSet};
-use log::{info, warn, error};
+use log::{info, warn, error, debug};
 use dvcore::{matrix::{DVVector3, DVVectorOfPoint3f}, config::{SETTINGS, SYSTEM}, sensor::{Sensor, FrameSensor, ImuSensor}};
 use logging_timer::time;
 use crate::{
@@ -16,7 +16,7 @@ pub type MapItemHashMap<T> = HashMap<Id, T, nohash_hasher::BuildNoHashHasher<Id>
 pub struct Map {
     pub id: Id,
 
-    pub keyframes: MapItemHashMap<Frame<FullKeyFrame>>, // = mspKeyFrames
+    pub keyframes: MapItemHashMap<KeyFrame>, // = mspKeyFrames
     pub mappoints: MapItemHashMap<MapPoint<FullMapPoint>>, // = mspMapPoints
 
     // KeyFrames
@@ -59,18 +59,20 @@ impl Map {
 
     pub fn print_current_map(&self, identifier: String) {
         // For debugging
-        println!("PRINT MAP START;{}", identifier);
+        debug!("PRINT MAP START;{}", identifier);
         for (id, kf) in &self.keyframes {
-            print!("PRINT MAP KF;{};{:?}", id, kf.pose.unwrap());
+            print!("PRINT MAP KF;{};{:?}", id, kf.pose);
             print!(";");
-            for connection in &kf.get_covisibility_keyframes(i32::MAX) {
+            for connection in &kf.connections.get_covisibility_keyframes(i32::MAX) {
                 print!("{},", connection);
             };
             print!(";");
-            for (_index, (mp_id, _)) in &kf.mappoint_matches {
-                print!("{},", mp_id);
+            for mp_match in &kf.mappoint_matches.matches {
+                if let Some((_, mp_id)) = mp_match {
+                    print!("{},", mp_id);
+                }
             };
-            println!("");
+            debug!("");
         }
         for (id, mp) in &self.mappoints {
             print!("PRINT MAP MP;{};{:?}", id, mp.position);
@@ -78,9 +80,9 @@ impl Map {
             for (kf_id, _indexes) in mp.get_observations() {
                 print!("{},", kf_id);
             };
-            println!("");
+            debug!("");
         }
-        println!("PRINT MAP DONE");
+        debug!("PRINT MAP DONE");
     }
 
     ////* &mut self ... behind map actor */////////////////////////////////////////////////////
@@ -93,12 +95,17 @@ impl Map {
 
         let mp = self.mappoints.get_mut(&new_mp_id).unwrap();
         for (kf_id, num_keypoints, index) in observations_to_add {
+            if self.keyframes.get(&kf_id).is_none() {
+                // Stale reference to deleted keyframe
+                continue;
+            }
+
             // Add observation for mp->kf
             mp.add_observation(&kf_id, num_keypoints, index as u32);
 
             // Add observation kf->mp
             self.keyframes.get_mut(&kf_id).map(|kf| {
-                kf.add_mappoint(index as u32, mp.get_id(), false);
+                kf.mappoint_matches.add_mappoint(index as u32, mp.get_id(), false);
             });
         }
 
@@ -118,7 +125,7 @@ impl Map {
     }
 
     #[time("Map::{}")]
-    pub fn insert_keyframe_to_map(&mut self, prelim_kf: Frame<PrelimKeyFrame>, is_initialization: bool) -> Id {
+    pub fn insert_keyframe_to_map(&mut self, frame: Frame, is_initialization: bool) -> Id {
         // TODO (timing) ... 20ms
         // Note: I would really like this to consume the keyframe, but this brings up issues
         // with the map actor being able to take ownership of the keyframe message.
@@ -129,7 +136,7 @@ impl Map {
             // self.lowest_kf = kf; // TODO (mvp): ORBSLAM3:Map.cc:67, used to sort mspKeyFrames. I think we can ignore?
         }
 
-        let full_keyframe = Frame::<FullKeyFrame>::new(prelim_kf, self.id, new_kf_id);
+        let full_keyframe = KeyFrame::new(frame, self.id, new_kf_id);
         self.keyframes.insert(new_kf_id, full_keyframe);
 
 
@@ -141,27 +148,30 @@ impl Map {
             let full_keyframe = self.keyframes.get(&new_kf_id).unwrap();
             let num_keypoints = full_keyframe.features.num_keypoints;
 
-            for (index, (mp_id, _is_outlier)) in full_keyframe.mappoint_matches.iter() {
-                // Add observation for mp->kf
-                if let Some(mp) = self.mappoints.get_mut(&mp_id) {
-                    mp.add_observation(&new_kf_id, num_keypoints, *index);
-                } else {
-                    continue; // Mappoint could have been deleted by local mapping 
-                    // TODO (MVP)...need to remove mappoint match in keyframe
-                }
+            for i in 0..full_keyframe.mappoint_matches.matches.len() {
+                if full_keyframe.mappoint_matches.has_mappoint(&(i as u32)) {
+                    let mp_id = full_keyframe.mappoint_matches.get_mappoint(&(i as u32));
+                    // Add observation for mp->kf
+                    if let Some(mp) = self.mappoints.get_mut(&mp_id) {
+                        mp.add_observation(&new_kf_id, num_keypoints, i as u32);
+                    } else {
+                        continue; // Mappoint could have been deleted by local mapping 
+                        // TODO (MVP)...need to remove mappoint match in keyframe
+                    }
 
-                let norm_and_depth;
-                let best_descriptor;
-                {
-                    let mp = self.mappoints.get(&mp_id).unwrap();
-                    norm_and_depth = mp.get_norm_and_depth(&self).unwrap();
-                    best_descriptor = mp.compute_distinctive_descriptors(&self).unwrap();
-                }
+                    let norm_and_depth;
+                    let best_descriptor;
+                    {
+                        let mp = self.mappoints.get(&mp_id).unwrap();
+                        norm_and_depth = mp.get_norm_and_depth(&self).unwrap();
+                        best_descriptor = mp.compute_distinctive_descriptors(&self).unwrap();
+                    }
 
-                {
-                    let mp = self.mappoints.get_mut(&mp_id).unwrap();
-                    mp.update_norm_and_depth(norm_and_depth);
-                    mp.update_distinctive_descriptors(best_descriptor);
+                    {
+                        let mp = self.mappoints.get_mut(&mp_id).unwrap();
+                        mp.update_norm_and_depth(norm_and_depth);
+                        mp.update_distinctive_descriptors(best_descriptor);
+                    }
                 }
             }
 
@@ -178,37 +188,37 @@ impl Map {
             .map(|mappoint| {
                 let obs = mappoint.get_observations();
                 for (kf_id, indexes) in obs {
-                    self.keyframes.get_mut(kf_id).unwrap().erase_mappoint_match(*indexes);
+                    self.keyframes.get_mut(kf_id).unwrap().mappoint_matches.delete(*indexes);
                 }
             });
-
     }
 
     #[time("Map::{}")]
     pub fn discard_keyframe(&mut self, kf_id: Id) {
-        warn!("TODO... not sure this works (discard_keyframe)");
         if kf_id == self.initial_kf_id {
             return;
         }
 
         let (connections1, matches1, parent1, mut children1);
         {
-            // TODO (CLONE) ... map mutability
+            // TODO (timing) ... map mutability
             // same as other issue in map.rs, to remove this clone we need to be able to iterate over an immutable ref to matches and children while mutating other keyframes inside the loop
             let kf = self.keyframes.get(&kf_id).unwrap();
-            connections1 = kf.get_covisibility_keyframes(i32::MAX);
-            matches1 = kf.mappoint_matches.clone();
-            parent1 = kf.full_kf_info.parent;
-            children1 = kf.full_kf_info.children.clone();
+            connections1 = kf.connections.get_covisibility_keyframes(i32::MAX);
+            matches1 = kf.mappoint_matches.matches.clone();
+            parent1 = kf.connections.parent;
+            children1 = kf.connections.children.clone();
         }
         for conn_kf in connections1 {
-            self.keyframes.get_mut(&conn_kf).unwrap().erase_connection(&kf_id);
+            self.keyframes.get_mut(&conn_kf).unwrap().connections.delete(&kf_id);
         }
 
-        for (_, (mp_id, _)) in matches1 {
-            let delete_mappoint = self.mappoints.get_mut(&mp_id).unwrap().erase_observation(&kf_id);
-            if delete_mappoint {
-                self.discard_mappoint(&mp_id);
+        for mp_match in &matches1 {
+            if let Some((mp_id, _)) = mp_match {
+                let should_delete_mappoint = self.mappoints.get_mut(&mp_id).unwrap().erase_observation(&kf_id);
+                if should_delete_mappoint {
+                    self.discard_mappoint(&mp_id);
+                }
             }
         }
 
@@ -221,20 +231,19 @@ impl Map {
         // Assign at each iteration one children with a parent (the pair with highest covisibility weight)
         // Include that children as new parent candidate for the rest
         let mut continue_loop = true;
-        warn!("TODO... this might be an infinite loop?");
 
         while !children1.is_empty() {
             let (mut max, mut child_id, mut parent_id) = (-1, -1, -1);
 
             for child_kf_id in &children1 {
                 let child_kf = self.keyframes.get(&child_kf_id).unwrap();
-                let connected_kfs = child_kf.get_covisibility_keyframes(i32::MAX);
+                let connected_kfs = child_kf.connections.get_covisibility_keyframes(i32::MAX);
 
                 // Check if a parent candidate is connected to the keyframe
                 for connected_kf_id in &connected_kfs {
                     for parent_candidate_id in &parent_candidates {
                         if connected_kf_id == parent_candidate_id {
-                            let weight = child_kf.get_weight(connected_kf_id);
+                            let weight = child_kf.connections.get_weight(connected_kf_id);
                             if weight > max {
                                 child_id = *child_kf_id;
                                 parent_id = *connected_kf_id;
@@ -247,7 +256,7 @@ impl Map {
             }
 
             if continue_loop {
-                self.keyframes.get_mut(&child_id).unwrap().change_parent(Some(parent_id));
+                self.keyframes.get_mut(&child_id).unwrap().connections.change_parent(Some(parent_id));
                 parent_candidates.insert(parent_id);
                 children1.remove(&child_id);
             } else {
@@ -257,11 +266,11 @@ impl Map {
 
         // If a children has no covisibility links with any parent candidate, assign to the original parent of this KF
         for child_id in &children1 {
-            self.keyframes.get_mut(&child_id).unwrap().change_parent(parent1);
+            self.keyframes.get_mut(&child_id).unwrap().connections.change_parent(parent1);
         }
 
         if parent1.is_some() {
-            self.keyframes.get_mut(&parent1.unwrap()).unwrap().erase_child(kf_id);
+            self.keyframes.get_mut(&parent1.unwrap()).unwrap().connections.erase_child(kf_id);
         }
         self.keyframes.remove(&kf_id);
 
@@ -269,7 +278,7 @@ impl Map {
     }
 
     pub fn create_initial_map_monocular(
-        &mut self, mp_matches: Vec<i32>, p3d: DVVectorOfPoint3f, initial_frame: Frame<InitialFrame>, current_frame: Frame<InitialFrame>
+        &mut self, mp_matches: Vec<i32>, p3d: DVVectorOfPoint3f, initial_frame: Frame, current_frame: Frame
     ) -> Option<(DVPose, i32, i32, HashSet<Id>, Timestamp)> {
         // Testing local mapping ... global bundle adjustment gives slightly different pose for second keyframe.
         // TODO (design) - we have to do some pretty gross things with calling functions in this section
@@ -290,11 +299,11 @@ impl Map {
 
         // Create KeyFrames
         let initial_kf_id = self.insert_keyframe_to_map(
-            Frame::<PrelimKeyFrame>::new(initial_frame),
+            initial_frame,
             true
         );
         let curr_kf_id = self.insert_keyframe_to_map(
-            Frame::<PrelimKeyFrame>::new(current_frame),
+            current_frame,
             true
         );
 
@@ -331,7 +340,7 @@ impl Map {
             _ => 1.0 / median_depth
         };
 
-        if median_depth < 0.0 || self.keyframes.get(&curr_kf_id)?.tracked_mappoints(&self, 1) < 50 {
+        if median_depth < 0.0 || self.keyframes.get(&curr_kf_id)?.mappoint_matches.tracked_mappoints(&self, 1) < 50 {
             // reset active map
             warn!("map::create_initial_map_monocular;wrong initialization");
             return None;
@@ -340,19 +349,21 @@ impl Map {
         // Scale initial baseline
         {
             let curr_kf = self.keyframes.get_mut(&curr_kf_id)?;
-            let new_trans = *(curr_kf.pose?.get_translation()) * inverse_median_depth;
-            curr_kf.pose.as_mut().unwrap().set_translation(new_trans);
+            let new_trans = *(curr_kf.pose.get_translation()) * inverse_median_depth;
+            curr_kf.pose.set_translation(new_trans);
         }
 
         // Scale points
-        for (_, (mp_id, _)) in &self.keyframes.get(&initial_kf_id)?.mappoint_matches {
-            let mp = self.mappoints.get_mut(&mp_id)?;
-            mp.position = DVVector3::new((*mp.position) * inverse_median_depth);
+        for item in &self.keyframes.get(&initial_kf_id)?.mappoint_matches.matches {
+            if let Some((mp_id, _)) = item {
+                let mp = self.mappoints.get_mut(&mp_id)?;
+                mp.position = DVVector3::new((*mp.position) * inverse_median_depth);
 
-            let norm_and_depth = self.mappoints.get(&mp_id)
-                .and_then(|mp| {mp.get_norm_and_depth(&self)})?;
-            self.mappoints.get_mut(&mp_id)
-                .map(|mp| mp.update_norm_and_depth(norm_and_depth));
+                let norm_and_depth = self.mappoints.get(&mp_id)
+                    .and_then(|mp| {mp.get_norm_and_depth(&self)})?;
+                self.mappoints.get_mut(&mp_id)
+                    .map(|mp| mp.update_norm_and_depth(norm_and_depth));
+            }
         }
 
         match self.sensor {
@@ -381,7 +392,7 @@ impl Map {
         // TODO (multimaps)
         // mpAtlas->GetCurrentMap()->mvpKeyFrameOrigins.push_back(pKFini)
 
-        let curr_kf_pose = self.keyframes.get_mut(&curr_kf_id)?.pose?;
+        let curr_kf_pose = self.keyframes.get_mut(&curr_kf_id)?.pose;
         let curr_kf_timestamp = self.keyframes.get(&curr_kf_id)?.timestamp;
 
         // self.print_current_map("initialization done".to_string());
@@ -391,16 +402,18 @@ impl Map {
         Some((curr_kf_pose, curr_kf_id, initial_kf_id, relevant_mappoints, curr_kf_timestamp))
     }
 
-    pub fn update_connections(mappoints: &MapItemHashMap<MapPoint<FullMapPoint>>, keyframes: &mut MapItemHashMap<Frame<FullKeyFrame>>, initial_kf_id: &i32, main_kf_id: &i32) {
+    pub fn update_connections(mappoints: &MapItemHashMap<MapPoint<FullMapPoint>>, keyframes: &mut MapItemHashMap<KeyFrame>, initial_kf_id: &i32, main_kf_id: &i32) {
         //For all map points in keyframe check in which other keyframes are they seen
         //Increase counter for those keyframes
         let mut kf_counter = HashMap::<Id, i32>::new();
         let kf = keyframes.get_mut(main_kf_id).unwrap();
-        for (_, (mp_id, _)) in kf.mappoint_matches.iter() {
-            if let Some(mp) = mappoints.get(&mp_id) {
-                for kf_id in mp.get_observations().keys() {
-                    if *kf_id != *main_kf_id {
-                        *kf_counter.entry(*kf_id).or_insert(0) += 1;
+        for item in kf.mappoint_matches.matches.iter() {
+            if let Some((mp_id, _)) = item {
+                if let Some(mp) = mappoints.get(&mp_id) {
+                    for kf_id in mp.get_observations().keys() {
+                        if *kf_id != *main_kf_id {
+                            *kf_counter.entry(*kf_id).or_insert(0) += 1;
+                        }
                     }
                 }
             }
@@ -420,12 +433,12 @@ impl Map {
         }
 
         for (kf_id, weight) in &kf_counter {
-            keyframes.get_mut(&kf_id).unwrap().add_connection(main_kf_id, *weight);
+            keyframes.get_mut(&kf_id).unwrap().connections.add(main_kf_id, *weight);
         }
-        let parent_kf_id = keyframes.get_mut(main_kf_id).unwrap().insert_all_connections(kf_counter, main_kf_id == initial_kf_id);
+        let parent_kf_id = keyframes.get_mut(main_kf_id).unwrap().connections.add_all(kf_counter, main_kf_id == initial_kf_id);
         if parent_kf_id.is_some() {
             parent_kf_id.map(|parent_kf| {
-                keyframes.get_mut(&parent_kf).unwrap().add_child(*main_kf_id);
+                keyframes.get_mut(&parent_kf).unwrap().connections.add_child(*main_kf_id);
             });
         }
     }
@@ -433,13 +446,19 @@ impl Map {
     #[time("Map::{}")]
     pub fn update_after_ba(&mut self, optimized_poses: optimizer::BundleAdjustmentResult, loop_kf: Id) {
         for (kf_id, pose) in optimized_poses.new_kf_poses {
-            if loop_kf == self.initial_kf_id {
-                self.keyframes.get_mut(&kf_id).unwrap().pose = Some(pose);
+            if let Some(kf) = self.keyframes.get_mut(&kf_id) {
+                if loop_kf == self.initial_kf_id {
+                    kf.pose = pose;
+                } else {
+                    todo!("MVP LOOP CLOSING");
+                    // Code from ORBSLAM, not sure if we need it
+                    // pKF->mTcwGBA = Sophus::SE3d(SE3quat.rotation(),SE3quat.translation()).cast<float>();
+                    // pKF->mnBAGlobalForKF = nLoopKF;
+                }
             } else {
-                todo!("MVP");
-                // Code from ORBSLAM, not sure if we need it
-                // pKF->mTcwGBA = Sophus::SE3d(SE3quat.rotation(),SE3quat.translation()).cast<float>();
-                // pKF->mnBAGlobalForKF = nLoopKF;
+                // Possible that map actor deleted mappoint after local BA has finished but before
+                // this message is processed
+                continue;
             }
         }
 
@@ -458,7 +477,7 @@ impl Map {
                     None => continue,
                 };
             } else {
-                todo!("MVP");
+                todo!("MVP LOOP CLOSING");
                 // pMP->mPosGBA = vPoint->estimate().cast<float>();
                 // pMP->mnBAGlobalForKF = nLoopKF;
             }
@@ -468,7 +487,7 @@ impl Map {
 
     #[time("Map::{}")]
     pub fn replace_mappoint(&self, _mp_to_replace: Id, _mp: Id) {
-        todo!("LOCAL MAPPING");
+        todo!("MVP LOCAL MAPPING");
         // if(pMP->mnId==this->mnId)
         //     return;
 

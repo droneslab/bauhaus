@@ -5,7 +5,7 @@ use dvcore::{
     matrix::{ DVVectorOfKeyPoint, DVMatrix}, actor::ActorMessage,
 };
 use crate::{
-    dvmap::{pose::DVPose, map::Id, misc::Timestamp},
+    dvmap::{pose::DVPose, map::Id, misc::Timestamp, keyframe::{Frame, KeyFrame}},
     actors::tracking_backend::TrackingState
 };
 
@@ -65,6 +65,11 @@ pub struct IMUInitializedMsg {
 }
 impl ActorMessage for IMUInitializedMsg {}
 
+pub struct NewKeyFrameMsg {
+    pub keyframe: Frame
+}
+impl ActorMessage for NewKeyFrameMsg {}
+
 //* VISUALIZER */
 pub struct VisFeaturesMsg {
     pub keypoints: DVVectorOfKeyPoint,
@@ -79,7 +84,7 @@ pub struct VisFeatureMatchMsg {
 impl ActorMessage for VisFeatureMatchMsg {}
 pub struct VisTrajectoryMsg { 
     pub pose: DVPose, 
-    pub mappoint_matches: HashMap<u32, (i32, bool)>, 
+    pub mappoint_matches: Vec<Option<(i32, bool)>>, 
     pub timestamp: Timestamp
 }
 impl ActorMessage for VisTrajectoryMsg {}

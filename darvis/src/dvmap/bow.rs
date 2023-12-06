@@ -53,7 +53,6 @@ impl BoW {
         }
     }
     pub fn clone(&self) -> Self {
-        // TODO (mvp): I am not sure this is thread-safe or that it works...
         Self {
             bow_vec: self.bow_vec.clone(),
             feat_vec: self.feat_vec.clone(),

@@ -10,11 +10,11 @@ use opencv::core::KeyPoint;
 use opencv::prelude::*;
 use crate::actors::map_actor::MapWriteMsg;
 use crate::actors::tracking_backend::TrackedMapPointData;
-use crate::dvmap::keyframe::{Frame, FullKeyFrame};
+use crate::dvmap::keyframe::{Frame, KeyFrame};
 use crate::modules::optimizer::LEVEL_SIGMA2;
 use crate::registered_actors::{MATCHER, FEATURE_DETECTION, CAMERA};
 use crate::{
-    dvmap::{keyframe::InitialFrame, map::Id, map::Map},
+    dvmap::{map::Id, map::Map},
     maplock::ReadOnlyMap,
 };
 
@@ -45,8 +45,8 @@ lazy_static! {
 }
 
 pub fn search_for_initialization(
-    f1: &Frame<InitialFrame>,
-    f2: &Frame<InitialFrame>,
+    f1: &Frame,
+    f2: &Frame,
     vb_prev_matched: &mut DVVectorOfPoint2f,
     window_size: i32,
 ) -> (i32, Vec<i32>) {
@@ -68,12 +68,11 @@ pub fn search_for_initialization(
         }
 
         // Pranay : could be a bug ?? get_features_in_area
-        let v_indices2 = f2.get_features_in_area(
+        let v_indices2 = f2.features.get_features_in_area(
             &(vb_prev_matched.get(i1).unwrap().x as f64),
             &(vb_prev_matched.get(i1).unwrap().y as f64),
             window_size as f64,
-            level1,
-            level1,
+            Some((level1, level1))
         );
 
         if v_indices2.is_empty() {
@@ -144,7 +143,7 @@ pub fn search_for_initialization(
 
 #[time("TrackingBackend::{}")]
 pub fn search_by_projection(
-    frame: &mut Frame<InitialFrame>, mappoints: &mut HashSet<Id>, th: i32, ratio: f64,
+    frame: &mut Frame, mappoints: &mut HashSet<Id>, th: i32, ratio: f64,
     track_in_view: &HashMap<Id, TrackedMapPointData>, track_in_view_right: &HashMap<Id, TrackedMapPointData>, 
     map: &ReadOnlyMap<Map>, sensor: Sensor
 ) -> Result<i32, Box<dyn std::error::Error>> {
@@ -175,12 +174,11 @@ pub fn search_by_projection(
             let mut r = radius_by_viewing_cos(mp_data.view_cos);
             if th != 1 { r *= th as f64; }
 
-            let indices = frame.get_features_in_area(
+            let indices = frame.features.get_features_in_area(
                 &mp_data.proj_x,
                 &mp_data.proj_y,
                 r * (SCALE_FACTORS[mp_data.predicted_level as usize] as f64),
-                mp_data.predicted_level-1,
-                mp_data.predicted_level
+                Some((mp_data.predicted_level-1, mp_data.predicted_level))
             );
 
             if !indices.is_empty() {
@@ -192,13 +190,14 @@ pub fn search_by_projection(
 
                 // Get best and second matches with near keypoints
                 for idx in indices {
-                    if let Some((id, _)) = frame.mappoint_matches.get(&idx) {
-                        if let Some(mp) = map.mappoints.get(id) {
+                    if frame.mappoint_matches.has_mappoint(&idx) {
+                        let id = frame.mappoint_matches.get_mappoint(&idx);
+                        if let Some(mp) = map.mappoints.get(&id) {
                             if mp.get_observations().len() > 0 {
                                 continue;
                             }
                         } else {
-                            frame.delete_mappoint_match(idx);
+                            frame.mappoint_matches.delete((idx as i32, -1)); // TODO (STEREO)
                         }
                     }
 
@@ -236,7 +235,7 @@ pub fn search_by_projection(
                         continue;
                     }
                     if best_level.0 != best_level.1 || (best_dist.0 as f64) <= (ratio * best_dist.1 as f64) {
-                        frame.add_mappoint(best_idx as u32, *mp_id, false);
+                        frame.mappoint_matches.add_mappoint(best_idx as u32, *mp_id, false);
 
                         match sensor.frame() {
                             FrameSensor::Stereo => {
@@ -338,13 +337,13 @@ pub fn search_by_projection(
 
 #[time("TrackingBackend::{}")]
 pub fn search_by_projection_with_threshold (
-    current_frame: &mut Frame<InitialFrame>, last_frame: &mut Frame<InitialFrame>, th: i32,
+    current_frame: &mut Frame, last_frame: &mut Frame, th: i32,
     should_check_orientation: bool,
     map: &ReadOnlyMap<Map>, sensor: Sensor
 ) -> Result<i32, Box<dyn std::error::Error>> {
     // int ORBmatcher::SearchByProjection(Frame &CurrentFrame, const Frame &LastFrame, const float th, const bool bMono)
 
-    // TODO STEREO...search_by_projection_with_threshold...
+    // TODO (Stereo)...search_by_projection_with_threshold...
     // This function should work for stereo as well as RGBD as long as get_all_keypoints() returns
     // a concatenated list of left keypoints and right keypoints (there is a to do for this in features.rs). BUT
     // double check that the descriptors works correctly. Instead of splitting descriptors into discriptors_left and right,
@@ -378,14 +377,15 @@ pub fn search_by_projection_with_threshold (
     {
         let map = map.read();
         for idx1 in 0..last_frame.features.get_all_keypoints().len() {
-            if last_frame.mappoint_matches.contains_key(&(idx1 as u32)) && !last_frame.is_mp_outlier(&(idx1 as u32)) {
+            if last_frame.mappoint_matches.has_mappoint(&(idx1 as u32)) {
+                let mp_id = last_frame.mappoint_matches.get_mappoint(&(idx1 as u32));
+                if last_frame.mappoint_matches.is_outlier(&(idx1 as u32)) { continue; }
                 // Project
-                let mp_id = &last_frame.mappoint_matches.get(&(idx1 as u32)).unwrap().0;
-                let mappoint = match map.mappoints.get(mp_id) {
+                let mappoint = match map.mappoints.get(&mp_id) {
                     Some(mp) => mp,
                     None => {
                         // Mappoint has been deleted but not updated in last_frame yet
-                        last_frame.mappoint_matches.remove(&(idx1 as u32));
+                        last_frame.mappoint_matches.delete((idx1, -1)); // TODO (STEREO)
                         continue;
                     }
                 };
@@ -410,11 +410,11 @@ pub fn search_by_projection_with_threshold (
 
                 let indices_2 =
                     if forward {
-                        current_frame.get_features_in_area(&u,&v, radius, last_octave, -1)
+                        current_frame.features.get_features_in_area(&u,&v, radius, Some((last_octave, -1)))
                     } else if backward {
-                        current_frame.get_features_in_area(&u,&v, radius, 0, last_octave)
+                        current_frame.features.get_features_in_area(&u,&v, radius, Some((0, last_octave)))
                     } else {
-                        current_frame.get_features_in_area(&u,&v, radius, last_octave-1, last_octave+1)
+                        current_frame.features.get_features_in_area(&u,&v, radius, Some((last_octave-1, last_octave+1)))
                     };
                 if indices_2.is_empty() {
                     continue;
@@ -425,13 +425,16 @@ pub fn search_by_projection_with_threshold (
                 let mut best_idx: i32 = -1;
 
                 for idx2 in indices_2 {
-                    if let Some((id, _)) = current_frame.mappoint_matches.get(&idx2) {
-                        if map.mappoints.get(id).unwrap().get_observations().len() > 0 {
-                            continue;
+                    if current_frame.mappoint_matches.has_mappoint(&idx2) {
+                        let id = current_frame.mappoint_matches.get_mappoint(&idx2);
+                        if let Some(mappoint) = map.mappoints.get(&id) {
+                            if mappoint.get_observations().len() > 0 { 
+                                continue;
+                            }
                         }
                     }
 
-                    // TODO Stereo: Unfinished code, not sure what this is doing in search_by_projection_with_threshold
+                    // TODO (Stereo): Unfinished code, not sure what this is doing in search_by_projection_with_threshold
                     // Nleft == -1 if the left camera has no extracted keypoints which would happen in the
                     // non-stereo case. But mvuRight is > 0 ONLY in the stereo case! So is this ever true?
                     // if(CurrentFrame.Nleft == -1 && CurrentFrame.mvuRight[i2]>0)
@@ -451,7 +454,7 @@ pub fn search_by_projection_with_threshold (
                 }
 
                 if best_dist <= TH_HIGH {
-                    current_frame.add_mappoint(best_idx as u32, *mp_id, false);
+                    current_frame.mappoint_matches.add_mappoint(best_idx as u32, mp_id, false);
 
                     if should_check_orientation {
                         check_orientation_1(
@@ -477,7 +480,7 @@ pub fn search_by_projection_with_threshold (
 // TODO (mvp): other searchbyprojection functions we will have to implement later:
 
 pub fn _search_by_projection_reloc (
-    _current_frame: &mut Frame<InitialFrame>, _keyframe: &Frame<FullKeyFrame>,
+    _current_frame: &mut Frame, _keyframe: &KeyFrame,
     _th: i32, _should_check_orientation: bool, _ratio: f64,
     _track_in_view: &HashMap<Id, TrackedMapPointData>, _track_in_view_right: &HashMap<Id, TrackedMapPointData>,
     _map: &ReadOnlyMap<Map>, _sensor: Sensor
@@ -498,11 +501,11 @@ pub fn _search_by_projection_reloc (
 
 #[time("TrackingBackend::{}")]
 pub fn search_by_bow_f(
-    kf: &Frame<FullKeyFrame>, frame: &mut Frame<InitialFrame>,
+    kf: &KeyFrame, frame: &mut Frame,
     should_check_orientation: bool, ratio: f64
 ) -> Result<u32, Box<dyn std::error::Error>> {
     // int SearchByBoW(KeyFrame *pKF, Frame &F, std::vector<MapPoint*> &vpMapPointMatches);
-    frame.clear_mappoints();
+    frame.mappoint_matches.clear_mappoints();
     let mut matches = HashMap::<u32, Id>::new();
 
     let factor = 1.0 / (HISTO_LENGTH as f32);
@@ -533,10 +536,10 @@ pub fn search_by_bow_f(
             let kf_indices = kf.bow.as_ref().unwrap().get_feat_from_node(kf_node_id);
 
             for kf_index in kf_indices {
-                if !kf.mappoint_matches.contains_key(&kf_index) {
+                if !kf.mappoint_matches.has_mappoint(&kf_index) {
                     continue
                 }
-                let mp_id = &kf.get_mappoint(&kf_index);
+                let mp_id = &kf.mappoint_matches.get_mappoint(&kf_index);
 
                 let mut best_dist_left = (256, 256);
                 let mut best_index_left = -1;
@@ -606,14 +609,14 @@ pub fn search_by_bow_f(
     };
 
     for (index, mp_id) in &matches {
-        frame.add_mappoint(*index, *mp_id, false);
+        frame.mappoint_matches.add_mappoint(*index, *mp_id, false);
     }
 
     return Ok(matches.len() as u32);
 }
 
 pub fn search_by_bow_kf(
-    kf_1 : &Frame<FullKeyFrame>, kf_2 : &Frame<FullKeyFrame>, should_check_orientation: bool, 
+    kf_1 : &KeyFrame, kf_2 : &KeyFrame, should_check_orientation: bool, 
     ratio: f64
 ) -> Result<HashMap<u32, Id>, Box<dyn std::error::Error>> {
     // int SearchByBoW(KeyFrame *pKF1, KeyFrame* pKF2, std::vector<MapPoint*> &vpMatches12);
@@ -638,7 +641,7 @@ pub fn search_by_bow_kf(
                             continue;
                         }
 
-                        if kf_2.has_mappoint(&index_kf_2) {
+                        if kf_2.mappoint_matches.has_mappoint(&index_kf_2) {
                             continue;
                         }
 
@@ -654,7 +657,7 @@ pub fn search_by_bow_kf(
                     }
 
                     if best_dist.0 <= TH_LOW {
-                        let mp_id = &kf_2.get_mappoint(&(best_index as u32));
+                        let mp_id = &kf_2.mappoint_matches.get_mappoint(&(best_index as u32));
 
                         if (best_dist.0 as f64) < ratio * (best_dist.1 as f64) {
                             matches.insert(index_kf_1, *mp_id); // for Kf_1
@@ -683,7 +686,7 @@ pub fn search_by_bow_kf(
 }
 
 pub fn search_for_triangulation(
-    kf_1 : &Frame<FullKeyFrame>, kf_2 : &Frame<FullKeyFrame>,
+    kf_1 : &KeyFrame, kf_2 : &KeyFrame,
     should_check_orientation: bool, _only_stereo: bool, course: bool,
     sensor: Sensor
 ) -> Result<HashMap<usize, usize>, Box<dyn std::error::Error>> {
@@ -694,16 +697,9 @@ pub fn search_for_triangulation(
 
     //Compute epipole in second image
     let cw = *kf_1.get_camera_center(); //Cw
-    let r2w = *kf_2.pose.unwrap().get_rotation(); //R2w
-    let t2w = *kf_2.pose.unwrap().get_translation(); //t2w
+    let r2w = *kf_2.pose.get_rotation(); //R2w
+    let t2w = *kf_2.pose.get_translation(); //t2w
     let c2 = r2w * cw + t2w; //C2
-
-    // let pose1 = kf_1.pose.unwrap(); // T1w
-    // let pose2 = kf_2.pose.unwrap(); // T2w
-    // let translation_inverse_2 = kf_2.pose.unwrap().inverse(); // Tw2
-    // let cw = *kf_1.get_camera_center(); // Cw
-    // let temp = *translation_2.get_translation();
-    // let c2 = temp.component_mul(&cw); // c2
 
     let ep = CAMERA_MODULE.project(DVVector3::new(c2));
 
@@ -719,7 +715,7 @@ pub fn search_for_triangulation(
             // Eigen::Matrix3f Rll = Tll.rotationMatrix(), Rlr  = Tlr.rotationMatrix(), Rrl  = Trl.rotationMatrix(), Rrr  = Trr.rotationMatrix();
             // Eigen::Vector3f tll = Tll.translation(), tlr = Tlr.translation(), trl = Trl.translation(), trr = Trr.translation();
     } else {
-        let pose12 = kf_1.pose.unwrap() * kf_2.pose.unwrap().inverse(); // T12 ... which is different than t12
+        let pose12 = kf_1.pose * kf_2.pose.inverse(); // T12 ... which is different than t12
         r12 = pose12.get_rotation();
         t12 = pose12.get_translation();
     }
@@ -748,7 +744,7 @@ pub fn search_for_triangulation(
 
             for kf1_index in kf1_indices {
                 // If there is already a MapPoint skip
-                if kf_1.mappoint_matches.contains_key(&kf1_index) {
+                if kf_1.mappoint_matches.has_mappoint(&kf1_index) {
                     // println!("Already mappoint at {}", kf1_index);
                     continue
                 };
@@ -774,7 +770,7 @@ pub fn search_for_triangulation(
                 let kf2_indices = kf_2.bow.as_ref().unwrap().get_feat_from_node(kf2_node_id);
                 for kf2_index in kf2_indices {
                     // If we have already matched or there is a MapPoint skip
-                    if kf_2.mappoint_matches.contains_key(&kf2_index) || matched_already.contains_key(&kf2_index) {
+                    if kf_2.mappoint_matches.has_mappoint(&kf2_index) || matched_already.contains_key(&kf2_index) {
                         continue
                     };
 
@@ -897,7 +893,7 @@ pub fn search_for_triangulation(
     return Ok(matches);
 }
 
-pub fn fuse(kf_id: &Id, fuse_candidates: &Vec<Id>, map: &RwLockReadGuard<Map>, th: f32, is_right: bool) -> Vec<MapWriteMsg> {
+pub fn fuse(kf_id: &Id, fuse_candidates: &Vec<Id>, map: &parking_lot::MappedRwLockReadGuard<Map>, th: f32, is_right: bool) -> Vec<MapWriteMsg> {
     // int ORBmatcher::Fuse(KeyFrame *pKF, const vector<MapPoint *> &vpMapPoints, const float th, const bool bRight)
     let keyframe = map.keyframes.get(kf_id).unwrap();
 
@@ -909,15 +905,18 @@ pub fn fuse(kf_id: &Id, fuse_candidates: &Vec<Id>, map: &RwLockReadGuard<Map>, t
             // pCamera = pKF->mpCamera2;
         },
         false => {
-            (keyframe.pose.unwrap().get_translation(), keyframe.get_camera_center(), CAMERA)
+            (keyframe.pose.get_translation(), keyframe.get_camera_center(), CAMERA)
         }
     };
 
     let mut to_fuse = Vec::new();
 
     for mp_id in fuse_candidates {
-        let mappoint = map.mappoints.get(&mp_id).unwrap();
-        if mappoint.is_in_keyframe(keyframe.id()) {
+        let mappoint = match map.mappoints.get(&mp_id) {
+            Some(mp) => mp,
+            None => continue
+        };
+        if mappoint.is_in_keyframe(keyframe.id) {
             continue;
         }
 
@@ -956,7 +955,7 @@ pub fn fuse(kf_id: &Id, fuse_candidates: &Vec<Id>, map: &RwLockReadGuard<Map>, t
         // Search in a radius
         let predicted_level = mappoint.predict_scale(&dist_3d);
         let radius = th * SCALE_FACTORS[predicted_level as usize];
-        let indices = keyframe.get_features_in_area(&uv.0, &uv.1, radius as f64, is_right);
+        let indices = keyframe.features.get_features_in_area(&uv.0, &uv.1, radius as f64, None);
         if indices.is_empty() {
             continue;
         }
@@ -1013,8 +1012,8 @@ pub fn fuse(kf_id: &Id, fuse_candidates: &Vec<Id>, map: &RwLockReadGuard<Map>, t
 
         // If there is already a MapPoint replace otherwise add new measurement
         if best_dist <= TH_LOW {
-            if keyframe.has_mappoint(&(best_idx as u32)) {
-                let mappoint_in_kf_id = keyframe.get_mappoint(&(best_idx as u32));
+            if keyframe.mappoint_matches.has_mappoint(&(best_idx as u32)) {
+                let mappoint_in_kf_id = keyframe.mappoint_matches.get_mappoint(&(best_idx as u32));
                 let mappoint_in_kf = map.mappoints.get(&mappoint_in_kf_id).unwrap();
                 if mappoint_in_kf.get_observations().len() > mappoint.get_observations().len() {
                     warn!("Verify that the order of mp_id and mappoint_in_kf_id is right");

@@ -167,7 +167,7 @@ impl DarvisVisualizer {
         }.expect("Visualizer could not draw image!");
 
         // If drawing with features and matches, need to save current image and keypoints for when matches are received
-        //TODO (memory)... remove these clones
+        //TODO (timing)... remove these clones. Can use same pointer swap technique as in beginning of tracking backend
         self.prev_keypoints = self.current_keypoints.clone();
         self.prev_image = self.current_image.clone();
         self.current_image = Some(msg.image.clone());
@@ -208,7 +208,7 @@ impl DarvisVisualizer {
             format!("cam"),
             vec![current_pose],
             vec![], vec![]
-        ); // TODO (vis) make this a camera frame and publish new transform, but will this mess up the pose of previous camera objects?
+        ); // TODO (mvp) make this a camera frame and publish new transform, but will this mess up the pose of previous camera objects?
 
         // Entity 2 ... trajectory
         // This should never be deleted or replaced
@@ -237,7 +237,7 @@ impl DarvisVisualizer {
         let map = self.map.read();
         let mut entities = Vec::<SceneEntity>::new();
         for (id, keyframe) in &map.keyframes {
-            let kf_arrow = self.create_arrow(&keyframe.pose.unwrap(), KEYFRAME_COLOR.clone());
+            let kf_arrow = self.create_arrow(&keyframe.pose, KEYFRAME_COLOR.clone());
             entities.push(self.create_scene_entity(
                 timestamp, "world",
                 format!("kf {}", id),
@@ -256,14 +256,16 @@ impl DarvisVisualizer {
         Ok(())
     }
 
-    fn draw_mappoints(&mut self, mappoint_matches: &HashMap<u32, (Id, bool)>, timestamp: Timestamp) -> Result<(), Box<dyn std::error::Error>> {
+    fn draw_mappoints(&mut self, mappoint_matches: &Vec<Option<(Id, bool)>>, timestamp: Timestamp) -> Result<(), Box<dyn std::error::Error>> {
         // Mappoints in map (different color if they are matches)
         // Should be overwritten when there is new info for a mappoint
         let mut entities = Vec::new();
 
         let mut mappoint_match_ids = HashSet::<Id>::new();
-        for (_, (mappoint_id, _)) in mappoint_matches {
-            mappoint_match_ids.insert(*mappoint_id);
+        for item in mappoint_matches {
+            if let Some((mappoint_id, _)) = item {
+                mappoint_match_ids.insert(*mappoint_id);
+            }
         }
 
         let map = self.map.read();
@@ -377,7 +379,7 @@ impl DarvisVisualizer {
 }
 
 fn convert_timestamp(timestamp: Timestamp) -> (i64, i32) {
-    let timestamp = timestamp * 10.0; // Sofiya TODO...Can remove this later, putting this in here for now so foxglove can show the results a little slower
+    let timestamp = timestamp * 10.0; // Note: Can remove this later, putting this in here for now so foxglove can show the results a little slower. If removing, also modify write() function
     let seconds = timestamp.floor();
     let nanos = (timestamp - seconds) * 1000000000.0;
     (seconds as i64, nanos as i32)
@@ -422,7 +424,7 @@ impl McapWriter {
         timestamp: Timestamp,
         sequence: u32,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let time_in_nsec = timestamp * 10000000000.0; // Sofiya todo remove one 0 if removing line in convert_timestamp that makes it go slower
+        let time_in_nsec = timestamp * 10000000000.0; // Note: remove one 0 if removing line in convert_timestamp that makes it go slower
         Ok(
             self.writer.write_to_known_channel(
                 &MessageHeader {
@@ -458,8 +460,6 @@ impl From<&DVPose> for foxglove::foxglove::items::Pose {
             z: quat[2],
             w: quat[3]
         };
-
-        // println!("Pose sent to foxglove {:?} {:?}", position, orientation);
 
         foxglove::foxglove::items::Pose {
             position: Some(position),

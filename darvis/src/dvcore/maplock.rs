@@ -1,4 +1,11 @@
 use log::{trace, debug};
+use parking_lot::{
+    RwLock,
+    MappedRwLockReadGuard,
+    MappedRwLockWriteGuard,
+    RwLockReadGuard,
+    RwLockWriteGuard
+};
 /// *** Structs to wrap map to manage read/write access *** ///
 // ReadOnlyWrapper is used by all actors but the map actor.
 // Trying to write on read-only will give a compilation error.
@@ -7,27 +14,29 @@ use log::{trace, debug};
 // to other actors.
 // Currently only used for map objects but is generic so you can use it
 // for other objects.
-use std::sync::{
-    RwLock,
-    RwLockReadGuard, //MappedRwLockReadGuard,
-    RwLockWriteGuard, //MappedRwLockWriteGuard,
-    // RwLockReadGuard,
-    // RwLockWriteGuard
-};
+// use std::sync::{
+//     RwLock,
+//     RwLockReadGuard, //MappedRwLockReadGuard,
+//     RwLockWriteGuard, //MappedRwLockWriteGuard,
+//     // RwLockReadGuard,
+//     // RwLockWriteGuard
+// };
 use std::{sync::Arc, time::Instant};
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct ReadOnlyMap<T> {
     inner: Arc<RwLock<T>>,
 }
 impl<T> ReadOnlyMap<T> {
-    pub fn read(&self) -> RwLockReadGuard<T> {
+    pub fn read(&self) -> MappedRwLockReadGuard<T> {
         let now = Instant::now();
-        let guard = self.inner.read().unwrap();
+        // let guard = self.inner.read().unwrap();
+        let guard = RwLockReadGuard::map(self.inner.read(), |unlocked| unlocked);
         let elapsed = now.elapsed().as_millis();
         if elapsed > 5 {
             debug!("LOCKS...Read acquire: {} ms", now.elapsed().as_millis());
         }
+
         guard
     }
 }
@@ -44,9 +53,11 @@ impl<T> ReadWriteMap<T> {
         }
     }
 
-    pub fn write(&self) -> RwLockWriteGuard<T> {
+    pub fn write(&self) -> MappedRwLockWriteGuard<T> {
         let now = Instant::now();
-        let write = self.inner.write().unwrap();
+        // let write = self.inner.write().unwrap();
+        let write = RwLockWriteGuard::map(self.inner.write(), |unlocked| unlocked);
+
         let elapsed = now.elapsed().as_millis();
         if elapsed > 5 {
             debug!("LOCKS...Write acquire: {} ms", elapsed);
@@ -54,9 +65,11 @@ impl<T> ReadWriteMap<T> {
         write
     }
 
-    pub fn read(&self) -> RwLockReadGuard<T> {
+    pub fn read(&self) -> MappedRwLockReadGuard<T> {
         debug!("retrieving read lock in map");
-        self.inner.read().unwrap()
+        // self.inner.read().unwrap()
+        RwLockReadGuard::map(self.inner.read(), |unlocked| unlocked)
+
     }
 
     pub fn create_read_only(&self) -> ReadOnlyMap<T> {

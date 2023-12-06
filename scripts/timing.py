@@ -1,7 +1,10 @@
 import numpy as np
 
 def read_file(fname):
-    results = {}
+    results = {
+        "write acquire": [],
+        "read acquire": [],
+    }
     with open(fname, "r") as f:
         for line in f:
             if "TimerFinished" in line:
@@ -25,6 +28,12 @@ def read_file(fname):
                         results[title] = [time]
                 except ValueError:
                     print(line)
+            elif "LOCKS...Write acquire" in line:
+                results["write acquire"].append(float(line.split("Write acquire:")[1].strip().split(" ")[0].strip()))
+            elif "LOCKS...Read acquire" in line:
+                results["read acquire"].append(float(line.split("Read acquire:")[1].strip().split(" ")[0].strip()))
+
+
 
     for title in results.keys():
         avg = np.mean(results[title])
