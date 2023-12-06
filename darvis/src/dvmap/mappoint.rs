@@ -3,7 +3,7 @@ use dvcore::{matrix::DVMatrix, config::{SETTINGS, SYSTEM}, sensor::{Sensor, Fram
 use log::error;
 extern crate nalgebra as na;
 use crate::{matrix::DVVector3, modules::orbmatcher::{descriptor_distance, SCALE_FACTORS}, registered_actors::FEATURE_DETECTION};
-use super::{map::{Id, Map}, keyframe::{Frame, FullKeyFrame}, pose::DVTranslation};
+use super::{map::{Id, Map}, keyframe::{Frame, KeyFrame}, pose::DVTranslation};
 
 // Paper note: Implementing typestate like here: http://cliffle.com/blog/rust-typestate/#a-simple-example-the-living-and-the-dead
 // This way we can encode mappoints that have been created but not inserted into the map as a separate type than mappoints that are legit.
@@ -28,7 +28,7 @@ pub struct MapPoint<M: MapPointState> {
     pub position: DVTranslation, 
 
     // Map connections
-    // TODO (improvement): it would be nice if we could guarantee that the connections are updated/correct
+    // TODO (design): it would be nice if we could guarantee that the connections are updated/correct
     // rather than duplicating all these connections across all the objects and hoping we remember
     // to update them correctly after a map modification
     pub origin_map_id: Id,
@@ -240,7 +240,7 @@ impl MapPoint<FullMapPoint> {
             }
         }
 
-        // TODO (CLONE) ... misc
+        // TODO (timing) ... this clone might take a while
         Some(DVMatrix::new(descriptors[best_idx].clone()))
     }
 
@@ -342,11 +342,8 @@ impl MapPoint<FullMapPoint> {
         descriptors
     }
 
-    fn get_level(&self, kf: &Frame<FullKeyFrame>) -> i32 {
-        let (left_index, right_index) = self.full_mp_info.observations.get(&kf.id()).unwrap();
-        // TODO (mvp): sometimes in orbslam, left index will be -1 even for a stereo
-        // camera, if there is no second camera set. I don't know why
-        // they would do this though, like then it's not stereo...
+    fn get_level(&self, kf: &KeyFrame) -> i32 {
+        let (left_index, right_index) = self.full_mp_info.observations.get(&kf.id).unwrap();
         if *left_index != -1 {
             kf.features.get_octave(*left_index as usize)
         } else {

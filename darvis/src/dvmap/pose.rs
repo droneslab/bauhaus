@@ -2,7 +2,6 @@ use std::ops::{Mul, Deref};
 use dvcore::matrix::{DVVector3, DVMatrix3};
 use serde::{Deserialize, Serialize};
 
-// TODO: Should we use nalgebra::Translation3 instead of our own matrices? Seems like there's a lot of converting happening right now
 pub type DVTranslation = DVVector3<f64>;
 pub type DVRotation = DVMatrix3<f64>;
 
@@ -30,7 +29,7 @@ impl DVPose {
         DVPose ( nalgebra::IsometryMatrix3::from_parts(translation,rotation3) )
     }
 
-    // TODO (memory): his forces a copy of the matrix/vector each time, which might not be ideal for just reads.
+    // TODO (timing): his forces a copy of the matrix/vector each time, which might not be ideal for just reads.
     pub fn get_translation(&self) -> DVTranslation { DVTranslation::new(self.0.translation.vector) }
     pub fn get_rotation(&self) -> DVRotation { DVRotation::new(*self.0.rotation.matrix()) }
     pub fn get_quaternion(&self) -> nalgebra::geometry::UnitQuaternion<f64> { nalgebra::geometry::UnitQuaternion::from_rotation_matrix(&self.0.rotation) }
@@ -100,10 +99,6 @@ impl From<DVPose> for g2o::ffi::Pose {
         // but eigen constructor takes [w,i,j,k]
         let rotation = [quat.w, quat.i, quat.j, quat.k];
         let translation = [pose.0.translation.x, pose.0.translation.y, pose.0.translation.z];
-        
-        // println!("rotation: {:?}", rotation);
-        // println!("quat: {:?}", quat);
-        // println!("back to matrix: {:?}", quat.to_rotation_matrix());
         g2o::ffi::Pose { translation, rotation }
     }
 }

@@ -6,8 +6,7 @@ use dvcore::sensor::{Sensor, FrameSensor, ImuSensor};
 use log::debug;
 use dvcore::matrix::DVVectorOfPoint3f;
 use opencv::prelude::KeyPointTraitConst;
-use crate::dvmap::keyframe::Frame;
-use crate::dvmap::{keyframe::InitialFrame, pose::DVPose};
+use crate::dvmap::{keyframe::Frame, pose::DVPose};
 use crate::modules::camera::CAMERA_MODULE;
 
 use super::orbmatcher;
@@ -20,9 +19,9 @@ pub struct Initialization {
     pub prev_matched: DVVectorOfPoint2f,// std::vector<cv::Point2f> mvbPrevMatched;
     pub p3d: DVVectorOfPoint3f,// std::vector<cv::Point3f> mvIniP3D;
     pub ready_to_initialize: bool,
-    pub initial_frame: Option<Frame<InitialFrame>>,
-    pub last_frame: Option<Frame<InitialFrame>>,
-    pub current_frame: Option<Frame<InitialFrame>>,
+    pub initial_frame: Option<Frame>,
+    pub last_frame: Option<Frame>,
+    pub current_frame: Option<Frame>,
     sensor: Sensor,
 }
 
@@ -42,7 +41,7 @@ impl Initialization {
         }
     }
 
-    pub fn try_initialize(&mut self, current_frame: &Frame<InitialFrame>) -> Result<bool, Box<dyn std::error::Error>> {
+    pub fn try_initialize(&mut self, current_frame: &Frame) -> Result<bool, Box<dyn std::error::Error>> {
         // Only set once at beginning
         if self.initial_frame.is_none() {
             self.initial_frame = Some(current_frame.clone());
@@ -103,8 +102,6 @@ impl Initialization {
                 100
             );
             self.mp_matches = mp_matches;
-            // TODO (test): COULD WRITE A TEST HERE .. match to mono_initialization_matches.txt
-            // debug!("MonocularInitialization, search for initialization.. {:?}", self.mp_matches);
 
             // Check if there are enough correspondences
             if num_matches < 100 {

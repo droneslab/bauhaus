@@ -268,7 +268,7 @@ pub mod ffi {
     }
 }
 
-// TODO (memory): Need to make sure these are actually safe
+// TODO (mvp): Need to make sure these are actually safe
 // They should be ok as long as they are only used within a UniquePtr.
 // But can we enforce using them in a UniquePtr?
 // These are needed because:

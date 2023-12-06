@@ -1,5 +1,6 @@
 #![feature(map_many_mut)]
 #![feature(hash_extract_if)]
+#![feature(extract_if)]
 
 use std::{fs::{OpenOptions, File}, path::Path, env, time::{self, Duration}, io::{self, BufRead}, thread};
 use fern::colors::{ColoredLevelConfig, Color};
@@ -145,9 +146,6 @@ impl LoopSleep {
                     return;
                 }
                 let next_timestamp = timestamps[(*current_index + 1) as usize];
-                // println!("timestamps {:?}", timestamps);
-                // println!("next timestamp {}", next_timestamp);
-                // println!("now {:?}", now);
                 thread::sleep(Duration::from_secs_f64(next_timestamp - now.elapsed().as_secs_f64()));
             },
             LoopType::Fps(ref mut loop_helper) => {

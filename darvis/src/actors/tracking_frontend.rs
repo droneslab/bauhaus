@@ -75,7 +75,7 @@ impl Actor for DarvisTrackingFront {
                 let image_cols = image.cols() as u32;
                 let image_rows = image.rows() as u32;
 
-                // TODO (CLONE) ... visualizer
+                // TODO (timing) ... cloned if visualizer running. maybe make global shared object?
                 let (keypoints, descriptors) = match SETTINGS.get::<bool>(SYSTEM, "show_visualizer") {
                     true => {
                         let (keypoints, descriptors) = actor.extract_features(image.clone());
@@ -98,7 +98,7 @@ impl Actor for DarvisTrackingFront {
                 let image_cols = msg.image.cols() as u32;
                 let image_rows = msg.image.rows() as u32;
 
-                // TODO (CLONE) ... visualizer
+                // TODO (timing) ... cloned if visualizer running. maybe make global shared object?
                 let (keypoints, descriptors) = match SETTINGS.get::<bool>(SYSTEM, "show_visualizer") {
                     true => {
                         let (keypoints, descriptors) = actor.extract_features(msg.image.clone());

@@ -150,7 +150,7 @@ impl Features {
         self.get_keypoint(index).0.octave()
     }
 
-    pub fn check_close_tracked_mappoints( &self, th_depth: f32, mappoint_matches: &HashMap::<u32, (Id, bool)> ) -> (i32, i32) {
+    pub fn check_close_tracked_mappoints( &self, th_depth: f32, mappoint_matches: &Vec<Option<(Id, bool)>> ) -> (i32, i32) {
         match &self.keypoints {
             KeyPoints::Mono{..}  => (0,0),
             KeyPoints::Stereo{mv_depth, ..} | KeyPoints::Rgbd{mv_depth, ..} => {
@@ -158,11 +158,12 @@ impl Features {
                 for i in 0..self.num_keypoints as u32 {
                     let depth = mv_depth[i as usize];
                     if depth > 0.0 && depth < th_depth {
-                        let mp = mappoint_matches.get(&i);
-                        if mp.is_some() && !mp.unwrap().1 {
-                            tracked_close += 1;
-                        } else {
-                            non_tracked_close += 1;
+                        if let Some((id, is_outlier)) = mappoint_matches[i as usize] {
+                            if !is_outlier {
+                                tracked_close += 1;
+                            } else {
+                                non_tracked_close += 1;
+                            }
                         }
                     }
                 }
@@ -173,6 +174,7 @@ impl Features {
     }
 
     fn undistort_keypoints(keypoints: &DVVectorOfKeyPoint) -> Result<DVVectorOfKeyPoint, Box<dyn std::error::Error>> {
+        // void Frame::UndistortKeyPoints()
         if let Some(dist_coef) = &CAMERA_MODULE.dist_coef {
 
             let num_keypoints = keypoints.len();
@@ -183,8 +185,7 @@ impl Features {
                 *mat.at_2d_mut::<f32>(i, 1)? = keypoints.get(i as usize)?.pt().y;
             }
 
-            // TODO (CLONE) ... misc
-            // can we do this in place? Then we don't have to construct and return keypoints_un
+            // TODO (timing) ... can we do this in place? Then we don't have to construct and return keypoints_un
 
             // Undistort points
             mat = mat.reshape(2, 0)?;
@@ -216,7 +217,7 @@ impl Features {
         }
     }
 
-    pub fn get_features_in_area(&self, x: &f64, y: &f64, r: f64, image_bounds: &ImageBounds, levels: Option<(i32, i32)>,) -> Vec<u32> {
+    pub fn get_features_in_area(&self, x: &f64, y: &f64, r: f64, levels: Option<(i32, i32)>,) -> Vec<u32> {
         //GetFeaturesInArea
         let mut indices = Vec::<u32>::new();
         indices.reserve(self.num_keypoints as usize);
@@ -229,12 +230,12 @@ impl Features {
         let factor_x = r;
         let factor_y = r;
 
-        let min_cell_x = i64::max(0, ((x-image_bounds.min_x-factor_x)*grid_element_width_inv).floor() as i64);
-        let max_cell_x = i64::min(frame_grid_cols-1, ((x-image_bounds.min_x+factor_x)*grid_element_width_inv).ceil() as i64);
-        let min_cell_y = i64::max(0, ((y-image_bounds.min_y-factor_y)*grid_element_height_inv).floor() as i64);
-        let max_cell_y = i64::min(frame_grid_rows-1, ((y-image_bounds.min_y+factor_y)*grid_element_height_inv).ceil() as i64);
+        let min_cell_x = i64::max(0, ((x-self.image_bounds.min_x-factor_x)*grid_element_width_inv).floor() as i64);
+        let max_cell_x = i64::min(frame_grid_cols-1, ((x-self.image_bounds.min_x+factor_x)*grid_element_width_inv).ceil() as i64);
+        let min_cell_y = i64::max(0, ((y-self.image_bounds.min_y-factor_y)*grid_element_height_inv).floor() as i64);
+        let max_cell_y = i64::min(frame_grid_rows-1, ((y-self.image_bounds.min_y+factor_y)*grid_element_height_inv).ceil() as i64);
 
-        if !image_bounds.check_bounds(min_cell_x as f64, min_cell_y as f64) || !image_bounds.check_bounds(max_cell_x as f64, max_cell_y as f64) {
+        if !self.image_bounds.check_bounds(min_cell_x as f64, min_cell_y as f64) || !self.image_bounds.check_bounds(max_cell_x as f64, max_cell_y as f64) {
             return indices;
         }
 
@@ -303,7 +304,7 @@ impl ImageBounds {
 
         match dist_coef {
             Some(_vec) => {
-                todo!("mid priority: implement code if dist_coef is non-zero");
+                todo!("mvp: implement code if dist_coef is non-zero");
                 // cv::Mat mat(4,2,CV_32F);
                 // mat.at<float>(0,0)=0.0; mat.at<float>(0,1)=0.0;
                 // mat.at<float>(1,0)=imLeft.cols; mat.at<float>(1,1)=0.0;
@@ -358,7 +359,6 @@ impl Grid {
             }
             grid.push(row);
         }
-        //println!("Grid row col : {:?}, {:?}", FRAME_GRID_ROWS, FRAME_GRID_COLS);
         grid
     }
 
