@@ -11,6 +11,7 @@
 #include <map>
 #include <vector>
 #include <iostream>
+#include <memory>
 
 namespace DBoW2 {
 

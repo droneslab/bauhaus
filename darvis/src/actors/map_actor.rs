@@ -1,5 +1,5 @@
 use dvcore::{actor::{ActorChannels, ActorMessage, Actor}, matrix::DVVectorOfPoint3f};
-use log::{info, warn};
+use log::{info, warn, debug};
 use logging_timer::{timer, finish};
 
 use crate::{
@@ -27,6 +27,8 @@ impl Actor for MapActor {
 
         'outer: loop {
             let message = actor.actor_system.receive().unwrap();
+            // debug!("map actor queue size: {}", actor.actor_system.receiver.len());
+
             if message.is::<MapWriteMsg>() {
                 let msg = message.downcast::<MapWriteMsg>().unwrap_or_else(|_| panic!("Could not downcast map actor message!"));
 

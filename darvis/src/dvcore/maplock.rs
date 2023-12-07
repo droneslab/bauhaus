@@ -6,6 +6,8 @@ use parking_lot::{
     RwLockReadGuard,
     RwLockWriteGuard
 };
+use std::backtrace::Backtrace;
+
 /// *** Structs to wrap map to manage read/write access *** ///
 // ReadOnlyWrapper is used by all actors but the map actor.
 // Trying to write on read-only will give a compilation error.
@@ -61,6 +63,8 @@ impl<T> ReadWriteMap<T> {
         let elapsed = now.elapsed().as_millis();
         if elapsed > 5 {
             debug!("LOCKS...Write acquire: {} ms", elapsed);
+            // println!("Custom backtrace: {}", Backtrace::capture());
+
         }
         write
     }

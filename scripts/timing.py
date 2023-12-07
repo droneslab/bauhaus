@@ -4,6 +4,7 @@ def read_file(fname):
     results = {
         "write acquire": [],
         "read acquire": [],
+        "map actor queue size": []
     }
     with open(fname, "r") as f:
         for line in f:
@@ -32,6 +33,9 @@ def read_file(fname):
                 results["write acquire"].append(float(line.split("Write acquire:")[1].strip().split(" ")[0].strip()))
             elif "LOCKS...Read acquire" in line:
                 results["read acquire"].append(float(line.split("Read acquire:")[1].strip().split(" ")[0].strip()))
+            elif "map actor queue size" in line:
+                results["map actor queue size"].append(float(line.split("map actor queue size:")[1].strip().split(" ")[0].strip()))
+
 
 
 

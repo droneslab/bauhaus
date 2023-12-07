@@ -18,6 +18,7 @@ git clone git@github.com:droneslab/darvis.git
 mkdir ~/darvis-home/depends
 
 # Upgrade version of cmake (needed for C++ bindings)
+# Only do this for ubuntu 20, ignore for ubuntu 22! Didn't test on earlier versions than 20.
 cd ~/darvis-home/depends
 sudo apt remove --purge cmake && hash -r
 sudo apt install build-essential libssl-dev
@@ -126,7 +127,7 @@ To instead install with docker...
         ```bash
         export CXX=/usr/bin/clang++
         export CC=/usr/bin/clang
-
+        ``````
 ### Using the Visualizer
 1. Download the [foxglove application](https://foxglove.dev/). This can be on any device (does not need to be the test device).
 2. Open foxglove, click on `layout` in the top right corner, then `import from file`. Load the file in `foxglove/foxglovelayout.json`.
