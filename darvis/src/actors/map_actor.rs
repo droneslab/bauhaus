@@ -34,76 +34,76 @@ impl Actor for MapActor {
 
                 match msg.target {
                     MapWriteTarget::CreateInitialMap { mp_matches, p3d, initial_frame, current_frame } => {
-                        // TODO (stereo) - Add option to make the map monocular or stereo
+                        // // TODO (stereo) - Add option to make the map monocular or stereo
 
-                        let mut write_lock = actor.map.write();
-                        match write_lock.create_initial_map_monocular(mp_matches, p3d, initial_frame, current_frame) {
-                                Some((curr_kf_pose, curr_kf_id, ini_kf_id, local_mappoints, curr_kf_timestamp)) => {
-                                    actor.actor_system.send(TRACKING_BACKEND, Box::new(
-                                        MapInitializedMsg {
-                                            curr_kf_pose, curr_kf_id, ini_kf_id, 
-                                            local_mappoints, curr_kf_timestamp
-                                        }
-                                    ));
-                                },
-                                None => { 
-                                    warn!("Could not create initial map");
-                                }
-                        };
+                        // let mut write_lock = actor.map.write();
+                        // match write_lock.create_initial_map_monocular(mp_matches, p3d, initial_frame, current_frame) {
+                        //         Some((curr_kf_pose, curr_kf_id, ini_kf_id, local_mappoints, curr_kf_timestamp)) => {
+                        //             actor.actor_system.send(TRACKING_BACKEND, Box::new(
+                        //                 MapInitializedMsg {
+                        //                     curr_kf_pose, curr_kf_id, ini_kf_id, 
+                        //                     local_mappoints, curr_kf_timestamp
+                        //                 }
+                        //             ));
+                        //         },
+                        //         None => { 
+                        //             warn!("Could not create initial map");
+                        //         }
+                        // };
                     },
                     MapWriteTarget::Map__Optimization { poses } => {
-                        let _timer = timer!("MapActor::Total-update_after_ba");
-                        let mut lock = actor.map.write();
-                        lock.update_after_ba(poses, 0);
+                        // let _timer = timer!("MapActor::Total-update_after_ba");
+                        // let mut lock = actor.map.write();
+                        // lock.update_after_ba(poses, 0);
                     },
                     MapWriteTarget::KeyFrame__New { kf } => {
-                        let _timer = timer!("MapActor::Total-insert_keyframe_to_map");
-                        let kf_id = actor.map.write().insert_keyframe_to_map(kf, false);
-                        info!("Created keyframe {}", kf_id);
-                        // Tell local mapping to process keyframe
-                        actor.actor_system.find(&msg.callback_actors[0]).send(Box::new(KeyFrameIdMsg{kf_id})).unwrap();
-                        // Send the new keyframe ID directly back to the sender so they can use the ID 
-                        actor.actor_system.find(&msg.callback_actors[0]).send(Box::new(KeyFrameIdMsg{kf_id})).unwrap();
+                        // let _timer = timer!("MapActor::Total-insert_keyframe_to_map");
+                        // let kf_id = actor.map.write().insert_keyframe_to_map(kf, false);
+                        // info!("Created keyframe {}", kf_id);
+                        // // Tell local mapping to process keyframe
+                        // actor.actor_system.find(&msg.callback_actors[0]).send(Box::new(KeyFrameIdMsg{kf_id})).unwrap();
+                        // // Send the new keyframe ID directly back to the sender so they can use the ID 
+                        // actor.actor_system.find(&msg.callback_actors[0]).send(Box::new(KeyFrameIdMsg{kf_id})).unwrap();
                     },
                     MapWriteTarget::KeyFrame__Delete { id } => {
-                        let _timer = timer!("MapActor::Total-discard_keyframe");
-                        actor.map.write().discard_keyframe(id);
+                        // let _timer = timer!("MapActor::Total-discard_keyframe");
+                        // actor.map.write().discard_keyframe(id);
                     },
                     MapWriteTarget::MapPoint__New { mp , observations} => {
                         // let _timer = timer!("MapActor::Total-insert_mappoint_to_map");
-                        let _id = actor.map.write().insert_mappoint_to_map(mp, observations);
+                        // let _id = actor.map.write().insert_mappoint_to_map(mp, observations);
                     },
                     MapWriteTarget::MapPoint__NewMany { mps } => {
-                        // let _timer = timer!("MapActor::Total-Many-insert_mappoint_to_map");
-                        let mut map = actor.map.write();
-                        for (mp, observations) in mps {
-                            let _ = map.insert_mappoint_to_map(mp, observations);
-                        }
-                        // Inform tracking that we are done with creating new mappoints. Needed because tracking fails if new points are not created
-                        // before track_with_reference_keyframe, so to avoid the race condition we have it wait until the new points are ready.
-                        actor.actor_system.send(&msg.callback_actors[0], Box::new(LastKeyFrameUpdatedMsg{}));
+                        // // let _timer = timer!("MapActor::Total-Many-insert_mappoint_to_map");
+                        // let mut map = actor.map.write();
+                        // for (mp, observations) in mps {
+                        //     let _ = map.insert_mappoint_to_map(mp, observations);
+                        // }
+                        // // Inform tracking that we are done with creating new mappoints. Needed because tracking fails if new points are not created
+                        // // before track_with_reference_keyframe, so to avoid the race condition we have it wait until the new points are ready.
+                        // actor.actor_system.send(&msg.callback_actors[0], Box::new(LastKeyFrameUpdatedMsg{}));
                     },
                     MapWriteTarget::MapPoint__DiscardMany { ids } => {
                         // let _timer = timer!("MapActor::Total-Many-discard_mappoint");
-                        for id in ids {
-                            actor.map.write().discard_mappoint(&id);
-                        }
+                        // for id in ids {
+                        //     actor.map.write().discard_mappoint(&id);
+                        // }
                     },
                     MapWriteTarget::MapPoint__Discard { id } => {
                         // let _timer = timer!("MapActor::Total-discard_mappoint");
-                        actor.map.write().discard_mappoint(&id);
+                        // actor.map.write().discard_mappoint(&id);
                     },
                     MapWriteTarget::MapPoint__IncreaseFound { id, amount } => {
                         // let _timer = timer!("MapActor::Total-increase_found");
-                        if let Some(mp) = actor.map.write().mappoints.get_mut(&id) {
-                            mp.increase_found(amount);
-                        }
+                        // if let Some(mp) = actor.map.write().mappoints.get_mut(&id) {
+                        //     mp.increase_found(amount);
+                        // }
                     },
                     MapWriteTarget::MapPoint__IncreaseVisible {id} => {
                         // let _timer = timer!("MapActor::Total-increase_visible");
-                        if let Some(mp) = actor.map.write().mappoints.get_mut(&id) {
-                            mp.increase_visible();
-                        }
+                        // if let Some(mp) = actor.map.write().mappoints.get_mut(&id) {
+                        //     mp.increase_visible();
+                        // }
                     },
                     MapWriteTarget::MapPoint__AddObservation {mp_id, kf_id, index} => {
                         let _timer = timer!("MapActor::Total-add_observation");

@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use log::{info, warn, error, debug};
-use dvcore::{matrix::{DVVector3, DVVectorOfPoint3f}, config::{SETTINGS, SYSTEM}, sensor::{Sensor, FrameSensor, ImuSensor}};
+use dvcore::{matrix::{DVVector3, DVVectorOfPoint3f}, config::{SETTINGS, SYSTEM}, sensor::{Sensor, FrameSensor, ImuSensor}, maplock::ReadWriteMap};
 use logging_timer::time;
 use crate::{
     dvmap::{keyframe::*, mappoint::*, pose::DVPose},
@@ -127,8 +127,6 @@ impl Map {
     #[time("Map::{}")]
     pub fn insert_keyframe_to_map(&mut self, frame: Frame, is_initialization: bool) -> Id {
         // TODO (timing) ... 20ms
-        // Note: I would really like this to consume the keyframe, but this brings up issues
-        // with the map actor being able to take ownership of the keyframe message.
         self.last_kf_id += 1;
         let new_kf_id = self.last_kf_id;
         if self.keyframes.is_empty() {
@@ -178,6 +176,7 @@ impl Map {
             // Update Connections
             Map::update_connections(&self.mappoints, &mut self.keyframes, & self.initial_kf_id, &new_kf_id);
         }
+        info!("Created keyframe {}", new_kf_id);
 
         new_kf_id
     }

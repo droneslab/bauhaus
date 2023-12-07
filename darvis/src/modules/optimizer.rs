@@ -3,7 +3,7 @@ extern crate g2o;
 use std::collections::{HashMap, HashSet};
 use cxx::UniquePtr;
 use dvcore::{
-    maplock::ReadOnlyMap,
+    maplock::{ReadOnlyMap, ReadWriteMap},
     config::{SETTINGS, SYSTEM}, sensor::{Sensor, FrameSensor},
 };
 use log::warn;
@@ -11,7 +11,7 @@ use logging_timer::time;
 use nalgebra::Matrix3;
 use opencv::prelude::KeyPointTraitConst;
 use crate::{
-    dvmap::{keyframe::{Frame}, pose::{DVPose, DVTranslation}, map::{Map, Id}}, registered_actors::{FEATURE_DETECTION, CAMERA}
+    dvmap::{keyframe::{Frame}, pose::{DVPose, DVTranslation}, map::{Map, Id}}, registered_actors::{FEATURE_DETECTION, CAMERA}, MapLock
 };
 use g2o::ffi::EdgeSE3ProjectXYZ;
 
@@ -51,7 +51,9 @@ lazy_static! {
 
 // int Optimizer::PoseInertialOptimizationLastFrame(Frame *pFrame, bool bRecInit)
 // but bRecInit is always set to false
-pub fn pose_inertial_optimization_last_frame(_frame: &mut Frame, _map: &ReadOnlyMap<Map>) {
+pub fn pose_inertial_optimization_last_frame(
+    _frame: &mut Frame, _map: &MapLock
+) {
     todo!("IMU... Optimizer::PoseInertialOptimizationLastFrame(&mCurrentFrame)");
     // let mut optimizer = g2o::ffi::new_sparse_optimizer(2);
 
@@ -809,7 +811,9 @@ pub fn pose_inertial_optimization_last_keyframe(_frame: &mut Frame) -> i32 {
 }
 
 #[time("TrackingBackend::{}")]
-pub fn optimize_pose(frame: &mut Frame, map: &ReadOnlyMap<Map>) -> Option<i32> {
+pub fn optimize_pose(
+    frame: &mut Frame, map: &MapLock
+) -> Option<i32> {
     //int Optimizer::PoseOptimization(Frame *pFrame)
     let sensor: Sensor = SETTINGS.get(SYSTEM, "sensor");
 
@@ -1108,8 +1112,8 @@ pub fn global_bundle_adjustment(map: &Map, iterations: i32) -> BundleAdjustmentR
 
 #[time("LocalMapping::{}")]
 pub fn local_bundle_adjustment(
-    locked_map: &ReadOnlyMap<Map>, keyframe_id: Id
-) -> BundleAdjustmentResult {
+    map: &MapLock, keyframe_id: Id, loop_kf: i32
+) {
     // void Optimizer::LocalBundleAdjustment(KeyFrame *pKF, bool* pbStopFlag, Map* pMap, int& num_fixedKF, int& num_OptKF, int& num_MPs, int& num_edges)
     // Setup optimizer
     let sensor: Sensor = SETTINGS.get(SYSTEM, "sensor");
@@ -1127,17 +1131,17 @@ pub fn local_bundle_adjustment(
 
     {
         // Construct factor graph with read lock, but don't have to have lock to optimize.
-        let map = locked_map.read();
+        let lock = map.read();
 
         // Local KeyFrames: First Breath Search from Current Keyframe
-        let keyframe = map.keyframes.get(&keyframe_id).unwrap();
+        let keyframe = lock.keyframes.get(&keyframe_id).unwrap();
         let mut local_keyframes = vec![keyframe.id];
-        let current_map_id = map.id;
+        let current_map_id = lock.id;
         let mut local_ba_for_kf = HashMap::new();
         local_ba_for_kf.insert(keyframe.id, keyframe.id);
 
         for kf_id in keyframe.connections.get_covisibility_keyframes(i32::MAX) {
-            let kf = map.keyframes.get(&kf_id).unwrap();
+            let kf = lock.keyframes.get(&kf_id).unwrap();
             local_ba_for_kf.insert(kf_id, keyframe.id);
             if kf.origin_map_id == current_map_id {
                 local_keyframes.push(kf_id);
@@ -1149,14 +1153,14 @@ pub fn local_bundle_adjustment(
         let mut local_mappoints = Vec::<Id>::new();
         let mut local_ba_for_mp = HashMap::new();
         for kf_id in &local_keyframes {
-            let keyframe = map.keyframes.get(&keyframe_id).unwrap();
-            let kf = map.keyframes.get(&kf_id).unwrap();
-            if kf.id == map.initial_kf_id {
+            let keyframe = lock.keyframes.get(&keyframe_id).unwrap();
+            let kf = lock.keyframes.get(&kf_id).unwrap();
+            if kf.id == lock.initial_kf_id {
                 num_fixed_kf += 1;
             }
             for item in &kf.mappoint_matches.matches {
                 if let Some((mp_id, _)) = item {
-                    if let Some(mp) = map.mappoints.get(&mp_id) {
+                    if let Some(mp) = lock.mappoints.get(&mp_id) {
                         if mp.origin_map_id == current_map_id {
                             local_mappoints.push(*mp_id);
                             local_ba_for_mp.insert(mp_id, keyframe.id);
@@ -1170,9 +1174,9 @@ pub fn local_bundle_adjustment(
         let mut fixed_cameras = Vec::new();
         let mut ba_fixed_for_kf = HashSet::new();
         for mp_id in &local_mappoints {
-            let mp = map.mappoints.get(&mp_id).unwrap();
+            let mp = lock.mappoints.get(&mp_id).unwrap();
             for (kf_id, (_left_index, _right_index)) in mp.get_observations() {
-                let kf = map.keyframes.get(&kf_id).unwrap();
+                let kf = lock.keyframes.get(&kf_id).unwrap();
                 let local_ba = match local_ba_for_kf.contains_key(kf_id) {
                     true => *local_ba_for_kf.get(kf_id).unwrap() != keyframe_id,
                     false => true
@@ -1207,8 +1211,8 @@ pub fn local_bundle_adjustment(
         // Set Local KeyFrame vertices
         let mut vertex_id = 1;
         for kf_id in &local_keyframes {
-            let kf = map.keyframes.get(kf_id).unwrap();
-            let set_fixed = *kf_id == map.initial_kf_id;
+            let kf = lock.keyframes.get(kf_id).unwrap();
+            let set_fixed = *kf_id == lock.initial_kf_id;
             optimizer.pin_mut().add_frame_vertex(vertex_id, (kf.pose).into(), set_fixed);
             kf_vertex_ids.insert(*kf_id, vertex_id);
             vertex_id += 1;
@@ -1216,7 +1220,7 @@ pub fn local_bundle_adjustment(
 
         // Set Fixed KeyFrame vertices
         for kf_id in &fixed_cameras {
-            let kf = map.keyframes.get(kf_id).unwrap();
+            let kf = lock.keyframes.get(kf_id).unwrap();
             optimizer.pin_mut().add_frame_vertex(vertex_id, (kf.pose).into(), true);
             kf_vertex_ids.insert(*kf_id, vertex_id);
             vertex_id += 1;
@@ -1224,7 +1228,7 @@ pub fn local_bundle_adjustment(
 
         // Set MapPoint vertices
         for mp_id in &local_mappoints {
-            let mp = map.mappoints.get(mp_id).unwrap();
+            let mp = lock.mappoints.get(mp_id).unwrap();
 
             optimizer.pin_mut().add_mappoint_vertex(
                 vertex_id,
@@ -1235,7 +1239,7 @@ pub fn local_bundle_adjustment(
             let observations = mp.get_observations();
             // Set edges
             for (kf_id, (left_index, _right_index)) in observations {
-                let kf = map.keyframes.get(kf_id).unwrap();
+                let kf = lock.keyframes.get(kf_id).unwrap();
                 if kf.origin_map_id != current_map_id {
                     continue
                 }
@@ -1385,7 +1389,57 @@ pub fn local_bundle_adjustment(
     }
 
     // Recover optimized data
-    BundleAdjustmentResult::new(optimizer, kf_vertex_ids, mp_vertex_ids, mps_to_discard, vec![])
+
+    for (kf_id, vertex_id) in kf_vertex_ids {
+        let pose = optimizer.recover_optimized_frame_pose(vertex_id);
+        let mut lock = map.write();
+        let initial_kf_id = lock.initial_kf_id;
+
+        if let Some(kf) = lock.keyframes.get_mut(&kf_id) {
+            if loop_kf == initial_kf_id {
+                kf.pose = pose.into();
+            } else {
+                todo!("MVP LOOP CLOSING");
+                // Code from ORBSLAM, not sure if we need it
+                // pKF->mTcwGBA = Sophus::SE3d(SE3quat.rotation(),SE3quat.translation()).cast<float>();
+                // pKF->mnBAGlobalForKF = nLoopKF;
+            }
+        } else {
+            // Possible that map actor deleted mappoint after local BA has finished but before
+            // this message is processed
+            continue;
+        }
+    }
+
+    //Points
+    for (mp_id, vertex_id) in mp_vertex_ids {
+        let position = optimizer.recover_optimized_mappoint_pose(vertex_id);
+        let translation = nalgebra::Translation3::new(
+            position.translation[0] as f64,
+            position.translation[1] as f64,
+            position.translation[2] as f64
+        );
+        let mut lock = map.write();
+
+        if loop_kf == lock.initial_kf_id {
+            match lock.mappoints.get_mut(&mp_id) {
+                // Possible that map actor deleted mappoint after local BA has finished but before
+                // this message is processed
+                Some(mp) => {
+                    mp.position = DVTranslation::new(translation.vector);
+                    let norm_and_depth = lock.mappoints.get(&mp_id).unwrap().get_norm_and_depth(&lock);
+                    if norm_and_depth.is_some() {
+                        lock.mappoints.get_mut(&mp_id).unwrap().update_norm_and_depth(norm_and_depth.unwrap());
+                    }
+                },
+                None => continue,
+            };
+        } else {
+            todo!("MVP LOOP CLOSING");
+            // pMP->mPosGBA = vPoint->estimate().cast<float>();
+            // pMP->mnBAGlobalForKF = nLoopKF;
+        }
+    }
 }
 
 

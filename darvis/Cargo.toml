@@ -43,7 +43,7 @@ cv-convert = {version = '0.25.0', default_features = false, features = ['opencv_
 cxx = "1.0"
 
 yaml-rust = "*"
-parking_lot = "*"
+parking_lot = {version = "*", features = ["deadlock_detection"]}
 num-traits = "*"
 fern = {version = "*", features = ["colored"] }
 array2d = "*"

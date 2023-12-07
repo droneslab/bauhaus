@@ -1,9 +1,9 @@
 use dvcore::actor::{Actor, ActorMessage};
 use dvcore::config::{SETTINGS, SYSTEM};
-use dvcore::maplock::ReadOnlyMap;
+use dvcore::maplock::{ReadOnlyMap, ReadWriteMap};
 use dvcore::sensor::Sensor;
 use log::warn;
-use crate::ActorChannels;
+use crate::{ActorChannels, MapLock};
 use crate::dvmap::map::{Id, Map};
 use crate::modules::imu::ImuModule;
 
@@ -13,7 +13,7 @@ use super::messages::{ShutdownMsg, IMUInitializedMsg};
 pub struct DarvisLoopClosing {
     actor_channels: ActorChannels,
     // Map
-    map: ReadOnlyMap<Map>,
+    map: MapLock,
 
     // IMU
     imu: ImuModule,
@@ -22,7 +22,7 @@ pub struct DarvisLoopClosing {
 }
 
 impl Actor for DarvisLoopClosing {
-    type MapRef = ReadOnlyMap<Map>;
+    type MapRef = MapLock;
 
     fn new_actorstate(actor_channels: ActorChannels, map: Self::MapRef) -> DarvisLoopClosing {
         let sensor: Sensor = SETTINGS.get(SYSTEM, "sensor");

@@ -2,14 +2,15 @@
 #![feature(hash_extract_if)]
 #![feature(extract_if)]
 
-use std::{fs::{OpenOptions, File}, path::Path, env, time::{self, Duration}, io::{self, BufRead}, thread};
+use std::{fs::{OpenOptions, File}, path::Path, env, time::{self, Duration}, io::{self, BufRead}, thread::{self, sleep}};
+use dvmap::map::Map;
 use fern::colors::{ColoredLevelConfig, Color};
 use glob::glob;
 use log::info;
 use spin_sleep::LoopHelper;
 #[macro_use] extern crate lazy_static;
 
-use dvcore::{*, config::*, actor::ActorChannels};
+use dvcore::{*, config::*, actor::ActorChannels, maplock::ReadWriteMap};
 use crate::{actors::messages::{ShutdownMsg, ImagePathMsg, ImageMsg}, registered_actors::TRACKING_FRONTEND, modules::image};
 use crate::dvmap::{bow::VOCABULARY, map::Id};
 
@@ -19,6 +20,9 @@ mod spawn;
 mod dvmap;
 mod modules;
 mod tests;
+
+pub type MapLock = ReadWriteMap<Map>; // TODO (WRITE LOCK TEST)
+// pub type MapLock = Arc<RwLock<T>>
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
@@ -47,7 +51,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut loop_sleep = LoopSleep::new(&img_dir);
     let timestamps = read_timestamps_file(&img_dir);
-    
+
+    // Check deadlocks. Turn off if you aren't using this, otherwise it will slow everything down.
+    thread::spawn(move || { 
+        loop {
+            let deadlocks = parking_lot::deadlock::check_deadlock();
+            if !deadlocks.is_empty() {
+                println!("{} deadlocks detected", deadlocks.len());
+                for (i, threads) in deadlocks.iter().enumerate() {
+                    println!("Deadlock #{}", i);
+                    for t in threads {
+                        println!("Thread Id {:#?}", t.thread_id());
+                        println!("{:#?}", t.backtrace());
+                    }
+                }
+            }
+            thread::sleep(Duration::from_secs_f64(2.0));
+        }
+    } );
+
     // Process images
     // let now = SystemTime::now();
     let mut i = 0;
