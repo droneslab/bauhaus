@@ -5,14 +5,14 @@ use opencv::prelude::{Mat, MatTraitConst, MatTraitConstManual};
 use foxglove::{foxglove::items::{SceneEntity, SceneUpdate, SpherePrimitive, Vector3, Quaternion, Color, FrameTransform, LinePrimitive, line_primitive, Point3, RawImage, ArrowPrimitive}, get_file_descriptor_set_bytes, make_pose};
 
 use dvcore::{
-    actor::{ActorChannels, Actor}, matrix::DVVectorOfKeyPoint, config::SETTINGS,
+    actor::{ActorChannels, Actor}, matrix::DVVectorOfKeyPoint, config::SETTINGS, maplock::ReadWriteMap,
 };
 use crate::{
     dvmap::{map::{Map, Id}, pose::DVPose, misc::Timestamp},
     maplock::ReadOnlyMap,
     modules::image,
     actors::messages::{ShutdownMsg, VisFeaturesMsg, VisFeatureMatchMsg, VisTrajectoryMsg},
-    registered_actors::VISUALIZER
+    registered_actors::VISUALIZER, MapLock
 };
 
 // Default visual stuff //
@@ -35,7 +35,7 @@ enum ImageDrawType {
 
 pub struct DarvisVisualizer {
     actor_system: ActorChannels,
-    map: ReadOnlyMap<Map>,
+    map: MapLock,
     writer: McapWriter,
 
     // For drawing images
@@ -58,7 +58,7 @@ pub struct DarvisVisualizer {
 }
 
 impl Actor for DarvisVisualizer {
-    type MapRef = ReadOnlyMap<Map>;
+    type MapRef = MapLock;
 
     fn new_actorstate(actor_system: ActorChannels, map: Self::MapRef) -> DarvisVisualizer {
         let mcap_file_path = SETTINGS.get::<String>(VISUALIZER, "mcap_file_path");

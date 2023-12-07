@@ -1,5 +1,5 @@
-use dvcore::{maplock::ReadOnlyMap, actor::{ActorChannels, Actor}};
-use crate::dvmap::map::Map;
+use dvcore::{maplock::{ReadOnlyMap, ReadWriteMap}, actor::{ActorChannels, Actor}};
+use crate::{dvmap::map::Map, MapLock};
 
 // USER-DEFINED ACTORS: add a string to name your actor here
 pub static TRACKING_FRONTEND: &str = "TRACKING_FRONTEND";
@@ -15,11 +15,10 @@ pub static MATCHER: &str = "MATCHER";
 
 // DARVIS SYSTEM ACTORS
 pub static SHUTDOWN_ACTOR: &str = "SHUTDOWN";
-pub static MAP_ACTOR: &str = "MAP_ACTOR"; 
 
 
 pub fn spawn(
-    actor_name: String, actor_channels: ActorChannels, map: Option<ReadOnlyMap<Map>>
+    actor_name: String, actor_channels: ActorChannels, map: Option<MapLock>
 ) {
     match actor_name.as_ref() {
         str if str == TRACKING_FRONTEND.to_string() => {
@@ -45,3 +44,4 @@ pub fn spawn(
         },
     };
 }
+

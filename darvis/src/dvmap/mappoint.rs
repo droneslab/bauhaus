@@ -166,7 +166,7 @@ impl MapPoint<FullMapPoint> {
         self.full_mp_info.nvisible += 1;
     }
 
-    pub(super) fn get_norm_and_depth(&self, map: &Map) -> Option<(f64, f64, DVVector3<f64>)> {
+    pub fn get_norm_and_depth(&self, map: &Map) -> Option<(f64, f64, DVVector3<f64>)> {
         // Part 1 of void MapPoint::UpdateNormalAndDepth()
         if self.full_mp_info.observations.is_empty() {
             return None;

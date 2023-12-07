@@ -32,7 +32,6 @@ pub struct ReadOnlyMap<T> {
 impl<T> ReadOnlyMap<T> {
     pub fn read(&self) -> MappedRwLockReadGuard<T> {
         let now = Instant::now();
-        // let guard = self.inner.read().unwrap();
         let guard = RwLockReadGuard::map(self.inner.read(), |unlocked| unlocked);
         let elapsed = now.elapsed().as_millis();
         if elapsed > 5 {
@@ -45,6 +44,7 @@ impl<T> ReadOnlyMap<T> {
 
 // Read-write map that is used ONLY by the map actor.
 // When creating this object, writing is on by default.
+#[derive(Debug, Clone)]
 pub struct ReadWriteMap<T> {
     inner: Arc<RwLock<T>>,
 }
@@ -70,8 +70,6 @@ impl<T> ReadWriteMap<T> {
     }
 
     pub fn read(&self) -> MappedRwLockReadGuard<T> {
-        debug!("retrieving read lock in map");
-        // self.inner.read().unwrap()
         RwLockReadGuard::map(self.inner.read(), |unlocked| unlocked)
 
     }

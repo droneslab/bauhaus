@@ -9,11 +9,10 @@ use dvcore::{
 use log::{info, warn};
 
 use crate::{
-    registered_actors::{SHUTDOWN_ACTOR, MAP_ACTOR, self},
+    registered_actors::{SHUTDOWN_ACTOR, self},
     dvmap::map::Map,
-    actors::messages::ShutdownMsg,
+    actors::messages::ShutdownMsg, MapLock,
 };
-
 
 // Initialize actor system using config file.
 // Returns mutex to shutdown flag and transmitters for first actor and shutdown actor.
@@ -34,25 +33,18 @@ pub fn launch_actor_system(config: Vec::<ActorConf>, first_actor_name: String)
     // Create transmitters/receivers for darvis system actors
     // Don't add receivers to the receivers vec because they need to be spawned separately.
     // User-defined actors still need the transmitters to these actors.
-    let (map_tx, map_rx) = unbounded();
-    transmitters.insert(MAP_ACTOR.to_string(), map_tx);
     let (shutdown_tx, shutdown_rx) = unbounded();
     transmitters.insert(SHUTDOWN_ACTOR.to_string(), shutdown_tx);
 
     // * SPAWN USER-DEFINED ACTORS *//
     // Create map
-    let writeable_map = ReadWriteMap::new(Map::new());
+    let writeable_map = ReadWriteMap::new(Map::new()); // Arc::new(parking_lot::Mutex::new(Map::new()));
     // Spawn actors
     for (actor_name, receiver_bound, receiver) in receivers {
         spawn_actor(actor_name, &transmitters, receiver, receiver_bound, Some(&writeable_map));
     }
 
     // * SPAWN DARVIS SYSTEM ACTORS *//
-    // Map actor
-    // After this point, you cannot get a read-only clone of the map!
-    // So make sure to spawn all the other actors that need the map before this.
-    spawn_map_actor(&transmitters, map_rx, writeable_map);
-
     // Ctrl+c shutdown actor
     let shutdown_flag = spawn_shutdown_actor(&transmitters, shutdown_rx);
 
@@ -65,14 +57,14 @@ pub fn launch_actor_system(config: Vec::<ActorConf>, first_actor_name: String)
 
 fn spawn_actor(
     actor_name: String, transmitters: &HashMap<String, Sender>, receiver: Receiver,
-    receiver_bound: Option<usize>, writeable_map: Option<&ReadWriteMap<Map>>
+    receiver_bound: Option<usize>, writeable_map: Option<&MapLock>
 ) {
     info!("Spawning actor {}", &actor_name);
 
     // Note: read_only() is important here, otherwise all actors can
     // access the write lock of the map
     let map_clone = match writeable_map {
-        Some(map) => Some(map.create_read_only()),
+        Some(map) => Some(map.clone()),//Some(map.create_read_only()), // TODO (WRITE LOCK TEST)
         None => None
     };
 
@@ -87,22 +79,9 @@ fn spawn_actor(
     thread::spawn(move || { 
         registered_actors::spawn(actor_name, actor_channels, map_clone);
     } );
+
 }
 
-fn spawn_map_actor(transmitters: &HashMap<String, Sender>, receiver: Receiver, map: ReadWriteMap<Map> ) {
-    info!("Spawning actor {}", MAP_ACTOR);
-    let mut txs = HashMap::new();
-    for (other_actor_name, other_actor_transmitter) in transmitters {
-        if *other_actor_name != *MAP_ACTOR.to_string() {
-            txs.insert(other_actor_name.clone(), other_actor_transmitter.clone());
-        }
-    }
-    let actor_channels = ActorChannels {receiver, receiver_bound: None, actors: txs, my_name: "Map Actor".to_string()};
-
-    thread::spawn(move || { 
-        crate::actors::map_actor::MapActor::spawn(actor_channels, map);
-    } );
-}
 
 fn spawn_shutdown_actor(transmitters: &HashMap<String, Sender>, receiver: Receiver) -> Arc<Mutex<bool>> {
     let shutdown_flag = Arc::new(Mutex::new(false));

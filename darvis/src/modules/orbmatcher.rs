@@ -2,13 +2,14 @@ use std::collections::{HashMap, HashSet};
 use std::f64::INFINITY;
 use std::sync::RwLockReadGuard;
 use dvcore::config::SETTINGS;
+use dvcore::maplock::ReadWriteMap;
 use dvcore::matrix::{DVVectorOfPoint2f, DVVector3};
 use dvcore::sensor::{Sensor, FrameSensor};
 use log::warn;
 use logging_timer::time;
 use opencv::core::KeyPoint;
 use opencv::prelude::*;
-use crate::actors::map_actor::MapWriteMsg;
+use crate::MapLock;
 use crate::actors::tracking_backend::TrackedMapPointData;
 use crate::dvmap::keyframe::{Frame, KeyFrame};
 use crate::modules::optimizer::LEVEL_SIGMA2;
@@ -145,7 +146,7 @@ pub fn search_for_initialization(
 pub fn search_by_projection(
     frame: &mut Frame, mappoints: &mut HashSet<Id>, th: i32, ratio: f64,
     track_in_view: &HashMap<Id, TrackedMapPointData>, track_in_view_right: &HashMap<Id, TrackedMapPointData>, 
-    map: &ReadOnlyMap<Map>, sensor: Sensor
+    map: &MapLock, sensor: Sensor
 ) -> Result<i32, Box<dyn std::error::Error>> {
     // int SearchByProjection(Frame &F, const std::vector<MapPoint*> &vpMapPoints, const float th=3, const bool bFarPoints = false, const float thFarPoints = 50.0f);
     // Search matches between Frame keypoints and projected MapPoints. Returns number of matches
@@ -339,7 +340,7 @@ pub fn search_by_projection(
 pub fn search_by_projection_with_threshold (
     current_frame: &mut Frame, last_frame: &mut Frame, th: i32,
     should_check_orientation: bool,
-    map: &ReadOnlyMap<Map>, sensor: Sensor
+    map: &MapLock, sensor: Sensor
 ) -> Result<i32, Box<dyn std::error::Error>> {
     // int ORBmatcher::SearchByProjection(Frame &CurrentFrame, const Frame &LastFrame, const float th, const bool bMono)
 
@@ -483,7 +484,7 @@ pub fn _search_by_projection_reloc (
     _current_frame: &mut Frame, _keyframe: &KeyFrame,
     _th: i32, _should_check_orientation: bool, _ratio: f64,
     _track_in_view: &HashMap<Id, TrackedMapPointData>, _track_in_view_right: &HashMap<Id, TrackedMapPointData>,
-    _map: &ReadOnlyMap<Map>, _sensor: Sensor
+    _map: &MapLock, _sensor: Sensor
 ) -> Result<i32, Box<dyn std::error::Error>> {
     // int SearchByProjection(Frame &CurrentFrame, KeyFrame* pKF, const std::set<MapPoint*> &sAlreadyFound, const float th, const int ORBdist);
     // Project MapPoints seen in KeyFrame into the Frame and search matches.
@@ -893,9 +894,10 @@ pub fn search_for_triangulation(
     return Ok(matches);
 }
 
-pub fn fuse(kf_id: &Id, fuse_candidates: &Vec<Id>, map: &parking_lot::MappedRwLockReadGuard<Map>, th: f32, is_right: bool) -> Vec<MapWriteMsg> {
+pub fn fuse(kf_id: &Id, fuse_candidates: &Vec<Id>, map: &MapLock, th: f32, is_right: bool) {
     // int ORBmatcher::Fuse(KeyFrame *pKF, const vector<MapPoint *> &vpMapPoints, const float th, const bool bRight)
-    let keyframe = map.keyframes.get(kf_id).unwrap();
+    let lock = map.read();
+    let keyframe = lock.keyframes.get(kf_id).unwrap();
 
     let (tcw, ow, _camera) = match is_right {
         true => {
@@ -909,14 +911,12 @@ pub fn fuse(kf_id: &Id, fuse_candidates: &Vec<Id>, map: &parking_lot::MappedRwLo
         }
     };
 
-    let mut to_fuse = Vec::new();
-
     for mp_id in fuse_candidates {
-        let mappoint = match map.mappoints.get(&mp_id) {
+        let mappoint = match lock.mappoints.get(&mp_id) {
             Some(mp) => mp,
             None => continue
         };
-        if mappoint.is_in_keyframe(keyframe.id) {
+        if mappoint.is_in_keyframe(*kf_id) {
             continue;
         }
 
@@ -1014,19 +1014,22 @@ pub fn fuse(kf_id: &Id, fuse_candidates: &Vec<Id>, map: &parking_lot::MappedRwLo
         if best_dist <= TH_LOW {
             if keyframe.mappoint_matches.has_mappoint(&(best_idx as u32)) {
                 let mappoint_in_kf_id = keyframe.mappoint_matches.get_mappoint(&(best_idx as u32));
-                let mappoint_in_kf = map.mappoints.get(&mappoint_in_kf_id).unwrap();
+                let mappoint_in_kf = lock.mappoints.get(&mappoint_in_kf_id).unwrap();
                 if mappoint_in_kf.get_observations().len() > mappoint.get_observations().len() {
                     warn!("Verify that the order of mp_id and mappoint_in_kf_id is right");
-                    to_fuse.push(MapWriteMsg::replace_mappoint(*mp_id, mappoint_in_kf_id));
+
+                    map.write().replace_mappoint(*mp_id, mappoint_in_kf_id);
                 } else {
-                    to_fuse.push(MapWriteMsg::replace_mappoint(mappoint_in_kf_id, *mp_id));
+                    map.write().replace_mappoint(mappoint_in_kf_id, *mp_id);
                 }
             } else {
-                to_fuse.push(MapWriteMsg::add_observation( *mp_id, *kf_id,  best_idx as usize));
+                let num_keypoints = map.write().keyframes.get(&kf_id).expect(&format!("Could not get kf {}", kf_id)).features.num_keypoints;
+                let mut write = map.write();
+                write.mappoints.get_mut(&mp_id).unwrap().add_observation(&kf_id, num_keypoints, best_idx as u32);
+                write.keyframes.get_mut(&kf_id).unwrap().mappoint_matches.add_mappoint(best_idx as u32, *mp_id, false);
             }
         }
     }
-    return to_fuse;
 }
 
 pub fn descriptor_distance(a : &Mat, b: &Mat) -> i32 {
