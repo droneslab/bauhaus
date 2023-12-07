@@ -14,6 +14,7 @@
 #include <map>
 #include <vector>
 #include <iostream>
+#include <memory>
 
 #include <boost/serialization/serialization.hpp>
 #include <boost/serialization/map.hpp>

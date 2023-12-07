@@ -13,6 +13,7 @@
 #include <iostream>
 #include <map>
 #include <vector>
+#include <memory>
 
 #include <boost/serialization/serialization.hpp>
 #include <boost/serialization/map.hpp>

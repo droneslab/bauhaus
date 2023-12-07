@@ -2,7 +2,7 @@ use std::collections::{HashSet, HashMap};
 use derivative::Derivative;
 use log::{warn, info, debug, error};
 use dvcore::{maplock::ReadOnlyMap, config::*, sensor::{Sensor, FrameSensor, ImuSensor}, actor::Actor};
-use logging_timer::{time, timer};
+use logging_timer::{time, timer, finish};
 use crate::{
     actors::messages::{TrajectoryMsg, VisTrajectoryMsg, TrackingStateMsg, FeatureMsg, MapInitializedMsg, KeyFrameIdMsg, LastKeyFrameUpdatedMsg, ShutdownMsg},
     actors::map_actor::MapWriteMsg,
@@ -543,7 +543,9 @@ impl DarvisTrackingBack {
 
         // Update pose according to reference keyframe
         let ref_kf_id = self.last_frame.as_ref().expect("Should have last frame").ref_kf_id.unwrap();
+        let timer = timer!("update_last_frame::get read lock");
         let map_lock = self.map.read();
+        finish!(timer);
         let ref_kf_pose = map_lock.keyframes.get(&ref_kf_id).expect("Reference kf should be in map").pose;
         self.last_frame.as_mut().unwrap().pose = Some(*self.trajectory_poses.last().unwrap() * ref_kf_pose);
 
