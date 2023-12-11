@@ -1,0 +1,177 @@
+actors:
+
+  - file: visualizer
+    name: VISUALIZER
+    receiver_bound: -1
+    settings:
+      - name: image_draw_type
+        type: string
+        value: none
+      - name: mcap_file_path
+        type: string
+        value: results/out.mcap
+
+  - file: tracking_frontend
+    name: TRACKING_FRONTEND
+    receiver_bound: 1
+    settings:
+      -
+
+  - file: tracking_backend
+    name: TRACKING_BACKEND
+    possible_paths:
+      - from: tracking_frontend
+        input: keypoints, descriptors
+        output: newkeyframe
+        to: localmapping
+    receiver_bound: 1
+    settings:
+      - name: recently_lost_cutoff
+        type: i32
+        value: 5
+      - name: frames_to_reset_IMU
+        type: i32
+        value: 30
+      - name: insert_KFs_when_lost
+        type: bool
+        value: yes
+      - name: min_num_features
+        type: i32
+        value: 2000
+
+  - file: loop_closing
+    name: LOOP_CLOSING
+    possible_paths:
+      - from: tracking_frontend
+        input: keypoints, descriptors
+        output: newkeyframe
+        to: localmapping
+    receiver_bound: -1
+    settings:
+      -
+
+  - file: local_mapping
+    name: LOCAL_MAPPING
+    possible_paths:
+      - from: tracking_frontend
+        input: keypoints, descriptors
+        output: newkeyframe
+        to: localmapping
+    receiver_bound: -1
+    settings:
+      - name: recently_lost_cutoff
+        type: i32
+        value: 5
+      - name: insert_KFs_when_lost
+        type: bool
+        value: yes
+      - name: min_num_features
+        type: i32
+        value: 2000
+
+master:
+  address: localhost
+  file: main.rs
+  name: manager
+
+modules:
+
+  - name: CAMERA
+    settings:
+
+      - name: fx
+        type: f64
+        value: 718.856
+
+      - name: fy
+        type: f64
+        value: 718.856
+
+      - name: cx
+        type: f64
+        value: 607.1928
+
+      - name: cy
+        type: f64
+        value: 185.2157
+
+      - name: k1
+        type: f64
+        value: 0.0
+
+      - name: k2
+        type: f64
+        value: 0.0
+
+      - name: p1
+        type: f64
+        value: 0.0
+
+      - name: p2
+        type: f64
+        value: 0.0
+
+      - name: k3
+        type: f64
+        value: 0.0
+
+      - name: width
+        type: i32
+        value: 1241
+
+      - name: height
+        type: i32
+        value: 376
+
+      - name: thdepth
+        type: i32
+        value: 35
+
+      - name: stereo_baseline_times_fx
+        type: f64
+        value: 386.1448
+
+      - name: stereo_overlapping_begin
+        type: i32
+        value: 0
+
+      - name: stereo_overlapping_end
+        type: i32
+        value: 1000
+
+  - name: FEATURE_DETECTION
+    settings:
+      - name: max_features
+        type: i32
+        value: 2000
+      - name: scale_factor
+        type: f64
+        value: 1.2
+      - name: n_levels
+        type: i32
+        value: 8
+      - name: ini_th_fast
+        type: i32
+        value: 20
+      - name: min_th_fast
+        type: i32
+        value: 7
+
+  - name: MATCHER
+    settings:
+      - name: far_points_threshold
+        type: f64
+        value: 20.0
+
+system:
+  create_flamegraph: no
+  fps: 1.0
+  framesensor: Mono
+  imusensor: None
+  localization_only_mode: no
+  log_level: debug
+  results_folder: results
+  show_visualizer: no
+  trajectory_file_name: trajectory.txt
+  use_timestamps_file: no
+  vocabulary_file: ../Vocabulary/ORBvoc.txt

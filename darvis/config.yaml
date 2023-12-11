@@ -7,7 +7,7 @@ master:
 
 system:
       localization_only_mode: false
-      vocabulary_file: "../Vocabulary/ORBvoc.txt"
+      vocabulary_file: "/home/nitin/Downloads/Thesis/ORB_SLAM3/Vocabulary/ORBvoc.txt"
       framesensor: Mono
       imusensor: None
 
