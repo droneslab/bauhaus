@@ -9,6 +9,8 @@ use crate::{
     actors::tracking_backend::TrackingState
 };
 
+use super::tracking_backend::FoundVisibleMapPoints;
+
 // * TRACKING FRONTEND **//
 pub struct ImagePathMsg{ 
     pub image_path: String,
@@ -66,7 +68,8 @@ pub struct IMUInitializedMsg {
 impl ActorMessage for IMUInitializedMsg {}
 
 pub struct NewKeyFrameMsg {
-    pub keyframe: Frame
+    pub keyframe: Frame,
+    pub tracked_mappoints: FoundVisibleMapPoints,
 }
 impl ActorMessage for NewKeyFrameMsg {}
 

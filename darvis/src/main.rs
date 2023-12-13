@@ -2,11 +2,12 @@
 #![feature(hash_extract_if)]
 #![feature(extract_if)]
 
-use std::{fs::{OpenOptions, File}, path::Path, env, time::{self, Duration}, io::{self, BufRead}, thread::{self, sleep}};
+use std::{fs::{OpenOptions, File}, path::Path, env, time::{self, Duration}, io::{self, BufRead}, thread::{self, sleep}, sync::Arc};
 use dvmap::map::Map;
 use fern::colors::{ColoredLevelConfig, Color};
 use glob::glob;
 use log::info;
+use parking_lot::{Mutex, RwLock};
 use spin_sleep::LoopHelper;
 #[macro_use] extern crate lazy_static;
 
@@ -21,8 +22,8 @@ mod dvmap;
 mod modules;
 mod tests;
 
-pub type MapLock = ReadWriteMap<Map>; // TODO (WRITE LOCK TEST)
-// pub type MapLock = Arc<RwLock<T>>
+pub type MapLock = ReadWriteMap<Map>;
+// pub type MapLock = Arc<Mutex<Map>>; // If you want to switch all locks to mutexes
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
@@ -53,22 +54,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let timestamps = read_timestamps_file(&img_dir);
 
     // Check deadlocks. Turn off if you aren't using this, otherwise it will slow everything down.
-    thread::spawn(move || { 
-        loop {
-            let deadlocks = parking_lot::deadlock::check_deadlock();
-            if !deadlocks.is_empty() {
-                println!("{} deadlocks detected", deadlocks.len());
-                for (i, threads) in deadlocks.iter().enumerate() {
-                    println!("Deadlock #{}", i);
-                    for t in threads {
-                        println!("Thread Id {:#?}", t.thread_id());
-                        println!("{:#?}", t.backtrace());
-                    }
-                }
-            }
-            thread::sleep(Duration::from_secs_f64(2.0));
-        }
-    } );
+    // If you turn this on and also turn all rwlocks into mutexes, this seems to more consistently
+    // find deadlock errors. You can turn all rwlocks into mutexes pretty quickly by modifying 
+    // pub type MapLock and turning read() and write() into lock()
+    // thread::spawn(move || { 
+    //     loop {
+    //         let deadlocks = parking_lot::deadlock::check_deadlock();
+    //         if !deadlocks.is_empty() {
+    //             println!("{} deadlocks detected", deadlocks.len());
+    //             for (i, threads) in deadlocks.iter().enumerate() {
+    //                 println!("Deadlock #{}", i);
+    //                 for t in threads {
+    //                     println!("Thread Id {:#?}", t.thread_id());
+    //                     println!("{:#?}", t.backtrace());
+    //                 }
+    //             }
+    //         }
+    //         thread::sleep(Duration::from_secs_f64(2.0));
+    //     }
+    // } );
 
     // Process images
     // let now = SystemTime::now();
@@ -79,7 +83,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let image = image::read_image_file(&path.to_string());
 
-        // For evaluation, use timestamps file to run loop and send timestamp from file instead of real time
         first_actor_tx.send(Box::new(
             ImageMsg{
                 image,
@@ -89,6 +92,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ))?;
 
         i += 1;
+        // TODO (timestamps) ... if use_timestamps_file is true, we should sleep for the difference between now
+        // and the next timestamp. Right now we are just sleeping so we keep at the target frame rate.
         loop_sleep.sleep();
     }
     shutdown_tx.send(Box::new(ShutdownMsg{}))?;

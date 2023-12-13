@@ -1,4 +1,4 @@
-use std::{fs::File, path::Path, io::Write};
+use std::{fs::File, path::Path, io::{Write, BufWriter}};
 use log::warn;
 
 use crate::dvmap::{pose::DVPose, map::Id, misc::Timestamp};
@@ -55,14 +55,24 @@ impl Actor for ShutdownActor {
                 }
             } else if message.is::<ShutdownMsg>() {
                 warn!("Triggered shutdown, saving trajectory info");
-                let mut file = File::create(
+                let file = File::create(
                     Path::new(&actor.results_folder)
                     .join(&actor.trajectory_filename)
-                ).unwrap();
-                for i in 0..actor.trajectory_poses.len() {
-                    let string = format!("{:?} {:?}\n", actor.trajectory_times[i], actor.trajectory_poses[i]);
-                    file.write_all(string.as_bytes()).unwrap();
-                }
+                );
+                match file {
+                    Ok(file) => {
+                        let mut f = BufWriter::new(file);
+
+                        for i in 0..actor.trajectory_poses.len() {
+                            let string = format!("{:?} {:?}\n", actor.trajectory_times[i], actor.trajectory_poses[i]);
+                            write!(f, "{}", string).expect("unable to write");
+                        }
+                    },
+                    Err(_) => {
+                        warn!("Could not create trajectory file {:?}", Path::new(&actor.results_folder).join(&actor.trajectory_filename));
+                        println!("Here is the trajectory: {:?}", actor.trajectory_poses);
+                    }
+                };
 
                 for (_, actor_tx) in &actor.actor_channels.actors {
                     actor_tx.send(Box::new(ShutdownMsg{})).unwrap();

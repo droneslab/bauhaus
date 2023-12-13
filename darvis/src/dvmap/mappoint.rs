@@ -20,11 +20,6 @@ use super::{map::{Id, Map}, keyframe::{Frame, KeyFrame}, pose::DVTranslation};
 // Typestate...Mappoint information that is ALWAYS available, regardless of mappoint state.
 #[derive(Debug, Clone)]
 pub struct MapPoint<M: MapPointState> {
-    // List of variables set in constructor in orbslam3, don't think we need these all but copying for reference
-    //     mnFirstKFid(pRefKF->mnId), mnFirstFrame(pRefKF->mnFrameId), nObs(0), mnTrackReferenceForFrame(0),
-    //     mnLastFrameSeen(0), mnBALocalForKF(0), mnFuseCandidateForKF(0), mnLoopPointForKF(0), mnCorrectedByKF(0),
-    //     mnCorrectedReference(0), mnBAGlobalForKF(0), mpRefKF(pRefKF), mnVisible(1), mnFound(1), mbBad(false),
-    //     mpReplaced(static_cast<MapPoint*>(NULL)), mfMinDistance(0), mfMaxDistance(0), 
     pub position: DVTranslation, 
 
     // Map connections
@@ -39,6 +34,8 @@ pub struct MapPoint<M: MapPointState> {
     // mnFirstFrame ... literally never used meaningfully
     // mnLastFrameSeen ... similar to "mnTrackReferenceForFrame" in KeyFrame. redundant and easy to mess up/get out of sync. Search for this globally to see an example of how to avoid using it.
     // mbTrackInView ... only used by tracking to keep track of which mappoints to show. Just keep this data saved in tracking locally
+    // nFound ... set in tracking, used by local mapping to make decisiion about deleting keyframe. To reduce # of writes to map, we keep this data in backend struct and pass to local mapping
+    // nVisibile ... Same as nfound
 
     // Typestate...This reassures the compiler that the parameter gets used.
     full_mp_info: M,
@@ -66,10 +63,6 @@ pub struct FullMapPoint { // Full map item inserted into the map with the follow
     // Scale invariance distances
     max_distance: f64,
     min_distance: f64,
-
-    // following two are only set by tracking and only checked by local mapping for mappoint culling, but not sure what the diff is b/w visible and found
-    nvisible: i32, //mnvisible
-    nfound: u32, //mnfound
 }
 
 pub trait MapPointState {}
@@ -102,8 +95,6 @@ impl MapPoint<FullMapPoint> {
                 normal_vector: DVVector3::zeros::<f64>(),
                 max_distance: 0.0,
                 min_distance: 0.0,
-                nvisible: 1,
-                nfound: 1,
                 best_descriptor: DVMatrix::empty(),
                 num_obs: 0
             },
@@ -130,10 +121,6 @@ impl MapPoint<FullMapPoint> {
         0.8 * self.full_mp_info.min_distance
     }
 
-    pub fn get_found_ratio(&self) -> f32 {
-        self.full_mp_info.nfound as f32 / self.full_mp_info.nvisible as f32
-    }
-
     pub fn is_in_keyframe(&self, kf_id: Id) -> bool {
         self.full_mp_info.observations.contains_key(&kf_id)
     }
@@ -156,15 +143,6 @@ impl MapPoint<FullMapPoint> {
         }
     }
 
-    pub fn increase_found(&mut self, n: u32) {
-        // void MapPoint::IncreaseFound(int n)
-        self.full_mp_info.nfound += n;
-    }
-
-    pub fn increase_visible(&mut self) {
-        // void MapPoint::IncreaseVisible(int n)
-        self.full_mp_info.nvisible += 1;
-    }
 
     pub fn get_norm_and_depth(&self, map: &Map) -> Option<(f64, f64, DVVector3<f64>)> {
         // Part 1 of void MapPoint::UpdateNormalAndDepth()

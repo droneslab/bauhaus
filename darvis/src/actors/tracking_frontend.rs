@@ -1,6 +1,6 @@
 extern crate g2o;
 use cxx::UniquePtr;
-use log::{warn, debug};
+use log::{warn, debug, info};
 use logging_timer::{time, timer};
 use std::{fmt, fmt::Debug};
 use opencv::{prelude::*, types::VectorOfKeyPoint,};
@@ -65,10 +65,18 @@ impl Actor for DarvisTrackingFront {
 
     fn spawn(actor_channels: ActorChannels, map: Self::MapRef) {
         let mut actor = DarvisTrackingFront::new_actorstate(actor_channels, map);
+        let max_queue_size = actor.actor_channels.receiver_bound.unwrap_or(100);
+
         'outer: loop {
             let message = actor.actor_channels.receive().unwrap();
 
             if message.is::<ImagePathMsg>() {
+                if actor.actor_channels.queue_len() > max_queue_size {
+                    // Abort additional work if there are too many frames in the msg queue.
+                    info!("Tracking frontend dropped 1 frame");
+                    continue;
+                }
+
                 let msg = message.downcast::<ImagePathMsg>().unwrap_or_else(|_| panic!("Could not downcast tracking frontend message!"));
 
                 let image = image::read_image_file(&msg.image_path);
@@ -91,7 +99,11 @@ impl Actor for DarvisTrackingFront {
 
                 actor.last_id += 1;
             } else if message.is::<ImageMsg>() {
-                // TODO (timing) ... 30 ms
+                if actor.actor_channels.queue_len() > max_queue_size {
+                    // Abort additional work if there are too many frames in the msg queue.
+                    info!("Tracking frontend dropped 1 frame");
+                    continue;
+                }
 
                 let msg = message.downcast::<ImageMsg>().unwrap_or_else(|_| panic!("Could not downcast tracking frontend message!"));
 
@@ -139,7 +151,7 @@ impl DarvisTrackingFront {
         let mut descriptors: dvos3binding::ffi::WrapBindCVMat = (&DVMatrix::default()).into();
         let mut keypoints: dvos3binding::ffi::WrapBindCVKeyPoints = DVVectorOfKeyPoint::empty().into();
 
-        // TODO (timing) ... this takes ~70 ms. Kind of high? Compare to ORBSLAM
+        // TODO (C++ and Rust optimizations) ... this takes ~70 ms which is way high compared to ORB-SLAM3. I think this is because the rust and C++ bindings are not getting optimized together.
         if self.map_initialized && (self.last_id - self.init_id < self.max_frames) {
             self.orb_extractor_left.extractor.pin_mut().extract(&image_dv, &mut keypoints, &mut descriptors);
         } else if self.sensor.is_mono() {

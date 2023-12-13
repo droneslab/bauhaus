@@ -13,8 +13,6 @@ use crate::{
 
 use super::messages::{IMUInitializedMsg, NewKeyFrameMsg};
 
-
-
 #[derive(Debug)]
 pub struct DarvisTrackingBack {
     actor_channels: ActorChannels,
@@ -38,6 +36,7 @@ pub struct DarvisTrackingBack {
     kf_track_reference_for_frame: HashMap::<Id, Id>, // mnTrackReferenceForFrame, member variable in Keyframe
     mp_track_reference_for_frame: HashMap::<Id, Id>,  // mnTrackReferenceForFrame, member variable in Mappoint
     last_frame_seen: HashMap::<Id, Id>, // mnLastFrameSeen, member variable in Mappoint
+    found_visible_mappoints: FoundVisibleMapPoints, // nFound and nVisible, member variable in MapPoint
 
     // IMU 
     imu: ImuModule,
@@ -91,12 +90,13 @@ impl Actor for DarvisTrackingBack {
             relocalization: Relocalization{last_reloc_frame_id: 0, timestamp_lost: None},
             map_updated: false,
             trajectory_poses: Vec::new(),
-            
+            found_visible_mappoints: FoundVisibleMapPoints::new()
         }
     }
 
     fn spawn(actor_channels: ActorChannels, map: Self::MapRef) {
         let mut actor = DarvisTrackingBack::new_actorstate(actor_channels, map);
+        let max_queue_size = actor.actor_channels.receiver_bound.unwrap_or(100);
         let mut last_frame = None; // Keep last_frame here instead of in tracking object to avoid putting it in an option and doing a ton of unwraps
         let mut curr_frame_id = 0;
 
@@ -105,6 +105,12 @@ impl Actor for DarvisTrackingBack {
 
             if message.is::<FeatureMsg>() {
                 // Regular tracking. Received from tracking frontend
+                if actor.actor_channels.queue_len() > max_queue_size {
+                    // Abort additional work if there are too many frames in the msg queue.
+                    info!("Tracking backend dropped 1 frame");
+                    continue;
+                }
+
                 let msg = message.downcast::<FeatureMsg>().unwrap_or_else(|_| panic!("Could not downcast tracking frontend message!"));
                 let _timer = timer!("TrackingBackend::Total");
                 debug!("Tracking working on frame {}", msg.frame_id);
@@ -212,7 +218,6 @@ impl DarvisTrackingBack {
                                         // Set current frame's updated info from map initialization
                                         current_frame.ref_kf_id = Some(curr_kf_id);
                                         current_frame.pose = Some(curr_kf_pose);
-                                        println!("Setting last frame pose {:?}", curr_kf_pose);
                                     }
                                     self.state = TrackingState::Ok;
                                     (ini_kf_id, curr_kf_id)
@@ -421,8 +426,6 @@ impl DarvisTrackingBack {
         // We perform first an ORB matching with the reference keyframe
         // If enough matches are found we setup a PnP solver
 
-        println!("track reference keyframe begin {}", current_frame.mappoint_matches.matches.len());
-
         current_frame.compute_bow();
         let nmatches;
         {
@@ -432,7 +435,7 @@ impl DarvisTrackingBack {
             nmatches = orbmatcher::search_by_bow_f(ref_kf, current_frame, true, 0.7)?;
         }
 
-        println!("track reference keyframe matches {}", current_frame.mappoint_matches.matches.len());
+        debug!("track reference keyframe matches {}", current_frame.mappoint_matches.matches.len());
 
         if nmatches < 15 {
             warn!("track_reference_keyframe has fewer than 15 matches = {}!!\n", nmatches);
@@ -445,7 +448,7 @@ impl DarvisTrackingBack {
 
         // Discard outliers
         let nmatches_map = self.discard_outliers(current_frame);
-        println!("track reference keyframe matches after outliers {}", nmatches_map);
+        debug!("track reference keyframe matches after outliers {}", nmatches_map);
 
         match self.sensor.is_imu() {
             true => { return Ok(true); },
@@ -495,7 +498,7 @@ impl DarvisTrackingBack {
             self.sensor
         )?;
 
-        println!("motion model matches {}", current_frame.mappoint_matches.matches.len());
+        debug!("motion model matches {}", current_frame.mappoint_matches.matches.len());
 
         // If few matches, uses a wider window search
         if matches < 20 {
@@ -511,8 +514,7 @@ impl DarvisTrackingBack {
             )?;
         }
 
-        println!("motion model matches with wider search {}", current_frame.mappoint_matches.matches.len());
-
+        debug!("motion model matches with wider search {}", current_frame.mappoint_matches.matches.len());
 
         if matches < 20 {
             warn!("tracking_backend::track_with_motion_model;not enough matches!!");
@@ -531,7 +533,7 @@ impl DarvisTrackingBack {
             // return nmatches>20;
         }
 
-        println!("motion model matches after outliers {}", nmatches_map);
+        debug!("motion model matches after outliers {}", nmatches_map);
         match self.sensor.is_imu() {
             true => { return Ok(true); },
             false => { return Ok(nmatches_map >= 10); }
@@ -639,14 +641,16 @@ impl DarvisTrackingBack {
             optimizer::pose_inertial_optimization_last_keyframe(current_frame);
         }
 
-        println!("track local map 1");
         self.matches_inliers = 0;
         // Update MapPoints Statistics
         for index in 0..current_frame.mappoint_matches.matches.len() {
             if let Some((mp_id, is_outlier)) = current_frame.mappoint_matches.matches[index as usize] {
                 if !is_outlier {
-                    if let Some(mp) = self.map.write().mappoints.get_mut(&mp_id) {
-                        mp.increase_found(1);
+                    if let Some(mp) = self.map.read().mappoints.get(&mp_id) {
+                        // mp.increase_found(1);
+                        self.found_visible_mappoints.increase_found(&mp_id);
+                    } else {
+                        self.found_visible_mappoints.remove(&mp_id);
                     }
 
                     if self.localization_only_mode {
@@ -674,7 +678,7 @@ impl DarvisTrackingBack {
         //     mpLocalMapper->mnMatchesInliers=mnMatchesInliers;
         // send this in local mapper message?
 
-        println!("Matches in track local map {}", self.matches_inliers);
+        debug!("Matches in track local map {}", self.matches_inliers);
 
         // Decide if the tracking was succesful
         // More restrictive if there was a relocalization recently
@@ -709,30 +713,33 @@ impl DarvisTrackingBack {
         // Each map point votes for the keyframes in which it has been observed
         let mut kf_counter = HashMap::<Id, i32>::new();
 
-        for i in 0..current_frame.mappoint_matches.matches.len() {
-            match !self.imu.is_initialized || current_frame.frame_id < self.relocalization.last_reloc_frame_id + 2 {
-                true => {
-                    if current_frame.mappoint_matches.has_mappoint(&(i as u32)) {
-                        let mp_id = current_frame.mappoint_matches.get_mappoint(&(i as u32));
-                        if let Some(mp) = self.map.read().mappoints.get(&mp_id) {
-                            for kf_id in mp.get_observations().keys() {
-                                *kf_counter.entry(*kf_id).or_insert(0) += 1;
+        {
+            let lock = self.map.read();
+            for i in 0..current_frame.mappoint_matches.matches.len() {
+                match !self.imu.is_initialized || current_frame.frame_id < self.relocalization.last_reloc_frame_id + 2 {
+                    true => {
+                        if current_frame.mappoint_matches.has_mappoint(&(i as u32)) {
+                            let mp_id = current_frame.mappoint_matches.get_mappoint(&(i as u32));
+                            if let Some(mp) = lock.mappoints.get(&mp_id) {
+                                for kf_id in mp.get_observations().keys() {
+                                    *kf_counter.entry(*kf_id).or_insert(0) += 1;
+                                }
+                            } else {
+                                current_frame.mappoint_matches.matches[i as usize] = None;
                             }
-                        } else {
-                            current_frame.mappoint_matches.matches[i as usize] = None;
                         }
-                    }
-                },
-                false => {
-                    // Using lastframe since current frame has no matches yet
-                    if last_frame.mappoint_matches.has_mappoint(&(i as u32)) {
-                        let mp_id = last_frame.mappoint_matches.get_mappoint(&(i as u32));
-                        if let Some(mp) = self.map.read().mappoints.get(&mp_id) {
-                            for kf_id in mp.get_observations().keys() {
-                                *kf_counter.entry(*kf_id).or_insert(0) += 1;
+                    },
+                    false => {
+                        // Using lastframe since current frame has no matches yet
+                        if last_frame.mappoint_matches.has_mappoint(&(i as u32)) {
+                            let mp_id = last_frame.mappoint_matches.get_mappoint(&(i as u32));
+                            if let Some(mp) = lock.mappoints.get(&mp_id) {
+                                for kf_id in mp.get_observations().keys() {
+                                    *kf_counter.entry(*kf_id).or_insert(0) += 1;
+                                }
+                            } else {
+                                last_frame.mappoint_matches.matches[i as usize] = None;
                             }
-                        } else {
-                            last_frame.mappoint_matches.matches[i as usize] = None;
                         }
                     }
                 }
@@ -752,34 +759,36 @@ impl DarvisTrackingBack {
             self.kf_track_reference_for_frame.insert(kf_id, current_frame.frame_id);
         }
 
-        println!("self.local_keyframes {:?}", self.local_keyframes);
         // Also include some keyframes that are neighbors to already-included keyframes
         let mut i = 0;
-        while self.local_keyframes.len() <= 80 && i < self.local_keyframes.len() { // Limit the number of keyframes
-            let next_kf_id = self.local_keyframes[i];
+        {
+            let lock = self.map.read();
+            while self.local_keyframes.len() <= 80 && i < self.local_keyframes.len() { // Limit the number of keyframes
+                let next_kf_id = self.local_keyframes[i];
 
-            for kf_id in &self.map.read().keyframes.get(&next_kf_id)?.connections.get_covisibility_keyframes(10) {
-                if self.kf_track_reference_for_frame.get(kf_id) != Some(&current_frame.frame_id) {
-                    self.local_keyframes.push(*kf_id);
-                    self.kf_track_reference_for_frame.insert(*kf_id, current_frame.frame_id);
-                    break;
+                for kf_id in &lock.keyframes.get(&next_kf_id)?.connections.get_covisibility_keyframes(10) {
+                    if self.kf_track_reference_for_frame.get(kf_id) != Some(&current_frame.frame_id) {
+                        self.local_keyframes.push(*kf_id);
+                        self.kf_track_reference_for_frame.insert(*kf_id, current_frame.frame_id);
+                        break;
+                    }
                 }
+                for kf_id in &lock.keyframes.get(&next_kf_id)?.connections.children {
+                    if self.kf_track_reference_for_frame.get(kf_id) != Some(&current_frame.frame_id) {
+                        self.local_keyframes.push(*kf_id);
+                        self.kf_track_reference_for_frame.insert(*kf_id, current_frame.frame_id);
+                        break;
+                    }
+                }
+        
+                if let Some(parent_id) = lock.keyframes.get(&next_kf_id)?.connections.parent {
+                    if self.kf_track_reference_for_frame.get(&parent_id) != Some(&current_frame.frame_id) {
+                        self.local_keyframes.push(parent_id);
+                        self.kf_track_reference_for_frame.insert(parent_id, current_frame.frame_id);
+                    }
+                };
+                i += 1;
             }
-            for kf_id in &self.map.read().keyframes.get(&next_kf_id)?.connections.children {
-                if self.kf_track_reference_for_frame.get(kf_id) != Some(&current_frame.frame_id) {
-                    self.local_keyframes.push(*kf_id);
-                    self.kf_track_reference_for_frame.insert(*kf_id, current_frame.frame_id);
-                    break;
-                }
-            }
-    
-            if let Some(parent_id) = self.map.read().keyframes.get(&next_kf_id)?.connections.parent {
-                if self.kf_track_reference_for_frame.get(&parent_id) != Some(&current_frame.frame_id) {
-                    self.local_keyframes.push(parent_id);
-                    self.kf_track_reference_for_frame.insert(parent_id, current_frame.frame_id);
-                }
-            };
-            i += 1;
         }
 
         // Add 10 last temporal KFs (mainly for IMU)
@@ -793,16 +802,15 @@ impl DarvisTrackingBack {
             current_frame.ref_kf_id = Some(max_kf_id);
             self.ref_kf_id = Some(max_kf_id);
         }
-        println!("Done update local keyframes");
         None
     }
 
     fn update_local_points(&mut self, current_frame: &mut Frame) -> Option<()> {
         // void Tracking::UpdateLocalPoints()
         self.local_mappoints.clear();
+        let lock = self.map.read();
         for kf_id in &self.local_keyframes {
-            let map_read_lock = self.map.read();
-            let mp_ids = &map_read_lock.keyframes.get(kf_id)?.mappoint_matches.matches;
+            let mp_ids = &lock.keyframes.get(kf_id)?.mappoint_matches.matches;
             for item in mp_ids {
                 if let Some((mp_id, _)) = item {
                     if self.mp_track_reference_for_frame.get(mp_id) != Some(&current_frame.frame_id) {
@@ -812,7 +820,6 @@ impl DarvisTrackingBack {
                 }
             }
         }
-        println!("Done update local points");
 
         None
     }
@@ -822,42 +829,54 @@ impl DarvisTrackingBack {
         //void Tracking::SearchLocalPoints()
 
         // Do not search map points already matched
-        for item in current_frame.mappoint_matches.matches.iter() {
-            if let Some((id, _)) = item {
-                self.map.write().mappoints.get_mut(&id).unwrap().increase_visible();
+        {
+            let lock = self.map.read();
+            for index in 0..current_frame.mappoint_matches.matches.len() {
+                if let Some((id, _)) = current_frame.mappoint_matches.matches[index as usize] {
+                    if let Some(mp) = lock.mappoints.get(&id) {
+                        // lock.mappoints.get_mut(&id).unwrap().increase_visible();
+                        self.found_visible_mappoints.increase_visible(&id);
 
-                self.last_frame_seen.insert(*id, current_frame.frame_id);
-                self.track_in_view.remove(id);
-                self.track_in_view_r.remove(id);
+                        self.last_frame_seen.insert(id, current_frame.frame_id);
+                        self.track_in_view.remove(&id);
+                        self.track_in_view_r.remove(&id);
+                    } else {
+                        current_frame.mappoint_matches.delete((index as i32, -1));
+                    }
+                }
             }
         }
 
         // Project points in frame and check its visibility
         let mut to_match = 0;
-        for mp_id in &self.local_mappoints {
-            let (tracked_data_left, tracked_data_right) = match self.map.read().mappoints.get(mp_id) {
-                Some(mp) => {
-                    if self.last_frame_seen.get(mp_id) == Some(&current_frame.frame_id) {
+        {
+            let lock = self.map.read();
+            for mp_id in &self.local_mappoints {
+                let (tracked_data_left, tracked_data_right) = match lock.mappoints.get(mp_id) {
+                    Some(mp) => {
+                        if self.last_frame_seen.get(mp_id) == Some(&current_frame.frame_id) {
+                            continue;
+                        }
+                        // Project (this fills MapPoint variables for matching)
+                        current_frame.is_in_frustum(mp, 0.5)
+                    },
+                    None => {
                         continue;
                     }
-                    // Project (this fills MapPoint variables for matching)
-                    current_frame.is_in_frustum(mp, 0.5)
-                },
-                None => {
-                    continue;
+                };
+
+                if tracked_data_left.is_some() || tracked_data_right.is_some() {
+                    // lock.mappoints.get_mut(&mp_id).unwrap().increase_visible();
+                    self.found_visible_mappoints.increase_visible(&mp_id);
+
+                    to_match += 1;
                 }
-            };
-
-            if tracked_data_left.is_some() || tracked_data_right.is_some() {
-                self.map.write().mappoints.get_mut(&mp_id).unwrap().increase_visible();
-
-                to_match += 1;
-            }
-            if let Some(d) = tracked_data_left {
-                self.track_in_view.insert(*mp_id, d);
-            }
-            if let Some(d) = tracked_data_right {
-                self.track_in_view_r.insert(*mp_id, d);
+                if let Some(d) = tracked_data_left {
+                    self.track_in_view.insert(*mp_id, d);
+                }
+                if let Some(d) = tracked_data_right {
+                    self.track_in_view_r.insert(*mp_id, d);
+                }
             }
         }
 
@@ -892,9 +911,8 @@ impl DarvisTrackingBack {
                 &self.track_in_view, &self.track_in_view_r,
                 &self.map, self.sensor
             );
-            println!("search local points matches {:?}", matches);
+            debug!("search local points matches {:?}", matches);
         }
-        println!("Done search local points");
 
     }
 
@@ -1000,7 +1018,15 @@ impl DarvisTrackingBack {
         self.last_kf_timestamp = Some(new_kf.timestamp);
 
         // KeyFrame created here and inserted into map
-        self.actor_channels.send(LOCAL_MAPPING, Box::new(NewKeyFrameMsg{ keyframe: new_kf }));
+        self.actor_channels.send(
+            LOCAL_MAPPING,
+            Box::new(
+                NewKeyFrameMsg{ 
+                    keyframe: new_kf,
+                    tracked_mappoints: self.found_visible_mappoints.clone(),
+                }
+            )
+        );
     }
 
     fn need_new_keyframe(&self, current_frame: &mut Frame) -> bool {
@@ -1043,8 +1069,8 @@ impl DarvisTrackingBack {
             },
             Sensor(FrameSensor::Stereo, _) | Sensor(FrameSensor::Rgbd, ImuSensor::Some) => 0.75,
             Sensor(FrameSensor::Rgbd, ImuSensor::None) => { if num_kfs < 2 { 0.4 } else { 0.75 } }
-        }; // TODO (mvp): is Rgbd right? See ORBSLAM3 code https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Tracking.cc#L3142
-
+        };
+        
         // Condition 1a: More than "MaxFrames" have passed from last keyframe insertion
         let c1a = self.frames_since_last_kf >= (self.max_frames as i32);
         // Condition 1b: More than "MinFrames" have passed and Local Mapping is idle
@@ -1085,7 +1111,8 @@ impl DarvisTrackingBack {
     fn discard_outliers(&mut self, current_frame: &mut Frame) -> i32 {
         let discarded = current_frame.mappoint_matches.discard_outliers();
         for mp_id in discarded {
-            self.map.write().mappoints.get_mut(&mp_id).unwrap().increase_found(1);
+            // self.map.write().mappoints.get_mut(&mp_id).unwrap().increase_found(1);
+            self.found_visible_mappoints.increase_found(&mp_id);
             self.track_in_view.remove(&mp_id);
             self.last_frame_seen.insert(mp_id, current_frame.frame_id);
             // TODO (Stereo) ... need to remove this from track_in_view_r if the mp is seen in the right camera
@@ -1118,4 +1145,36 @@ pub enum TrackingState {
     RecentlyLost,
     WaitForMapResponse,
     Ok
+}
+
+#[derive(Debug, Clone)]
+pub struct FoundVisibleMapPoints {
+    found: HashMap::<Id, i32>,
+    visible: HashMap::<Id, i32>
+}
+impl FoundVisibleMapPoints {
+    pub fn new() -> Self {
+        Self { 
+            found: HashMap::new(), 
+            visible: HashMap::new()
+        }
+    }
+    pub fn increase_found(&mut self, mp_id: &Id) {
+        self.found.entry(*mp_id).and_modify(|count| *count += 1).or_insert(1);
+    }
+    pub fn increase_visible(&mut self, mp_id: &Id) {
+        self.visible.entry(*mp_id).and_modify(|count| *count += 1).or_insert(1);
+    }
+    pub fn remove(&mut self, mp_id: &Id) {
+        self.found.remove(mp_id);
+        self.visible.remove(mp_id);
+    }
+    pub fn get_found_ratio(&self, mp_id: &Id) -> f32 {
+        // println!("mp_id {}, found {:?}, visible {:?}, ratio {:?}", mp_id, self.found.get(mp_id), self.visible.get(mp_id), *self.found.get(mp_id)? as f32 / *self.visible.get(mp_id)? as f32);
+        if self.found.get(mp_id).is_some() && self.visible.get(mp_id).is_some() {
+            *self.found.get(mp_id).unwrap() as f32 / *self.visible.get(mp_id).unwrap() as f32
+        } else {
+            1.0
+        }
+    }
 }
