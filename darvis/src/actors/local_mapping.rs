@@ -40,8 +40,6 @@ pub struct DarvisLocalMapping {
     // keep track of them and avoid doing duplicate work with them
     discarded_kfs: HashSet<Id>,  // TODO (design) ... kf culling and rates
 
-    tracked_mappoints: FoundVisibleMapPoints,
-
     // Modules
     imu: ImuModule,
 }
@@ -60,7 +58,6 @@ impl Actor for DarvisLocalMapping {
             recently_added_mappoints: Vec::new(),
             imu: ImuModule::new(None, None, sensor, false, false),
             discarded_kfs: HashSet::new(),
-            tracked_mappoints: FoundVisibleMapPoints::new(),
         }
     }
 
@@ -88,7 +85,6 @@ impl Actor for DarvisLocalMapping {
 
                 let msg = message.downcast::<NewKeyFrameMsg>().unwrap_or_else(|_| panic!("Could not downcast local mapping message!"));
                 let kf_id = actor.map.write().insert_keyframe_to_map(msg.keyframe, false);
-                actor.tracked_mappoints = msg.tracked_mappoints;
 
                 // Send the new keyframe ID directly back to the sender so they can use the ID 
                 actor.actor_channels.find(TRACKING_BACKEND).send(Box::new(KeyFrameIdMsg{kf_id})).unwrap();
@@ -246,7 +242,7 @@ impl DarvisLocalMapping {
         self.recently_added_mappoints.retain(|&mp_id| {
             let mut lock = self.map.write();
             if let Some(mappoint) = lock.mappoints.get(&mp_id) {
-                if (self.tracked_mappoints.get_found_ratio(&mp_id) < 0.25) || (current_kf_id - mappoint.first_kf_id >= 2 && mappoint.get_observations().len() <= th_obs) {
+                if (mappoint.get_found_ratio() < 0.25) || (current_kf_id - mappoint.first_kf_id >= 2 && mappoint.get_observations().len() <= th_obs) {
                     num_to_discard += 1;
                     lock.discard_mappoint(&mp_id);
                     false
@@ -263,7 +259,7 @@ impl DarvisLocalMapping {
     }
 
     #[time("LocalMapping::{}")]
-    fn create_new_mappoints(&self) -> i32 { //-> Vec<(MapPoint<PrelimMapPoint>, Vec<(i32, u32, usize)>)> {
+    fn create_new_mappoints(&self) -> i32 {
         // Retrieve neighbor keyframes in covisibility graph
         let nn = match self.sensor.is_mono() {
             true => 30,
@@ -729,8 +725,6 @@ impl DarvisLocalMapping {
                     }
                 }
             }
-
-            println!("num_redundant_obs {} > {}, num_mps {}", num_redundant_obs, redundant_th * (num_mps as f64), num_mps);
 
             if (num_redundant_obs as f64) > redundant_th * (num_mps as f64) {
                 match self.sensor.is_imu() {

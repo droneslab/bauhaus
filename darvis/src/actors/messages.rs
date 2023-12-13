@@ -69,7 +69,6 @@ impl ActorMessage for IMUInitializedMsg {}
 
 pub struct NewKeyFrameMsg {
     pub keyframe: Frame,
-    pub tracked_mappoints: FoundVisibleMapPoints,
 }
 impl ActorMessage for NewKeyFrameMsg {}
 

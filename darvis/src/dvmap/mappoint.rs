@@ -1,4 +1,4 @@
-use std::{fmt::Debug, collections::HashMap};
+use std::{fmt::Debug, collections::HashMap, sync::atomic::{AtomicI32, Ordering}};
 use dvcore::{matrix::DVMatrix, config::{SETTINGS, SYSTEM}, sensor::{Sensor, FrameSensor}};
 use log::error;
 extern crate nalgebra as na;
@@ -18,7 +18,7 @@ use super::{map::{Id, Map}, keyframe::{Frame, KeyFrame}, pose::DVTranslation};
 // The function in step 2 (to add a mappoint to a keyframe) takes a MapPoint<FullMapItem>
 
 // Typestate...Mappoint information that is ALWAYS available, regardless of mappoint state.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct MapPoint<M: MapPointState> {
     pub position: DVTranslation, 
 
@@ -34,11 +34,14 @@ pub struct MapPoint<M: MapPointState> {
     // mnFirstFrame ... literally never used meaningfully
     // mnLastFrameSeen ... similar to "mnTrackReferenceForFrame" in KeyFrame. redundant and easy to mess up/get out of sync. Search for this globally to see an example of how to avoid using it.
     // mbTrackInView ... only used by tracking to keep track of which mappoints to show. Just keep this data saved in tracking locally
-    // nFound ... set in tracking, used by local mapping to make decisiion about deleting keyframe. To reduce # of writes to map, we keep this data in backend struct and pass to local mapping
-    // nVisibile ... Same as nfound
 
     // Typestate...This reassures the compiler that the parameter gets used.
     full_mp_info: M,
+
+
+    // Set in tracking, used by local mapping to make decision about deleting keyframe
+    found: AtomicI32, //nFound
+    visible: AtomicI32, // nVisible
 
     sensor: Sensor
 }
@@ -77,6 +80,8 @@ impl MapPoint<PrelimMapPoint> {
             ref_kf_id,
             first_kf_id: ref_kf_id,
             full_mp_info: PrelimMapPoint{},
+            found: AtomicI32::new(1),
+            visible: AtomicI32::new(1),
             sensor: SETTINGS.get(SYSTEM, "sensor")
         }
     }
@@ -98,6 +103,8 @@ impl MapPoint<FullMapPoint> {
                 best_descriptor: DVMatrix::empty(),
                 num_obs: 0
             },
+            found: AtomicI32::new(1),
+            visible: AtomicI32::new(1),
             sensor: prelim_mappoint.sensor
         }
     }
@@ -227,6 +234,17 @@ impl MapPoint<FullMapPoint> {
         self.full_mp_info.best_descriptor = desc;
     }
 
+    pub fn increase_found(& self) {
+        self.found.fetch_add(1, Ordering::SeqCst);
+    }
+    pub fn increase_visible(& self) {
+        self.visible.fetch_add(1, Ordering::SeqCst);
+    }
+    pub fn get_found_ratio(&self) -> f32 {
+        // println!("mp_id {}, found {:?}, visible {:?}, ratio {:?}", mp_id, self.found.get(mp_id), self.visible.get(mp_id), *self.found.get(mp_id)? as f32 / *self.visible.get(mp_id)? as f32);
+        self.found.load(Ordering::SeqCst) as f32 / self.visible.load(Ordering::SeqCst) as f32
+    }
+
     //** Observations */////////////////////////////////////////////////////////////////////////////////
     pub fn erase_observation(&mut self, kf_id: &Id) -> bool {
         if let Some((left_index, right_index)) = self.full_mp_info.observations.get(kf_id) {
@@ -326,6 +344,22 @@ impl MapPoint<FullMapPoint> {
             kf.features.get_octave(*left_index as usize)
         } else {
             kf.features.get_octave((right_index - kf.features.num_keypoints as i32) as usize)
+        }
+    }
+}
+
+
+impl<M> Clone for MapPoint<M> where M: MapPointState + Clone {
+    fn clone(&self) -> Self {
+        Self {
+            position: self.position.clone(),
+            origin_map_id: self.origin_map_id,
+            ref_kf_id: self.ref_kf_id,
+            first_kf_id: self.first_kf_id,
+            full_mp_info: self.full_mp_info.clone(),
+            found: AtomicI32::new(self.found.load(Ordering::Relaxed)),
+            visible: AtomicI32::new(self.visible.load(Ordering::Relaxed)),
+            sensor: self.sensor.clone(),
         }
     }
 }
