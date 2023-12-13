@@ -29,21 +29,23 @@ impl ActorChannels {
     }
 
     pub fn receive(&self) -> Result<MessageBox, RecvError> {
-        match self.receiver_bound {
-            Some(bound) => {
-                let mut result = self.receiver.recv()?;
-                let mut dropped = 0;
-                while self.receiver.len() > bound {
-                    dropped += 1;
-                    result = self.receiver.recv()?;
-                }
-                if dropped > 0 {
-                    info!("Actor {} dropped {} messages.", self.my_name, dropped);
-                }
-                Ok(result)
-            },
-            None => self.receiver.recv(),
-        }
+        // Note: not doing this right now. Instead, dropping messages in the spawn thread
+        // of the actors so that we can filter drops by message type.
+        // match self.receiver_bound {
+        //     Some(bound) => {
+        //         let mut result = self.receiver.recv()?;
+        //         let mut dropped = 0;
+        //         while self.receiver.len() > bound {
+        //             dropped += 1;
+        //             result = self.receiver.recv()?;
+        //         }
+        //         if dropped > 0 {
+        //             info!("Actor {} dropped {} messages.", self.my_name, dropped);
+        //         }
+        //         Ok(result)
+        //     },
+        //    None => 
+        self.receiver.recv()
     }
     
     pub fn queue_len(&self) -> usize {

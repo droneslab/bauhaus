@@ -112,6 +112,8 @@ To instead install with docker...
             cargo build # Either debug or release build works
             valgrind target/debug/bindarvis  [DATASET] config.yaml > log.txt 2>&1
             ```
+    - Check for deadlocks
+        - The RwLock will deadlock if you take two locks in one scope, but this just shows up as an infinite loop on the command line. To find deadlocks, look inside main.rs for the word ``deadlock``, uncomment the lines of code that spawn a thread. This runs a separate thread that periodically wakes up, checks for a deadlock, and prints out the thread info if there is one. Additionally (or alternatively) you can change all RwLocks to Mutexes, which should give an error if you try to lock twice. This should be pretty straightforward by changing ``pub type MapLock`` to ``Arc<Mutex<Map>>`` and then changing occurences of ``read()`` and ``write()`` to ``lock()``.
 - Performance and profiling
     - Print timing of some functions (functions using ``#[time()]`` proc macro and calls to ``timer!`` macro)
         ```bash

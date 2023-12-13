@@ -1,4 +1,4 @@
-use std::{collections::{HashMap, HashSet}, cmp::min};
+use std::{collections::{HashMap, HashSet}, cmp::min, backtrace::Backtrace};
 use dvcore::{matrix::{DVVector3, DVVectorOfKeyPoint, DVMatrix}, config::{ SETTINGS, SYSTEM}, sensor::{Sensor, FrameSensor}};
 use log::{error, info, debug};
 use crate::{dvmap::{map::Id, pose::DVPose},modules::{imu::*, camera::CAMERA_MODULE}, actors::tracking_backend::TrackedMapPointData,};
@@ -203,7 +203,7 @@ pub struct KeyFrame {
     pub origin_map_id: Id, // mnOriginMapId
     pub connections: ConnectedKeyFrames, // Parent, children, neighbors
 
-    // TODO (mvp): I think we can clean this up and get rid of these
+    // I think we can clean this up and get rid of these
     // Variables used by KF database
     // pub loop_query: u64, //mnLoopQuery
     // pub loop_words: i32, //mnLoopWords
@@ -271,9 +271,15 @@ impl KeyFrame {
         let rcw2 = rot.row(2);
         let zcw = self.pose.get_translation()[2];
 
-        for mp_match in &self.mappoint_matches.matches {
-            if let Some((mp_id, _)) = mp_match {
-                let world_pos = *(mappoints.get(mp_id).unwrap().position);
+        for index in 0..self.mappoint_matches.matches.len() {
+            if let Some((mp_id, _)) = self.mappoint_matches.matches[index as usize] {
+                if mappoints.get(&mp_id).is_none() {
+                    error!("Map point not found in map. This shouldn't happen!! KF ID = {}, MP ID = {}", self.id, mp_id);
+                    println!("Custom backtrace: {}", Backtrace::force_capture());
+
+                    continue;
+                }
+                let world_pos = *(mappoints.get(&mp_id).unwrap().position);
                 let z = (rcw2 * world_pos)[0] + zcw; // first part of this term is scalar but still need to get it from Matrix<1,1> to f64
                 depths.push(z);
             }

@@ -63,8 +63,7 @@ impl<T> ReadWriteMap<T> {
         let elapsed = now.elapsed().as_millis();
         if elapsed > 5 {
             debug!("LOCKS...Write acquire: {} ms", elapsed);
-            // println!("Custom backtrace: {}", Backtrace::capture());
-
+            // println!("Backtrace: {}", Backtrace::force_capture());
         }
         write
     }

@@ -740,13 +740,11 @@ pub fn search_for_triangulation(
         let kf1_node_id = kf1_featvec[i];
         let kf2_node_id = kf2_featvec[j];
         if kf1_node_id == kf2_node_id {
-            // println!("index match {}", kf1_node_id);
             let kf1_indices = kf_1.bow.as_ref().unwrap().get_feat_from_node(kf1_node_id);
 
             for kf1_index in kf1_indices {
                 // If there is already a MapPoint skip
                 if kf_1.mappoint_matches.has_mappoint(&kf1_index) {
-                    // println!("Already mappoint at {}", kf1_index);
                     continue
                 };
 
@@ -791,11 +789,8 @@ pub fn search_for_triangulation(
                     let dist = descriptor_distance(&descriptors_kf_1, &descriptors_kf_2);
 
                     if dist > TH_LOW || dist > best_dist {
-                        // println!("dist is > 50 or better than best dist {} {} {} ", kf2_index, dist, best_dist);
                         continue
                     }
-
-                    // println!("dist {} {} {}", kf1_index, kf2_index, dist);
 
                     let (kp2, _right2) = kf_2.features.get_keypoint(kf2_index as usize);
 
@@ -803,7 +798,6 @@ pub fn search_for_triangulation(
                         let dist_ex = (ep.0 as f32) - kp2.pt().x;
                         let dist_ey = (ep.1 as f32) - kp2.pt().y;
                         if dist_ex * dist_ex + dist_ey * dist_ey < 100.0 * SCALE_FACTORS[kp2.octave() as usize] {
-                            // println!("continuing");
                             continue
                         }
                     }
@@ -851,7 +845,6 @@ pub fn search_for_triangulation(
                         best_dist = dist;
                     }
                 }
-                // println!("Best index and dist {} {}", best_index, best_dist);
                 if best_index >= 0 {
                     let (kp2, _) = kf_2.features.get_keypoint(best_index as usize);
                     matches.insert(kf1_index as usize, best_index as usize);
@@ -869,10 +862,8 @@ pub fn search_for_triangulation(
             j += 1;
         } else if kf1_node_id < kf2_node_id {
             i = lower_bound(&kf1_featvec, &kf2_featvec, i, j);
-            // println!("Move kf1 to {}", i);
         } else {
             j = lower_bound(&kf2_featvec, &kf1_featvec, j, i);
-            // println!("Move kf2 to {}", j);
         }
     }
 
@@ -1017,7 +1008,6 @@ pub fn fuse(kf_id: &Id, fuse_candidates: &Vec<Id>, map: &MapLock, th: f32, is_ri
                 let mappoint_in_kf = lock.mappoints.get(&mappoint_in_kf_id).unwrap();
                 if mappoint_in_kf.get_observations().len() > mappoint.get_observations().len() {
                     warn!("Verify that the order of mp_id and mappoint_in_kf_id is right");
-
                     map.write().replace_mappoint(*mp_id, mappoint_in_kf_id);
                 } else {
                     map.write().replace_mappoint(mappoint_in_kf_id, *mp_id);

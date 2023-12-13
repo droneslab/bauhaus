@@ -126,7 +126,6 @@ impl Map {
 
     #[time("Map::{}")]
     pub fn insert_keyframe_to_map(&mut self, frame: Frame, is_initialization: bool) -> Id {
-        // TODO (timing) ... 20ms
         self.last_kf_id += 1;
         let new_kf_id = self.last_kf_id;
         if self.keyframes.is_empty() {
@@ -135,30 +134,36 @@ impl Map {
         }
 
         let full_keyframe = KeyFrame::new(frame, self.id, new_kf_id);
+        let num_keypoints = full_keyframe.features.num_keypoints;
         self.keyframes.insert(new_kf_id, full_keyframe);
-
 
         // Update mp connections after insertion
         // Note: This should run during most normal keyframe insertions, but not 
         // when inserting the first two keyframes in initialization, because this
         // already happens when inserting the mappoints in initialization.
         if !is_initialization {
-            let full_keyframe = self.keyframes.get(&new_kf_id).unwrap();
-            let num_keypoints = full_keyframe.features.num_keypoints;
+            // TODO (timing) ... really annoying to have this clone but it's the only way we can
+            // have a get_mut on keyframes as well as a get on mappoints below. Another option is to
+            // split up the for loop into 2, one for the keyframe update and one for the mappoint update.
+            // Possible that that is faster than cloning.
+            let mp_matches = self.keyframes.get(&new_kf_id).unwrap().mappoint_matches.clone();
 
-            for i in 0..full_keyframe.mappoint_matches.matches.len() {
-                if full_keyframe.mappoint_matches.has_mappoint(&(i as u32)) {
-                    let mp_id = full_keyframe.mappoint_matches.get_mappoint(&(i as u32));
+            for i in 0..mp_matches.matches.len() {
+                if mp_matches.has_mappoint(&(i as u32)) {
+                    let mp_id = mp_matches.get_mappoint(&(i as u32));
                     // Add observation for mp->kf
                     if let Some(mp) = self.mappoints.get_mut(&mp_id) {
                         mp.add_observation(&new_kf_id, num_keypoints, i as u32);
                     } else {
-                        continue; // Mappoint could have been deleted by local mapping 
-                        // TODO (MVP)...need to remove mappoint match in keyframe
+                        self.keyframes.get_mut(&new_kf_id).unwrap().mappoint_matches.delete((i as i32, -1));
+                        continue;
+                        // Mappoint was deleted by local mapping but not deleted here yet 
+                        // because the kf was not in the map at the time.
                     }
 
                     let norm_and_depth;
                     let best_descriptor;
+                    let mp_id = mp_matches.get_mappoint(&(i as u32));
                     {
                         let mp = self.mappoints.get(&mp_id).unwrap();
                         norm_and_depth = mp.get_norm_and_depth(&self).unwrap();
@@ -442,7 +447,6 @@ impl Map {
         }
     }
 
-    #[time("Map::{}")]
     pub fn update_after_ba(&mut self, optimized_poses: optimizer::BundleAdjustmentResult, loop_kf: Id) {
         for (kf_id, pose) in optimized_poses.new_kf_poses {
             if let Some(kf) = self.keyframes.get_mut(&kf_id) {
@@ -484,7 +488,6 @@ impl Map {
 
     }
 
-    #[time("Map::{}")]
     pub fn replace_mappoint(&self, _mp_to_replace: Id, _mp: Id) {
         todo!("MVP LOCAL MAPPING");
         // if(pMP->mnId==this->mnId)

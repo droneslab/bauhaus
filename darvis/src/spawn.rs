@@ -38,7 +38,7 @@ pub fn launch_actor_system(config: Vec::<ActorConf>, first_actor_name: String)
 
     // * SPAWN USER-DEFINED ACTORS *//
     // Create map
-    let writeable_map = ReadWriteMap::new(Map::new()); // Arc::new(parking_lot::Mutex::new(Map::new()));
+    let writeable_map = ReadWriteMap::<Map>::new(Map::new()); // Arc::new(parking_lot::Mutex::new(Map::new()))
     // Spawn actors
     for (actor_name, receiver_bound, receiver) in receivers {
         spawn_actor(actor_name, &transmitters, receiver, receiver_bound, Some(&writeable_map));
@@ -61,10 +61,10 @@ fn spawn_actor(
 ) {
     info!("Spawning actor {}", &actor_name);
 
-    // Note: read_only() is important here, otherwise all actors can
-    // access the write lock of the map
+    // Note: not using this right now, but if you wanted to pass a read-only map,
+    // call map.create_read_only(). Otherwise all actors can access the write lock.
     let map_clone = match writeable_map {
-        Some(map) => Some(map.clone()),//Some(map.create_read_only()), // TODO (WRITE LOCK TEST)
+        Some(map) => Some(map.clone()),
         None => None
     };
 
