@@ -36,7 +36,6 @@ pub struct DarvisTrackingBack {
     kf_track_reference_for_frame: HashMap::<Id, Id>, // mnTrackReferenceForFrame, member variable in Keyframe
     mp_track_reference_for_frame: HashMap::<Id, Id>,  // mnTrackReferenceForFrame, member variable in Mappoint
     last_frame_seen: HashMap::<Id, Id>, // mnLastFrameSeen, member variable in Mappoint
-    found_visible_mappoints: FoundVisibleMapPoints, // nFound and nVisible, member variable in MapPoint
 
     // IMU 
     imu: ImuModule,
@@ -90,7 +89,6 @@ impl Actor for DarvisTrackingBack {
             relocalization: Relocalization{last_reloc_frame_id: 0, timestamp_lost: None},
             map_updated: false,
             trajectory_poses: Vec::new(),
-            found_visible_mappoints: FoundVisibleMapPoints::new()
         }
     }
 
@@ -647,10 +645,7 @@ impl DarvisTrackingBack {
             if let Some((mp_id, is_outlier)) = current_frame.mappoint_matches.matches[index as usize] {
                 if !is_outlier {
                     if let Some(mp) = self.map.read().mappoints.get(&mp_id) {
-                        // mp.increase_found(1);
-                        self.found_visible_mappoints.increase_found(&mp_id);
-                    } else {
-                        self.found_visible_mappoints.remove(&mp_id);
+                        mp.increase_found();
                     }
 
                     if self.localization_only_mode {
@@ -834,8 +829,7 @@ impl DarvisTrackingBack {
             for index in 0..current_frame.mappoint_matches.matches.len() {
                 if let Some((id, _)) = current_frame.mappoint_matches.matches[index as usize] {
                     if let Some(mp) = lock.mappoints.get(&id) {
-                        // lock.mappoints.get_mut(&id).unwrap().increase_visible();
-                        self.found_visible_mappoints.increase_visible(&id);
+                        lock.mappoints.get(&id).unwrap().increase_visible();
 
                         self.last_frame_seen.insert(id, current_frame.frame_id);
                         self.track_in_view.remove(&id);
@@ -866,9 +860,7 @@ impl DarvisTrackingBack {
                 };
 
                 if tracked_data_left.is_some() || tracked_data_right.is_some() {
-                    // lock.mappoints.get_mut(&mp_id).unwrap().increase_visible();
-                    self.found_visible_mappoints.increase_visible(&mp_id);
-
+                    lock.mappoints.get(&mp_id).unwrap().increase_visible();
                     to_match += 1;
                 }
                 if let Some(d) = tracked_data_left {
@@ -1020,12 +1012,7 @@ impl DarvisTrackingBack {
         // KeyFrame created here and inserted into map
         self.actor_channels.send(
             LOCAL_MAPPING,
-            Box::new(
-                NewKeyFrameMsg{ 
-                    keyframe: new_kf,
-                    tracked_mappoints: self.found_visible_mappoints.clone(),
-                }
-            )
+            Box::new( NewKeyFrameMsg{  keyframe: new_kf, } )
         );
     }
 
@@ -1111,8 +1098,7 @@ impl DarvisTrackingBack {
     fn discard_outliers(&mut self, current_frame: &mut Frame) -> i32 {
         let discarded = current_frame.mappoint_matches.discard_outliers();
         for mp_id in discarded {
-            // self.map.write().mappoints.get_mut(&mp_id).unwrap().increase_found(1);
-            self.found_visible_mappoints.increase_found(&mp_id);
+            self.map.read().mappoints.get(&mp_id).unwrap().increase_found();
             self.track_in_view.remove(&mp_id);
             self.last_frame_seen.insert(mp_id, current_frame.frame_id);
             // TODO (Stereo) ... need to remove this from track_in_view_r if the mp is seen in the right camera
