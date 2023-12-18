@@ -1,12 +1,11 @@
 use std::collections::{HashMap, HashSet};
 use std::f64::INFINITY;
-use std::sync::RwLockReadGuard;
+use std::time::{Instant, Duration};
 use dvcore::config::SETTINGS;
-use dvcore::maplock::ReadWriteMap;
 use dvcore::matrix::{DVVectorOfPoint2f, DVVector3};
 use dvcore::sensor::{Sensor, FrameSensor};
 use log::warn;
-use logging_timer::time;
+use logging_timer::{time, timer};
 use opencv::core::KeyPoint;
 use opencv::prelude::*;
 use crate::MapLock;
@@ -15,8 +14,7 @@ use crate::dvmap::keyframe::{Frame, KeyFrame};
 use crate::modules::optimizer::LEVEL_SIGMA2;
 use crate::registered_actors::{MATCHER, FEATURE_DETECTION, CAMERA};
 use crate::{
-    dvmap::{map::Id, map::Map},
-    maplock::ReadOnlyMap,
+    dvmap::map::Id,
 };
 
 use super::camera::CAMERA_MODULE;
@@ -525,8 +523,8 @@ pub fn search_by_bow_f(
         }
     }
 
-    let kf_featvec = kf.bow.as_ref().unwrap().get_feat_vec_nodes();
-    let frame_featvec = frame.bow.as_ref().unwrap().get_feat_vec_nodes();
+    let kf_featvec = kf.bow.as_ref().unwrap().feat_vec.get_all_nodes();
+    let frame_featvec = frame.bow.as_ref().unwrap().feat_vec.get_all_nodes();
     let mut i = 0;
     let mut j = 0;
 
@@ -534,9 +532,11 @@ pub fn search_by_bow_f(
         let kf_node_id = kf_featvec[i];
         let frame_node_id = frame_featvec[j];
         if kf_node_id == frame_node_id {
-            let kf_indices = kf.bow.as_ref().unwrap().get_feat_from_node(kf_node_id);
+            let kf_indices_size = kf.bow.as_ref().unwrap().feat_vec.vec_size(kf_node_id);
 
-            for kf_index in kf_indices {
+            for index1 in 0..kf_indices_size {
+                let kf_index = kf.bow.as_ref().unwrap().feat_vec.vec_get(kf_node_id, index1);
+
                 if !kf.mappoint_matches.has_mappoint(&kf_index) {
                     continue
                 }
@@ -548,25 +548,27 @@ pub fn search_by_bow_f(
                 let mut best_index_right = -1;
                 let descriptors_kf = kf.features.descriptors.row(kf_index)?;
 
-                let frame_indices = frame.bow.as_ref().unwrap().get_feat_from_node(frame_node_id);
+                let frame_indices_size = frame.bow.as_ref().unwrap().feat_vec.vec_size(frame_node_id);
 
-                for frame_index in &frame_indices {
+                for index2 in 0..frame_indices_size {
+                    let frame_index = frame.bow.as_ref().unwrap().feat_vec.vec_get(frame_node_id, index2);
+
                     if matches.contains_key(&frame_index) {
                         continue;
                     }
 
-                    let descriptors_f = frame.features.descriptors.row(*frame_index)?;
+                    let descriptors_f = frame.features.descriptors.row(frame_index)?;
 
                     let dist = descriptor_distance(&descriptors_kf, &descriptors_f);
-                    let no_left = frame.features.has_left_kp().map_or(true, |n_left| *frame_index < n_left);
+                    let no_left = frame.features.has_left_kp().map_or(true, |n_left| frame_index < n_left);
                     // TODO (stereo): I'm not sure if below works in the stereo case
                     update_bests(
-                        dist, *frame_index as i32,
+                        dist, frame_index as i32,
                         &mut best_dist_left, &mut best_index_left,
                         no_left
                     );
                     update_bests(
-                        dist, *frame_index as i32,
+                        dist, frame_index as i32,
                         &mut best_dist_right, &mut best_index_right,
                         no_left
                     );
@@ -626,19 +628,22 @@ pub fn search_by_bow_kf(
     let factor = 1.0 / (HISTO_LENGTH as f32);
     let mut rot_hist = construct_rotation_histogram();
 
-    for node_id_kf_1 in kf_1.bow.as_ref().unwrap().get_feat_vec_nodes() {
-        for node_id_kf_2 in kf_2.bow.as_ref().unwrap().get_feat_vec_nodes() {
+    for node_id_kf_1 in kf_1.bow.as_ref().unwrap().feat_vec.get_all_nodes() {
+        for node_id_kf_2 in kf_2.bow.as_ref().unwrap().feat_vec.get_all_nodes() {
             if node_id_kf_1 == node_id_kf_2 {
-                let indices_kf_1 = kf_1.bow.as_ref().unwrap().get_feat_from_node(node_id_kf_1);
-                let indices_kf_2 = kf_2.bow.as_ref().unwrap().get_feat_from_node(node_id_kf_2);
+                let indices_kf_1_size = kf_1.bow.as_ref().unwrap().feat_vec.vec_size(node_id_kf_1);
+                let indices_kf_2_size = kf_2.bow.as_ref().unwrap().feat_vec.vec_size(node_id_kf_2);
 
-                for index_kf_1 in indices_kf_1 {
+
+                for index1 in 0..indices_kf_1_size {
+                    let index_kf_1 = kf_1.bow.as_ref().unwrap().feat_vec.vec_get(node_id_kf_1, index1);
                     let mut best_dist = (256, 256);
                     let mut best_index = -1;
                     let descriptors_kf_1 = kf_1.features.descriptors.row(index_kf_1)?;
 
-                    for index_kf_2 in &indices_kf_2 {
-                        if kf_2.features.has_left_kp().map_or(false, |n_left| index_kf_2 > &n_left) {
+                    for index2 in 0..indices_kf_2_size {
+                        let index_kf_2 = kf_2.bow.as_ref().unwrap().feat_vec.vec_get(node_id_kf_2, index2);
+                        if kf_2.features.has_left_kp().map_or(false, |n_left| index_kf_2 > n_left) {
                             continue;
                         }
 
@@ -646,12 +651,12 @@ pub fn search_by_bow_kf(
                             continue;
                         }
 
-                        let descriptors_kf_2 = kf_2.features.descriptors.row(*index_kf_2)?;
+                        let descriptors_kf_2 = kf_2.features.descriptors.row(index_kf_2)?;
                         let dist = descriptor_distance(&descriptors_kf_1, &descriptors_kf_2);
                         if dist < best_dist.0 {
                             best_dist.1 = best_dist.0;
                             best_dist.0 = dist;
-                            best_index = *index_kf_2 as i32;
+                            best_index = index_kf_2 as i32;
                         } else if dist < best_dist.1 {
                             best_dist.1 = dist;
                         }
@@ -696,6 +701,8 @@ pub fn search_for_triangulation(
     // Some math based on ORB-SLAM2 to avoid some confusion with Sophus.
     // Look here: https://github.com/raulmur/ORB_SLAM2/blob/master/src/ORBmatcher.cc#L657
 
+    let _span = tracy_client::span!("search_for_triangulation");
+
     //Compute epipole in second image
     let cw = *kf_1.get_camera_center(); //Cw
     let r2w = *kf_2.pose.get_rotation(); //R2w
@@ -731,18 +738,38 @@ pub fn search_for_triangulation(
     let factor = 1.0 / (HISTO_LENGTH as f32);
     let mut rot_hist = construct_rotation_histogram();
 
-    let kf1_featvec = kf_1.bow.as_ref().unwrap().get_feat_vec_nodes();
-    let kf2_featvec = kf_2.bow.as_ref().unwrap().get_feat_vec_nodes();
+    let kf1_featvec = kf_1.bow.as_ref().unwrap().feat_vec.get_all_nodes();
+    let kf2_featvec = kf_2.bow.as_ref().unwrap().feat_vec.get_all_nodes();
     let mut i = 0;
     let mut j = 0;
 
+    let mut get_featvec_time = Duration::new(0, 0);
+    let mut intro_time =Duration::new(0, 0);
+    let mut descriptor_distance_time =Duration::new(0, 0);
+    let mut epipolar_constrain_time = Duration::new(0, 0);
+    let mut orientation_time = Duration::new(0, 0);
+    let mut lower_bound_time = Duration::new(0, 0);
+    let mut total_inner_time = Duration::new(0, 0);
+    let mut inner2_time = Duration::new(0, 0);
+    let total = Instant::now();
+    // let timer = timer!("LocalMapping::search_for_triangulation::while_loop");
+    let mut loop_iterations = 0;
     while i < kf1_featvec.len() && j < kf2_featvec.len() {
         let kf1_node_id = kf1_featvec[i];
         let kf2_node_id = kf2_featvec[j];
         if kf1_node_id == kf2_node_id {
-            let kf1_indices = kf_1.bow.as_ref().unwrap().get_feat_from_node(kf1_node_id);
+            let mut now = Instant::now();
+            let kf1_indices = kf_1.bow.as_ref().unwrap().feat_vec.get_feat_from_node(kf1_node_id);
+            get_featvec_time = get_featvec_time.checked_add(now.elapsed()).unwrap();
+
+            // let kf1_indices_size = kf_1.bow.as_ref().unwrap().feat_vec.vec_size(kf1_node_id);
+
+            let total_inner = Instant::now();
 
             for kf1_index in kf1_indices {
+                // let kf1_index = kf_1.bow.as_ref().unwrap().feat_vec.vec_get(kf1_node_id, index1);
+
+                now = Instant::now();
                 // If there is already a MapPoint skip
                 if kf_1.mappoint_matches.has_mappoint(&kf1_index) {
                     continue
@@ -765,9 +792,20 @@ pub fn search_for_triangulation(
                 let mut best_dist = TH_LOW;
                 let mut best_index = -1;
                 let descriptors_kf_1 = kf_1.features.descriptors.row(kf1_index)?;
+                
+                intro_time = intro_time.checked_add(now.elapsed()).unwrap();
+                now = Instant::now();
 
-                let kf2_indices = kf_2.bow.as_ref().unwrap().get_feat_from_node(kf2_node_id);
+                let kf2_indices = kf_2.bow.as_ref().unwrap().feat_vec.get_feat_from_node(kf2_node_id);
+                // let kf2_indices_size = kf_1.bow.as_ref().unwrap().feat_vec.vec_size(kf2_node_id);
+                get_featvec_time = get_featvec_time.checked_add(now.elapsed()).unwrap();
+
+                let inner2 = Instant::now();
+
                 for kf2_index in kf2_indices {
+                    // let kf2_index = kf_1.bow.as_ref().unwrap().feat_vec.vec_get(kf2_node_id, index2);
+                    now = Instant::now();
+
                     // If we have already matched or there is a MapPoint skip
                     if kf_2.mappoint_matches.has_mappoint(&kf2_index) || matched_already.contains_key(&kf2_index) {
                         continue
@@ -791,6 +829,9 @@ pub fn search_for_triangulation(
                     if dist > TH_LOW || dist > best_dist {
                         continue
                     }
+
+                    descriptor_distance_time = descriptor_distance_time.checked_add(now.elapsed()).unwrap();
+                    now = Instant::now();
 
                     let (kp2, _right2) = kf_2.features.get_keypoint(kf2_index as usize);
 
@@ -844,7 +885,14 @@ pub fn search_for_triangulation(
                         best_index = kf2_index as i32;
                         best_dist = dist;
                     }
+
+                    epipolar_constrain_time = epipolar_constrain_time.checked_add(now.elapsed()).unwrap();
+
                 }
+
+                inner2_time = inner2_time.checked_add(inner2.elapsed()).unwrap();
+
+                now = Instant::now();
                 if best_index >= 0 {
                     let (kp2, _) = kf_2.features.get_keypoint(best_index as usize);
                     matches.insert(kf1_index as usize, best_index as usize);
@@ -857,15 +905,35 @@ pub fn search_for_triangulation(
 
                     }
                 }
+                orientation_time = orientation_time.checked_add(now.elapsed()).unwrap();
             }
+            total_inner_time = total_inner_time.checked_add(total_inner.elapsed()).unwrap();
             i += 1;
             j += 1;
+            loop_iterations += 1;
         } else if kf1_node_id < kf2_node_id {
+            let now = Instant::now();
             i = lower_bound(&kf1_featvec, &kf2_featvec, i, j);
+            lower_bound_time= lower_bound_time.checked_add(now.elapsed()).unwrap();
         } else {
+            let now = Instant::now();
             j = lower_bound(&kf2_featvec, &kf1_featvec, j, i);
+            lower_bound_time=lower_bound_time.checked_add(now.elapsed()).unwrap();
         }
     }
+
+    // logging_timer::finish!(timer);
+    println!("loop_iterations {}", loop_iterations);
+
+    println!("get_featvec_time {} ms", get_featvec_time.as_millis());
+    println!("intro_time {} ms", intro_time.as_millis());
+    println!("descriptor_distance_time {} ms", descriptor_distance_time.as_millis());
+    println!("epipolar_constrain_time {} ms", epipolar_constrain_time.as_millis());
+    println!("orientation_time {} ms", orientation_time.as_millis());
+    println!("lower_bound_time {} ms", lower_bound_time.as_millis());
+    println!("total_inner_time {} ms", total_inner_time.as_millis());
+    println!("total time {} ms", total.elapsed().as_millis());
+    println!("inner2_time {} ms", inner2_time.as_millis());
 
     if should_check_orientation {
         let (ind_1, ind_2, ind_3) = compute_three_maxima(&rot_hist,HISTO_LENGTH);
@@ -1028,6 +1096,7 @@ pub fn descriptor_distance(a : &Mat, b: &Mat) -> i32 {
     ).unwrap() as i32;
 }
 
+
 fn check_orientation_1(
     keypoint_1: &KeyPoint, keypoint_2: &KeyPoint,
     rot_hist: &mut Vec<Vec<u32>>, factor: f32,
@@ -1110,6 +1179,7 @@ fn compute_three_maxima(histo : &Vec<Vec<u32>> , histo_length: i32) -> (i32, i32
     (ind_1, ind_2, ind_3)
 }
 
+#[time("LocalMapping::{}")]
 fn lower_bound(vec1: &Vec<u32>, vec2: &Vec<u32>, i: usize, j: usize) -> usize {
     let mut curr = i;
     while vec1[curr] < vec2[j] {

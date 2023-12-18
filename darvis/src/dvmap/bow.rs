@@ -42,8 +42,8 @@ impl DVVocabulary {
 
 
 pub struct BoW {
-    bow_vec: UniquePtr<dvos3binding::ffi::BowVector>, // mBowVec
-    feat_vec: UniquePtr<dvos3binding::ffi::FeatureVector>, // mFeatVec
+    pub bow_vec: UniquePtr<dvos3binding::ffi::BowVector>, // mBowVec
+    pub feat_vec: UniquePtr<dvos3binding::ffi::FeatureVector>, // mFeatVec
 }
 impl BoW {
     pub fn new() -> Self {
@@ -57,12 +57,6 @@ impl BoW {
             bow_vec: self.bow_vec.clone(),
             feat_vec: self.feat_vec.clone(),
         }
-    }
-    pub fn get_feat_vec_nodes(&self) -> Vec<u32> {
-        self.feat_vec.get_all_nodes()
-    }
-    pub fn get_feat_from_node(&self, node: u32) -> Vec<u32> {
-        self.feat_vec.get_feat_from_node(node)
     }
 }
 

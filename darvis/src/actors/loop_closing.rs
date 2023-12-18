@@ -1,6 +1,5 @@
 use dvcore::actor::{Actor, ActorMessage};
 use dvcore::config::{SETTINGS, SYSTEM};
-use dvcore::maplock::{ReadOnlyMap, ReadWriteMap};
 use dvcore::sensor::Sensor;
 use log::warn;
 use crate::{ActorChannels, MapLock};

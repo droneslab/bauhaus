@@ -25,7 +25,6 @@ use crate::{
 };
 
 use super::messages::{ShutdownMsg, KeyFrameIdMsg, Reset, NewKeyFrameMsg};
-use super::tracking_backend::FoundVisibleMapPoints;
 
 #[derive(Debug)]
 pub struct DarvisLocalMapping {
@@ -294,7 +293,7 @@ impl DarvisLocalMapping {
             ow1 = current_kf.get_camera_center();
         }
 
-        // let mut new_mappoints = Vec::new();
+        println!("neighbor kfs len {}", neighbor_kfs.len());
         // Search matches with epipolar restriction and triangulate
         let mut mps_created = 0;
         for neighbor_id in neighbor_kfs {
@@ -334,6 +333,7 @@ impl DarvisLocalMapping {
             let (matches, mut pose2, translation2, rotation2, rotation_transpose2);
             {
                 let lock = self.map.read();
+                
                 matches = match orbmatcher::search_for_triangulation(
                     lock.keyframes.get(&self.current_keyframe_id).unwrap(), lock.keyframes.get(&neighbor_id).unwrap(),
                     false, false, course,
@@ -348,6 +348,7 @@ impl DarvisLocalMapping {
                 rotation2 = pose2.get_rotation(); // Rcw2
                 rotation_transpose2 = rotation2.transpose(); // Rwc2
             }
+
 
             // Triangulate each match
             for (idx1, idx2) in matches {
@@ -418,6 +419,7 @@ impl DarvisLocalMapping {
                         continue
                     }
                 }
+
 
                 //Check triangulation in front of cameras
                 let x3_d_nalg = *x3_d.unwrap();
@@ -503,6 +505,7 @@ impl DarvisLocalMapping {
                     continue;
                 }
 
+
                 // Triangulation is successful
                 {
                     let mut lock = self.map.write();
@@ -511,12 +514,12 @@ impl DarvisLocalMapping {
                     let _id = lock.insert_mappoint_to_map(new_mp, observations);
                     mps_created += 1;
                 }
+
             }
         }
         mps_created
     }
 
-    #[time("LocalMapping::{}")]
     fn search_in_neighbors(&self) {
         // Retrieve neighbor keyframes
         let nn = match self.sensor.frame() {
@@ -608,7 +611,6 @@ impl DarvisLocalMapping {
         }
     }
 
-    #[time("LocalMapping::{}")]
     fn keyframe_culling(&mut self) -> i32 {
         // Check redundant keyframes (only local keyframes)
         // A keyframe is considered redundant if the 90% of the MapPoints it sees, are seen
