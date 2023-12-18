@@ -28,15 +28,22 @@ IDL_PACKAGE_FILTER = { value = "std_msgs;r2r_minimal_node_msgs" }
 g2o = { path = "../g2o" }
 dvos3binding = { path = "../orbslam-bindings" }
 foxglove = { path = "../foxglove" }
+
+
 once_cell = "*"
 chrono = { version = "*", features = ["serde"] }
 rand = "*"
 linked-hash-map = "*"
 ctrlc = "*"
 downcast-rs = "*"
+
+## Visualizer
 prost-types = "*"
 prost = "*"
+mcap = "*"
 
+
+cc = { version = "1.0.79", features = ["parallel"] }
 opencv = "0.84.5"
 nalgebra = {version = "0.32.3", features = ["serde-serialize"]}
 cv-convert = {version = '0.25.0', default_features = false, features = ['opencv_0-84','nalgebra_0-32']}
@@ -45,19 +52,23 @@ cxx = "1.0"
 yaml-rust = "*"
 parking_lot = {version = "*", features = ["deadlock_detection"]}
 num-traits = "*"
-fern = {version = "*", features = ["colored"] }
 array2d = "*"
 lazy_static = "*"
-env_logger = "*"
 glob = "*"
 serde = "*"
 simba = "*"
-log = "*"
 derivative = "*"
 error-chain = "*"
 spin_sleep = "*"
-mcap = "*"
 crossbeam-channel = "0.5.8"
-
-logging_timer = "1.1.0"
 nohash-hasher = "0.2.0"
+
+fern = {version = "*", features = ["colored"] }
+log = "*"
+env_logger = "*"
+logging_timer = "1.1.0"
+profiling = "1.0.12"
+tracing = "0.1.40"
+tracing-subscriber = "0.3.0"
+#tracy-client = { version = "0.12.6", default-features = false, features = ["enable", "timer-fallback"] }
+tracy-client = {version = "0.16.4", features = ["enable", "timer-fallback"] }

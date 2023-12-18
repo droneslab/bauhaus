@@ -94,42 +94,53 @@ To instead install with docker...
     cargo build
     cargo run [DATASET] config.yaml
     ```
-
-- Debugging
-    - Use GDB
-        ```bash
-        cargo build    # Either debug build or release build works
-        rust-gdb --args target/debug/bindarvis [DATASET] config.yaml
-        ```
-        You can also use regular gdb instead of rust-gdb, but [it doesn't work in all cases](https://users.rust-lang.org/t/printing-single-vector-elements-in-gdb/16890/4).
-    - Check memory errors (useful for verifying C++ code in ffi bindings)
-        - Run with address sanitizer:
-            ```bash
-            RUSTFLAGS="-Z sanitizer=address" cargo run --target x86_64-unknown-linux-gnu [DATASET] config.yaml
-            ```
-        - Run with valgrind and save output to `log.txt`:
-            ```bash
-            cargo build # Either debug or release build works
-            valgrind target/debug/bindarvis  [DATASET] config.yaml > log.txt 2>&1
-            ```
-    - Check for deadlocks
-        - The RwLock will deadlock if you take two locks in one scope, but this just shows up as an infinite loop on the command line. To find deadlocks, look inside main.rs for the word ``deadlock``, uncomment the lines of code that spawn a thread. This runs a separate thread that periodically wakes up, checks for a deadlock, and prints out the thread info if there is one. Additionally (or alternatively) you can change all RwLocks to Mutexes, which should give an error if you try to lock twice. This should be pretty straightforward by changing ``pub type MapLock`` to ``Arc<Mutex<Map>>`` and then changing occurences of ``read()`` and ``write()`` to ``lock()``.
-- Performance and profiling
-    - Print timing of some functions (functions using ``#[time()]`` proc macro and calls to ``timer!`` macro)
-        ```bash
-        RUST_BACKTRACE=1 RUST_LOG=debug cargo run --release ~/datasets/kitti_00_0/ config.yaml
-        ```
-    - Generating flamegraphs (requires some setup, [see here](https://www.justanotherdot.com/posts/profiling-with-perf-and-dhat-on-rust-code-in-linux.html)):
-        ```bash
-            cargo flamegraph -o flamegraph.svg --root --release --ignore-status  -- ~/datasets/kitti_00_0/ config.yaml
-        ```
-
 - Misc:
-    - Compile C++ bindings with clang instead of g++, set these environment variables:
+    - To compile C++ bindings with clang instead of g++, set these environment variables:
         ```bash
         export CXX=/usr/bin/clang++
         export CC=/usr/bin/clang
         ``````
+
+### Debugging and Profiling
+- Use GDB
+    ```bash
+    cargo build    # Either debug build or release build works
+    rust-gdb --args target/debug/bindarvis [DATASET] config.yaml
+    ```
+    You can also use regular gdb instead of rust-gdb, but [it doesn't work in all cases](https://users.rust-lang.org/t/printing-single-vector-elements-in-gdb/16890/4).
+- Check memory errors (useful for verifying C++ code in ffi bindings)
+    - Run with address sanitizer:
+        ```bash
+        RUSTFLAGS="-Z sanitizer=address" cargo run --target x86_64-unknown-linux-gnu [DATASET] config.yaml
+        ```
+    - Run with valgrind and save output to `log.txt`:
+        ```bash
+        cargo build # Either debug or release build works
+        valgrind target/debug/bindarvis  [DATASET] config.yaml > log.txt 2>&1
+        ```
+- Check for deadlocks
+    - The RwLock will deadlock if you take two locks in one scope, but this just shows up as an infinite loop on the command line. To find deadlocks, look inside main.rs for the word ``deadlock``, uncomment the lines of code that spawn a thread. This runs a separate thread that periodically wakes up, checks for a deadlock, and prints out the thread info if there is one. Additionally (or alternatively) you can change all RwLocks to Mutexes, which should give an error if you try to lock twice. This should be pretty straightforward by changing ``pub type MapLock`` to ``Arc<Mutex<Map>>`` and then changing occurences of ``read()`` and ``write()`` to ``lock()``.
+- Print timing of some functions (functions using ``#[time()]`` proc macro and calls to ``timer!`` macro)
+    ```bash
+    RUST_BACKTRACE=1 RUST_LOG=debug cargo run --release ~/datasets/kitti_00_0/ config.yaml
+    ```
+- Generating flamegraphs (requires some setup, [see here](https://www.justanotherdot.com/posts/profiling-with-perf-and-dhat-on-rust-code-in-linux.html)):
+    ```bash
+        cargo flamegraph -o flamegraph.svg --root --release --ignore-status  -- ~/datasets/kitti_00_0/ config.yaml
+    ```
+- Profiling with tracy
+    - Helpful links: [blog post on using tracy with rust](https://www.abhirag.com/blog/tracy/), [tracy documentation(download documentation pdf here)](https://github.com/wolfpld/tracy?tab=readme-ov-file)
+
+    1. Download and compile tracy from source code
+        ```bash
+        sudo apt-get install libglfw3 libglfw3-dev libfreetype6 libcapstone-dev dbus
+        cd ~/darvis/depends/
+        git clone https://github.com/wolfpld/tracy.git
+        cd tracy/profiler/build/unix
+        make
+        ```
+    2. 
+    
 ### Using the Visualizer
 1. Download the [foxglove application](https://foxglove.dev/). This can be on any device (does not need to be the test device).
 2. Open foxglove, click on `layout` in the top right corner, then `import from file`. Load the file in `foxglove/foxglovelayout.json`.

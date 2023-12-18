@@ -109,6 +109,11 @@ unsafe impl ExternType for BindCVRawPtr {
     type Kind = cxx::kind::Trivial;
 }
 
+pub struct Feature {
+    pub node_id: u32,
+    pub feature_id: u32,
+}
+
 #[cxx::bridge(namespace = "orb_slam3")]
 pub mod ffi {
     // Shared structs with fields visible to both languages.
@@ -255,7 +260,10 @@ pub mod ffi {
         fn new_feat_vec() -> UniquePtr<FeatureVector>;
         fn clone(self: &FeatureVector) -> UniquePtr<FeatureVector>;
         fn get_all_nodes(self: &FeatureVector) -> Vec<u32>;
+
         fn get_feat_from_node(self: &FeatureVector, node_id: u32) -> Vec<u32>;
+        fn vec_size(self: &FeatureVector, node_id: u32) -> u32;
+        fn vec_get(self: &FeatureVector, node_id: u32, index: u32) -> u32;
 
         fn load_vocabulary_from_text_file(file: &CxxString) -> UniquePtr<ORBVocabulary>;
         fn transform(

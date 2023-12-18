@@ -1,7 +1,7 @@
 use std::collections::{HashSet, HashMap};
 use log::{warn, info, debug, error};
 use dvcore::{config::*, sensor::{Sensor, FrameSensor, ImuSensor}, actor::Actor};
-use logging_timer::{time, timer, finish};
+use logging_timer::{time, timer};
 use crate::{
     actors::messages::{TrajectoryMsg, VisTrajectoryMsg, TrackingStateMsg, FeatureMsg, KeyFrameIdMsg, LastKeyFrameUpdatedMsg, ShutdownMsg},
     registered_actors::{LOCAL_MAPPING, TRACKING_BACKEND, SHUTDOWN_ACTOR, TRACKING_FRONTEND, VISUALIZER},
@@ -278,7 +278,7 @@ impl DarvisTrackingBack {
                 warn!("State recently lost");
                 let relocalize_success = match self.imu.ready() {
                     true => {
-                        let ok = self.imu.predict_state(); // TODO (IMU): I guess this should be used somewhere?
+                        let _ok = self.imu.predict_state(); // TODO (IMU): I guess this should be used somewhere?
                         self.relocalization.past_cutoff(&current_frame)
                     },
                     false => {

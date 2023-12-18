@@ -1,15 +1,13 @@
-use std::collections::{HashSet, HashMap};
+use std::collections::HashSet;
 
 use opencv::prelude::Mat;
 use dvcore::{
     matrix::{ DVVectorOfKeyPoint, DVMatrix}, actor::ActorMessage,
 };
 use crate::{
-    dvmap::{pose::DVPose, map::Id, misc::Timestamp, keyframe::{Frame, KeyFrame}},
+    dvmap::{pose::DVPose, map::Id, misc::Timestamp, keyframe::Frame},
     actors::tracking_backend::TrackingState
 };
-
-use super::tracking_backend::FoundVisibleMapPoints;
 
 // * TRACKING FRONTEND **//
 pub struct ImagePathMsg{ 

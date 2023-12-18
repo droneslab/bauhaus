@@ -174,7 +174,7 @@ impl Camera {
         );
 
         let k1 = self.k_matrix_convert();
-        let k2 = self.k_matrix_convert(); // TODO (Stereo) this should be whatever camera kf2 uses, the K1 above should be whatevere camera kf1 uses
+        let k2 = k1.clone(); // TODO (Stereo) this should be whatever camera kf2 uses, the K1 above should be whatevere camera kf1 uses
         let f12 = k1.transpose().try_inverse().unwrap() * t12x * rot * k2.try_inverse().unwrap();
 
         // Epipolar line in second image l = x1'F12 = [a b c]

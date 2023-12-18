@@ -79,7 +79,7 @@ mod vision_tests {
 
     fn format_features(bow: &BoW) -> String {
         let mut real_features = vec![];
-        for node_id in bow.get_feat_vec_nodes() {
+        for node_id in bow.feat_vec.get_all_nodes() {
             let index = bow.get_feat_from_node(node_id);
             real_features.push(format!("<{}: {:?}>", node_id, index));
         }
