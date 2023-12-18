@@ -13,7 +13,7 @@ chmod +x rustup-init.sh
 ./rustup-init.sh -y
 
 # Create directories for darvis project, clone repo
-mkdir ~/darvis-home
+mkdir ~/darvis-home && cd ~/darvis-home
 git clone git@github.com:droneslab/darvis.git
 mkdir ~/darvis-home/depends
 
@@ -52,6 +52,7 @@ git clone --recursive https://github.com/stevenlovegrove/Pangolin.git
 cd Pangolin
 ./scripts/install_prerequisites.sh recommended
 cmake -B build
+cmake --build build
 
 # Build darvis
 cd ~/darvis-home/darvis/darvis/
