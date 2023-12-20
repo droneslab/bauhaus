@@ -237,13 +237,17 @@ impl MapPoint<FullMapPoint> {
 
     pub fn increase_found(& self) {
         self.found.fetch_add(1, Ordering::SeqCst);
+        println!("Increase Found {}, Visible {}", self.found.load(Ordering::SeqCst), self.visible.load(Ordering::SeqCst));
     }
     pub fn increase_visible(& self) {
         self.visible.fetch_add(1, Ordering::SeqCst);
+        println!("Increase Visible {}, Found {}", self.visible.load(Ordering::SeqCst), self.found.load(Ordering::SeqCst),);
     }
     pub fn get_found_ratio(&self) -> f32 {
         // println!("mp_id {}, found {:?}, visible {:?}, ratio {:?}", mp_id, self.found.get(mp_id), self.visible.get(mp_id), *self.found.get(mp_id)? as f32 / *self.visible.get(mp_id)? as f32);
-        self.found.load(Ordering::SeqCst) as f32 / self.visible.load(Ordering::SeqCst) as f32
+        let ratio = self.found.load(Ordering::SeqCst) as f32 / self.visible.load(Ordering::SeqCst) as f32;
+        // println!("found ratio {}", ratio);
+        ratio
     }
 
     //** Observations */////////////////////////////////////////////////////////////////////////////////

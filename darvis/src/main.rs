@@ -23,7 +23,14 @@ mod modules;
 mod tests;
 
 pub type MapLock = ReadWriteMap<Map>;
-// pub type MapLock = Arc<Mutex<Map>>; // If you want to switch all locks to mutexes
+// pub type MapLock = Arc<Mutex<Map>>; // Replace above line with this if you want to switch all locks to mutexes
+
+// To profile memory usage with tracy
+// use tracy_client::*;
+// #[global_allocator]
+// static GLOBAL: ProfiledAllocator<std::alloc::System> =
+//     ProfiledAllocator::new(std::alloc::System, 100);
+
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();

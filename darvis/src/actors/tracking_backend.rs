@@ -395,8 +395,8 @@ impl TrackingBackend {
         {
             let map = self.map.read();
             pose_in_world = current_frame.get_pose_in_world_frame(&map);
-            debug!("Current pose  {:?}", pose_in_world);
-            debug!("Current pose in world frame {:?}", pose_in_world);
+            // debug!("Current pose  {:?}", pose_in_world);
+            // debug!("Current pose in world frame {:?}", pose_in_world);
             self.trajectory_poses.push(pose_in_world);
         }
         self.actor_channels.send(
@@ -435,7 +435,7 @@ impl TrackingBackend {
             nmatches = orbmatcher::search_by_bow_f(ref_kf, current_frame, true, 0.7)?;
         }
 
-        debug!("track reference keyframe matches {}", current_frame.mappoint_matches.matches.len());
+        // debug!("track reference keyframe matches {}", current_frame.mappoint_matches.matches.len());
 
         if nmatches < 15 {
             warn!("track_reference_keyframe has fewer than 15 matches = {}!!\n", nmatches);
@@ -448,7 +448,7 @@ impl TrackingBackend {
 
         // Discard outliers
         let nmatches_map = self.discard_outliers(current_frame);
-        debug!("track reference keyframe matches after outliers {}", nmatches_map);
+        // debug!("track reference keyframe matches after outliers {}", nmatches_map);
 
         match self.sensor.is_imu() {
             true => { return Ok(true); },
@@ -498,7 +498,7 @@ impl TrackingBackend {
             self.sensor
         )?;
 
-        debug!("motion model matches {}", current_frame.mappoint_matches.matches.len());
+        // debug!("motion model matches {}", current_frame.mappoint_matches.matches.len());
 
         // If few matches, uses a wider window search
         if matches < 20 {
@@ -514,7 +514,7 @@ impl TrackingBackend {
             )?;
         }
 
-        debug!("motion model matches with wider search {}", current_frame.mappoint_matches.matches.len());
+        // debug!("motion model matches with wider search {}", current_frame.mappoint_matches.matches.len());
 
         if matches < 20 {
             warn!("tracking_backend::track_with_motion_model;not enough matches!!");
@@ -533,7 +533,7 @@ impl TrackingBackend {
             // return nmatches>20;
         }
 
-        debug!("motion model matches after outliers {}", nmatches_map);
+        // debug!("motion model matches after outliers {}", nmatches_map);
         match self.sensor.is_imu() {
             true => { return Ok(true); },
             false => { return Ok(nmatches_map >= 10); }
@@ -674,7 +674,7 @@ impl TrackingBackend {
         //     mpLocalMapper->mnMatchesInliers=mnMatchesInliers;
         // send this in local mapper message?
 
-        debug!("Matches in track local map {}", self.matches_inliers);
+        // debug!("Matches in track local map {}", self.matches_inliers);
 
         // Decide if the tracking was succesful
         // More restrictive if there was a relocalization recently
@@ -832,7 +832,7 @@ impl TrackingBackend {
             for index in 0..current_frame.mappoint_matches.matches.len() {
                 if let Some((id, _)) = current_frame.mappoint_matches.matches[index as usize] {
                     if let Some(mp) = lock.mappoints.get(&id) {
-                        lock.mappoints.get(&id).unwrap().increase_visible();
+                        mp.increase_visible();
 
                         self.last_frame_seen.insert(id, current_frame.frame_id);
                         self.track_in_view.remove(&id);
@@ -906,7 +906,7 @@ impl TrackingBackend {
                 &self.track_in_view, &self.track_in_view_r,
                 &self.map, self.sensor
             );
-            debug!("search local points matches {:?}", matches);
+            // debug!("search local points matches {:?}", matches);
         }
 
     }
@@ -1134,36 +1134,4 @@ pub enum TrackingState {
     RecentlyLost,
     WaitForMapResponse,
     Ok
-}
-
-#[derive(Debug, Clone)]
-pub struct FoundVisibleMapPoints {
-    found: HashMap::<Id, i32>,
-    visible: HashMap::<Id, i32>
-}
-impl FoundVisibleMapPoints {
-    pub fn new() -> Self {
-        Self { 
-            found: HashMap::new(), 
-            visible: HashMap::new()
-        }
-    }
-    pub fn increase_found(&mut self, mp_id: &Id) {
-        self.found.entry(*mp_id).and_modify(|count| *count += 1).or_insert(1);
-    }
-    pub fn increase_visible(&mut self, mp_id: &Id) {
-        self.visible.entry(*mp_id).and_modify(|count| *count += 1).or_insert(1);
-    }
-    pub fn remove(&mut self, mp_id: &Id) {
-        self.found.remove(mp_id);
-        self.visible.remove(mp_id);
-    }
-    pub fn get_found_ratio(&self, mp_id: &Id) -> f32 {
-        // println!("mp_id {}, found {:?}, visible {:?}, ratio {:?}", mp_id, self.found.get(mp_id), self.visible.get(mp_id), *self.found.get(mp_id)? as f32 / *self.visible.get(mp_id)? as f32);
-        if self.found.get(mp_id).is_some() && self.visible.get(mp_id).is_some() {
-            *self.found.get(mp_id).unwrap() as f32 / *self.visible.get(mp_id).unwrap() as f32
-        } else {
-            1.0
-        }
-    }
 }
