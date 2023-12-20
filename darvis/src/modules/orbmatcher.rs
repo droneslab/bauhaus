@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::f64::INFINITY;
 use std::time::{Instant, Duration};
 use dvcore::config::SETTINGS;
-use dvcore::matrix::{DVVectorOfPoint2f, DVVector3};
+use dvcore::matrix::{DVVectorOfPoint2f, DVVector3, DVMatrix};
 use dvcore::sensor::{Sensor, FrameSensor};
 use log::warn;
 use logging_timer::{time, timer};
@@ -82,7 +82,7 @@ pub fn search_for_initialization(
         let (mut best_dist, mut best_dist2, mut best_idx2) : (i32, i32, i32) = (std::i32::MAX, std::i32::MAX, -1);
         for i2 in v_indices2 {
             let d2 = f2.features.descriptors.row(i2).unwrap();
-            let dist = descriptor_distance(&d1, &d2);
+            let dist = descriptor_distance(&d1,&d2);
             if v_matched_distance[i2 as usize] <= dist {
                 continue;
             }
@@ -140,7 +140,6 @@ pub fn search_for_initialization(
     (n_matches, vn_matches12)
 }
 
-#[time("TrackingBackend::{}")]
 pub fn search_by_projection(
     frame: &mut Frame, mappoints: &mut HashSet<Id>, th: i32, ratio: f64,
     track_in_view: &HashMap<Id, TrackedMapPointData>, track_in_view_right: &HashMap<Id, TrackedMapPointData>, 
@@ -334,7 +333,6 @@ pub fn search_by_projection(
 // Project MapPoints tracked in last frame into the current frame and search matches.
 // Used to track from previous frame (Tracking)
 
-#[time("TrackingBackend::{}")]
 pub fn search_by_projection_with_threshold (
     current_frame: &mut Frame, last_frame: &mut Frame, th: i32,
     should_check_orientation: bool,
@@ -445,7 +443,8 @@ pub fn search_by_projection_with_threshold (
                     // }
 
                     let descriptor = current_frame.features.descriptors.row(idx2)?;
-                    let dist = descriptor_distance(best_descriptor, &descriptor);
+                    let dist = descriptor_distance(&best_descriptor, &descriptor);
+
                     if dist < best_dist {
                         best_dist = dist;
                         best_idx = idx2 as i32;
@@ -498,7 +497,6 @@ pub fn _search_by_projection_reloc (
 // Used in Place Recognition (Loop Closing and Merging)
 // int SearchByProjection(KeyFrame* pKF, Sophus::Sim3<float> &Scw, const std::vector<MapPoint*> &vpPoints, const std::vector<KeyFrame*> &vpPointsKFs, std::vector<MapPoint*> &vpMatched, std::vector<KeyFrame*> &vpMatchedKF, int th, float ratioHamming=1.0);
 
-#[time("TrackingBackend::{}")]
 pub fn search_by_bow_f(
     kf: &KeyFrame, frame: &mut Frame,
     should_check_orientation: bool, ratio: f64
@@ -560,6 +558,7 @@ pub fn search_by_bow_f(
                     let descriptors_f = frame.features.descriptors.row(frame_index)?;
 
                     let dist = descriptor_distance(&descriptors_kf, &descriptors_f);
+
                     let no_left = frame.features.has_left_kp().map_or(true, |n_left| frame_index < n_left);
                     // TODO (stereo): I'm not sure if below works in the stereo case
                     update_bests(
@@ -653,6 +652,7 @@ pub fn search_by_bow_kf(
 
                         let descriptors_kf_2 = kf_2.features.descriptors.row(index_kf_2)?;
                         let dist = descriptor_distance(&descriptors_kf_1, &descriptors_kf_2);
+
                         if dist < best_dist.0 {
                             best_dist.1 = best_dist.0;
                             best_dist.0 = dist;
@@ -742,34 +742,16 @@ pub fn search_for_triangulation(
     let kf2_featvec = kf_2.bow.as_ref().unwrap().feat_vec.get_all_nodes();
     let mut i = 0;
     let mut j = 0;
-
-    let mut get_featvec_time = Duration::new(0, 0);
-    let mut intro_time =Duration::new(0, 0);
-    let mut descriptor_distance_time =Duration::new(0, 0);
-    let mut epipolar_constrain_time = Duration::new(0, 0);
-    let mut orientation_time = Duration::new(0, 0);
-    let mut lower_bound_time = Duration::new(0, 0);
-    let mut total_inner_time = Duration::new(0, 0);
-    let mut inner2_time = Duration::new(0, 0);
-    let total = Instant::now();
-    // let timer = timer!("LocalMapping::search_for_triangulation::while_loop");
-    let mut loop_iterations = 0;
     while i < kf1_featvec.len() && j < kf2_featvec.len() {
         let kf1_node_id = kf1_featvec[i];
         let kf2_node_id = kf2_featvec[j];
         if kf1_node_id == kf2_node_id {
-            let mut now = Instant::now();
             let kf1_indices = kf_1.bow.as_ref().unwrap().feat_vec.get_feat_from_node(kf1_node_id);
-            get_featvec_time = get_featvec_time.checked_add(now.elapsed()).unwrap();
 
             // let kf1_indices_size = kf_1.bow.as_ref().unwrap().feat_vec.vec_size(kf1_node_id);
 
-            let total_inner = Instant::now();
-
             for kf1_index in kf1_indices {
                 // let kf1_index = kf_1.bow.as_ref().unwrap().feat_vec.vec_get(kf1_node_id, index1);
-
-                now = Instant::now();
                 // If there is already a MapPoint skip
                 if kf_1.mappoint_matches.has_mappoint(&kf1_index) {
                     continue
@@ -792,19 +774,12 @@ pub fn search_for_triangulation(
                 let mut best_dist = TH_LOW;
                 let mut best_index = -1;
                 let descriptors_kf_1 = kf_1.features.descriptors.row(kf1_index)?;
-                
-                intro_time = intro_time.checked_add(now.elapsed()).unwrap();
-                now = Instant::now();
 
                 let kf2_indices = kf_2.bow.as_ref().unwrap().feat_vec.get_feat_from_node(kf2_node_id);
                 // let kf2_indices_size = kf_1.bow.as_ref().unwrap().feat_vec.vec_size(kf2_node_id);
-                get_featvec_time = get_featvec_time.checked_add(now.elapsed()).unwrap();
-
-                let inner2 = Instant::now();
 
                 for kf2_index in kf2_indices {
                     // let kf2_index = kf_1.bow.as_ref().unwrap().feat_vec.vec_get(kf2_node_id, index2);
-                    now = Instant::now();
 
                     // If we have already matched or there is a MapPoint skip
                     if kf_2.mappoint_matches.has_mappoint(&kf2_index) || matched_already.contains_key(&kf2_index) {
@@ -829,9 +804,6 @@ pub fn search_for_triangulation(
                     if dist > TH_LOW || dist > best_dist {
                         continue
                     }
-
-                    descriptor_distance_time = descriptor_distance_time.checked_add(now.elapsed()).unwrap();
-                    now = Instant::now();
 
                     let (kp2, _right2) = kf_2.features.get_keypoint(kf2_index as usize);
 
@@ -885,14 +857,8 @@ pub fn search_for_triangulation(
                         best_index = kf2_index as i32;
                         best_dist = dist;
                     }
-
-                    epipolar_constrain_time = epipolar_constrain_time.checked_add(now.elapsed()).unwrap();
-
                 }
 
-                inner2_time = inner2_time.checked_add(inner2.elapsed()).unwrap();
-
-                now = Instant::now();
                 if best_index >= 0 {
                     let (kp2, _) = kf_2.features.get_keypoint(best_index as usize);
                     matches.insert(kf1_index as usize, best_index as usize);
@@ -905,35 +871,15 @@ pub fn search_for_triangulation(
 
                     }
                 }
-                orientation_time = orientation_time.checked_add(now.elapsed()).unwrap();
             }
-            total_inner_time = total_inner_time.checked_add(total_inner.elapsed()).unwrap();
             i += 1;
             j += 1;
-            loop_iterations += 1;
         } else if kf1_node_id < kf2_node_id {
-            let now = Instant::now();
             i = lower_bound(&kf1_featvec, &kf2_featvec, i, j);
-            lower_bound_time= lower_bound_time.checked_add(now.elapsed()).unwrap();
         } else {
-            let now = Instant::now();
             j = lower_bound(&kf2_featvec, &kf1_featvec, j, i);
-            lower_bound_time=lower_bound_time.checked_add(now.elapsed()).unwrap();
         }
     }
-
-    // logging_timer::finish!(timer);
-    println!("loop_iterations {}", loop_iterations);
-
-    println!("get_featvec_time {} ms", get_featvec_time.as_millis());
-    println!("intro_time {} ms", intro_time.as_millis());
-    println!("descriptor_distance_time {} ms", descriptor_distance_time.as_millis());
-    println!("epipolar_constrain_time {} ms", epipolar_constrain_time.as_millis());
-    println!("orientation_time {} ms", orientation_time.as_millis());
-    println!("lower_bound_time {} ms", lower_bound_time.as_millis());
-    println!("total_inner_time {} ms", total_inner_time.as_millis());
-    println!("total time {} ms", total.elapsed().as_millis());
-    println!("inner2_time {} ms", inner2_time.as_millis());
 
     if should_check_orientation {
         let (ind_1, ind_2, ind_3) = compute_three_maxima(&rot_hist,HISTO_LENGTH);
@@ -1061,7 +1007,7 @@ pub fn fuse(kf_id: &Id, fuse_candidates: &Vec<Id>, map: &MapLock, th: f32, is_ri
             }
 
             let desc_kf = keyframe.features.descriptors.row(idx2).unwrap();
-            let dist = descriptor_distance(desc_mp, &desc_kf);
+            let dist = descriptor_distance(&desc_mp, &desc_kf);
 
             if dist < best_dist {
                 best_dist = dist;
@@ -1089,13 +1035,6 @@ pub fn fuse(kf_id: &Id, fuse_candidates: &Vec<Id>, map: &MapLock, th: f32, is_ri
         }
     }
 }
-
-pub fn descriptor_distance(a : &Mat, b: &Mat) -> i32 {
-    return opencv::core::norm2(
-        a, b, opencv::core::NormTypes::NORM_HAMMING as i32, &Mat::default()
-    ).unwrap() as i32;
-}
-
 
 fn check_orientation_1(
     keypoint_1: &KeyPoint, keypoint_2: &KeyPoint,
@@ -1179,11 +1118,39 @@ fn compute_three_maxima(histo : &Vec<Vec<u32>> , histo_length: i32) -> (i32, i32
     (ind_1, ind_2, ind_3)
 }
 
-#[time("LocalMapping::{}")]
 fn lower_bound(vec1: &Vec<u32>, vec2: &Vec<u32>, i: usize, j: usize) -> usize {
+    // TODO (timing) ... this could be sped up
     let mut curr = i;
     while vec1[curr] < vec2[j] {
         curr += 1;
     }
     curr
+}
+
+
+pub fn descriptor_distance(desc1: &Mat, desc2: &Mat) -> i32 {
+    // I know I said don't use BindCVRawPtr if possible
+    // In this case it's ok because we are not doing anything with the pointer
+    // other than reading and immediately discarding. It would be wasteful
+    // to clone here if we wanted to do the safer strategy of contructing
+    // a DVMatrix from the Mat.
+
+    // This code is equivalent to:
+    // return opencv::core::norm2(
+    //     a, b, opencv::core::NormTypes::NORM_HAMMING as i32, &Mat::default()
+    // ).unwrap() as i32;
+    // But much faster!!
+    
+    dvos3binding::ffi::descriptor_distance(
+        &dvos3binding::ffi::WrapBindCVRawPtr { 
+            raw_ptr: dvos3binding::BindCVRawPtr {
+                raw_ptr: desc1.as_raw()
+            } 
+        },
+        &dvos3binding::ffi::WrapBindCVRawPtr { 
+            raw_ptr: dvos3binding::BindCVRawPtr {
+                raw_ptr: desc2.as_raw()
+            } 
+        }
+    )
 }

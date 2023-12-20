@@ -54,6 +54,9 @@ impl DVMatrix {
     pub fn new(mat: opencv::core::Mat) -> Self {
         Self ( mat )
     }
+    pub fn new_clone(mat: &opencv::core::Mat) -> Self {
+        Self ( mat.clone() )
+    }
     pub fn mat(&self) -> &opencv::core::Mat { &self.0 }
     pub fn row(&self, index: u32) -> Result<Mat, opencv::Error> { self.0.row(index as i32) }
 }

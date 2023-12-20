@@ -41,16 +41,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     setup_logger(&log_level)?;
 
-    // a builder for `FmtSubscriber`.
-    let subscriber = tracing_subscriber::FmtSubscriber::builder()
-        // all spans/events with a level higher than TRACE (e.g, debug, info, warn, etc.)
-        // will be written to stdout.
-        .with_max_level(tracing::Level::TRACE)
-        // completes the builder.
-        .finish();
-
-    tracing::subscriber::set_global_default(subscriber)
-        .expect("setting default subscriber failed");
+    let _client = tracy_client::Client::start();
+    tracy_client::set_thread_name!("main");
 
     // Launch actor system
     let first_actor_name = TRACKING_FRONTEND.to_string(); // Actor that launches the pipeline

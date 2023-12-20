@@ -222,6 +222,11 @@ pub mod ffi {
         // ORB Matcher
         include!("orb_slam3/src/ORBmatcher.h");
         type ORBmatcher;
+        fn descriptor_distance(
+            a: &WrapBindCVRawPtr,
+            b: &WrapBindCVRawPtr
+        ) -> i32;
+
         fn new_orb_matcher(
             frame_grid_cols : i32, 
             frame_grid_rows : i32,

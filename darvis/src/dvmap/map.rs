@@ -124,8 +124,8 @@ impl Map {
         return self.last_mp_id;
     }
 
-    #[time("Map::{}")]
     pub fn insert_keyframe_to_map(&mut self, frame: Frame, is_initialization: bool) -> Id {
+        let _span = tracy_client::span!("insert_keyframe");
         self.last_kf_id += 1;
         let new_kf_id = self.last_kf_id;
         if self.keyframes.is_empty() {
@@ -197,8 +197,8 @@ impl Map {
             });
     }
 
-    #[time("Map::{}")]
     pub fn discard_keyframe(&mut self, kf_id: Id) {
+        let _span = tracy_client::span!("discard_keyframe");
         if kf_id == self.initial_kf_id {
             return;
         }
@@ -407,6 +407,7 @@ impl Map {
     }
 
     pub fn update_connections(mappoints: &MapItemHashMap<MapPoint<FullMapPoint>>, keyframes: &mut MapItemHashMap<KeyFrame>, initial_kf_id: &i32, main_kf_id: &i32) {
+        let _span = tracy_client::span!("update_connections");
         //For all map points in keyframe check in which other keyframes are they seen
         //Increase counter for those keyframes
         let mut kf_counter = HashMap::<Id, i32>::new();

@@ -47,7 +47,7 @@ impl ActorChannels {
         //    None => 
         self.receiver.recv()
     }
-    
+
     pub fn queue_len(&self) -> usize {
         self.receiver.len()
     }

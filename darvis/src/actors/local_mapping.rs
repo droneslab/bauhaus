@@ -2,6 +2,7 @@ use std::cmp::min;
 use std::collections::HashSet;
 use std::f64::INFINITY;
 use std::iter::FromIterator;
+use std::sync::atomic::AtomicBool;
 
 use dvcore::actor::Actor;
 use dvcore::sensor::{Sensor, FrameSensor, ImuSensor};
@@ -10,7 +11,6 @@ use dvcore::{
     matrix::DVVector3
 };
 use log::{debug, warn, info};
-use logging_timer::{time, timer};
 use opencv::prelude::KeyPointTraitConst;
 use crate::{ActorChannels, MapLock};
 use crate::actors::loop_closing::LoopClosingMsg;
@@ -26,8 +26,11 @@ use crate::{
 
 use super::messages::{ShutdownMsg, KeyFrameIdMsg, Reset, NewKeyFrameMsg};
 
+// TODO (design): It would be nice for this to be a member of LocalMapping instead of floating around in the global namespace, but we can't do that easily because then Tracking would need a reference to the localmapping object.
+pub static LOCAL_MAPPING_IDLE: AtomicBool = AtomicBool::new(true);
+
 #[derive(Debug)]
-pub struct DarvisLocalMapping {
+pub struct LocalMapping {
     actor_channels: ActorChannels,
     map: MapLock,
     sensor: Sensor,
@@ -43,13 +46,13 @@ pub struct DarvisLocalMapping {
     imu: ImuModule,
 }
 
-impl Actor for DarvisLocalMapping {
+impl Actor for LocalMapping {
     type MapRef = MapLock;
 
-    fn new_actorstate(actor_channels: ActorChannels, map: Self::MapRef) -> DarvisLocalMapping {
+    fn new_actorstate(actor_channels: ActorChannels, map: Self::MapRef) -> LocalMapping {
         let sensor: Sensor = SETTINGS.get(SYSTEM, "sensor");
 
-        DarvisLocalMapping {
+        LocalMapping {
             actor_channels,
             map,
             sensor,
@@ -61,26 +64,28 @@ impl Actor for DarvisLocalMapping {
     }
 
     fn spawn(actor_channels: ActorChannels, map: Self::MapRef) {
-        let mut actor = DarvisLocalMapping::new_actorstate(actor_channels, map);
+        let mut actor = LocalMapping::new_actorstate(actor_channels, map);
         let max_queue_size = actor.actor_channels.receiver_bound.unwrap_or(100);
+
+        tracy_client::set_thread_name!("local mapping");
 
         'outer: loop {
             let message = actor.actor_channels.receive().unwrap();
+
             if message.is::<KeyFrameIdMsg>() {
-                let _timer = timer!("LocalMapping::Total");
+                LOCAL_MAPPING_IDLE.store(false, std::sync::atomic::Ordering::SeqCst);
                 let msg = message.downcast::<KeyFrameIdMsg>().unwrap_or_else(|_| panic!("Could not downcast local mapping message!"));
                 debug!("Local mapping working on kf {}", msg.kf_id);
 
                 actor.current_keyframe_id = msg.kf_id;
                 actor.local_mapping();
             } else if message.is::<NewKeyFrameMsg>() {
+                LOCAL_MAPPING_IDLE.store(false, std::sync::atomic::Ordering::SeqCst);
                 if actor.actor_channels.queue_len() > max_queue_size {
                     // Abort additional work if there are too many keyframes in the msg queue.
                     info!("Local mapping dropped 1 keyframe");
                     continue;
                 }
-
-                let _timer = timer!("LocalMapping::Total");
 
                 let msg = message.downcast::<NewKeyFrameMsg>().unwrap_or_else(|_| panic!("Could not downcast local mapping message!"));
                 let kf_id = actor.map.write().insert_keyframe_to_map(msg.keyframe, false);
@@ -99,12 +104,15 @@ impl Actor for DarvisLocalMapping {
             } else {
                 warn!("Local Mapping received unknown message type!");
             }
+            LOCAL_MAPPING_IDLE.store(true, std::sync::atomic::Ordering::SeqCst);
         }
     }
 }
 
-impl DarvisLocalMapping {
+impl LocalMapping {
     fn local_mapping(&mut self) {
+        let _span = tracy_client::span!("local_mapping");
+
         match self.sensor.frame() {
             FrameSensor::Stereo => {
                 todo!("Stereo");
@@ -231,6 +239,8 @@ impl DarvisLocalMapping {
     }
 
     fn mappoint_culling(&mut self) -> i32 {
+        let _span = tracy_client::span!("mappoint_culling");
+
         let th_obs = match self.sensor.is_mono() {
             true => 2,
             false => 3
@@ -257,8 +267,9 @@ impl DarvisLocalMapping {
         return num_to_discard;
     }
 
-    #[time("LocalMapping::{}")]
     fn create_new_mappoints(&self) -> i32 {
+        let _span = tracy_client::span!("create_new_mappoints");
+
         // Retrieve neighbor keyframes in covisibility graph
         let nn = match self.sensor.is_mono() {
             true => 30,
@@ -293,7 +304,6 @@ impl DarvisLocalMapping {
             ow1 = current_kf.get_camera_center();
         }
 
-        println!("neighbor kfs len {}", neighbor_kfs.len());
         // Search matches with epipolar restriction and triangulate
         let mut mps_created = 0;
         for neighbor_id in neighbor_kfs {
@@ -333,7 +343,7 @@ impl DarvisLocalMapping {
             let (matches, mut pose2, translation2, rotation2, rotation_transpose2);
             {
                 let lock = self.map.read();
-                
+
                 matches = match orbmatcher::search_for_triangulation(
                     lock.keyframes.get(&self.current_keyframe_id).unwrap(), lock.keyframes.get(&neighbor_id).unwrap(),
                     false, false, course,
@@ -521,6 +531,8 @@ impl DarvisLocalMapping {
     }
 
     fn search_in_neighbors(&self) {
+        let _span = tracy_client::span!("search_in_neighbors");
+
         // Retrieve neighbor keyframes
         let nn = match self.sensor.frame() {
             FrameSensor::Mono => 30,
@@ -612,6 +624,8 @@ impl DarvisLocalMapping {
     }
 
     fn keyframe_culling(&mut self) -> i32 {
+        let _span = tracy_client::span!("keyframe_culling");
+
         // Check redundant keyframes (only local keyframes)
         // A keyframe is considered redundant if the 90% of the MapPoints it sees, are seen
         // in at least other 3 keyframes (in the same or finer scale)

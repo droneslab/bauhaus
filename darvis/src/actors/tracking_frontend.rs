@@ -24,7 +24,7 @@ use crate::{
 
 
 #[derive(Debug)]
-pub struct DarvisTrackingFront {
+pub struct TrackingFrontEnd {
     actor_channels: ActorChannels,
     orb_extractor_left: DVORBextractor,
     orb_extractor_right: Option<DVORBextractor>,
@@ -36,10 +36,10 @@ pub struct DarvisTrackingFront {
     sensor: Sensor,
 }
 
-impl Actor for DarvisTrackingFront {
+impl Actor for TrackingFrontEnd {
     type MapRef = ();
 
-    fn new_actorstate(actor_channels: ActorChannels, _map: Self::MapRef) -> DarvisTrackingFront {
+    fn new_actorstate(actor_channels: ActorChannels, _map: Self::MapRef) -> TrackingFrontEnd {
         let max_features = SETTINGS.get::<i32>(FEATURE_DETECTION, "max_features");
         let sensor = SETTINGS.get::<Sensor>(SYSTEM, "sensor");
         let orb_extractor_right = match sensor.frame() {
@@ -50,7 +50,7 @@ impl Actor for DarvisTrackingFront {
             true => Some(DVORBextractor::new(max_features*5)),
             false => None
         };
-        DarvisTrackingFront {
+        TrackingFrontEnd {
             actor_channels,
             orb_extractor_left: DVORBextractor::new(max_features),
             orb_extractor_right,
@@ -64,9 +64,11 @@ impl Actor for DarvisTrackingFront {
     }
 
     fn spawn(actor_channels: ActorChannels, map: Self::MapRef) {
-        let mut actor = DarvisTrackingFront::new_actorstate(actor_channels, map);
+        let mut actor = TrackingFrontEnd::new_actorstate(actor_channels, map);
         let max_queue_size = actor.actor_channels.receiver_bound.unwrap_or(100);
 
+        tracy_client::set_thread_name!("tracking frontend");
+        
         'outer: loop {
             let message = actor.actor_channels.receive().unwrap();
 
@@ -145,8 +147,10 @@ impl Actor for DarvisTrackingFront {
     }
 }
 
-impl DarvisTrackingFront {
+impl TrackingFrontEnd {
     fn extract_features(&mut self, image: opencv::core::Mat) -> (VectorOfKeyPoint, Mat) {
+        let _span = tracy_client::span!("extract features");
+
         let image_dv: dvos3binding::ffi::WrapBindCVMat = (&DVMatrix::new(image)).into();
         let mut descriptors: dvos3binding::ffi::WrapBindCVMat = (&DVMatrix::default()).into();
         let mut keypoints: dvos3binding::ffi::WrapBindCVKeyPoints = DVVectorOfKeyPoint::empty().into();
@@ -182,7 +186,6 @@ impl DarvisTrackingFront {
         })).unwrap();
     }
 
-    #[time("TrackingFrontend::{}")]
     fn send_to_visualizer(&mut self, keypoints: VectorOfKeyPoint, image: Mat, timestamp: Timestamp) {
         // Send image and features to visualizer
         self.actor_channels.find(VISUALIZER).send(Box::new(VisFeaturesMsg {

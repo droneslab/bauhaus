@@ -2,8 +2,8 @@ use std::{fmt::Debug, collections::HashMap, sync::atomic::{AtomicI32, Ordering}}
 use dvcore::{matrix::DVMatrix, config::{SETTINGS, SYSTEM}, sensor::{Sensor, FrameSensor}};
 use log::error;
 extern crate nalgebra as na;
-use crate::{matrix::DVVector3, modules::orbmatcher::{descriptor_distance, SCALE_FACTORS}, registered_actors::FEATURE_DETECTION};
-use super::{map::{Id, Map}, keyframe::{Frame, KeyFrame}, pose::DVTranslation};
+use crate::{matrix::DVVector3, modules::orbmatcher::{SCALE_FACTORS, descriptor_distance}, registered_actors::FEATURE_DETECTION};
+use super::{map::{Id, Map}, keyframe::KeyFrame, pose::DVTranslation};
 
 // Paper note: Implementing typestate like here: http://cliffle.com/blog/rust-typestate/#a-simple-example-the-living-and-the-dead
 // This way we can encode mappoints that have been created but not inserted into the map as a separate type than mappoints that are legit.
@@ -200,6 +200,7 @@ impl MapPoint<FullMapPoint> {
             distances.insert((i,i), 0);
             for j in i+1..descriptors.len() {
                 let dist_ij = descriptor_distance(&descriptors[i], &descriptors[j]);
+
                 distances.insert((i,j), dist_ij);
                 distances.insert((j,i), dist_ij);
             }

@@ -22,16 +22,16 @@ pub fn spawn(
 ) {
     match actor_name.as_ref() {
         str if str == TRACKING_FRONTEND.to_string() => {
-            crate::actors::tracking_frontend::DarvisTrackingFront::spawn(actor_channels, ())
+            crate::actors::tracking_frontend::TrackingFrontEnd::spawn(actor_channels, ())
         },
         str if str == TRACKING_BACKEND.to_string() => {
-            crate::actors::tracking_backend::DarvisTrackingBack::spawn(actor_channels, map.expect("Tracking backend needs the map!"))
+            crate::actors::tracking_backend::TrackingBackend::spawn(actor_channels, map.expect("Tracking backend needs the map!"))
         },
         str if str == LOCAL_MAPPING.to_string() => {
-            crate::actors::local_mapping::DarvisLocalMapping::spawn(actor_channels, map.expect("Local mapping needs the map!"))
+            crate::actors::local_mapping::LocalMapping::spawn(actor_channels, map.expect("Local mapping needs the map!"))
         },
         str if str == LOOP_CLOSING.to_string() => {
-            crate::actors::loop_closing::DarvisLoopClosing::spawn(actor_channels, map.expect("Loop closing needs the map!"))
+            crate::actors::loop_closing::LoopClosing::spawn(actor_channels, map.expect("Loop closing needs the map!"))
         },
         str if str == VISUALIZER.to_string() => {
             crate::actors::visualizer::DarvisVisualizer::spawn(actor_channels, map.expect("Visualizer needs the map!"))

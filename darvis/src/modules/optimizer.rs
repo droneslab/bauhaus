@@ -810,10 +810,10 @@ pub fn pose_inertial_optimization_last_keyframe(_frame: &mut Frame) -> i32 {
     // return nInitialCorrespondences-nBad;
 }
 
-#[time("TrackingBackend::{}")]
 pub fn optimize_pose(
     frame: &mut Frame, map: &MapLock
 ) -> Option<i32> {
+    let _span = tracy_client::span!("optimize_pose");
     //int Optimizer::PoseOptimization(Frame *pFrame)
     let sensor: Sensor = SETTINGS.get(SYSTEM, "sensor");
 
@@ -1012,6 +1012,7 @@ pub fn optimize_pose(
 }
 
 pub fn global_bundle_adjustment(map: &Map, iterations: i32) -> BundleAdjustmentResult {
+    let _span = tracy_client::span!("global_bundle_adjustment");
     // void Optimizer::GlobalBundleAdjustemnt(Map* pMap, int nIterations, bool* pbStopFlag, const unsigned long nLoopKF, const bool bRobust)
     let sensor: Sensor = SETTINGS.get(SYSTEM, "sensor");
     let fx= SETTINGS.get::<f64>(CAMERA, "fx");
@@ -1110,10 +1111,11 @@ pub fn global_bundle_adjustment(map: &Map, iterations: i32) -> BundleAdjustmentR
     BundleAdjustmentResult::new(optimizer, kf_vertex_ids, mp_vertex_ids, vec![], vec![])
 }
 
-#[time("LocalMapping::{}")]
 pub fn local_bundle_adjustment(
     map: &MapLock, keyframe_id: Id, loop_kf: i32
 ) {
+    let _span = tracy_client::span!("local_bundle_adjustment");
+
     // void Optimizer::LocalBundleAdjustment(KeyFrame *pKF, bool* pbStopFlag, Map* pMap, int& num_fixedKF, int& num_OptKF, int& num_MPs, int& num_edges)
     // Setup optimizer
     let sensor: Sensor = SETTINGS.get(SYSTEM, "sensor");

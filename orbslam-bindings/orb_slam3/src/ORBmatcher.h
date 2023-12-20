@@ -48,15 +48,16 @@ namespace orb_slam3
     struct BindCVMatRef;
     struct BindCVVectorOfPoint2fRef;
 
+    // Computes the Hamming distance between two ORB descriptors
+    int DescriptorDistance(const cv::Mat &a, const cv::Mat &b);
+    int descriptor_distance(const orb_slam3::WrapBindCVRawPtr &a, const orb_slam3::WrapBindCVRawPtr &b);
+
     class ORBmatcher
     {
 
     public:
 
         ORBmatcher(int frame_grid_cols, int frame_grid_rows, float minX=0.0, float minY=0.0,  float maxX=0.0, float maxY=0.0,float nnratio=0.6, bool checkOri=true);
-
-        // Computes the Hamming distance between two ORB descriptors
-        static int DescriptorDistance(const cv::Mat &a, const cv::Mat &b);
 
         // // Search matches between Frame keypoints and projected MapPoints. Returns number of matches
         // // Used to track the local map (Tracking)

@@ -9,7 +9,7 @@ use crate::modules::imu::ImuModule;
 use super::messages::{ShutdownMsg, IMUInitializedMsg};
 
 #[derive(Debug)]
-pub struct DarvisLoopClosing {
+pub struct LoopClosing {
     actor_channels: ActorChannels,
     // Map
     map: MapLock,
@@ -20,13 +20,13 @@ pub struct DarvisLoopClosing {
     matches_inliers: i32,
 }
 
-impl Actor for DarvisLoopClosing {
+impl Actor for LoopClosing {
     type MapRef = MapLock;
 
-    fn new_actorstate(actor_channels: ActorChannels, map: Self::MapRef) -> DarvisLoopClosing {
+    fn new_actorstate(actor_channels: ActorChannels, map: Self::MapRef) -> LoopClosing {
         let sensor: Sensor = SETTINGS.get(SYSTEM, "sensor");
 
-        DarvisLoopClosing {
+        LoopClosing {
             actor_channels,
             map,
             imu: ImuModule::new(None, None, sensor, false, false),
@@ -35,7 +35,8 @@ impl Actor for DarvisLoopClosing {
     }
 
     fn spawn(actor_channels: ActorChannels, map: Self::MapRef) {
-        let mut actor = DarvisLoopClosing::new_actorstate(actor_channels, map);
+        let mut actor = LoopClosing::new_actorstate(actor_channels, map);
+        tracy_client::set_thread_name!("loop closing");
 
         'outer: loop {
             let message = actor.actor_channels.receive().unwrap();
@@ -59,7 +60,7 @@ impl Actor for DarvisLoopClosing {
 
 }
 
-impl DarvisLoopClosing {
+impl LoopClosing {
 
     fn loop_closing(&mut self, kf_id: Id) {
         // if(mpLastCurrentKF)
