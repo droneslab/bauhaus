@@ -43,7 +43,7 @@ prost = "*"
 mcap = "*"
 
 
-cc = { version = "1.0.79", features = ["parallel"] }
+#cc = { version = "1.0.79", features = ["parallel"] }
 opencv = "0.84.5"
 nalgebra = {version = "0.32.3", features = ["serde-serialize"]}
 cv-convert = {version = '0.25.0', default_features = false, features = ['opencv_0-84','nalgebra_0-32']}
@@ -67,8 +67,6 @@ fern = {version = "*", features = ["colored"] }
 log = "*"
 env_logger = "*"
 logging_timer = "1.1.0"
-profiling = "1.0.12"
-tracing = "0.1.40"
-tracing-subscriber = "0.3.0"
-#tracy-client = { version = "0.12.6", default-features = false, features = ["enable", "timer-fallback"] }
-tracy-client = {version = "0.16.4", features = ["enable", "timer-fallback"] }
+tracy-client = {version = "0.16.0", features = ["enable"] }
+tracy-client-sys = {version = "0.21.0"}
+#tracy_full = "1.3.0"

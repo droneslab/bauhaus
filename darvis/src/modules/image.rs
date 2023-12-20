@@ -1,6 +1,7 @@
 use opencv::{imgcodecs, prelude::Mat, types::VectorOfKeyPoint, core::{Vector, KeyPoint, DMatch}};
 
 pub fn read_image_file(path: &String) -> Mat {
+    let _span = tracy_client::span!("read image");
     imgcodecs::imread(path, imgcodecs::IMREAD_GRAYSCALE).expect("Could not read image.")
 }
 

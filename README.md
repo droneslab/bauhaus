@@ -1,7 +1,7 @@
 # darvis
 Distributed, modulAR Visual SLAM
 
-## Installation
+# 1. Installation
 ```bash
 # Install system dependencies 
 sudo apt-get update
@@ -59,7 +59,12 @@ cd ~/darvis-home/darvis/darvis/
 cargo build --release
 ```
 
-To instead install with docker...
+**Common Build Problems**
+- Segfaults inside orbslam-bindings
+    - If you have two versions of OpenCV (for example, one from apt that gets downloaded when you install ROS and the one you installed in the instructions above) then you can get segfaults inside the C++ OpenCV code in `orbslam-bindings`. This occurs because C++ finds one OpenCV version (usually the ROS version) and Rust finds a different one (usually the system-installed one). The easiest workaround is just to uninstall ROS and the apt version of OpenCV. It should be possible to inform the rust OpenCV package to look for the right version with [environment variables like this](https://github.com/twistedfall/opencv-rust#environment-variables) but I have not tested it.
+
+## Optional: Using docker
+If you want to run darvis inside a docker container instead:
 1. [Install docker](https://docs.docker.com/get-docker/)
 2. (Macs only) [Download Xquartz](https://www.xquartz.org/) 
 3. Create darvis container (linux):
@@ -77,71 +82,31 @@ To instead install with docker...
     2. Follow [instructions for quick start](https://code.visualstudio.com/docs/remote/containers#_quick-start-open-an-existing-folder-in-a-container) to open VSCode inside container. This opens a new VSCode window
     3. For compile-time code checking, in the new VSCode window, install [rust-analyzer extension](https://marketplace.visualstudio.com/items?itemName=matklad.rust-analyzer) 
 
-### Common Problems
-- **Segfaults inside orbslam-bindings** 
-    - If you have two versions of OpenCV (for example, one from apt that gets downloaded when you install ROS and the one you installed in the instructions above) then you can get segfaults inside the C++ OpenCV code in `orbslam-bindings`. This occurs because C++ finds one OpenCV version (usually the ROS version) and Rust finds a different one (usually the system-installed one). The easiest workaround is just to uninstall ROS and the apt version of OpenCV. It should be possible to inform the rust OpenCV package to look for the right version with [environment variables like this](https://github.com/twistedfall/opencv-rust#environment-variables) but I have not tested it.
 
----
-## Running
-### Options for running/building
-- RELEASE mode (slow building, fast execution). This is probably what you want to use
-    ```bash
-    cargo build --release
-    cargo run --release [DATASET] config.yaml
-    ```
-- DEBUG mode (fast building, slow execution)
-    ```bash
-    cargo build
-    cargo run [DATASET] config.yaml
-    ```
-- Misc:
-    - To compile C++ bindings with clang instead of g++, set these environment variables:
-        ```bash
-        export CXX=/usr/bin/clang++
-        export CC=/usr/bin/clang
-        ``````
+## Optional: Set up ORB_SLAM3
+If you want to set up ORB_SLAM3 to compare its performance against Darvis You can also just follow the instructions in the ORB_SLAM3 repo, but if darvis is already set up then you only need to do these steps. Tested on Ubuntu 22.
 
-### Debugging and Profiling
-- Use GDB
-    ```bash
-    cargo build    # Either debug build or release build works
-    rust-gdb --args target/debug/bindarvis [DATASET] config.yaml
-    ```
-    You can also use regular gdb instead of rust-gdb, but [it doesn't work in all cases](https://users.rust-lang.org/t/printing-single-vector-elements-in-gdb/16890/4).
-- Check memory errors (useful for verifying C++ code in ffi bindings)
-    - Run with address sanitizer:
-        ```bash
-        RUSTFLAGS="-Z sanitizer=address" cargo run --target x86_64-unknown-linux-gnu [DATASET] config.yaml
-        ```
-    - Run with valgrind and save output to `log.txt`:
-        ```bash
-        cargo build # Either debug or release build works
-        valgrind target/debug/bindarvis  [DATASET] config.yaml > log.txt 2>&1
-        ```
-- Check for deadlocks
-    - The RwLock will deadlock if you take two locks in one scope, but this just shows up as an infinite loop on the command line. To find deadlocks, look inside main.rs for the word ``deadlock``, uncomment the lines of code that spawn a thread. This runs a separate thread that periodically wakes up, checks for a deadlock, and prints out the thread info if there is one. Additionally (or alternatively) you can change all RwLocks to Mutexes, which should give an error if you try to lock twice. This should be pretty straightforward by changing ``pub type MapLock`` to ``Arc<Mutex<Map>>`` and then changing occurences of ``read()`` and ``write()`` to ``lock()``.
-- Print timing of some functions (functions using ``#[time()]`` proc macro and calls to ``timer!`` macro)
-    ```bash
-    RUST_BACKTRACE=1 RUST_LOG=debug cargo run --release ~/datasets/kitti_00_0/ config.yaml
-    ```
-- Generating flamegraphs (requires some setup, [see here](https://www.justanotherdot.com/posts/profiling-with-perf-and-dhat-on-rust-code-in-linux.html)):
-    ```bash
-        cargo flamegraph -o flamegraph.svg --root --release --ignore-status  -- ~/datasets/kitti_00_0/ config.yaml
-    ```
-- Profiling with tracy
-    - Helpful links: [blog post on using tracy with rust](https://www.abhirag.com/blog/tracy/), [tracy documentation(download documentation pdf here)](https://github.com/wolfpld/tracy?tab=readme-ov-file)
+```bash
+sudo apt-get install libssl-dev
+git clone https://github.com/UZ-SLAMLab/ORB_SLAM3
+cd ORB_SLAM3
+sed -i 's/++11/++14/g' CMakeLists.txt
+./build.sh
+```
 
-    1. Download and compile tracy from source code
-        ```bash
-        sudo apt-get install libglfw3 libglfw3-dev libfreetype6 libcapstone-dev dbus
-        cd ~/darvis/depends/
-        git clone https://github.com/wolfpld/tracy.git
-        cd tracy/profiler/build/unix
-        make
-        ```
-    2. 
-    
-### Using the Visualizer
+# 2. Building and Running
+RELEASE mode (slow building, fast execution). This is probably what you want to use
+```bash
+cargo build --release
+cargo run --release [DATASET] config.yaml
+```
+DEBUG mode (fast building, slow execution)
+```bash
+cargo build
+cargo run [DATASET] config.yaml
+```
+
+**Using the Visualizer**
 1. Download the [foxglove application](https://foxglove.dev/). This can be on any device (does not need to be the test device).
 2. Open foxglove, click on `layout` in the top right corner, then `import from file`. Load the file in `foxglove/foxglovelayout.json`.
 3. Make sure the `visualizer` actor in `config.yaml` is not commented out.
@@ -152,7 +117,109 @@ Currently there is no way to stream the visualization in real-time. To do that, 
 
 For longer datasets, the mcap file size can get unreasonably large because it saves all the images. You can turn this off by setting the `image_draw_type` setting in the visualizer actor to `none`. The other valid options are `plain` (unmodified images), `features` (detected features), and `featuresandmatches` (current and previous image with feature matches highlighted).
 
----
+## Debuggers, Memory Checks, and Profiling
+
+### Use GDB
+```bash
+cargo build    # Either debug or release build works
+rust-gdb --args target/debug/bindarvis [DATASET] config.yaml
+```
+You can also use regular gdb instead of rust-gdb, but [it doesn't work in all cases](https://users.rust-lang.org/t/printing-single-vector-elements-in-gdb/16890/4).
+
+### Check memory errors (useful for verifying C++ code in ffi bindings)
+Run with address sanitizer:
+```bash
+RUSTFLAGS="-Z sanitizer=address" cargo run --target x86_64-unknown-linux-gnu [DATASET] config.yaml
+```
+Run with valgrind and save output to `log.txt`:
+```bash
+cargo build # Either debug or release build works
+valgrind target/debug/bindarvis  [DATASET] config.yaml > log.txt 2>&1
+```
+
+### Check for deadlocks
+The RwLock will deadlock if you take two locks in one scope, but this just shows up as an infinite loop on the command line. To find deadlocks, look inside main.rs for the word ``deadlock``, uncomment the lines of code that spawn a thread. This runs a separate thread that periodically wakes up, checks for a deadlock, and prints out the thread info if there is one. Additionally (or alternatively) you can change all RwLocks to Mutexes, which should give an error if you try to lock twice. This should be pretty straightforward by changing ``pub type MapLock`` to ``Arc<Mutex<Map>>`` and then changing occurences of ``read()`` and ``write()`` to ``lock()``.
+
+### Log basic timing info
+Use this for very basic timing information. It is not very accurate, so if you need to dig deep into performance you should follow the steps below to use the Tracy profiler instead.
+
+- Print time of certain functions
+    - Add ``#[time()]`` before the function name like this:
+        ```rust
+        #[time()]
+        fn function() {}
+        ```
+    - You can also customize the name of the timer like this: ``#[time("MyFunction")]``. This is useful if you have similarly-named functions.
+- To print time of arbitrary sections of code
+    - Add ``let timer = timer!()`` when you want to start timing.
+    - It will print the time when ``timer`` goes out of scope. Alternatively, you can set the end point by calling ``finish!(timer)``
+- Compile/run the normal way, but make sure that ``log_level`` in ``config.yaml`` is set to ``debug``.
+
+### Generate flamegraphs
+This requires some setup, [see here](https://www.justanotherdot.com/posts/profiling-with-perf-and-dhat-on-rust-code-in-linux.html)
+
+```bash
+cargo flamegraph -o flamegraph.svg --root --release --ignore-status  -- ~/datasets/kitti_00_0/ config.yaml
+```
+
+### Profiling with Tracy
+**Set up**
+1. Set up C++
+    ```bash
+    apt install libdbus-glib-1-dev libcapstone-dev
+    cd ~/darvis-home
+    git clone https://github.com/wolfpld/tracy.git
+    git checkout 897aec5 # Set to version 0.9.1
+    cd tracy/profiler/build/unix
+    make
+    cd ~/darvis-home/tracy/capture/build/unix
+    make
+    ```
+    Tracy C++ version has to be compatible with tracy-client version in Rust. [See table here](https://github.com/nagisa/rust_tracy_client).
+2. Try to run ``./tracy/profiler/build/unix/Tracy-release``. If you get [this error](https://github.com/wolfpld/tracy/issues/567), you need to make [this change](https://github.com/wolfpld/tracy/commit/c57b8994f6dcee2e3312b1a7aec9e055f7a0bb01) to the tracy source code.
+2. In darvis ``Cargo.toml``, set tracy-client features to "enable", like this:
+    ```rust
+    tracy-client = {version = "0.16.0", features = ["enable"] }
+    ```
+3. Uncomment this line of code in ``main.rs`` :
+    ```rust
+    let _client = tracy_client::Client::start();
+    ```
+
+**Mark up code**
+- To time a region, add this line of code. Then the timing will be displayed when the variable goes out of scope.
+    ```rust
+    let _span = tracy_client::span!("search_for_triangulation");
+    ```
+
+**Run**
+- Two ways to run: showing the GUI while the program is running, or logging the output and viewing the results in the GUI afterward. Instructions below are for logging and viewing afterward, but if you want it in real-time you should be able to just run the ``Tracy-release`` command in step 3 instead of the ``capture-release`` command in step 1.
+1. Start the tracy client (this is from darvis-home directory)
+    ```bash
+    ./tracy/capture/build/unix/capture-release -o output.tracy
+    ```
+2. Run darvis normally
+3. After darvis ends, tracy capture should have created `output.tracy`. To view this, open the GUI application:
+    ```bash
+    ./tracy/profiler/build/unix/Tracy-release
+    ```
+4. Select ``open saved trace`` in the GUI
+- If you're on a mac and sshing into the darvis computer or running it in docker, ``brew install tracy`` will actually work to show the tracy GUI. I could not get wayland forwarding to work.
+
+**Helpful links**
+- [blog post on using tracy with rust](https://www.abhirag.com/blog/tracy/)
+- [tracy documentation(download documentation pdf here)](https://github.com/wolfpld/tracy?tab=readme-ov-file)
+- [Rust tracy-client crate](https://docs.rs/tracy-client/latest/tracy_client/)
+
+## Misc. Build Options
+To compile C++ bindings with clang instead of g++, set these environment variables:
+```bash
+export CXX=/usr/bin/clang++
+export CC=/usr/bin/clang
+``````
+
+# 3. Modifying the Code
+
 ## Creating new modules
 
 All the steps below reference the module ``Visualizer`` as an example.
@@ -261,8 +328,7 @@ let max_features: i32 = SETTINGS.get(SYSTEM, "max_features");
 Where ``max_features`` is the key you added in the config file.
 
 
----
-## Key for strings
+# 4. Key for strings
 
 Strings are formatted like: ``TODO (string)``
 

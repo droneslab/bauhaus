@@ -1,4 +1,4 @@
-use std::collections::{HashSet, HashMap};
+use std::{collections::{HashSet, HashMap}, sync::atomic::Ordering};
 use log::{warn, info, debug, error};
 use dvcore::{config::*, sensor::{Sensor, FrameSensor, ImuSensor}, actor::Actor};
 use logging_timer::{time, timer};
@@ -11,10 +11,10 @@ use crate::{
     modules::{imu::ImuModule, optimizer::{self}, orbmatcher, map_initialization::Initialization, relocalization::Relocalization}, ActorChannels, MapLock,
 };
 
-use super::messages::{IMUInitializedMsg, NewKeyFrameMsg};
+use super::{messages::{IMUInitializedMsg, NewKeyFrameMsg}, local_mapping::{self, LOCAL_MAPPING_IDLE}};
 
 #[derive(Debug)]
-pub struct DarvisTrackingBack {
+pub struct TrackingBackend {
     actor_channels: ActorChannels,
     state: TrackingState,
 
@@ -58,12 +58,12 @@ pub struct DarvisTrackingBack {
     sensor: Sensor,
 }
 
-impl Actor for DarvisTrackingBack {
+impl Actor for TrackingBackend {
     type MapRef = MapLock;
 
-    fn new_actorstate(actor_channels: ActorChannels, map: Self::MapRef) -> DarvisTrackingBack {
+    fn new_actorstate(actor_channels: ActorChannels, map: Self::MapRef) -> TrackingBackend {
         let sensor = SETTINGS.get::<Sensor>(SYSTEM, "sensor");
-        DarvisTrackingBack {
+        TrackingBackend {
             actor_channels,
             map,
             sensor,
@@ -93,10 +93,12 @@ impl Actor for DarvisTrackingBack {
     }
 
     fn spawn(actor_channels: ActorChannels, map: Self::MapRef) {
-        let mut actor = DarvisTrackingBack::new_actorstate(actor_channels, map);
+        let mut actor = TrackingBackend::new_actorstate(actor_channels, map);
         let max_queue_size = actor.actor_channels.receiver_bound.unwrap_or(100);
         let mut last_frame = None; // Keep last_frame here instead of in tracking object to avoid putting it in an option and doing a ton of unwraps
         let mut curr_frame_id = 0;
+
+        tracy_client::set_thread_name!("tracking backend");
 
         'outer: loop {
             let message = actor.actor_channels.receive().unwrap();
@@ -110,7 +112,6 @@ impl Actor for DarvisTrackingBack {
                 }
 
                 let msg = message.downcast::<FeatureMsg>().unwrap_or_else(|_| panic!("Could not downcast tracking frontend message!"));
-                let _timer = timer!("TrackingBackend::Total");
                 debug!("Tracking working on frame {}", msg.frame_id);
                 let mut current_frame = Frame::new(
                     curr_frame_id, 
@@ -157,9 +158,10 @@ impl Actor for DarvisTrackingBack {
     }
 }
 
-impl DarvisTrackingBack {
-    #[time("TrackingBackend::{}")]
+impl TrackingBackend {
     fn track(&mut self, current_frame: &mut Frame, last_frame: &mut Option<Frame>) -> Result<(), Box<dyn std::error::Error>>  {
+        let _span = tracy_client::span!("track");
+
         // TODO (reset): Reset map because local mapper set the bad imu flag
         // Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Tracking.cc#L1808
 
@@ -418,8 +420,8 @@ impl DarvisTrackingBack {
         Ok(())
     }
 
-    #[time("TrackingBackend::{}")]
     fn track_reference_keyframe(&mut self, current_frame: &mut Frame, last_frame: &mut Frame) -> Result<bool, Box<dyn std::error::Error>> {
+        let _span = tracy_client::span!("track_reference_keyframe");
         // Tracking::TrackReferenceKeyFrame()
         // We perform first an ORB matching with the reference keyframe
         // If enough matches are found we setup a PnP solver
@@ -454,8 +456,8 @@ impl DarvisTrackingBack {
         };
     }
 
-    #[time("TrackingBackend::{}")]
     fn track_with_motion_model(&mut self, current_frame: &mut Frame, last_frame: &mut Frame) -> Result<bool, Box<dyn std::error::Error>> {
+        let _span = tracy_client::span!("track_with_motion_model");
         // Tracking::TrackWithMotionModel()
         // If tracking was successful for last frame, we use a constant
         // velocity motion model to predict the camera pose and perform
@@ -539,7 +541,6 @@ impl DarvisTrackingBack {
 
     }
 
-    #[time("TrackingBackend::{}")]
     fn update_last_frame(&mut self, last_frame: &mut Frame) {
         // Tracking::UpdateLastFrame()
 
@@ -622,8 +623,8 @@ impl DarvisTrackingBack {
         }
     }
 
-    #[time("TrackingBackend::{}")]
     fn track_local_map(&mut self, current_frame: &mut Frame, last_frame: &mut Frame) -> (bool, i32) {
+        let _span = tracy_client::span!("track_local_map");
         // bool Tracking::TrackLocalMap()
         // We have an estimation of the camera pose and some map points tracked in the frame.
         // We retrieve the local map and try to find matches to points in the local map.
@@ -704,6 +705,7 @@ impl DarvisTrackingBack {
     }
 
     fn update_local_keyframes(&mut self, current_frame: &mut Frame, last_frame: &mut Frame) -> Option<()> {
+        let _span = tracy_client::span!("update_local_keyframes");
         // void Tracking::UpdateLocalKeyFrames()
         // Each map point votes for the keyframes in which it has been observed
         let mut kf_counter = HashMap::<Id, i32>::new();
@@ -801,6 +803,7 @@ impl DarvisTrackingBack {
     }
 
     fn update_local_points(&mut self, current_frame: &mut Frame) -> Option<()> {
+        let _span = tracy_client::span!("update_local_points");
         // void Tracking::UpdateLocalPoints()
         self.local_mappoints.clear();
         let lock = self.map.read();
@@ -819,8 +822,8 @@ impl DarvisTrackingBack {
         None
     }
 
-    #[time("TrackingBackend::{}")]
     fn search_local_points(&mut self, current_frame: &mut Frame) {
+        let _span = tracy_client::span!("search_local_points");
         //void Tracking::SearchLocalPoints()
 
         // Do not search map points already matched
@@ -909,6 +912,7 @@ impl DarvisTrackingBack {
     }
 
     fn create_new_keyframe(&mut self, current_frame: &mut Frame) {
+        let _span = tracy_client::span!("create_new_keyframe");
         //CreateNewKeyFrame
         // Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Tracking.cc#L3216
         let new_kf = Frame::new_clone(&current_frame);
@@ -1061,8 +1065,7 @@ impl DarvisTrackingBack {
         // Condition 1a: More than "MaxFrames" have passed from last keyframe insertion
         let c1a = self.frames_since_last_kf >= (self.max_frames as i32);
         // Condition 1b: More than "MinFrames" have passed and Local Mapping is idle
-        // Note: removed localmappingidle from here
-        let c1b = self.frames_since_last_kf >= (self.min_frames as i32);
+        let c1b = self.frames_since_last_kf >= (self.min_frames as i32) && LOCAL_MAPPING_IDLE.load(Ordering::SeqCst);
         //Condition 1c: tracking is weak
         let sensor_is_right = match self.sensor {
             Sensor(FrameSensor::Mono, _) | Sensor(FrameSensor::Stereo, ImuSensor::Some) | Sensor(FrameSensor::Rgbd, ImuSensor::Some) => false,
