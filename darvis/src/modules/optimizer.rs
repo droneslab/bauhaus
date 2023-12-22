@@ -6,7 +6,7 @@ use dvcore::{
     maplock::{ReadOnlyMap, ReadWriteMap},
     config::{SETTINGS, SYSTEM}, sensor::{Sensor, FrameSensor},
 };
-use log::warn;
+use log::{warn, debug};
 use logging_timer::time;
 use nalgebra::Matrix3;
 use opencv::prelude::KeyPointTraitConst;
@@ -1127,14 +1127,20 @@ pub fn local_bundle_adjustment(
     let mut optimizer = g2o::ffi::new_sparse_optimizer(1, camera_param);
 
     let mut mp_vertex_ids = HashMap::new();
-    let all_edges_stereo = Vec::<(Id, UniquePtr<EdgeSE3ProjectXYZ>)>::new(); //vpEdgesStereo
-    let all_edges_body = Vec::<(Id, UniquePtr<EdgeSE3ProjectXYZ>)>::new(); // vpEdgesBody
+    let mut edges_kf_body = Vec::<Id>::new(); // vpEdgeKFBody
     let mut kf_vertex_ids = HashMap::new();
+
+    // This is for debugging, can delete later
+    let mut mps_to_optimize = 0;
+    let mut fixed_kfs = 0;
+    let mut kfs_to_optimize = 0;
+    let mut edges = 0;
 
     {
         // Construct factor graph with read lock, but don't have to have lock to optimize.
         let lock = map.read();
 
+        let span = tracy_client::span!("local_bundle_adjustment:construct_keyframes");
         // Local KeyFrames: First Breath Search from Current Keyframe
         let keyframe = lock.keyframes.get(&keyframe_id).unwrap();
         let mut local_keyframes = vec![keyframe.id];
@@ -1148,28 +1154,35 @@ pub fn local_bundle_adjustment(
             if kf.origin_map_id == current_map_id {
                 local_keyframes.push(kf_id);
             }
+            // println!("local keyframe from covisibility: {}", kf_id);
         }
 
         // Local MapPoints seen in Local KeyFrames
         let mut num_fixed_kf = 0;
         let mut local_mappoints = Vec::<Id>::new();
-        let mut local_ba_for_mp = HashMap::new();
-        for kf_id in &local_keyframes {
-            let keyframe = lock.keyframes.get(&keyframe_id).unwrap();
-            let kf = lock.keyframes.get(&kf_id).unwrap();
-            if kf.id == lock.initial_kf_id {
+        let mut local_ba_for_mp = HashMap::new(); // mappoint::mnBALocalForKF
+        for kf_i_id in &local_keyframes {
+            let kf_i = lock.keyframes.get(&kf_i_id).unwrap();
+            if kf_i.id == lock.initial_kf_id {
                 num_fixed_kf += 1;
             }
-            for item in &kf.mappoint_matches.matches {
-                if let Some((mp_id, _)) = item {
+            for mp_match in &kf_i.mappoint_matches.matches {
+                if let Some((mp_id, _)) = mp_match {
                     if let Some(mp) = lock.mappoints.get(&mp_id) {
                         if mp.origin_map_id == current_map_id {
-                            local_mappoints.push(*mp_id);
-                            local_ba_for_mp.insert(mp_id, keyframe.id);
+                            let mappoint_optimized_for_curr_kf = match local_ba_for_mp.get(&mp_id) {
+                                Some(id) => *id == keyframe_id,
+                                None => false
+                            };
+                            if !mappoint_optimized_for_curr_kf {
+                                local_mappoints.push(*mp_id);
+                                local_ba_for_mp.insert(mp_id, keyframe_id);
+                            }
                         }
                     }
                 }
             }
+            // println!("Matches added {}, matches skipped {} for kf {}", matches_added,matches_skipped, kf_i_id);
         }
 
         // Fixed Keyframes. Keyframes that see Local MapPoints but that are not Local Keyframes
@@ -1179,9 +1192,9 @@ pub fn local_bundle_adjustment(
             let mp = lock.mappoints.get(&mp_id).unwrap();
             for (kf_id, (_left_index, _right_index)) in mp.get_observations() {
                 let kf = lock.keyframes.get(&kf_id).unwrap();
-                let local_ba = match local_ba_for_kf.contains_key(kf_id) {
-                    true => *local_ba_for_kf.get(kf_id).unwrap() != keyframe_id,
-                    false => true
+                let local_ba = match local_ba_for_kf.get(kf_id) {
+                    Some(local_ba) => *local_ba != keyframe_id,
+                    None => true
                 };
                 if local_ba && !ba_fixed_for_kf.contains(kf_id) {
                     ba_fixed_for_kf.insert(kf_id);
@@ -1195,6 +1208,7 @@ pub fn local_bundle_adjustment(
             warn!("LM_LBA: There are 0 fixed KF in the optimizations, LBA aborted");
         }
 
+        drop(span);
 
         match sensor.is_imu() {
             true => {
@@ -1210,6 +1224,7 @@ pub fn local_bundle_adjustment(
         // if(pbStopFlag)
         //     optimizer.setForceStopFlag(pbStopFlag);
 
+        let span = tracy_client::span!("local_bundle_adjustment:add_kf_vertices");
         // Set Local KeyFrame vertices
         let mut vertex_id = 1;
         for kf_id in &local_keyframes {
@@ -1218,7 +1233,13 @@ pub fn local_bundle_adjustment(
             optimizer.pin_mut().add_frame_vertex(vertex_id, (kf.pose).into(), set_fixed);
             kf_vertex_ids.insert(*kf_id, vertex_id);
             vertex_id += 1;
+            if set_fixed {
+                fixed_kfs += 1;
+            } else {
+                kfs_to_optimize += 1;
+            }
         }
+        // println!("Local keyframes: {:?}", local_keyframes);
 
         // Set Fixed KeyFrame vertices
         for kf_id in &fixed_cameras {
@@ -1226,7 +1247,12 @@ pub fn local_bundle_adjustment(
             optimizer.pin_mut().add_frame_vertex(vertex_id, (kf.pose).into(), true);
             kf_vertex_ids.insert(*kf_id, vertex_id);
             vertex_id += 1;
+            fixed_kfs += 1;
         }
+        // println!("Fixed keyframes: {:?}", fixed_cameras);
+
+        drop(span);
+        let _span = tracy_client::span!("local_bundle_adjustment:add_mp_vertices");
 
         // Set MapPoint vertices
         for mp_id in &local_mappoints {
@@ -1237,6 +1263,7 @@ pub fn local_bundle_adjustment(
                 DVPose::new(*mp.position, Matrix3::identity()).into() // create pose out of translation only
             );
             mp_vertex_ids.insert(*mp_id, vertex_id);
+            mps_to_optimize += 1;
 
             let observations = mp.get_observations();
             // Set edges
@@ -1339,6 +1366,8 @@ pub fn local_bundle_adjustment(
                             // TODO (mvp): below code sets edge's camera to the frame's camera
                             // but are we sure we need it?
                             // edge->pCamera = pFrame->mpCamera;
+                            edges += 1;
+                            edges_kf_body.push(kf.id);
                         } else {
                             warn!("Local bundle adjustment, monocular observation... Pretty sure this line shouldn't be hit.");
                         }
@@ -1348,98 +1377,127 @@ pub fn local_bundle_adjustment(
             vertex_id += 1;
         }
     }
-
+    tracy_client::plot!("KFs to Optimize", kfs_to_optimize as f64);
+    tracy_client::plot!("Fixed KFs", fixed_kfs as f64);
+    tracy_client::plot!("MPs to Optimize", mps_to_optimize as f64);
+    tracy_client::plot!("Edges", edges as f64);
     // Optimize
-    optimizer.pin_mut().optimize(10, false);
+    {
+        let _span = tracy_client::span!("local_bundle_adjustment::optimize");
+        optimizer.pin_mut().optimize(10, false);
+    }
 
     // Check inlier observations
-    let mut mps_to_discard = Vec::new();
-    for edge in optimizer.pin_mut().get_mut_xyz_onlypose_edges().iter() {
-        if edge.inner.chi2() > 5.991 || !edge.inner.is_depth_positive() {
-            mps_to_discard.push(edge.mappoint_id);
+    let mut mps_to_discard = Vec::new(); // vToErase
+    {
+        let _span = tracy_client::span!("local_bundle_adjustment::check_inliers");
+        let mut i = 0;
+        for edge in optimizer.pin_mut().get_mut_xyz_onlypose_edges().iter() {
+            if edge.inner.chi2() > 5.991 || !edge.inner.is_depth_positive() {
+                mps_to_discard.push((edge.mappoint_id, edges_kf_body[i]));
+            }
+            i += 1;
         }
     }
 
-    for (_mp_id, _edge) in all_edges_body {
+
+    if matches!(sensor.frame(), FrameSensor::Stereo) {
         todo!("Stereo");
-        // ORB_SLAM3::EdgeSE3ProjectXYZToBody* e = vpEdgesBody[i];
-        // MapPoint* pMP = vpMapPointEdgeBody[i];
+        // For the below vectors, will need to make vector in g2o bindings similar to
+        // xyz_onlypose_edges and iterate over it like get_mut_xyz_onlypose_edges above
 
-        // if(pMP->isBad())
-        //     continue;
+        // for (_mp_id, _edge) in all_edges_body {
+            // ORB_SLAM3::EdgeSE3ProjectXYZToBody* e = vpEdgesBody[i];
+            // MapPoint* pMP = vpMapPointEdgeBody[i];
 
-        // if(e->chi2()>5.991 || !e->isDepthPositive())
-        // {
-        //     KeyFrame* pKFi = vpEdgeKFBody[i];
-        //     vToErase.push_back(make_pair(pKFi,pMP));
+            // if(pMP->isBad())
+            //     continue;
+
+            // if(e->chi2()>5.991 || !e->isDepthPositive())
+            // {
+            //     KeyFrame* pKFi = vpEdgeKFBody[i];
+            //     vToErase.push_back(make_pair(pKFi,pMP));
+            // }
+        // }
+
+        // for (_mp_id, _edge) in all_edges_stereo {
+            // g2o::EdgeStereoSE3ProjectXYZ* e = vpEdgesStereo[i];
+            // MapPoint* pMP = vpMapPointEdgeStereo[i];
+
+            // if(pMP->isBad())
+            //     continue;
+
+            // if(e->chi2()>7.815 || !e->isDepthPositive())
+            // {
+            //     KeyFrame* pKFi = vpEdgeKFStereo[i];
+            //     vToErase.push_back(make_pair(pKFi,pMP));
+            // }
         // }
     }
 
-    for (_mp_id, _edge) in all_edges_stereo {
-        todo!("Stereo");
-        // g2o::EdgeStereoSE3ProjectXYZ* e = vpEdgesStereo[i];
-        // MapPoint* pMP = vpMapPointEdgeStereo[i];
-
-        // if(pMP->isBad())
-        //     continue;
-
-        // if(e->chi2()>7.815 || !e->isDepthPositive())
-        // {
-        //     KeyFrame* pKFi = vpEdgeKFStereo[i];
-        //     vToErase.push_back(make_pair(pKFi,pMP));
-        // }
+    {
+        let _span = tracy_client::span!("local_bundle_adjustment::discard");
+        for (mp_id, kf_id) in mps_to_discard {
+            map.write().keyframes.get_mut(&kf_id).unwrap().mappoint_matches.delete((mp_id, -1));
+            map.write().mappoints.get_mut(&mp_id).unwrap().delete_observation(&kf_id);
+            debug!("Discarding mappoint {} from keyframe {}", mp_id, kf_id);
+            debug!("Discarding keyframe {} for mappoint {}", kf_id, mp_id);
+        }
     }
 
     // Recover optimized data
 
-    for (kf_id, vertex_id) in kf_vertex_ids {
-        let pose = optimizer.recover_optimized_frame_pose(vertex_id);
-        let mut lock = map.write();
-        let initial_kf_id = lock.initial_kf_id;
+    {
+        let _span = tracy_client::span!("local_bundle_adjustment::recover");
+        for (kf_id, vertex_id) in kf_vertex_ids {
+            let pose = optimizer.recover_optimized_frame_pose(vertex_id);
+            let mut lock = map.write();
+            let initial_kf_id = lock.initial_kf_id;
 
-        if let Some(kf) = lock.keyframes.get_mut(&kf_id) {
-            if loop_kf == initial_kf_id {
-                kf.pose = pose.into();
+            if let Some(kf) = lock.keyframes.get_mut(&kf_id) {
+                if loop_kf == initial_kf_id {
+                    kf.pose = pose.into();
+                } else {
+                    todo!("MVP LOOP CLOSING");
+                    // Code from ORBSLAM, not sure if we need it
+                    // pKF->mTcwGBA = Sophus::SE3d(SE3quat.rotation(),SE3quat.translation()).cast<float>();
+                    // pKF->mnBAGlobalForKF = nLoopKF;
+                }
             } else {
-                todo!("MVP LOOP CLOSING");
-                // Code from ORBSLAM, not sure if we need it
-                // pKF->mTcwGBA = Sophus::SE3d(SE3quat.rotation(),SE3quat.translation()).cast<float>();
-                // pKF->mnBAGlobalForKF = nLoopKF;
-            }
-        } else {
-            // Possible that map actor deleted mappoint after local BA has finished but before
-            // this message is processed
-            continue;
-        }
-    }
-
-    //Points
-    for (mp_id, vertex_id) in mp_vertex_ids {
-        let position = optimizer.recover_optimized_mappoint_pose(vertex_id);
-        let translation = nalgebra::Translation3::new(
-            position.translation[0] as f64,
-            position.translation[1] as f64,
-            position.translation[2] as f64
-        );
-        let mut lock = map.write();
-
-        if loop_kf == lock.initial_kf_id {
-            match lock.mappoints.get_mut(&mp_id) {
                 // Possible that map actor deleted mappoint after local BA has finished but before
                 // this message is processed
-                Some(mp) => {
-                    mp.position = DVTranslation::new(translation.vector);
-                    let norm_and_depth = lock.mappoints.get(&mp_id).unwrap().get_norm_and_depth(&lock);
-                    if norm_and_depth.is_some() {
-                        lock.mappoints.get_mut(&mp_id).unwrap().update_norm_and_depth(norm_and_depth.unwrap());
-                    }
-                },
-                None => continue,
-            };
-        } else {
-            todo!("MVP LOOP CLOSING");
-            // pMP->mPosGBA = vPoint->estimate().cast<float>();
-            // pMP->mnBAGlobalForKF = nLoopKF;
+                continue;
+            }
+        }
+
+        //Points
+        for (mp_id, vertex_id) in mp_vertex_ids {
+            let position = optimizer.recover_optimized_mappoint_pose(vertex_id);
+            let translation = nalgebra::Translation3::new(
+                position.translation[0] as f64,
+                position.translation[1] as f64,
+                position.translation[2] as f64
+            );
+            let mut lock = map.write();
+
+            if loop_kf == lock.initial_kf_id {
+                match lock.mappoints.get_mut(&mp_id) {
+                    // Possible that map actor deleted mappoint after local BA has finished but before
+                    // this message is processed
+                    Some(mp) => {
+                        mp.position = DVTranslation::new(translation.vector);
+                        let norm_and_depth = lock.mappoints.get(&mp_id).unwrap().get_norm_and_depth(&lock);
+                        if norm_and_depth.is_some() {
+                            lock.mappoints.get_mut(&mp_id).unwrap().update_norm_and_depth(norm_and_depth.unwrap());
+                        }
+                    },
+                    None => continue,
+                };
+            } else {
+                todo!("MVP LOOP CLOSING");
+                // pMP->mPosGBA = vPoint->estimate().cast<float>();
+                // pMP->mnBAGlobalForKF = nLoopKF;
+            }
         }
     }
 }

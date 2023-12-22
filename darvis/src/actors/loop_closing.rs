@@ -2,6 +2,7 @@ use dvcore::actor::{Actor, ActorMessage};
 use dvcore::config::{SETTINGS, SYSTEM};
 use dvcore::sensor::Sensor;
 use log::warn;
+use crate::actors::messages::KeyFrameIdMsg;
 use crate::{ActorChannels, MapLock};
 use crate::dvmap::map::{Id, Map};
 use crate::modules::imu::ImuModule;
@@ -40,13 +41,9 @@ impl Actor for LoopClosing {
 
         'outer: loop {
             let message = actor.actor_channels.receive().unwrap();
-            if message.is::<LoopClosingMsg>() {
-                let msg = message.downcast::<LoopClosingMsg>().unwrap_or_else(|_| panic!("Could not downcast loop closing message!"));
-                match *msg {
-                    LoopClosingMsg::KeyFrameIdMsg{ kf_id } => {
-                        actor.loop_closing(kf_id);
-                    },
-                };
+            if message.is::<KeyFrameIdMsg>() {
+                let msg = message.downcast::<KeyFrameIdMsg>().unwrap_or_else(|_| panic!("Could not downcast loop closing message!"));
+                actor.loop_closing(msg.kf_id);
             } else if message.is::<IMUInitializedMsg>() {
                 // TODO (IMU) process message from local mapping!
             } else if message.is::<ShutdownMsg>() {
@@ -225,8 +222,3 @@ impl LoopClosing {
     }
 }
 
-
-pub enum LoopClosingMsg {
-    KeyFrameIdMsg{ kf_id: Id },
-}
-impl ActorMessage for LoopClosingMsg {}

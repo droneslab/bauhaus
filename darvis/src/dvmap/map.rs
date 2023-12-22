@@ -109,6 +109,7 @@ impl Map {
             });
         }
 
+
         // Compute distinctive descriptors
         let best_descriptor = self.mappoints.get(&new_mp_id)
             .and_then(|mp| mp.compute_distinctive_descriptors(&self)).unwrap();
@@ -217,9 +218,11 @@ impl Map {
             self.keyframes.get_mut(&conn_kf).unwrap().connections.delete(&kf_id);
         }
 
+        debug!("Discarding keyframe {} with matches: {:?}", kf_id, matches1);
+
         for mp_match in &matches1 {
             if let Some((mp_id, _)) = mp_match {
-                let should_delete_mappoint = self.mappoints.get_mut(&mp_id).unwrap().erase_observation(&kf_id);
+                let should_delete_mappoint = self.mappoints.get_mut(&mp_id).unwrap().delete_observation(&kf_id);
                 if should_delete_mappoint {
                     self.discard_mappoint(&mp_id);
                 }
@@ -274,7 +277,7 @@ impl Map {
         }
 
         if parent1.is_some() {
-            self.keyframes.get_mut(&parent1.unwrap()).unwrap().connections.erase_child(kf_id);
+            self.keyframes.get_mut(&parent1.unwrap()).unwrap().connections.delete_child(kf_id);
         }
         self.keyframes.remove(&kf_id);
 
@@ -529,10 +532,10 @@ impl Map {
         //     else
         //     {
         //         if(leftIndex != -1){
-        //             pKF->EraseMapPointMatch(leftIndex);
+        //             pKF->deleteMapPointMatch(leftIndex);
         //         }
         //         if(rightIndex != -1){
-        //             pKF->EraseMapPointMatch(rightIndex);
+        //             pKF->deleteMapPointMatch(rightIndex);
         //         }
         //     }
         // }
@@ -540,7 +543,7 @@ impl Map {
         // pMP->IncreaseVisible(nvisible);
         // pMP->ComputeDistinctiveDescriptors();
 
-        // mpMap->EraseMapPoint(this);
+        // mpMap->deleteMapPoint(this);
 
 
         // Update points

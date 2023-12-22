@@ -220,14 +220,15 @@ fn setup_logger(level: &str) -> Result<(), fern::InitError> {
     fern::Dispatch::new()
             .format(move |out, message, record| {
                 out.finish(format_args!(
-                    "{color_line}[{time}][{target}][{level}{color_line}] {message}\x1B[0m",
+                    "{color_line}[{time} {target}:{line_num} {level}{color_line}] {message}\x1B[0m",
                     color_line = format_args!(
                         "\x1B[{}m",
                         colors.get_color(&record.level()).to_fg_str()
                     ),
                     level = colors.color(record.level()),
                     time = (chrono::Local::now() - start_time).num_milliseconds() as f64 / 1000.0,
-                    target = record.target(),
+                    target = record.file().unwrap_or("unknown"),
+                    line_num = record.line().unwrap_or(0),
                     message = message
                 ))
             })
@@ -237,9 +238,10 @@ fn setup_logger(level: &str) -> Result<(), fern::InitError> {
     fern::Dispatch::new()
             .format(move |out, message, record| {
                 out.finish(format_args!(
-                    "{time}|{target}|{level}|{message}",
+                    "[{time} {target}:{line_num} {level}] {message}",
                     time = (chrono::Local::now() - start_time).num_milliseconds() as f64  / 1000.0,
-                    target = record.target(),
+                    target = record.file().unwrap_or("unknown"),
+                    line_num = record.line().unwrap_or(0),
                     level = record.level(),
                     message = message
                 ))

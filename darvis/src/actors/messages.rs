@@ -47,10 +47,10 @@ pub struct MapInitializedMsg {
 }
 impl ActorMessage for MapInitializedMsg {}
 
-pub struct KeyFrameIdMsg { 
+pub struct InitKeyFrameMsg { 
     pub kf_id: Id 
 }
-impl ActorMessage for KeyFrameIdMsg {}
+impl ActorMessage for InitKeyFrameMsg {}
 
 pub struct LastKeyFrameUpdatedMsg {}
 impl ActorMessage for LastKeyFrameUpdatedMsg {}
@@ -69,6 +69,12 @@ pub struct NewKeyFrameMsg {
     pub keyframe: Frame,
 }
 impl ActorMessage for NewKeyFrameMsg {}
+
+// * LOOP CLOSING */
+pub struct KeyFrameIdMsg { 
+    pub kf_id: Id 
+}
+impl ActorMessage for KeyFrameIdMsg {}
 
 //* VISUALIZER */
 pub struct VisFeaturesMsg {

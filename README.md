@@ -88,9 +88,10 @@ If you want to set up ORB_SLAM3 to compare its performance against Darvis You ca
 
 ```bash
 sudo apt-get install libssl-dev
-git clone https://github.com/UZ-SLAMLab/ORB_SLAM3
+git clone git@github.com:droneslab/darvis-orbslam3.git
 cd ORB_SLAM3
-sed -i 's/++11/++14/g' CMakeLists.txt
+# If using darvis-orbslam3, don't have to do this.
+# sed -i 's/++11/++14/g' CMakeLists.txt
 ./build.sh
 ```
 
