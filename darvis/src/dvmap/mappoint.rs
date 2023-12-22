@@ -1,6 +1,6 @@
 use std::{fmt::Debug, collections::HashMap, sync::atomic::{AtomicI32, Ordering}};
 use dvcore::{matrix::DVMatrix, config::{SETTINGS, SYSTEM}, sensor::{Sensor, FrameSensor}};
-use log::error;
+use log::{error, debug, warn};
 extern crate nalgebra as na;
 use crate::{matrix::DVVector3, modules::orbmatcher::{SCALE_FACTORS, descriptor_distance}, registered_actors::FEATURE_DETECTION};
 use super::{map::{Id, Map}, keyframe::KeyFrame, pose::DVTranslation};
@@ -101,7 +101,7 @@ impl MapPoint<FullMapPoint> {
                 max_distance: 0.0,
                 min_distance: 0.0,
                 best_descriptor: DVMatrix::empty(),
-                num_obs: 0
+                num_obs: 0,
             },
             found: AtomicI32::new(1),
             visible: AtomicI32::new(1),
@@ -237,21 +237,20 @@ impl MapPoint<FullMapPoint> {
 
     pub fn increase_found(& self) {
         self.found.fetch_add(1, Ordering::SeqCst);
-        println!("Increase Found {}, Visible {}", self.found.load(Ordering::SeqCst), self.visible.load(Ordering::SeqCst));
+        // println!("Increase Found {}, Visible {}", self.found.load(Ordering::SeqCst), self.visible.load(Ordering::SeqCst));
     }
     pub fn increase_visible(& self) {
         self.visible.fetch_add(1, Ordering::SeqCst);
-        println!("Increase Visible {}, Found {}", self.visible.load(Ordering::SeqCst), self.found.load(Ordering::SeqCst),);
+        // println!("Increase Visible {}, Found {}", self.visible.load(Ordering::SeqCst), self.found.load(Ordering::SeqCst),);
     }
     pub fn get_found_ratio(&self) -> f32 {
+        // print!(" [{},{}] ", self.found.load(Ordering::SeqCst), self.visible.load(Ordering::SeqCst));
         // println!("mp_id {}, found {:?}, visible {:?}, ratio {:?}", mp_id, self.found.get(mp_id), self.visible.get(mp_id), *self.found.get(mp_id)? as f32 / *self.visible.get(mp_id)? as f32);
-        let ratio = self.found.load(Ordering::SeqCst) as f32 / self.visible.load(Ordering::SeqCst) as f32;
-        // println!("found ratio {}", ratio);
-        ratio
+        self.found.load(Ordering::SeqCst) as f32 / self.visible.load(Ordering::SeqCst) as f32
     }
 
     //** Observations */////////////////////////////////////////////////////////////////////////////////
-    pub fn erase_observation(&mut self, kf_id: &Id) -> bool {
+    pub fn delete_observation(&mut self, kf_id: &Id) -> bool {
         if let Some((left_index, right_index)) = self.full_mp_info.observations.get(kf_id) {
             if *left_index != -1 {
                 // TODO (Stereo)
@@ -274,6 +273,8 @@ impl MapPoint<FullMapPoint> {
             if self.full_mp_info.num_obs <= 2 {
                 return true;
             }
+        } else {
+            warn!("Deleting kf, has reference to this mappoint but this mappoint does not have reference to kf. KF id: {}, MP id: {}", kf_id, self.full_mp_info.id);
         }
         return false;
     }
@@ -309,22 +310,25 @@ impl MapPoint<FullMapPoint> {
         let mut n = 0;
         let position_opencv = **position;
         for (id, _) in &self.full_mp_info.observations {
-            let kf = map.keyframes.get(&id).unwrap();
-            let mut camera_center = kf.get_camera_center();
-            let owi = *camera_center;
-            let normali = position_opencv - owi;
-            normal = normal + normali / normali.norm();
-            n += 1;
+            if let Some(kf) = map.keyframes.get(&id) {
+                let mut camera_center = kf.get_camera_center();
+                let owi = *camera_center;
+                let normali = position_opencv - owi;
+                normal = normal + normali / normali.norm();
+                n += 1;
 
-            match self.sensor.frame() {
-                FrameSensor::Stereo => {
-                    camera_center = kf.get_right_camera_center();
-                    let owi = *camera_center;
-                    let normali = position_opencv - owi;
-                    normal = normal + normali / normali.norm();
-                    n += 1;
-                },
-                _ => {}
+                match self.sensor.frame() {
+                    FrameSensor::Stereo => {
+                        camera_center = kf.get_right_camera_center();
+                        let owi = *camera_center;
+                        let normali = position_opencv - owi;
+                        normal = normal + normali / normali.norm();
+                        n += 1;
+                    },
+                    _ => {}
+                }
+            } else {
+                error!("Mappoint {} has observation of keyframe {} but it is not in the map", self.full_mp_info.id, id);
             }
         }
         (n, normal)

@@ -4,7 +4,7 @@ use std::time::{Instant, Duration};
 use dvcore::config::SETTINGS;
 use dvcore::matrix::{DVVectorOfPoint2f, DVVector3, DVMatrix};
 use dvcore::sensor::{Sensor, FrameSensor};
-use log::warn;
+use log::{warn, debug};
 use logging_timer::{time, timer};
 use opencv::core::KeyPoint;
 use opencv::prelude::*;
@@ -742,18 +742,30 @@ pub fn search_for_triangulation(
     let kf2_featvec = kf_2.bow.as_ref().unwrap().feat_vec.get_all_nodes();
     let mut i = 0;
     let mut j = 0;
+
+    // This is for debugging, can delete later
+    // let mut skipped1 = 0;
+    // let mut skipped2 = 0;
+    // let mut skipped3 = 0;
+    // let mut skipped4 = 0;
+    // let mut loops = 0;
+
     while i < kf1_featvec.len() && j < kf2_featvec.len() {
         let kf1_node_id = kf1_featvec[i];
         let kf2_node_id = kf2_featvec[j];
         if kf1_node_id == kf2_node_id {
-            let kf1_indices = kf_1.bow.as_ref().unwrap().feat_vec.get_feat_from_node(kf1_node_id);
+            // let kf1_indices = kf_1.bow.as_ref().unwrap().feat_vec.get_feat_from_node(kf1_node_id);
+            // note... was testing out not copying the vec below but it doesn't work
+            let kf1_indices_size = kf_1.bow.as_ref().unwrap().feat_vec.vec_size(kf1_node_id);
 
-            // let kf1_indices_size = kf_1.bow.as_ref().unwrap().feat_vec.vec_size(kf1_node_id);
+            for idx1 in 0..kf1_indices_size {
+                // let _span = tracy_client::span!("outer");
+                // note...to use the strategy to not copy the vec, uncomment this and change for loop to for index1 in 0..kf1_indices_size
+                let kf1_index = kf_1.bow.as_ref().unwrap().feat_vec.vec_get(kf1_node_id, idx1);
 
-            for kf1_index in kf1_indices {
-                // let kf1_index = kf_1.bow.as_ref().unwrap().feat_vec.vec_get(kf1_node_id, index1);
                 // If there is already a MapPoint skip
                 if kf_1.mappoint_matches.has_mappoint(&kf1_index) {
+                    // skipped1 += 1;
                     continue
                 };
 
@@ -775,14 +787,21 @@ pub fn search_for_triangulation(
                 let mut best_index = -1;
                 let descriptors_kf_1 = kf_1.features.descriptors.row(kf1_index)?;
 
-                let kf2_indices = kf_2.bow.as_ref().unwrap().feat_vec.get_feat_from_node(kf2_node_id);
-                // let kf2_indices_size = kf_1.bow.as_ref().unwrap().feat_vec.vec_size(kf2_node_id);
+                // let kf2_indices = kf_2.bow.as_ref().unwrap().feat_vec.get_feat_from_node(kf2_node_id);
+                // note...same thing about not copying vec as above
+                // println!("{:?}", bla);
+                let kf2_indices_size = kf_2.bow.as_ref().unwrap().feat_vec.vec_size(kf2_node_id);
 
-                for kf2_index in kf2_indices {
-                    // let kf2_index = kf_1.bow.as_ref().unwrap().feat_vec.vec_get(kf2_node_id, index2);
+                for idx2 in 0..kf2_indices_size {
+                    // let _span = tracy_client::span!("inner");
+                    // note...same thing about not copying vec as above
+                    let kf2_index = kf_2.bow.as_ref().unwrap().feat_vec.vec_get(kf2_node_id, idx2);
+
+                    // println!("{} {} {} ", kf2_indices_size, idx2, kf2_index);
 
                     // If we have already matched or there is a MapPoint skip
                     if kf_2.mappoint_matches.has_mappoint(&kf2_index) || matched_already.contains_key(&kf2_index) {
+                        // skipped2 += 1;
                         continue
                     };
 
@@ -802,6 +821,7 @@ pub fn search_for_triangulation(
                     let dist = descriptor_distance(&descriptors_kf_1, &descriptors_kf_2);
 
                     if dist > TH_LOW || dist > best_dist {
+                        // skipped3 += 1;
                         continue
                     }
 
@@ -811,6 +831,7 @@ pub fn search_for_triangulation(
                         let dist_ex = (ep.0 as f32) - kp2.pt().x;
                         let dist_ey = (ep.1 as f32) - kp2.pt().y;
                         if dist_ex * dist_ex + dist_ey * dist_ey < 100.0 * SCALE_FACTORS[kp2.octave() as usize] {
+                            // skipped4 += 1;
                             continue
                         }
                     }
@@ -857,6 +878,7 @@ pub fn search_for_triangulation(
                         best_index = kf2_index as i32;
                         best_dist = dist;
                     }
+                    // loops += 1;
                 }
 
                 if best_index >= 0 {
@@ -880,6 +902,15 @@ pub fn search_for_triangulation(
             j = lower_bound(&kf2_featvec, &kf1_featvec, j, i);
         }
     }
+
+    // Debugging
+    // let msg = format!("Skipped {} {} {} {} ", skipped1, skipped2, skipped3, skipped4);
+    // tracy_client::Client::running().unwrap().message(&msg, 0);
+    // tracy_client::plot!("Skipped1", skipped1 as f64);
+    // tracy_client::plot!("Skipped2", skipped2 as f64);
+    // tracy_client::plot!("Skipped3", skipped3 as f64);
+    // tracy_client::plot!("Skipped4", skipped4 as f64);
+    // tracy_client::plot!("Loops", loops as f64);
 
     if should_check_orientation {
         let (ind_1, ind_2, ind_3) = compute_three_maxima(&rot_hist,HISTO_LENGTH);
@@ -1140,7 +1171,7 @@ pub fn descriptor_distance(desc1: &Mat, desc2: &Mat) -> i32 {
     //     a, b, opencv::core::NormTypes::NORM_HAMMING as i32, &Mat::default()
     // ).unwrap() as i32;
     // But much faster!!
-    
+
     dvos3binding::ffi::descriptor_distance(
         &dvos3binding::ffi::WrapBindCVRawPtr { 
             raw_ptr: dvos3binding::BindCVRawPtr {

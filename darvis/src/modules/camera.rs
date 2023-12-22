@@ -22,6 +22,7 @@ pub struct Camera {
     pub camera_type: CameraType,
 
     pub k_matrix: DVMatrix,
+    k_matrix_nalgebra: nalgebra::Matrix3<f64>,
 
     // Constants
     pub stereo_baseline_times_fx: f64, // mbf
@@ -67,9 +68,22 @@ impl Camera {
         let th_depth= SETTINGS.get::<i32>(CAMERA, "thdepth");
         let stereo_baseline = stereo_baseline_times_fx / fx;
 
+        // current k_matrix representation is opencv matrix, sometimes we need that or other times we need an nalgebra matrix
+        // Could be an into() if we made a KMatrix type but not sure if it's needed
+        let fx= SETTINGS.get::<f64>(CAMERA, "fx");
+        let fy= SETTINGS.get::<f64>(CAMERA, "fy");
+        let cx= SETTINGS.get::<f64>(CAMERA, "cx");
+        let cy= SETTINGS.get::<f64>(CAMERA, "cy");
+        let k_matrix_nalgebra = nalgebra::Matrix3::new(
+            fx, 0.0, cx,
+            0.0, fy, cy,
+            0.0, 0.0, 1.0
+        );
+
         Ok(Camera {
             camera_type,
             k_matrix: DVMatrix::new(k),
+            k_matrix_nalgebra,
             stereo_baseline_times_fx,
             stereo_baseline,
             th_depth, dist_coef,
@@ -163,9 +177,9 @@ impl Camera {
     }
 
     pub fn epipolar_constrain(&self, kp1: &KeyPoint, kp2: &KeyPoint, r12: &DVMatrix3<f64>, t12: &DVVector3<f64>, unc: f32) -> bool {
-        let _span = tracy_client::span!("epipolar constrain");
         // bool Pinhole::epipolarConstrain(GeometricCamera* pCamera2,  const cv::KeyPoint &kp1, const cv::KeyPoint &kp2, const Eigen::Matrix3f& R12, const Eigen::Vector3f& t12, const float sigmaLevel, const float unc) {
         //Compute Fundamental Matrix
+        let _span = tracy_client::span!("epipolar_constrain");
         let rot = **r12;
         let trans = *t12;
         let t12x = nalgebra::Matrix3::new(
@@ -174,7 +188,7 @@ impl Camera {
             -trans[1], trans[0], 0.0
         );
 
-        let k1 = self.k_matrix_convert();
+        let k1 = self.k_matrix_nalgebra;
         let k2 = k1.clone(); // TODO (Stereo) this should be whatever camera kf2 uses, the K1 above should be whatevere camera kf1 uses
         let f12 = k1.transpose().try_inverse().unwrap() * t12x * rot * k2.try_inverse().unwrap();
 
@@ -197,17 +211,4 @@ impl Camera {
         dsqr < 3.84 * (unc as f64)
     }
 
-    fn k_matrix_convert(&self) -> nalgebra::Matrix3<f64> {
-        // current k_matrix representation is opencv matrix, sometimes we need that or other times we need an nalgebra matrix
-        // Could be an into() if we made a KMatrix type but not sure if it's needed
-        let fx= SETTINGS.get::<f64>(CAMERA, "fx");
-        let fy= SETTINGS.get::<f64>(CAMERA, "fy");
-        let cx= SETTINGS.get::<f64>(CAMERA, "cx");
-        let cy= SETTINGS.get::<f64>(CAMERA, "cy");
-        nalgebra::Matrix3::new(
-            fx, 0.0, cx,
-            0.0, fy, cy,
-            0.0, 0.0, 1.0
-        )
-    }
 }

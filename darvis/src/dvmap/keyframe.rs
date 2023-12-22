@@ -164,10 +164,6 @@ pub fn new(
     }
 
 
-    // don't pass through just call
-    // pub fn get_features_in_area(&self, x: &f64, y: &f64, r: f64, min_level: i32, max_level: i32) -> Vec<u32> {
-    //     self.features.get_features_in_area(x, y, r, &self.features.image_bounds, Some((min_level, max_level)))
-    // }
     pub fn get_pose_in_world_frame(&self, map: &Map) -> DVPose {
         let pose = self.pose.unwrap();
         let ref_kf_id = self.ref_kf_id.unwrap();
@@ -175,6 +171,39 @@ pub fn new(
         let ref_kf_pose = ref_kf.pose;
         pose * ref_kf_pose.inverse()
     }
+
+    pub fn delete_mappoint_outliers(&mut self) -> Vec<Id> {
+        // Should only be called on a Frame.
+        // In the chance you might want to call this on a keyframe, you also need to delete the mappoints' observations to the kf!
+        let mut discards = vec![];
+        for mp_match in &mut self.mappoint_matches.matches {
+            if let Some((mp_id, is_outlier)) = mp_match {
+                if *is_outlier {
+                    discards.push(mp_id.clone());
+                    *mp_match = None;
+                }
+            }
+        }
+        discards
+    }
+
+    pub fn delete_mappoints_without_observations(&mut self, map: &Map) {
+        // Should only be called on a Frame.
+        // In the chance you might want to call this on a keyframe, you also need to delete the mappoints' observations to the kf!
+        for mp_match in &mut self.mappoint_matches.matches {
+            if let Some((mp_id, _)) = mp_match {
+                match map.mappoints.get(mp_id) {
+                    Some(mp) => {
+                        if mp.get_observations().len() == 0 {
+                            *mp_match = None;
+                        }
+                    },
+                    None => {}
+                }
+            }
+        }
+    }
+
 
 }
 
@@ -325,6 +354,7 @@ impl MapPointMatches {
     }
 
     pub fn delete(&mut self, indices: (i32, i32)) {
+        // Indices are (left, right). Right should be -1 for mono. Maybe we can rewrite this to make it more clear?
         // TODO (mvp): removed the code that set's mappoint's last_frame_seen to the frame ID. Is that ok or does it need to be in here?
         if indices.0 != -1 {
             self.matches[indices.0 as usize] = None;
@@ -346,19 +376,6 @@ impl MapPointMatches {
         self.matches[*index as usize].unwrap().1 = is_outlier;
     }
 
-    pub fn discard_outliers(&mut self) -> Vec<Id> {
-        let mut discards = vec![];
-        for mp_match in &mut self.matches {
-            if let Some((mp_id, is_outlier)) = mp_match {
-                if *is_outlier {
-                    discards.push(mp_id.clone());
-                    *mp_match = None;
-                }
-            }
-        }
-        discards
-    }
-
     pub fn get_num_mappoints_with_observations(&self, map: &Map) -> i32 {
         (&self.matches)
         .into_iter()
@@ -374,21 +391,6 @@ impl MapPointMatches {
             }
         })
         .count() as i32
-    }
-
-    pub fn delete_mappoints_without_observations(&mut self, map: &Map) {
-        for mp_match in &mut self.matches {
-            if let Some((mp_id, _)) = mp_match {
-                match map.mappoints.get(mp_id) {
-                    Some(mp) => {
-                        if mp.get_observations().len() == 0 {
-                            *mp_match = None;
-                        }
-                    },
-                    None => {}
-                }
-            }
-        }
     }
 
     pub fn tracked_mappoints(&self, map: &Map, min_observations: u32) -> i32{
@@ -515,7 +517,7 @@ impl ConnectedKeyFrames {
         self.children.insert(id);
     }
 
-    pub fn erase_child(&mut self, id: Id) {
+    pub fn delete_child(&mut self, id: Id) {
         self.children.remove(&id);
     }
 }

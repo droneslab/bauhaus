@@ -3,7 +3,7 @@ use log::{warn, info, debug, error};
 use dvcore::{config::*, sensor::{Sensor, FrameSensor, ImuSensor}, actor::Actor};
 use logging_timer::{time, timer};
 use crate::{
-    actors::messages::{TrajectoryMsg, VisTrajectoryMsg, TrackingStateMsg, FeatureMsg, KeyFrameIdMsg, LastKeyFrameUpdatedMsg, ShutdownMsg},
+    actors::messages::{TrajectoryMsg, VisTrajectoryMsg, TrackingStateMsg, FeatureMsg, InitKeyFrameMsg, LastKeyFrameUpdatedMsg, ShutdownMsg},
     registered_actors::{LOCAL_MAPPING, TRACKING_BACKEND, SHUTDOWN_ACTOR, TRACKING_FRONTEND, VISUALIZER},
     dvmap::{
         map::Id, keyframe::Frame, pose::DVPose, misc::Timestamp,
@@ -140,9 +140,9 @@ impl Actor for TrackingBackend {
                         panic!("Error in Tracking Backend: {}", e);
                     }
                 };
-            } else if message.is::<KeyFrameIdMsg>() {
+            } else if message.is::<InitKeyFrameMsg>() {
                 // Received from the map actor after it inserts a keyframe
-                let msg = message.downcast::<KeyFrameIdMsg>().unwrap_or_else(|_| panic!("Could not downcast tracking frontend message!"));
+                let msg = message.downcast::<InitKeyFrameMsg>().unwrap_or_else(|_| panic!("Could not downcast tracking frontend message!"));
                 last_frame.as_mut().unwrap().ref_kf_id = Some(msg.kf_id);
             } else if message.is::<LastKeyFrameUpdatedMsg>() {
                 // Received from local mapping after it culls and creates new MPs for the last inserted KF
@@ -238,10 +238,10 @@ impl TrackingBackend {
 
                     // Send first two keyframes to local mapping
                     self.actor_channels.send(LOCAL_MAPPING, Box::new(
-                        KeyFrameIdMsg { kf_id: ini_kf_id }
+                        InitKeyFrameMsg { kf_id: ini_kf_id }
                     ));
                     self.actor_channels.send(LOCAL_MAPPING,Box::new(
-                        KeyFrameIdMsg { kf_id: curr_kf_id }
+                        InitKeyFrameMsg { kf_id: curr_kf_id }
                     ));
 
 
@@ -358,7 +358,7 @@ impl TrackingBackend {
             }
 
             // Clean VO matches
-            current_frame.mappoint_matches.delete_mappoints_without_observations(&self.map.read());
+            current_frame.delete_mappoints_without_observations(&self.map.read());
 
             // Check if we need to insert a new keyframe
             let insert_if_lost_anyway = self.insert_kfs_when_lost && matches!(self.state, TrackingState::RecentlyLost) && self.sensor.is_imu();
@@ -371,7 +371,7 @@ impl TrackingBackend {
             // pass to the new keyframe, so that bundle adjustment will finally decide
             // if they are outliers or not. We don't want next frame to estimate its position
             // with those points so we discard them in the frame. Only has effect if lastframe is tracked
-            let _ = current_frame.mappoint_matches.discard_outliers();
+            let _ = current_frame.delete_mappoint_outliers();
         }
 
         // Reset if the camera get lost soon after initialization
@@ -447,7 +447,7 @@ impl TrackingBackend {
         optimizer::optimize_pose(current_frame, &self.map);
 
         // Discard outliers
-        let nmatches_map = self.discard_outliers(current_frame);
+        let nmatches_map = self.delete_mappoint_outliers(current_frame);
         // debug!("track reference keyframe matches after outliers {}", nmatches_map);
 
         match self.sensor.is_imu() {
@@ -525,7 +525,7 @@ impl TrackingBackend {
         optimizer::optimize_pose(current_frame, &self.map);
 
         // Discard outliers
-        let nmatches_map = self.discard_outliers(current_frame);
+        let nmatches_map = self.delete_mappoint_outliers(current_frame);
 
         if self.localization_only_mode {
             todo!("Localization only");
@@ -647,6 +647,7 @@ impl TrackingBackend {
                 if !is_outlier {
                     if let Some(mp) = self.map.read().mappoints.get(&mp_id) {
                         mp.increase_found();
+                        // println!("Increase found {}", mp_id);
                     }
 
                     if self.localization_only_mode {
@@ -833,6 +834,7 @@ impl TrackingBackend {
                 if let Some((id, _)) = current_frame.mappoint_matches.matches[index as usize] {
                     if let Some(mp) = lock.mappoints.get(&id) {
                         mp.increase_visible();
+                        // println!("Increase visible {}", id);
 
                         self.last_frame_seen.insert(id, current_frame.frame_id);
                         self.track_in_view.remove(&id);
@@ -864,6 +866,7 @@ impl TrackingBackend {
 
                 if tracked_data_left.is_some() || tracked_data_right.is_some() {
                     lock.mappoints.get(&mp_id).unwrap().increase_visible();
+                    // println!("Increase visible {}", mp_id);
                     to_match += 1;
                 }
                 if let Some(d) = tracked_data_left {
@@ -1098,10 +1101,10 @@ impl TrackingBackend {
     }
 
     //* Helper functions */
-    fn discard_outliers(&mut self, current_frame: &mut Frame) -> i32 {
-        let discarded = current_frame.mappoint_matches.discard_outliers();
+    fn delete_mappoint_outliers(&mut self, current_frame: &mut Frame) -> i32 {
+        let discarded = current_frame.delete_mappoint_outliers();
         for mp_id in discarded {
-            self.map.read().mappoints.get(&mp_id).unwrap().increase_found();
+            // self.map.read().mappoints.get(&mp_id).unwrap().increase_found();
             self.track_in_view.remove(&mp_id);
             self.last_frame_seen.insert(mp_id, current_frame.frame_id);
             // TODO (Stereo) ... need to remove this from track_in_view_r if the mp is seen in the right camera
