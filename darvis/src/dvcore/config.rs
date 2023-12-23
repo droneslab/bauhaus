@@ -174,13 +174,14 @@ pub fn load_config(file_name: &String) -> Result<(Vec<ActorConf>, Vec<ModuleConf
     // Load additional custom settings from config file
     let system_settings = &yaml::YamlLoader::load_from_str(&config_string).unwrap()[0]["system"];
     add_setting_bool(SYSTEM, "localization_only_mode", &system_settings["localization_only_mode"]);
-    add_setting_bool(SYSTEM, "create_flamegraph", &system_settings["create_flamegraph"]);
     add_setting_string(SYSTEM, "vocabulary_file", &system_settings["vocabulary_file"]);
     add_setting_string(SYSTEM, "trajectory_file_name", &system_settings["trajectory_file_name"]);
     add_setting_string(SYSTEM, "results_folder", &system_settings["results_folder"]);
     add_setting_bool(SYSTEM, "use_timestamps_file", &system_settings["use_timestamps_file"]);
     add_setting_f64(SYSTEM, "fps", &system_settings["fps"]);
     add_setting_bool(SYSTEM, "show_visualizer", &system_settings["show_visualizer"]);
+    add_setting_bool(SYSTEM, "enable_profiling", &system_settings["enable_profiling"]);
+    add_setting_bool(SYSTEM, "check_deadlocks", &system_settings["check_deadlocks"]);
     let log_level = system_settings["log_level"].as_str().unwrap().to_owned();
 
     // Load sensor settings

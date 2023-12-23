@@ -1,4 +1,5 @@
-use std::collections::{HashMap, HashSet};
+use std::{collections::{HashMap, HashSet}, hash::BuildHasherDefault};
+use fasthash::SeaHasher;
 use log::{info, warn, error, debug};
 use dvcore::{matrix::{DVVector3, DVVectorOfPoint3f}, config::{SETTINGS, SYSTEM}, sensor::{Sensor, FrameSensor, ImuSensor}, maplock::ReadWriteMap};
 use logging_timer::time;
@@ -10,14 +11,14 @@ use crate::{
 use super::misc::Timestamp;
 
 pub type Id = i32;
-pub type MapItemHashMap<T> = HashMap<Id, T, nohash_hasher::BuildNoHashHasher<Id>>; // Faster performance
+pub type MapItems<T> = HashMap<Id, T, BuildHasherDefault<SeaHasher>>; // faster performance with seahasher
 
 #[derive(Debug, Clone)]
 pub struct Map {
     pub id: Id,
 
-    pub keyframes: MapItemHashMap<KeyFrame>, // = mspKeyFrames
-    pub mappoints: MapItemHashMap<MapPoint<FullMapPoint>>, // = mspMapPoints
+    pub keyframes: MapItems<KeyFrame>, // = mspKeyFrames
+    pub mappoints: MapItems<MapPoint<FullMapPoint>>, // = mspMapPoints
 
     // KeyFrames
     last_kf_id: Id, // = mnMaxKFid
@@ -52,8 +53,8 @@ impl Map {
             last_kf_id: -1,
             last_mp_id: -1,
             initial_kf_id: -1,
-            keyframes: MapItemHashMap::default(),
-            mappoints: MapItemHashMap::default(),
+            keyframes: MapItems::<KeyFrame>::default(),
+            mappoints: MapItems::<MapPoint<FullMapPoint>>::default(),
         }
     }
 
@@ -409,7 +410,7 @@ impl Map {
         Some((curr_kf_pose, curr_kf_id, initial_kf_id, relevant_mappoints, curr_kf_timestamp))
     }
 
-    pub fn update_connections(mappoints: &MapItemHashMap<MapPoint<FullMapPoint>>, keyframes: &mut MapItemHashMap<KeyFrame>, initial_kf_id: &i32, main_kf_id: &i32) {
+    pub fn update_connections(mappoints: &MapItems<MapPoint<FullMapPoint>>, keyframes: &mut MapItems<KeyFrame>, initial_kf_id: &i32, main_kf_id: &i32) {
         let _span = tracy_client::span!("update_connections");
         //For all map points in keyframe check in which other keyframes are they seen
         //Increase counter for those keyframes

@@ -2,7 +2,7 @@ use std::{collections::{HashMap, HashSet}, cmp::min, backtrace::Backtrace};
 use dvcore::{matrix::{DVVector3, DVVectorOfKeyPoint, DVMatrix}, config::{ SETTINGS, SYSTEM}, sensor::{Sensor, FrameSensor}};
 use log::{error, info, debug};
 use crate::{dvmap::{map::Id, pose::DVPose},modules::{imu::*, camera::CAMERA_MODULE}, actors::tracking_backend::TrackedMapPointData,};
-use super::{mappoint::{MapPoint, FullMapPoint}, map::{Map, MapItemHashMap}, features::Features, bow::{BoW, self}, misc::Timestamp};
+use super::{mappoint::{MapPoint, FullMapPoint}, map::{Map, MapItems}, features::Features, bow::{BoW, self}, misc::Timestamp};
 
 #[derive(Debug, Clone)]
 pub struct Frame {
@@ -164,7 +164,7 @@ pub fn new(
     }
 
 
-    pub fn get_pose_in_world_frame(&self, map: &Map) -> DVPose {
+    pub fn get_pose_relative(&self, map: &Map) -> DVPose {
         let pose = self.pose.unwrap();
         let ref_kf_id = self.ref_kf_id.unwrap();
         let ref_kf = map.keyframes.get(&ref_kf_id).expect("Can't get ref kf from map");
@@ -290,7 +290,7 @@ impl KeyFrame {
         // this needs to be generic on sensor, so it can't be called if the sensor doesn't have a right camera
     }
 
-    pub fn compute_scene_median_depth(&self, mappoints: &MapItemHashMap<MapPoint<FullMapPoint>>, q: i32) -> f64 {
+    pub fn compute_scene_median_depth(&self, mappoints: &MapItems<MapPoint<FullMapPoint>>, q: i32) -> f64 {
         if self.features.num_keypoints == 0 {
             return -1.0;
         }

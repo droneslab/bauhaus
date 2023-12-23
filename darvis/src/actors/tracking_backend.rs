@@ -388,21 +388,18 @@ impl TrackingBackend {
     }
 
     fn update_trajectory_in_logs(
-        &mut self, current_frame: &Frame, //current_frame: &Frame
-        // &mut self, current_pose: DVPose, ref_kf_id: Id, mappoint_matches: HashMap<u32, (Id, bool)>, timestamp: Timestamp
+        &mut self, current_frame: &Frame,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let pose_in_world;
+        let relative_pose;
         {
             let map = self.map.read();
-            pose_in_world = current_frame.get_pose_in_world_frame(&map);
-            // debug!("Current pose  {:?}", pose_in_world);
-            // debug!("Current pose in world frame {:?}", pose_in_world);
-            self.trajectory_poses.push(pose_in_world);
+            relative_pose = current_frame.get_pose_relative(&map);
+            self.trajectory_poses.push(relative_pose);
         }
         self.actor_channels.send(
             SHUTDOWN_ACTOR, 
             Box::new(TrajectoryMsg{
-                pose: pose_in_world,
+                pose: relative_pose,
                 ref_kf_id: current_frame.ref_kf_id.unwrap(),
                 timestamp: current_frame.timestamp
             })
@@ -411,7 +408,7 @@ impl TrackingBackend {
         if SETTINGS.get::<bool>(SYSTEM, "show_visualizer") {
             // TODO (timing) ... cloned if visualizer running. maybe make global shared object?
             self.actor_channels.send(VISUALIZER, Box::new(VisTrajectoryMsg{
-                pose: pose_in_world,
+                pose: current_frame.pose.unwrap(),
                 mappoint_matches: current_frame.mappoint_matches.matches.clone(),
                 timestamp: current_frame.timestamp
             }));
@@ -476,7 +473,6 @@ impl TrackingBackend {
             // Predict state with IMU if it is initialized and it doesnt need reset
             todo!("IMU");
             self.imu.predict_state();
-            // Should return frame_with_pose
         } else {
             current_frame.pose = Some(self.imu.velocity.unwrap() * last_frame.pose.unwrap());
         }
