@@ -6,7 +6,7 @@ use std::{fs::{OpenOptions, File}, path::Path, env, time::{self, Duration}, io::
 use dvmap::map::Map;
 use fern::colors::{ColoredLevelConfig, Color};
 use glob::glob;
-use log::info;
+use log::{info, warn};
 use parking_lot::{Mutex, RwLock};
 use spin_sleep::LoopHelper;
 #[macro_use] extern crate lazy_static;
@@ -48,8 +48,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     setup_logger(&log_level)?;
 
-    let _client = tracy_client::Client::start();
-    tracy_client::set_thread_name!("main");
+    if SETTINGS.get::<bool>(SYSTEM, "enable_profiling") {
+        let _client = tracy_client::Client::start();
+        tracy_client::set_thread_name!("main");
+        warn!("Profiling set to ON.");
+    }
 
     // Launch actor system
     let first_actor_name = TRACKING_FRONTEND.to_string(); // Actor that launches the pipeline
@@ -63,26 +66,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut loop_sleep = LoopSleep::new(&img_dir);
     let timestamps = read_timestamps_file(&img_dir);
 
-    // Check deadlocks. Turn off if you aren't using this, otherwise it will slow everything down.
-    // If you turn this on and also turn all rwlocks into mutexes, this seems to more consistently
-    // find deadlock errors. You can turn all rwlocks into mutexes pretty quickly by modifying 
-    // pub type MapLock and turning read() and write() into lock()
-    // thread::spawn(move || { 
-    //     loop {
-    //         let deadlocks = parking_lot::deadlock::check_deadlock();
-    //         if !deadlocks.is_empty() {
-    //             println!("{} deadlocks detected", deadlocks.len());
-    //             for (i, threads) in deadlocks.iter().enumerate() {
-    //                 println!("Deadlock #{}", i);
-    //                 for t in threads {
-    //                     println!("Thread Id {:#?}", t.thread_id());
-    //                     println!("{:#?}", t.backtrace());
-    //                 }
-    //             }
-    //         }
-    //         thread::sleep(Duration::from_secs_f64(2.0));
-    //     }
-    // } );
+    if SETTINGS.get::<bool>(SYSTEM, "check_deadlocks") {
+        // This slows stuff down, so only enable this if you really need to.
+        // This seems to find deadlocks more consistently if you turn all rwlocks into
+        // mutexes. You can do that pretty quickly by modifying pub type MapLock in the 
+        // beginning of this file and turning usages of read() and write() into lock().
+        thread::spawn(move || { 
+            loop {
+                let deadlocks = parking_lot::deadlock::check_deadlock();
+                if !deadlocks.is_empty() {
+                    println!("{} deadlocks detected", deadlocks.len());
+                    for (i, threads) in deadlocks.iter().enumerate() {
+                        println!("Deadlock #{}", i);
+                        for t in threads {
+                            println!("Thread Id {:#?}", t.thread_id());
+                            println!("{:#?}", t.backtrace());
+                        }
+                    }
+                }
+                thread::sleep(Duration::from_secs_f64(2.0));
+            }
+        } );
+    }
 
     // Process images
     // let now = SystemTime::now();

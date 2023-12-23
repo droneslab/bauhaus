@@ -63,6 +63,8 @@ impl Actor for ShutdownActor {
                     Ok(file) => {
                         let mut f = BufWriter::new(file);
 
+                        // TODO (MVP) ... look at SaveTrajectoryEuRoC in orbslam, I think we need to apply some transform to these poses
+                        // I think they are currently saved as the relative pose between frames but we need world coords
                         for i in 0..actor.trajectory_poses.len() {
                             let string = format!("{:?} {:?}\n", actor.trajectory_times[i], actor.trajectory_poses[i]);
                             write!(f, "{}", string).expect("unable to write");

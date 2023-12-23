@@ -152,7 +152,7 @@ impl std::fmt::Debug for DVPose {
 
         write!(
             f,
-            "translation = [{:.4},{:.4},{:.4}] / rotation = [{:.4},{:.4},{:.4},{:.4}]",
+            "t[{:.4},{:.4},{:.4}] r[{:.4},{:.4},{:.4},{:.4}]",
             trans[0], trans[1], trans[2],
             rot[0], rot[1], rot[2], rot[3],
         )

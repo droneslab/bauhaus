@@ -11,15 +11,19 @@ system:
       framesensor: Mono
       imusensor: None
 
+      # FPS
       fps: 1.0
       use_timestamps_file: false # Instead of running at a fixed fps, use timestamps from the dataset
 
+      # RESULTS
       results_folder: "results"
       trajectory_file_name: "trajectory.txt"
-      create_flamegraph: false
-      show_visualizer: false
-      log_level: debug # options are [trace, debug, info, warn, error] but we don't use trace for anything
+      show_visualizer: false # Additional visualizer settings in VISUALIZER module definition below
 
+      # DEBUGGING
+      log_level: debug # options are [trace, debug, info, warn, error]
+      enable_profiling: true # Profiling with tracy. Also need to set "enable" feature for tracy-client in Cargo.toml
+      check_deadlocks: false # Spawns a new thread to check for deadlocks every 2 secs, but slows stuff down.
 
 modules:
       - 
