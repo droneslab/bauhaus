@@ -1,13 +1,10 @@
-// Testing: Fully tested, works correctly.
-
-use dvcore::config::{SETTINGS, SYSTEM};
-use dvcore::matrix::DVVectorOfPoint2f;
-use dvcore::sensor::{Sensor, FrameSensor, ImuSensor};
+use core::config::{SETTINGS, SYSTEM};
+use core::matrix::DVVectorOfPoint2f;
+use core::sensor::{Sensor, FrameSensor, ImuSensor};
 use log::debug;
-use dvcore::matrix::DVVectorOfPoint3f;
+use core::matrix::DVVectorOfPoint3f;
 use opencv::prelude::KeyPointTraitConst;
-use crate::dvmap::keyframe::Frame;
-use crate::dvmap::{keyframe::InitialFrame, pose::DVPose};
+use crate::map::{frame::Frame, pose::Pose};
 use crate::modules::camera::CAMERA_MODULE;
 
 use super::orbmatcher;
@@ -20,9 +17,9 @@ pub struct Initialization {
     pub prev_matched: DVVectorOfPoint2f,// std::vector<cv::Point2f> mvbPrevMatched;
     pub p3d: DVVectorOfPoint3f,// std::vector<cv::Point3f> mvIniP3D;
     pub ready_to_initialize: bool,
-    pub initial_frame: Option<Frame<InitialFrame>>,
-    pub last_frame: Option<Frame<InitialFrame>>,
-    pub current_frame: Option<Frame<InitialFrame>>,
+    pub initial_frame: Option<Frame>,
+    pub last_frame: Option<Frame>,
+    pub current_frame: Option<Frame>,
     sensor: Sensor,
 }
 
@@ -42,7 +39,7 @@ impl Initialization {
         }
     }
 
-    pub fn try_initialize(&mut self, current_frame: &Frame<InitialFrame>) -> Result<bool, Box<dyn std::error::Error>> {
+    pub fn try_initialize(&mut self, current_frame: &Frame) -> Result<bool, Box<dyn std::error::Error>> {
         // Only set once at beginning
         if self.initial_frame.is_none() {
             self.initial_frame = Some(current_frame.clone());
@@ -103,8 +100,6 @@ impl Initialization {
                 100
             );
             self.mp_matches = mp_matches;
-            // TODO (test): COULD WRITE A TEST HERE .. match to mono_initialization_matches.txt
-            // debug!("MonocularInitialization, search for initialization.. {:?}", self.mp_matches);
 
             // Check if there are enough correspondences
             if num_matches < 100 {
@@ -126,7 +121,7 @@ impl Initialization {
                     }
                 }
 
-                self.initial_frame.as_mut().unwrap().pose = Some(DVPose::default());
+                self.initial_frame.as_mut().unwrap().pose = Some(Pose::default());
                 self.current_frame.as_mut().unwrap().pose = Some(tcw);
 
                 return Ok(true);

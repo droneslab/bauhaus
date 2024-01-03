@@ -1,5 +1,5 @@
-use dvcore::{maplock::ReadOnlyMap, actor::{ActorChannels, Actor}};
-use crate::dvmap::map::Map;
+use core::actor::{ActorChannels, Actor};
+use crate:: MapLock;
 
 // USER-DEFINED ACTORS: add a string to name your actor here
 pub static TRACKING_FRONTEND: &str = "TRACKING_FRONTEND";
@@ -15,24 +15,23 @@ pub static MATCHER: &str = "MATCHER";
 
 // DARVIS SYSTEM ACTORS
 pub static SHUTDOWN_ACTOR: &str = "SHUTDOWN";
-pub static MAP_ACTOR: &str = "MAP_ACTOR"; 
 
 
 pub fn spawn(
-    actor_name: String, actor_channels: ActorChannels, map: Option<ReadOnlyMap<Map>>
+    actor_name: String, actor_channels: ActorChannels, map: Option<MapLock>
 ) {
     match actor_name.as_ref() {
         str if str == TRACKING_FRONTEND.to_string() => {
-            crate::actors::tracking_frontend::DarvisTrackingFront::spawn(actor_channels, ())
+            crate::actors::tracking_frontend::TrackingFrontEnd::spawn(actor_channels, ())
         },
         str if str == TRACKING_BACKEND.to_string() => {
-            crate::actors::tracking_backend::DarvisTrackingBack::spawn(actor_channels, map.expect("Tracking backend needs the map!"))
+            crate::actors::tracking_backend::TrackingBackend::spawn(actor_channels, map.expect("Tracking backend needs the map!"))
         },
         str if str == LOCAL_MAPPING.to_string() => {
-            crate::actors::local_mapping::DarvisLocalMapping::spawn(actor_channels, map.expect("Local mapping needs the map!"))
+            crate::actors::local_mapping::LocalMapping::spawn(actor_channels, map.expect("Local mapping needs the map!"))
         },
         str if str == LOOP_CLOSING.to_string() => {
-            crate::actors::loop_closing::DarvisLoopClosing::spawn(actor_channels, map.expect("Loop closing needs the map!"))
+            crate::actors::loop_closing::LoopClosing::spawn(actor_channels, map.expect("Loop closing needs the map!"))
         },
         str if str == VISUALIZER.to_string() => {
             crate::actors::visualizer::DarvisVisualizer::spawn(actor_channels, map.expect("Visualizer needs the map!"))
@@ -41,7 +40,8 @@ pub fn spawn(
             crate::actors::shutdown::ShutdownActor::spawn(actor_channels, ())
         },
         _ => {
-            dvcore::actor::NullActor::spawn(actor_channels, ())
+            core::actor::NullActor::spawn(actor_channels, ())
         },
     };
 }
+

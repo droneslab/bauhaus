@@ -1,23 +1,35 @@
 #![feature(map_many_mut)]
 #![feature(hash_extract_if)]
+#![feature(extract_if)]
 
 use std::{fs::{OpenOptions, File}, path::Path, env, time::{self, Duration}, io::{self, BufRead}, thread};
+use map::map::Map;
 use fern::colors::{ColoredLevelConfig, Color};
 use glob::glob;
-use log::info;
+use log::{info, warn};
 use spin_sleep::LoopHelper;
 #[macro_use] extern crate lazy_static;
 
-use dvcore::{*, config::*, actor::ActorChannels};
-use crate::{actors::messages::{ShutdownMsg, ImagePathMsg, ImageMsg}, registered_actors::TRACKING_FRONTEND, modules::image};
-use crate::dvmap::{bow::VOCABULARY, map::Id};
+use core::{*, config::*, actor::ActorChannels, maplock::ReadWriteMap};
+use crate::{actors::messages::{ShutdownMsg, ImageMsg}, registered_actors::TRACKING_FRONTEND, modules::image};
+use crate::map::{bow::VOCABULARY, map::Id};
 
 mod actors;
 mod registered_actors;
 mod spawn;
-mod dvmap;
+mod map;
 mod modules;
 mod tests;
+
+pub type MapLock = ReadWriteMap<Map>;
+// pub type MapLock = Arc<Mutex<Map>>; // Replace above line with this if you want to switch all locks to mutexes
+
+// To profile memory usage with tracy
+// use tracy_client::*;
+// #[global_allocator]
+// static GLOBAL: ProfiledAllocator<std::alloc::System> =
+//     ProfiledAllocator::new(std::alloc::System, 100);
+
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
@@ -35,6 +47,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     setup_logger(&log_level)?;
 
+    if SETTINGS.get::<bool>(SYSTEM, "enable_profiling") {
+        let _client = tracy_client::Client::start();
+        tracy_client::set_thread_name!("main");
+        warn!("Profiling set to ON.");
+    }
+
     // Launch actor system
     let first_actor_name = TRACKING_FRONTEND.to_string(); // Actor that launches the pipeline
     let (shutdown_flag, first_actor_tx, shutdown_tx) = spawn::launch_actor_system(actor_info, first_actor_name)?;
@@ -46,7 +64,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut loop_sleep = LoopSleep::new(&img_dir);
     let timestamps = read_timestamps_file(&img_dir);
-    
+
+    if SETTINGS.get::<bool>(SYSTEM, "check_deadlocks") {
+        // This slows stuff down, so only enable this if you really need to.
+        // This seems to find deadlocks more consistently if you turn all rwlocks into
+        // mutexes. You can do that pretty quickly by modifying pub type MapLock in the 
+        // beginning of this file and turning usages of read() and write() into lock().
+        thread::spawn(move || { 
+            loop {
+                let deadlocks = parking_lot::deadlock::check_deadlock();
+                if !deadlocks.is_empty() {
+                    println!("{} deadlocks detected", deadlocks.len());
+                    for (i, threads) in deadlocks.iter().enumerate() {
+                        println!("Deadlock #{}", i);
+                        for t in threads {
+                            println!("Thread Id {:#?}", t.thread_id());
+                            println!("{:#?}", t.backtrace());
+                        }
+                    }
+                }
+                thread::sleep(Duration::from_secs_f64(2.0));
+            }
+        } );
+    }
+
     // Process images
     // let now = SystemTime::now();
     let mut i = 0;
@@ -56,7 +97,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let image = image::read_image_file(&path.to_string());
 
-        // For evaluation, use timestamps file to run loop and send timestamp from file instead of real time
         first_actor_tx.send(Box::new(
             ImageMsg{
                 image,
@@ -66,6 +106,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ))?;
 
         i += 1;
+        // TODO (timestamps) ... if use_timestamps_file is true, we should sleep for the difference between now
+        // and the next timestamp. Right now we are just sleeping so we keep at the target frame rate.
         loop_sleep.sleep();
     }
     shutdown_tx.send(Box::new(ShutdownMsg{}))?;
@@ -145,9 +187,6 @@ impl LoopSleep {
                     return;
                 }
                 let next_timestamp = timestamps[(*current_index + 1) as usize];
-                // println!("timestamps {:?}", timestamps);
-                // println!("next timestamp {}", next_timestamp);
-                // println!("now {:?}", now);
                 thread::sleep(Duration::from_secs_f64(next_timestamp - now.elapsed().as_secs_f64()));
             },
             LoopType::Fps(ref mut loop_helper) => {
@@ -175,9 +214,7 @@ fn setup_logger(level: &str) -> Result<(), fern::InitError> {
         "error" => log::LevelFilter::Error,
         _ => log::LevelFilter::Trace,
     };
-    // Two loggers in chain - one for terminal output (colored, easier to read)
-    // and another for file output (not colored, info on each line deliminated by |
-    // for easier parsing in python scripts)
+    // Two loggers in chain - one for terminal output (colored) and another for file output (not colored)
     let start_time = chrono::Local::now();
     fern::Dispatch::new()
     .level(log_level)
@@ -185,14 +222,15 @@ fn setup_logger(level: &str) -> Result<(), fern::InitError> {
     fern::Dispatch::new()
             .format(move |out, message, record| {
                 out.finish(format_args!(
-                    "{color_line}[{time}][{target}][{level}{color_line}] {message}\x1B[0m",
+                    "{color_line}[{time} {target}:{line_num} {level}{color_line}] {message}\x1B[0m",
                     color_line = format_args!(
                         "\x1B[{}m",
                         colors.get_color(&record.level()).to_fg_str()
                     ),
                     level = colors.color(record.level()),
                     time = (chrono::Local::now() - start_time).num_milliseconds() as f64 / 1000.0,
-                    target = record.target(),
+                    target = record.file().unwrap_or("unknown"),
+                    line_num = record.line().unwrap_or(0),
                     message = message
                 ))
             })
@@ -202,9 +240,10 @@ fn setup_logger(level: &str) -> Result<(), fern::InitError> {
     fern::Dispatch::new()
             .format(move |out, message, record| {
                 out.finish(format_args!(
-                    "{time}|{target}|{level}|{message}",
+                    "[{time} {target}:{line_num} {level}] {message}",
                     time = (chrono::Local::now() - start_time).num_milliseconds() as f64  / 1000.0,
-                    target = record.target(),
+                    target = record.file().unwrap_or("unknown"),
+                    line_num = record.line().unwrap_or(0),
                     level = record.level(),
                     message = message
                 ))

@@ -2181,11 +2181,10 @@ namespace orb_slam3 {
         }
     }
 
-
 // Bit set count operation from
 // http://graphics.stanford.edu/~seander/bithacks.html#CountBitsSetParallel
-    int ORBmatcher::DescriptorDistance(const cv::Mat &a, const cv::Mat &b)
-    {
+
+    int DescriptorDistance(const cv::Mat &a, const cv::Mat &b) {
         const int *pa = a.ptr<int32_t>();
         const int *pb = b.ptr<int32_t>();
 
@@ -2200,6 +2199,15 @@ namespace orb_slam3 {
         }
 
         return dist;
+
+    }
+
+    int descriptor_distance(const orb_slam3::WrapBindCVRawPtr &a, const orb_slam3::WrapBindCVRawPtr &b)
+    {
+        // rust entrypoint
+        const cv::Mat* a_mat = raw_ptr_as_mat(a.raw_ptr);
+        const cv::Mat* b_mat = raw_ptr_as_mat(b.raw_ptr);
+        return DescriptorDistance(*a_mat, *b_mat);
     }
 
 } //namespace ORB_SLAM

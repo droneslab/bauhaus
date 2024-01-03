@@ -1,11 +1,11 @@
-use std::collections::{HashSet, HashMap};
+use std::collections::HashSet;
 
 use opencv::prelude::Mat;
-use dvcore::{
+use core::{
     matrix::{ DVVectorOfKeyPoint, DVMatrix}, actor::ActorMessage,
 };
 use crate::{
-    dvmap::{pose::DVPose, map::Id, misc::Timestamp},
+    map::{pose::Pose, map::Id, misc::Timestamp, frame::Frame},
     actors::tracking_backend::TrackingState
 };
 
@@ -39,7 +39,7 @@ pub struct FeatureMsg {
 }
 impl ActorMessage for FeatureMsg {}
 pub struct MapInitializedMsg { 
-    pub curr_kf_pose: DVPose, 
+    pub curr_kf_pose: Pose, 
     pub curr_kf_id: Id, 
     pub ini_kf_id: Id, 
     pub local_mappoints: HashSet<Id>, 
@@ -47,10 +47,10 @@ pub struct MapInitializedMsg {
 }
 impl ActorMessage for MapInitializedMsg {}
 
-pub struct KeyFrameIdMsg { 
+pub struct InitKeyFrameMsg { 
     pub kf_id: Id 
 }
-impl ActorMessage for KeyFrameIdMsg {}
+impl ActorMessage for InitKeyFrameMsg {}
 
 pub struct LastKeyFrameUpdatedMsg {}
 impl ActorMessage for LastKeyFrameUpdatedMsg {}
@@ -65,6 +65,17 @@ pub struct IMUInitializedMsg {
 }
 impl ActorMessage for IMUInitializedMsg {}
 
+pub struct NewKeyFrameMsg {
+    pub keyframe: Frame,
+}
+impl ActorMessage for NewKeyFrameMsg {}
+
+// * LOOP CLOSING */
+pub struct KeyFrameIdMsg { 
+    pub kf_id: Id 
+}
+impl ActorMessage for KeyFrameIdMsg {}
+
 //* VISUALIZER */
 pub struct VisFeaturesMsg {
     pub keypoints: DVVectorOfKeyPoint,
@@ -78,20 +89,20 @@ pub struct VisFeatureMatchMsg {
 }
 impl ActorMessage for VisFeatureMatchMsg {}
 pub struct VisTrajectoryMsg { 
-    pub pose: DVPose, 
-    pub mappoint_matches: HashMap<u32, (i32, bool)>, 
+    pub pose: Pose, 
+    pub mappoint_matches: Vec<Option<(i32, bool)>>, 
     pub timestamp: Timestamp
 }
 impl ActorMessage for VisTrajectoryMsg {}
 pub struct VisUpdateMsg {
-    pub pose: DVPose,
+    pub pose: Pose,
     pub timestamp: Timestamp,
 }
 impl ActorMessage for VisUpdateMsg {}
 
 //* Shutdown Actor *//
 pub struct TrajectoryMsg{ 
-    pub pose: DVPose, 
+    pub pose: Pose, 
     pub ref_kf_id: Id, 
     pub timestamp: Timestamp
 }

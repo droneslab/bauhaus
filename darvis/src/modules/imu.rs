@@ -1,11 +1,11 @@
-use dvcore::{maplock::ReadOnlyMap, sensor::{FrameSensor, ImuSensor, Sensor}};
+use core::sensor::{FrameSensor, ImuSensor, Sensor};
 use serde::{Deserialize, Serialize};
 
-use crate::dvmap::{pose::DVPose, map::Map};
+use crate::map::pose::Pose;
 
 #[derive(Debug, Clone)]
 pub struct ImuModule {
-    pub velocity: Option<DVPose>,
+    pub velocity: Option<Pose>,
     pub is_initialized: bool, // isImuInitialized(), set true by local mapper
     pub imu_ba2: bool, // mbIMU_BA2
     _last_bias: Option<IMUBias>,
@@ -13,11 +13,11 @@ pub struct ImuModule {
 }
 
 impl ImuModule {
-    pub fn new(velocity: Option<DVPose>, last_bias: Option<IMUBias>, sensor: Sensor, is_initialized: bool, imu_ba2: bool) -> Self {
+    pub fn new(velocity: Option<Pose>, last_bias: Option<IMUBias>, sensor: Sensor, is_initialized: bool, imu_ba2: bool) -> Self {
         Self {
             velocity,
             _last_bias: last_bias,
-            sensor: sensor,
+            sensor,
             is_initialized,
             imu_ba2
         }

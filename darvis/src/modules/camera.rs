@@ -1,7 +1,7 @@
 use opencv::{prelude::{Mat, MatTrait, MatTraitConst, KeyPointTraitConst}, core::{Scalar, CV_64F, KeyPoint}};
-use dvcore::{config::*, matrix::{DVMatrix, DVVectorOfPoint3f, DVVector3, DVMatrix3}, sensor::Sensor};
+use core::{config::*, matrix::{DVMatrix, DVVectorOfPoint3f, DVVector3, DVMatrix3}, sensor::Sensor};
 use crate::{
-    dvmap::{pose::DVPose, keyframe::{Frame, FullKeyFrame}},
+    map::{pose::Pose, keyframe::KeyFrame},
     matrix::DVVectorOfKeyPoint, registered_actors::CAMERA
 };
 
@@ -21,7 +21,13 @@ pub enum CameraType {
 pub struct Camera {
     pub camera_type: CameraType,
 
+    // Three diff ways of representing K...
     pub k_matrix: DVMatrix,
+    k_matrix_nalgebra: nalgebra::Matrix3<f64>,
+    pub fx: f64,
+    pub fy: f64,
+    pub cx: f64,
+    pub cy: f64,
 
     // Constants
     pub stereo_baseline_times_fx: f64, // mbf
@@ -41,6 +47,7 @@ impl Camera {
         let cx= SETTINGS.get::<f64>(CAMERA, "cx");
         let cy= SETTINGS.get::<f64>(CAMERA, "cy");
 
+        // K as opencv matrix
         let mut k = Mat::new_rows_cols_with_default(3,3, CV_64F, Scalar::all(0.0))?;
         *k.at_2d_mut::<f64>(0, 0)? = fx;
         *k.at_2d_mut::<f64>(0, 2)? = cx;
@@ -48,7 +55,14 @@ impl Camera {
         *k.at_2d_mut::<f64>(1, 2)? = cy;
         *k.at_2d_mut::<f64>(2, 2)? = 1.0;
 
-        //TODO... check if we need to correct distortion from the images
+        // K as nalgebra matrix
+        // Could be an into() from opencv version if we made a KMatrix type but not sure if it's needed
+        let k_matrix_nalgebra = nalgebra::Matrix3::new(
+            fx, 0.0, cx,
+            0.0, fy, cy,
+            0.0, 0.0, 1.0
+        );
+
         let mut dist_coef = None;
         let sensor= SETTINGS.get::<Sensor>(SYSTEM, "sensor");
         let k1= SETTINGS.get::<f64>(CAMERA, "k1") as f32;
@@ -71,30 +85,29 @@ impl Camera {
         Ok(Camera {
             camera_type,
             k_matrix: DVMatrix::new(k),
+            k_matrix_nalgebra,
             stereo_baseline_times_fx,
             stereo_baseline,
-            th_depth, dist_coef,
+            th_depth,
+            dist_coef,
+            fx,
+            fy,
+            cx,
+            cy
         })
     }
-
-    pub fn get_fx(&self) -> f64 { *self.k_matrix.mat().at_2d::<f64>(0,0).unwrap() }
-    pub fn get_fy(&self) -> f64 { *self.k_matrix.mat().at_2d::<f64>(1,1).unwrap() }
-    pub fn get_cx(&self) -> f64 { *self.k_matrix.mat().at_2d::<f64>(0,2).unwrap() }
-    pub fn get_cy(&self) -> f64 { *self.k_matrix.mat().at_2d::<f64>(1,2).unwrap() }
-    pub fn get_inv_fx(&self) -> f64 { 1.0 / self.get_fx() }
-    pub fn get_inv_fy(&self) -> f64 { 1.0 / self.get_fy() }
 
     pub fn reconstruct_with_two_views(
         & self, 
         v_keys1: &DVVectorOfKeyPoint, 
         v_keys2: &DVVectorOfKeyPoint,
         matches: &Vec<i32>,
-    ) -> Option<(DVPose, DVVectorOfPoint3f, Vec<bool>)> {
+    ) -> Option<(Pose, DVVectorOfPoint3f, Vec<bool>)> {
         let mut tvr = dvos3binding::ffi::new_two_view_reconstruction(
-            self.get_fx() as f32,
-            self.get_cx() as f32,
-            self.get_fy() as f32,
-            self.get_cy() as f32,
+            self.fx as f32,
+            self.cx as f32,
+            self.fy as f32,
+            self.cy as f32,
             1.0, 200
         );
 
@@ -105,7 +118,7 @@ impl Camera {
         let mut v_p3d: dvos3binding::ffi::WrapBindCVVectorOfPoint3f = DVVectorOfPoint3f::empty().into();
         let mut vb_triangulated  = Vec::new();
 
-        // TODO (CLONE) ... matrix
+        // TODO (timing) ... cloning vkeys1 and 2
         let reconstructed = tvr.pin_mut().reconstruct(
             & v_keys1.clone().into(),
             & v_keys2.clone().into(),
@@ -127,13 +140,13 @@ impl Camera {
         // mvParameters in orbslam are:
         // 0 = fx, 1 = fy, 2 = cx, 3 = cy
         DVVector3::new_with(
-            (kp.x as f64 - self.get_cx()) / self.get_fx(),
-            (kp.y as f64 - self.get_cy()) / self.get_fy(),
+            (kp.x as f64 - self.cx) / self.fx,
+            (kp.y as f64 - self.cy) / self.fy,
             1.0
         )
     }
 
-    pub fn unproject_stereo(&self, _kf: &Frame<FullKeyFrame>, _idx: usize) -> Option<DVVector3<f64>> {
+    pub fn unproject_stereo(&self, _kf: &KeyFrame, _idx: usize) -> Option<DVVector3<f64>> {
         todo!("TODO (Stereo)");
         // bool KeyFrame::UnprojectStereo(int i, Eigen::Vector3f &x3D)
         // {
@@ -158,14 +171,15 @@ impl Camera {
     pub fn project(&self, pos: DVVector3<f64>) -> (f64, f64) {
         // Eigen::Vector2f Pinhole::project(const Eigen::Vector3f &v3D)
         (
-            self.get_fx() * pos[0] / pos[2] + self.get_cx(),
-            self.get_fy() * pos[1] / pos[2] + self.get_cy()
+            self.fx * pos[0] / pos[2] + self.cx,
+            self.fy * pos[1] / pos[2] + self.cy
         )
     }
 
     pub fn epipolar_constrain(&self, kp1: &KeyPoint, kp2: &KeyPoint, r12: &DVMatrix3<f64>, t12: &DVVector3<f64>, unc: f32) -> bool {
         // bool Pinhole::epipolarConstrain(GeometricCamera* pCamera2,  const cv::KeyPoint &kp1, const cv::KeyPoint &kp2, const Eigen::Matrix3f& R12, const Eigen::Vector3f& t12, const float sigmaLevel, const float unc) {
         //Compute Fundamental Matrix
+        let _span = tracy_client::span!("epipolar_constrain");
         let rot = **r12;
         let trans = *t12;
         let t12x = nalgebra::Matrix3::new(
@@ -174,8 +188,8 @@ impl Camera {
             -trans[1], trans[0], 0.0
         );
 
-        let k1 = self.k_matrix_convert();
-        let k2 = self.k_matrix_convert(); // TODO (Stereo) this should be whatever camera kf2 uses, the K1 above should be whatevere camera kf1 uses
+        let k1 = self.k_matrix_nalgebra;
+        let k2 = k1.clone(); // TODO (Stereo) this should be whatever camera kf2 uses, the K1 above should be whatevere camera kf1 uses
         let f12 = k1.transpose().try_inverse().unwrap() * t12x * rot * k2.try_inverse().unwrap();
 
         // Epipolar line in second image l = x1'F12 = [a b c]
@@ -197,17 +211,4 @@ impl Camera {
         dsqr < 3.84 * (unc as f64)
     }
 
-    fn k_matrix_convert(&self) -> nalgebra::Matrix3<f64> {
-        // current k_matrix representation is opencv matrix, sometimes we need that or other times we need an nalgebra matrix
-        // Could be an into() if we made a KMatrix type but not sure if it's needed
-        let fx= SETTINGS.get::<f64>(CAMERA, "fx");
-        let fy= SETTINGS.get::<f64>(CAMERA, "fy");
-        let cx= SETTINGS.get::<f64>(CAMERA, "cx");
-        let cy= SETTINGS.get::<f64>(CAMERA, "cy");
-        nalgebra::Matrix3::new(
-            fx, 0.0, cx,
-            0.0, fy, cy,
-            0.0, 0.0, 1.0
-        )
-    }
 }

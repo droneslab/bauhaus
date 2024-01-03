@@ -1,22 +1,16 @@
 use std::collections::{HashMap, HashSet};
 use std::f64::INFINITY;
-use std::sync::RwLockReadGuard;
-use dvcore::config::SETTINGS;
-use dvcore::matrix::{DVVectorOfPoint2f, DVVector3};
-use dvcore::sensor::{Sensor, FrameSensor};
-use log::warn;
-use logging_timer::time;
+use core::config::SETTINGS;
+use core::matrix::{DVVectorOfPoint2f, DVVector3};
+use core::sensor::{Sensor, FrameSensor};
+use log::{warn, debug};
 use opencv::core::KeyPoint;
 use opencv::prelude::*;
-use crate::actors::map_actor::MapWriteMsg;
+use crate::MapLock;
 use crate::actors::tracking_backend::TrackedMapPointData;
-use crate::dvmap::keyframe::{Frame, FullKeyFrame};
 use crate::modules::optimizer::LEVEL_SIGMA2;
 use crate::registered_actors::{MATCHER, FEATURE_DETECTION, CAMERA};
-use crate::{
-    dvmap::{keyframe::InitialFrame, map::Id, map::Map},
-    maplock::ReadOnlyMap,
-};
+use crate::map::{map::Id, keyframe::KeyFrame, frame::Frame};
 
 use super::camera::CAMERA_MODULE;
 use super::optimizer::INV_LEVEL_SIGMA2;
@@ -26,9 +20,7 @@ const  TH_LOW: i32 = 50;
 const  HISTO_LENGTH: i32 = 30;
 
 lazy_static! {
-    // Note: ORBSLAM3 duplicates this var at every frame and keyframe,
-    // but I'm pretty sure that it's set once per-system when the ORBExtractor
-    // is created and only ever used by Optimizer.
+    // Note: ORBSLAM3 duplicates this var at every frame and keyframe.
     // In general, I'd like to remove these kinds of variables away from the
     // frame/keyframe/mappoint implementation and into the object that actually
     // directly uses it.
@@ -45,8 +37,8 @@ lazy_static! {
 }
 
 pub fn search_for_initialization(
-    f1: &Frame<InitialFrame>,
-    f2: &Frame<InitialFrame>,
+    f1: &Frame,
+    f2: &Frame,
     vb_prev_matched: &mut DVVectorOfPoint2f,
     window_size: i32,
 ) -> (i32, Vec<i32>) {
@@ -68,12 +60,11 @@ pub fn search_for_initialization(
         }
 
         // Pranay : could be a bug ?? get_features_in_area
-        let v_indices2 = f2.get_features_in_area(
+        let v_indices2 = f2.features.get_features_in_area(
             &(vb_prev_matched.get(i1).unwrap().x as f64),
             &(vb_prev_matched.get(i1).unwrap().y as f64),
             window_size as f64,
-            level1,
-            level1,
+            Some((level1, level1))
         );
 
         if v_indices2.is_empty() {
@@ -84,7 +75,7 @@ pub fn search_for_initialization(
         let (mut best_dist, mut best_dist2, mut best_idx2) : (i32, i32, i32) = (std::i32::MAX, std::i32::MAX, -1);
         for i2 in v_indices2 {
             let d2 = f2.features.descriptors.row(i2).unwrap();
-            let dist = descriptor_distance(&d1, &d2);
+            let dist = descriptor_distance(&d1,&d2);
             if v_matched_distance[i2 as usize] <= dist {
                 continue;
             }
@@ -142,11 +133,10 @@ pub fn search_for_initialization(
     (n_matches, vn_matches12)
 }
 
-#[time("TrackingBackend::{}")]
 pub fn search_by_projection(
-    frame: &mut Frame<InitialFrame>, mappoints: &mut HashSet<Id>, th: i32, ratio: f64,
+    frame: &mut Frame, mappoints: &mut HashSet<Id>, th: i32, ratio: f64,
     track_in_view: &HashMap<Id, TrackedMapPointData>, track_in_view_right: &HashMap<Id, TrackedMapPointData>, 
-    map: &ReadOnlyMap<Map>, sensor: Sensor
+    map: &MapLock, sensor: Sensor
 ) -> Result<i32, Box<dyn std::error::Error>> {
     // int SearchByProjection(Frame &F, const std::vector<MapPoint*> &vpMapPoints, const float th=3, const bool bFarPoints = false, const float thFarPoints = 50.0f);
     // Search matches between Frame keypoints and projected MapPoints. Returns number of matches
@@ -175,30 +165,28 @@ pub fn search_by_projection(
             let mut r = radius_by_viewing_cos(mp_data.view_cos);
             if th != 1 { r *= th as f64; }
 
-            let indices = frame.get_features_in_area(
+            let indices = frame.features.get_features_in_area(
                 &mp_data.proj_x,
                 &mp_data.proj_y,
                 r * (SCALE_FACTORS[mp_data.predicted_level as usize] as f64),
-                mp_data.predicted_level-1,
-                mp_data.predicted_level
+                Some((mp_data.predicted_level-1, mp_data.predicted_level))
             );
 
             if !indices.is_empty() {
-                let best_descriptor = mp.get_best_descriptor();
-
                 let mut best_dist = (256, 256);
                 let mut best_level = (-1, -1);
                 let mut best_idx: i32 = -1;
 
                 // Get best and second matches with near keypoints
                 for idx in indices {
-                    if let Some((id, _)) = frame.mappoint_matches.get(&idx) {
-                        if let Some(mp) = map.mappoints.get(id) {
+                    if frame.mappoint_matches.has(&idx) {
+                        let id = frame.mappoint_matches.get(&idx);
+                        if let Some(mp) = map.mappoints.get(&id) {
                             if mp.get_observations().len() > 0 {
                                 continue;
                             }
                         } else {
-                            frame.delete_mappoint_match(idx);
+                            frame.mappoint_matches.delete_at_indices((idx as i32, -1)); // TODO (STEREO)
                         }
                     }
 
@@ -216,7 +204,7 @@ pub fn search_by_projection(
                     }
 
                     let descriptors = frame.features.descriptors.row(idx).unwrap();
-                    let dist = descriptor_distance(&best_descriptor, &descriptors);
+                    let dist = descriptor_distance(&mp.best_descriptor, &descriptors);
 
                     if dist < best_dist.0 {
                         best_dist.1 = best_dist.0;
@@ -236,7 +224,7 @@ pub fn search_by_projection(
                         continue;
                     }
                     if best_level.0 != best_level.1 || (best_dist.0 as f64) <= (ratio * best_dist.1 as f64) {
-                        frame.add_mappoint(best_idx as u32, *mp_id, false);
+                        frame.mappoint_matches.add(best_idx as u32, *mp_id, false);
 
                         match sensor.frame() {
                             FrameSensor::Stereo => {
@@ -336,15 +324,14 @@ pub fn search_by_projection(
 // Project MapPoints tracked in last frame into the current frame and search matches.
 // Used to track from previous frame (Tracking)
 
-#[time("TrackingBackend::{}")]
 pub fn search_by_projection_with_threshold (
-    current_frame: &mut Frame<InitialFrame>, last_frame: &mut Frame<InitialFrame>, th: i32,
+    current_frame: &mut Frame, last_frame: &mut Frame, th: i32,
     should_check_orientation: bool,
-    map: &ReadOnlyMap<Map>, sensor: Sensor
+    map: &MapLock, sensor: Sensor
 ) -> Result<i32, Box<dyn std::error::Error>> {
     // int ORBmatcher::SearchByProjection(Frame &CurrentFrame, const Frame &LastFrame, const float th, const bool bMono)
 
-    // TODO STEREO...search_by_projection_with_threshold...
+    // TODO (Stereo)...search_by_projection_with_threshold...
     // This function should work for stereo as well as RGBD as long as get_all_keypoints() returns
     // a concatenated list of left keypoints and right keypoints (there is a to do for this in features.rs). BUT
     // double check that the descriptors works correctly. Instead of splitting descriptors into discriptors_left and right,
@@ -378,14 +365,15 @@ pub fn search_by_projection_with_threshold (
     {
         let map = map.read();
         for idx1 in 0..last_frame.features.get_all_keypoints().len() {
-            if last_frame.mappoint_matches.contains_key(&(idx1 as u32)) && !last_frame.is_mp_outlier(&(idx1 as u32)) {
+            if last_frame.mappoint_matches.has(&(idx1 as u32)) {
+                let mp_id = last_frame.mappoint_matches.get(&(idx1 as u32));
+                if last_frame.mappoint_matches.is_outlier(&(idx1 as u32)) { continue; }
                 // Project
-                let mp_id = &last_frame.mappoint_matches.get(&(idx1 as u32)).unwrap().0;
-                let mappoint = match map.mappoints.get(mp_id) {
+                let mappoint = match map.mappoints.get(&mp_id) {
                     Some(mp) => mp,
                     None => {
                         // Mappoint has been deleted but not updated in last_frame yet
-                        last_frame.mappoint_matches.remove(&(idx1 as u32));
+                        last_frame.mappoint_matches.delete_at_indices((idx1, -1)); // TODO (STEREO)
                         continue;
                     }
                 };
@@ -397,9 +385,9 @@ pub fn search_by_projection_with_threshold (
                 let invzc = 1.0 / x_3d_c[2];
                 if invzc < 0.0 { continue; }
 
-                let u = CAMERA_MODULE.get_fx() * xc * invzc + CAMERA_MODULE.get_cx();
-                let v = CAMERA_MODULE.get_fy() * yc * invzc + CAMERA_MODULE.get_cy();
-                if !current_frame.features.image_bounds.check_bounds(u, v) {
+                let u = CAMERA_MODULE.fx * xc * invzc + CAMERA_MODULE.cx;
+                let v = CAMERA_MODULE.fy * yc * invzc + CAMERA_MODULE.cy;
+                if !current_frame.features.check_bounds(u, v) {
                     continue;
                 }
 
@@ -410,28 +398,30 @@ pub fn search_by_projection_with_threshold (
 
                 let indices_2 =
                     if forward {
-                        current_frame.get_features_in_area(&u,&v, radius, last_octave, -1)
+                        current_frame.features.get_features_in_area(&u,&v, radius, Some((last_octave, -1)))
                     } else if backward {
-                        current_frame.get_features_in_area(&u,&v, radius, 0, last_octave)
+                        current_frame.features.get_features_in_area(&u,&v, radius, Some((0, last_octave)))
                     } else {
-                        current_frame.get_features_in_area(&u,&v, radius, last_octave-1, last_octave+1)
+                        current_frame.features.get_features_in_area(&u,&v, radius, Some((last_octave-1, last_octave+1)))
                     };
                 if indices_2.is_empty() {
                     continue;
                 }
 
-                let best_descriptor = mappoint.get_best_descriptor();
                 let mut best_dist = 256;
                 let mut best_idx: i32 = -1;
 
                 for idx2 in indices_2 {
-                    if let Some((id, _)) = current_frame.mappoint_matches.get(&idx2) {
-                        if map.mappoints.get(id).unwrap().get_observations().len() > 0 {
-                            continue;
+                    if current_frame.mappoint_matches.has(&idx2) {
+                        let id = current_frame.mappoint_matches.get(&idx2);
+                        if let Some(mappoint) = map.mappoints.get(&id) {
+                            if mappoint.get_observations().len() > 0 { 
+                                continue;
+                            }
                         }
                     }
 
-                    // TODO Stereo: Unfinished code, not sure what this is doing in search_by_projection_with_threshold
+                    // TODO (Stereo): Unfinished code, not sure what this is doing in search_by_projection_with_threshold
                     // Nleft == -1 if the left camera has no extracted keypoints which would happen in the
                     // non-stereo case. But mvuRight is > 0 ONLY in the stereo case! So is this ever true?
                     // if(CurrentFrame.Nleft == -1 && CurrentFrame.mvuRight[i2]>0)
@@ -443,7 +433,8 @@ pub fn search_by_projection_with_threshold (
                     // }
 
                     let descriptor = current_frame.features.descriptors.row(idx2)?;
-                    let dist = descriptor_distance(best_descriptor, &descriptor);
+                    let dist = descriptor_distance(&mappoint.best_descriptor, &descriptor);
+
                     if dist < best_dist {
                         best_dist = dist;
                         best_idx = idx2 as i32;
@@ -451,7 +442,7 @@ pub fn search_by_projection_with_threshold (
                 }
 
                 if best_dist <= TH_HIGH {
-                    current_frame.add_mappoint(best_idx as u32, *mp_id, false);
+                    current_frame.mappoint_matches.add(best_idx as u32, mp_id, false);
 
                     if should_check_orientation {
                         check_orientation_1(
@@ -477,10 +468,10 @@ pub fn search_by_projection_with_threshold (
 // TODO (mvp): other searchbyprojection functions we will have to implement later:
 
 pub fn _search_by_projection_reloc (
-    _current_frame: &mut Frame<InitialFrame>, _keyframe: &Frame<FullKeyFrame>,
+    _current_frame: &mut Frame, _keyframe: &KeyFrame,
     _th: i32, _should_check_orientation: bool, _ratio: f64,
     _track_in_view: &HashMap<Id, TrackedMapPointData>, _track_in_view_right: &HashMap<Id, TrackedMapPointData>,
-    _map: &ReadOnlyMap<Map>, _sensor: Sensor
+    _map: &MapLock, _sensor: Sensor
 ) -> Result<i32, Box<dyn std::error::Error>> {
     // int SearchByProjection(Frame &CurrentFrame, KeyFrame* pKF, const std::set<MapPoint*> &sAlreadyFound, const float th, const int ORBdist);
     // Project MapPoints seen in KeyFrame into the Frame and search matches.
@@ -496,13 +487,12 @@ pub fn _search_by_projection_reloc (
 // Used in Place Recognition (Loop Closing and Merging)
 // int SearchByProjection(KeyFrame* pKF, Sophus::Sim3<float> &Scw, const std::vector<MapPoint*> &vpPoints, const std::vector<KeyFrame*> &vpPointsKFs, std::vector<MapPoint*> &vpMatched, std::vector<KeyFrame*> &vpMatchedKF, int th, float ratioHamming=1.0);
 
-#[time("TrackingBackend::{}")]
 pub fn search_by_bow_f(
-    kf: &Frame<FullKeyFrame>, frame: &mut Frame<InitialFrame>,
+    kf: &KeyFrame, frame: &mut Frame,
     should_check_orientation: bool, ratio: f64
 ) -> Result<u32, Box<dyn std::error::Error>> {
     // int SearchByBoW(KeyFrame *pKF, Frame &F, std::vector<MapPoint*> &vpMapPointMatches);
-    frame.clear_mappoints();
+    frame.mappoint_matches.clear();
     let mut matches = HashMap::<u32, Id>::new();
 
     let factor = 1.0 / (HISTO_LENGTH as f32);
@@ -521,8 +511,8 @@ pub fn search_by_bow_f(
         }
     }
 
-    let kf_featvec = kf.bow.as_ref().unwrap().get_feat_vec_nodes();
-    let frame_featvec = frame.bow.as_ref().unwrap().get_feat_vec_nodes();
+    let kf_featvec = kf.bow.as_ref().unwrap().feat_vec.get_all_nodes();
+    let frame_featvec = frame.bow.as_ref().unwrap().feat_vec.get_all_nodes();
     let mut i = 0;
     let mut j = 0;
 
@@ -530,13 +520,15 @@ pub fn search_by_bow_f(
         let kf_node_id = kf_featvec[i];
         let frame_node_id = frame_featvec[j];
         if kf_node_id == frame_node_id {
-            let kf_indices = kf.bow.as_ref().unwrap().get_feat_from_node(kf_node_id);
+            let kf_indices_size = kf.bow.as_ref().unwrap().feat_vec.vec_size(kf_node_id);
 
-            for kf_index in kf_indices {
-                if !kf.mappoint_matches.contains_key(&kf_index) {
+            for index1 in 0..kf_indices_size {
+                let kf_index = kf.bow.as_ref().unwrap().feat_vec.vec_get(kf_node_id, index1);
+
+                if !kf.has_mp_match(&kf_index) {
                     continue
                 }
-                let mp_id = &kf.get_mappoint(&kf_index);
+                let mp_id = &kf.get_mp_match(&kf_index);
 
                 let mut best_dist_left = (256, 256);
                 let mut best_index_left = -1;
@@ -544,25 +536,28 @@ pub fn search_by_bow_f(
                 let mut best_index_right = -1;
                 let descriptors_kf = kf.features.descriptors.row(kf_index)?;
 
-                let frame_indices = frame.bow.as_ref().unwrap().get_feat_from_node(frame_node_id);
+                let frame_indices_size = frame.bow.as_ref().unwrap().feat_vec.vec_size(frame_node_id);
 
-                for frame_index in &frame_indices {
+                for index2 in 0..frame_indices_size {
+                    let frame_index = frame.bow.as_ref().unwrap().feat_vec.vec_get(frame_node_id, index2);
+
                     if matches.contains_key(&frame_index) {
                         continue;
                     }
 
-                    let descriptors_f = frame.features.descriptors.row(*frame_index)?;
+                    let descriptors_f = frame.features.descriptors.row(frame_index)?;
 
                     let dist = descriptor_distance(&descriptors_kf, &descriptors_f);
-                    let no_left = frame.features.has_left_kp().map_or(true, |n_left| *frame_index < n_left);
+
+                    let no_left = frame.features.has_left_kp().map_or(true, |n_left| frame_index < n_left);
                     // TODO (stereo): I'm not sure if below works in the stereo case
                     update_bests(
-                        dist, *frame_index as i32,
+                        dist, frame_index as i32,
                         &mut best_dist_left, &mut best_index_left,
                         no_left
                     );
                     update_bests(
-                        dist, *frame_index as i32,
+                        dist, frame_index as i32,
                         &mut best_dist_right, &mut best_index_right,
                         no_left
                     );
@@ -606,14 +601,14 @@ pub fn search_by_bow_f(
     };
 
     for (index, mp_id) in &matches {
-        frame.add_mappoint(*index, *mp_id, false);
+        frame.mappoint_matches.add(*index, *mp_id, false);
     }
 
     return Ok(matches.len() as u32);
 }
 
 pub fn search_by_bow_kf(
-    kf_1 : &Frame<FullKeyFrame>, kf_2 : &Frame<FullKeyFrame>, should_check_orientation: bool, 
+    kf_1 : &KeyFrame, kf_2 : &KeyFrame, should_check_orientation: bool, 
     ratio: f64
 ) -> Result<HashMap<u32, Id>, Box<dyn std::error::Error>> {
     // int SearchByBoW(KeyFrame *pKF1, KeyFrame* pKF2, std::vector<MapPoint*> &vpMatches12);
@@ -622,39 +617,43 @@ pub fn search_by_bow_kf(
     let factor = 1.0 / (HISTO_LENGTH as f32);
     let mut rot_hist = construct_rotation_histogram();
 
-    for node_id_kf_1 in kf_1.bow.as_ref().unwrap().get_feat_vec_nodes() {
-        for node_id_kf_2 in kf_2.bow.as_ref().unwrap().get_feat_vec_nodes() {
+    for node_id_kf_1 in kf_1.bow.as_ref().unwrap().feat_vec.get_all_nodes() {
+        for node_id_kf_2 in kf_2.bow.as_ref().unwrap().feat_vec.get_all_nodes() {
             if node_id_kf_1 == node_id_kf_2 {
-                let indices_kf_1 = kf_1.bow.as_ref().unwrap().get_feat_from_node(node_id_kf_1);
-                let indices_kf_2 = kf_2.bow.as_ref().unwrap().get_feat_from_node(node_id_kf_2);
+                let indices_kf_1_size = kf_1.bow.as_ref().unwrap().feat_vec.vec_size(node_id_kf_1);
+                let indices_kf_2_size = kf_2.bow.as_ref().unwrap().feat_vec.vec_size(node_id_kf_2);
 
-                for index_kf_1 in indices_kf_1 {
+
+                for index1 in 0..indices_kf_1_size {
+                    let index_kf_1 = kf_1.bow.as_ref().unwrap().feat_vec.vec_get(node_id_kf_1, index1);
                     let mut best_dist = (256, 256);
                     let mut best_index = -1;
                     let descriptors_kf_1 = kf_1.features.descriptors.row(index_kf_1)?;
 
-                    for index_kf_2 in &indices_kf_2 {
-                        if kf_2.features.has_left_kp().map_or(false, |n_left| index_kf_2 > &n_left) {
+                    for index2 in 0..indices_kf_2_size {
+                        let index_kf_2 = kf_2.bow.as_ref().unwrap().feat_vec.vec_get(node_id_kf_2, index2);
+                        if kf_2.features.has_left_kp().map_or(false, |n_left| index_kf_2 > n_left) {
                             continue;
                         }
 
-                        if kf_2.has_mappoint(&index_kf_2) {
+                        if kf_2.has_mp_match(&index_kf_2) {
                             continue;
                         }
 
-                        let descriptors_kf_2 = kf_2.features.descriptors.row(*index_kf_2)?;
+                        let descriptors_kf_2 = kf_2.features.descriptors.row(index_kf_2)?;
                         let dist = descriptor_distance(&descriptors_kf_1, &descriptors_kf_2);
+
                         if dist < best_dist.0 {
                             best_dist.1 = best_dist.0;
                             best_dist.0 = dist;
-                            best_index = *index_kf_2 as i32;
+                            best_index = index_kf_2 as i32;
                         } else if dist < best_dist.1 {
                             best_dist.1 = dist;
                         }
                     }
 
                     if best_dist.0 <= TH_LOW {
-                        let mp_id = &kf_2.get_mappoint(&(best_index as u32));
+                        let mp_id = &kf_2.get_mp_match(&(best_index as u32));
 
                         if (best_dist.0 as f64) < ratio * (best_dist.1 as f64) {
                             matches.insert(index_kf_1, *mp_id); // for Kf_1
@@ -683,7 +682,7 @@ pub fn search_by_bow_kf(
 }
 
 pub fn search_for_triangulation(
-    kf_1 : &Frame<FullKeyFrame>, kf_2 : &Frame<FullKeyFrame>,
+    kf_1 : &KeyFrame, kf_2 : &KeyFrame,
     should_check_orientation: bool, _only_stereo: bool, course: bool,
     sensor: Sensor
 ) -> Result<HashMap<usize, usize>, Box<dyn std::error::Error>> {
@@ -692,18 +691,13 @@ pub fn search_for_triangulation(
     // Some math based on ORB-SLAM2 to avoid some confusion with Sophus.
     // Look here: https://github.com/raulmur/ORB_SLAM2/blob/master/src/ORBmatcher.cc#L657
 
+    let _span = tracy_client::span!("search_for_triangulation");
+
     //Compute epipole in second image
     let cw = *kf_1.get_camera_center(); //Cw
-    let r2w = *kf_2.pose.unwrap().get_rotation(); //R2w
-    let t2w = *kf_2.pose.unwrap().get_translation(); //t2w
+    let r2w = *kf_2.pose.get_rotation(); //R2w
+    let t2w = *kf_2.pose.get_translation(); //t2w
     let c2 = r2w * cw + t2w; //C2
-
-    // let pose1 = kf_1.pose.unwrap(); // T1w
-    // let pose2 = kf_2.pose.unwrap(); // T2w
-    // let translation_inverse_2 = kf_2.pose.unwrap().inverse(); // Tw2
-    // let cw = *kf_1.get_camera_center(); // Cw
-    // let temp = *translation_2.get_translation();
-    // let c2 = temp.component_mul(&cw); // c2
 
     let ep = CAMERA_MODULE.project(DVVector3::new(c2));
 
@@ -719,7 +713,7 @@ pub fn search_for_triangulation(
             // Eigen::Matrix3f Rll = Tll.rotationMatrix(), Rlr  = Tlr.rotationMatrix(), Rrl  = Trl.rotationMatrix(), Rrr  = Trr.rotationMatrix();
             // Eigen::Vector3f tll = Tll.translation(), tlr = Tlr.translation(), trl = Trl.translation(), trr = Trr.translation();
     } else {
-        let pose12 = kf_1.pose.unwrap() * kf_2.pose.unwrap().inverse(); // T12 ... which is different than t12
+        let pose12 = kf_1.pose * kf_2.pose.inverse(); // T12 ... which is different than t12
         r12 = pose12.get_rotation();
         t12 = pose12.get_translation();
     }
@@ -734,22 +728,34 @@ pub fn search_for_triangulation(
     let factor = 1.0 / (HISTO_LENGTH as f32);
     let mut rot_hist = construct_rotation_histogram();
 
-    let kf1_featvec = kf_1.bow.as_ref().unwrap().get_feat_vec_nodes();
-    let kf2_featvec = kf_2.bow.as_ref().unwrap().get_feat_vec_nodes();
+    let kf1_featvec = kf_1.bow.as_ref().unwrap().feat_vec.get_all_nodes();
+    let kf2_featvec = kf_2.bow.as_ref().unwrap().feat_vec.get_all_nodes();
     let mut i = 0;
     let mut j = 0;
+
+    // This is for debugging, can delete later
+    // let mut skipped1 = 0;
+    // let mut skipped2 = 0;
+    // let mut skipped3 = 0;
+    // let mut skipped4 = 0;
+    // let mut loops = 0;
 
     while i < kf1_featvec.len() && j < kf2_featvec.len() {
         let kf1_node_id = kf1_featvec[i];
         let kf2_node_id = kf2_featvec[j];
         if kf1_node_id == kf2_node_id {
-            // println!("index match {}", kf1_node_id);
-            let kf1_indices = kf_1.bow.as_ref().unwrap().get_feat_from_node(kf1_node_id);
+            // let kf1_indices = kf_1.bow.as_ref().unwrap().feat_vec.get_feat_from_node(kf1_node_id);
+            // note... was testing out not copying the vec below but it doesn't work
+            let kf1_indices_size = kf_1.bow.as_ref().unwrap().feat_vec.vec_size(kf1_node_id);
 
-            for kf1_index in kf1_indices {
+            for idx1 in 0..kf1_indices_size {
+                // let _span = tracy_client::span!("outer");
+                // note...to use the strategy to not copy the vec, uncomment this and change for loop to for index1 in 0..kf1_indices_size
+                let kf1_index = kf_1.bow.as_ref().unwrap().feat_vec.vec_get(kf1_node_id, idx1);
+
                 // If there is already a MapPoint skip
-                if kf_1.mappoint_matches.contains_key(&kf1_index) {
-                    // println!("Already mappoint at {}", kf1_index);
+                if kf_1.has_mp_match(&kf1_index) {
+                    // skipped1 += 1;
                     continue
                 };
 
@@ -771,10 +777,21 @@ pub fn search_for_triangulation(
                 let mut best_index = -1;
                 let descriptors_kf_1 = kf_1.features.descriptors.row(kf1_index)?;
 
-                let kf2_indices = kf_2.bow.as_ref().unwrap().get_feat_from_node(kf2_node_id);
-                for kf2_index in kf2_indices {
+                // let kf2_indices = kf_2.bow.as_ref().unwrap().feat_vec.get_feat_from_node(kf2_node_id);
+                // note...same thing about not copying vec as above
+                // println!("{:?}", bla);
+                let kf2_indices_size = kf_2.bow.as_ref().unwrap().feat_vec.vec_size(kf2_node_id);
+
+                for idx2 in 0..kf2_indices_size {
+                    // let _span = tracy_client::span!("inner");
+                    // note...same thing about not copying vec as above
+                    let kf2_index = kf_2.bow.as_ref().unwrap().feat_vec.vec_get(kf2_node_id, idx2);
+
+                    // println!("{} {} {} ", kf2_indices_size, idx2, kf2_index);
+
                     // If we have already matched or there is a MapPoint skip
-                    if kf_2.mappoint_matches.contains_key(&kf2_index) || matched_already.contains_key(&kf2_index) {
+                    if kf_2.has_mp_match(&kf2_index) || matched_already.contains_key(&kf2_index) {
+                        // skipped2 += 1;
                         continue
                     };
 
@@ -794,11 +811,9 @@ pub fn search_for_triangulation(
                     let dist = descriptor_distance(&descriptors_kf_1, &descriptors_kf_2);
 
                     if dist > TH_LOW || dist > best_dist {
-                        // println!("dist is > 50 or better than best dist {} {} {} ", kf2_index, dist, best_dist);
+                        // skipped3 += 1;
                         continue
                     }
-
-                    // println!("dist {} {} {}", kf1_index, kf2_index, dist);
 
                     let (kp2, _right2) = kf_2.features.get_keypoint(kf2_index as usize);
 
@@ -806,7 +821,7 @@ pub fn search_for_triangulation(
                         let dist_ex = (ep.0 as f32) - kp2.pt().x;
                         let dist_ey = (ep.1 as f32) - kp2.pt().y;
                         if dist_ex * dist_ex + dist_ey * dist_ey < 100.0 * SCALE_FACTORS[kp2.octave() as usize] {
-                            // println!("continuing");
+                            // skipped4 += 1;
                             continue
                         }
                     }
@@ -853,8 +868,9 @@ pub fn search_for_triangulation(
                         best_index = kf2_index as i32;
                         best_dist = dist;
                     }
+                    // loops += 1;
                 }
-                // println!("Best index and dist {} {}", best_index, best_dist);
+
                 if best_index >= 0 {
                     let (kp2, _) = kf_2.features.get_keypoint(best_index as usize);
                     matches.insert(kf1_index as usize, best_index as usize);
@@ -872,12 +888,19 @@ pub fn search_for_triangulation(
             j += 1;
         } else if kf1_node_id < kf2_node_id {
             i = lower_bound(&kf1_featvec, &kf2_featvec, i, j);
-            // println!("Move kf1 to {}", i);
         } else {
             j = lower_bound(&kf2_featvec, &kf1_featvec, j, i);
-            // println!("Move kf2 to {}", j);
         }
     }
+
+    // Debugging
+    // let msg = format!("Skipped {} {} {} {} ", skipped1, skipped2, skipped3, skipped4);
+    // tracy_client::Client::running().unwrap().message(&msg, 0);
+    // tracy_client::plot!("Skipped1", skipped1 as f64);
+    // tracy_client::plot!("Skipped2", skipped2 as f64);
+    // tracy_client::plot!("Skipped3", skipped3 as f64);
+    // tracy_client::plot!("Skipped4", skipped4 as f64);
+    // tracy_client::plot!("Loops", loops as f64);
 
     if should_check_orientation {
         let (ind_1, ind_2, ind_3) = compute_three_maxima(&rot_hist,HISTO_LENGTH);
@@ -897,9 +920,10 @@ pub fn search_for_triangulation(
     return Ok(matches);
 }
 
-pub fn fuse(kf_id: &Id, fuse_candidates: &Vec<Id>, map: &RwLockReadGuard<Map>, th: f32, is_right: bool) -> Vec<MapWriteMsg> {
+pub fn fuse(kf_id: &Id, fuse_candidates: &Vec<Id>, map: &MapLock, th: f32, is_right: bool) {
     // int ORBmatcher::Fuse(KeyFrame *pKF, const vector<MapPoint *> &vpMapPoints, const float th, const bool bRight)
-    let keyframe = map.keyframes.get(kf_id).unwrap();
+    let lock = map.read();
+    let keyframe = lock.keyframes.get(kf_id).unwrap();
 
     let (tcw, ow, _camera) = match is_right {
         true => {
@@ -909,15 +933,16 @@ pub fn fuse(kf_id: &Id, fuse_candidates: &Vec<Id>, map: &RwLockReadGuard<Map>, t
             // pCamera = pKF->mpCamera2;
         },
         false => {
-            (keyframe.pose.unwrap().get_translation(), keyframe.get_camera_center(), CAMERA)
+            (keyframe.pose.get_translation(), keyframe.get_camera_center(), CAMERA)
         }
     };
 
-    let mut to_fuse = Vec::new();
-
     for mp_id in fuse_candidates {
-        let mappoint = map.mappoints.get(&mp_id).unwrap();
-        if mappoint.is_in_keyframe(keyframe.id()) {
+        let mappoint = match lock.mappoints.get(&mp_id) {
+            Some(mp) => mp,
+            None => continue
+        };
+        if mappoint.get_observations().contains_key(kf_id) {
             continue;
         }
 
@@ -948,7 +973,7 @@ pub fn fuse(kf_id: &Id, fuse_candidates: &Vec<Id>, map: &RwLockReadGuard<Map>, t
         }
 
         // Viewing angle must be less than 60 deg
-        let pn = mappoint.get_normal();
+        let pn = mappoint.normal_vector;
         if po.dot(&pn) < 0.5 * dist_3d {
             continue;
         }
@@ -956,14 +981,12 @@ pub fn fuse(kf_id: &Id, fuse_candidates: &Vec<Id>, map: &RwLockReadGuard<Map>, t
         // Search in a radius
         let predicted_level = mappoint.predict_scale(&dist_3d);
         let radius = th * SCALE_FACTORS[predicted_level as usize];
-        let indices = keyframe.get_features_in_area(&uv.0, &uv.1, radius as f64, is_right);
+        let indices = keyframe.features.get_features_in_area(&uv.0, &uv.1, radius as f64, None);
         if indices.is_empty() {
             continue;
         }
 
         // Match to the most similar keypoint in the radius
-        let desc_mp = mappoint.get_best_descriptor();
-
         let mut best_dist = 256;
         let mut best_idx = -1;
 
@@ -1003,7 +1026,7 @@ pub fn fuse(kf_id: &Id, fuse_candidates: &Vec<Id>, map: &RwLockReadGuard<Map>, t
             }
 
             let desc_kf = keyframe.features.descriptors.row(idx2).unwrap();
-            let dist = descriptor_distance(desc_mp, &desc_kf);
+            let dist = descriptor_distance(&mappoint.best_descriptor, &desc_kf);
 
             if dist < best_dist {
                 best_dist = dist;
@@ -1013,27 +1036,24 @@ pub fn fuse(kf_id: &Id, fuse_candidates: &Vec<Id>, map: &RwLockReadGuard<Map>, t
 
         // If there is already a MapPoint replace otherwise add new measurement
         if best_dist <= TH_LOW {
-            if keyframe.has_mappoint(&(best_idx as u32)) {
-                let mappoint_in_kf_id = keyframe.get_mappoint(&(best_idx as u32));
-                let mappoint_in_kf = map.mappoints.get(&mappoint_in_kf_id).unwrap();
+            if keyframe.has_mp_match(&(best_idx as u32)) {
+                let mappoint_in_kf_id = keyframe.get_mp_match(&(best_idx as u32));
+                let mappoint_in_kf = lock.mappoints.get(&mappoint_in_kf_id).unwrap();
                 if mappoint_in_kf.get_observations().len() > mappoint.get_observations().len() {
                     warn!("Verify that the order of mp_id and mappoint_in_kf_id is right");
-                    to_fuse.push(MapWriteMsg::replace_mappoint(*mp_id, mappoint_in_kf_id));
+                    map.write().replace_mappoint(*mp_id, mappoint_in_kf_id);
                 } else {
-                    to_fuse.push(MapWriteMsg::replace_mappoint(mappoint_in_kf_id, *mp_id));
+                    map.write().replace_mappoint(mappoint_in_kf_id, *mp_id);
                 }
             } else {
-                to_fuse.push(MapWriteMsg::add_observation( *mp_id, *kf_id,  best_idx as usize));
+                let num_keypoints = map.write().keyframes.get(&kf_id).expect(&format!("Could not get kf {}", kf_id)).features.num_keypoints;
+                let mut write = map.write();
+                debug!("ADd observation in orbmatcher");
+                write.mappoints.get_mut(&mp_id).unwrap().add_observation(&kf_id, num_keypoints, best_idx as u32);
+                write.keyframes.get_mut(&kf_id).unwrap().add_mp_match(best_idx as u32, *mp_id, false);
             }
         }
     }
-    return to_fuse;
-}
-
-pub fn descriptor_distance(a : &Mat, b: &Mat) -> i32 {
-    return opencv::core::norm2(
-        a, b, opencv::core::NormTypes::NORM_HAMMING as i32, &Mat::default()
-    ).unwrap() as i32;
 }
 
 fn check_orientation_1(
@@ -1119,9 +1139,38 @@ fn compute_three_maxima(histo : &Vec<Vec<u32>> , histo_length: i32) -> (i32, i32
 }
 
 fn lower_bound(vec1: &Vec<u32>, vec2: &Vec<u32>, i: usize, j: usize) -> usize {
+    // TODO (timing) ... this could be sped up
     let mut curr = i;
     while vec1[curr] < vec2[j] {
         curr += 1;
     }
     curr
+}
+
+
+pub fn descriptor_distance(desc1: &Mat, desc2: &Mat) -> i32 {
+    // I know I said don't use BindCVRawPtr if possible
+    // In this case it's ok because we are not doing anything with the pointer
+    // other than reading and immediately discarding. It would be wasteful
+    // to clone here if we wanted to do the safer strategy of contructing
+    // a DVMatrix from the Mat.
+
+    // This code is equivalent to:
+    // return opencv::core::norm2(
+    //     a, b, opencv::core::NormTypes::NORM_HAMMING as i32, &Mat::default()
+    // ).unwrap() as i32;
+    // But much faster!!
+
+    dvos3binding::ffi::descriptor_distance(
+        &dvos3binding::ffi::WrapBindCVRawPtr { 
+            raw_ptr: dvos3binding::BindCVRawPtr {
+                raw_ptr: desc1.as_raw()
+            } 
+        },
+        &dvos3binding::ffi::WrapBindCVRawPtr { 
+            raw_ptr: dvos3binding::BindCVRawPtr {
+                raw_ptr: desc2.as_raw()
+            } 
+        }
+    )
 }

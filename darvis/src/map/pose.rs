@@ -1,8 +1,7 @@
 use std::ops::{Mul, Deref};
-use dvcore::matrix::{DVVector3, DVMatrix3};
+use core::matrix::{DVVector3, DVMatrix3};
 use serde::{Deserialize, Serialize};
 
-// TODO: Should we use nalgebra::Translation3 instead of our own matrices? Seems like there's a lot of converting happening right now
 pub type DVTranslation = DVVector3<f64>;
 pub type DVRotation = DVMatrix3<f64>;
 
@@ -10,27 +9,27 @@ pub type DVRotation = DVMatrix3<f64>;
 // Note: I'm not sure that Isometry3 is thread safe, could be the same problem
 // as with opencv matrices pointing to the same underlying memory even though
 // it looks like different objects in Rust. I think we need to be careful here.
-pub struct DVPose ( nalgebra::IsometryMatrix3<f64> );
+pub struct Pose ( nalgebra::IsometryMatrix3<f64> );
 
-impl DVPose {
-    pub fn new(translation : nalgebra::Vector3<f64>, rotation: nalgebra::Matrix3<f64>) -> DVPose {
+impl Pose {
+    pub fn new(translation : nalgebra::Vector3<f64>, rotation: nalgebra::Matrix3<f64>) -> Pose {
         let trans = nalgebra::Translation3::from(translation);
         let rot = nalgebra::Rotation3::from_matrix(&rotation);
         let pose = nalgebra::IsometryMatrix3::from_parts(trans, rot);
-        DVPose (pose)
+        Pose (pose)
     }
 
-    pub fn new_with_default_rot(translation: DVTranslation) -> DVPose {
+    pub fn new_with_default_rot(translation: DVTranslation) -> Pose {
         let translation = nalgebra::Translation3::new(
             translation[0] as f64,
             translation[1] as f64,
             translation[2] as f64
         );
         let rotation3 = nalgebra::Rotation3::identity();
-        DVPose ( nalgebra::IsometryMatrix3::from_parts(translation,rotation3) )
+        Pose ( nalgebra::IsometryMatrix3::from_parts(translation,rotation3) )
     }
 
-    // TODO (memory): his forces a copy of the matrix/vector each time, which might not be ideal for just reads.
+    // TODO (timing): his forces a copy of the matrix/vector each time, which might not be ideal for just reads.
     pub fn get_translation(&self) -> DVTranslation { DVTranslation::new(self.0.translation.vector) }
     pub fn get_rotation(&self) -> DVRotation { DVRotation::new(*self.0.rotation.matrix()) }
     pub fn get_quaternion(&self) -> nalgebra::geometry::UnitQuaternion<f64> { nalgebra::geometry::UnitQuaternion::from_rotation_matrix(&self.0.rotation) }
@@ -44,11 +43,11 @@ impl DVPose {
         self.0.rotation = nalgebra::Rotation3::from_matrix(rot);
     }
 
-    pub fn inverse(&self) -> DVPose {
-        DVPose(self.0.inverse())
+    pub fn inverse(&self) -> Pose {
+        Pose(self.0.inverse())
     }
 
-    pub fn component_mul(&self, other: &DVPose) -> (DVTranslation, DVRotation) {
+    pub fn component_mul(&self, other: &Pose) -> (DVTranslation, DVRotation) {
         let matrix_self = self.0.to_matrix();
         let matrix_other = (*other).to_matrix();
         let pose12 = matrix_self.component_mul(&matrix_other);
@@ -60,24 +59,24 @@ impl DVPose {
     }
 
 }
-impl Deref for DVPose {
+impl Deref for Pose {
     type Target = nalgebra::IsometryMatrix3<f64>;
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
-impl Mul for DVPose {
-    type Output = DVPose;
+impl Mul for Pose {
+    type Output = Pose;
 
-    fn mul(self, _other: DVPose) -> DVPose {
-        DVPose(self.0 * _other.0)
+    fn mul(self, _other: Pose) -> Pose {
+        Pose(self.0 * _other.0)
     }
 }
 
 //* Into 3x4 matrix */
-impl From<DVPose> for nalgebra::Matrix3x4<f64> {
-    fn from(pose: DVPose) -> nalgebra::Matrix3x4<f64> {
+impl From<Pose> for nalgebra::Matrix3x4<f64> {
+    fn from(pose: Pose) -> nalgebra::Matrix3x4<f64> {
         let binding = pose.0.rotation;
         let r = binding.matrix();
         let t = *pose.get_translation();
@@ -92,22 +91,18 @@ impl From<DVPose> for nalgebra::Matrix3x4<f64> {
 }
 
 //* bindings with g2o */
-impl From<DVPose> for g2o::ffi::Pose {
-    fn from(pose: DVPose) -> Self { 
+impl From<Pose> for g2o::ffi::Pose {
+    fn from(pose: Pose) -> Self { 
         let quat: nalgebra::geometry::UnitQuaternion<f64> = pose.get_quaternion();
         // Note: quaternion in nalgebra (here) is [w,i,j,k]
         // but in eigen (in C++ bindings) is [i,j,k,w] 
         // but eigen constructor takes [w,i,j,k]
         let rotation = [quat.w, quat.i, quat.j, quat.k];
         let translation = [pose.0.translation.x, pose.0.translation.y, pose.0.translation.z];
-        
-        // println!("rotation: {:?}", rotation);
-        // println!("quat: {:?}", quat);
-        // println!("back to matrix: {:?}", quat.to_rotation_matrix());
         g2o::ffi::Pose { translation, rotation }
     }
 }
-impl From<g2o::ffi::Pose> for DVPose {
+impl From<g2o::ffi::Pose> for Pose {
     fn from(pose: g2o::ffi::Pose) -> Self {
         let translation = nalgebra::Translation3::new(
             pose.translation[0],
@@ -124,12 +119,12 @@ impl From<g2o::ffi::Pose> for DVPose {
                 pose.rotation[3],
             )
         ).to_rotation_matrix();
-        DVPose ( nalgebra::IsometryMatrix3::from_parts(translation, rotation) )
+        Pose ( nalgebra::IsometryMatrix3::from_parts(translation, rotation) )
     }
 }
 
 //* bindings with orbslam */
-impl From<dvos3binding::ffi::Pose> for DVPose {
+impl From<dvos3binding::ffi::Pose> for Pose {
     fn from(pose: dvos3binding::ffi::Pose) -> Self {
         let translation = nalgebra::Translation3::new(
             pose.translation[0] as f64,
@@ -144,20 +139,20 @@ impl From<dvos3binding::ffi::Pose> for DVPose {
             pose.rotation[0][2].into(), pose.rotation[1][2].into(), pose.rotation[2][2].into()
         );
         let rotation3 = nalgebra::Rotation3::from_matrix_unchecked(matrix3);
-        DVPose ( nalgebra::IsometryMatrix3::from_parts(translation, rotation3) )
+        Pose ( nalgebra::IsometryMatrix3::from_parts(translation, rotation3) )
     }
 }
 
 
 /* Pretty print for testing */
-impl std::fmt::Debug for DVPose {
+impl std::fmt::Debug for Pose {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let rot = self.get_quaternion();
         let trans = self.get_translation();
 
         write!(
             f,
-            "translation = [{:.4},{:.4},{:.4}] / rotation = [{:.4},{:.4},{:.4},{:.4}]",
+            "t[{:.4},{:.4},{:.4}] r[{:.4},{:.4},{:.4},{:.4}]",
             trans[0], trans[1], trans[2],
             rot[0], rot[1], rot[2], rot[3],
         )

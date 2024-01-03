@@ -10,13 +10,12 @@ name = "bindarvis"
 path = "src/main.rs"
 
 [lib]
-name = "dvcore"
-path = "src/dvcore/lib.rs"
+name = "core"
+path = "src/core/lib.rs"
 
 [profile.release]
 debug = true
-codegen-units = 1
-incremental = true
+#codegen-units = 1
 lto = "fat"
 
 [rust]
@@ -29,36 +28,45 @@ IDL_PACKAGE_FILTER = { value = "std_msgs;r2r_minimal_node_msgs" }
 g2o = { path = "../g2o" }
 dvos3binding = { path = "../orbslam-bindings" }
 foxglove = { path = "../foxglove" }
+
+
 once_cell = "*"
 chrono = { version = "*", features = ["serde"] }
 rand = "*"
 linked-hash-map = "*"
 ctrlc = "*"
 downcast-rs = "*"
+
+## Visualizer
 prost-types = "*"
 prost = "*"
+mcap = "*"
 
+
+#cc = { version = "1.0.79", features = ["parallel"] }
 opencv = "0.84.5"
 nalgebra = {version = "0.32.3", features = ["serde-serialize"]}
 cv-convert = {version = '0.25.0', default_features = false, features = ['opencv_0-84','nalgebra_0-32']}
 cxx = "1.0"
 
 yaml-rust = "*"
-parking_lot = "*"
+parking_lot = {version = "*", features = ["deadlock_detection"]}
 num-traits = "*"
-fern = {version = "*", features = ["colored"] }
 array2d = "*"
 lazy_static = "*"
-env_logger = "*"
 glob = "*"
 serde = "*"
 simba = "*"
-log = "*"
 derivative = "*"
 error-chain = "*"
 spin_sleep = "*"
-mcap = "*"
 crossbeam-channel = "0.5.8"
-
-logging_timer = "1.1.0"
 nohash-hasher = "0.2.0"
+fasthash = "0.4"
+
+fern = {version = "*", features = ["colored"] }
+log = "*"
+env_logger = "*"
+logging_timer = "1.1.0"
+tracy-client = {version = "0.16.0", features = ["enable"] }
+tracy-client-sys = {version = "0.21.0"}

@@ -1,19 +1,20 @@
-use dvcore::actor::{Actor, ActorMessage};
-use dvcore::config::{SETTINGS, SYSTEM};
-use dvcore::maplock::ReadOnlyMap;
-use dvcore::sensor::Sensor;
+use core::actor::Actor;
+use core::config::{SETTINGS, SYSTEM};
+use core::sensor::Sensor;
 use log::warn;
-use crate::ActorChannels;
-use crate::dvmap::map::{Id, Map};
+use crate::actors::messages::KeyFrameIdMsg;
+use crate::{ActorChannels, MapLock};
+use crate::map::map::Id;
 use crate::modules::imu::ImuModule;
 
 use super::messages::{ShutdownMsg, IMUInitializedMsg};
 
 #[derive(Debug)]
-pub struct DarvisLoopClosing {
+pub struct LoopClosing {
     actor_channels: ActorChannels,
+    
     // Map
-    map: ReadOnlyMap<Map>,
+    map: MapLock,
 
     // IMU
     imu: ImuModule,
@@ -21,13 +22,13 @@ pub struct DarvisLoopClosing {
     matches_inliers: i32,
 }
 
-impl Actor for DarvisLoopClosing {
-    type MapRef = ReadOnlyMap<Map>;
+impl Actor for LoopClosing {
+    type MapRef = MapLock;
 
-    fn new_actorstate(actor_channels: ActorChannels, map: Self::MapRef) -> DarvisLoopClosing {
+    fn new_actorstate(actor_channels: ActorChannels, map: Self::MapRef) -> LoopClosing {
         let sensor: Sensor = SETTINGS.get(SYSTEM, "sensor");
 
-        DarvisLoopClosing {
+        LoopClosing {
             actor_channels,
             map,
             imu: ImuModule::new(None, None, sensor, false, false),
@@ -36,17 +37,14 @@ impl Actor for DarvisLoopClosing {
     }
 
     fn spawn(actor_channels: ActorChannels, map: Self::MapRef) {
-        let mut actor = DarvisLoopClosing::new_actorstate(actor_channels, map);
+        let mut actor = LoopClosing::new_actorstate(actor_channels, map);
+        tracy_client::set_thread_name!("loop closing");
 
         'outer: loop {
             let message = actor.actor_channels.receive().unwrap();
-            if message.is::<LoopClosingMsg>() {
-                let msg = message.downcast::<LoopClosingMsg>().unwrap_or_else(|_| panic!("Could not downcast loop closing message!"));
-                match *msg {
-                    LoopClosingMsg::KeyFrameIdMsg{ kf_id } => {
-                        actor.loop_closing(kf_id);
-                    },
-                };
+            if message.is::<KeyFrameIdMsg>() {
+                let msg = message.downcast::<KeyFrameIdMsg>().unwrap_or_else(|_| panic!("Could not downcast loop closing message!"));
+                actor.loop_closing(msg.kf_id);
             } else if message.is::<IMUInitializedMsg>() {
                 // TODO (IMU) process message from local mapping!
             } else if message.is::<ShutdownMsg>() {
@@ -60,7 +58,7 @@ impl Actor for DarvisLoopClosing {
 
 }
 
-impl DarvisLoopClosing {
+impl LoopClosing {
 
     fn loop_closing(&mut self, kf_id: Id) {
         // if(mpLastCurrentKF)
@@ -225,8 +223,3 @@ impl DarvisLoopClosing {
     }
 }
 
-
-pub enum LoopClosingMsg {
-    KeyFrameIdMsg{ kf_id: Id },
-}
-impl ActorMessage for LoopClosingMsg {}

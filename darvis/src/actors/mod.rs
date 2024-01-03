@@ -4,7 +4,6 @@ pub mod local_mapping;
 pub mod loop_closing;
 
 // Darvis-defined actors
-pub mod map_actor;
 pub mod visualizer;
 pub mod shutdown; // handles CTRL+C
 
