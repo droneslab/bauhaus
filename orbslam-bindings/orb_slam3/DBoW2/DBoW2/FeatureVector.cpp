@@ -11,6 +11,7 @@
 #include <map>
 #include <vector>
 #include <iostream>
+#include <memory>
 
 namespace DBoW2 {
 
@@ -97,6 +98,11 @@ rust::Vec<uint32_t> FeatureVector::get_all_nodes() const {
     return keys;
 }
 
+std::unique_ptr<FeatureVector> new_feat_vec() {
+    std::unique_ptr<FeatureVector> vec = std::make_unique<FeatureVector>();
+    return vec;
+}
+
 rust::Vec<uint32_t> FeatureVector::get_feat_from_node(unsigned int node_id) const {
     auto features = this->find(node_id);
     rust::Vec<uint32_t> features_copy;
@@ -108,9 +114,13 @@ rust::Vec<uint32_t> FeatureVector::get_feat_from_node(unsigned int node_id) cons
     return features_copy;
 }
 
-std::unique_ptr<FeatureVector> new_feat_vec() {
-    std::unique_ptr<FeatureVector> vec = std::make_unique<FeatureVector>();
-    return vec;
+
+uint32_t FeatureVector::vec_size(unsigned int node_id) const {
+    return this->find(node_id)->second.size();
+}
+
+uint32_t FeatureVector::vec_get(unsigned int node_id, uint32_t index) const {
+    return this->find(node_id)->second[index];
 }
 
 } // namespace DBoW2

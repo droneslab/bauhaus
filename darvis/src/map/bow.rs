@@ -1,8 +1,7 @@
 use std::fmt;
 use cxx::{UniquePtr, let_cxx_string};
 use log::info;
-use dvcore::{matrix::DVMatrix, config::{SETTINGS, SYSTEM}};
-use logging_timer::time;
+use core::{matrix::DVMatrix, config::{SETTINGS, SYSTEM}};
 
 lazy_static! {
     pub static ref VOCABULARY: DVVocabulary = {
@@ -30,7 +29,6 @@ impl DVVocabulary {
     pub fn transform(&self, descriptors: &DVMatrix, bow: & mut BoW) {
         let descriptors2: dvos3binding::ffi::WrapBindCVMat = descriptors.into();
 
-        // TODO (timing) ... this takes 24ms, need to compare to ORBSLAM
         self.vocabulary.transform(
             & descriptors2,
             bow.bow_vec.pin_mut(),
@@ -42,8 +40,8 @@ impl DVVocabulary {
 
 
 pub struct BoW {
-    bow_vec: UniquePtr<dvos3binding::ffi::BowVector>, // mBowVec
-    feat_vec: UniquePtr<dvos3binding::ffi::FeatureVector>, // mFeatVec
+    pub bow_vec: UniquePtr<dvos3binding::ffi::BowVector>, // mBowVec
+    pub feat_vec: UniquePtr<dvos3binding::ffi::FeatureVector>, // mFeatVec
 }
 impl BoW {
     pub fn new() -> Self {
@@ -53,17 +51,10 @@ impl BoW {
         }
     }
     pub fn clone(&self) -> Self {
-        // TODO (mvp): I am not sure this is thread-safe or that it works...
         Self {
             bow_vec: self.bow_vec.clone(),
             feat_vec: self.feat_vec.clone(),
         }
-    }
-    pub fn get_feat_vec_nodes(&self) -> Vec<u32> {
-        self.feat_vec.get_all_nodes()
-    }
-    pub fn get_feat_from_node(&self, node: u32) -> Vec<u32> {
-        self.feat_vec.get_feat_from_node(node)
     }
 }
 

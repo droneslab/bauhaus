@@ -11,15 +11,18 @@ system:
       framesensor: Mono
       imusensor: None
 
+      # FPS
       fps: 1.0
       use_timestamps_file: false # Instead of running at a fixed fps, use timestamps from the dataset
 
+      # RESULTS
       results_folder: "results"
       trajectory_file_name: "trajectory.txt"
-      create_flamegraph: false
-      show_visualizer: false
-      log_level: debug # options are [trace, debug, info, warn, error]
 
+      # DEBUGGING
+      log_level: debug # options are [trace, debug, info, warn, error]
+      enable_profiling: true # Profiling with tracy. Also need to set "enable" feature for tracy-client in Cargo.toml
+      check_deadlocks: false # Spawns a new thread to check for deadlocks every 2 secs, but slows stuff down.
 
 modules:
       - 
@@ -120,31 +123,31 @@ modules:
 
 
 actors:
-      -
-       name: VISUALIZER
-       file: visualizer
-       receiver_bound: -1
-       settings:
-          - 
-            name: image_draw_type
-            value: none # options are [none, plain, features, featuresandmatches]
-            type: string
-          -
-            name: mcap_file_path
-            value: "results/out.mcap"
-            type: string
+      # -
+      #  name: VISUALIZER
+      #  file: visualizer
+      #  receiver_bound: -1
+      #  settings:
+      #     - 
+      #       name: image_draw_type
+      #       value: none # options are [none, plain, features, featuresandmatches]
+      #       type: string
+      #     -
+      #       name: mcap_file_path
+      #       value: "results/out.mcap"
+      #       type: string
 
       -
        name: TRACKING_FRONTEND
        file: tracking_frontend
-       receiver_bound: 1
+       receiver_bound: 10
        settings:
           -
 
       -
        name: TRACKING_BACKEND
        file: tracking_backend
-       receiver_bound: 1
+       receiver_bound: 10
        possible_paths:
                      -
                       from: tracking_frontend
@@ -185,7 +188,7 @@ actors:
       -
        name: LOCAL_MAPPING
        file: local_mapping
-       receiver_bound: -1
+       receiver_bound: 3
        possible_paths:
                      -
                       from: tracking_frontend

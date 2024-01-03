@@ -3,6 +3,7 @@
 
 pub mod map;
 
+pub mod frame;
 pub mod keyframe;
 pub mod mappoint;
 pub mod pose;

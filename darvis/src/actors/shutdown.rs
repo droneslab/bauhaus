@@ -1,8 +1,8 @@
-use std::{fs::File, path::Path, io::Write};
+use std::{fs::File, path::Path, io::{Write, BufWriter}};
 use log::warn;
 
-use crate::dvmap::{pose::DVPose, map::Id, misc::Timestamp};
-use dvcore::{actor::{ActorChannels, Actor}, config::{SYSTEM, SETTINGS}};
+use crate::map::{pose::Pose, map::Id, misc::Timestamp};
+use core::{actor::{ActorChannels, Actor}, config::{SYSTEM, SETTINGS}};
 use super::{messages::{ShutdownMsg, TrajectoryMsg, TrackingStateMsg}, tracking_backend::TrackingState};
 
 
@@ -10,7 +10,7 @@ pub struct ShutdownActor {
     actor_channels: ActorChannels,
     // Lists used to recover the full camera trajectory at the end of the execution.
     // Basically we store the reference keyframe for each frame and its relative transformation
-    trajectory_poses: Vec<DVPose>, //mlRelativeFramePoses
+    trajectory_poses: Vec<Pose>, //mlRelativeFramePoses
     trajectory_times: Vec<Timestamp>, //mlFrameTimes
     trajectory_keyframes: Vec<Id>, //mlpReferences
 
@@ -55,14 +55,26 @@ impl Actor for ShutdownActor {
                 }
             } else if message.is::<ShutdownMsg>() {
                 warn!("Triggered shutdown, saving trajectory info");
-                let mut file = File::create(
+                let file = File::create(
                     Path::new(&actor.results_folder)
                     .join(&actor.trajectory_filename)
-                ).unwrap();
-                for i in 0..actor.trajectory_poses.len() {
-                    let string = format!("{:?} {:?}\n", actor.trajectory_times[i], actor.trajectory_poses[i]);
-                    file.write_all(string.as_bytes()).unwrap();
-                }
+                );
+                match file {
+                    Ok(file) => {
+                        let mut f = BufWriter::new(file);
+
+                        // TODO (MVP) ... look at SaveTrajectoryEuRoC in orbslam, I think we need to apply some transform to these poses
+                        // I think they are currently saved as the relative pose between frames but we need world coords
+                        for i in 0..actor.trajectory_poses.len() {
+                            let string = format!("{:?} {:?}\n", actor.trajectory_times[i], actor.trajectory_poses[i]);
+                            write!(f, "{}", string).expect("unable to write");
+                        }
+                    },
+                    Err(_) => {
+                        warn!("Could not create trajectory file {:?}", Path::new(&actor.results_folder).join(&actor.trajectory_filename));
+                        println!("Here is the trajectory: {:?}", actor.trajectory_poses);
+                    }
+                };
 
                 for (_, actor_tx) in &actor.actor_channels.actors {
                     actor_tx.send(Box::new(ShutdownMsg{})).unwrap();

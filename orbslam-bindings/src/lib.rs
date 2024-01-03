@@ -109,6 +109,11 @@ unsafe impl ExternType for BindCVRawPtr {
     type Kind = cxx::kind::Trivial;
 }
 
+pub struct Feature {
+    pub node_id: u32,
+    pub feature_id: u32,
+}
+
 #[cxx::bridge(namespace = "orb_slam3")]
 pub mod ffi {
     // Shared structs with fields visible to both languages.
@@ -217,6 +222,11 @@ pub mod ffi {
         // ORB Matcher
         include!("orb_slam3/src/ORBmatcher.h");
         type ORBmatcher;
+        fn descriptor_distance(
+            a: &WrapBindCVRawPtr,
+            b: &WrapBindCVRawPtr
+        ) -> i32;
+
         fn new_orb_matcher(
             frame_grid_cols : i32, 
             frame_grid_rows : i32,
@@ -255,7 +265,10 @@ pub mod ffi {
         fn new_feat_vec() -> UniquePtr<FeatureVector>;
         fn clone(self: &FeatureVector) -> UniquePtr<FeatureVector>;
         fn get_all_nodes(self: &FeatureVector) -> Vec<u32>;
+
         fn get_feat_from_node(self: &FeatureVector, node_id: u32) -> Vec<u32>;
+        fn vec_size(self: &FeatureVector, node_id: u32) -> u32;
+        fn vec_get(self: &FeatureVector, node_id: u32, index: u32) -> u32;
 
         fn load_vocabulary_from_text_file(file: &CxxString) -> UniquePtr<ORBVocabulary>;
         fn transform(
@@ -268,7 +281,7 @@ pub mod ffi {
     }
 }
 
-// TODO (memory): Need to make sure these are actually safe
+// TODO (mvp): Need to make sure these are actually safe
 // They should be ok as long as they are only used within a UniquePtr.
 // But can we enforce using them in a UniquePtr?
 // These are needed because:

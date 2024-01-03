@@ -1,11 +1,10 @@
 extern crate g2o;
 use cxx::UniquePtr;
-use log::{warn, debug};
-use logging_timer::{time, timer};
+use log::{warn, info};
 use std::{fmt, fmt::Debug};
 use opencv::{prelude::*, types::VectorOfKeyPoint,};
 
-use dvcore::{
+use core::{
     actor::Actor,
     sensor::{Sensor, FrameSensor},
     matrix::*,
@@ -19,12 +18,12 @@ use crate::{
     },
     modules::image,
     ActorChannels,
-    dvmap::{map::Id, misc::Timestamp}
+    map::{map::Id, misc::Timestamp},
 };
 
 
 #[derive(Debug)]
-pub struct DarvisTrackingFront {
+pub struct TrackingFrontEnd {
     actor_channels: ActorChannels,
     orb_extractor_left: DVORBextractor,
     orb_extractor_right: Option<DVORBextractor>,
@@ -36,10 +35,10 @@ pub struct DarvisTrackingFront {
     sensor: Sensor,
 }
 
-impl Actor for DarvisTrackingFront {
+impl Actor for TrackingFrontEnd {
     type MapRef = ();
 
-    fn new_actorstate(actor_channels: ActorChannels, _map: Self::MapRef) -> DarvisTrackingFront {
+    fn new_actorstate(actor_channels: ActorChannels, _map: Self::MapRef) -> TrackingFrontEnd {
         let max_features = SETTINGS.get::<i32>(FEATURE_DETECTION, "max_features");
         let sensor = SETTINGS.get::<Sensor>(SYSTEM, "sensor");
         let orb_extractor_right = match sensor.frame() {
@@ -50,7 +49,7 @@ impl Actor for DarvisTrackingFront {
             true => Some(DVORBextractor::new(max_features*5)),
             false => None
         };
-        DarvisTrackingFront {
+        TrackingFrontEnd {
             actor_channels,
             orb_extractor_left: DVORBextractor::new(max_features),
             orb_extractor_right,
@@ -64,19 +63,29 @@ impl Actor for DarvisTrackingFront {
     }
 
     fn spawn(actor_channels: ActorChannels, map: Self::MapRef) {
-        let mut actor = DarvisTrackingFront::new_actorstate(actor_channels, map);
+        let mut actor = TrackingFrontEnd::new_actorstate(actor_channels, map);
+        let max_queue_size = actor.actor_channels.receiver_bound.unwrap_or(100);
+
+        tracy_client::set_thread_name!("tracking frontend");
+        
         'outer: loop {
             let message = actor.actor_channels.receive().unwrap();
 
             if message.is::<ImagePathMsg>() {
+                if actor.actor_channels.queue_len() > max_queue_size {
+                    // Abort additional work if there are too many frames in the msg queue.
+                    info!("Tracking frontend dropped 1 frame");
+                    continue;
+                }
+
                 let msg = message.downcast::<ImagePathMsg>().unwrap_or_else(|_| panic!("Could not downcast tracking frontend message!"));
 
                 let image = image::read_image_file(&msg.image_path);
                 let image_cols = image.cols() as u32;
                 let image_rows = image.rows() as u32;
 
-                // TODO (CLONE) ... visualizer
-                let (keypoints, descriptors) = match SETTINGS.get::<bool>(SYSTEM, "show_visualizer") {
+                // TODO (timing) ... cloned if visualizer running. maybe make global shared object?
+                let (keypoints, descriptors) = match actor.actor_channels.actors.get(VISUALIZER).is_some() {
                     true => {
                         let (keypoints, descriptors) = actor.extract_features(image.clone());
                         actor.send_to_visualizer(keypoints.clone(), image, msg.timestamp);
@@ -91,15 +100,19 @@ impl Actor for DarvisTrackingFront {
 
                 actor.last_id += 1;
             } else if message.is::<ImageMsg>() {
-                // TODO (timing) ... 30 ms
+                if actor.actor_channels.queue_len() > max_queue_size {
+                    // Abort additional work if there are too many frames in the msg queue.
+                    info!("Tracking frontend dropped 1 frame");
+                    continue;
+                }
 
                 let msg = message.downcast::<ImageMsg>().unwrap_or_else(|_| panic!("Could not downcast tracking frontend message!"));
 
                 let image_cols = msg.image.cols() as u32;
                 let image_rows = msg.image.rows() as u32;
 
-                // TODO (CLONE) ... visualizer
-                let (keypoints, descriptors) = match SETTINGS.get::<bool>(SYSTEM, "show_visualizer") {
+                // TODO (timing) ... cloned if visualizer running. maybe make global shared object?
+                let (keypoints, descriptors) = match actor.actor_channels.actors.get(VISUALIZER).is_some() {
                     true => {
                         let (keypoints, descriptors) = actor.extract_features(msg.image.clone());
                         actor.send_to_visualizer(keypoints.clone(), msg.image, msg.timestamp);
@@ -133,13 +146,15 @@ impl Actor for DarvisTrackingFront {
     }
 }
 
-impl DarvisTrackingFront {
+impl TrackingFrontEnd {
     fn extract_features(&mut self, image: opencv::core::Mat) -> (VectorOfKeyPoint, Mat) {
+        let _span = tracy_client::span!("extract features");
+
         let image_dv: dvos3binding::ffi::WrapBindCVMat = (&DVMatrix::new(image)).into();
         let mut descriptors: dvos3binding::ffi::WrapBindCVMat = (&DVMatrix::default()).into();
         let mut keypoints: dvos3binding::ffi::WrapBindCVKeyPoints = DVVectorOfKeyPoint::empty().into();
 
-        // TODO (timing) ... this takes ~70 ms. Kind of high? Compare to ORBSLAM
+        // TODO (C++ and Rust optimizations) ... this takes ~70 ms which is way high compared to ORB-SLAM3. I think this is because the rust and C++ bindings are not getting optimized together.
         if self.map_initialized && (self.last_id - self.init_id < self.max_frames) {
             self.orb_extractor_left.extractor.pin_mut().extract(&image_dv, &mut keypoints, &mut descriptors);
         } else if self.sensor.is_mono() {
@@ -170,7 +185,6 @@ impl DarvisTrackingFront {
         })).unwrap();
     }
 
-    #[time("TrackingFrontend::{}")]
     fn send_to_visualizer(&mut self, keypoints: VectorOfKeyPoint, image: Mat, timestamp: Timestamp) {
         // Send image and features to visualizer
         self.actor_channels.find(VISUALIZER).send(Box::new(VisFeaturesMsg {

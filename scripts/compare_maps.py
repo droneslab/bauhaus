@@ -1,3 +1,6 @@
+## Compares output of printing the entire map in ORB_SLAM3 and Darvis
+## Print map by calling print_current_map() in darvis and PrintCurrentMap() in ORB_SLAM3
+
 from pprint import pprint
 
 def read_kf_pose(line):

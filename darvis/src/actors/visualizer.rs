@@ -4,15 +4,15 @@ use mcap::{Schema, Channel, records::MessageHeader, Writer};
 use opencv::prelude::{Mat, MatTraitConst, MatTraitConstManual};
 use foxglove::{foxglove::items::{SceneEntity, SceneUpdate, SpherePrimitive, Vector3, Quaternion, Color, FrameTransform, LinePrimitive, line_primitive, Point3, RawImage, ArrowPrimitive}, get_file_descriptor_set_bytes, make_pose};
 
-use dvcore::{
-    actor::{ActorChannels, Actor}, matrix::DVVectorOfKeyPoint, config::SETTINGS,
+use core::{
+    actor::{ActorChannels, Actor}, matrix::DVVectorOfKeyPoint, config::SETTINGS, maplock::ReadWriteMap,
 };
 use crate::{
-    dvmap::{map::{Map, Id}, pose::DVPose, misc::Timestamp},
+    map::{map::{Map, Id}, pose::Pose, misc::Timestamp},
     maplock::ReadOnlyMap,
     modules::image,
     actors::messages::{ShutdownMsg, VisFeaturesMsg, VisFeatureMatchMsg, VisTrajectoryMsg},
-    registered_actors::VISUALIZER
+    registered_actors::VISUALIZER, MapLock
 };
 
 // Default visual stuff //
@@ -35,7 +35,7 @@ enum ImageDrawType {
 
 pub struct DarvisVisualizer {
     actor_system: ActorChannels,
-    map: ReadOnlyMap<Map>,
+    map: MapLock,
     writer: McapWriter,
 
     // For drawing images
@@ -46,19 +46,15 @@ pub struct DarvisVisualizer {
     current_keypoints: Option<DVVectorOfKeyPoint>,
     prev_keypoints: Option<DVVectorOfKeyPoint>,
 
-    // For drawing current frame and trajectory
     trajectory_channel: u16,
-    transform_channel: u16,
+    mappoints_channel: u16,
+    connected_kfs_channel: u16,
     current_update_id: u64,
     prev_pose: Point3,
-
-    // For drawing mappoints, mappoint matches, and keyframes
-    keyframes_channel: u16,
-    mappoints_channel: u16,
 }
 
 impl Actor for DarvisVisualizer {
-    type MapRef = ReadOnlyMap<Map>;
+    type MapRef = MapLock;
 
     fn new_actorstate(actor_system: ActorChannels, map: Self::MapRef) -> DarvisVisualizer {
         let mcap_file_path = SETTINGS.get::<String>(VISUALIZER, "mcap_file_path");
@@ -76,9 +72,9 @@ impl Actor for DarvisVisualizer {
         let mappoints_channel = writer.create_and_add_channel(
             "foxglove.SceneUpdate", "/mappoints",
         ).expect("Could not make mappoints channel");
-        let keyframes_channel = writer.create_and_add_channel(
-            "foxglove.SceneUpdate", "/keyframes",
-        ).expect("Could not make keyframes channel");
+        let connected_kfs_channel = writer.create_and_add_channel(
+            "foxglove.SceneUpdate", "/connected_kfs",
+        ).expect("Could not make connected kfs channel");
 
         let transform = FrameTransform {
             timestamp: Some(prost_types::Timestamp { seconds: 0,  nanos: 0 }),
@@ -113,8 +109,7 @@ impl Actor for DarvisVisualizer {
             image_channel,
             trajectory_channel,
             mappoints_channel,
-            keyframes_channel,
-            transform_channel,
+            connected_kfs_channel,
             current_image: None,
             prev_image: None,
             current_keypoints: None,
@@ -167,7 +162,7 @@ impl DarvisVisualizer {
         }.expect("Visualizer could not draw image!");
 
         // If drawing with features and matches, need to save current image and keypoints for when matches are received
-        //TODO (memory)... remove these clones
+        //TODO (timing)... remove these clones. Can use same pointer swap technique as in beginning of tracking backend
         self.prev_keypoints = self.current_keypoints.clone();
         self.prev_image = self.current_image.clone();
         self.current_image = Some(msg.image.clone());
@@ -192,83 +187,102 @@ impl DarvisVisualizer {
     fn update_draw_map(&mut self, msg: VisTrajectoryMsg) {
         self.draw_trajectory(msg.pose, msg.timestamp).expect("Visualizer could not draw trajectory!");
         self.draw_mappoints(&msg.mappoint_matches, msg.timestamp).expect("Visualizer could not draw mappoints!");
-        self.draw_keyframes(msg.timestamp).expect("Visualizer could not draw map!");
+        // Not calling this right now, need to figure out some nicer way to distribute the points so it's actually readable
+        // self.draw_connected_kfs(msg.timestamp).expect("Visualizer could not draw connected kfs!");
         self.current_update_id += 1;
         self.prev_pose = msg.pose.into();
     }
 
-    fn draw_trajectory(&mut self, pose: DVPose, timestamp: Timestamp) -> Result<(), Box<dyn std::error::Error>> {
-        debug!("Drawing trajectory at timestamp {} with pose {:?}", timestamp, pose);
+    fn draw_trajectory(&mut self, frame_pose: Pose, timestamp: Timestamp) -> Result<(), Box<dyn std::error::Error>> {
+        debug!("Drawing trajectory at timestamp {} with pose {:?}", timestamp, frame_pose.inverse());
+        let mut entities = vec![];
 
-        // Entity 1 ... current pose
+        // Draw current pose
         // This entity is overwritten at every update, so only one camera is in view at all times
-        let current_pose = self.create_arrow(&pose, FRAME_COLOR.clone());
-        let pose_entity = self.create_scene_entity(
-            timestamp, "world",
-            format!("cam"),
-            vec![current_pose],
-            vec![], vec![]
-        ); // TODO (vis) make this a camera frame and publish new transform, but will this mess up the pose of previous camera objects?
-
-        // Entity 2 ... trajectory
-        // This should never be deleted or replaced
-        let points = vec![self.prev_pose.clone(), pose.into()];
-        let trajectory_line = self.create_line(points, TRAJECTORY_COLOR.clone());
-        let traj_entity = self.create_scene_entity(
-            timestamp, "world",
-            format!("t{}", self.current_update_id.to_string()),
-            vec![],
-            vec![trajectory_line], 
-            vec![]
+        entities.push(
+            self.create_scene_entity(
+                timestamp, 
+                "world",
+                format!("cam"),
+                vec![self.create_arrow(&frame_pose.inverse(), FRAME_COLOR.clone())],
+                vec![], vec![]
+            )
         );
 
-        let sceneupdate = SceneUpdate {
-            deletions: vec![],
-            entities: vec![pose_entity, traj_entity]
-        };
-
-        self.writer.write(self.trajectory_channel, sceneupdate, timestamp, 0)?;
-        Ok(())
-    }
-
-    fn draw_keyframes(&mut self, timestamp: Timestamp) -> Result<(), Box<dyn std::error::Error>> {
-        // Draw each keyframe
-        // Should be deleted when keyframes are deleted
         let map = self.map.read();
-        let mut entities = Vec::<SceneEntity>::new();
-        for (id, keyframe) in &map.keyframes {
-            let kf_arrow = self.create_arrow(&keyframe.pose.unwrap(), KEYFRAME_COLOR.clone());
-            entities.push(self.create_scene_entity(
-                timestamp, "world",
-                format!("kf {}", id),
-                vec![kf_arrow],
-                vec![], vec![]
-            ));
+
+        // Draw keyframes and trajectory
+        // Re-draw each time because kf poses may have neen optimized since last drawing
+        let mut sorted_kfs = map.keyframes.keys().collect::<Vec<&Id>>();
+        sorted_kfs.sort();
+        let mut prev_pose: Point3 = Pose::default().into();
+        let mut prev_id = 0;
+        for id in sorted_kfs {
+            let curr_pose = map.keyframes.get(id).unwrap().pose.inverse();
+            let points = vec![prev_pose, curr_pose.into()];
+            entities.push(
+                self.create_scene_entity(
+                    timestamp,
+                    "world",
+                    format!("t {}->{}", prev_id, id),
+                    vec![],
+                    vec![self.create_line(points, TRAJECTORY_COLOR.clone())], 
+                    vec![]
+                )
+            );
+
+            // TODO: Should update to delete kfs that are deleted from map
+            entities.push(
+                self.create_scene_entity(
+                    timestamp, 
+                    "world",
+                    format!("kf {}", id),
+                    vec![self.create_arrow(&curr_pose, KEYFRAME_COLOR.clone())],
+                    vec![],
+                    vec![]
+                )
+            );
+            prev_pose = curr_pose.into();
+            prev_id = *id;
         }
+
+        // Lastly, add the trajectory line from the last keyframe to the current pose
+        let points = vec![prev_pose, frame_pose.inverse().into()];
+        entities.push(
+            self.create_scene_entity(
+                timestamp, 
+                "world",
+                format!("t to frame"),
+                vec![],
+                vec![self.create_line(points, TRAJECTORY_COLOR.clone())], 
+                vec![]
+            )
+        );
 
         let sceneupdate = SceneUpdate {
             deletions: vec![], // TODO (MVP) add deletions
             entities
         };
 
-        self.writer.write(self.keyframes_channel, sceneupdate, timestamp, 0)?;
-
+        self.writer.write(self.trajectory_channel, sceneupdate, timestamp, 0)?;
         Ok(())
     }
 
-    fn draw_mappoints(&mut self, mappoint_matches: &HashMap<u32, (Id, bool)>, timestamp: Timestamp) -> Result<(), Box<dyn std::error::Error>> {
+    fn draw_mappoints(&mut self, mappoint_matches: &Vec<Option<(Id, bool)>>, timestamp: Timestamp) -> Result<(), Box<dyn std::error::Error>> {
         // Mappoints in map (different color if they are matches)
         // Should be overwritten when there is new info for a mappoint
         let mut entities = Vec::new();
 
         let mut mappoint_match_ids = HashSet::<Id>::new();
-        for (_, (mappoint_id, _)) in mappoint_matches {
-            mappoint_match_ids.insert(*mappoint_id);
+        for item in mappoint_matches {
+            if let Some((mappoint_id, _)) = item {
+                mappoint_match_ids.insert(*mappoint_id);
+            }
         }
 
         let map = self.map.read();
         for (mappoint_id, mappoint) in &map.mappoints {
-            let pose = DVPose::new_with_default_rot(mappoint.position);
+            let pose = Pose::new_with_default_rot(mappoint.position);
 
             let mp_sphere = match mappoint_match_ids.contains(&mappoint_id) {
                 true => self.create_sphere(&pose, MAPPOINT_MATCH_COLOR.clone(), MAPPOINT_SIZE.clone()),
@@ -291,6 +305,52 @@ impl DarvisVisualizer {
         };
 
         self.writer.write(self.mappoints_channel, sceneupdate, timestamp, 0)?;
+
+        Ok(())
+    }
+
+    fn draw_connected_kfs(&mut self, timestamp: Timestamp) -> Result<(), Box<dyn std::error::Error>> {
+        // You can call this but the results don't look too good because I draw each KF at its pose
+        // so it's hard to see the connections, they overlap too much. Need to find some algorithm to
+        // distribute items in a graph so they're spread apart and the lines between are more visible.
+        // Maybe there's a crate for this?
+
+        // Draw connected keyframes graph
+        // Will be re-drawn each time because kf may gain/lose connections over time
+        // But won't update if a keyframe is deleted! Need to keep track of that and delete manually
+
+        let mut entities = Vec::new();
+        let map = self.map.read();
+        for kf_id in map.keyframes.keys() {
+            let kf = map.keyframes.get(&kf_id).unwrap();
+            let pose = kf.pose.inverse();
+
+            let mut spheres = Vec::new();
+            let mut lines = Vec::new();
+
+            for connected_kf_id in &kf.get_covisibility_keyframes(i32::MAX) {
+                let connected_kf = map.keyframes.get(connected_kf_id).unwrap();
+                let connected_pose = connected_kf.pose.inverse();
+                let points = vec![pose.into(), connected_pose.into()];
+                lines.push(self.create_line(points, TRAJECTORY_COLOR.clone()));
+                spheres.push(self.create_sphere(&connected_pose, KEYFRAME_COLOR.clone(), MAPPOINT_SIZE.clone()));
+            }
+
+            let kf_entity = self.create_scene_entity(
+                timestamp, "world",
+                format!("kf {}", kf_id),
+                vec![], lines, spheres
+            );
+            entities.push(kf_entity);
+        }
+
+        // TODO ... remove keyframes from this graph if they are deleted in map!
+        let sceneupdate = SceneUpdate {
+            deletions: vec![],
+            entities
+        };
+
+        self.writer.write(self.connected_kfs_channel, sceneupdate, timestamp, 0)?;
 
         Ok(())
     }
@@ -320,7 +380,7 @@ impl DarvisVisualizer {
         Ok(())
     }
 
-    fn create_sphere(&self, pose: &DVPose, color: Color, size: Vector3) -> SpherePrimitive {
+    fn create_sphere(&self, pose: &Pose, color: Color, size: Vector3) -> SpherePrimitive {
         SpherePrimitive {
             pose: Some(pose.into()),
             size: Some(size),
@@ -328,7 +388,7 @@ impl DarvisVisualizer {
         }
     }
 
-    fn create_arrow(&self, pose: &DVPose, color: Color) -> ArrowPrimitive {
+    fn create_arrow(&self, pose: &Pose, color: Color) -> ArrowPrimitive {
         ArrowPrimitive { 
             pose: Some(pose.into()),
             color: Some(color),
@@ -377,7 +437,7 @@ impl DarvisVisualizer {
 }
 
 fn convert_timestamp(timestamp: Timestamp) -> (i64, i32) {
-    let timestamp = timestamp * 10.0; // Sofiya TODO...Can remove this later, putting this in here for now so foxglove can show the results a little slower
+    let timestamp = timestamp * 10.0; // Note: Can remove this later, putting this in here for now so foxglove can show the results a little slower. If removing, also modify write() function
     let seconds = timestamp.floor();
     let nanos = (timestamp - seconds) * 1000000000.0;
     (seconds as i64, nanos as i32)
@@ -422,7 +482,7 @@ impl McapWriter {
         timestamp: Timestamp,
         sequence: u32,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let time_in_nsec = timestamp * 10000000000.0; // Sofiya todo remove one 0 if removing line in convert_timestamp that makes it go slower
+        let time_in_nsec = timestamp * 10000000000.0; // Note: remove one 0 if removing line in convert_timestamp that makes it go slower
         Ok(
             self.writer.write_to_known_channel(
                 &MessageHeader {
@@ -442,8 +502,8 @@ impl McapWriter {
 }
 
 
-impl From<&DVPose> for foxglove::foxglove::items::Pose {
-    fn from(pose: &DVPose) -> foxglove::foxglove::items::Pose {
+impl From<&Pose> for foxglove::foxglove::items::Pose {
+    fn from(pose: &Pose) -> foxglove::foxglove::items::Pose {
         let trans = pose.get_translation();
         let position = Vector3 { 
             x: trans[0], 
@@ -459,8 +519,6 @@ impl From<&DVPose> for foxglove::foxglove::items::Pose {
             w: quat[3]
         };
 
-        // println!("Pose sent to foxglove {:?} {:?}", position, orientation);
-
         foxglove::foxglove::items::Pose {
             position: Some(position),
             orientation: Some(orientation),
@@ -468,8 +526,8 @@ impl From<&DVPose> for foxglove::foxglove::items::Pose {
     }
 }
 
-impl From<DVPose> for foxglove::foxglove::items::Point3 {
-    fn from(pose: DVPose) -> foxglove::foxglove::items::Point3 {
+impl From<Pose> for foxglove::foxglove::items::Point3 {
+    fn from(pose: Pose) -> foxglove::foxglove::items::Point3 {
         let trans = pose.get_translation();
         Point3 { 
             x: trans[0], 

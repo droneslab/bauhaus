@@ -14,12 +14,14 @@
 #include <map>
 #include <vector>
 #include <iostream>
+#include <memory>
 
 #include <boost/serialization/serialization.hpp>
 #include <boost/serialization/map.hpp>
 #include "../../../target/cxxbridge/rust/cxx.h"
 
 namespace DBoW2 {
+
 
 /// Vector of nodes with indexes of local features
 class FeatureVector: 
@@ -62,7 +64,14 @@ public:
     // For rust bindings...
     std::unique_ptr<FeatureVector> clone() const; 
     rust::Vec<uint32_t> get_all_nodes() const;
+
+    // So we can iterate through each node's feature vector 
+    // (the std::vector in this map... std::map<NodeId, std::vector<unsigned int> >)
+    // without copying the entire vector into rust
     rust::Vec<uint32_t> get_feat_from_node(unsigned int node_id) const;
+    uint32_t vec_size(unsigned int node_id) const;
+    uint32_t vec_get(unsigned int node_id, uint32_t index) const;
+
 };
 
 std::unique_ptr<FeatureVector> new_feat_vec();

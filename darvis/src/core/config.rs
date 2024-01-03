@@ -12,6 +12,7 @@
 use std::{collections::HashMap, sync::RwLock};
 use lazy_static::*;
 use linked_hash_map::LinkedHashMap;
+use log::info;
 
 use std::fs::File;
 use std::io::Read;
@@ -163,23 +164,23 @@ pub struct ModuleConf{
 
 pub fn load_config(file_name: &String) -> Result<(Vec<ActorConf>, Vec<ModuleConf>, String), Box<dyn std::error::Error>> {
     let mut config_string = String::new();
-    println!("{}",file_name);
+    info!("{}",file_name);
     let mut f = File::open(file_name).unwrap();
     f.read_to_string(&mut config_string).unwrap();
     let yaml_document = &yaml::YamlLoader::load_from_str(&config_string).unwrap()[0];
 
-    println!("SYSTEM SETTINGS");
+    info!("SYSTEM SETTINGS");
 
     // Load additional custom settings from config file
     let system_settings = &yaml::YamlLoader::load_from_str(&config_string).unwrap()[0]["system"];
     add_setting_bool(SYSTEM, "localization_only_mode", &system_settings["localization_only_mode"]);
-    add_setting_bool(SYSTEM, "create_flamegraph", &system_settings["create_flamegraph"]);
     add_setting_string(SYSTEM, "vocabulary_file", &system_settings["vocabulary_file"]);
     add_setting_string(SYSTEM, "trajectory_file_name", &system_settings["trajectory_file_name"]);
     add_setting_string(SYSTEM, "results_folder", &system_settings["results_folder"]);
     add_setting_bool(SYSTEM, "use_timestamps_file", &system_settings["use_timestamps_file"]);
     add_setting_f64(SYSTEM, "fps", &system_settings["fps"]);
-    add_setting_bool(SYSTEM, "show_visualizer", &system_settings["show_visualizer"]);
+    add_setting_bool(SYSTEM, "enable_profiling", &system_settings["enable_profiling"]);
+    add_setting_bool(SYSTEM, "check_deadlocks", &system_settings["check_deadlocks"]);
     let log_level = system_settings["log_level"].as_str().unwrap().to_owned();
 
     // Load sensor settings
@@ -196,7 +197,7 @@ pub fn load_config(file_name: &String) -> Result<(Vec<ActorConf>, Vec<ModuleConf
     };
     let sensor = Sensor(framesensor, imusensor);
     SETTINGS.insert(SYSTEM, "sensor", sensor);
-    println!("\t {} = {}", "SENSOR", sensor);
+    info!("\t {} = {}", "SENSOR", sensor);
 
     // Load actors
     let mut actor_info = Vec::<ActorConf>::new();
@@ -255,22 +256,22 @@ fn add_settings(settings: &Vec<Yaml>, namespace: &String) -> Option<()> {
 fn add_setting_bool(namespace: &str, key: &str, value: &Yaml) {
     let val = value.as_bool().unwrap();
     SETTINGS.insert(&namespace, &key, val);
-    println!("\t {} {} = {}", namespace, key, val);
+    info!("\t {} {} = {}", namespace, key, val);
 }
 fn add_setting_i32(namespace: &str, key: &str, value: &Yaml) {
     let val = value.as_i64().unwrap() as i32;
     SETTINGS.insert(&namespace, &key, val);
-    println!("\t {} {} = {}", namespace, key, val);
+    info!("\t {} {} = {}", namespace, key, val);
 }
 fn add_setting_f64(namespace: &str, key: &str, value: &Yaml) {
     let val = value.as_f64().unwrap();
     SETTINGS.insert(&namespace, &key, val);
-    println!("\t {} {} = {}", namespace, key, val);
+    info!("\t {} {} = {}", namespace, key, val);
 }
 fn add_setting_string(namespace: &str, key: &str, value: &Yaml) {
     let val = value.as_str().unwrap().to_string();
     SETTINGS.insert(&namespace, &key, val.clone());
-    println!("\t {} {} = {}", namespace, key, val);
+    info!("\t {} {} = {}", namespace, key, val);
 }
 
 fn get_val<'a>(hashmap: &'a LinkedHashMap<Yaml, Yaml>, string: &str) -> &'a Yaml {
