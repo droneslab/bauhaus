@@ -1,8 +1,7 @@
 use std::fmt;
 use cxx::{UniquePtr, let_cxx_string};
 use log::info;
-use dvcore::{matrix::DVMatrix, config::{SETTINGS, SYSTEM}};
-use logging_timer::time;
+use core::{matrix::DVMatrix, config::{SETTINGS, SYSTEM}};
 
 lazy_static! {
     pub static ref VOCABULARY: DVVocabulary = {
@@ -30,7 +29,6 @@ impl DVVocabulary {
     pub fn transform(&self, descriptors: &DVMatrix, bow: & mut BoW) {
         let descriptors2: dvos3binding::ffi::WrapBindCVMat = descriptors.into();
 
-        // TODO (timing) ... this takes 24ms, need to compare to ORBSLAM
         self.vocabulary.transform(
             & descriptors2,
             bow.bow_vec.pin_mut(),

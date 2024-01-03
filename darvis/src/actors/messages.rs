@@ -1,11 +1,11 @@
 use std::collections::HashSet;
 
 use opencv::prelude::Mat;
-use dvcore::{
+use core::{
     matrix::{ DVVectorOfKeyPoint, DVMatrix}, actor::ActorMessage,
 };
 use crate::{
-    dvmap::{pose::DVPose, map::Id, misc::Timestamp, keyframe::Frame},
+    map::{pose::Pose, map::Id, misc::Timestamp, frame::Frame},
     actors::tracking_backend::TrackingState
 };
 
@@ -39,7 +39,7 @@ pub struct FeatureMsg {
 }
 impl ActorMessage for FeatureMsg {}
 pub struct MapInitializedMsg { 
-    pub curr_kf_pose: DVPose, 
+    pub curr_kf_pose: Pose, 
     pub curr_kf_id: Id, 
     pub ini_kf_id: Id, 
     pub local_mappoints: HashSet<Id>, 
@@ -89,20 +89,20 @@ pub struct VisFeatureMatchMsg {
 }
 impl ActorMessage for VisFeatureMatchMsg {}
 pub struct VisTrajectoryMsg { 
-    pub pose: DVPose, 
+    pub pose: Pose, 
     pub mappoint_matches: Vec<Option<(i32, bool)>>, 
     pub timestamp: Timestamp
 }
 impl ActorMessage for VisTrajectoryMsg {}
 pub struct VisUpdateMsg {
-    pub pose: DVPose,
+    pub pose: Pose,
     pub timestamp: Timestamp,
 }
 impl ActorMessage for VisUpdateMsg {}
 
 //* Shutdown Actor *//
 pub struct TrajectoryMsg{ 
-    pub pose: DVPose, 
+    pub pose: Pose, 
     pub ref_kf_id: Id, 
     pub timestamp: Timestamp
 }

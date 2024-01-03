@@ -4,11 +4,11 @@ use mcap::{Schema, Channel, records::MessageHeader, Writer};
 use opencv::prelude::{Mat, MatTraitConst, MatTraitConstManual};
 use foxglove::{foxglove::items::{SceneEntity, SceneUpdate, SpherePrimitive, Vector3, Quaternion, Color, FrameTransform, LinePrimitive, line_primitive, Point3, RawImage, ArrowPrimitive}, get_file_descriptor_set_bytes, make_pose};
 
-use dvcore::{
+use core::{
     actor::{ActorChannels, Actor}, matrix::DVVectorOfKeyPoint, config::SETTINGS, maplock::ReadWriteMap,
 };
 use crate::{
-    dvmap::{map::{Map, Id}, pose::DVPose, misc::Timestamp},
+    map::{map::{Map, Id}, pose::Pose, misc::Timestamp},
     maplock::ReadOnlyMap,
     modules::image,
     actors::messages::{ShutdownMsg, VisFeaturesMsg, VisFeatureMatchMsg, VisTrajectoryMsg},
@@ -193,7 +193,7 @@ impl DarvisVisualizer {
         self.prev_pose = msg.pose.into();
     }
 
-    fn draw_trajectory(&mut self, frame_pose: DVPose, timestamp: Timestamp) -> Result<(), Box<dyn std::error::Error>> {
+    fn draw_trajectory(&mut self, frame_pose: Pose, timestamp: Timestamp) -> Result<(), Box<dyn std::error::Error>> {
         debug!("Drawing trajectory at timestamp {} with pose {:?}", timestamp, frame_pose.inverse());
         let mut entities = vec![];
 
@@ -215,7 +215,7 @@ impl DarvisVisualizer {
         // Re-draw each time because kf poses may have neen optimized since last drawing
         let mut sorted_kfs = map.keyframes.keys().collect::<Vec<&Id>>();
         sorted_kfs.sort();
-        let mut prev_pose: Point3 = DVPose::default().into();
+        let mut prev_pose: Point3 = Pose::default().into();
         let mut prev_id = 0;
         for id in sorted_kfs {
             let curr_pose = map.keyframes.get(id).unwrap().pose.inverse();
@@ -282,7 +282,7 @@ impl DarvisVisualizer {
 
         let map = self.map.read();
         for (mappoint_id, mappoint) in &map.mappoints {
-            let pose = DVPose::new_with_default_rot(mappoint.position);
+            let pose = Pose::new_with_default_rot(mappoint.position);
 
             let mp_sphere = match mappoint_match_ids.contains(&mappoint_id) {
                 true => self.create_sphere(&pose, MAPPOINT_MATCH_COLOR.clone(), MAPPOINT_SIZE.clone()),
@@ -328,7 +328,7 @@ impl DarvisVisualizer {
             let mut spheres = Vec::new();
             let mut lines = Vec::new();
 
-            for connected_kf_id in &kf.connections.get_covisibility_keyframes(i32::MAX) {
+            for connected_kf_id in &kf.get_covisibility_keyframes(i32::MAX) {
                 let connected_kf = map.keyframes.get(connected_kf_id).unwrap();
                 let connected_pose = connected_kf.pose.inverse();
                 let points = vec![pose.into(), connected_pose.into()];
@@ -380,7 +380,7 @@ impl DarvisVisualizer {
         Ok(())
     }
 
-    fn create_sphere(&self, pose: &DVPose, color: Color, size: Vector3) -> SpherePrimitive {
+    fn create_sphere(&self, pose: &Pose, color: Color, size: Vector3) -> SpherePrimitive {
         SpherePrimitive {
             pose: Some(pose.into()),
             size: Some(size),
@@ -388,7 +388,7 @@ impl DarvisVisualizer {
         }
     }
 
-    fn create_arrow(&self, pose: &DVPose, color: Color) -> ArrowPrimitive {
+    fn create_arrow(&self, pose: &Pose, color: Color) -> ArrowPrimitive {
         ArrowPrimitive { 
             pose: Some(pose.into()),
             color: Some(color),
@@ -502,8 +502,8 @@ impl McapWriter {
 }
 
 
-impl From<&DVPose> for foxglove::foxglove::items::Pose {
-    fn from(pose: &DVPose) -> foxglove::foxglove::items::Pose {
+impl From<&Pose> for foxglove::foxglove::items::Pose {
+    fn from(pose: &Pose) -> foxglove::foxglove::items::Pose {
         let trans = pose.get_translation();
         let position = Vector3 { 
             x: trans[0], 
@@ -526,8 +526,8 @@ impl From<&DVPose> for foxglove::foxglove::items::Pose {
     }
 }
 
-impl From<DVPose> for foxglove::foxglove::items::Point3 {
-    fn from(pose: DVPose) -> foxglove::foxglove::items::Point3 {
+impl From<Pose> for foxglove::foxglove::items::Point3 {
+    fn from(pose: Pose) -> foxglove::foxglove::items::Point3 {
         let trans = pose.get_translation();
         Point3 { 
             x: trans[0], 

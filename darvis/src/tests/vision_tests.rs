@@ -1,10 +1,10 @@
 #[cfg(test)]
 mod vision_tests {
-    use dvcore::{matrix::{DVVector3, DVMatrix, DVVectorOfKeyPoint}, config::{SETTINGS, self}, sensor::{Sensor, FrameSensor, ImuSensor}};
+    use core::{matrix::{DVVector3, DVMatrix, DVVectorOfKeyPoint}, config::{SETTINGS, self}, sensor::{Sensor, FrameSensor, ImuSensor}};
     use dvos3binding::ffi::WrapBindCVMat;
     use opencv::{imgcodecs, prelude::{MatTraitConst, KeyPointTraitConst}, core::{CV_8U, CV_8UC1}};
 
-    use crate::{modules::geometric_tools, dvmap::{pose::DVPose, features::Features, bow::{BoW, self}}, actors::tracking_frontend::DVORBextractor};
+    use crate::{modules::geometric_tools, map::{pose::Pose, features::Features, bow::{BoW, self}}, actors::tracking_frontend::DVORBextractor};
     use std::{fs, env};
 
     use super::*;

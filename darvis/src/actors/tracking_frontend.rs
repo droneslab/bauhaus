@@ -1,11 +1,10 @@
 extern crate g2o;
 use cxx::UniquePtr;
-use log::{warn, debug, info};
-use logging_timer::{time, timer};
+use log::{warn, info};
 use std::{fmt, fmt::Debug};
 use opencv::{prelude::*, types::VectorOfKeyPoint,};
 
-use dvcore::{
+use core::{
     actor::Actor,
     sensor::{Sensor, FrameSensor},
     matrix::*,
@@ -19,7 +18,7 @@ use crate::{
     },
     modules::image,
     ActorChannels,
-    dvmap::{map::Id, misc::Timestamp}
+    map::{map::Id, misc::Timestamp},
 };
 
 
@@ -86,7 +85,7 @@ impl Actor for TrackingFrontEnd {
                 let image_rows = image.rows() as u32;
 
                 // TODO (timing) ... cloned if visualizer running. maybe make global shared object?
-                let (keypoints, descriptors) = match SETTINGS.get::<bool>(SYSTEM, "show_visualizer") {
+                let (keypoints, descriptors) = match actor.actor_channels.actors.get(VISUALIZER).is_some() {
                     true => {
                         let (keypoints, descriptors) = actor.extract_features(image.clone());
                         actor.send_to_visualizer(keypoints.clone(), image, msg.timestamp);
@@ -113,7 +112,7 @@ impl Actor for TrackingFrontEnd {
                 let image_rows = msg.image.rows() as u32;
 
                 // TODO (timing) ... cloned if visualizer running. maybe make global shared object?
-                let (keypoints, descriptors) = match SETTINGS.get::<bool>(SYSTEM, "show_visualizer") {
+                let (keypoints, descriptors) = match actor.actor_channels.actors.get(VISUALIZER).is_some() {
                     true => {
                         let (keypoints, descriptors) = actor.extract_features(msg.image.clone());
                         actor.send_to_visualizer(keypoints.clone(), msg.image, msg.timestamp);

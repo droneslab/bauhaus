@@ -1,14 +1,13 @@
 use std::{collections::{HashMap, HashSet}, hash::BuildHasherDefault};
 use fasthash::SeaHasher;
 use log::{info, warn, error, debug};
-use dvcore::{matrix::{DVVector3, DVVectorOfPoint3f}, config::{SETTINGS, SYSTEM}, sensor::{Sensor, FrameSensor, ImuSensor}, maplock::ReadWriteMap};
-use logging_timer::time;
+use core::{matrix::{DVVector3, DVVectorOfPoint3f}, config::{SETTINGS, SYSTEM}, sensor::{Sensor, FrameSensor, ImuSensor}};
 use crate::{
-    dvmap::{keyframe::*, mappoint::*, pose::DVPose},
+    map::{keyframe::*, mappoint::*, pose::Pose},
     modules::optimizer::{self}
 };
 
-use super::misc::Timestamp;
+use super::{misc::Timestamp, frame::Frame};
 
 pub type Id = i32;
 pub type MapItems<T> = HashMap<Id, T, BuildHasherDefault<SeaHasher>>; // faster performance with seahasher
@@ -18,7 +17,7 @@ pub struct Map {
     pub id: Id,
 
     pub keyframes: MapItems<KeyFrame>, // = mspKeyFrames
-    pub mappoints: MapItems<MapPoint<FullMapPoint>>, // = mspMapPoints
+    pub mappoints: MapItems<MapPoint>, // = mspMapPoints
 
     // KeyFrames
     last_kf_id: Id, // = mnMaxKFid
@@ -54,7 +53,7 @@ impl Map {
             last_mp_id: -1,
             initial_kf_id: -1,
             keyframes: MapItems::<KeyFrame>::default(),
-            mappoints: MapItems::<MapPoint<FullMapPoint>>::default(),
+            mappoints: MapItems::<MapPoint>::default(),
         }
     }
 
@@ -64,11 +63,11 @@ impl Map {
         for (id, kf) in &self.keyframes {
             print!("PRINT MAP KF;{};{:?}", id, kf.pose);
             print!(";");
-            for connection in &kf.connections.get_covisibility_keyframes(i32::MAX) {
+            for connection in &kf.get_covisibility_keyframes(i32::MAX) {
                 print!("{},", connection);
             };
             print!(";");
-            for mp_match in &kf.mappoint_matches.matches {
+            for mp_match in kf.get_mp_matches() {
                 if let Some((_, mp_id)) = mp_match {
                     print!("{},", mp_id);
                 }
@@ -87,11 +86,11 @@ impl Map {
     }
 
     ////* &mut self ... behind map actor */////////////////////////////////////////////////////
-    pub fn insert_mappoint_to_map(&mut self, mp: MapPoint<PrelimMapPoint>, observations_to_add: Vec<(Id, u32, usize)>) -> Id {
+    pub fn insert_mappoint_to_map(&mut self, position: DVVector3<f64>, ref_kf_id: Id, origin_map_id: Id, observations_to_add: Vec<(Id, u32, usize)>) -> Id {
         self.last_mp_id += 1;
         let new_mp_id = self.last_mp_id;
 
-        let full_mappoint = MapPoint::<FullMapPoint>::new(mp, self.last_mp_id);
+        let full_mappoint = MapPoint::new(position, ref_kf_id, origin_map_id, self.last_mp_id);
         self.mappoints.insert(self.last_mp_id, full_mappoint);
 
         let mp = self.mappoints.get_mut(&new_mp_id).unwrap();
@@ -106,8 +105,10 @@ impl Map {
 
             // Add observation kf->mp
             self.keyframes.get_mut(&kf_id).map(|kf| {
-                kf.mappoint_matches.add_mappoint(index as u32, mp.get_id(), false);
+                kf.add_mp_match(index as u32, mp.id, false);
             });
+
+            // println!("kf {} observations {:?}", kf_id, self.keyframes.get(&kf_id).unwrap().get_mp_matches());
         }
 
 
@@ -148,16 +149,17 @@ impl Map {
             // have a get_mut on keyframes as well as a get on mappoints below. Another option is to
             // split up the for loop into 2, one for the keyframe update and one for the mappoint update.
             // Possible that that is faster than cloning.
-            let mp_matches = self.keyframes.get(&new_kf_id).unwrap().mappoint_matches.clone();
+            let mp_matches = self.keyframes.get(&new_kf_id).unwrap().get_mp_matches().clone();
 
-            for i in 0..mp_matches.matches.len() {
-                if mp_matches.has_mappoint(&(i as u32)) {
-                    let mp_id = mp_matches.get_mappoint(&(i as u32));
+            for i in 0..mp_matches.len() {
+                if mp_matches[i].is_some() {
+                    let mp_id = self.keyframes.get(&new_kf_id).unwrap().get_mp_match(&(i as u32));
                     // Add observation for mp->kf
                     if let Some(mp) = self.mappoints.get_mut(&mp_id) {
                         mp.add_observation(&new_kf_id, num_keypoints, i as u32);
                     } else {
-                        self.keyframes.get_mut(&new_kf_id).unwrap().mappoint_matches.delete((i as i32, -1));
+                        println!("Delete match kf {} mp {}", new_kf_id, mp_id);
+                        self.keyframes.get_mut(&new_kf_id).unwrap().delete_mp_match_at_indices((i as i32, -1));
                         continue;
                         // Mappoint was deleted by local mapping but not deleted here yet 
                         // because the kf was not in the map at the time.
@@ -165,7 +167,7 @@ impl Map {
 
                     let norm_and_depth;
                     let best_descriptor;
-                    let mp_id = mp_matches.get_mappoint(&(i as u32));
+                    let mp_id = mp_matches[i].unwrap().0;
                     {
                         let mp = self.mappoints.get(&mp_id).unwrap();
                         norm_and_depth = mp.get_norm_and_depth(&self).unwrap();
@@ -194,7 +196,7 @@ impl Map {
             .map(|mappoint| {
                 let obs = mappoint.get_observations();
                 for (kf_id, indexes) in obs {
-                    self.keyframes.get_mut(kf_id).unwrap().mappoint_matches.delete(*indexes);
+                    self.keyframes.get_mut(kf_id).unwrap().delete_mp_match_at_indices(*indexes);
                 }
             });
     }
@@ -210,13 +212,13 @@ impl Map {
             // TODO (timing) ... map mutability
             // same as other issue in map.rs, to remove this clone we need to be able to iterate over an immutable ref to matches and children while mutating other keyframes inside the loop
             let kf = self.keyframes.get(&kf_id).unwrap();
-            connections1 = kf.connections.get_covisibility_keyframes(i32::MAX);
-            matches1 = kf.mappoint_matches.matches.clone();
-            parent1 = kf.connections.parent;
-            children1 = kf.connections.children.clone();
+            connections1 = kf.get_covisibility_keyframes(i32::MAX);
+            matches1 = kf.get_mp_matches().clone();
+            parent1 = kf.parent;
+            children1 = kf.children.clone();
         }
         for conn_kf in connections1 {
-            self.keyframes.get_mut(&conn_kf).unwrap().connections.delete(&kf_id);
+            self.keyframes.get_mut(&conn_kf).unwrap().delete_connection(kf_id);
         }
 
         debug!("Discarding keyframe {} with matches: {:?}", kf_id, matches1);
@@ -245,13 +247,13 @@ impl Map {
 
             for child_kf_id in &children1 {
                 let child_kf = self.keyframes.get(&child_kf_id).unwrap();
-                let connected_kfs = child_kf.connections.get_covisibility_keyframes(i32::MAX);
+                let connected_kfs = child_kf.get_covisibility_keyframes(i32::MAX);
 
                 // Check if a parent candidate is connected to the keyframe
                 for connected_kf_id in &connected_kfs {
                     for parent_candidate_id in &parent_candidates {
                         if connected_kf_id == parent_candidate_id {
-                            let weight = child_kf.connections.get_weight(connected_kf_id);
+                            let weight = child_kf.get_connected_kf_weight(*connected_kf_id);
                             if weight > max {
                                 child_id = *child_kf_id;
                                 parent_id = *connected_kf_id;
@@ -264,7 +266,7 @@ impl Map {
             }
 
             if continue_loop {
-                self.keyframes.get_mut(&child_id).unwrap().connections.change_parent(Some(parent_id));
+                self.keyframes.get_mut(&child_id).unwrap().parent = Some(parent_id);
                 parent_candidates.insert(parent_id);
                 children1.remove(&child_id);
             } else {
@@ -273,12 +275,12 @@ impl Map {
         }
 
         // If a children has no covisibility links with any parent candidate, assign to the original parent of this KF
-        for child_id in &children1 {
-            self.keyframes.get_mut(&child_id).unwrap().connections.change_parent(parent1);
+        for child_id in children1 {
+            self.keyframes.get_mut(&child_id).unwrap().parent = parent1;
         }
 
         if parent1.is_some() {
-            self.keyframes.get_mut(&parent1.unwrap()).unwrap().connections.delete_child(kf_id);
+            self.keyframes.get_mut(&parent1.unwrap()).unwrap().children.remove(&kf_id);
         }
         self.keyframes.remove(&kf_id);
 
@@ -287,7 +289,7 @@ impl Map {
 
     pub fn create_initial_map_monocular(
         &mut self, mp_matches: Vec<i32>, p3d: DVVectorOfPoint3f, initial_frame: Frame, current_frame: Frame
-    ) -> Option<(DVPose, i32, i32, HashSet<Id>, Timestamp)> {
+    ) -> Option<(Pose, i32, i32, HashSet<Id>, Timestamp)> {
         // Testing local mapping ... global bundle adjustment gives slightly different pose for second keyframe.
         // TODO (design) - we have to do some pretty gross things with calling functions in this section
         // so that we can have multiple references to parts of the map. This should get cleaned up, but I'm not sure how.
@@ -327,8 +329,10 @@ impl Map {
             // Create mappoint
             let point = p3d.get(kf1_index).unwrap();
             let world_pos = DVVector3::new_with(point.x as f64, point.y as f64, point.z as f64);
-            let id = self.insert_mappoint_to_map(
-                MapPoint::<PrelimMapPoint>::new(world_pos, curr_kf_id, self.id),
+            let _id = self.insert_mappoint_to_map(
+                world_pos, 
+                curr_kf_id, 
+                self.id,
                 vec![(initial_kf_id, num_keypoints, kf1_index), (curr_kf_id, num_keypoints, kf2_index as usize)]
             );
         }
@@ -348,7 +352,7 @@ impl Map {
             _ => 1.0 / median_depth
         };
 
-        if median_depth < 0.0 || self.keyframes.get(&curr_kf_id)?.mappoint_matches.tracked_mappoints(&self, 1) < 50 {
+        if median_depth < 0.0 || self.keyframes.get(&curr_kf_id)?.get_tracked_mappoints(&self, 1) < 50 {
             // reset active map
             warn!("map::create_initial_map_monocular;wrong initialization");
             return None;
@@ -362,7 +366,7 @@ impl Map {
         }
 
         // Scale points
-        for item in &self.keyframes.get(&initial_kf_id)?.mappoint_matches.matches {
+        for item in self.keyframes.get(&initial_kf_id)?.get_mp_matches() {
             if let Some((mp_id, _)) = item {
                 let mp = self.mappoints.get_mut(&mp_id)?;
                 mp.position = DVVector3::new((*mp.position) * inverse_median_depth);
@@ -410,13 +414,13 @@ impl Map {
         Some((curr_kf_pose, curr_kf_id, initial_kf_id, relevant_mappoints, curr_kf_timestamp))
     }
 
-    pub fn update_connections(mappoints: &MapItems<MapPoint<FullMapPoint>>, keyframes: &mut MapItems<KeyFrame>, initial_kf_id: &i32, main_kf_id: &i32) {
+    pub fn update_connections(mappoints: &MapItems<MapPoint>, keyframes: &mut MapItems<KeyFrame>, initial_kf_id: &i32, main_kf_id: &i32) {
         let _span = tracy_client::span!("update_connections");
         //For all map points in keyframe check in which other keyframes are they seen
         //Increase counter for those keyframes
         let mut kf_counter = HashMap::<Id, i32>::new();
         let kf = keyframes.get_mut(main_kf_id).unwrap();
-        for item in kf.mappoint_matches.matches.iter() {
+        for item in kf.get_mp_matches() {
             if let Some((mp_id, _)) = item {
                 if let Some(mp) = mappoints.get(&mp_id) {
                     for kf_id in mp.get_observations().keys() {
@@ -442,12 +446,12 @@ impl Map {
         }
 
         for (kf_id, weight) in &kf_counter {
-            keyframes.get_mut(&kf_id).unwrap().connections.add(main_kf_id, *weight);
+            keyframes.get_mut(&kf_id).unwrap().add_connection(*main_kf_id, *weight);
         }
-        let parent_kf_id = keyframes.get_mut(main_kf_id).unwrap().connections.add_all(kf_counter, main_kf_id == initial_kf_id);
+        let parent_kf_id = keyframes.get_mut(main_kf_id).unwrap().add_all_connections(kf_counter, main_kf_id == initial_kf_id);
         if parent_kf_id.is_some() {
             parent_kf_id.map(|parent_kf| {
-                keyframes.get_mut(&parent_kf).unwrap().connections.add_child(*main_kf_id);
+                keyframes.get_mut(&parent_kf).unwrap().children.insert(*main_kf_id);
             });
         }
     }

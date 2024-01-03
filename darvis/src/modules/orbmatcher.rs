@@ -1,21 +1,16 @@
 use std::collections::{HashMap, HashSet};
 use std::f64::INFINITY;
-use std::time::{Instant, Duration};
-use dvcore::config::SETTINGS;
-use dvcore::matrix::{DVVectorOfPoint2f, DVVector3, DVMatrix};
-use dvcore::sensor::{Sensor, FrameSensor};
+use core::config::SETTINGS;
+use core::matrix::{DVVectorOfPoint2f, DVVector3};
+use core::sensor::{Sensor, FrameSensor};
 use log::{warn, debug};
-use logging_timer::{time, timer};
 use opencv::core::KeyPoint;
 use opencv::prelude::*;
 use crate::MapLock;
 use crate::actors::tracking_backend::TrackedMapPointData;
-use crate::dvmap::keyframe::{Frame, KeyFrame};
 use crate::modules::optimizer::LEVEL_SIGMA2;
 use crate::registered_actors::{MATCHER, FEATURE_DETECTION, CAMERA};
-use crate::{
-    dvmap::map::Id,
-};
+use crate::map::{map::Id, keyframe::KeyFrame, frame::Frame};
 
 use super::camera::CAMERA_MODULE;
 use super::optimizer::INV_LEVEL_SIGMA2;
@@ -25,9 +20,7 @@ const  TH_LOW: i32 = 50;
 const  HISTO_LENGTH: i32 = 30;
 
 lazy_static! {
-    // Note: ORBSLAM3 duplicates this var at every frame and keyframe,
-    // but I'm pretty sure that it's set once per-system when the ORBExtractor
-    // is created and only ever used by Optimizer.
+    // Note: ORBSLAM3 duplicates this var at every frame and keyframe.
     // In general, I'd like to remove these kinds of variables away from the
     // frame/keyframe/mappoint implementation and into the object that actually
     // directly uses it.
@@ -180,22 +173,20 @@ pub fn search_by_projection(
             );
 
             if !indices.is_empty() {
-                let best_descriptor = mp.get_best_descriptor();
-
                 let mut best_dist = (256, 256);
                 let mut best_level = (-1, -1);
                 let mut best_idx: i32 = -1;
 
                 // Get best and second matches with near keypoints
                 for idx in indices {
-                    if frame.mappoint_matches.has_mappoint(&idx) {
-                        let id = frame.mappoint_matches.get_mappoint(&idx);
+                    if frame.mappoint_matches.has(&idx) {
+                        let id = frame.mappoint_matches.get(&idx);
                         if let Some(mp) = map.mappoints.get(&id) {
                             if mp.get_observations().len() > 0 {
                                 continue;
                             }
                         } else {
-                            frame.mappoint_matches.delete((idx as i32, -1)); // TODO (STEREO)
+                            frame.mappoint_matches.delete_at_indices((idx as i32, -1)); // TODO (STEREO)
                         }
                     }
 
@@ -213,7 +204,7 @@ pub fn search_by_projection(
                     }
 
                     let descriptors = frame.features.descriptors.row(idx).unwrap();
-                    let dist = descriptor_distance(&best_descriptor, &descriptors);
+                    let dist = descriptor_distance(&mp.best_descriptor, &descriptors);
 
                     if dist < best_dist.0 {
                         best_dist.1 = best_dist.0;
@@ -233,7 +224,7 @@ pub fn search_by_projection(
                         continue;
                     }
                     if best_level.0 != best_level.1 || (best_dist.0 as f64) <= (ratio * best_dist.1 as f64) {
-                        frame.mappoint_matches.add_mappoint(best_idx as u32, *mp_id, false);
+                        frame.mappoint_matches.add(best_idx as u32, *mp_id, false);
 
                         match sensor.frame() {
                             FrameSensor::Stereo => {
@@ -374,15 +365,15 @@ pub fn search_by_projection_with_threshold (
     {
         let map = map.read();
         for idx1 in 0..last_frame.features.get_all_keypoints().len() {
-            if last_frame.mappoint_matches.has_mappoint(&(idx1 as u32)) {
-                let mp_id = last_frame.mappoint_matches.get_mappoint(&(idx1 as u32));
+            if last_frame.mappoint_matches.has(&(idx1 as u32)) {
+                let mp_id = last_frame.mappoint_matches.get(&(idx1 as u32));
                 if last_frame.mappoint_matches.is_outlier(&(idx1 as u32)) { continue; }
                 // Project
                 let mappoint = match map.mappoints.get(&mp_id) {
                     Some(mp) => mp,
                     None => {
                         // Mappoint has been deleted but not updated in last_frame yet
-                        last_frame.mappoint_matches.delete((idx1, -1)); // TODO (STEREO)
+                        last_frame.mappoint_matches.delete_at_indices((idx1, -1)); // TODO (STEREO)
                         continue;
                     }
                 };
@@ -394,9 +385,9 @@ pub fn search_by_projection_with_threshold (
                 let invzc = 1.0 / x_3d_c[2];
                 if invzc < 0.0 { continue; }
 
-                let u = CAMERA_MODULE.get_fx() * xc * invzc + CAMERA_MODULE.get_cx();
-                let v = CAMERA_MODULE.get_fy() * yc * invzc + CAMERA_MODULE.get_cy();
-                if !current_frame.features.image_bounds.check_bounds(u, v) {
+                let u = CAMERA_MODULE.fx * xc * invzc + CAMERA_MODULE.cx;
+                let v = CAMERA_MODULE.fy * yc * invzc + CAMERA_MODULE.cy;
+                if !current_frame.features.check_bounds(u, v) {
                     continue;
                 }
 
@@ -417,13 +408,12 @@ pub fn search_by_projection_with_threshold (
                     continue;
                 }
 
-                let best_descriptor = mappoint.get_best_descriptor();
                 let mut best_dist = 256;
                 let mut best_idx: i32 = -1;
 
                 for idx2 in indices_2 {
-                    if current_frame.mappoint_matches.has_mappoint(&idx2) {
-                        let id = current_frame.mappoint_matches.get_mappoint(&idx2);
+                    if current_frame.mappoint_matches.has(&idx2) {
+                        let id = current_frame.mappoint_matches.get(&idx2);
                         if let Some(mappoint) = map.mappoints.get(&id) {
                             if mappoint.get_observations().len() > 0 { 
                                 continue;
@@ -443,7 +433,7 @@ pub fn search_by_projection_with_threshold (
                     // }
 
                     let descriptor = current_frame.features.descriptors.row(idx2)?;
-                    let dist = descriptor_distance(&best_descriptor, &descriptor);
+                    let dist = descriptor_distance(&mappoint.best_descriptor, &descriptor);
 
                     if dist < best_dist {
                         best_dist = dist;
@@ -452,7 +442,7 @@ pub fn search_by_projection_with_threshold (
                 }
 
                 if best_dist <= TH_HIGH {
-                    current_frame.mappoint_matches.add_mappoint(best_idx as u32, mp_id, false);
+                    current_frame.mappoint_matches.add(best_idx as u32, mp_id, false);
 
                     if should_check_orientation {
                         check_orientation_1(
@@ -502,7 +492,7 @@ pub fn search_by_bow_f(
     should_check_orientation: bool, ratio: f64
 ) -> Result<u32, Box<dyn std::error::Error>> {
     // int SearchByBoW(KeyFrame *pKF, Frame &F, std::vector<MapPoint*> &vpMapPointMatches);
-    frame.mappoint_matches.clear_mappoints();
+    frame.mappoint_matches.clear();
     let mut matches = HashMap::<u32, Id>::new();
 
     let factor = 1.0 / (HISTO_LENGTH as f32);
@@ -535,10 +525,10 @@ pub fn search_by_bow_f(
             for index1 in 0..kf_indices_size {
                 let kf_index = kf.bow.as_ref().unwrap().feat_vec.vec_get(kf_node_id, index1);
 
-                if !kf.mappoint_matches.has_mappoint(&kf_index) {
+                if !kf.has_mp_match(&kf_index) {
                     continue
                 }
-                let mp_id = &kf.mappoint_matches.get_mappoint(&kf_index);
+                let mp_id = &kf.get_mp_match(&kf_index);
 
                 let mut best_dist_left = (256, 256);
                 let mut best_index_left = -1;
@@ -611,7 +601,7 @@ pub fn search_by_bow_f(
     };
 
     for (index, mp_id) in &matches {
-        frame.mappoint_matches.add_mappoint(*index, *mp_id, false);
+        frame.mappoint_matches.add(*index, *mp_id, false);
     }
 
     return Ok(matches.len() as u32);
@@ -646,7 +636,7 @@ pub fn search_by_bow_kf(
                             continue;
                         }
 
-                        if kf_2.mappoint_matches.has_mappoint(&index_kf_2) {
+                        if kf_2.has_mp_match(&index_kf_2) {
                             continue;
                         }
 
@@ -663,7 +653,7 @@ pub fn search_by_bow_kf(
                     }
 
                     if best_dist.0 <= TH_LOW {
-                        let mp_id = &kf_2.mappoint_matches.get_mappoint(&(best_index as u32));
+                        let mp_id = &kf_2.get_mp_match(&(best_index as u32));
 
                         if (best_dist.0 as f64) < ratio * (best_dist.1 as f64) {
                             matches.insert(index_kf_1, *mp_id); // for Kf_1
@@ -764,7 +754,7 @@ pub fn search_for_triangulation(
                 let kf1_index = kf_1.bow.as_ref().unwrap().feat_vec.vec_get(kf1_node_id, idx1);
 
                 // If there is already a MapPoint skip
-                if kf_1.mappoint_matches.has_mappoint(&kf1_index) {
+                if kf_1.has_mp_match(&kf1_index) {
                     // skipped1 += 1;
                     continue
                 };
@@ -800,7 +790,7 @@ pub fn search_for_triangulation(
                     // println!("{} {} {} ", kf2_indices_size, idx2, kf2_index);
 
                     // If we have already matched or there is a MapPoint skip
-                    if kf_2.mappoint_matches.has_mappoint(&kf2_index) || matched_already.contains_key(&kf2_index) {
+                    if kf_2.has_mp_match(&kf2_index) || matched_already.contains_key(&kf2_index) {
                         // skipped2 += 1;
                         continue
                     };
@@ -952,7 +942,7 @@ pub fn fuse(kf_id: &Id, fuse_candidates: &Vec<Id>, map: &MapLock, th: f32, is_ri
             Some(mp) => mp,
             None => continue
         };
-        if mappoint.is_in_keyframe(*kf_id) {
+        if mappoint.get_observations().contains_key(kf_id) {
             continue;
         }
 
@@ -983,7 +973,7 @@ pub fn fuse(kf_id: &Id, fuse_candidates: &Vec<Id>, map: &MapLock, th: f32, is_ri
         }
 
         // Viewing angle must be less than 60 deg
-        let pn = mappoint.get_normal();
+        let pn = mappoint.normal_vector;
         if po.dot(&pn) < 0.5 * dist_3d {
             continue;
         }
@@ -997,8 +987,6 @@ pub fn fuse(kf_id: &Id, fuse_candidates: &Vec<Id>, map: &MapLock, th: f32, is_ri
         }
 
         // Match to the most similar keypoint in the radius
-        let desc_mp = mappoint.get_best_descriptor();
-
         let mut best_dist = 256;
         let mut best_idx = -1;
 
@@ -1038,7 +1026,7 @@ pub fn fuse(kf_id: &Id, fuse_candidates: &Vec<Id>, map: &MapLock, th: f32, is_ri
             }
 
             let desc_kf = keyframe.features.descriptors.row(idx2).unwrap();
-            let dist = descriptor_distance(&desc_mp, &desc_kf);
+            let dist = descriptor_distance(&mappoint.best_descriptor, &desc_kf);
 
             if dist < best_dist {
                 best_dist = dist;
@@ -1048,8 +1036,8 @@ pub fn fuse(kf_id: &Id, fuse_candidates: &Vec<Id>, map: &MapLock, th: f32, is_ri
 
         // If there is already a MapPoint replace otherwise add new measurement
         if best_dist <= TH_LOW {
-            if keyframe.mappoint_matches.has_mappoint(&(best_idx as u32)) {
-                let mappoint_in_kf_id = keyframe.mappoint_matches.get_mappoint(&(best_idx as u32));
+            if keyframe.has_mp_match(&(best_idx as u32)) {
+                let mappoint_in_kf_id = keyframe.get_mp_match(&(best_idx as u32));
                 let mappoint_in_kf = lock.mappoints.get(&mappoint_in_kf_id).unwrap();
                 if mappoint_in_kf.get_observations().len() > mappoint.get_observations().len() {
                     warn!("Verify that the order of mp_id and mappoint_in_kf_id is right");
@@ -1060,8 +1048,9 @@ pub fn fuse(kf_id: &Id, fuse_candidates: &Vec<Id>, map: &MapLock, th: f32, is_ri
             } else {
                 let num_keypoints = map.write().keyframes.get(&kf_id).expect(&format!("Could not get kf {}", kf_id)).features.num_keypoints;
                 let mut write = map.write();
+                debug!("ADd observation in orbmatcher");
                 write.mappoints.get_mut(&mp_id).unwrap().add_observation(&kf_id, num_keypoints, best_idx as u32);
-                write.keyframes.get_mut(&kf_id).unwrap().mappoint_matches.add_mappoint(best_idx as u32, *mp_id, false);
+                write.keyframes.get_mut(&kf_id).unwrap().add_mp_match(best_idx as u32, *mp_id, false);
             }
         }
     }

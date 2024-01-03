@@ -1,12 +1,10 @@
-// Testing: Fully tested, works correctly.
-
-use dvcore::config::{SETTINGS, SYSTEM};
-use dvcore::matrix::DVVectorOfPoint2f;
-use dvcore::sensor::{Sensor, FrameSensor, ImuSensor};
+use core::config::{SETTINGS, SYSTEM};
+use core::matrix::DVVectorOfPoint2f;
+use core::sensor::{Sensor, FrameSensor, ImuSensor};
 use log::debug;
-use dvcore::matrix::DVVectorOfPoint3f;
+use core::matrix::DVVectorOfPoint3f;
 use opencv::prelude::KeyPointTraitConst;
-use crate::dvmap::{keyframe::Frame, pose::DVPose};
+use crate::map::{frame::Frame, pose::Pose};
 use crate::modules::camera::CAMERA_MODULE;
 
 use super::orbmatcher;
@@ -123,7 +121,7 @@ impl Initialization {
                     }
                 }
 
-                self.initial_frame.as_mut().unwrap().pose = Some(DVPose::default());
+                self.initial_frame.as_mut().unwrap().pose = Some(Pose::default());
                 self.current_frame.as_mut().unwrap().pose = Some(tcw);
 
                 return Ok(true);

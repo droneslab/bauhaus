@@ -1,10 +1,10 @@
-use dvcore::actor::{Actor, ActorMessage};
-use dvcore::config::{SETTINGS, SYSTEM};
-use dvcore::sensor::Sensor;
+use core::actor::Actor;
+use core::config::{SETTINGS, SYSTEM};
+use core::sensor::Sensor;
 use log::warn;
 use crate::actors::messages::KeyFrameIdMsg;
 use crate::{ActorChannels, MapLock};
-use crate::dvmap::map::{Id, Map};
+use crate::map::map::Id;
 use crate::modules::imu::ImuModule;
 
 use super::messages::{ShutdownMsg, IMUInitializedMsg};
@@ -12,6 +12,7 @@ use super::messages::{ShutdownMsg, IMUInitializedMsg};
 #[derive(Debug)]
 pub struct LoopClosing {
     actor_channels: ActorChannels,
+    
     // Map
     map: MapLock,
 

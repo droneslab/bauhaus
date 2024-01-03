@@ -10,8 +10,8 @@ name = "bindarvis"
 path = "src/main.rs"
 
 [lib]
-name = "dvcore"
-path = "src/dvcore/lib.rs"
+name = "core"
+path = "src/core/lib.rs"
 
 [profile.release]
 debug = true

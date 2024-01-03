@@ -1,10 +1,10 @@
 /// *** Actor channel and actor message implementation. *** //
 
-use std::{collections::HashMap};
+use std::collections::HashMap;
 use crossbeam_channel::{RecvError, unbounded};
 
 use downcast_rs::{impl_downcast, Downcast};
-use log::{info, error};
+use log::error;
 
 pub type MessageBox = Box<dyn ActorMessage>;
 pub type Receiver = crossbeam_channel::Receiver<MessageBox>;

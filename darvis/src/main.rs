@@ -2,23 +2,22 @@
 #![feature(hash_extract_if)]
 #![feature(extract_if)]
 
-use std::{fs::{OpenOptions, File}, path::Path, env, time::{self, Duration}, io::{self, BufRead}, thread::{self, sleep}, sync::Arc};
-use dvmap::map::Map;
+use std::{fs::{OpenOptions, File}, path::Path, env, time::{self, Duration}, io::{self, BufRead}, thread};
+use map::map::Map;
 use fern::colors::{ColoredLevelConfig, Color};
 use glob::glob;
 use log::{info, warn};
-use parking_lot::{Mutex, RwLock};
 use spin_sleep::LoopHelper;
 #[macro_use] extern crate lazy_static;
 
-use dvcore::{*, config::*, actor::ActorChannels, maplock::ReadWriteMap};
-use crate::{actors::messages::{ShutdownMsg, ImagePathMsg, ImageMsg}, registered_actors::TRACKING_FRONTEND, modules::image};
-use crate::dvmap::{bow::VOCABULARY, map::Id};
+use core::{*, config::*, actor::ActorChannels, maplock::ReadWriteMap};
+use crate::{actors::messages::{ShutdownMsg, ImageMsg}, registered_actors::TRACKING_FRONTEND, modules::image};
+use crate::map::{bow::VOCABULARY, map::Id};
 
 mod actors;
 mod registered_actors;
 mod spawn;
-mod dvmap;
+mod map;
 mod modules;
 mod tests;
 
@@ -215,9 +214,7 @@ fn setup_logger(level: &str) -> Result<(), fern::InitError> {
         "error" => log::LevelFilter::Error,
         _ => log::LevelFilter::Trace,
     };
-    // Two loggers in chain - one for terminal output (colored, easier to read)
-    // and another for file output (not colored, info on each line deliminated by |
-    // for easier parsing in python scripts)
+    // Two loggers in chain - one for terminal output (colored) and another for file output (not colored)
     let start_time = chrono::Local::now();
     fern::Dispatch::new()
     .level(log_level)

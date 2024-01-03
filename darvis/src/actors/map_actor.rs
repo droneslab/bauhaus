@@ -1,12 +1,12 @@
 // NOT USING THIS RIGHT NOW!!!!!!!!!!!!!
 
-// use dvcore::{actor::{ActorChannels, ActorMessage, Actor}, matrix::DVVectorOfPoint3f};
+// use core::{actor::{ActorChannels, ActorMessage, Actor}, matrix::DVVectorOfPoint3f};
 // use log::{info, warn, debug};
 // use logging_timer::{timer, finish};
 
 // use crate::{
 //     maplock::ReadWriteMap,
-//     dvmap::{keyframe::*, map::*, mappoint::{MapPoint, PrelimMapPoint}, pose::DVPose},
+//     map::{keyframe::*, map::*, mappoint::{MapPoint, PrelimMapPoint}, pose::DVPose},
 //     modules::{map_initialization::Initialization, optimizer::BundleAdjustmentResult}, actors::messages::{ShutdownMsg, KeyFrameIdMsg}, registered_actors::{TRACKING_BACKEND, LOCAL_MAPPING},
 // };
 

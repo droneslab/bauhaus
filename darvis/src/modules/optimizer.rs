@@ -2,18 +2,15 @@ extern crate g2o;
 
 use std::collections::{HashMap, HashSet};
 use cxx::UniquePtr;
-use dvcore::{
-    maplock::{ReadOnlyMap, ReadWriteMap},
+use core::{
     config::{SETTINGS, SYSTEM}, sensor::{Sensor, FrameSensor},
 };
 use log::{warn, debug};
-use logging_timer::time;
 use nalgebra::Matrix3;
 use opencv::prelude::KeyPointTraitConst;
 use crate::{
-    dvmap::{keyframe::{Frame}, pose::{DVPose, DVTranslation}, map::{Map, Id}}, registered_actors::{FEATURE_DETECTION, CAMERA}, MapLock
+    map::{frame::Frame, pose::{Pose, DVTranslation}, map::{Map, Id}}, registered_actors::{FEATURE_DETECTION, CAMERA}, MapLock
 };
-use g2o::ffi::EdgeSE3ProjectXYZ;
 
 lazy_static! {
     static ref TH_HUBER_MONO: f32 = (5.991 as f32).sqrt();
@@ -834,14 +831,14 @@ pub fn optimize_pose(
         // Take lock to construct factor graph
         let map_read_lock = map.read();
         for i in 0..frame.features.num_keypoints {
-            if !frame.mappoint_matches.has_mappoint(&i) {
+            if !frame.mappoint_matches.has(&i) {
                 continue;
             }
-            let mp_id = frame.mappoint_matches.get_mappoint(&i);
+            let mp_id = frame.mappoint_matches.get(&i);
             let position = match map_read_lock.mappoints.get(&mp_id) {
                 Some(mp) => mp.position,
                 None => {
-                    frame.mappoint_matches.delete((i as i32, -1)); // TODO (STEREO)
+                    frame.mappoint_matches.delete_at_indices((i as i32, -1)); // TODO (STEREO)
                     continue;
                 },
             };
@@ -869,7 +866,7 @@ pub fn optimize_pose(
                 },
                 _ => {
                     // Mono observations
-                    frame.mappoint_matches.set_mp_outlier(& (i as u32), false);
+                    frame.mappoint_matches.set_outlier(& (i as u32), false);
                     optimizer.pin_mut().add_edge_monocular_unary(
                         true, 0, keypoint.octave(), keypoint.pt().x, keypoint.pt().y,
                         INV_LEVEL_SIGMA2[keypoint.octave() as usize],
@@ -915,11 +912,11 @@ pub fn optimize_pose(
             let chi2 = edge.inner.chi2();
 
             if chi2 > chi2_mono[iteration] {
-                frame.mappoint_matches.set_mp_outlier(&mp_indexes[index], true);
+                frame.mappoint_matches.set_outlier(&mp_indexes[index], true);
                 edge.inner.pin_mut().set_level(1);
                 num_bad += 1;
             } else {
-                frame.mappoint_matches.set_mp_outlier(&mp_indexes[index], false);
+                frame.mappoint_matches.set_outlier(&mp_indexes[index], false);
                 edge.inner.pin_mut().set_level(0);
             }
 
@@ -1045,23 +1042,22 @@ pub fn global_bundle_adjustment(map: &Map, iterations: i32) -> BundleAdjustmentR
     // for key in bla {
     //     let mappoint = mappoints.get(&key).unwrap();
     //     debug!("optimizer data id: {}, pos: [{:.3} {:.3} {:.3}]", mappoint.get_id(), mappoint.position.x, mappoint.position.y, mappoint.position.z);
-    //     debug!("optimizer data obs: {:?}", mappoint.get_observations());
+    //     debug!("optimizer data obs: {:?}", mappoint.observations);
     // }
 
     let mut _edges = Vec::new();
     for (mp_id, mappoint) in &map.mappoints {
         optimizer.pin_mut().add_mappoint_vertex(
             id_count,
-            DVPose::new(*mappoint.position, Matrix3::identity()).into() // create pose out of translation only
+            Pose::new(*mappoint.position, Matrix3::identity()).into() // create pose out of translation only
         );
         mp_vertex_ids.insert(*mp_id, id_count);
         // debug!("Add mappoint to vertex,{:?},{:?}", mp_id, id_count);
 
-        let observations = mappoint.get_observations();
         let mut n_edges = 0;
 
         //SET EDGES
-        for (kf_id, (left_index, _right_index)) in observations {
+        for (kf_id, (left_index, _right_index)) in mappoint.get_observations() {
             if !optimizer.has_vertex(id_count) || !optimizer.has_vertex(*kf_id) {
                 continue;
             }
@@ -1148,7 +1144,7 @@ pub fn local_bundle_adjustment(
         let mut local_ba_for_kf = HashMap::new();
         local_ba_for_kf.insert(keyframe.id, keyframe.id);
 
-        for kf_id in keyframe.connections.get_covisibility_keyframes(i32::MAX) {
+        for kf_id in keyframe.get_covisibility_keyframes(i32::MAX) {
             let kf = lock.keyframes.get(&kf_id).unwrap();
             local_ba_for_kf.insert(kf_id, keyframe.id);
             if kf.origin_map_id == current_map_id {
@@ -1166,7 +1162,7 @@ pub fn local_bundle_adjustment(
             if kf_i.id == lock.initial_kf_id {
                 num_fixed_kf += 1;
             }
-            for mp_match in &kf_i.mappoint_matches.matches {
+            for mp_match in kf_i.get_mp_matches() {
                 if let Some((mp_id, _)) = mp_match {
                     if let Some(mp) = lock.mappoints.get(&mp_id) {
                         if mp.origin_map_id == current_map_id {
@@ -1260,14 +1256,13 @@ pub fn local_bundle_adjustment(
 
             optimizer.pin_mut().add_mappoint_vertex(
                 vertex_id,
-                DVPose::new(*mp.position, Matrix3::identity()).into() // create pose out of translation only
+                Pose::new(*mp.position, Matrix3::identity()).into() // create pose out of translation only
             );
             mp_vertex_ids.insert(*mp_id, vertex_id);
             mps_to_optimize += 1;
 
-            let observations = mp.get_observations();
             // Set edges
-            for (kf_id, (left_index, _right_index)) in observations {
+            for (kf_id, (left_index, _right_index)) in mp.get_observations() {
                 let kf = lock.keyframes.get(kf_id).unwrap();
                 if kf.origin_map_id != current_map_id {
                     continue
@@ -1438,7 +1433,7 @@ pub fn local_bundle_adjustment(
     {
         let _span = tracy_client::span!("local_bundle_adjustment::discard");
         for (mp_id, kf_id) in mps_to_discard {
-            map.write().keyframes.get_mut(&kf_id).unwrap().mappoint_matches.delete((mp_id, -1));
+            map.write().keyframes.get_mut(&kf_id).unwrap().delete_mp_match(mp_id);
             map.write().mappoints.get_mut(&mp_id).unwrap().delete_observation(&kf_id);
             debug!("Discarding mappoint {} from keyframe {}", mp_id, kf_id);
             debug!("Discarding keyframe {} for mappoint {}", kf_id, mp_id);
@@ -1506,7 +1501,7 @@ pub fn local_bundle_adjustment(
 #[derive(Debug)]
 pub struct BundleAdjustmentResult {
     pub new_mp_poses: HashMap::<Id, DVTranslation>,
-    pub new_kf_poses: HashMap::<Id, DVPose>,
+    pub new_kf_poses: HashMap::<Id, Pose>,
     pub mps_to_discard: Vec<i32>,
     pub kfs_to_discard: Vec<i32>,
 }
@@ -1517,7 +1512,7 @@ impl BundleAdjustmentResult {
     ) -> Self {
         // Recover optimized data
         // Keyframes
-        let mut new_kf_poses = HashMap::<Id, DVPose>::new();
+        let mut new_kf_poses = HashMap::<Id, Pose>::new();
         for (kf_id, vertex_id) in kf_vertex_ids {
             let pose = optimizer.recover_optimized_frame_pose(vertex_id);
             new_kf_poses.insert(kf_id, pose.into());
