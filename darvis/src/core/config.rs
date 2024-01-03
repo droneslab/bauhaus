@@ -179,7 +179,6 @@ pub fn load_config(file_name: &String) -> Result<(Vec<ActorConf>, Vec<ModuleConf
     add_setting_string(SYSTEM, "results_folder", &system_settings["results_folder"]);
     add_setting_bool(SYSTEM, "use_timestamps_file", &system_settings["use_timestamps_file"]);
     add_setting_f64(SYSTEM, "fps", &system_settings["fps"]);
-    add_setting_bool(SYSTEM, "show_visualizer", &system_settings["show_visualizer"]);
     add_setting_bool(SYSTEM, "enable_profiling", &system_settings["enable_profiling"]);
     add_setting_bool(SYSTEM, "check_deadlocks", &system_settings["check_deadlocks"]);
     let log_level = system_settings["log_level"].as_str().unwrap().to_owned();

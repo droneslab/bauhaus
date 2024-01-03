@@ -1,5 +1,5 @@
-use dvcore::{maplock::{ReadOnlyMap, ReadWriteMap}, actor::{ActorChannels, Actor}};
-use crate::{dvmap::map::Map, MapLock};
+use core::actor::{ActorChannels, Actor};
+use crate:: MapLock;
 
 // USER-DEFINED ACTORS: add a string to name your actor here
 pub static TRACKING_FRONTEND: &str = "TRACKING_FRONTEND";
@@ -40,7 +40,7 @@ pub fn spawn(
             crate::actors::shutdown::ShutdownActor::spawn(actor_channels, ())
         },
         _ => {
-            dvcore::actor::NullActor::spawn(actor_channels, ())
+            core::actor::NullActor::spawn(actor_channels, ())
         },
     };
 }

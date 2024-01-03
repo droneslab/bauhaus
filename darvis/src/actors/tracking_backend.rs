@@ -1,17 +1,16 @@
 use std::{collections::{HashSet, HashMap}, sync::atomic::Ordering};
 use log::{warn, info, debug, error};
-use dvcore::{config::*, sensor::{Sensor, FrameSensor, ImuSensor}, actor::Actor};
-use logging_timer::{time, timer};
+use core::{config::*, sensor::{Sensor, FrameSensor, ImuSensor}, actor::Actor};
 use crate::{
     actors::messages::{TrajectoryMsg, VisTrajectoryMsg, TrackingStateMsg, FeatureMsg, InitKeyFrameMsg, LastKeyFrameUpdatedMsg, ShutdownMsg},
     registered_actors::{LOCAL_MAPPING, TRACKING_BACKEND, SHUTDOWN_ACTOR, TRACKING_FRONTEND, VISUALIZER},
-    dvmap::{
-        map::Id, keyframe::Frame, pose::DVPose, misc::Timestamp,
+    map::{
+        map::Id, frame::Frame, pose::Pose, misc::Timestamp,
     },
     modules::{imu::ImuModule, optimizer::{self}, orbmatcher, map_initialization::Initialization, relocalization::Relocalization}, ActorChannels, MapLock,
 };
 
-use super::{messages::{IMUInitializedMsg, NewKeyFrameMsg}, local_mapping::{self, LOCAL_MAPPING_IDLE}};
+use super::{messages::{IMUInitializedMsg, NewKeyFrameMsg}, local_mapping::LOCAL_MAPPING_IDLE};
 
 #[derive(Debug)]
 pub struct TrackingBackend {
@@ -47,7 +46,7 @@ pub struct TrackingBackend {
     map_updated : bool,  // TODO (mvp) I'm not sure we want to use this
 
     // Poses in trajectory
-    trajectory_poses: Vec<DVPose>, //mlRelativeFramePoses
+    trajectory_poses: Vec<Pose>, //mlRelativeFramePoses
 
     // Global defaults
     localization_only_mode: bool,
@@ -185,10 +184,6 @@ impl TrackingBackend {
                 todo!("Localization only");
                 // Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Tracking.cc#L1933
                 // Look for "mbOnlyTracking" in Track() function
-            },
-            (false, TrackingState::WaitForMapResponse) => {
-                self.state = TrackingState::WaitForMapResponse;
-                return Ok(());
             },
             (false, TrackingState::NotInitialized) => {
                 if self.initialization.is_none() {
@@ -328,7 +323,7 @@ impl TrackingBackend {
         // TrackingState::Ok | TrackingState::RecentlyLost | TrackingState::Lost
 
         // Track Local Map
-        let (enough_matches, matches_in_frame) = self.track_local_map(current_frame, last_frame.as_mut().unwrap());
+        let (enough_matches, _matches_in_frame) = self.track_local_map(current_frame, last_frame.as_mut().unwrap());
         if enough_matches {
             self.state = TrackingState::Ok;
         } else if matches!(self.state, TrackingState::Ok) {
@@ -405,7 +400,7 @@ impl TrackingBackend {
             })
         );
 
-        if SETTINGS.get::<bool>(SYSTEM, "show_visualizer") {
+        if self.actor_channels.actors.get(VISUALIZER).is_some() {
             // TODO (timing) ... cloned if visualizer running. maybe make global shared object?
             self.actor_channels.send(VISUALIZER, Box::new(VisTrajectoryMsg{
                 pose: current_frame.pose.unwrap(),
@@ -477,7 +472,7 @@ impl TrackingBackend {
             current_frame.pose = Some(self.imu.velocity.unwrap() * last_frame.pose.unwrap());
         }
 
-        current_frame.mappoint_matches.clear_mappoints();
+        current_frame.mappoint_matches.clear();
 
         // Project points seen in previous frame
         let th = match self.sensor.frame() {
@@ -499,7 +494,7 @@ impl TrackingBackend {
         // If few matches, uses a wider window search
         if matches < 20 {
             info!("tracking_backend::track_with_motion_model;not enough matches, wider window search");
-            current_frame.mappoint_matches.clear_mappoints();
+            current_frame.mappoint_matches.clear();
             matches = orbmatcher::search_by_projection_with_threshold(
                 current_frame,
                 last_frame,
@@ -712,8 +707,8 @@ impl TrackingBackend {
             for i in 0..current_frame.mappoint_matches.matches.len() {
                 match !self.imu.is_initialized || current_frame.frame_id < self.relocalization.last_reloc_frame_id + 2 {
                     true => {
-                        if current_frame.mappoint_matches.has_mappoint(&(i as u32)) {
-                            let mp_id = current_frame.mappoint_matches.get_mappoint(&(i as u32));
+                        if current_frame.mappoint_matches.has(&(i as u32)) {
+                            let mp_id = current_frame.mappoint_matches.get(&(i as u32));
                             if let Some(mp) = lock.mappoints.get(&mp_id) {
                                 for kf_id in mp.get_observations().keys() {
                                     *kf_counter.entry(*kf_id).or_insert(0) += 1;
@@ -725,8 +720,8 @@ impl TrackingBackend {
                     },
                     false => {
                         // Using lastframe since current frame has no matches yet
-                        if last_frame.mappoint_matches.has_mappoint(&(i as u32)) {
-                            let mp_id = last_frame.mappoint_matches.get_mappoint(&(i as u32));
+                        if last_frame.mappoint_matches.has(&(i as u32)) {
+                            let mp_id = last_frame.mappoint_matches.get(&(i as u32));
                             if let Some(mp) = lock.mappoints.get(&mp_id) {
                                 for kf_id in mp.get_observations().keys() {
                                     *kf_counter.entry(*kf_id).or_insert(0) += 1;
@@ -760,14 +755,14 @@ impl TrackingBackend {
             while self.local_keyframes.len() <= 80 && i < self.local_keyframes.len() { // Limit the number of keyframes
                 let next_kf_id = self.local_keyframes[i];
 
-                for kf_id in &lock.keyframes.get(&next_kf_id)?.connections.get_covisibility_keyframes(10) {
+                for kf_id in &lock.keyframes.get(&next_kf_id)?.get_covisibility_keyframes(10) {
                     if self.kf_track_reference_for_frame.get(kf_id) != Some(&current_frame.frame_id) {
                         self.local_keyframes.push(*kf_id);
                         self.kf_track_reference_for_frame.insert(*kf_id, current_frame.frame_id);
                         break;
                     }
                 }
-                for kf_id in &lock.keyframes.get(&next_kf_id)?.connections.children {
+                for kf_id in &lock.keyframes.get(&next_kf_id)?.children {
                     if self.kf_track_reference_for_frame.get(kf_id) != Some(&current_frame.frame_id) {
                         self.local_keyframes.push(*kf_id);
                         self.kf_track_reference_for_frame.insert(*kf_id, current_frame.frame_id);
@@ -775,7 +770,7 @@ impl TrackingBackend {
                     }
                 }
         
-                if let Some(parent_id) = lock.keyframes.get(&next_kf_id)?.connections.parent {
+                if let Some(parent_id) = lock.keyframes.get(&next_kf_id)?.parent {
                     if self.kf_track_reference_for_frame.get(&parent_id) != Some(&current_frame.frame_id) {
                         self.local_keyframes.push(parent_id);
                         self.kf_track_reference_for_frame.insert(parent_id, current_frame.frame_id);
@@ -805,7 +800,7 @@ impl TrackingBackend {
         self.local_mappoints.clear();
         let lock = self.map.read();
         for kf_id in &self.local_keyframes {
-            let mp_ids = &lock.keyframes.get(kf_id)?.mappoint_matches.matches;
+            let mp_ids = lock.keyframes.get(kf_id)?.get_mp_matches();
             for item in mp_ids {
                 if let Some((mp_id, _)) = item {
                     if self.mp_track_reference_for_frame.get(mp_id) != Some(&current_frame.frame_id) {
@@ -836,7 +831,7 @@ impl TrackingBackend {
                         self.track_in_view.remove(&id);
                         self.track_in_view_r.remove(&id);
                     } else {
-                        current_frame.mappoint_matches.delete((index as i32, -1));
+                        current_frame.mappoint_matches.delete_at_indices((index as i32, -1));
                     }
                 }
             }
@@ -898,7 +893,7 @@ impl TrackingBackend {
                 _ => {}
             }
 
-            let matches = orbmatcher::search_by_projection(
+            let _matches = orbmatcher::search_by_projection(
                 current_frame,
                 &mut self.local_mappoints,
                 th, 0.8,
@@ -1043,7 +1038,7 @@ impl TrackingBackend {
 
         let map_lock = self.map.read();
         let tracked_mappoints = map_lock.keyframes.get(&self.ref_kf_id.unwrap())
-            .map(|kf| kf.mappoint_matches.tracked_mappoints(&*map_lock, min_observations) as f32)
+            .map(|kf| kf.get_tracked_mappoints(&*map_lock, min_observations) as f32)
             .unwrap_or(0.0);
 
         // Check how many "close" points are being tracked and how many could be potentially created.
@@ -1105,7 +1100,7 @@ impl TrackingBackend {
             self.last_frame_seen.insert(mp_id, current_frame.frame_id);
             // TODO (Stereo) ... need to remove this from track_in_view_r if the mp is seen in the right camera
         }
-        current_frame.mappoint_matches.get_num_mappoints_with_observations(&*self.map.read())
+        current_frame.mappoint_matches.mappoints_with_observations(&*self.map.read())
     }
 
     //* Next steps */
@@ -1131,6 +1126,5 @@ pub enum TrackingState {
     #[default] NotInitialized,
     Lost,
     RecentlyLost,
-    WaitForMapResponse,
     Ok
 }

@@ -1,16 +1,16 @@
 use std::{sync::{Arc, Mutex}, thread, collections::HashMap};
 use crossbeam_channel::unbounded;
 
-use dvcore::{
+use core::{
     config::ActorConf,
-    actor::{Sender, Receiver, ActorChannels, Actor},
+    actor::{Sender, Receiver, ActorChannels},
     maplock::ReadWriteMap
 };
 use log::{info, warn};
 
 use crate::{
     registered_actors::{SHUTDOWN_ACTOR, self},
-    dvmap::map::Map,
+    map::map::Map,
     actors::messages::ShutdownMsg, MapLock,
 };
 

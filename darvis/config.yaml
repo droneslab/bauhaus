@@ -18,7 +18,6 @@ system:
       # RESULTS
       results_folder: "results"
       trajectory_file_name: "trajectory.txt"
-      show_visualizer: false # Additional visualizer settings in VISUALIZER module definition below
 
       # DEBUGGING
       log_level: debug # options are [trace, debug, info, warn, error]
@@ -124,19 +123,19 @@ modules:
 
 
 actors:
-      -
-       name: VISUALIZER
-       file: visualizer
-       receiver_bound: -1
-       settings:
-          - 
-            name: image_draw_type
-            value: none # options are [none, plain, features, featuresandmatches]
-            type: string
-          -
-            name: mcap_file_path
-            value: "results/out.mcap"
-            type: string
+      # -
+      #  name: VISUALIZER
+      #  file: visualizer
+      #  receiver_bound: -1
+      #  settings:
+      #     - 
+      #       name: image_draw_type
+      #       value: none # options are [none, plain, features, featuresandmatches]
+      #       type: string
+      #     -
+      #       name: mcap_file_path
+      #       value: "results/out.mcap"
+      #       type: string
 
       -
        name: TRACKING_FRONTEND

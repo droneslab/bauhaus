@@ -1,4 +1,4 @@
-use log::{trace, debug};
+use log::debug;
 use parking_lot::{
     RwLock,
     MappedRwLockReadGuard,
@@ -6,7 +6,6 @@ use parking_lot::{
     RwLockReadGuard,
     RwLockWriteGuard
 };
-use std::backtrace::Backtrace;
 
 /// *** Structs to wrap map to manage read/write access *** ///
 // ReadOnlyWrapper is used by all actors but the map actor.
@@ -20,8 +19,6 @@ use std::backtrace::Backtrace;
 //     RwLock,
 //     RwLockReadGuard, //MappedRwLockReadGuard,
 //     RwLockWriteGuard, //MappedRwLockWriteGuard,
-//     // RwLockReadGuard,
-//     // RwLockWriteGuard
 // };
 use std::{sync::Arc, time::Instant};
 

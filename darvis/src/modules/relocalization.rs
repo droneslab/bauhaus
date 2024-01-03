@@ -1,6 +1,6 @@
 use derivative::Derivative;
-use dvcore::config::{SETTINGS, SYSTEM};
-use crate::dvmap::{map::Id, keyframe::{Frame}, misc::Timestamp};
+use core::config::{SETTINGS, SYSTEM};
+use crate::map::{map::Id, frame::Frame, misc::Timestamp};
 
 #[derive(Debug, Clone, Derivative)]
 #[derivative(Default)]

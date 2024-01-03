@@ -1,12 +1,12 @@
 use std::cmp::min;
-use std::collections::{HashSet, HashMap};
+use std::collections::HashSet;
 use std::f64::INFINITY;
 use std::iter::FromIterator;
 use std::sync::atomic::AtomicBool;
 
-use dvcore::actor::Actor;
-use dvcore::sensor::{Sensor, FrameSensor, ImuSensor};
-use dvcore::{
+use core::actor::Actor;
+use core::sensor::{Sensor, FrameSensor, ImuSensor};
+use core::{
     config::{SETTINGS, SYSTEM},
     matrix::DVVector3
 };
@@ -17,7 +17,6 @@ use crate::actors::messages::LastKeyFrameUpdatedMsg;
 use crate::modules::optimizer::LEVEL_SIGMA2;
 use crate::registered_actors::TRACKING_BACKEND;
 use crate::{
-    dvmap::mappoint::{MapPoint, PrelimMapPoint},
     modules::{optimizer, orbmatcher, imu::ImuModule, camera::CAMERA_MODULE, orbmatcher::SCALE_FACTORS, geometric_tools},
     registered_actors::{FEATURE_DETECTION, LOOP_CLOSING, MATCHER, CAMERA},
     Id,
@@ -85,7 +84,7 @@ impl Actor for LocalMapping {
                 actor.recently_added_mappoints.extend(
                     actor.map.read()
                     .keyframes.get(&actor.current_keyframe_id).unwrap()
-                    .mappoint_matches.matches.iter()
+                    .get_mp_matches().iter()
                     .filter(|item| item.is_some())
                     .map(|item| item.unwrap().0)
                     .collect::<Vec<Id>>()
@@ -141,7 +140,7 @@ impl LocalMapping {
         let _span = tracy_client::span!("local_mapping");
         tracy_client::plot!("KFs in map", self.map.read().keyframes.len() as f64);
         tracy_client::plot!("MPs in map", self.map.read().mappoints.len() as f64);
-        let avg_mappoints = self.map.read().keyframes.iter().map(|(_, kf)| kf.mappoint_matches.matches.len()).sum::<usize>() as f64 / self.map.read().keyframes.len() as f64;
+        let avg_mappoints = self.map.read().keyframes.iter().map(|(_, kf)| kf.get_mp_matches().len()).sum::<usize>() as f64 / self.map.read().keyframes.len() as f64;
         tracy_client::plot!("Avg mps for kf", avg_mappoints as f64);
 
         // Triangulate new MapPoints
@@ -247,7 +246,7 @@ impl LocalMapping {
 
         tracy_client::plot!("KFs in map", self.map.read().keyframes.len() as f64);
         tracy_client::plot!("MPs in map", self.map.read().mappoints.len() as f64);
-        let avg_mappoints = self.map.read().keyframes.iter().map(|(_, kf)| kf.mappoint_matches.matches.len()).sum::<usize>() as f64 / self.map.read().keyframes.len() as f64;
+        let avg_mappoints = self.map.read().keyframes.iter().map(|(_, kf)| kf.get_mp_matches().len()).sum::<usize>() as f64 / self.map.read().keyframes.len() as f64;
         tracy_client::plot!("Avg mps for kf", avg_mappoints as f64);
 
         tracy_client::frame_mark();
@@ -312,7 +311,7 @@ impl LocalMapping {
         {
             let map = self.map.read();
             let current_kf = map.keyframes.get(&self.current_keyframe_id).unwrap();
-            neighbor_kfs = current_kf.connections.get_covisibility_keyframes(nn);
+            neighbor_kfs = current_kf.get_covisibility_keyframes(nn);
             if self.sensor.is_imu() {
                 todo!("IMU");
                 // KeyFrame* pKF = mpCurrentKeyFrame;
@@ -479,9 +478,9 @@ impl LocalMapping {
                 if right1 {
                     todo!("Stereo");
                     // let invz1 = 1.0 / z1;
-                    // let u1 = CAMERA_MODULE.get_fx() * x1 * invz1 + CAMERA_MODULE.get_cx();
+                    // let u1 = CAMERA_MODULE.fx * x1 * invz1 + CAMERA_MODULE.cx;
                     // let u1_r = u1 - CAMERA_MODULE.stereo_baseline_times_fx * invz1;
-                    // let v1 = CAMERA_MODULE.get_fy() * y1 * invz1 + CAMERA_MODULE.get_cy();
+                    // let v1 = CAMERA_MODULE.fy * y1 * invz1 + CAMERA_MODULE.cy;
                     // let err_x1 = u1 as f32 - kp1.pt().x;
                     // let err_y1 = v1 as f32 - kp1.pt().y;
                     // let err_x1_r = u1_r as f32 - kp1_ur.unwrap();
@@ -505,9 +504,9 @@ impl LocalMapping {
                 if right2 {
                     todo!("Stereo");
                     // let invz2 = 1.0 / z2;
-                    // let u2 = CAMERA_MODULE.get_fx() * x2 * invz2 + CAMERA_MODULE.get_cx();// This should be camera2, not camera
+                    // let u2 = CAMERA_MODULE.fx * x2 * invz2 + CAMERA_MODULE.cx;// This should be camera2, not camera
                     // let u2_r = u2 - CAMERA_MODULE.stereo_baseline_times_fx * invz2;
-                    // let v2 = CAMERA_MODULE.get_fy() * y2 * invz2 + CAMERA_MODULE.get_cy();// This should be camera2, not camera
+                    // let v2 = CAMERA_MODULE.fy * y2 * invz2 + CAMERA_MODULE.cy;// This should be camera2, not camera
                     // let err_x2 = u2 as f32 - kp2.pt().x;
                     // let err_y2 = v2 as f32 - kp2.pt().y;
                     // let err_x2_r = u2_r as f32 - kp2_ur.unwrap();
@@ -548,9 +547,9 @@ impl LocalMapping {
                 // Triangulation is successful
                 {
                     let mut lock = self.map.write();
-                    let new_mp = MapPoint::<PrelimMapPoint>::new(x3_d.unwrap(), self.current_keyframe_id, lock.id);
+                    let origin_map_id = lock.id;
                     let observations = vec![(self.current_keyframe_id, lock.keyframes.get(&self.current_keyframe_id).unwrap().features.num_keypoints, idx1), (neighbor_id, lock.keyframes.get(&neighbor_id).unwrap().features.num_keypoints, idx2)];
-                    let mp_id = lock.insert_mappoint_to_map(new_mp, observations);
+                    let mp_id = lock.insert_mappoint_to_map(x3_d.unwrap(), self.current_keyframe_id, origin_map_id, observations);
                     mps_created += 1;
                     self.recently_added_mappoints.push(mp_id);
                 }
@@ -574,12 +573,12 @@ impl LocalMapping {
         {
             let map = self.map.read();
             let current_kf = map.keyframes.get(&self.current_keyframe_id).unwrap();
-            target_kfs = HashSet::<i32>::from_iter(current_kf.connections.get_covisibility_keyframes(nn));
+            target_kfs = HashSet::<i32>::from_iter(current_kf.get_covisibility_keyframes(nn));
 
             // Add some covisible of covisible
             // Extend to some second neighbors if abort is not requested
             let new_kfs = target_kfs.iter().map(|kf_id| {
-                map.keyframes.get(&kf_id).unwrap().connections.get_covisibility_keyframes(20)
+                map.keyframes.get(&kf_id).unwrap().get_covisibility_keyframes(20)
             }).flatten().collect::<Vec<i32>>();
             target_kfs.extend(new_kfs);
         
@@ -609,7 +608,7 @@ impl LocalMapping {
             }
 
             // Search matches by projection from current KF in target KFs
-            mappoint_matches = current_kf.mappoint_matches.matches.iter()
+            mappoint_matches = current_kf.get_mp_matches().iter()
                 .filter(|item| item.is_some() )
                 .map(|item| item.unwrap().0 )
                 .collect::<Vec<Id>>();
@@ -636,7 +635,7 @@ impl LocalMapping {
             fuse_candidates = HashSet::<Id>::from_iter(
                 target_kfs.iter().map(|kf_id| {
                     let kf = read.keyframes.get(&kf_id).unwrap();
-                    let mappoints_kf = &kf.mappoint_matches.matches;
+                    let mappoints_kf = kf.get_mp_matches();
                     mappoints_kf
                         .iter()
                         .filter(|item| item.is_some())
@@ -667,7 +666,7 @@ impl LocalMapping {
         {
             let read_lock = self.map.read();
             let current_kf = read_lock.keyframes.get(&self.current_keyframe_id).unwrap();
-            let local_keyframes = current_kf.connections.get_covisibility_keyframes(i32::MAX);
+            let local_keyframes = current_kf.get_covisibility_keyframes(i32::MAX);
 
             let redundant_th = match self.sensor {
                 Sensor(_, ImuSensor::None) | Sensor(FrameSensor::Mono, _) => 0.9,
@@ -705,11 +704,11 @@ impl LocalMapping {
                 let keyframe = read_lock.keyframes.get(&kf_id).unwrap();
                 let th_obs = 3;
 
-                for i in 0..keyframe.mappoint_matches.matches.len() {
-                    if !keyframe.mappoint_matches.has_mappoint(&(i as u32)) {
+                for i in 0..keyframe.get_mp_matches().len() {
+                    if !keyframe.has_mp_match(&(i as u32)) {
                         continue;
                     }
-                    let mp_id = keyframe.mappoint_matches.get_mappoint(&(i as u32));
+                    let mp_id = keyframe.get_mp_match(&(i as u32));
                     if !self.sensor.is_mono() {
                         let mv_depth = keyframe.features.get_mv_depth(i as usize).unwrap();
                         let th_depth = SETTINGS.get::<i32>(CAMERA, "thdepth") as f32;
