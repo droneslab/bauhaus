@@ -1,15 +1,14 @@
-use std::{borrow::Cow, fs::File, sync::Arc, collections::{BTreeMap, HashMap, HashSet}, fs, io::BufWriter};
+use std::{borrow::Cow, fs::File, sync::Arc, collections::{BTreeMap, HashSet}, fs, io::BufWriter};
 use log::{warn, debug};
 use mcap::{Schema, Channel, records::MessageHeader, Writer};
 use opencv::prelude::{Mat, MatTraitConst, MatTraitConstManual};
-use foxglove::{foxglove::items::{SceneEntity, SceneUpdate, SpherePrimitive, Vector3, Quaternion, Color, FrameTransform, LinePrimitive, line_primitive, Point3, RawImage, ArrowPrimitive}, get_file_descriptor_set_bytes, make_pose};
+use foxglove::{foxglove::items::{SceneEntity, SceneUpdate, SpherePrimitive, Vector3, Quaternion, Color, FrameTransform, LinePrimitive, line_primitive, Point3, RawImage, ArrowPrimitive, SceneEntityDeletion, scene_entity_deletion}, get_file_descriptor_set_bytes, make_pose};
 
 use core::{
-    actor::{ActorChannels, Actor}, matrix::DVVectorOfKeyPoint, config::SETTINGS, maplock::ReadWriteMap,
+    actor::{ActorChannels, Actor}, matrix::DVVectorOfKeyPoint, config::SETTINGS,
 };
 use crate::{
-    map::{map::{Map, Id}, pose::Pose, misc::Timestamp},
-    maplock::ReadOnlyMap,
+    map::{map::Id, pose::Pose, misc::Timestamp},
     modules::image,
     actors::messages::{ShutdownMsg, VisFeaturesMsg, VisFeatureMatchMsg, VisTrajectoryMsg},
     registered_actors::VISUALIZER, MapLock
@@ -45,6 +44,8 @@ pub struct DarvisVisualizer {
     prev_image: Option<Mat>,
     current_keypoints: Option<DVVectorOfKeyPoint>,
     prev_keypoints: Option<DVVectorOfKeyPoint>,
+    previous_mappoints: HashSet<Id>,
+    previous_keyframes: HashSet<Id>,
 
     trajectory_channel: u16,
     mappoints_channel: u16,
@@ -114,6 +115,8 @@ impl Actor for DarvisVisualizer {
             prev_image: None,
             current_keypoints: None,
             prev_keypoints: None,
+            previous_mappoints: HashSet::new(),
+            previous_keyframes: HashSet::new(),
         };
     }
 
@@ -195,7 +198,11 @@ impl DarvisVisualizer {
 
     fn draw_trajectory(&mut self, frame_pose: Pose, timestamp: Timestamp) -> Result<(), Box<dyn std::error::Error>> {
         debug!("Drawing trajectory at timestamp {} with pose {:?}", timestamp, frame_pose.inverse());
+
+        // self.clear_scene(timestamp, self.trajectory_channel)?;
+
         let mut entities = vec![];
+        let inverse_frame_pose = frame_pose.inverse();
 
         // Draw current pose
         // This entity is overwritten at every update, so only one camera is in view at all times
@@ -204,7 +211,7 @@ impl DarvisVisualizer {
                 timestamp, 
                 "world",
                 format!("cam"),
-                vec![self.create_arrow(&frame_pose.inverse(), FRAME_COLOR.clone())],
+                vec![self.create_arrow(&inverse_frame_pose, FRAME_COLOR.clone())],
                 vec![], vec![]
             )
         );
@@ -219,6 +226,13 @@ impl DarvisVisualizer {
         let mut prev_id = 0;
         for id in sorted_kfs {
             let curr_pose = map.keyframes.get(id).unwrap().pose.inverse();
+
+            if curr_pose == inverse_frame_pose {
+                // Skip over drawing a kf if it was created at this frame, 
+                // so that it doesn't cover up the drawing of the current frame. 
+                continue;
+            }
+
             let points = vec![prev_pose, curr_pose.into()];
             entities.push(
                 self.create_scene_entity(
@@ -231,7 +245,6 @@ impl DarvisVisualizer {
                 )
             );
 
-            // TODO: Should update to delete kfs that are deleted from map
             entities.push(
                 self.create_scene_entity(
                     timestamp, 
@@ -245,6 +258,14 @@ impl DarvisVisualizer {
             prev_pose = curr_pose.into();
             prev_id = *id;
         }
+
+        // Delete keyframes that are no longer in the map but were previously drawn
+        let curr_keyframes = map.keyframes.keys().map(|id| *id).collect::<HashSet<Id>>();
+        let deleted_keyframes = self.previous_keyframes.difference(&curr_keyframes);
+        let deletions = deleted_keyframes.map(|id|
+            self.create_scene_entity_deletion(timestamp, format!("kf {}", id),
+        )).collect();
+        self.previous_keyframes = curr_keyframes;
 
         // Lastly, add the trajectory line from the last keyframe to the current pose
         let points = vec![prev_pose, frame_pose.inverse().into()];
@@ -260,7 +281,7 @@ impl DarvisVisualizer {
         );
 
         let sceneupdate = SceneUpdate {
-            deletions: vec![], // TODO (MVP) add deletions
+            deletions,
             entities
         };
 
@@ -271,6 +292,8 @@ impl DarvisVisualizer {
     fn draw_mappoints(&mut self, mappoint_matches: &Vec<Option<(Id, bool)>>, timestamp: Timestamp) -> Result<(), Box<dyn std::error::Error>> {
         // Mappoints in map (different color if they are matches)
         // Should be overwritten when there is new info for a mappoint
+        // self.clear_scene(timestamp, self.mappoints_channel)?;
+
         let mut entities = Vec::new();
 
         let mut mappoint_match_ids = HashSet::<Id>::new();
@@ -281,12 +304,21 @@ impl DarvisVisualizer {
         }
 
         let map = self.map.read();
+        let mut curr_mappoints = HashSet::new();
         for (mappoint_id, mappoint) in &map.mappoints {
             let pose = Pose::new_with_default_rot(mappoint.position);
 
             let mp_sphere = match mappoint_match_ids.contains(&mappoint_id) {
                 true => self.create_sphere(&pose, MAPPOINT_MATCH_COLOR.clone(), MAPPOINT_SIZE.clone()),
-                false => self.create_sphere(&pose, MAPPOINT_COLOR.clone(), MAPPOINT_SIZE.clone()),
+                false => {
+                    if SETTINGS.get::<bool>(VISUALIZER, "draw_all_mappoints") || !self.previous_mappoints.contains(&mappoint_id) {
+                        // Mappoint is not a match in current frame. Only draw if we are drawing all mappoints, or if the mappoint was recently created/seen.
+                        // TODO (mvp) : I'm not sure the logic behind using self.previous_mappoints is correct. I think more mps get included than should be?
+                        self.create_sphere(&pose, MAPPOINT_COLOR.clone(), MAPPOINT_SIZE.clone())
+                    } else {
+                        continue;
+                    }
+                },
             };
             let mp_entity = self.create_scene_entity(
                 timestamp, "world",
@@ -296,11 +328,18 @@ impl DarvisVisualizer {
                 vec![mp_sphere]
             );
             entities.push(mp_entity);
+            curr_mappoints.insert(*mappoint_id);
         }
 
+        // Delete mappoints that are no longer in the map but were previously drawn
+        let deleted_mappoints = self.previous_mappoints.difference(&curr_mappoints);
+        let deletions = deleted_mappoints.map(|id|
+            self.create_scene_entity_deletion(timestamp, format!("mp {}", id),
+        )).collect();
+        self.previous_mappoints = curr_mappoints;
 
         let sceneupdate = SceneUpdate {
-            deletions: vec![],
+            deletions,
             entities
         };
 
@@ -344,9 +383,16 @@ impl DarvisVisualizer {
             entities.push(kf_entity);
         }
 
-        // TODO ... remove keyframes from this graph if they are deleted in map!
+        // Delete keyframes that are no longer in the map but were previously drawn
+        let curr_keyframes = map.keyframes.keys().map(|id| *id).collect::<HashSet<Id>>();
+        let deleted_keyframes = self.previous_keyframes.difference(&curr_keyframes);
+        let deletions = deleted_keyframes.map(|id|
+            self.create_scene_entity_deletion(timestamp, format!("kf {}", id),
+        )).collect();
+        self.previous_keyframes = curr_keyframes;
+
         let sceneupdate = SceneUpdate {
-            deletions: vec![],
+            deletions,
             entities
         };
 
@@ -410,6 +456,31 @@ impl DarvisVisualizer {
             colors: vec![],
             indices: vec![],
         }
+    }
+
+    fn create_scene_entity_deletion(&self, timestamp: Timestamp, entity_id: String) -> SceneEntityDeletion {
+        let (seconds, nanos) = convert_timestamp(timestamp);
+        SceneEntityDeletion {
+            timestamp: Some(prost_types::Timestamp { seconds, nanos }),
+            r#type: scene_entity_deletion::Type::MatchingId as i32,
+            id: entity_id,
+        }
+    }
+
+    fn clear_scene(&mut self, timestamp: Timestamp, channel: u16) -> Result<(), Box<dyn std::error::Error>> {
+        // Deletes all entities in the channel
+        let (seconds, nanos) = convert_timestamp(timestamp);
+        let sceneupdate = SceneUpdate {
+            deletions: vec![
+                SceneEntityDeletion {
+                    timestamp: Some(prost_types::Timestamp { seconds, nanos }),
+                    r#type: scene_entity_deletion::Type::All as i32,
+                    id: "".to_string(),
+                }
+            ],
+            entities: vec![]
+        };
+        self.writer.write(channel, sceneupdate, timestamp, 0)
     }
 
     fn create_scene_entity(
@@ -511,6 +582,7 @@ impl From<&Pose> for foxglove::foxglove::items::Pose {
             z: trans[2]
         };
 
+        // TODO (mvp): These always show pointing to the right when they shouldn't be
         let quat = pose.get_quaternion();
         let orientation = Quaternion {
             x: quat[0],

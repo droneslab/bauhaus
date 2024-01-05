@@ -107,10 +107,7 @@ impl Map {
             self.keyframes.get_mut(&kf_id).map(|kf| {
                 kf.add_mp_match(index as u32, mp.id, false);
             });
-
-            // println!("kf {} observations {:?}", kf_id, self.keyframes.get(&kf_id).unwrap().get_mp_matches());
         }
-
 
         // Compute distinctive descriptors
         let best_descriptor = self.mappoints.get(&new_mp_id)
@@ -158,7 +155,6 @@ impl Map {
                     if let Some(mp) = self.mappoints.get_mut(&mp_id) {
                         mp.add_observation(&new_kf_id, num_keypoints, i as u32);
                     } else {
-                        println!("Delete match kf {} mp {}", new_kf_id, mp_id);
                         self.keyframes.get_mut(&new_kf_id).unwrap().delete_mp_match_at_indices((i as i32, -1));
                         continue;
                         // Mappoint was deleted by local mapping but not deleted here yet 
@@ -220,8 +216,6 @@ impl Map {
         for conn_kf in connections1 {
             self.keyframes.get_mut(&conn_kf).unwrap().delete_connection(kf_id);
         }
-
-        debug!("Discarding keyframe {} with matches: {:?}", kf_id, matches1);
 
         for mp_match in &matches1 {
             if let Some((mp_id, _)) = mp_match {

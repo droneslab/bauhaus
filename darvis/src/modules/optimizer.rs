@@ -1435,8 +1435,6 @@ pub fn local_bundle_adjustment(
         for (mp_id, kf_id) in mps_to_discard {
             map.write().keyframes.get_mut(&kf_id).unwrap().delete_mp_match(mp_id);
             map.write().mappoints.get_mut(&mp_id).unwrap().delete_observation(&kf_id);
-            debug!("Discarding mappoint {} from keyframe {}", mp_id, kf_id);
-            debug!("Discarding keyframe {} for mappoint {}", kf_id, mp_id);
         }
     }
 

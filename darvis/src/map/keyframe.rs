@@ -94,13 +94,18 @@ impl KeyFrame {
 
     pub fn get_mp_matches(&self) -> &Vec<Option<(i32, bool)>> { &self.mappoint_matches.matches }
     pub fn get_mp_match(&self, index: &u32) -> Id { self.mappoint_matches.get(index) }
-    pub fn add_mp_match(&mut self, index: u32, mp_id: Id, is_outlier: bool) { self.mappoint_matches.add(index, mp_id, is_outlier); }
+    pub fn add_mp_match(&mut self, index: u32, mp_id: Id, is_outlier: bool) { 
+        self.mappoint_matches.add(index, mp_id, is_outlier);
+        // debug!("kf {} add_mp_match {} -> {}", self.id, index, mp_id);
+    }
     pub fn has_mp_match(&self, index: &u32) -> bool { self.mappoint_matches.has(index) }
     pub fn delete_mp_match_at_indices(&mut self, indices: (i32, i32)) {
-        self.mappoint_matches.delete_at_indices(indices);
+        let (first_mp_id, second_mp_id) = self.mappoint_matches.delete_at_indices(indices);
+        // debug!("Deleted mappoints {:?} and {:?} for kf {}, indices are {:?}", first_mp_id, second_mp_id, self.id, indices);
     }
     pub fn delete_mp_match(&mut self, mp_id: Id) {
         self.mappoint_matches.delete_with_id(mp_id);
+        // debug!("Delete mappoint {} for kf {}", mp_id, self.id);
     }
     pub fn get_tracked_mappoints(&self, map: &Map, min_observations: u32) -> i32 { self.mappoint_matches.tracked_mappoints(map, min_observations) }
 
@@ -198,15 +203,19 @@ impl MapPointMatches {
         }
     }
 
-    pub fn delete_at_indices(&mut self, indices: (i32, i32)) {
+    pub fn delete_at_indices(&mut self, indices: (i32, i32)) -> (Option<(Id, bool)>, Option<(Id, bool)>) {
         // Indices are (left, right). Right should be -1 for mono. Maybe we can rewrite this to make it more clear?
         // TODO (mvp): removed the code that set's mappoint's last_frame_seen to the frame ID. Is that ok or does it need to be in here?
+        let (mut first_mp_id, mut second_mp_id) = (None, None);
         if indices.0 != -1 {
+            first_mp_id = self.matches[indices.0 as usize];
             self.matches[indices.0 as usize] = None;
         }
         if indices.1 != -1 {
+            second_mp_id = self.matches[indices.1 as usize];
             self.matches[indices.1 as usize]= None;
         }
+        (first_mp_id, second_mp_id)
     }
 
     pub fn clear(&mut self) {

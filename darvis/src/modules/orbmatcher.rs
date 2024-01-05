@@ -723,7 +723,7 @@ pub fn search_for_triangulation(
     // Compare only ORB that share the same node
 
     let mut matches = HashMap::<usize, usize>::new();
-    let matched_already = HashMap::<u32, u32>::new();
+    let mut matched_already = HashSet::<u32>::new();
 
     let factor = 1.0 / (HISTO_LENGTH as f32);
     let mut rot_hist = construct_rotation_histogram();
@@ -748,10 +748,10 @@ pub fn search_for_triangulation(
             // note... was testing out not copying the vec below but it doesn't work
             let kf1_indices_size = kf_1.bow.as_ref().unwrap().feat_vec.vec_size(kf1_node_id);
 
-            for idx1 in 0..kf1_indices_size {
+            for i1 in 0..kf1_indices_size {
                 // let _span = tracy_client::span!("outer");
                 // note...to use the strategy to not copy the vec, uncomment this and change for loop to for index1 in 0..kf1_indices_size
-                let kf1_index = kf_1.bow.as_ref().unwrap().feat_vec.vec_get(kf1_node_id, idx1);
+                let kf1_index = kf_1.bow.as_ref().unwrap().feat_vec.vec_get(kf1_node_id, i1); // = idx1
 
                 // If there is already a MapPoint skip
                 if kf_1.has_mp_match(&kf1_index) {
@@ -782,15 +782,15 @@ pub fn search_for_triangulation(
                 // println!("{:?}", bla);
                 let kf2_indices_size = kf_2.bow.as_ref().unwrap().feat_vec.vec_size(kf2_node_id);
 
-                for idx2 in 0..kf2_indices_size {
+                for i2 in 0..kf2_indices_size {
                     // let _span = tracy_client::span!("inner");
                     // note...same thing about not copying vec as above
-                    let kf2_index = kf_2.bow.as_ref().unwrap().feat_vec.vec_get(kf2_node_id, idx2);
+                    let kf2_index = kf_2.bow.as_ref().unwrap().feat_vec.vec_get(kf2_node_id, i2); // = idx2
 
                     // println!("{} {} {} ", kf2_indices_size, idx2, kf2_index);
 
                     // If we have already matched or there is a MapPoint skip
-                    if kf_2.has_mp_match(&kf2_index) || matched_already.contains_key(&kf2_index) {
+                    if kf_2.has_mp_match(&kf2_index) || matched_already.contains(&kf2_index) {
                         // skipped2 += 1;
                         continue
                     };
@@ -874,6 +874,7 @@ pub fn search_for_triangulation(
                 if best_index >= 0 {
                     let (kp2, _) = kf_2.features.get_keypoint(best_index as usize);
                     matches.insert(kf1_index as usize, best_index as usize);
+                    matched_already.insert(best_index as u32);
                     if should_check_orientation {
                         check_orientation_1(
                             &kp1,
@@ -1040,7 +1041,6 @@ pub fn fuse(kf_id: &Id, fuse_candidates: &Vec<Id>, map: &MapLock, th: f32, is_ri
                 let mappoint_in_kf_id = keyframe.get_mp_match(&(best_idx as u32));
                 let mappoint_in_kf = lock.mappoints.get(&mappoint_in_kf_id).unwrap();
                 if mappoint_in_kf.get_observations().len() > mappoint.get_observations().len() {
-                    warn!("Verify that the order of mp_id and mappoint_in_kf_id is right");
                     map.write().replace_mappoint(*mp_id, mappoint_in_kf_id);
                 } else {
                     map.write().replace_mappoint(mappoint_in_kf_id, *mp_id);
@@ -1048,7 +1048,6 @@ pub fn fuse(kf_id: &Id, fuse_candidates: &Vec<Id>, map: &MapLock, th: f32, is_ri
             } else {
                 let num_keypoints = map.write().keyframes.get(&kf_id).expect(&format!("Could not get kf {}", kf_id)).features.num_keypoints;
                 let mut write = map.write();
-                debug!("ADd observation in orbmatcher");
                 write.mappoints.get_mut(&mp_id).unwrap().add_observation(&kf_id, num_keypoints, best_idx as u32);
                 write.keyframes.get_mut(&kf_id).unwrap().add_mp_match(best_idx as u32, *mp_id, false);
             }

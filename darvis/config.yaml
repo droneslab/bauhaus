@@ -21,8 +21,9 @@ system:
 
       # DEBUGGING
       log_level: debug # options are [trace, debug, info, warn, error]
-      enable_profiling: true # Profiling with tracy. Also need to set "enable" feature for tracy-client in Cargo.toml
       check_deadlocks: false # Spawns a new thread to check for deadlocks every 2 secs, but slows stuff down.
+      # To enable profiling, set features = ["enable"] for tracy-client in Cargo.toml
+      # To turn on visualizer, uncomment visualizer actor below
 
 modules:
       - 
@@ -123,19 +124,22 @@ modules:
 
 
 actors:
-      # -
-      #  name: VISUALIZER
-      #  file: visualizer
-      #  receiver_bound: -1
-      #  settings:
-      #     - 
-      #       name: image_draw_type
-      #       value: none # options are [none, plain, features, featuresandmatches]
-      #       type: string
-      #     -
-      #       name: mcap_file_path
-      #       value: "results/out.mcap"
-      #       type: string
+      -
+       name: VISUALIZER
+       file: visualizer
+       receiver_bound: -1
+       settings:
+          - 
+            name: image_draw_type
+            value: none # options are [none, plain, features, featuresandmatches]
+            type: string
+          -
+            name: mcap_file_path
+            value: "results/out.mcap"
+            type: string
+          - name: draw_all_mappoints # Not sure this works right now... If true, draws all mappoints in the map. If false, only draws matches and recently created mappoints. Set to false to save space.
+            value: true
+            type: bool
 
       -
        name: TRACKING_FRONTEND

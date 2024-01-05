@@ -1,5 +1,6 @@
 use std::ops::{Mul, Deref};
 use core::matrix::{DVVector3, DVMatrix3};
+use num_traits::abs;
 use serde::{Deserialize, Serialize};
 
 pub type DVTranslation = DVVector3<f64>;
@@ -71,6 +72,22 @@ impl Mul for Pose {
 
     fn mul(self, _other: Pose) -> Pose {
         Pose(self.0 * _other.0)
+    }
+}
+
+impl PartialEq for Pose {
+    fn eq(&self, other: &Self) -> bool {
+        let t1 = self.get_translation();
+        let r1 = self.get_rotation();
+        let t2 = other.get_translation();
+        let r2 = other.get_rotation();
+        abs(t1[0] - t2[0]) < 0.0001 &&
+        abs(t1[1] - t2[1]) < 0.0001 &&
+        abs(t1[2] - t2[2]) < 0.0001 &&
+        abs(r1[0] - r2[0]) < 0.0001 &&
+        abs(r1[1] - r2[1]) < 0.0001 &&
+        abs(r1[2] - r2[2]) < 0.0001 &&
+        abs(r1[3] - r2[3]) < 0.0001
     }
 }
 
