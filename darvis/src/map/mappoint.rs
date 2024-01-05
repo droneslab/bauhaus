@@ -63,7 +63,7 @@ impl MapPoint {
             num_obs: 0,
         }
     }
-    
+
     pub fn get_max_distance_invariance(&self) -> f64 {
         // float MapPoint::GetMaxDistanceInvariance()
         1.2 * self.max_distance
@@ -240,6 +240,7 @@ impl MapPoint {
         //     nObs++;
         self.num_obs += 1;
 
+        // debug!("mp {} add_observation {} -> ({}, {})", self.id, kf_id, left_index, right_index);
         self.observations.insert(*kf_id, (left_index, right_index));
     }
 

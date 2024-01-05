@@ -47,11 +47,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     setup_logger(&log_level)?;
 
-    if SETTINGS.get::<bool>(SYSTEM, "enable_profiling") {
-        let _client = tracy_client::Client::start();
-        tracy_client::set_thread_name!("main");
-        warn!("Profiling set to ON.");
-    }
+    let _client = tracy_client::Client::start();
+    tracy_client::set_thread_name!("main");
 
     // Launch actor system
     let first_actor_name = TRACKING_FRONTEND.to_string(); // Actor that launches the pipeline

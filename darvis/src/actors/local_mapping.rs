@@ -74,7 +74,6 @@ impl Actor for LocalMapping {
             if message.is::<InitKeyFrameMsg>() {
                 LOCAL_MAPPING_IDLE.store(false, std::sync::atomic::Ordering::SeqCst);
                 let msg = message.downcast::<InitKeyFrameMsg>().unwrap_or_else(|_| panic!("Could not downcast local mapping message!"));
-                debug!("Local mapping working on kf {}", msg.kf_id);
 
                 actor.current_keyframe_id = msg.kf_id;
 
@@ -265,27 +264,21 @@ impl LocalMapping {
 
         let current_kf_id = self.current_keyframe_id;
         let mut num_to_discard = 0;
-        // println!("recently added mappoints: ");
         self.recently_added_mappoints.retain(|&mp_id| {
             let mut lock = self.map.write();
             if let Some(mappoint) = lock.mappoints.get(&mp_id) {
-                // print!("{} ", mp_id);
                 let found_ratio = mappoint.get_found_ratio();
                 if found_ratio < 0.25 {
-                    // print!("RATIO, ");
                     num_to_discard += 1;
                     lock.discard_mappoint(&mp_id);
                     false
                 } else if current_kf_id - mappoint.first_kf_id >= 2 && mappoint.get_observations().len() <= th_obs {
-                    // print!("OBS, ");
                     num_to_discard += 1;
                     lock.discard_mappoint(&mp_id);
                     false 
                 } else if current_kf_id - mappoint.first_kf_id >= 3 {
-                    // print!("IDs, ");
                     false // mappoint should not be deleted, but remove from recently_added_mappoints
                 } else {
-                    // print!("NO, ");
                     true // mappoint should not be deleted, keep in recently_added_mappoints
                 }
             } else {
@@ -373,7 +366,8 @@ impl LocalMapping {
                 let lock = self.map.read();
 
                 matches = match orbmatcher::search_for_triangulation(
-                    lock.keyframes.get(&self.current_keyframe_id).unwrap(), lock.keyframes.get(&neighbor_id).unwrap(),
+                    lock.keyframes.get(&self.current_keyframe_id).unwrap(),
+                    lock.keyframes.get(&neighbor_id).unwrap(),
                     false, false, course,
                     self.sensor
                 ) {
@@ -548,7 +542,10 @@ impl LocalMapping {
                 {
                     let mut lock = self.map.write();
                     let origin_map_id = lock.id;
-                    let observations = vec![(self.current_keyframe_id, lock.keyframes.get(&self.current_keyframe_id).unwrap().features.num_keypoints, idx1), (neighbor_id, lock.keyframes.get(&neighbor_id).unwrap().features.num_keypoints, idx2)];
+                    let observations = vec![
+                        (self.current_keyframe_id, lock.keyframes.get(&self.current_keyframe_id).unwrap().features.num_keypoints, idx1),
+                        (neighbor_id, lock.keyframes.get(&neighbor_id).unwrap().features.num_keypoints, idx2)
+                    ];
                     let mp_id = lock.insert_mappoint_to_map(x3_d.unwrap(), self.current_keyframe_id, origin_map_id, observations);
                     mps_created += 1;
                     self.recently_added_mappoints.push(mp_id);
@@ -794,7 +791,6 @@ impl LocalMapping {
                         false => {
                             to_delete.push(kf_id);
                             self.discarded_kfs.insert(kf_id);
-                            debug!("Choosing to discard {} while working on {}", kf_id, self.current_keyframe_id);
                         }
                     }
                 }
