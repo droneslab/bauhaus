@@ -15,7 +15,7 @@ use opencv::prelude::KeyPointTraitConst;
 use crate::{ActorChannels, MapLock};
 use crate::actors::messages::LastKeyFrameUpdatedMsg;
 use crate::modules::optimizer::LEVEL_SIGMA2;
-use crate::registered_actors::TRACKING_BACKEND;
+use crate::registered_actors::{TRACKING_BACKEND};
 use crate::{
     modules::{optimizer, orbmatcher, imu::ImuModule, camera::CAMERA_MODULE, orbmatcher::SCALE_FACTORS, geometric_tools},
     registered_actors::{FEATURE_DETECTION, LOOP_CLOSING, MATCHER, CAMERA},

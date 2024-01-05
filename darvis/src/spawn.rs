@@ -27,7 +27,7 @@ pub fn launch_actor_system(config: Vec::<ActorConf>, first_actor_name: String)
     for actor_conf in &config {
         let (tx, rx) = unbounded(); // Note: bounded channels block on send if channel is full, so use unbounded and handle drops in receive()
         transmitters.insert(actor_conf.name.clone(), tx);
-        receivers.push((actor_conf.name.clone(), actor_conf.receiver_bound.clone(), rx));
+        receivers.push((actor_conf.name.clone(), actor_conf.tag.clone(), actor_conf.receiver_bound.clone(), rx));
     }
 
     // Create transmitters/receivers for darvis system actors
@@ -40,8 +40,8 @@ pub fn launch_actor_system(config: Vec::<ActorConf>, first_actor_name: String)
     // Create map
     let writeable_map = ReadWriteMap::<Map>::new(Map::new()); // Arc::new(parking_lot::Mutex::new(Map::new()))
     // Spawn actors
-    for (actor_name, receiver_bound, receiver) in receivers {
-        spawn_actor(actor_name, &transmitters, receiver, receiver_bound, Some(&writeable_map));
+    for (actor_name, actor_tag, receiver_bound, receiver) in receivers {
+        spawn_actor(actor_tag, actor_name, &transmitters, receiver, receiver_bound, Some(&writeable_map));
     }
 
     // * SPAWN DARVIS SYSTEM ACTORS *//
@@ -56,10 +56,10 @@ pub fn launch_actor_system(config: Vec::<ActorConf>, first_actor_name: String)
 
 
 fn spawn_actor(
-    actor_name: String, transmitters: &HashMap<String, Sender>, receiver: Receiver,
+    actor_tag: String, actor_name: String, transmitters: &HashMap<String, Sender>, receiver: Receiver,
     receiver_bound: Option<usize>, writeable_map: Option<&MapLock>
 ) {
-    info!("Spawning actor {}", &actor_name);
+    info!("Spawning actor '{}' with name {}", &actor_tag, &actor_name);
 
     // Note: not using this right now, but if you wanted to pass a read-only map,
     // call map.create_read_only(). Otherwise all actors can access the write lock.
@@ -77,7 +77,7 @@ fn spawn_actor(
     let actor_channels = ActorChannels {receiver, receiver_bound, actors: txs, my_name: actor_name.clone()};
 
     thread::spawn(move || { 
-        registered_actors::spawn(actor_name, actor_channels, map_clone);
+        registered_actors::spawn(actor_tag, actor_channels, map_clone);
     } );
 
 }
@@ -87,7 +87,17 @@ fn spawn_shutdown_actor(transmitters: &HashMap<String, Sender>, receiver: Receiv
     let shutdown_flag = Arc::new(Mutex::new(false));
     let flag_clone = shutdown_flag.clone();
 
-    spawn_actor(SHUTDOWN_ACTOR.to_string(), transmitters, receiver, None, None);
+    let mut txs = HashMap::new();
+    for (other_actor_name, other_actor_transmitter) in transmitters {
+        if *other_actor_name != *SHUTDOWN_ACTOR.to_string() {
+            txs.insert(other_actor_name.clone(), other_actor_transmitter.clone());
+        }
+    }
+    let actor_channels = ActorChannels {receiver, receiver_bound: None, actors: txs, my_name: SHUTDOWN_ACTOR.to_string()};
+
+    thread::spawn(move || { 
+        registered_actors::spawn(SHUTDOWN_ACTOR.to_string(), actor_channels, None);
+    } );
 
     let shutdown_transmitter = transmitters.get(SHUTDOWN_ACTOR).unwrap().clone();
     ctrlc::set_handler(move || {
