@@ -1,7 +1,9 @@
-pub mod tracking_frontend;
-pub mod tracking_backend;
-pub mod local_mapping;
-pub mod loop_closing;
+pub mod tracking_frontend; // orbslam tracking frontend
+pub mod tracking_backend; // orbslam tracking backend
+pub mod local_mapping; // orbslam local mapping
+pub mod loop_closing; // orbslam loop closing
+
+pub mod tracking_full; // end-to-end tracking
 
 // Darvis-defined actors
 pub mod visualizer;

@@ -10,7 +10,7 @@ system:
       vocabulary_file: "../Vocabulary/ORBvoc.txt"
       framesensor: Mono
       imusensor: None
-      first_actor_name: TRACKING_FRONTEND # Name of actor to kick off pipeline
+      first_actor_name: TRACKING_BACKEND # Name of actor to kick off pipeline
 
       # FPS
       fps: 1.0
@@ -143,24 +143,11 @@ actors:
             type: bool
 
       -
-       name: TRACKING_FRONTEND
-       tag: "orbslam tracking frontend"
+       name: TRACKING_BACKEND
+       tag: "end-to-end tracking"
        receiver_bound: 10
        settings:
           -
-
-      -
-       name: TRACKING_BACKEND
-       tag: "orbslam tracking backend"
-       receiver_bound: 10
-       possible_paths:
-                     -
-                      from: tracking_frontend
-                      to: localmapping
-                      input: keypoints, descriptors
-                      output: newkeyframe
-       settings:
-          - 
             name: recently_lost_cutoff
             value: 5
             type: i32

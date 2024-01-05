@@ -151,8 +151,11 @@ pub struct SettingBox {
 #[derive(Debug, Default, Clone)]
 // Struct holding configuration parameters for a given actor
 pub struct ActorConf{
-    pub name: String,
-    pub file: String,
+    // Splitting up names and tags allows us to have other actors refer to an actor by name
+    // without it being tied to a specific implementation. For example, LOCAL_MAPPING can refer
+    // to TRACKING_BACKEND without needing to know about which file implements TRACKING_BACKEND.
+    pub name: String,  // How this actor is referred to by other actors
+    pub tag: String, // Tag to match up with executable in registered_actors.rs
     pub receiver_bound: Option<usize>,
 }
 
@@ -177,6 +180,7 @@ pub fn load_config(file_name: &String) -> Result<(Vec<ActorConf>, Vec<ModuleConf
     add_setting_string(SYSTEM, "vocabulary_file", &system_settings["vocabulary_file"]);
     add_setting_string(SYSTEM, "trajectory_file_name", &system_settings["trajectory_file_name"]);
     add_setting_string(SYSTEM, "results_folder", &system_settings["results_folder"]);
+    add_setting_string(SYSTEM, "first_actor_name", &system_settings["first_actor_name"]);
     add_setting_bool(SYSTEM, "use_timestamps_file", &system_settings["use_timestamps_file"]);
     add_setting_f64(SYSTEM, "fps", &system_settings["fps"]);
     add_setting_bool(SYSTEM, "check_deadlocks", &system_settings["check_deadlocks"]);
@@ -204,8 +208,8 @@ pub fn load_config(file_name: &String) -> Result<(Vec<ActorConf>, Vec<ModuleConf
         let h = &actor.as_hash().unwrap();
 
         let a_conf = ActorConf {
+            tag: get_val(h, "tag").as_str().unwrap().to_string(),
             name: get_val(h, "name").as_str().unwrap().to_string(),
-            file: get_val(h, "file").as_str().unwrap().to_string(),
             receiver_bound: match get_val(h, "receiver_bound").as_i64().unwrap() == -1 {
                 true => None,
                 false => Some(get_val(h, "receiver_bound").as_i64().unwrap() as usize)
@@ -215,8 +219,6 @@ pub fn load_config(file_name: &String) -> Result<(Vec<ActorConf>, Vec<ModuleConf
         actor_info.push(a_conf.clone());
 
         add_settings(get_val(h, "settings").as_vec().unwrap(), &a_conf.name);
-
-        SETTINGS.insert(&a_conf.name, "file", a_conf.file);
     }
 
     // Load modules

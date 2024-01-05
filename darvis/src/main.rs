@@ -11,7 +11,7 @@ use spin_sleep::LoopHelper;
 #[macro_use] extern crate lazy_static;
 
 use core::{*, config::*, actor::ActorChannels, maplock::ReadWriteMap};
-use crate::{actors::messages::{ShutdownMsg, ImageMsg}, registered_actors::TRACKING_FRONTEND, modules::image};
+use crate::{actors::messages::{ShutdownMsg, ImageMsg}, registered_actors::{TRACKING_FRONTEND}, modules::image};
 use crate::map::{bow::VOCABULARY, map::Id};
 
 mod actors;
@@ -51,7 +51,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracy_client::set_thread_name!("main");
 
     // Launch actor system
-    let first_actor_name = TRACKING_FRONTEND.to_string(); // Actor that launches the pipeline
+    let first_actor_name = SETTINGS.get::<String>(SYSTEM, "first_actor_name"); // Actor that launches the pipeline
     let (shutdown_flag, first_actor_tx, shutdown_tx) = spawn::launch_actor_system(actor_info, first_actor_name)?;
 
     // Load vocabulary
