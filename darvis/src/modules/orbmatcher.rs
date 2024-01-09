@@ -8,6 +8,7 @@ use opencv::core::KeyPoint;
 use opencv::prelude::*;
 use crate::MapLock;
 use crate::actors::tracking_backend::TrackedMapPointData;
+use crate::map::pose::Pose;
 use crate::modules::optimizer::LEVEL_SIGMA2;
 use crate::registered_actors::{MATCHER, FEATURE_DETECTION, CAMERA};
 use crate::map::{map::Id, keyframe::KeyFrame, frame::Frame};
@@ -479,14 +480,26 @@ pub fn _search_by_projection_reloc (
     todo!("Relocalization");
 }
 
-// Project MapPoints using a Similarity Transformation and search matches.
-// Used in loop detection (Loop Closing)
-// int SearchByProjection(KeyFrame* pKF, Sophus::Sim3<float> &Scw, const std::vector<MapPoint*> &vpPoints, std::vector<MapPoint*> &vpMatched, int th, float ratioHamming=1.0);
+pub fn search_by_projection_for_loop_detection(
+    map: &MapLock, scw: &Pose, mps: &Vec<Id>, matched_mappoints: &Vec<Id>, th: i32, ratio_hamming: f32
+) -> i32 {
+    let ratio = 0.6;
+    let check_orientation = true;
 
-// Project MapPoints using a Similarity Transformation and search matches.
-// Used in Place Recognition (Loop Closing and Merging)
-// int SearchByProjection(KeyFrame* pKF, Sophus::Sim3<float> &Scw, const std::vector<MapPoint*> &vpPoints, const std::vector<KeyFrame*> &vpPointsKFs, std::vector<MapPoint*> &vpMatched, std::vector<KeyFrame*> &vpMatchedKF, int th, float ratioHamming=1.0);
 
+     //&self.map, scw, &mps, &detection_data.matched_mappoints, 3, 1.5);
+    todo!("LOOP CLOSING");
+    // Project MapPoints using a Similarity Transformation and search matches.
+    // Used in loop detection
+    // int SearchByProjection(KeyFrame* pKF, Sophus::Sim3<float> &Scw, const std::vector<MapPoint*> &vpPoints, std::vector<MapPoint*> &vpMatched, int th, float ratioHamming=1.0);
+}
+
+pub fn search_by_projection_for_place_recognition() {
+    todo!("LOOP CLOSING");
+    // Project MapPoints using a Similarity Transformation and search matches.
+    // Used in Place Recognition
+    // int SearchByProjection(KeyFrame* pKF, Sophus::Sim3<float> &Scw, const std::vector<MapPoint*> &vpPoints, const std::vector<KeyFrame*> &vpPointsKFs, std::vector<MapPoint*> &vpMatched, std::vector<KeyFrame*> &vpMatchedKF, int th, float ratioHamming=1.0);
+}
 pub fn search_by_bow_f(
     kf: &KeyFrame, frame: &mut Frame,
     should_check_orientation: bool, ratio: f64
@@ -919,6 +932,12 @@ pub fn search_for_triangulation(
     };
 
     return Ok(matches);
+}
+
+pub fn fuse_from_loop_closing(kf_id: &Id, scw: &Pose, mappoints: &Vec<Id>, map: &MapLock, th: i32, nnratio: f32) ->  Vec<Option<Id>> {
+    // int ORBmatcher::Fuse(KeyFrame *pKF, Sophus::Sim3f &Scw, const vector<MapPoint *> &vpPoints, float th, vector<MapPoint *> &vpReplacePoint)
+
+    todo!("LOOP CLOSING");
 }
 
 pub fn fuse(kf_id: &Id, fuse_candidates: &Vec<Id>, map: &MapLock, th: f32, is_right: bool) {

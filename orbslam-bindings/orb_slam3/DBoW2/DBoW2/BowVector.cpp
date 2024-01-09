@@ -139,4 +139,12 @@ std::unique_ptr<BowVector> new_bow_vec() {
     return vec;
 }
 
+rust::Vec<unsigned int> BowVector::get_all_word_ids() const {
+    rust::Vec<unsigned int> word_ids;
+    for(DBoW2::BowVector::const_iterator vit= this->begin(), vend=this->end(); vit!=vend; vit++) {
+        word_ids.push_back(vit->first);
+    }
+    return word_ids;
+}
+
 } // namespace DBoW2

@@ -40,6 +40,10 @@ std::unique_ptr<ORBVocabulary> load_vocabulary_from_text_file(const string &file
     return vocabulary;
 }
 
+std::size_t ORBVocabulary::size() const {
+    vocabulary.size();
+}
+
 void ORBVocabulary::transform(
     const orb_slam3::WrapBindCVMat& desc1, 
     DBoW2::BowVector & bow_vector,

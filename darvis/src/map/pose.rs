@@ -30,6 +30,12 @@ impl Pose {
         Pose ( nalgebra::IsometryMatrix3::from_parts(translation,rotation3) )
     }
 
+    pub fn identity() -> Pose {
+        let translation = nalgebra::Translation3::new(0.0, 0.0, 0.0);
+        let rotation3 = nalgebra::Rotation3::identity();
+        Pose ( nalgebra::IsometryMatrix3::from_parts(translation,rotation3) )
+    }
+
     // TODO (timing): his forces a copy of the matrix/vector each time, which might not be ideal for just reads.
     pub fn get_translation(&self) -> DVTranslation { DVTranslation::new(self.0.translation.vector) }
     pub fn get_rotation(&self) -> DVRotation { DVRotation::new(*self.0.rotation.matrix()) }

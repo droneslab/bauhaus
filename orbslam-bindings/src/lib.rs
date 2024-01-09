@@ -270,7 +270,11 @@ pub mod ffi {
         fn vec_size(self: &FeatureVector, node_id: u32) -> u32;
         fn vec_get(self: &FeatureVector, node_id: u32, index: u32) -> u32;
 
+        fn get_all_word_ids(self: &BowVector) -> Vec<u32>;
+        // fn vec_get(self: &BowVector, node_id: u32, index: u32) -> Vec<u32>;
+
         fn load_vocabulary_from_text_file(file: &CxxString) -> UniquePtr<ORBVocabulary>;
+        fn size(self: &ORBVocabulary) -> usize;
         fn transform(
             self: &ORBVocabulary,
             descriptors: &WrapBindCVMat,

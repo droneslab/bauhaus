@@ -28,6 +28,11 @@ pub struct KeyFrame {
     pub imu_preintegrated: Option<IMUPreIntegrated>,
     pub sensor: Sensor,
 
+    // todo I would like to get rid of this but until we have fine-grained locking this is the only way to prevent deletion without taking the entire map
+    pub dont_delete: bool, // mbNotErase
+
+    // DON'T SET THESE! Either never used, or moved into actor implementation
+    // mbCurrentPlaceRecognition
 
     // I think we can clean this up and get rid of these
     // Variables used by KF database
@@ -72,6 +77,7 @@ impl KeyFrame {
             sensor: SETTINGS.get::<Sensor>(SYSTEM, "sensor"),
             parent: None,
             children: HashSet::new(),
+            dont_delete: false,
         }
     }
 
