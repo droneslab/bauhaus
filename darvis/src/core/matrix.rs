@@ -409,6 +409,56 @@ impl<T> Index<usize> for DVMatrix3<T> {
     }
 }
 
+pub struct DVMatrix7x7<T> ( nalgebra::SMatrix<T, 7, 7> ); // 7x7 matrix
+impl<T: Debug + Clone + nalgebra::Scalar + num_traits::identities::Zero + num_traits::One + nalgebra::ComplexField> DVMatrix7x7<T> {
+    pub fn new(vec: nalgebra::SMatrix<T, 7, 7>) -> Self {
+        DVMatrix7x7 ( vec )
+    }
+    pub fn zeros<T2: Debug + Clone + nalgebra::Scalar + num_traits::identities::Zero>() -> Self {
+        DVMatrix7x7::new(nalgebra::SMatrix::<T, 7, 7>::zeros())
+    }
+    pub fn identity() -> Self { 
+        DVMatrix7x7::new(nalgebra::SMatrix::<T, 7, 7>::identity())
+    }
+
+    pub fn is_zero(&self) -> bool { self.0 == nalgebra::SMatrix::<T, 7, 7>::zeros() }
+
+    pub fn vec(&self) -> &nalgebra::SMatrix<T, 7, 7> { &self.0 }
+    pub fn transpose(&self) -> nalgebra::SMatrix<T, 7, 7> { self.0.transpose() }
+    pub fn determinant(&self) -> T { self.0.determinant() }
+
+    pub fn neg_mut(&mut self) { self.0.neg_mut() }
+}
+impl<T> Deref for DVMatrix7x7<T> {
+    type Target = nalgebra::SMatrix<T, 7, 7>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+// From implementations...
+impl<T: Clone> From<DVMatrix7x7<T>> for nalgebra::SMatrix<T, 7, 7> {
+    fn from(vec: DVMatrix7x7<T>) -> nalgebra::SMatrix<T, 7, 7> { vec.0.clone() }
+}
+impl<T: Clone> From<&DVMatrix7x7<T>> for nalgebra::SMatrix<T, 7, 7> {
+    fn from(vec: &DVMatrix7x7<T>) -> nalgebra::SMatrix<T, 7, 7> { vec.0.clone() }
+}
+// Two index implementations, one for matrix7x7[(x,y)] and one for [(x)]
+impl<T> Index<(usize, usize)> for DVMatrix7x7<T> {
+    type Output = T;
+
+    fn index(&self, i: (usize, usize)) -> &Self::Output {
+        &self.0[i]
+    }
+}
+impl<T> Index<usize> for DVMatrix7x7<T> {
+    type Output = T;
+
+    fn index(&self, i: usize) -> &Self::Output {
+        &self.0[i]
+    }
+}
+
+
 
 #[derive(Clone, Debug)]
 pub struct DVMatrixGrayscale ( nalgebra::DMatrix<u8> );

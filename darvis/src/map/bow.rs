@@ -25,6 +25,9 @@ impl DVVocabulary {
             filename,
         }
     }
+    pub fn size(&self) -> usize {
+        self.vocabulary.size()
+    }
 
     pub fn transform(&self, descriptors: &DVMatrix, bow: & mut BoW) {
         let descriptors2: dvos3binding::ffi::WrapBindCVMat = descriptors.into();

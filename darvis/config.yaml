@@ -177,12 +177,12 @@ actors:
             value: 2000
             type: i32
 
-      -
-       name: LOOP_CLOSING
-       tag: "orbslam loop closing"
-       receiver_bound: -1
-       settings:
-          - 
+      # -
+      #  name: LOOP_CLOSING
+      #  tag: "orbslam loop closing"
+      #  receiver_bound: -1
+      #  settings:
+      #     - 
 
       -
        name: LOCAL_MAPPING

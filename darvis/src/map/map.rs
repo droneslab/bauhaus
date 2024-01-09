@@ -208,6 +208,10 @@ impl Map {
             // TODO (timing) ... map mutability
             // same as other issue in map.rs, to remove this clone we need to be able to iterate over an immutable ref to matches and children while mutating other keyframes inside the loop
             let kf = self.keyframes.get(&kf_id).unwrap();
+            if kf.dont_delete {
+                debug!("Loop closing working on keyframe, don't delete.");
+                return;
+            }
             connections1 = kf.get_covisibility_keyframes(i32::MAX);
             matches1 = kf.get_mp_matches().clone();
             parent1 = kf.parent;

@@ -23,6 +23,7 @@ class ORBVocabulary {
             DBoW2::FeatureVector & feature_vector,
             int levelsup
         ) const;
+        std::size_t size() const;
 };
 
 std::unique_ptr<ORBVocabulary> load_vocabulary_from_text_file(const string &file);

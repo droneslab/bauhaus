@@ -22,6 +22,8 @@ use parking_lot::{
 // };
 use std::{sync::Arc, time::Instant};
 
+pub type UnlockedToRead<'a, Map> = MappedRwLockReadGuard<'a, Map>;
+
 #[derive(Debug, Clone)]
 pub struct ReadOnlyMap<T> {
     inner: Arc<RwLock<T>>,
