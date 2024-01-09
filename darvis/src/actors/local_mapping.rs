@@ -250,8 +250,11 @@ impl LocalMapping {
 
         tracy_client::frame_mark();
 
-        let loopclosing = self.actor_channels.find(LOOP_CLOSING);
-        loopclosing.send(Box::new(KeyFrameIdMsg{ kf_id: self.current_keyframe_id })).unwrap();
+        if self.actor_channels.actors.get(LOOP_CLOSING).is_some() {
+            // Only send if loop closing is actually running
+            let loopclosing = self.actor_channels.find(LOOP_CLOSING);
+            loopclosing.send(Box::new(KeyFrameIdMsg{ kf_id: self.current_keyframe_id })).unwrap();
+        }
     }
 
     fn mappoint_culling(&mut self) -> i32 {

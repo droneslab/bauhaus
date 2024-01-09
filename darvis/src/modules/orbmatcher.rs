@@ -486,8 +486,6 @@ pub fn search_by_projection_for_loop_detection(
     let ratio = 0.6;
     let check_orientation = true;
 
-
-     //&self.map, scw, &mps, &detection_data.matched_mappoints, 3, 1.5);
     todo!("LOOP CLOSING");
     // Project MapPoints using a Similarity Transformation and search matches.
     // Used in loop detection
@@ -937,6 +935,7 @@ pub fn search_for_triangulation(
 pub fn fuse_from_loop_closing(kf_id: &Id, scw: &Pose, mappoints: &Vec<Id>, map: &MapLock, th: i32, nnratio: f32) ->  Vec<Option<Id>> {
     // int ORBmatcher::Fuse(KeyFrame *pKF, Sophus::Sim3f &Scw, const vector<MapPoint *> &vpPoints, float th, vector<MapPoint *> &vpReplacePoint)
 
+    // not sure why this function is different from the other fuse function, could be a really small difference with a lot of copied code, so double-check the code to save some time
     todo!("LOOP CLOSING");
 }
 
