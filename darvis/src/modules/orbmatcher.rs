@@ -917,7 +917,7 @@ pub fn search_for_triangulation(
                 if best_index >= 0 {
                     let (kp2, _) = kf_2.features.get_keypoint(best_index as usize);
                     matches.insert(kf1_index as usize, best_index as usize);
-                    // matched_already.insert(best_index as u32);
+                    matched_already.insert(best_index as u32);
                     if should_check_orientation {
                         check_orientation_1(
                             &kp1,

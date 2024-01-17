@@ -148,7 +148,7 @@ impl Actor for TrackingFrontEnd {
 
 impl TrackingFrontEnd {
     fn extract_features(&mut self, image: opencv::core::Mat) -> (VectorOfKeyPoint, Mat) {
-        let _span = tracy_client::span!("extract features");
+        let _span = tracy_client::span!("extract_features");
 
         let image_dv: dvos3binding::ffi::WrapBindCVMat = (&DVMatrix::new(image)).into();
         let mut descriptors: dvos3binding::ffi::WrapBindCVMat = (&DVMatrix::default()).into();
