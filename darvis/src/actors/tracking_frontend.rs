@@ -6,7 +6,7 @@ use opencv::{prelude::*, types::VectorOfKeyPoint,};
 
 use core::{
     actor::Actor,
-    sensor::{Sensor, FrameSensor},
+    sensor::{Sensor, FrameSensor, ImuSensor},
     matrix::*,
     config::*
 };
@@ -57,7 +57,7 @@ impl Actor for TrackingFrontEnd {
             map_initialized: false,
             init_id: 0,
             last_id: 0,
-            max_frames: SETTINGS.get::<f64>(SYSTEM, "fps") as i32,
+            max_frames: 10, // TODO (MVP): this should be set to:  SETTINGS.get::<f64>(SYSTEM, "fps") as i32,
             sensor,
         }
     }
@@ -155,13 +155,20 @@ impl TrackingFrontEnd {
         let mut keypoints: dvos3binding::ffi::WrapBindCVKeyPoints = DVVectorOfKeyPoint::empty().into();
 
         // TODO (C++ and Rust optimizations) ... this takes ~70 ms which is way high compared to ORB-SLAM3. I think this is because the rust and C++ bindings are not getting optimized together.
-        if self.map_initialized && (self.last_id - self.init_id < self.max_frames) {
-            self.orb_extractor_left.extractor.pin_mut().extract(&image_dv, &mut keypoints, &mut descriptors);
-        } else if self.sensor.is_mono() {
-            self.orb_extractor_ini.as_mut().unwrap().extractor.pin_mut().extract(&image_dv, &mut keypoints, &mut descriptors);
-        } else {
-            self.orb_extractor_left.extractor.pin_mut().extract(&image_dv, &mut keypoints, &mut descriptors);
+        match self.sensor {
+            Sensor(FrameSensor::Mono, ImuSensor::None) => {
+                if !self.map_initialized || (self.last_id - self.init_id < self.max_frames) {
+                    self.orb_extractor_ini.as_mut().unwrap().extractor.pin_mut().extract(&image_dv, &mut keypoints, &mut descriptors);
+                } else {
+                    self.orb_extractor_left.extractor.pin_mut().extract(&image_dv, &mut keypoints, &mut descriptors);
+                }
+            },
+            _ => { 
+                // See GrabImageMonocular, GrabImageStereo, GrabImageRGBD in Tracking.cc
+                todo!("IMU, Stereo, RGBD")
+            }
         }
+
         match self.sensor.frame() {
             FrameSensor::Stereo => todo!("Stereo"), //Also call extractor_right, see Tracking::GrabImageStereo,
             _ => {}

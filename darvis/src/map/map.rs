@@ -1,6 +1,7 @@
 use std::{collections::{HashMap, HashSet}, hash::BuildHasherDefault};
 use fasthash::SeaHasher;
 use log::{info, warn, error, debug};
+use rustc_hash::FxHashMap;
 use core::{matrix::{DVVector3, DVVectorOfPoint3f}, config::{SETTINGS, SYSTEM}, sensor::{Sensor, FrameSensor, ImuSensor}};
 use crate::{
     map::{keyframe::*, mappoint::*, pose::Pose},
@@ -10,7 +11,10 @@ use crate::{
 use super::{misc::Timestamp, frame::Frame};
 
 pub type Id = i32;
-pub type MapItems<T> = HashMap<Id, T, BuildHasherDefault<SeaHasher>>; // faster performance with seahasher
+// pub type MapItems<T> = HashMap<Id, T>;
+// pub type MapItems<T> = HashMap<Id, T, BuildHasherDefault<SeaHasher>>; // faster performance with seahasher
+pub type MapItems<T> = FxHashMap<Id, T>;
+
 
 #[derive(Debug, Clone)]
 pub struct Map {
@@ -109,17 +113,7 @@ impl Map {
             });
         }
 
-        // Compute distinctive descriptors
-        let best_descriptor = self.mappoints.get(&new_mp_id)
-            .and_then(|mp| mp.compute_distinctive_descriptors(&self)).unwrap();
-        self.mappoints.get_mut(&new_mp_id)
-            .map(|mp| mp.update_distinctive_descriptors(best_descriptor));
-
-        // Update normal and depth
-        let norm_and_depth = self.mappoints.get(&new_mp_id)
-            .and_then(|mp| {mp.get_norm_and_depth(&self)}).unwrap();
-        self.mappoints.get_mut(&new_mp_id)
-            .map(|mp| mp.update_norm_and_depth(norm_and_depth));
+        self.update_mappoint(new_mp_id);
 
         return self.last_mp_id;
     }
@@ -161,20 +155,7 @@ impl Map {
                         // because the kf was not in the map at the time.
                     }
 
-                    let norm_and_depth;
-                    let best_descriptor;
-                    let mp_id = mp_matches[i].unwrap().0;
-                    {
-                        let mp = self.mappoints.get(&mp_id).unwrap();
-                        norm_and_depth = mp.get_norm_and_depth(&self).unwrap();
-                        best_descriptor = mp.compute_distinctive_descriptors(&self).unwrap();
-                    }
-
-                    {
-                        let mp = self.mappoints.get_mut(&mp_id).unwrap();
-                        mp.update_norm_and_depth(norm_and_depth);
-                        mp.update_distinctive_descriptors(best_descriptor);
-                    }
+                    self.update_mappoint(mp_id);
                 }
             }
 
@@ -226,6 +207,7 @@ impl Map {
                 let should_delete_mappoint = self.mappoints.get_mut(&mp_id).unwrap().delete_observation(&kf_id);
                 if should_delete_mappoint {
                     self.discard_mappoint(&mp_id);
+                    debug!("Discarded mappoint: {}", mp_id);
                 }
             }
         }
@@ -409,6 +391,7 @@ impl Map {
 
         // Update tracking with new info
         let relevant_mappoints = self.mappoints.keys().cloned().collect();
+
         Some((curr_kf_pose, curr_kf_id, initial_kf_id, relevant_mappoints, curr_kf_timestamp))
     }
 
@@ -495,75 +478,68 @@ impl Map {
 
     }
 
-    pub fn replace_mappoint(&self, _mp_to_replace: Id, _mp: Id) {
-        todo!("MVP LOCAL MAPPING");
-        // if(pMP->mnId==this->mnId)
-        //     return;
+    pub fn replace_mappoint(&mut self, mp_to_replace_id: Id, mp_id: Id) {
+        // void MapPoint::Replace(MapPoint* pMP)
 
-        // int nvisible, nfound;
-        // map<KeyFrame*,tuple<int,int>> obs;
-        // {
-        //     unique_lock<mutex> lock1(mMutexFeatures);
-        //     unique_lock<mutex> lock2(mMutexPos);
-        //     obs=mObservations;
-        //     mObservations.clear();
-        //     mbBad=true;
-        //     nvisible = mnVisible;
-        //     nfound = mnFound;
-        //     mpReplaced = pMP;
-        // }
+        if mp_to_replace_id == mp_id {
+            return;
+        }
 
-        // for(map<KeyFrame*,tuple<int,int>>::iterator mit=obs.begin(), mend=obs.end(); mit!=mend; mit++)
-        // {
-        //     // Replace measurement in keyframe
-        //     KeyFrame* pKF = mit->first;
+        let (num_found, num_visible, observations);
+        {
+            let mp_to_replace = self.mappoints.get(&mp_to_replace_id).unwrap();
+            num_found = mp_to_replace.get_found();
+            num_visible = mp_to_replace.get_visible();
+            observations = mp_to_replace.get_observations().clone();
+        }
 
-        //     tuple<int,int> indexes = mit -> second;
-        //     int leftIndex = get<0>(indexes), rightIndex = get<1>(indexes);
+        for (kf_id, (index_left, index_right)) in observations {
+            // Replace measurement in keyframe
+            let kf = self.keyframes.get_mut(&kf_id).unwrap();
+            let mp = self.mappoints.get(&mp_id).unwrap();
 
-        //     if(!pMP->IsInKeyFrame(pKF))
-        //     {
-        //         if(leftIndex != -1){
-        //             pKF->ReplaceMapPointMatch(leftIndex, pMP);
-        //             pMP->AddObservation(pKF,leftIndex);
-        //         }
-        //         if(rightIndex != -1){
-        //             pKF->ReplaceMapPointMatch(rightIndex, pMP);
-        //             pMP->AddObservation(pKF,rightIndex);
-        //         }
-        //     }
-        //     else
-        //     {
-        //         if(leftIndex != -1){
-        //             pKF->deleteMapPointMatch(leftIndex);
-        //         }
-        //         if(rightIndex != -1){
-        //             pKF->deleteMapPointMatch(rightIndex);
-        //         }
-        //     }
-        // }
-        // pMP->IncreaseFound(nfound);
-        // pMP->IncreaseVisible(nvisible);
-        // pMP->ComputeDistinctiveDescriptors();
+            if !mp.get_observations().contains_key(&kf_id) {
+                if index_left != -1 {
+                    kf.add_mp_match(index_left as u32, mp_id, false);
+                    self.mappoints.get_mut(&mp_id).unwrap().add_observation(&kf_id, kf.features.num_keypoints, index_left as u32);
+                }
+                if index_right != -1 {
+                    // TODO STEREO
+                }
+            } else {
+                kf.delete_mp_match_at_indices((index_left, index_right));
+            }
+        }
 
-        // mpMap->deleteMapPoint(this);
+        let mp = self.mappoints.get(&mp_id).unwrap();
+        mp.increase_found(num_found);
+        mp.increase_visible(num_visible);
 
+        let best_descriptor = self.mappoints.get(&mp_id)
+            .and_then(|mp| mp.compute_distinctive_descriptors(&self)).unwrap();
+        self.mappoints.get_mut(&mp_id)
+            .map(|mp| mp.update_distinctive_descriptors(best_descriptor));
 
-        // Update points
-        // vpMapPointMatches = mpCurrentKeyFrame->GetMapPointMatches();
-        // for(size_t i=0, iend=vpMapPointMatches.size(); i<iend; i++)
-        // {
-        //     MapPoint* pMP=vpMapPointMatches[i];
-        //     if(pMP)
-        //     {
-        //         if(!pMP->isBad())
-        //         {
-        //             pMP->ComputeDistinctiveDescriptors();
-        //             pMP->UpdateNormalAndDepth();
-        //         }
-        //     }
-        // }
-        // Update connections in covisibility graph
-        // mpCurrentKeyFrame->UpdateConnections();
+        self.discard_mappoint(&mp_to_replace_id);
     }
+
+
+    pub fn update_mappoint(&mut self, mp_id: Id) {
+        // These two functions are called together all the time, and our implementation is more complicated
+        // because we need to split up the computing (read lock) from the updating (write lock). The whole
+        // sequence is put together here so each time you need to do it you can just call this function.
+
+        // Compute distinctive descriptors
+        let best_descriptor = self.mappoints.get(&mp_id)
+            .and_then(|mp| mp.compute_distinctive_descriptors(&self)).unwrap();
+        self.mappoints.get_mut(&mp_id)
+            .map(|mp| mp.update_distinctive_descriptors(best_descriptor));
+
+        // Update normal and depth
+        let norm_and_depth = self.mappoints.get(&mp_id)
+            .and_then(|mp| {mp.get_norm_and_depth(&self)}).unwrap();
+        self.mappoints.get_mut(&mp_id)
+            .map(|mp| mp.update_norm_and_depth(norm_and_depth));
+    }
+
 }

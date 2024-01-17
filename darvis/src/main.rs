@@ -91,6 +91,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     for path in &generate_image_paths(img_dir + "/image_0/") {
         if *shutdown_flag.lock().unwrap() { break; }
         loop_sleep.start();
+        tracy_client::frame_mark();
 
         let image = image::read_image_file(&path.to_string());
 

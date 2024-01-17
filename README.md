@@ -171,11 +171,11 @@ cargo flamegraph -o flamegraph.svg --root --release --ignore-status  -- ~/datase
     apt install libdbus-glib-1-dev libcapstone-dev
     cd ~/darvis-home
     git clone https://github.com/wolfpld/tracy.git
+    cd tracy
     git checkout 897aec5 # Set to version 0.9.1
-    cd tracy/profiler/build/unix
-    make
-    cd ~/darvis-home/tracy/capture/build/unix
-    make
+    cd profiler/build/unix && make && cd ../../../
+    cd capture/build/unix && make && cd ../../../
+    cd csvexport/build/unix && make && cd ../../../
     ```
     Tracy C++ version has to be compatible with tracy-client version in Rust. [See table here](https://github.com/nagisa/rust_tracy_client).
 2. Try to run ``./tracy/profiler/build/unix/Tracy-release``. If you get [this error](https://github.com/wolfpld/tracy/issues/567), you need to make [this change](https://github.com/wolfpld/tracy/commit/c57b8994f6dcee2e3312b1a7aec9e055f7a0bb01) to the tracy source code.
@@ -207,6 +207,11 @@ cargo flamegraph -o flamegraph.svg --root --release --ignore-status  -- ~/datase
     ```
 4. Select ``open saved trace`` in the GUI
 - If you're on a mac and sshing into the darvis computer or running it in docker, ``brew install tracy`` will actually work to show the tracy GUI. I could not get wayland forwarding to work.
+5. To export tracy statistics to a csv, run:
+    ```bash
+    ./tracy/csvexport/build/unix/csvexport-release output.tracy
+    ```
+    You can then further process this with the `tracy.py` script in the scripts directory.
 
 **Helpful links**
 - [blog post on using tracy with rust](https://www.abhirag.com/blog/tracy/)

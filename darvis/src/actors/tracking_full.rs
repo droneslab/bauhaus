@@ -91,7 +91,9 @@ impl Actor for TrackingFull {
             orb_extractor_ini,
             map_initialized: false,
             init_id: 0,
-            max_frames: SETTINGS.get::<f64>(SYSTEM, "fps") as i32,
+            // TODO(MVP) after we are done testing, this should be set to:  SETTINGS.get::<f64>(SYSTEM, "fps") as i32,
+            // orbslam sets this to 10 regardless of what the actual fps is
+            max_frames: 10,
             sensor,
             map,
             initialization: Some(Initialization::new()),
@@ -698,7 +700,7 @@ impl TrackingFull {
             if let Some((mp_id, is_outlier)) = current_frame.mappoint_matches.matches[index as usize] {
                 if !is_outlier {
                     if let Some(mp) = self.map.read().mappoints.get(&mp_id) {
-                        mp.increase_found();
+                        mp.increase_found(1);
                         // println!("Increase found {}", mp_id);
                     }
 
@@ -885,7 +887,7 @@ impl TrackingFull {
             for index in 0..current_frame.mappoint_matches.matches.len() {
                 if let Some((id, _)) = current_frame.mappoint_matches.matches[index as usize] {
                     if let Some(mp) = lock.mappoints.get(&id) {
-                        mp.increase_visible();
+                        mp.increase_visible(1);
                         // println!("Increase visible {}", id);
 
                         self.last_frame_seen.insert(id, current_frame.frame_id);
@@ -917,7 +919,7 @@ impl TrackingFull {
                 };
 
                 if tracked_data_left.is_some() || tracked_data_right.is_some() {
-                    lock.mappoints.get(&mp_id).unwrap().increase_visible();
+                    lock.mappoints.get(&mp_id).unwrap().increase_visible(1);
                     // println!("Increase visible {}", mp_id);
                     to_match += 1;
                 }
@@ -1161,7 +1163,7 @@ impl TrackingFull {
             self.last_frame_seen.insert(mp_id, current_frame.frame_id);
             // TODO (Stereo) ... need to remove this from track_in_view_r if the mp is seen in the right camera
         }
-        current_frame.mappoint_matches.mappoints_with_observations(&*self.map.read())
+        current_frame.mappoint_matches.tracked_mappoints(&*self.map.read(), 1)
     }
 
     //* Next steps */

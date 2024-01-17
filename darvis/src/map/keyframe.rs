@@ -1,6 +1,6 @@
 use std::{collections::{HashMap, HashSet}, cmp::min, backtrace::Backtrace};
 use core::{matrix::DVVector3, config::{ SETTINGS, SYSTEM}, sensor::Sensor};
-use log::{error, debug};
+use log::{error, debug, warn};
 use crate::{map::{map::Id, pose::Pose},modules::imu::*};
 use super::{mappoint::MapPoint, map::{Map, MapItems}, features::Features, bow::{BoW, self}, misc::Timestamp, frame::Frame};
 
@@ -114,7 +114,8 @@ impl KeyFrame {
         // debug!("Delete mappoint {} for kf {}", mp_id, self.id);
     }
     pub fn get_tracked_mappoints(&self, map: &Map, min_observations: u32) -> i32 { self.mappoint_matches.tracked_mappoints(map, min_observations) }
-
+    pub fn debug_get_mps_count(&self) -> i32 { self.mappoint_matches.debug_count }
+    
     pub fn get_camera_center(&self) -> DVVector3<f64> {
         self.pose.inverse().get_translation()
         // Note: In Orbslam, this is: mTwc.translation()
@@ -179,12 +180,14 @@ impl KeyFrame {
 pub struct MapPointMatches {
     // Mappoints //
     // Note: Id is mappoint Id, bool is if it's an oultier
-    pub matches: Vec<Option<(Id, bool)>>
+    pub matches: Vec<Option<(Id, bool)>>,
+    pub debug_count: i32, // keep track of count for debugging
 }
 impl MapPointMatches {
     pub fn new(num_keypoints: usize) -> Self {
         Self {
-            matches: vec![None; num_keypoints]
+            matches: vec![None; num_keypoints],
+            debug_count: 0,
         }
     }
 
@@ -197,6 +200,7 @@ impl MapPointMatches {
 
     pub fn add(&mut self, index: u32, mp_id: Id, is_outlier: bool) {
         self.matches[index as usize] = Some((mp_id, is_outlier));
+        self.debug_count += 1;
     }
 
     pub fn delete_with_id(&mut self, mp_id: Id) {
@@ -204,6 +208,8 @@ impl MapPointMatches {
             if let Some((id, _)) = self.matches[index] {
                 if id == mp_id {
                     self.matches[index] = None;
+                    self.debug_count -= 1;
+                    return
                 }
             }
         }
@@ -216,24 +222,28 @@ impl MapPointMatches {
         if indices.0 != -1 {
             first_mp_id = self.matches[indices.0 as usize];
             self.matches[indices.0 as usize] = None;
+            self.debug_count -= 1;
         }
         if indices.1 != -1 {
             second_mp_id = self.matches[indices.1 as usize];
             self.matches[indices.1 as usize]= None;
+            self.debug_count -= 1;
         }
         (first_mp_id, second_mp_id)
     }
 
     pub fn clear(&mut self) {
         self.matches = vec![None; self.matches.len()];
+        self.debug_count = 0;
     }
 
     pub fn is_outlier(&self, index: &u32) -> bool {
         self.matches[*index as usize].unwrap().1
     }
 
-    pub fn set_outlier(&mut self, index: &u32, is_outlier: bool) {
-        self.matches[*index as usize].unwrap().1 = is_outlier;
+    pub fn set_outlier(&mut self, index: usize, is_outlier: bool) {
+        // need as_mut().unwrap() or it won't actually change the internal value!!!
+        self.matches[index].as_mut().unwrap().1 = is_outlier;
     }
 
     pub fn mappoints_with_observations(&self, map: &Map) -> i32 {
@@ -253,11 +263,13 @@ impl MapPointMatches {
         .count() as i32
     }
 
-    pub fn tracked_mappoints(&self, map: &Map, min_observations: u32) -> i32 {
+    pub fn old_tracked_mappoints(&self, map: &Map, min_observations: u32) -> i32 {
         // KeyFrame::TrackedMapPoints(const int &minObs)
         if min_observations > 0 {
             return self.matches.len() as i32;
-        }
+        } // SOFIYA... this is obviously wrong, but new_tracked_mappoints below gives way too few tracked mps
+        // I think mps are not storing observations correctly .. actually this is not true, most mappoints have the right amount of observations
+        // so self.matches just does not have enough mappoints???
 
         let mut num_points = 0;
         for mp_match in &self.matches {
@@ -271,6 +283,39 @@ impl MapPointMatches {
 
         num_points
     }
+
+    pub fn tracked_mappoints(&self, map: &Map, min_observations: u32) -> i32 {
+        // KeyFrame::TrackedMapPoints(const int &minObs)
+        // To get all mappoints with any observations at all, pass in 1 as `min_observations`
+        let check_obs = min_observations > 0;
+        (&self.matches)
+        .into_iter()
+        .filter(|item| {
+            match item {
+                Some((mp_id, _)) => {
+                    match map.mappoints.get(mp_id) {
+                        Some(mappoint) => {
+                            if check_obs {
+                                if mappoint.num_obs <= 1 {
+                                    debug!("mappoint.num_obs {}", mappoint.num_obs);
+                                }
+                                mappoint.num_obs >= (min_observations as i32)
+                            } else {
+                                true
+                            }
+                        },
+                        None => {
+                            warn!("Mappoint {} not in map", mp_id);
+                            false
+                        }
+                    }
+                },
+                None => false
+            }
+        })
+        .count() as i32
+    }
+
 
 }
 
@@ -298,8 +343,16 @@ impl ConnectedKeyFrames {
     }
 
     fn add(&mut self, kf_id: &Id, weight: i32) {
-        *self.map_connected_keyframes.entry(*kf_id).or_insert(weight) = weight;
-        self.ordered_connected_keyframes.push((*kf_id, weight));
+        match self.map_connected_keyframes.contains_key(kf_id) {
+            true => {
+                self.map_connected_keyframes.insert(*kf_id, weight); // updates value in hashmap
+            },
+            false => {
+                self.map_connected_keyframes.insert(*kf_id, weight);
+                self.ordered_connected_keyframes.push((*kf_id, weight));
+            }
+        }
+
         //TODO (mvp)...verify sorting in ConnectedKeyFrames, might be backwards. Not quite clear whether low weight = earlier index or vice versa
         if weight > self.connected_keyframes_cutoff_weight { self.sort_ordered(); }
     }

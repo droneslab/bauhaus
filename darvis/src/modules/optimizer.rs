@@ -5,7 +5,7 @@ use cxx::UniquePtr;
 use core::{
     config::{SETTINGS, SYSTEM}, sensor::{Sensor, FrameSensor}, matrix::DVMatrix7x7,
 };
-use log::{warn, debug};
+use log::{warn, debug, trace};
 use nalgebra::Matrix3;
 use opencv::prelude::KeyPointTraitConst;
 use crate::{
@@ -121,7 +121,7 @@ pub fn optimize_pose(
                 },
                 _ => {
                     // Mono observations
-                    frame.mappoint_matches.set_outlier(& (i as u32), false);
+                    frame.mappoint_matches.set_outlier(i as usize, false);
                     optimizer.pin_mut().add_edge_monocular_unary(
                         true, 0, keypoint.octave(), keypoint.pt().x, keypoint.pt().y,
                         INV_LEVEL_SIGMA2[keypoint.octave() as usize],
@@ -167,11 +167,11 @@ pub fn optimize_pose(
             let chi2 = edge.inner.chi2();
 
             if chi2 > chi2_mono[iteration] {
-                frame.mappoint_matches.set_outlier(&mp_indexes[index], true);
+                frame.mappoint_matches.set_outlier(mp_indexes[index] as usize, true);
                 edge.inner.pin_mut().set_level(1);
                 num_bad += 1;
             } else {
-                frame.mappoint_matches.set_outlier(&mp_indexes[index], false);
+                frame.mappoint_matches.set_outlier(mp_indexes[index] as usize, false);
                 edge.inner.pin_mut().set_level(0);
             }
 
@@ -258,6 +258,8 @@ pub fn optimize_pose(
     // Recover optimized pose
     let pose = optimizer.recover_optimized_frame_pose(0);
     frame.pose = Some(pose.into());
+
+    // debug!("Set outliers in pose optimization: {}", num_bad);
 
     // Return number of inliers
     return Some(initial_correspondences - num_bad);
@@ -617,10 +619,12 @@ pub fn local_bundle_adjustment(
             vertex_id += 1;
         }
     }
-    tracy_client::plot!("KFs to Optimize", kfs_to_optimize as f64);
-    tracy_client::plot!("Fixed KFs", fixed_kfs as f64);
-    tracy_client::plot!("MPs to Optimize", mps_to_optimize as f64);
-    tracy_client::plot!("Edges", edges as f64);
+    tracy_client::plot!("LBA: KFs to Optimize", kfs_to_optimize as f64);
+    tracy_client::plot!("LBA: Fixed KFs", fixed_kfs as f64);
+    tracy_client::plot!("LBA: MPs to Optimize", mps_to_optimize as f64);
+    tracy_client::plot!("LBA: Edges", edges as f64);
+    trace!("LBA:{},{},{},{}", kfs_to_optimize, fixed_kfs, mps_to_optimize, edges);
+
     // Optimize
     {
         let _span = tracy_client::span!("local_bundle_adjustment::optimize");

@@ -702,7 +702,7 @@ pub fn search_for_triangulation(
     // Some math based on ORB-SLAM2 to avoid some confusion with Sophus.
     // Look here: https://github.com/raulmur/ORB_SLAM2/blob/master/src/ORBmatcher.cc#L657
 
-    let _span = tracy_client::span!("search_for_triangulation");
+    // let _span = tracy_client::span!("search_for_triangulation");
 
     //Compute epipole in second image
     let cw = *kf_1.get_camera_center(); //Cw
@@ -734,6 +734,12 @@ pub fn search_for_triangulation(
     // Compare only ORB that share the same node
 
     let mut matches = HashMap::<usize, usize>::new();
+    // Note: ORBSLAM includes this vec but never inserts in it.
+    // If we don't include the vec, we get the same results as ORBSLAM but introduce a bug where multiple
+    // mappoints get made for the same index of the keyframe and the connections don't match up:
+    // MP 1 -> KF, KF -> MP 2, MP 2 -> KF
+    // Not sure how this error doesn't happen in ORBSLAM, since the rest of the code matches.
+    // Including the vec gives us different results than ORBSLAM, but I think ours are correct.
     let mut matched_already = HashSet::<u32>::new();
 
     let factor = 1.0 / (HISTO_LENGTH as f32);
@@ -750,6 +756,10 @@ pub fn search_for_triangulation(
     // let mut skipped3 = 0;
     // let mut skipped4 = 0;
     // let mut loops = 0;
+    // println!("BEGIN");
+
+    // println!("feature vector lengths {} {}", kf1_featvec.len(), kf2_featvec.len());
+
 
     while i < kf1_featvec.len() && j < kf2_featvec.len() {
         let kf1_node_id = kf1_featvec[i];
@@ -760,12 +770,14 @@ pub fn search_for_triangulation(
             let kf1_indices_size = kf_1.bow.as_ref().unwrap().feat_vec.vec_size(kf1_node_id);
 
             for i1 in 0..kf1_indices_size {
-                // let _span = tracy_client::span!("outer");
                 // note...to use the strategy to not copy the vec, uncomment this and change for loop to for index1 in 0..kf1_indices_size
                 let kf1_index = kf_1.bow.as_ref().unwrap().feat_vec.vec_get(kf1_node_id, i1); // = idx1
 
                 // If there is already a MapPoint skip
                 if kf_1.has_mp_match(&kf1_index) {
+                    // if kf1_index == 2871 {
+                    //     println!("has mp match");
+                    // }
                     // skipped1 += 1;
                     continue
                 };
@@ -790,19 +802,22 @@ pub fn search_for_triangulation(
 
                 // let kf2_indices = kf_2.bow.as_ref().unwrap().feat_vec.get_feat_from_node(kf2_node_id);
                 // note...same thing about not copying vec as above
-                // println!("{:?}", bla);
                 let kf2_indices_size = kf_2.bow.as_ref().unwrap().feat_vec.vec_size(kf2_node_id);
 
                 for i2 in 0..kf2_indices_size {
-                    // let _span = tracy_client::span!("inner");
                     // note...same thing about not copying vec as above
                     let kf2_index = kf_2.bow.as_ref().unwrap().feat_vec.vec_get(kf2_node_id, i2); // = idx2
 
-                    // println!("{} {} {} ", kf2_indices_size, idx2, kf2_index);
+                    // println!("{} {}", kf1_index, kf2_index);
 
                     // If we have already matched or there is a MapPoint skip
                     if kf_2.has_mp_match(&kf2_index) || matched_already.contains(&kf2_index) {
                         // skipped2 += 1;
+                        // if kf1_index == 2871 && kf2_index == 2433 {
+                        //     println!("matches {:?}", matches);
+                        //     println!("match is {}", kf_2.get_mp_match(&kf2_index));
+                        // }
+
                         continue
                     };
 
@@ -823,6 +838,10 @@ pub fn search_for_triangulation(
 
                     if dist > TH_LOW || dist > best_dist {
                         // skipped3 += 1;
+                        // if kf1_index == 2871 && kf2_index == 2433  {
+                        //     println!("skipped 2");
+                        // }
+
                         continue
                     }
 
@@ -833,6 +852,10 @@ pub fn search_for_triangulation(
                         let dist_ey = (ep.1 as f32) - kp2.pt().y;
                         if dist_ex * dist_ex + dist_ey * dist_ey < 100.0 * SCALE_FACTORS[kp2.octave() as usize] {
                             // skipped4 += 1;
+                            // if kf1_index == 2871 && kf2_index == 2433 {
+                            //     println!("skipped 3");
+                            // }
+
                             continue
                         }
                     }
@@ -875,17 +898,26 @@ pub fn search_for_triangulation(
 
                     let epipolar = CAMERA_MODULE.epipolar_constrain(&kp1, &kp2, &r12, &t12, LEVEL_SIGMA2[kp2.octave() as usize]);
 
+                    // if kf1_index == 2871 {
+                    //     println!("interest {} {}", kf2_index, epipolar);
+                    //     println!("{} {}", kp1.pt().x, kp1.pt().y);
+                    //     println!("{} {}", kp2.pt().x, kp2.pt().y);
+                    //     println!("{:?}", r12);
+                    //     println!("{:?}", t12);
+                    // }
+
                     if course || epipolar {
                         best_index = kf2_index as i32;
                         best_dist = dist;
                     }
                     // loops += 1;
                 }
+                // println!("{} {} {}", kf1_index, best_index, best_dist);
 
                 if best_index >= 0 {
                     let (kp2, _) = kf_2.features.get_keypoint(best_index as usize);
                     matches.insert(kf1_index as usize, best_index as usize);
-                    matched_already.insert(best_index as u32);
+                    // matched_already.insert(best_index as u32);
                     if should_check_orientation {
                         check_orientation_1(
                             &kp1,
@@ -904,15 +936,10 @@ pub fn search_for_triangulation(
             j = lower_bound(&kf2_featvec, &kf1_featvec, j, i);
         }
     }
+    // println!("DONE");
 
     // Debugging
-    // let msg = format!("Skipped {} {} {} {} ", skipped1, skipped2, skipped3, skipped4);
-    // tracy_client::Client::running().unwrap().message(&msg, 0);
-    // tracy_client::plot!("Skipped1", skipped1 as f64);
-    // tracy_client::plot!("Skipped2", skipped2 as f64);
-    // tracy_client::plot!("Skipped3", skipped3 as f64);
-    // tracy_client::plot!("Skipped4", skipped4 as f64);
-    // tracy_client::plot!("Loops", loops as f64);
+    // println!("search for triangulation: {} {} {} {} {}", skipped1, skipped2, skipped3, skipped4, loops);
 
     if should_check_orientation {
         let (ind_1, ind_2, ind_3) = compute_three_maxima(&rot_hist,HISTO_LENGTH);
@@ -939,138 +966,194 @@ pub fn fuse_from_loop_closing(kf_id: &Id, scw: &Pose, mappoints: &Vec<Id>, map: 
     todo!("LOOP CLOSING");
 }
 
-pub fn fuse(kf_id: &Id, fuse_candidates: &Vec<Id>, map: &MapLock, th: f32, is_right: bool) {
+pub fn fuse(kf_id: &Id, fuse_candidates: &Vec<Option<(Id, bool)>>, map: &MapLock, th: f32, is_right: bool) {
     // int ORBmatcher::Fuse(KeyFrame *pKF, const vector<MapPoint *> &vpMapPoints, const float th, const bool bRight)
-    let lock = map.read();
-    let keyframe = lock.keyframes.get(kf_id).unwrap();
+    
+    let (tcw, rcw, ow, _camera);
+    {
+        let lock = map.read();
+        let keyframe = lock.keyframes.get(kf_id).unwrap();
 
-    let (tcw, ow, _camera) = match is_right {
-        true => {
-            todo!("Stereo");
-            // Tcw = pKF->GetRightPose();
-            // Ow = pKF->GetRightCameraCenter();
-            // pCamera = pKF->mpCamera2;
-        },
-        false => {
-            (keyframe.pose.get_translation(), keyframe.get_camera_center(), CAMERA)
-        }
-    };
-
-    for mp_id in fuse_candidates {
-        let mappoint = match lock.mappoints.get(&mp_id) {
-            Some(mp) => mp,
-            None => continue
+        (tcw, rcw, ow, _camera) = match is_right {
+            true => {
+                todo!("Stereo");
+                // Tcw = pKF->GetRightPose();
+                // Ow = pKF->GetRightCameraCenter();
+                // pCamera = pKF->mpCamera2;
+            },
+            false => {
+                (keyframe.pose.get_translation(), keyframe.pose.get_rotation(), keyframe.get_camera_center(), CAMERA)
+            }
         };
-        if mappoint.get_observations().contains_key(kf_id) {
-            continue;
-        }
+    }
 
-        let p_3d_w = mappoint.position;
-        let p_3d_c = (*tcw).component_mul(&*p_3d_w);
+    let mut obs_added = 0;
+    let mut mps_replaced = 0;
+    let mut quit_none = 0;
+    let mut quit_not_in_map = 0;
+    let mut quit_in_obs = 0;
+    let mut quit_depth = 0;
+    let mut quit_point_in_image = 0;
+    let mut quit_inv_sigma = 0;
+    let mut quit_best_dist = 0;
+    let mut quit_predicted_level = 0;
+    let mut quit_indices_empty = 0;
+    let mut quit_viewing_angle = 0;
+    let mut quit_inside_scale = 0;
+    
+    for fuse_cand in fuse_candidates {
+        let (mp_id, _) = match fuse_cand {
+            Some((mp_id, _)) => (mp_id, true),
+            None => {
+                quit_none += 1;
+                continue
+            }
+        };
 
-        // Depth must be positive
-        if p_3d_c[2] < 0.0 {
-            continue;
-        }
-
-        let _inv_z = 1.0 / p_3d_c[2]; // Used by stereo below
-        let uv = CAMERA_MODULE.project(DVVector3::new(p_3d_c));
-
-        // Point must be inside the image
-        if !keyframe.features.is_in_image(uv.0, uv.1) {
-            continue;
-        }
-
-        let max_distance = mappoint.get_max_distance_invariance();
-        let min_distance = mappoint.get_min_distance_invariance();
-        let po = *p_3d_w - *ow;
-        let dist_3d = po.norm();
-
-        // Depth must be inside the scale pyramid of the image
-        if dist_3d < min_distance || dist_3d > max_distance {
-            continue;
-        }
-
-        // Viewing angle must be less than 60 deg
-        let pn = mappoint.normal_vector;
-        if po.dot(&pn) < 0.5 * dist_3d {
-            continue;
-        }
-
-        // Search in a radius
-        let predicted_level = mappoint.predict_scale(&dist_3d);
-        let radius = th * SCALE_FACTORS[predicted_level as usize];
-        let indices = keyframe.features.get_features_in_area(&uv.0, &uv.1, radius as f64, None);
-        if indices.is_empty() {
-            continue;
-        }
-
-        // Match to the most similar keypoint in the radius
-        let mut best_dist = 256;
-        let mut best_idx = -1;
-
-        for idx2 in indices {
-            let (kp, is_right) = keyframe.features.get_keypoint(idx2 as usize);
-            let kp_level = kp.octave();
-
-            if kp_level < predicted_level - 1 || kp_level > predicted_level {
+        let (mut best_dist, mut best_idx);
+        {
+            let lock = map.read();
+            let mappoint = match lock.mappoints.get(&mp_id) {
+                Some(mp) => mp,
+                None => {
+                    quit_not_in_map += 1;
+                    continue
+                }
+            };
+            if mappoint.get_observations().contains_key(kf_id) {
+                quit_in_obs += 1;
                 continue;
             }
 
-            let (kpx, kpy, ex, ey, e2);
-            if is_right {
-                todo!("Stereo");
-                // let ur = uv.0 - CAMERA_MODULE.stereo_baseline_times_fx * inv_z;
+            let p_3d_w = mappoint.position;
+            let p_3d_c = (*rcw) * (*p_3d_w) + (*tcw);
 
-                // Check reprojection error in stereo
-                // const float &kpx = kp.pt().x;
-                // const float &kpy = kp.pt().y;
-                // const float &kpr = pKF->mvuRight[idx];
-                // const float ex = uv(0)-kpx;
-                // const float ey = uv(1)-kpy;
-                // const float er = ur-kpr;
-                // const float e2 = ex*ex+ey*ey+er*er;
-
-                // if(e2*pKF->mvInvLevelSigma2[kpLevel]>7.8)
-                //     continue;
-            } else {
-                kpx = kp.pt().x as f64;
-                kpy = kp.pt().y as f64;
-                ex = uv.0 - kpx;
-                ey = uv.1 - kpy;
-                e2 = ex * ex + ey * ey;
-                if e2 * INV_LEVEL_SIGMA2[kp_level as usize] as f64 > 5.99 {
-                    continue;
-                }
+            // Depth must be positive
+            if p_3d_c[2] < 0.0 {
+                quit_depth += 1;
+                continue;
             }
 
-            let desc_kf = keyframe.features.descriptors.row(idx2).unwrap();
-            let dist = descriptor_distance(&mappoint.best_descriptor, &desc_kf);
+            let _inv_z = 1.0 / p_3d_c[2]; // Used by stereo below
+            let uv = CAMERA_MODULE.project(DVVector3::new(p_3d_c));
 
-            if dist < best_dist {
-                best_dist = dist;
-                best_idx = idx2 as i32;
+            // Point must be inside the image
+            if !lock.keyframes.get(kf_id).unwrap().features.is_in_image(uv.0, uv.1) {
+                quit_point_in_image += 1;
+                continue;
+            }
+
+            let max_distance = mappoint.get_max_distance_invariance();
+            let min_distance = mappoint.get_min_distance_invariance();
+            let po = *p_3d_w - *ow;
+            let dist_3d = po.norm();
+
+            // Depth must be inside the scale pyramid of the image
+            if dist_3d < min_distance || dist_3d > max_distance {
+                quit_inside_scale += 1;
+                continue;
+            }
+
+            // Viewing angle must be less than 60 deg
+            let pn = mappoint.normal_vector;
+            if po.dot(&pn) < 0.5 * dist_3d {
+                quit_viewing_angle += 1;
+                continue;
+            }
+
+            // Search in a radius
+            let predicted_level = mappoint.predict_scale(&dist_3d);
+            let radius = th * SCALE_FACTORS[predicted_level as usize];
+            let indices = lock.keyframes.get(kf_id).unwrap().features.get_features_in_area(&uv.0, &uv.1, radius as f64, None);
+            if indices.is_empty() {
+                quit_indices_empty += 1;
+                continue;
+            }
+
+            // Match to the most similar keypoint in the radius
+            best_dist = 256;
+            best_idx = -1;
+
+            for idx2 in indices {
+                let (kp, is_right) = lock.keyframes.get(kf_id).unwrap().features.get_keypoint(idx2 as usize);
+                let kp_level = kp.octave();
+
+                if kp_level < predicted_level - 1 || kp_level > predicted_level {
+                    quit_predicted_level += 1;
+                    continue;
+                }
+
+                let (kpx, kpy, ex, ey, e2);
+                if is_right {
+                    todo!("Stereo");
+                    // let ur = uv.0 - CAMERA_MODULE.stereo_baseline_times_fx * inv_z;
+
+                    // Check reprojection error in stereo
+                    // const float &kpx = kp.pt().x;
+                    // const float &kpy = kp.pt().y;
+                    // const float &kpr = pKF->mvuRight[idx];
+                    // const float ex = uv(0)-kpx;
+                    // const float ey = uv(1)-kpy;
+                    // const float er = ur-kpr;
+                    // const float e2 = ex*ex+ey*ey+er*er;
+
+                    // if(e2*pKF->mvInvLevelSigma2[kpLevel]>7.8)
+                    //     continue;
+                } else {
+                    kpx = kp.pt().x as f64;
+                    kpy = kp.pt().y as f64;
+                    ex = uv.0 - kpx;
+                    ey = uv.1 - kpy;
+                    e2 = ex * ex + ey * ey;
+                    if e2 * INV_LEVEL_SIGMA2[kp_level as usize] as f64 > 5.99 {
+                        quit_inv_sigma += 1;
+                        continue;
+                    }
+                }
+
+                let desc_kf = lock.keyframes.get(kf_id).unwrap().features.descriptors.row(idx2).unwrap();
+                let dist = descriptor_distance(&lock.mappoints.get(mp_id).unwrap().best_descriptor, &desc_kf);
+
+                if dist < best_dist {
+                    best_dist = dist;
+                    best_idx = idx2 as i32;
+                }
             }
         }
 
         // If there is already a MapPoint replace otherwise add new measurement
         if best_dist <= TH_LOW {
-            if keyframe.has_mp_match(&(best_idx as u32)) {
-                let mappoint_in_kf_id = keyframe.get_mp_match(&(best_idx as u32));
-                let mappoint_in_kf = lock.mappoints.get(&mappoint_in_kf_id).unwrap();
-                if mappoint_in_kf.get_observations().len() > mappoint.get_observations().len() {
-                    map.write().replace_mappoint(*mp_id, mappoint_in_kf_id);
-                } else {
-                    map.write().replace_mappoint(mappoint_in_kf_id, *mp_id);
+            let has_mappoint_match = map.read().keyframes.get(kf_id).unwrap().has_mp_match(&(best_idx as u32));
+            if has_mappoint_match {
+                let (mp_in_kf_id, mp_in_kf_obs, mp_obs);
+                {
+                    let lock = map.read();
+                    mp_in_kf_id = lock.keyframes.get(kf_id).unwrap().get_mp_match(&(best_idx as u32));
+                    mp_in_kf_obs = lock.mappoints.get(&mp_in_kf_id).unwrap().get_observations().len();
+                    mp_obs = lock.mappoints.get(mp_id).unwrap().get_observations().len();
                 }
+                if mp_in_kf_obs > mp_obs {
+                    map.write().replace_mappoint(*mp_id, mp_in_kf_id);
+                } else {
+                    map.write().replace_mappoint(mp_in_kf_id, *mp_id);
+                }
+                mps_replaced += 1;
             } else {
-                let num_keypoints = map.write().keyframes.get(&kf_id).expect(&format!("Could not get kf {}", kf_id)).features.num_keypoints;
                 let mut write = map.write();
+                let num_keypoints = write.keyframes.get(&kf_id).expect(&format!("Could not get kf {}", kf_id)).features.num_keypoints;
                 write.mappoints.get_mut(&mp_id).unwrap().add_observation(&kf_id, num_keypoints, best_idx as u32);
                 write.keyframes.get_mut(&kf_id).unwrap().add_mp_match(best_idx as u32, *mp_id, false);
+                obs_added += 1;
             }
+        } else {
+            quit_best_dist += 1;
         }
     }
+
+    // debug!("Fuse statistics.. none: {}, not in map: {}, already in obs: {}, depth negative: {}, point not in image: {}", quit_none, quit_not_in_map, quit_in_obs, quit_depth, quit_point_in_image);
+    // debug!("Statistics continued... indices empty: {}, inv sigma: {}, best dist: {}, predicted level: {}, viewing angle: {}, inside scale: {}", quit_indices_empty, quit_inv_sigma, quit_best_dist, quit_predicted_level, quit_viewing_angle, quit_inside_scale);
+
+    // debug!("search_in_neighbors, kf: {}, observations added: {}, mappoints replaced: {}", kf_id, obs_added, mps_replaced);
 }
 
 fn check_orientation_1(

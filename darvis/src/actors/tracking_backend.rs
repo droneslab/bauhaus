@@ -70,7 +70,7 @@ impl Actor for TrackingBackend {
             localization_only_mode: SETTINGS.get::<bool>(SYSTEM, "localization_only_mode"),
             frames_to_reset_imu: SETTINGS.get::<i32>(TRACKING_BACKEND, "frames_to_reset_IMU") as u32,
             insert_kfs_when_lost: SETTINGS.get::<bool>(TRACKING_BACKEND, "insert_KFs_when_lost"),
-            max_frames: SETTINGS.get::<f64>(SYSTEM, "fps") as i64,
+            max_frames: 10, // TODO MVP this should be set back to SETTINGS.get::<f64>(SYSTEM, "fps") as i64,
             min_frames: 0,
             state: TrackingState::NotInitialized,
             ref_kf_id: None,
@@ -227,7 +227,7 @@ impl TrackingBackend {
                     self.actor_channels.send(TRACKING_FRONTEND, Box::new(
                         TrackingStateMsg {
                             state: TrackingState::Ok,
-                            init_id: ini_kf_id
+                            init_id: curr_kf_id
                         }
                     ));
 
@@ -265,14 +265,13 @@ impl TrackingBackend {
                     false => {
                         self.relocalization.timestamp_lost = Some(current_frame.timestamp);
                         match self.map.read().keyframes.len() > 10 {
-                            true =>{warn!("State recently lost 271"); TrackingState::RecentlyLost},
+                            true =>{warn!("State recently lost!"); TrackingState::RecentlyLost},
                             false => TrackingState::Lost
                         }
                     },
                 }
             },
             (false, TrackingState::RecentlyLost) => {
-                warn!("State recently lost");
                 let relocalize_success = match self.imu.ready() {
                     true => {
                         let _ok = self.imu.predict_state(); // TODO (IMU): I guess this should be used somewhere?
@@ -293,7 +292,10 @@ impl TrackingBackend {
                         warn!("Relocalization unsuccessful...");
                         TrackingState::Lost
                     },
-                    false => {warn!("State recently lost"); TrackingState::RecentlyLost}
+                    false => {
+                        warn!("Setting state to recently lost!");
+                        TrackingState::RecentlyLost
+                    }
                 }
             },
             (false, TrackingState::Lost) => {
@@ -334,6 +336,7 @@ impl TrackingBackend {
             }
             self.relocalization.timestamp_lost = Some(current_frame.timestamp);
             self.state = TrackingState::RecentlyLost;
+            warn!("Setting state to recently lost!");
         }
 
         if self.sensor.is_imu() {
@@ -427,8 +430,6 @@ impl TrackingBackend {
             nmatches = orbmatcher::search_by_bow_f(ref_kf, current_frame, true, 0.7)?;
         }
 
-        // debug!("track reference keyframe matches {}", current_frame.mappoint_matches.matches.len());
-
         if nmatches < 15 {
             warn!("track_reference_keyframe has fewer than 15 matches = {}!!\n", nmatches);
             return Ok(false);
@@ -439,8 +440,8 @@ impl TrackingBackend {
         optimizer::optimize_pose(current_frame, &self.map);
 
         // Discard outliers
-        let nmatches_map = self.delete_mappoint_outliers(current_frame);
-        // debug!("track reference keyframe matches after outliers {}", nmatches_map);
+        let nmatches_map = self.discard_outliers(current_frame);
+        debug!("Track reference keyframe, initial matches: {}, after outliers deleted: {}, ref kf id: {}", nmatches, nmatches_map, self.ref_kf_id.unwrap());
 
         match self.sensor.is_imu() {
             true => { return Ok(true); },
@@ -516,7 +517,7 @@ impl TrackingBackend {
         optimizer::optimize_pose(current_frame, &self.map);
 
         // Discard outliers
-        let nmatches_map = self.delete_mappoint_outliers(current_frame);
+        let nmatches_map = self.discard_outliers(current_frame);
 
         if self.localization_only_mode {
             todo!("Localization only");
@@ -623,6 +624,8 @@ impl TrackingBackend {
         self.update_local_points(current_frame);
         self.search_local_points(current_frame);
 
+        debug!("Local keyframes: {}, local points: {}", self.local_keyframes.len(), self.local_mappoints.len());
+
         if !self.imu.is_initialized || (current_frame.frame_id <= self.relocalization.last_reloc_frame_id + (self.frames_to_reset_imu as i32)) {
             optimizer::optimize_pose(current_frame, &self.map);
         } else if !self.map_updated {
@@ -632,12 +635,13 @@ impl TrackingBackend {
         }
 
         self.matches_inliers = 0;
+        let mut num_outliers = 0;
         // Update MapPoints Statistics
         for index in 0..current_frame.mappoint_matches.matches.len() {
             if let Some((mp_id, is_outlier)) = current_frame.mappoint_matches.matches[index as usize] {
                 if !is_outlier {
                     if let Some(mp) = self.map.read().mappoints.get(&mp_id) {
-                        mp.increase_found();
+                        mp.increase_found(1);
                         // println!("Increase found {}", mp_id);
                     }
 
@@ -658,15 +662,13 @@ impl TrackingBackend {
                     todo!("Stereo");
                     //mCurrentFrame.mappoint_matches[i] = static_cast<MapPoint*>(NULL);
                     // current_frame.as_mut().unwrap().mappoint_matches.remove(&index);
+                } else {
+                    num_outliers += 1;
                 }
             }
         }
 
-        // Sofiya matches
-        //     mpLocalMapper->mnMatchesInliers=mnMatchesInliers;
-        // send this in local mapper message?
-
-        // debug!("Matches in track local map {}", self.matches_inliers);
+        debug!("Matches in track local map: {}, outliers: {}", self.matches_inliers, num_outliers);
 
         // Decide if the tracking was succesful
         // More restrictive if there was a relocalization recently
@@ -704,31 +706,31 @@ impl TrackingBackend {
 
         {
             let lock = self.map.read();
-            for i in 0..current_frame.mappoint_matches.matches.len() {
-                match !self.imu.is_initialized || current_frame.frame_id < self.relocalization.last_reloc_frame_id + 2 {
-                    true => {
-                        if current_frame.mappoint_matches.has(&(i as u32)) {
-                            let mp_id = current_frame.mappoint_matches.get(&(i as u32));
-                            if let Some(mp) = lock.mappoints.get(&mp_id) {
-                                for kf_id in mp.get_observations().keys() {
-                                    *kf_counter.entry(*kf_id).or_insert(0) += 1;
-                                }
-                            } else {
-                                current_frame.mappoint_matches.matches[i as usize] = None;
+            if !self.imu.is_initialized || current_frame.frame_id < self.relocalization.last_reloc_frame_id + 2 {
+                for i in 0..current_frame.mappoint_matches.matches.len() {
+                    if current_frame.mappoint_matches.has(&(i as u32)) {
+                        let mp_id = current_frame.mappoint_matches.get(&(i as u32));
+                        if let Some(mp) = lock.mappoints.get(&mp_id) {
+                            for kf_id in mp.get_observations().keys() {
+                                *kf_counter.entry(*kf_id).or_insert(0) += 1;
                             }
+                        } else {
+                            current_frame.mappoint_matches.matches[i as usize] = None;
                         }
-                    },
-                    false => {
-                        // Using lastframe since current frame has no matches yet
-                        if last_frame.mappoint_matches.has(&(i as u32)) {
-                            let mp_id = last_frame.mappoint_matches.get(&(i as u32));
-                            if let Some(mp) = lock.mappoints.get(&mp_id) {
-                                for kf_id in mp.get_observations().keys() {
-                                    *kf_counter.entry(*kf_id).or_insert(0) += 1;
-                                }
-                            } else {
-                                last_frame.mappoint_matches.matches[i as usize] = None;
+                    }
+                }
+
+            } else {
+                // Using lastframe since current frame has no matches yet
+                for i in 0..last_frame.mappoint_matches.matches.len() {
+                    if last_frame.mappoint_matches.has(&(i as u32)) {
+                        let mp_id = last_frame.mappoint_matches.get(&(i as u32));
+                        if let Some(mp) = lock.mappoints.get(&mp_id) {
+                            for kf_id in mp.get_observations().keys() {
+                                *kf_counter.entry(*kf_id).or_insert(0) += 1;
                             }
+                        } else {
+                            last_frame.mappoint_matches.matches[i as usize] = None;
                         }
                     }
                 }
@@ -794,27 +796,32 @@ impl TrackingBackend {
         None
     }
 
-    fn update_local_points(&mut self, current_frame: &mut Frame) -> Option<()> {
+    fn update_local_points(&mut self, current_frame: &mut Frame) {
         let _span = tracy_client::span!("update_local_points");
         // void Tracking::UpdateLocalPoints()
         self.local_mappoints.clear();
         let lock = self.map.read();
+        let mut skip1 = 0;
+        let mut skip2 = 0;
         for kf_id in &self.local_keyframes {
-            let mp_ids = lock.keyframes.get(kf_id)?.get_mp_matches();
+            let mp_ids = lock.keyframes.get(kf_id).unwrap().get_mp_matches();
             for item in mp_ids {
                 if let Some((mp_id, _)) = item {
                     if self.mp_track_reference_for_frame.get(mp_id) != Some(&current_frame.frame_id) {
                         self.local_mappoints.insert(*mp_id);
                         self.mp_track_reference_for_frame.insert(*mp_id, current_frame.frame_id);
+                    } else {
+                        skip1 += 1;
                     }
+                } else {
+                    skip2 += 1;
                 }
             }
         }
-
-        None
+        debug!("Update local points: {} {}", skip1, skip2)
     }
 
-    fn search_local_points(&mut self, current_frame: &mut Frame) {
+    fn search_local_points(&mut self, current_frame: &mut Frame) -> Result<(), Box<dyn std::error::Error>> {
         let _span = tracy_client::span!("search_local_points");
         //void Tracking::SearchLocalPoints()
 
@@ -824,7 +831,7 @@ impl TrackingBackend {
             for index in 0..current_frame.mappoint_matches.matches.len() {
                 if let Some((id, _)) = current_frame.mappoint_matches.matches[index as usize] {
                     if let Some(mp) = lock.mappoints.get(&id) {
-                        mp.increase_visible();
+                        mp.increase_visible(1);
                         // println!("Increase visible {}", id);
 
                         self.last_frame_seen.insert(id, current_frame.frame_id);
@@ -856,8 +863,7 @@ impl TrackingBackend {
                 };
 
                 if tracked_data_left.is_some() || tracked_data_right.is_some() {
-                    lock.mappoints.get(&mp_id).unwrap().increase_visible();
-                    // println!("Increase visible {}", mp_id);
+                    lock.mappoints.get(&mp_id).unwrap().increase_visible(1);
                     to_match += 1;
                 }
                 if let Some(d) = tracked_data_left {
@@ -869,6 +875,7 @@ impl TrackingBackend {
             }
         }
 
+        let mut matches = 0;
         if to_match > 0 {
             let mut th = match self.sensor.frame() {
                 FrameSensor::Rgbd => 3,
@@ -893,16 +900,17 @@ impl TrackingBackend {
                 _ => {}
             }
 
-            let _matches = orbmatcher::search_by_projection(
+            matches = orbmatcher::search_by_projection(
                 current_frame,
                 &mut self.local_mappoints,
                 th, 0.8,
                 &self.track_in_view, &self.track_in_view_r,
                 &self.map, self.sensor
-            );
-            // debug!("search local points matches {:?}", matches);
+            )?;
         }
+        debug!("search local points matches {:?}", matches);
 
+        Ok(())
     }
 
     fn create_new_keyframe(&mut self, current_frame: &mut Frame) {
@@ -1055,7 +1063,9 @@ impl TrackingBackend {
             Sensor(FrameSensor::Stereo, _) | Sensor(FrameSensor::Rgbd, ImuSensor::Some) => 0.75,
             Sensor(FrameSensor::Rgbd, ImuSensor::None) => { if num_kfs < 2 { 0.4 } else { 0.75 } }
         };
-        
+
+        // debug!("tracked mps {}, {} < {} * {} = {}", self.ref_kf_id.unwrap(), self.matches_inliers, tracked_mappoints, th_ref_ratio, (self.matches_inliers as f32) < tracked_mappoints * th_ref_ratio);
+
         // Condition 1a: More than "MaxFrames" have passed from last keyframe insertion
         let c1a = self.frames_since_last_kf >= (self.max_frames as i32);
         // Condition 1b: More than "MinFrames" have passed and Local Mapping is idle
@@ -1092,15 +1102,16 @@ impl TrackingBackend {
     }
 
     //* Helper functions */
-    fn delete_mappoint_outliers(&mut self, current_frame: &mut Frame) -> i32 {
+    fn discard_outliers(&mut self, current_frame: &mut Frame) -> i32 {
         let discarded = current_frame.delete_mappoint_outliers();
+        // println!("current frame matches {:?}", current_frame.mappoint_matches.matches);
         for mp_id in discarded {
             // self.map.read().mappoints.get(&mp_id).unwrap().increase_found();
             self.track_in_view.remove(&mp_id);
             self.last_frame_seen.insert(mp_id, current_frame.frame_id);
             // TODO (Stereo) ... need to remove this from track_in_view_r if the mp is seen in the right camera
         }
-        current_frame.mappoint_matches.mappoints_with_observations(&*self.map.read())
+        current_frame.mappoint_matches.tracked_mappoints(&*self.map.read(), 1)
     }
 
     //* Next steps */
