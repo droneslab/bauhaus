@@ -197,7 +197,7 @@ impl DarvisVisualizer {
     }
 
     fn draw_trajectory(&mut self, frame_pose: Pose, timestamp: Timestamp) -> Result<(), Box<dyn std::error::Error>> {
-        debug!("Drawing trajectory at timestamp {} with pose {:?}", timestamp, frame_pose.inverse());
+        // debug!("Drawing trajectory at timestamp {} with pose {:?}", timestamp, frame_pose.inverse());
 
         // self.clear_scene(timestamp, self.trajectory_channel)?;
 

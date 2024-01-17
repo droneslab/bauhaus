@@ -12,7 +12,7 @@ pub struct MapPoint { // Full map item inserted into the map with the following 
 
     // Observations, this is a part of "map connections" but I don't think we can avoid keeping this here.
     observations: HashMap<Id, (i32, i32)>, // mObservations ; Keyframes observing the point and associated index in keyframe
-    num_obs: i32,
+    pub num_obs: i32,
 
     // Best descriptor used for fast matching
     pub best_descriptor: DVMatrix,
@@ -176,19 +176,26 @@ impl MapPoint {
         self.best_descriptor = desc;
     }
 
-    pub fn increase_found(& self) {
-        self.found.fetch_add(1, Ordering::SeqCst);
+    pub fn increase_found(& self, num: i32) {
+        self.found.fetch_add(num, Ordering::SeqCst);
     }
-    pub fn increase_visible(& self) {
-        self.visible.fetch_add(1, Ordering::SeqCst);
+    pub fn increase_visible(& self, num: i32) {
+        self.visible.fetch_add(num, Ordering::SeqCst);
     }
     pub fn get_found_ratio(& self) -> f32 {
         self.found.load(Ordering::SeqCst) as f32 / self.visible.load(Ordering::SeqCst) as f32
+    }
+    pub fn get_found(& self) -> i32 {
+        self.found.load(Ordering::SeqCst)
+    }
+    pub fn get_visible(& self) -> i32 {
+        self.visible.load(Ordering::SeqCst)
     }
 
     //** Observations */////////////////////////////////////////////////////////////////////////////////
     pub fn get_observations(&self) -> &HashMap<Id, (i32, i32)> { &self.observations }
     pub fn delete_observation(&mut self, kf_id: &Id) -> bool {
+        // void MapPoint::EraseObservation(KeyFrame* pKF)
         if let Some((left_index, right_index)) = self.observations.get(kf_id) {
             if *left_index != -1 {
                 // TODO (Stereo)

@@ -10,7 +10,7 @@ use core::{
     config::{SETTINGS, SYSTEM},
     matrix::DVVector3
 };
-use log::{debug, warn, info};
+use log::{debug, warn, info, trace};
 use opencv::prelude::KeyPointTraitConst;
 use crate::{ActorChannels, MapLock};
 use crate::actors::messages::LastKeyFrameUpdatedMsg;
@@ -34,7 +34,7 @@ pub struct LocalMapping {
     sensor: Sensor,
 
     current_keyframe_id: Id, //mpCurrentKeyFrame
-    recently_added_mappoints: Vec<Id>, //mlpRecentAddedMapPoints
+    recently_added_mappoints: HashSet<Id>, //mlpRecentAddedMapPoints
 
     // list of keyframes to delete sent to map. they might not be deleted until later, so we need to 
     // keep track of them and avoid doing duplicate work with them
@@ -56,7 +56,7 @@ impl Actor for LocalMapping {
             map,
             sensor,
             current_keyframe_id: -1,
-            recently_added_mappoints: Vec::new(),
+            recently_added_mappoints: HashSet::new(),
             imu: ImuModule::new(None, None, sensor, false, false),
             discarded_kfs: HashSet::new(),
         }
@@ -74,7 +74,6 @@ impl Actor for LocalMapping {
             if message.is::<InitKeyFrameMsg>() {
                 LOCAL_MAPPING_IDLE.store(false, std::sync::atomic::Ordering::SeqCst);
                 let msg = message.downcast::<InitKeyFrameMsg>().unwrap_or_else(|_| panic!("Could not downcast local mapping message!"));
-
                 actor.current_keyframe_id = msg.kf_id;
 
                 // Should only happen for the first two keyframes created by the map because that is the only time
@@ -133,14 +132,19 @@ impl LocalMapping {
             _ => {}
         }
 
+        // debug!("at beginning of local mapping, {}", self.map.read().keyframes.get(&1).unwrap().get_tracked_mappoints(&self.map.read(), 3));
         // Check recent MapPoints
         let mps_culled = self.mappoint_culling();
 
+        // debug!("after culling, {}", self.map.read().keyframes.get(&1).unwrap().get_tracked_mappoints(&self.map.read(), 3));
+
         let _span = tracy_client::span!("local_mapping");
-        tracy_client::plot!("KFs in map", self.map.read().keyframes.len() as f64);
-        tracy_client::plot!("MPs in map", self.map.read().mappoints.len() as f64);
-        let avg_mappoints = self.map.read().keyframes.iter().map(|(_, kf)| kf.get_mp_matches().len()).sum::<usize>() as f64 / self.map.read().keyframes.len() as f64;
-        tracy_client::plot!("Avg mps for kf", avg_mappoints as f64);
+        tracy_client::plot!("MAP INFO: KeyFrames", self.map.read().keyframes.len() as f64);
+        tracy_client::plot!("MAP INFO: MapPoints", self.map.read().mappoints.len() as f64);
+        let avg_mappoints = self.map.read().keyframes.iter().map(|(_, kf)| kf.debug_get_mps_count()).sum::<i32>() as f64 / self.map.read().keyframes.len() as f64;
+        tracy_client::plot!("MAP INFO: Avg mp matches for kfs", avg_mappoints as f64);
+        trace!("MAP INFO:{},{},{}", self.map.read().keyframes.len(), self.map.read().mappoints.len(), avg_mappoints as f64);
+
 
         // Triangulate new MapPoints
         let mps_created = self.create_new_mappoints();
@@ -148,11 +152,15 @@ impl LocalMapping {
             LastKeyFrameUpdatedMsg{}
         )).unwrap();
 
+        // debug!("after create new mps, {}", self.map.read().keyframes.get(&1).unwrap().get_tracked_mappoints(&self.map.read(), 3));
+
         if self.actor_channels.queue_len() < 1 {
             // Abort additional work if there are too many keyframes in the msg queue.
             // Find more matches in neighbor keyframes and fuse point duplications
             self.search_in_neighbors();
         }
+
+        // debug!("after search in neighbors, {}", self.map.read().keyframes.get(&1).unwrap().get_tracked_mappoints(&self.map.read(), 3));
 
         let t_init = 0.0;
 
@@ -243,12 +251,13 @@ impl LocalMapping {
 
         debug!("For keyframe {}, culled {} mappoints, created {} mappoints, culled {} keyframes", self.current_keyframe_id, mps_culled, mps_created, kfs_culled);
 
-        tracy_client::plot!("KFs in map", self.map.read().keyframes.len() as f64);
-        tracy_client::plot!("MPs in map", self.map.read().mappoints.len() as f64);
-        let avg_mappoints = self.map.read().keyframes.iter().map(|(_, kf)| kf.get_mp_matches().len()).sum::<usize>() as f64 / self.map.read().keyframes.len() as f64;
-        tracy_client::plot!("Avg mps for kf", avg_mappoints as f64);
+        tracy_client::plot!("MAP INFO: KeyFrames", self.map.read().keyframes.len() as f64);
+        tracy_client::plot!("MAP INFO: MapPoints", self.map.read().mappoints.len() as f64);
+        let avg_mappoints = self.map.read().keyframes.iter().map(|(_, kf)| kf.debug_get_mps_count()).sum::<i32>() as f64 / self.map.read().keyframes.len() as f64;
+        tracy_client::plot!("MAP INFO: Avg mp matches for kfs", avg_mappoints as f64);
+        trace!("MAP INFO:{},{},{}", self.map.read().keyframes.len(), self.map.read().mappoints.len(), avg_mappoints as f64);
 
-        tracy_client::frame_mark();
+        // debug!("at end, {}", self.map.read().keyframes.get(&1).unwrap().get_tracked_mappoints(&self.map.read(), 3));
 
         if self.actor_channels.actors.get(LOOP_CLOSING).is_some() {
             // Only send if loop closing is actually running
@@ -266,29 +275,38 @@ impl LocalMapping {
         };
 
         let current_kf_id = self.current_keyframe_id;
-        let mut num_to_discard = 0;
+        let mut discard_for_found_ratio = 0;
+        let mut discard_for_observations = 0;
+        let mut erased_from_recently_added = 0;
+        let mut deleted = HashSet::new();
         self.recently_added_mappoints.retain(|&mp_id| {
             let mut lock = self.map.write();
             if let Some(mappoint) = lock.mappoints.get(&mp_id) {
                 let found_ratio = mappoint.get_found_ratio();
                 if found_ratio < 0.25 {
-                    num_to_discard += 1;
+                    discard_for_found_ratio += 1;
                     lock.discard_mappoint(&mp_id);
+                    deleted.insert(mp_id);
                     false
                 } else if current_kf_id - mappoint.first_kf_id >= 2 && mappoint.get_observations().len() <= th_obs {
-                    num_to_discard += 1;
+                    discard_for_observations += 1;
                     lock.discard_mappoint(&mp_id);
+                    deleted.insert(mp_id);
                     false 
                 } else if current_kf_id - mappoint.first_kf_id >= 3 {
+                    erased_from_recently_added += 1;
                     false // mappoint should not be deleted, but remove from recently_added_mappoints
                 } else {
                     true // mappoint should not be deleted, keep in recently_added_mappoints
                 }
             } else {
-                false // mappoint has already been deleted, remove from recently_added_mappoints
+                 // mappoint has been deleted (fused or deleted for low observations when removing keyframe)
+                 // remove from recently_added_mappoints
+                false
             }
         });
-        return num_to_discard;
+        debug!("Mappoint culling, {} {} {} {}", discard_for_found_ratio, discard_for_observations, erased_from_recently_added, self.recently_added_mappoints.len());
+        return discard_for_observations + discard_for_found_ratio;
     }
 
     fn create_new_mappoints(&mut self) -> i32 {
@@ -383,6 +401,8 @@ impl LocalMapping {
                 rotation2 = pose2.get_rotation(); // Rcw2
                 rotation_transpose2 = rotation2.transpose(); // Rwc2
             }
+
+            // debug!("Neighbor {}, Matches: {}", neighbor_id, matches.len());
 
 
             // Triangulate each match
@@ -549,9 +569,11 @@ impl LocalMapping {
                         (self.current_keyframe_id, lock.keyframes.get(&self.current_keyframe_id).unwrap().features.num_keypoints, idx1),
                         (neighbor_id, lock.keyframes.get(&neighbor_id).unwrap().features.num_keypoints, idx2)
                     ];
+
                     let mp_id = lock.insert_mappoint_to_map(x3_d.unwrap(), self.current_keyframe_id, origin_map_id, observations);
+                    // debug!("Add mp {} to kf {} at index {}", mp_id, self.current_keyframe_id, idx1);
                     mps_created += 1;
-                    self.recently_added_mappoints.push(mp_id);
+                    self.recently_added_mappoints.insert(mp_id);
                 }
 
             }
@@ -577,11 +599,19 @@ impl LocalMapping {
 
             // Add some covisible of covisible
             // Extend to some second neighbors if abort is not requested
-            let new_kfs = target_kfs.iter().map(|kf_id| {
-                map.keyframes.get(&kf_id).unwrap().get_covisibility_keyframes(20)
-            }).flatten().collect::<Vec<i32>>();
+            let mut new_kfs = vec![];
+            for kf_id in &target_kfs {
+                let kf = map.keyframes.get(&kf_id).unwrap();
+                let covisible = kf.get_covisibility_keyframes(20);
+                for kf2_id in covisible {
+                    if kf2_id == self.current_keyframe_id || target_kfs.contains(&kf2_id) || new_kfs.contains(&kf2_id) {
+                        continue;
+                    }
+                    new_kfs.push(kf2_id);
+                }
+            }
             target_kfs.extend(new_kfs);
-        
+
             if self.actor_channels.queue_len() > 1 {
                 // Abort additional work if there are too many keyframes in the msg queue.
                 return;
@@ -606,20 +636,19 @@ impl LocalMapping {
                 }
                 false => {},
             }
-
-            // Search matches by projection from current KF in target KFs
-            mappoint_matches = current_kf.get_mp_matches().iter()
-                .filter(|item| item.is_some() )
-                .map(|item| item.unwrap().0 )
-                .collect::<Vec<Id>>();
+            // Clone necessary here so we can use mappoint_matches after the lock is dropped
+            // Lock needs to be dropped because orbmatcher::fuse calls write, which causes a deadlock if we keep the read lock
+            mappoint_matches = current_kf.get_mp_matches().clone();
         }
 
+        // Search matches by projection from current KF in target KFs
         for kf_id in &target_kfs {
             orbmatcher::fuse(kf_id, &mappoint_matches, &self.map, 3.0, false);
             match self.sensor.frame() {
                 FrameSensor::Stereo => orbmatcher::fuse(kf_id, &mappoint_matches, &self.map, 3.0, true),
                 _ => {}
             }
+
         }
 
         if self.actor_channels.queue_len() > 1 {
@@ -627,29 +656,60 @@ impl LocalMapping {
             return;
         }
 
-
-        let fuse_candidates;
+        // Search matches by projection from target KFs in current KF
+        let mut fuse_candidates_set = HashSet::new();
+        let mut fuse_candidates_vec = vec![];
         {
             let read = self.map.read();
-            // Search matches by projection from target KFs in current KF
-            fuse_candidates = HashSet::<Id>::from_iter(
-                target_kfs.iter().map(|kf_id| {
-                    let kf = read.keyframes.get(&kf_id).unwrap();
-                    let mappoints_kf = kf.get_mp_matches();
-                    mappoints_kf
-                        .iter()
-                        .filter(|item| item.is_some())
-                        .map(|item| item.unwrap().0)
-                        .collect::<Vec<_>>()
-                }).flatten()
-            );
+            for kf_id in target_kfs {
+                let keyframe = read.keyframes.get(&kf_id).unwrap();
+                let mappoints = keyframe.get_mp_matches();
+                for mp_match in mappoints {
+                    match mp_match {
+                        Some((mp_id, is_outlier)) => {
+                            if !fuse_candidates_set.contains(&*mp_id) {
+                                fuse_candidates_vec.push(Some((*mp_id, *is_outlier)));
+                                fuse_candidates_set.insert(*mp_id);
+                            }
+                        },
+                        None => {}
+                    }
+                }
+            }
         }
-        let fuse_candidates_vec = fuse_candidates.iter().map(|mp| *mp).collect::<Vec<Id>>();
         orbmatcher::fuse(&self.current_keyframe_id, &fuse_candidates_vec,  &self.map, 3.0, false);
         match self.sensor.frame() {
             FrameSensor::Stereo => orbmatcher::fuse(&self.current_keyframe_id, &fuse_candidates_vec, &self.map, 3.0, true),
             _ => {}
         }
+
+        // Update points
+        // Clone needed here for same reason as in map:insert_keyframe_to_map, read explanation there.
+        let mappoint_matches = self.map.read().keyframes.get(&self.current_keyframe_id).unwrap().get_mp_matches().clone();
+        for mp_match in mappoint_matches {
+            match mp_match {
+                Some((mp_id, _)) => {
+                    self.map.write().update_mappoint(mp_id);
+                },
+                None => {}
+            }
+        }
+        // vpMapPointMatches = mpCurrentKeyFrame->GetMapPointMatches();
+        // for(size_t i=0, iend=vpMapPointMatches.size(); i<iend; i++)
+        // {
+        //     MapPoint* pMP=vpMapPointMatches[i];
+        //     if(pMP)
+        //     {
+        //         if(!pMP->isBad())
+        //         {
+        //             pMP->ComputeDistinctiveDescriptors();
+        //             pMP->UpdateNormalAndDepth();
+        //         }
+        //     }
+        // }
+        // Update connections in covisibility graph
+        // mpCurrentKeyFrame->UpdateConnections();
+
     }
 
     fn keyframe_culling(&mut self) -> i32 {

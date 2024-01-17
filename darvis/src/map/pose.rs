@@ -40,6 +40,16 @@ impl Pose {
     pub fn get_translation(&self) -> DVTranslation { DVTranslation::new(self.0.translation.vector) }
     pub fn get_rotation(&self) -> DVRotation { DVRotation::new(*self.0.rotation.matrix()) }
     pub fn get_quaternion(&self) -> nalgebra::geometry::UnitQuaternion<f64> { nalgebra::geometry::UnitQuaternion::from_rotation_matrix(&self.0.rotation) }
+    pub fn get_3x4(&self) -> nalgebra::Matrix3x4<f64> { 
+        let rot = self.rotation.matrix();
+        let trans = self.translation.vector;
+        nalgebra::Matrix3x4::<f64>::new(
+            rot[0], rot[1], rot[2], trans[0],
+            rot[3], rot[4], rot[5], trans[1],
+            rot[6], rot[7], rot[8], trans[2],
+            // 0.0, 0.0, 0.0, 1.0
+        )
+    }
 
     pub fn set_translation(&mut self, trans: nalgebra::Vector3<f64>) {
         let t = nalgebra::Translation3::from(trans);

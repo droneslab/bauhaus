@@ -13,7 +13,7 @@ system:
       first_actor_name: TRACKING_FRONTEND # Name of actor to kick off pipeline
 
       # FPS
-      fps: 1.0
+      fps: 10.0
       use_timestamps_file: false # Instead of running at a fixed fps, use timestamps from the dataset
 
       # RESULTS
@@ -21,7 +21,7 @@ system:
       trajectory_file_name: "trajectory.txt"
 
       # DEBUGGING
-      log_level: debug # options are [trace, debug, info, warn, error]
+      log_level: trace # options are [trace, debug, info, warn, error]
       check_deadlocks: false # Spawns a new thread to check for deadlocks every 2 secs, but slows stuff down.
       # To enable profiling, set features = ["enable"] for tracy-client in Cargo.toml
       # To turn on visualizer, uncomment visualizer actor below

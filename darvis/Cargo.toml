@@ -36,6 +36,7 @@ rand = "*"
 linked-hash-map = "*"
 ctrlc = "*"
 downcast-rs = "*"
+rustc-hash = "1.1.0"
 
 ## Visualizer
 prost-types = "*"

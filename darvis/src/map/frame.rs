@@ -177,11 +177,12 @@ pub fn new(
         // Should only be called on a Frame.
         // In the chance you might want to call this on a keyframe, you also need to delete the mappoints' observations to the kf!
         let mut discards = vec![];
-        for mp_match in &mut self.mappoint_matches.matches {
-            if let Some((mp_id, is_outlier)) = mp_match {
-                if *is_outlier {
-                    discards.push(mp_id.clone());
-                    *mp_match = None;
+        for i in 0..self.mappoint_matches.matches.len() {
+            if self.mappoint_matches.matches[i].is_some() {
+                let mp_match = self.mappoint_matches.matches[i].unwrap();
+                if mp_match.1 {
+                    discards.push(mp_match.0.clone());
+                    self.mappoint_matches.matches[i] = None;
                 }
             }
         }
