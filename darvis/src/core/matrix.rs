@@ -409,6 +409,57 @@ impl<T> Index<usize> for DVMatrix3<T> {
     }
 }
 
+
+#[derive(Clone, Debug)]
+pub struct DVMatrix4<T> ( nalgebra::Matrix4<T> ); // 4x4 matrix
+
+impl<T: Debug + Clone + nalgebra::Scalar + num_traits::identities::Zero + num_traits::One + nalgebra::ComplexField> DVMatrix4<T> {
+    pub fn new(vec: nalgebra::Matrix4<T>) -> Self {
+        DVMatrix4 ( vec )
+    }
+    pub fn zeros<T2: Debug + Clone + nalgebra::Scalar + num_traits::identities::Zero>() -> Self {
+        DVMatrix4::new(nalgebra::Matrix4::<T>::zeros())
+    }
+    pub fn identity() -> Self { 
+        DVMatrix4::new(nalgebra::Matrix4::<T>::identity())
+    }
+
+    pub fn is_zero(&self) -> bool { self.0 == nalgebra::Matrix4::<T>::zeros() }
+
+    pub fn vec(&self) -> &nalgebra::Matrix4<T> { &self.0 }
+    pub fn transpose(&self) -> nalgebra::Matrix4<T> { self.0.transpose() }
+    pub fn determinant(&self) -> T { self.0.determinant() }
+
+    pub fn neg_mut(&mut self) { self.0.neg_mut() }
+}
+impl<T> Deref for DVMatrix4<T> {
+    type Target = nalgebra::Matrix4<T>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+// From implementations...
+impl<T: Clone> From<DVMatrix4<T>> for nalgebra::Matrix4<T> {
+    fn from(vec: DVMatrix4<T>) -> nalgebra::Matrix4<T> { vec.0.clone() }
+}
+impl<T: Clone> From<&DVMatrix4<T>> for nalgebra::Matrix4<T> {
+    fn from(vec: &DVMatrix4<T>) -> nalgebra::Matrix4<T> { vec.0.clone() }
+}
+// Two index implementations, one for matrix3[(x,y)] and one for [(x)]
+impl<T> Index<(usize, usize)> for DVMatrix4<T> {
+    type Output = T;
+
+    fn index(&self, i: (usize, usize)) -> &Self::Output {
+        &self.0[i]
+    }
+}
+impl<T> Index<usize> for DVMatrix4<T> {
+    type Output = T;
+
+    fn index(&self, i: usize) -> &Self::Output {
+        &self.0[i]
+    }
+}
 pub struct DVMatrix7x7<T> ( nalgebra::SMatrix<T, 7, 7> ); // 7x7 matrix
 impl<T: Debug + Clone + nalgebra::Scalar + num_traits::identities::Zero + num_traits::One + nalgebra::ComplexField> DVMatrix7x7<T> {
     pub fn new(vec: nalgebra::SMatrix<T, 7, 7>) -> Self {

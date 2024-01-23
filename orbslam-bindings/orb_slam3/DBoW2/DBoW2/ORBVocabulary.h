@@ -24,6 +24,11 @@ class ORBVocabulary {
             int levelsup
         ) const;
         std::size_t size() const;
+
+        float score(
+            const std::unique_ptr<DBoW2::BowVector> & v1, 
+            const std::unique_ptr<DBoW2::BowVector> & v2
+        ) const;
 };
 
 std::unique_ptr<ORBVocabulary> load_vocabulary_from_text_file(const string &file);

@@ -282,6 +282,11 @@ pub mod ffi {
             feature_vector: Pin<&mut FeatureVector>,
             levelsup: i32
         );
+        fn score(
+            self: &ORBVocabulary,
+            bow_vec1: &UniquePtr<BowVector>,
+            bow_vec2: &UniquePtr<BowVector>
+        ) -> f32;
     }
 }
 

@@ -3,6 +3,8 @@ use cxx::{UniquePtr, let_cxx_string};
 use log::info;
 use core::{matrix::DVMatrix, config::{SETTINGS, SYSTEM}};
 
+use super::keyframe::KeyFrame;
+
 lazy_static! {
     pub static ref VOCABULARY: DVVocabulary = {
         let filename = SETTINGS.get::<String>(SYSTEM, "vocabulary_file");
@@ -38,6 +40,10 @@ impl DVVocabulary {
             bow.feat_vec.pin_mut(),
             4
         );
+    }
+
+    pub fn score(&self, kf1: &KeyFrame, kf2: &KeyFrame) -> f32 {
+        self.vocabulary.score(&kf1.bow.as_ref().unwrap().bow_vec, &kf2.bow.as_ref().unwrap().bow_vec)
     }
 }
 
