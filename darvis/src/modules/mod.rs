@@ -8,3 +8,4 @@ pub mod map_initialization;
 pub mod relocalization;
 pub mod geometric_tools;
 pub mod image;
+pub mod sim3solver;

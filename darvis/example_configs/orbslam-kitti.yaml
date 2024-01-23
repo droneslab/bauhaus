@@ -7,7 +7,7 @@ master:
 
 system:
       localization_only_mode: false
-      vocabulary_file: "../Vocabulary/ORBvoc.txt"
+      vocabulary_file: "../../Vocabulary/ORBvoc.txt"
       framesensor: Mono
       imusensor: None
       first_actor_name: TRACKING_FRONTEND # Name of actor to kick off pipeline
@@ -17,7 +17,7 @@ system:
       use_timestamps_file: false # Instead of running at a fixed fps, use timestamps from the dataset
 
       # RESULTS
-      results_folder: "results"
+      results_folder: "../results"
       trajectory_file_name: "trajectory.txt"
 
       # DEBUGGING
@@ -125,22 +125,22 @@ modules:
 
 
 actors:
-      -
-       name: VISUALIZER
-       tag: visualizer
-       receiver_bound: -1
-       settings:
-          - 
-            name: image_draw_type
-            value: none # options are [none, plain, features, featuresandmatches]
-            type: string
-          -
-            name: mcap_file_path
-            value: "results/out.mcap"
-            type: string
-          - name: draw_all_mappoints # Not sure this works right now... If true, draws all mappoints in the map. If false, only draws matches and recently created mappoints. Set to false to save space.
-            value: true
-            type: bool
+      # -
+      #  name: VISUALIZER
+      #  tag: visualizer
+      #  receiver_bound: -1
+      #  settings:
+      #     - 
+      #       name: image_draw_type
+      #       value: none # options are [none, plain, features, featuresandmatches]
+      #       type: string
+      #     -
+      #       name: mcap_file_path
+      #       value: "results/out.mcap"
+      #       type: string
+      #     - name: draw_all_mappoints # Not sure this works right now... If true, draws all mappoints in the map. If false, only draws matches and recently created mappoints. Set to false to save space.
+      #       value: true
+      #       type: bool
 
       -
        name: TRACKING_FRONTEND
@@ -178,16 +178,6 @@ actors:
             type: i32
 
       -
-       name: LOOP_CLOSING
-       tag: "orbslam2 loop closing"
-       receiver_bound: -1
-       settings:
-          - 
-            name: covisibility_consistency_threshold
-            value: 3
-            type: i32
-    
-      -
        name: LOCAL_MAPPING
        tag: "orbslam local mapping"
        receiver_bound: 3
@@ -204,3 +194,10 @@ actors:
             name: min_num_features
             value: 2000
             type: i32
+
+      -
+       name: LOOP_CLOSING
+       tag: "orbslam loop closing"
+       receiver_bound: -1
+       settings:
+          - 

@@ -54,4 +54,14 @@ void ORBVocabulary::transform(
 
     vocabulary.transform(desc2, bow_vector, feature_vector, levelsup);
 }
+
+float ORBVocabulary::score(
+    const std::unique_ptr<DBoW2::BowVector>& v1, 
+    const std::unique_ptr<DBoW2::BowVector>& v2
+) const {
+    DBoW2::BowVector * v1_ptr = v1.get();
+    DBoW2::BowVector * v2_ptr = v2.get();
+    vocabulary.score(*v1_ptr, *v2_ptr);
+}
+
 }

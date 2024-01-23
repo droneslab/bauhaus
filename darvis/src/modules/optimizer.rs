@@ -3,7 +3,7 @@ extern crate g2o;
 use std::collections::{HashMap, HashSet};
 use cxx::UniquePtr;
 use core::{
-    config::{SETTINGS, SYSTEM}, sensor::{Sensor, FrameSensor}, matrix::DVMatrix7x7,
+    config::{SETTINGS, SYSTEM}, sensor::{Sensor, FrameSensor}, matrix::{DVMatrix4, DVMatrix7x7},
 };
 use log::{warn, debug, trace};
 use nalgebra::Matrix3;
@@ -767,7 +767,7 @@ pub fn optimize_essential_graph() {
 }
 
 pub fn optimize_sim3(
-    map: &MapLock, _kf1: Id, _kf2: Id, _matched_mps: &mut Vec<Id>, _s12: &Pose, _th2: f32, _b_fix_scale: bool
+    map: &MapLock, _kf1: Id, _kf2: Id, _matched_mps: &mut Vec<Id>, _s12: &DVMatrix4<f32>, scale: f32, _th2: i32, _b_fix_scale: bool
 ) -> (i32, DVMatrix7x7<f32>) {
     todo!("LOOP CLOSING");
     // int Optimizer::OptimizeSim3(KeyFrame *pKF1, KeyFrame *pKF2, vector<MapPoint *> &vpMatches1, g2o::Sim3 &g2oS12, const float th2,
