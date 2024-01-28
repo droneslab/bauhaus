@@ -190,10 +190,10 @@ impl Sim3Solver {
 
                 let idx = self.all_indices[randi] as usize;
                 self.x_3d_c1[idx].as_ref().unwrap().copy_to(
-                    &mut p_3d_c1_i.frow(idx as i32)?
+                    &mut p_3d_c1_i.row(idx as i32)?
                 )?;
                 self.x_3d_c2[idx].as_ref().unwrap().copy_to(
-                    &mut p_3d_c2_i.frow(idx as i32)?
+                    &mut p_3d_c2_i.row(idx as i32)?
                 )?;
 
                 self.all_indices[randi] = self.all_indices.pop().unwrap(); // todo is this equivalent to .back() followed by pop_back() ?
@@ -298,7 +298,7 @@ impl Sim3Solver {
         opencv::core::eigen(&N, &mut eval, &mut evec)?; //evec[0] is the quaternion of the desired rotation
 
         let mut vec = Mat::default();
-        evec.frow(0)?.col_range(& opencv::core::Range::new(1,2)?)?.copy_to(&mut vec)?; //extract imaginary part of the quaternion (sin*axis)
+        evec.row(0)?.col_range(& opencv::core::Range::new(1,2)?)?.copy_to(&mut vec)?; //extract imaginary part of the quaternion (sin*axis)
 
         // Rotation angle. sin is the norm of the imaginary part, cos is the real part
         let ang = norm(&vec, NORM_L2, &Mat::default())?.atan2(* evec.at_2d::<f64>(0,0)?);
