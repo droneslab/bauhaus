@@ -232,7 +232,8 @@ impl LoopClosing {
                     continue;
                 } else {
                     let sim3_solver = Sim3Solver::new(
-                        current_keyframe, keyframe, &mappoint_matches, false,
+                        &self.map,
+                        current_keyframe.id, keyframe.id, &mappoint_matches, false,
                         0.99, 20, 300
                     );
                     solvers.insert(i, sim3_solver);
@@ -252,8 +253,8 @@ impl LoopClosing {
                 let kf_id = self.enough_consistent_candidates[i];
 
                 // Perform 5 Ransac Iterations
-                let solver = solvers.get(&i).unwrap();
-                let (scm, no_more, inliers, num_inliers) = solver.iterate(5);
+                let solver = solvers.get_mut(&i).unwrap();
+                let (no_more, sim3_result) = solver.iterate(5)?;
 
                 // If Ransac reachs max. iterations discard keyframe
                 if no_more {
@@ -262,7 +263,8 @@ impl LoopClosing {
                 }
 
                 // If RANSAC returns a Sim3, perform a guided matching and optimize with all correspondences
-                if !scm.is_empty() {
+                if sim3_result.is_some() {
+                    let (scm, inliers, num_inliers) = sim3_result.unwrap();
                     let mut mappoint_matches_copy = vec![0; mappoint_matches.len()]; //vpMapPointMatches
                     for j in 0..inliers.len() {
                         if inliers[j] {

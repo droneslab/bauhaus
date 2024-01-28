@@ -43,9 +43,9 @@ pub fn spawn(
         str if str == "orbslam local mapping".to_string() => {
             crate::actors::local_mapping::LocalMapping::spawn(actor_channels, map.expect("Local mapping needs the map!"))
         },
-        str if str == "orbslam2 loop closing".to_string() => {
-            crate::actors::loop_closing2::LoopClosing::spawn(actor_channels, map.expect("Loop closing needs the map!"))
-        },
+        // str if str == "orbslam2 loop closing".to_string() => {
+        //     crate::actors::loop_closing2::LoopClosing::spawn(actor_channels, map.expect("Loop closing needs the map!"))
+        // },
         str if str == "visualizer".to_string() => {
             crate::actors::visualizer::DarvisVisualizer::spawn(actor_channels, map.expect("Visualizer needs the map!"))
         },

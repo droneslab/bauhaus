@@ -28,7 +28,7 @@ use opencv::platform_types::size_t;
 use serde::{Deserialize, Serialize};
 
 use opencv::{
-    prelude::*, core::*,
+    prelude::*, core::*, hub_prelude::{MatExprTraitConst}
 };
 // extern crate nalgebra as na;
 
@@ -58,7 +58,7 @@ impl DVMatrix {
         Self ( mat.clone() )
     }
     pub fn mat(&self) -> &opencv::core::Mat { &self.0 }
-    pub fn row(&self, index: u32) -> Result<Mat, opencv::Error> { self.0.row(index as i32) }
+    pub fn row(&self, index: u32) -> Result<opencv::core::Mat, opencv::Error> { self.0.frow(index as i32) }
 }
 impl Deref for DVMatrix {
     type Target = opencv::core::Mat;
@@ -97,8 +97,22 @@ impl<'a> From<&'a DVMatrix> for dvos3binding::BindCVMatRef<'a> {
         }
     }
 }
-
-
+impl From<&DVVector3<f64>> for opencv::core::Mat {
+    fn from(mat: &DVVector3<f64>) -> opencv::core::Mat { 
+        Mat::from_slice_2d(&[
+            [mat[0], mat[1], mat[2]],
+        ]).unwrap()
+    }
+}
+impl From<&DVMatrix3<f64>> for opencv::core::Mat {
+    fn from(mat: &DVMatrix3<f64>) -> opencv::core::Mat { 
+        Mat::from_slice_2d(&[
+            [mat[0], mat[1], mat[2]],
+            [mat[3], mat[4], mat[5]],
+            [mat[6], mat[7], mat[8]]
+        ]).unwrap()
+    }
+}
 
 #[derive(Clone, Debug, Default)]
 pub struct DVVectorOfKeyPoint ( opencv::types::VectorOfKeyPoint );
@@ -357,6 +371,15 @@ impl<T> Index<usize> for DVVector3<T> {
     type Output = T;
     fn index(&self, i: usize) -> &Self::Output { &self.0[i] }
 }
+impl From<&opencv::core::Mat> for DVVector3<f64> {
+    fn from(mat: &opencv::core::Mat) -> DVVector3<f64> { 
+        DVVector3::new(nalgebra::Vector3::<f64>::new(
+            *mat.at::<f64>(0).unwrap(),
+            *mat.at::<f64>(1).unwrap(),
+            *mat.at::<f64>(2).unwrap()
+        ))
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct DVMatrix3<T> ( nalgebra::Matrix3<T> ); // 3x3 matrix
@@ -392,6 +415,21 @@ impl<T: Clone> From<DVMatrix3<T>> for nalgebra::Matrix3<T> {
 }
 impl<T: Clone> From<&DVMatrix3<T>> for nalgebra::Matrix3<T> {
     fn from(vec: &DVMatrix3<T>) -> nalgebra::Matrix3<T> { vec.0.clone() }
+}
+impl From<opencv::core::Mat> for DVMatrix3<f64> {
+    fn from(mat: opencv::core::Mat) -> DVMatrix3<f64> { 
+        DVMatrix3::new(nalgebra::Matrix3::<f64>::new(
+            *mat.at_2d::<f64>(0,0).unwrap(),
+            *mat.at_2d::<f64>(0, 1).unwrap(),
+            *mat.at_2d::<f64>(0, 2).unwrap(),
+            *mat.at_2d::<f64>(1, 3).unwrap(),
+            *mat.at_2d::<f64>(1, 4).unwrap(),
+            *mat.at_2d::<f64>(1, 5).unwrap(),
+            *mat.at_2d::<f64>(2, 6).unwrap(),
+            *mat.at_2d::<f64>(2, 7).unwrap(),
+            *mat.at_2d::<f64>(2, 8).unwrap(),
+        ))
+    }
 }
 // Two index implementations, one for matrix3[(x,y)] and one for [(x)]
 impl<T> Index<(usize, usize)> for DVMatrix3<T> {
