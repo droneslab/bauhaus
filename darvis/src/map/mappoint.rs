@@ -194,6 +194,12 @@ impl MapPoint {
 
     //** Observations */////////////////////////////////////////////////////////////////////////////////
     pub fn get_observations(&self) -> &HashMap<Id, (i32, i32)> { &self.observations }
+    pub fn get_index_in_keyframe(&self, kf_id: Id) -> (i32, i32) { 
+        match self.observations.get(&kf_id) {
+            Some((left, right)) => (*left, *right),
+            None => (-1, -1)
+        }
+    }
     pub fn delete_observation(&mut self, kf_id: &Id) -> bool {
         // void MapPoint::EraseObservation(KeyFrame* pKF)
         if let Some((left_index, right_index)) = self.observations.get(kf_id) {

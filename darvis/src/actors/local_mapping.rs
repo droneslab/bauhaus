@@ -132,19 +132,8 @@ impl LocalMapping {
             _ => {}
         }
 
-        // debug!("at beginning of local mapping, {}", self.map.read().keyframes.get(&1).unwrap().get_tracked_mappoints(&self.map.read(), 3));
         // Check recent MapPoints
         let mps_culled = self.mappoint_culling();
-
-        // debug!("after culling, {}", self.map.read().keyframes.get(&1).unwrap().get_tracked_mappoints(&self.map.read(), 3));
-
-        let _span = tracy_client::span!("local_mapping");
-        tracy_client::plot!("MAP INFO: KeyFrames", self.map.read().keyframes.len() as f64);
-        tracy_client::plot!("MAP INFO: MapPoints", self.map.read().mappoints.len() as f64);
-        let avg_mappoints = self.map.read().keyframes.iter().map(|(_, kf)| kf.debug_get_mps_count()).sum::<i32>() as f64 / self.map.read().keyframes.len() as f64;
-        tracy_client::plot!("MAP INFO: Avg mp matches for kfs", avg_mappoints as f64);
-        trace!("MAP INFO:{},{},{}", self.map.read().keyframes.len(), self.map.read().mappoints.len(), avg_mappoints as f64);
-
 
         // Triangulate new MapPoints
         let mps_created = self.create_new_mappoints();
@@ -152,7 +141,6 @@ impl LocalMapping {
             LastKeyFrameUpdatedMsg{}
         )).unwrap();
 
-        // debug!("after create new mps, {}", self.map.read().keyframes.get(&1).unwrap().get_tracked_mappoints(&self.map.read(), 3));
 
         if self.actor_channels.queue_len() < 1 {
             // Abort additional work if there are too many keyframes in the msg queue.
@@ -160,7 +148,6 @@ impl LocalMapping {
             self.search_in_neighbors();
         }
 
-        // debug!("after search in neighbors, {}", self.map.read().keyframes.get(&1).unwrap().get_tracked_mappoints(&self.map.read(), 3));
 
         let t_init = 0.0;
 
@@ -256,8 +243,6 @@ impl LocalMapping {
         let avg_mappoints = self.map.read().keyframes.iter().map(|(_, kf)| kf.debug_get_mps_count()).sum::<i32>() as f64 / self.map.read().keyframes.len() as f64;
         tracy_client::plot!("MAP INFO: Avg mp matches for kfs", avg_mappoints as f64);
         trace!("MAP INFO:{},{},{}", self.map.read().keyframes.len(), self.map.read().mappoints.len(), avg_mappoints as f64);
-
-        // debug!("at end, {}", self.map.read().keyframes.get(&1).unwrap().get_tracked_mappoints(&self.map.read(), 3));
 
         if self.actor_channels.actors.get(LOOP_CLOSING).is_some() {
             // Only send if loop closing is actually running

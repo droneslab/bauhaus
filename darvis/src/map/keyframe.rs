@@ -102,12 +102,10 @@ impl KeyFrame {
     pub fn get_mp_match(&self, index: &u32) -> Id { self.mappoint_matches.get(index) }
     pub fn add_mp_match(&mut self, index: u32, mp_id: Id, is_outlier: bool) { 
         self.mappoint_matches.add(index, mp_id, is_outlier);
-        // debug!("kf {} add_mp_match {} -> {}", self.id, index, mp_id);
     }
     pub fn has_mp_match(&self, index: &u32) -> bool { self.mappoint_matches.has(index) }
     pub fn delete_mp_match_at_indices(&mut self, indices: (i32, i32)) {
         let (first_mp_id, second_mp_id) = self.mappoint_matches.delete_at_indices(indices);
-        // debug!("Deleted mappoints {:?} and {:?} for kf {}, indices are {:?}", first_mp_id, second_mp_id, self.id, indices);
     }
     pub fn delete_mp_match(&mut self, mp_id: Id) {
         self.mappoint_matches.delete_with_id(mp_id);
@@ -261,27 +259,6 @@ impl MapPointMatches {
             }
         })
         .count() as i32
-    }
-
-    pub fn old_tracked_mappoints(&self, map: &Map, min_observations: u32) -> i32 {
-        // KeyFrame::TrackedMapPoints(const int &minObs)
-        if min_observations > 0 {
-            return self.matches.len() as i32;
-        } // SOFIYA... this is obviously wrong, but new_tracked_mappoints below gives way too few tracked mps
-        // I think mps are not storing observations correctly .. actually this is not true, most mappoints have the right amount of observations
-        // so self.matches just does not have enough mappoints???
-
-        let mut num_points = 0;
-        for mp_match in &self.matches {
-            if let Some((mp_id, _)) = mp_match {
-                let mappoint = map.mappoints.get(&mp_id).unwrap();
-                if mappoint.get_observations().len() >= (min_observations as usize) {
-                    num_points += 1;
-                }
-            }
-        }
-
-        num_points
     }
 
     pub fn tracked_mappoints(&self, map: &Map, min_observations: u32) -> i32 {

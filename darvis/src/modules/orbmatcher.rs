@@ -480,7 +480,7 @@ pub fn _search_by_projection_reloc (
     todo!("Relocalization");
 }
 
-pub fn search_by_sim3(map: &MapLock, curr_kf_id: Id, kf_id: Id, matched_mappoints: &Vec<Id>, s: f32, r: &DVRotation, t: &DVTranslation, th: f32) {
+pub fn search_by_sim3(map: &MapLock, curr_kf_id: Id, kf_id: Id, matched_mappoints: &Vec<Id>, s: f64, r: &DVRotation, t: &DVTranslation, th: f32) {
     // From ORB-SLAM2:
     // int ORBmatcher::SearchBySim3(KeyFrame *pKF1, KeyFrame *pKF2, vector<MapPoint*> &vpMatches12,
     //                          const float &s12, const cv::Mat &R12, const cv::Mat &t12, const float th)
@@ -1092,16 +1092,13 @@ pub fn search_for_triangulation(
     let mut i = 0;
     let mut j = 0;
 
+    // println!("Featvec lengths {} {}", kf1_featvec.len(), kf2_featvec.len());
     // This is for debugging, can delete later
-    // let mut skipped1 = 0;
-    // let mut skipped2 = 0;
-    // let mut skipped3 = 0;
-    // let mut skipped4 = 0;
-    // let mut loops = 0;
-    // println!("BEGIN");
-
-    // println!("feature vector lengths {} {}", kf1_featvec.len(), kf2_featvec.len());
-
+    let mut skipped1 = 0;
+    let mut skipped2 = 0;
+    let mut skipped3 = 0;
+    let mut skipped4 = 0;
+    let mut loops = 0;
 
     while i < kf1_featvec.len() && j < kf2_featvec.len() {
         let kf1_node_id = kf1_featvec[i];
@@ -1120,7 +1117,7 @@ pub fn search_for_triangulation(
                     // if kf1_index == 2871 {
                     //     println!("has mp match");
                     // }
-                    // skipped1 += 1;
+                    skipped1 += 1;
                     continue
                 };
 
@@ -1154,7 +1151,7 @@ pub fn search_for_triangulation(
 
                     // If we have already matched or there is a MapPoint skip
                     if kf_2.has_mp_match(&kf2_index) || matched_already.contains(&kf2_index) {
-                        // skipped2 += 1;
+                        skipped2 += 1;
                         // if kf1_index == 2871 && kf2_index == 2433 {
                         //     println!("matches {:?}", matches);
                         //     println!("match is {}", kf_2.get_mp_match(&kf2_index));
@@ -1179,7 +1176,7 @@ pub fn search_for_triangulation(
                     let dist = descriptor_distance(&descriptors_kf_1, &descriptors_kf_2);
 
                     if dist > TH_LOW || dist > best_dist {
-                        // skipped3 += 1;
+                        skipped3 += 1;
                         // if kf1_index == 2871 && kf2_index == 2433  {
                         //     println!("skipped 2");
                         // }
@@ -1193,7 +1190,7 @@ pub fn search_for_triangulation(
                         let dist_ex = (ep.0 as f32) - kp2.pt().x;
                         let dist_ey = (ep.1 as f32) - kp2.pt().y;
                         if dist_ex * dist_ex + dist_ey * dist_ey < 100.0 * SCALE_FACTORS[kp2.octave() as usize] {
-                            // skipped4 += 1;
+                            skipped4 += 1;
                             // if kf1_index == 2871 && kf2_index == 2433 {
                             //     println!("skipped 3");
                             // }
@@ -1252,7 +1249,7 @@ pub fn search_for_triangulation(
                         best_index = kf2_index as i32;
                         best_dist = dist;
                     }
-                    // loops += 1;
+                    loops += 1;
                 }
                 // println!("{} {} {}", kf1_index, best_index, best_dist);
 
@@ -1278,7 +1275,6 @@ pub fn search_for_triangulation(
             j = lower_bound(&kf2_featvec, &kf1_featvec, j, i);
         }
     }
-    // println!("DONE");
 
     // Debugging
     // println!("search for triangulation: {} {} {} {} {}", skipped1, skipped2, skipped3, skipped4, loops);

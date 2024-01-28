@@ -191,3 +191,9 @@ impl std::fmt::Debug for Pose {
         )
     }
 }
+
+
+pub struct Sim3 {
+    pose: Pose,
+    scale: f64,
+}

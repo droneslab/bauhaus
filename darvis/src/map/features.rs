@@ -44,7 +44,7 @@ enum KeyPoints {
 pub struct Features {
     // Common across all sensor types
 
-    pub num_keypoints: u32,
+    pub num_keypoints: u32, // N
     keypoints: KeyPoints,
     pub descriptors: DVMatrix, // mDescriptors
 

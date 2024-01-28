@@ -490,7 +490,7 @@ impl TrackingBackend {
             self.sensor
         )?;
 
-        // debug!("motion model matches {}", current_frame.mappoint_matches.matches.len());
+        debug!("motion model initial matches {}", matches);
 
         // If few matches, uses a wider window search
         if matches < 20 {
@@ -504,9 +504,8 @@ impl TrackingBackend {
                 &self.map,
                 self.sensor
             )?;
+            debug!("motion model matches with wider search {}", matches);
         }
-
-        // debug!("motion model matches with wider search {}", current_frame.mappoint_matches.matches.len());
 
         if matches < 20 {
             warn!("tracking_backend::track_with_motion_model;not enough matches!!");
@@ -525,7 +524,7 @@ impl TrackingBackend {
             // return nmatches>20;
         }
 
-        // debug!("motion model matches after outliers {}", nmatches_map);
+        debug!("motion model matches after outliers {}", nmatches_map);
         match self.sensor.is_imu() {
             true => { return Ok(true); },
             false => { return Ok(nmatches_map >= 10); }
@@ -546,73 +545,68 @@ impl TrackingBackend {
             return;
         }
 
-        match self.sensor.is_mono() {
-            true => return,
-            false => {
-                todo!("Stereo, RGBD");
-                // Create "visual odometry" MapPoints
-                // We sort points according to their measured depth by the stereo/RGB-D sensor
-                // vector<pair<float,int> > vDepthIdx;
-                // const int Nfeat = mLastFrame.Nleft == -1? mLastFrame.N : mLastFrame.Nleft;
-                // vDepthIdx.reserve(Nfeat);
-                // for(int i=0; i<Nfeat;i++)
-                // {
-                //     float z = mLastFrame.mvDepth[i];
-                //     if(z>0)
-                //     {
-                //         vDepthIdx.push_back(make_pair(z,i));
-                //     }
-                // }
+        todo!("Stereo, RGBD");
+        // Create "visual odometry" MapPoints
+        // We sort points according to their measured depth by the stereo/RGB-D sensor
+        // vector<pair<float,int> > vDepthIdx;
+        // const int Nfeat = mLastFrame.Nleft == -1? mLastFrame.N : mLastFrame.Nleft;
+        // vDepthIdx.reserve(Nfeat);
+        // for(int i=0; i<Nfeat;i++)
+        // {
+        //     float z = mLastFrame.mvDepth[i];
+        //     if(z>0)
+        //     {
+        //         vDepthIdx.push_back(make_pair(z,i));
+        //     }
+        // }
 
-                // if(vDepthIdx.empty())
-                //     return;
+        // if(vDepthIdx.empty())
+        //     return;
 
-                // sort(vDepthIdx.begin(),vDepthIdx.end());
+        // sort(vDepthIdx.begin(),vDepthIdx.end());
 
-                // // We insert all close points (depth<mThDepth)
-                // // If less than 100 close points, we insert the 100 closest ones.
-                // int nPoints = 0;
-                // for(size_t j=0; j<vDepthIdx.size();j++)
-                // {
-                //     int i = vDepthIdx[j].second;
+        // // We insert all close points (depth<mThDepth)
+        // // If less than 100 close points, we insert the 100 closest ones.
+        // int nPoints = 0;
+        // for(size_t j=0; j<vDepthIdx.size();j++)
+        // {
+        //     int i = vDepthIdx[j].second;
 
-                //     bool bCreateNew = false;
+        //     bool bCreateNew = false;
 
-                //     MapPoint* pMP = mLastFrame.mvpMapPoints[i];
+        //     MapPoint* pMP = mLastFrame.mvpMapPoints[i];
 
-                //     if(!pMP)
-                //         bCreateNew = true;
-                //     else if(pMP->Observations()<1)
-                //         bCreateNew = true;
+        //     if(!pMP)
+        //         bCreateNew = true;
+        //     else if(pMP->Observations()<1)
+        //         bCreateNew = true;
 
-                //     if(bCreateNew)
-                //     {
-                //         Eigen::Vector3f x3D;
+        //     if(bCreateNew)
+        //     {
+        //         Eigen::Vector3f x3D;
 
-                //         if(mLastFrame.Nleft == -1){
-                //             mLastFrame.UnprojectStereo(i, x3D);
-                //         }
-                //         else{
-                //             x3D = mLastFrame.UnprojectStereoFishEye(i);
-                //         }
+        //         if(mLastFrame.Nleft == -1){
+        //             mLastFrame.UnprojectStereo(i, x3D);
+        //         }
+        //         else{
+        //             x3D = mLastFrame.UnprojectStereoFishEye(i);
+        //         }
 
-                //         MapPoint* pNewMP = new MapPoint(x3D,mpAtlas->GetCurrentMap(),&mLastFrame,i);
-                //         mLastFrame.mvpMapPoints[i]=pNewMP;
+        //         MapPoint* pNewMP = new MapPoint(x3D,mpAtlas->GetCurrentMap(),&mLastFrame,i);
+        //         mLastFrame.mvpMapPoints[i]=pNewMP;
 
-                //         mlpTemporalPoints.push_back(pNewMP);
-                //         nPoints++;
-                //     }
-                //     else
-                //     {
-                //         nPoints++;
-                //     }
+        //         mlpTemporalPoints.push_back(pNewMP);
+        //         nPoints++;
+        //     }
+        //     else
+        //     {
+        //         nPoints++;
+        //     }
 
-                //     if(vDepthIdx[j].first>mThDepth && nPoints>100)
-                //         break;
+        //     if(vDepthIdx[j].first>mThDepth && nPoints>100)
+        //         break;
 
-                // }
-            }
-        }
+        // }
     }
 
     fn track_local_map(&mut self, current_frame: &mut Frame, last_frame: &mut Frame) -> (bool, i32) {
@@ -706,7 +700,8 @@ impl TrackingBackend {
 
         {
             let lock = self.map.read();
-            if !self.imu.is_initialized || current_frame.frame_id < self.relocalization.last_reloc_frame_id + 2 {
+            // TODO (IMU) ... Check below should be !self.imu.is_initialized || current_frame.frame_id < self.relocalization.last_reloc_frame_id + 2
+            if current_frame.frame_id < self.relocalization.last_reloc_frame_id + 2 {
                 for i in 0..current_frame.mappoint_matches.matches.len() {
                     if current_frame.mappoint_matches.has(&(i as u32)) {
                         let mp_id = current_frame.mappoint_matches.get(&(i as u32));
@@ -1104,7 +1099,6 @@ impl TrackingBackend {
     //* Helper functions */
     fn discard_outliers(&mut self, current_frame: &mut Frame) -> i32 {
         let discarded = current_frame.delete_mappoint_outliers();
-        // println!("current frame matches {:?}", current_frame.mappoint_matches.matches);
         for mp_id in discarded {
             // self.map.read().mappoints.get(&mp_id).unwrap().increase_found();
             self.track_in_view.remove(&mp_id);
