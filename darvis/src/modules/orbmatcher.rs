@@ -1,10 +1,10 @@
 use std::collections::{HashMap, HashSet};
 use std::f64::INFINITY;
 use core::config::SETTINGS;
-use core::matrix::{DVMatrix4, DVVector3, DVVectorOfPoint2f};
+use core::matrix::{DVMatrix, DVMatrix4, DVVector3, DVVectorOfPoint2f};
 use core::sensor::{Sensor, FrameSensor};
 use log::{warn, debug};
-use opencv::core::KeyPoint;
+use opencv::core::{KeyPoint, Range};
 use opencv::prelude::*;
 use crate::MapLock;
 use crate::actors::tracking_backend::TrackedMapPointData;
@@ -72,10 +72,10 @@ pub fn search_for_initialization(
             continue;
         }
 
-        let d1 = f1.features.descriptors.row(i1 as u32).unwrap();
+        let d1 = f1.features.descriptors.row(i1 as u32);
         let (mut best_dist, mut best_dist2, mut best_idx2) : (i32, i32, i32) = (std::i32::MAX, std::i32::MAX, -1);
         for i2 in v_indices2 {
-            let d2 = f2.features.descriptors.row(i2).unwrap();
+            let d2 = f2.features.descriptors.row(i2);
             let dist = descriptor_distance(&d1,&d2);
             if v_matched_distance[i2 as usize] <= dist {
                 continue;
@@ -204,7 +204,7 @@ pub fn search_by_projection(
                         _ => {}
                     }
 
-                    let descriptors = frame.features.descriptors.row(idx).unwrap();
+                    let descriptors = frame.features.descriptors.row(idx);
                     let dist = descriptor_distance(&mp.best_descriptor, &descriptors);
 
                     if dist < best_dist.0 {
@@ -388,7 +388,7 @@ pub fn search_by_projection_with_threshold (
 
                 let u = CAMERA_MODULE.fx * xc * invzc + CAMERA_MODULE.cx;
                 let v = CAMERA_MODULE.fy * yc * invzc + CAMERA_MODULE.cy;
-                if !current_frame.features.check_bounds(u, v) {
+                if !current_frame.features.is_in_image(u, v) {
                     continue;
                 }
 
@@ -433,7 +433,7 @@ pub fn search_by_projection_with_threshold (
                     //         continue;
                     // }
 
-                    let descriptor = current_frame.features.descriptors.row(idx2)?;
+                    let descriptor = current_frame.features.descriptors.row(idx2);
                     let dist = descriptor_distance(&mappoint.best_descriptor, &descriptor);
 
                     if dist < best_dist {
@@ -480,357 +480,350 @@ pub fn _search_by_projection_reloc (
     todo!("Relocalization");
 }
 
-pub fn search_by_sim3(map: &MapLock, curr_kf_id: Id, kf_id: Id, matched_mappoints: &Vec<Id>, s: f64, r: &DVRotation, t: &DVTranslation, th: f32) {
+pub fn search_by_sim3(map: &MapLock, kf1_id: Id, kf2_id: Id, matches: &mut Vec<Option<Id>>, s12: f64, r12: &DVRotation, t12: &DVTranslation, th: f32) -> i32 {
     // From ORB-SLAM2:
     // int ORBmatcher::SearchBySim3(KeyFrame *pKF1, KeyFrame *pKF2, vector<MapPoint*> &vpMatches12,
     //                          const float &s12, const cv::Mat &R12, const cv::Mat &t12, const float th)
 
-    // const float &fx = pKF1->fx;
-    // const float &fy = pKF1->fy;
-    // const float &cx = pKF1->cx;
-    // const float &cy = pKF1->cy;
+    let lock = map.read();
 
-    // // Camera 1 from world
-    // cv::Mat R1w = pKF1->GetRotation();
-    // cv::Mat t1w = pKF1->GetTranslation();
+    // Camera 1 from world
+    let kf1 = lock.keyframes.get(&kf1_id).unwrap();
+    let R1w = kf1.pose.get_rotation();
+    let t1w = kf1.pose.get_translation();
 
-    // //Camera 2 from world
-    // cv::Mat R2w = pKF2->GetRotation();
-    // cv::Mat t2w = pKF2->GetTranslation();
+    // Camera 2 from world
+    let kf2 = lock.keyframes.get(&kf2_id).unwrap();
+    let R2w = kf2.pose.get_rotation();
+    let tw2 = kf2.pose.get_translation();
 
-    // //Transformation between cameras
-    // cv::Mat sR12 = s12*R12;
-    // cv::Mat sR21 = (1.0/s12)*R12.t();
-    // cv::Mat t21 = -sR21*t12;
+    //Transformation between cameras
+    let s_R12 = s12 * **r12;
+    let s_R21 = (1.0 / s12) * r12.transpose();
+    let t21 = -s_R21 * **t12;
 
-    // const vector<MapPoint*> vpMapPoints1 = pKF1->GetMapPointMatches();
-    // const int N1 = vpMapPoints1.size();
+    let mappoints1 = kf1.get_mp_matches();
+    let mappoints2 =  kf2.get_mp_matches();
+    let N1 = mappoints1.len();
+    let N2 = mappoints2.len();
 
-    // const vector<MapPoint*> vpMapPoints2 = pKF2->GetMapPointMatches();
-    // const int N2 = vpMapPoints2.size();
+    let mut already_matched1 = vec![false; N1];
+    let mut already_matched2 = vec![false; N2];
 
-    // vector<bool> vbAlreadyMatched1(N1,false);
-    // vector<bool> vbAlreadyMatched2(N2,false);
+    {
+        let map = map.read();
+        for i in 0..N1 {
+            let mp_id = matches[i];
+            if let Some(mp) = mp_id {
+                already_matched1[i] = true;
+                let mp = map.mappoints.get(&mp).unwrap();
+                let (left_idx2, _right_idx2) = mp.get_index_in_keyframe(kf2_id);
+                if left_idx2 != -1 && left_idx2 < N2 as i32 {
+                    already_matched2[left_idx2 as usize] = true;
+                }
+            }
+        }
+    }
 
-    // for(int i=0; i<N1; i++)
-    // {
-    //     MapPoint* pMP = vpMatches12[i];
-    //     if(pMP)
-    //     {
-    //         vbAlreadyMatched1[i]=true;
-    //         int idx2 = pMP->GetIndexInKeyFrame(pKF2);
-    //         if(idx2>=0 && idx2<N2)
-    //             vbAlreadyMatched2[idx2]=true;
-    //     }
-    // }
+    let mut match1 = vec![-1; N1];
+    let mut match2 = vec![-1; N2];
 
-    // vector<int> vnMatch1(N1,-1);
-    // vector<int> vnMatch2(N2,-1);
+    // Transform from KF1 to KF2 and search
+    for i in 0..N1 {
+        let mp_id = match mappoints1[i] {
+            Some((mp_id, _)) => mp_id,
+            None => continue
+        };
+        let lock = map.read();
+        let mp = match lock.mappoints.get(&mp_id) {
+            Some(mp) => mp,
+            None => continue
+        };
 
-    // // Transform from KF1 to KF2 and search
-    // for(int i1=0; i1<N1; i1++)
-    // {
-    //     MapPoint* pMP = vpMapPoints1[i1];
+        if already_matched1[i] {
+            continue;
+        }
+        
+        let p_3D_w = mp.position;
+        let p_3D_c1 = (*R1w) * (*p_3D_w) + (*t1w);
+        let p_3D_c2 = s_R21 * p_3D_c1 + t21;
 
-    //     if(!pMP || vbAlreadyMatched1[i1])
-    //         continue;
+        // Depth must be positive
+        if p_3D_c2[2] < 0.0 {
+            continue;
+        }
 
-    //     if(pMP->isBad())
-    //         continue;
+        let invz = 1.0 / p_3D_c2[2];
+        let x = p_3D_c2[0] * invz;
+        let y = p_3D_c2[1] * invz;
+        
+        let u = CAMERA_MODULE.fx * x + CAMERA_MODULE.cx;
+        let v = CAMERA_MODULE.fy * y + CAMERA_MODULE.cy;
 
-    //     cv::Mat p3Dw = pMP->GetWorldPos();
-    //     cv::Mat p3Dc1 = R1w*p3Dw + t1w;
-    //     cv::Mat p3Dc2 = sR21*p3Dc1 + t21;
+        // Point must be inside the image
+        if !kf2.features.is_in_image(u, v) {
+            continue;
+        }
+        let max_distance = mp.get_max_distance_invariance();
+        let min_distance = mp.get_min_distance_invariance();
+        let dist_3d = p_3D_c2.norm();
 
-    //     // Depth must be positive
-    //     if(p3Dc2.at<float>(2)<0.0)
-    //         continue;
+        // Depth must be inside the scale invariance region
+        if dist_3d < min_distance || dist_3d > max_distance {
+            continue;
+        }
 
-    //     const float invz = 1.0/p3Dc2.at<float>(2);
-    //     const float x = p3Dc2.at<float>(0)*invz;
-    //     const float y = p3Dc2.at<float>(1)*invz;
+        // Compute predicted octave
+        let n_predicted_level = mp.predict_scale(&dist_3d);
 
-    //     const float u = fx*x+cx;
-    //     const float v = fy*y+cy;
+        // Search in a radius
+        let radius = th * SCALE_FACTORS[n_predicted_level as usize];
 
-    //     // Point must be inside the image
-    //     if(!pKF2->IsInImage(u,v))
-    //         continue;
+        let indices = kf2.features.get_features_in_area(
+            &u, &v, radius as f64, None
+        );
+        if indices.is_empty() {
+            continue;
+        }
 
-    //     const float maxDistance = pMP->GetMaxDistanceInvariance();
-    //     const float minDistance = pMP->GetMinDistanceInvariance();
-    //     const float dist3D = cv::norm(p3Dc2);
+        // Match to the most similar keypoint in the radius
+        let d_mp = &mp.best_descriptor;
 
-    //     // Depth must be inside the scale invariance region
-    //     if(dist3D<minDistance || dist3D>maxDistance )
-    //         continue;
+        let mut best_dist = std::i32::MAX;
+        let mut best_idx = -1;
 
-    //     // Compute predicted octave
-    //     const int nPredictedLevel = pMP->PredictScale(dist3D,pKF2);
+        for idx in indices {
+            let (kp, _) = kf2.features.get_keypoint(idx as usize);
+            if kp.octave() < n_predicted_level - 1 || kp.octave() > n_predicted_level {
+                continue;
+            }
+            let descriptors_kf = kf2.features.descriptors.row(idx);
+            let dist = descriptor_distance(&d_mp, &descriptors_kf);
+            if dist < best_dist {
+                best_dist = dist;
+                best_idx = idx as i32;
+            }
+        }
 
-    //     // Search in a radius
-    //     const float radius = th*pKF2->mvScaleFactors[nPredictedLevel];
+        if best_dist <= TH_HIGH {
+            match1[i] = best_idx;
+        }
+    }
 
-    //     const vector<size_t> vIndices = pKF2->GetFeaturesInArea(u,v,radius);
+    // Transform from KF2 to KF2 and search
+    for i in 0..N2 {
+        let lock = map.read();
+        let mp_id = match mappoints2[i] {
+            Some((mp, _)) => mp,
+            None => continue
+        };
+        if already_matched2[i] {
+            continue;
+        }
+        let mp = match lock.mappoints.get(&mp_id) {
+            Some(mp) => mp,
+            None => continue
+        };
 
-    //     if(vIndices.empty())
-    //         continue;
+        let p_3D_w = mp.position;
+        let p_3D_c2 = (*R2w) * (*p_3D_w) + (*tw2);
+        let p_3D_c1 = s_R12 * p_3D_c2 + **t12;
 
-    //     // Match to the most similar keypoint in the radius
-    //     const cv::Mat dMP = pMP->GetDescriptor();
+        // Depth must be positive
+        if p_3D_c1[2] < 0.0 {
+            continue;
+        }
+        
+        let invz = 1.0 / p_3D_c1[2];
+        let x = p_3D_c1[0] * invz;
+        let y = p_3D_c1[1] * invz;
 
-    //     int bestDist = INT_MAX;
-    //     int bestIdx = -1;
-    //     for(vector<size_t>::const_iterator vit=vIndices.begin(), vend=vIndices.end(); vit!=vend; vit++)
-    //     {
-    //         const size_t idx = *vit;
+        let u = CAMERA_MODULE.fx * x + CAMERA_MODULE.cx;
+        let v = CAMERA_MODULE.fy * y + CAMERA_MODULE.cy;
 
-    //         const cv::KeyPoint &kp = pKF2->mvKeysUn[idx];
+        // Point must be inside the image
+        if !kf1.features.is_in_image(u, v) {
+            continue;
+        }
 
-    //         if(kp.octave<nPredictedLevel-1 || kp.octave>nPredictedLevel)
-    //             continue;
+        let max_distance = mp.get_max_distance_invariance();
+        let min_distance = mp.get_min_distance_invariance();
+        let dist_3d = p_3D_c1.norm();
 
-    //         const cv::Mat &dKF = pKF2->mDescriptors.row(idx);
+        // Depth must be inside the scale pyramid of the image
+        if dist_3d < min_distance || dist_3d > max_distance {
+            continue;
+        }
+        
+        // Compute predicted octave
+        let n_predicted_level = mp.predict_scale(&dist_3d);
 
-    //         const int dist = DescriptorDistance(dMP,dKF);
+        // Search in a radius of 2.5*sigma(ScaleLevel)
+        let radius = th * SCALE_FACTORS[n_predicted_level as usize];
+        
+        let indices = kf1.features.get_features_in_area(
+            &u, &v, radius as f64, None
+        );
+        if indices.is_empty() {
+            continue;
+        }
+    
+        // Match to the most similar keypoint in the radius
+        let d_mp = &mp.best_descriptor;
 
-    //         if(dist<bestDist)
-    //         {
-    //             bestDist = dist;
-    //             bestIdx = idx;
-    //         }
-    //     }
+        let mut best_dist = std::i32::MAX;
+        let mut best_idx = -1;
+        for idx in indices {
+            let kp = kf1.features.get_keypoint(idx as usize).0;
+            if kp.octave() < n_predicted_level - 1 || kp.octave() > n_predicted_level {
+                continue;
+            }
+            let descriptors_kf = kf1.features.descriptors.row(idx);
+            let dist = descriptor_distance(&d_mp, &descriptors_kf);
+            if dist < best_dist {
+                best_dist = dist;
+                best_idx = idx as i32;
+            }
+        }
+        if best_dist <= TH_HIGH {
+            match2[i] = best_idx;
+        }
+    }
 
-    //     if(bestDist<=TH_HIGH)
-    //     {
-    //         vnMatch1[i1]=bestIdx;
-    //     }
-    // }
-
-    // // Transform from KF2 to KF2 and search
-    // for(int i2=0; i2<N2; i2++)
-    // {
-    //     MapPoint* pMP = vpMapPoints2[i2];
-
-    //     if(!pMP || vbAlreadyMatched2[i2])
-    //         continue;
-
-    //     if(pMP->isBad())
-    //         continue;
-
-    //     cv::Mat p3Dw = pMP->GetWorldPos();
-    //     cv::Mat p3Dc2 = R2w*p3Dw + t2w;
-    //     cv::Mat p3Dc1 = sR12*p3Dc2 + t12;
-
-    //     // Depth must be positive
-    //     if(p3Dc1.at<float>(2)<0.0)
-    //         continue;
-
-    //     const float invz = 1.0/p3Dc1.at<float>(2);
-    //     const float x = p3Dc1.at<float>(0)*invz;
-    //     const float y = p3Dc1.at<float>(1)*invz;
-
-    //     const float u = fx*x+cx;
-    //     const float v = fy*y+cy;
-
-    //     // Point must be inside the image
-    //     if(!pKF1->IsInImage(u,v))
-    //         continue;
-
-    //     const float maxDistance = pMP->GetMaxDistanceInvariance();
-    //     const float minDistance = pMP->GetMinDistanceInvariance();
-    //     const float dist3D = cv::norm(p3Dc1);
-
-    //     // Depth must be inside the scale pyramid of the image
-    //     if(dist3D<minDistance || dist3D>maxDistance)
-    //         continue;
-
-    //     // Compute predicted octave
-    //     const int nPredictedLevel = pMP->PredictScale(dist3D,pKF1);
-
-    //     // Search in a radius of 2.5*sigma(ScaleLevel)
-    //     const float radius = th*pKF1->mvScaleFactors[nPredictedLevel];
-
-    //     const vector<size_t> vIndices = pKF1->GetFeaturesInArea(u,v,radius);
-
-    //     if(vIndices.empty())
-    //         continue;
-
-    //     // Match to the most similar keypoint in the radius
-    //     const cv::Mat dMP = pMP->GetDescriptor();
-
-    //     int bestDist = INT_MAX;
-    //     int bestIdx = -1;
-    //     for(vector<size_t>::const_iterator vit=vIndices.begin(), vend=vIndices.end(); vit!=vend; vit++)
-    //     {
-    //         const size_t idx = *vit;
-
-    //         const cv::KeyPoint &kp = pKF1->mvKeysUn[idx];
-
-    //         if(kp.octave<nPredictedLevel-1 || kp.octave>nPredictedLevel)
-    //             continue;
-
-    //         const cv::Mat &dKF = pKF1->mDescriptors.row(idx);
-
-    //         const int dist = DescriptorDistance(dMP,dKF);
-
-    //         if(dist<bestDist)
-    //         {
-    //             bestDist = dist;
-    //             bestIdx = idx;
-    //         }
-    //     }
-
-    //     if(bestDist<=TH_HIGH)
-    //     {
-    //         vnMatch2[i2]=bestIdx;
-    //     }
-    // }
-
-    // // Check agreement
-    // int nFound = 0;
-
-    // for(int i1=0; i1<N1; i1++)
-    // {
-    //     int idx2 = vnMatch1[i1];
-
-    //     if(idx2>=0)
-    //     {
-    //         int idx1 = vnMatch2[idx2];
-    //         if(idx1==i1)
-    //         {
-    //             vpMatches12[i1] = vpMapPoints2[idx2];
-    //             nFound++;
-    //         }
-    //     }
-    // }
-
-    // return nFound;
+    // Check agreement
+    let mut found = 0;
+    for i in 0..N1 {
+        let idx2 = match1[i];
+        if idx2 >= 0 {
+            let idx1 = match2[idx2 as usize];
+            if idx1 == i as i32 {
+                matches[i] = Some(mappoints2[i].unwrap().0);
+                found += 1;
+            }
+        }
+    }
+    return found;
 
 }
 
 pub fn search_by_projection_for_loop_detection(
-    map: &MapLock, scw: &DVMatrix4<f32>, candidate_mps: &Vec<Id>, matched_mappoints: &Vec<Id>, threshold: i32,
+    map: &MapLock, kf_id: &Id,
+    scw: &DVMatrix4<f32>, candidate_mps: &Vec<Id>, matched_mappoints: &mut Vec<Option<Id>>, threshold: i32,
     ratio: f64, check_orientation: bool
-) -> i32 {
+) -> Result<i32, Box<dyn std::error::Error>>{
     // Project MapPoints using a Similarity Transformation and search matches.
     // Used in loop detection
     // From ORB-SLAM2:
     // int ORBmatcher::SearchByProjection(KeyFrame* pKF, cv::Mat Scw, const vector<MapPoint*> &vpPoints, vector<MapPoint*> &vpMatched, int th)
 
-    // // Get Calibration Parameters for later projection
-    // const float &fx = pKF->fx;
-    // const float &fy = pKF->fy;
-    // const float &cx = pKF->cx;
-    // const float &cy = pKF->cy;
+    // Some of the matrix stuff in here really sucks because we're using the opencv matrixes (DVMatrix) instead of nalgebra
+    
+    let lock = map.read();
 
-    // // Decompose Scw
-    // cv::Mat sRcw = Scw.rowRange(0,3).colRange(0,3);
-    // const float scw = sqrt(sRcw.row(0).dot(sRcw.row(0)));
-    // cv::Mat Rcw = sRcw/scw;
-    // cv::Mat tcw = Scw.rowRange(0,3).col(3)/scw;
-    // cv::Mat Ow = -Rcw.t()*tcw;
+    // Decompose Scw
+    let scw_mat: DVMatrix = scw.into();
+    let s_Rcw = scw_mat.row_range(0,3).col_range(0,3);
+    let scw = (s_Rcw.row(0).dot(& *s_Rcw.row(0))? as f32).sqrt();
+    let Rcw = s_Rcw.divide_by_scalar(scw); // Should be == s_rCw / scw
+    let tcw = DVMatrix::new(scw_mat.row_range(0,3).col(3)?).divide_by_scalar(scw); // Should be == scw_mat / scw
+    let ow = DVMatrix::new_expr(Rcw.clone().t()?).neg() * &tcw;
 
-    // // Set of MapPoints already found in the KeyFrame
-    // set<MapPoint*> spAlreadyFound(vpMatched.begin(), vpMatched.end());
-    // spAlreadyFound.erase(static_cast<MapPoint*>(NULL));
+    // Set of MapPoints already found in the KeyFrame
+    let mut already_found = vec![false; matched_mappoints.len()];
 
-    // int nmatches=0;
+    let mut num_matches = 0;
 
-    // // For each Candidate MapPoint Project and Match
-    // for(int iMP=0, iendMP=vpPoints.size(); iMP<iendMP; iMP++)
-    // {
-    //     MapPoint* pMP = vpPoints[iMP];
+    // For each Candidate MapPoint Project and Match
+    for i in 0..candidate_mps.len() {
+        let mp_id = candidate_mps[i];
+        let mp = match lock.mappoints.get(&mp_id) {
+            Some(mp) => mp,
+            None => continue
+        };
+        if already_found[i] {
+            continue;
+        }
 
-    //     // Discard Bad MapPoints and already found
-    //     if(pMP->isBad() || spAlreadyFound.count(pMP))
-    //         continue;
+        // Get 3D Coords.
+        let p3dw: Mat = (&mp.position).into();
 
-    //     // Get 3D Coords.
-    //     cv::Mat p3Dw = pMP->GetWorldPos();
+        // Transform into Camera Coords.
+        let p3dc = DVMatrix::new_expr_res(Rcw.mat() * &p3dw + tcw.mat());
 
-    //     // Transform into Camera Coords.
-    //     cv::Mat p3Dc = Rcw*p3Dw+tcw;
+        // Depth must be positive
+        if p3dc.at(2) < 0.0 {
+            continue;
+        }
 
-    //     // Depth must be positive
-    //     if(p3Dc.at<float>(2)<0.0)
-    //         continue;
+        // Project into Image
+        let invz = 1.0 / p3dc.at(2);
+        let x = p3dc.at(0) * invz;
+        let y = p3dc.at(1) * invz;
 
-    //     // Project into Image
-    //     const float invz = 1/p3Dc.at<float>(2);
-    //     const float x = p3Dc.at<float>(0)*invz;
-    //     const float y = p3Dc.at<float>(1)*invz;
+        let u = CAMERA_MODULE.fx * x + CAMERA_MODULE.cx;
+        let v = CAMERA_MODULE.fy * y + CAMERA_MODULE.cy;
 
-    //     const float u = fx*x+cx;
-    //     const float v = fy*y+cy;
+        // Point must be inside the image
+        let kf = lock.keyframes.get(&kf_id).unwrap();
+        if !kf.features.is_in_image(u, v) {
+            continue;
+        }
 
-    //     // Point must be inside the image
-    //     if(!pKF->IsInImage(u,v))
-    //         continue;
+        // Depth must be inside the scale invariance region of the point
+        let max_distance = mp.get_max_distance_invariance();
+        let min_distance = mp.get_min_distance_invariance();
+        let po = DVMatrix::new_expr((p3dw - ow.mat()).into_result()?);
+        let dist = po.norm();
 
-    //     // Depth must be inside the scale invariance region of the point
-    //     const float maxDistance = pMP->GetMaxDistanceInvariance();
-    //     const float minDistance = pMP->GetMinDistanceInvariance();
-    //     cv::Mat PO = p3Dw-Ow;
-    //     const float dist = cv::norm(PO);
+        if dist < min_distance || dist > max_distance {
+            continue;
+        }
 
-    //     if(dist<minDistance || dist>maxDistance)
-    //         continue;
+        // Viewing angle must be less than 60 deg
+        let pn: Mat = (&mp.normal_vector).into();
+        if po.dot(&pn)? < 0.5 * dist {
+            continue;
+        }
 
-    //     // Viewing angle must be less than 60 deg
-    //     cv::Mat Pn = pMP->GetNormal();
+        let n_predicted_level = mp.predict_scale(&dist);
 
-    //     if(PO.dot(Pn)<0.5*dist)
-    //         continue;
+        // Search in a radius
+        let radius = threshold as f32 * SCALE_FACTORS[n_predicted_level as usize];
 
-    //     int nPredictedLevel = pMP->PredictScale(dist,pKF);
+        let indices = kf.features.get_features_in_area(&u, &v, radius as f64, None);
 
-    //     // Search in a radius
-    //     const float radius = th*pKF->mvScaleFactors[nPredictedLevel];
+        if indices.is_empty() {
+            continue;
+        }
 
-    //     const vector<size_t> vIndices = pKF->GetFeaturesInArea(u,v,radius);
+        // Match to the most similar keypoint in the radius
+        let d_mp = &mp.best_descriptor;
 
-    //     if(vIndices.empty())
-    //         continue;
+        let mut best_dist = std::i32::MAX;
+        let mut best_idx = -1;
+        for idx in indices { 
+            if matched_mappoints[idx as usize].is_some() {
+                continue;
+            }
+            let kp_level = kf.features.get_octave(idx as usize);
+            if kp_level < n_predicted_level - 1 || kp_level > n_predicted_level {
+                continue;
+            }
 
-    //     // Match to the most similar keypoint in the radius
-    //     const cv::Mat dMP = pMP->GetDescriptor();
+            let descriptors_kf = kf.features.descriptors.row(idx);
+            let dist = descriptor_distance(&d_mp, &descriptors_kf);
+            if dist < best_dist {
+                best_dist = dist;
+                best_idx = idx as i32;
+            }
+        }
+        if best_dist <= TH_LOW {
+            matched_mappoints[best_idx as usize] = Some(mp_id);
+            num_matches += 1;
+        }
+    }
 
-    //     int bestDist = 256;
-    //     int bestIdx = -1;
-    //     for(vector<size_t>::const_iterator vit=vIndices.begin(), vend=vIndices.end(); vit!=vend; vit++)
-    //     {
-    //         const size_t idx = *vit;
-    //         if(vpMatched[idx])
-    //             continue;
-
-    //         const int &kpLevel= pKF->mvKeysUn[idx].octave;
-
-    //         if(kpLevel<nPredictedLevel-1 || kpLevel>nPredictedLevel)
-    //             continue;
-
-    //         const cv::Mat &dKF = pKF->mDescriptors.row(idx);
-
-    //         const int dist = DescriptorDistance(dMP,dKF);
-
-    //         if(dist<bestDist)
-    //         {
-    //             bestDist = dist;
-    //             bestIdx = idx;
-    //         }
-    //     }
-
-    //     if(bestDist<=TH_LOW)
-    //     {
-    //         vpMatched[bestIdx]=pMP;
-    //         nmatches++;
-    //     }
-
-    // }
-
-    // return nmatches;
-
-    todo!("LOOP CLOSING");
+    Ok(num_matches)
 }
 
 pub fn search_by_projection_for_place_recognition() {
@@ -887,7 +880,7 @@ pub fn search_by_bow_f(
                 let mut best_index_left = -1;
                 let mut best_dist_right = (256, 256);
                 let mut best_index_right = -1;
-                let descriptors_kf = kf.features.descriptors.row(kf_index)?;
+                let descriptors_kf = kf.features.descriptors.row(kf_index);
 
                 let frame_indices_size = frame.bow.as_ref().unwrap().feat_vec.vec_size(frame_node_id);
 
@@ -898,7 +891,7 @@ pub fn search_by_bow_f(
                         continue;
                     }
 
-                    let descriptors_f = frame.features.descriptors.row(frame_index)?;
+                    let descriptors_f = frame.features.descriptors.row(frame_index);
 
                     let dist = descriptor_distance(&descriptors_kf, &descriptors_f);
 
@@ -981,7 +974,7 @@ pub fn search_by_bow_kf(
                     let index_kf_1 = kf_1.bow.as_ref().unwrap().feat_vec.vec_get(node_id_kf_1, index1);
                     let mut best_dist = (256, 256);
                     let mut best_index = -1;
-                    let descriptors_kf_1 = kf_1.features.descriptors.row(index_kf_1)?;
+                    let descriptors_kf_1 = kf_1.features.descriptors.row(index_kf_1);
 
                     for index2 in 0..indices_kf_2_size {
                         let index_kf_2 = kf_2.bow.as_ref().unwrap().feat_vec.vec_get(node_id_kf_2, index2);
@@ -993,7 +986,7 @@ pub fn search_by_bow_kf(
                             continue;
                         }
 
-                        let descriptors_kf_2 = kf_2.features.descriptors.row(index_kf_2)?;
+                        let descriptors_kf_2 = kf_2.features.descriptors.row(index_kf_2);
                         let dist = descriptor_distance(&descriptors_kf_1, &descriptors_kf_2);
 
                         if dist < best_dist.0 {
@@ -1137,7 +1130,7 @@ pub fn search_for_triangulation(
 
                 let mut best_dist = TH_LOW;
                 let mut best_index = -1;
-                let descriptors_kf_1 = kf_1.features.descriptors.row(kf1_index)?;
+                let descriptors_kf_1 = kf_1.features.descriptors.row(kf1_index);
 
                 // let kf2_indices = kf_2.bow.as_ref().unwrap().feat_vec.get_feat_from_node(kf2_node_id);
                 // note...same thing about not copying vec as above
@@ -1172,7 +1165,7 @@ pub fn search_for_triangulation(
                         _ => false
                     };
 
-                    let descriptors_kf_2 = kf_2.features.descriptors.row(kf2_index)?;
+                    let descriptors_kf_2 = kf_2.features.descriptors.row(kf2_index);
                     let dist = descriptor_distance(&descriptors_kf_1, &descriptors_kf_2);
 
                     if dist > TH_LOW || dist > best_dist {
@@ -1449,7 +1442,7 @@ pub fn fuse(kf_id: &Id, fuse_candidates: &Vec<Option<(Id, bool)>>, map: &MapLock
                     }
                 }
 
-                let desc_kf = lock.keyframes.get(kf_id).unwrap().features.descriptors.row(idx2).unwrap();
+                let desc_kf = lock.keyframes.get(kf_id).unwrap().features.descriptors.row(idx2);
                 let dist = descriptor_distance(&lock.mappoints.get(mp_id).unwrap().best_descriptor, &desc_kf);
 
                 if dist < best_dist {

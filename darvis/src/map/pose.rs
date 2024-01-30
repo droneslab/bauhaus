@@ -155,6 +155,30 @@ impl From<g2o::ffi::Pose> for Pose {
         Pose ( nalgebra::IsometryMatrix3::from_parts(translation, rotation) )
     }
 }
+impl From<g2o::ffi::RustSim3> for Sim3 {
+    fn from(sim3: g2o::ffi::RustSim3) -> Self {
+        let translation = nalgebra::Translation3::new(
+            sim3.translation[0],
+            sim3.translation[1],
+            sim3.translation[2]
+        );
+        // Note: quaternion in nalgebra (here) is [w,i,j,k]
+        // orbslam bindings return wijk
+        let rotation = nalgebra::geometry::UnitQuaternion::<f64>::from_quaternion(
+            nalgebra::Quaternion::<f64>::new(
+                sim3.rotation[0],
+                sim3.rotation[1],
+                sim3.rotation[2],
+                sim3.rotation[3],
+            )
+        ).to_rotation_matrix();
+        Sim3 {
+            pose: Pose (nalgebra::IsometryMatrix3::from_parts(translation, rotation)),
+            scale: sim3.scale
+        }
+
+    }
+}
 
 //* bindings with orbslam */
 impl From<dvos3binding::ffi::Pose> for Pose {

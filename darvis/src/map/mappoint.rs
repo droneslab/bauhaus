@@ -8,14 +8,14 @@ use super::{map::{Id, Map}, keyframe::KeyFrame, pose::DVTranslation};
 #[derive(Debug)]
 pub struct MapPoint { // Full map item inserted into the map with the following additional fields
     pub id: Id,
-    pub position: DVTranslation, 
+    pub position: DVTranslation, // mWorldPos
 
     // Observations, this is a part of "map connections" but I don't think we can avoid keeping this here.
     observations: HashMap<Id, (i32, i32)>, // mObservations ; Keyframes observing the point and associated index in keyframe
     pub num_obs: i32,
 
     // Best descriptor used for fast matching
-    pub best_descriptor: DVMatrix,
+    pub best_descriptor: DVMatrix, // mDescriptor
 
     // Variables used by merging
     pub normal_vector: DVVector3<f64>,  // mNormalVector ; Mean viewing direction
@@ -290,9 +290,9 @@ impl MapPoint {
         let mut descriptors = Vec::<opencv::core::Mat>::new();
         for (id, (index1, index2)) in &self.observations {
             let kf = map.keyframes.get(&id).unwrap();
-            descriptors.push(kf.features.descriptors.row(*index1 as u32).unwrap());
+            descriptors.push((*kf.features.descriptors.row(*index1 as u32)).clone());
             match self.sensor.frame() {
-                FrameSensor::Stereo => descriptors.push(kf.features.descriptors.row(*index2 as u32).unwrap()),
+                FrameSensor::Stereo => descriptors.push((*kf.features.descriptors.row(*index2 as u32)).clone()),
                 _ => {}
             }
         }
