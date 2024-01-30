@@ -16,6 +16,11 @@ pub mod ffi {
     struct Position {
         translation: [f64; 3],
     }
+    struct RustSim3 {
+        translation: [f64; 3],
+        rotation: [f64; 4],
+        scale: f64,
+    }
     // Note: Workaround to have a vec of shared ptrs 
     // https://github.com/dtolnay/cxx/issues/741
     // Not thread safe!! Don't make this shared.
@@ -26,6 +31,10 @@ pub mod ffi {
     struct RustXYZOnlyPoseEdge {
         inner: UniquePtr<EdgeSE3ProjectXYZOnlyPose>,
         mappoint_id: i32,
+    }
+    struct RustSim3Edge {
+        edge1: UniquePtr<EdgeSim3ProjectXYZ>,
+        edge2: UniquePtr<EdgeInverseSim3ProjectXYZ>,
     }
 
     unsafe extern "C++" {
@@ -38,10 +47,18 @@ pub mod ffi {
         type VertexSBAPointXYZ;
         type EdgeSE3ProjectXYZOnlyPose;
         type EdgeSE3ProjectXYZ;
+        type EdgeSim3ProjectXYZ;
+        type EdgeInverseSim3ProjectXYZ;
 
         fn new_sparse_optimizer(opt_type: i32, camera_param: [f64;4]) -> UniquePtr<BridgeSparseOptimizer>;
 
         // creating/adding vertices to graph
+        fn add_sim3_vertex(
+            self: Pin<&mut BridgeSparseOptimizer>,
+            pose: Pose,
+            scale: f64,
+            set_fixed: bool
+        );
         fn add_frame_vertex(
             self: Pin<&mut BridgeSparseOptimizer>,
             vertex_id: i32,
@@ -51,7 +68,9 @@ pub mod ffi {
         fn add_mappoint_vertex(
             self: Pin<&mut BridgeSparseOptimizer>,
             vertex_id: i32,
-            pose: Pose
+            pose: Pose,
+            set_fixed: bool,
+            set_marginalized: bool
         );
         fn set_vertex_estimate(
             self: Pin<&mut BridgeSparseOptimizer>,
@@ -65,6 +84,12 @@ pub mod ffi {
         fn has_vertex(self: &BridgeSparseOptimizer, id: i32) -> bool;
 
         // creating/adding edges to graph
+        fn add_both_sim_edges(
+            self: Pin<&mut BridgeSparseOptimizer>,
+            vertex_id1: i32, keypoint_pt_x1: f32, keypoint_pt_y1: f32, inv_sigma1: f32,
+            vertex_id2: i32, keypoint_pt_x2: f32, keypoint_pt_y2: f32, inv_sigma2: f32,
+            huber_delta: f32
+        );
         fn add_edge_monocular_unary(
             self: Pin<&mut BridgeSparseOptimizer>,
             robust_kernel: bool,
@@ -72,7 +97,7 @@ pub mod ffi {
             keypoint_octave: i32,
             keypoint_pt_x: f32,
             keypoint_pt_y: f32,
-            invSigma2: f32,
+            inv_sigma2: f32,
             mp_world_position: [f64; 3],
             mappoint_id: i32,
             huber_delta: f32
@@ -84,7 +109,7 @@ pub mod ffi {
             vertex_id_2: i32,
             keypoint_pt_x: f32,
             keypoint_pt_y: f32,
-            invSigma2: f32,
+            inv_sigma2: f32,
             huber_delta: f32
         );
         // fn set_edge_worldpos(
@@ -102,6 +127,10 @@ pub mod ffi {
 
         fn _add_edge_stereo(self: &BridgeSparseOptimizer);
         fn num_edges(self: &BridgeSparseOptimizer) -> i32;
+        fn remove_sim3_edges_with_chi2(
+            self: Pin<&mut BridgeSparseOptimizer>,
+            chi2_threshold: f32
+        ) -> Vec<i32>;
 
         // optimization
         fn optimize(
@@ -117,6 +146,9 @@ pub mod ffi {
             self: &BridgeSparseOptimizer,
             vertex: i32,
         ) -> Position;
+        fn recover_optimized_sim3(
+            self: &BridgeSparseOptimizer,
+        ) -> RustSim3;
 
         // optimization within edge
         // Note: BridgeSparseOptimizer has vector of RustEdge types, call get_mut_edges to access
@@ -130,6 +162,7 @@ pub mod ffi {
         // used by the optimizer!
         fn get_mut_xyz_edges(self: Pin<&mut BridgeSparseOptimizer>) -> Pin<&mut CxxVector<RustXYZEdge>>;
         fn get_mut_xyz_onlypose_edges(self: Pin<&mut BridgeSparseOptimizer>) -> Pin<&mut CxxVector<RustXYZOnlyPoseEdge>>;
+        fn get_mut_sim3_edges(self: Pin<&mut BridgeSparseOptimizer>) -> Pin<&mut CxxVector<RustSim3Edge>>;
         #[rust_name = "set_level"]
         fn setLevel(
             self: Pin<&mut EdgeSE3ProjectXYZOnlyPose>,
@@ -139,6 +172,9 @@ pub mod ffi {
         fn computeError(self: Pin<&mut EdgeSE3ProjectXYZOnlyPose>);
         fn chi2(self: &EdgeSE3ProjectXYZOnlyPose) -> f64;
         fn chi2(self: &EdgeSE3ProjectXYZ) -> f64;
+        fn chi2(self: &EdgeSim3ProjectXYZ) -> f64;
+        fn chi2(self: &EdgeInverseSim3ProjectXYZ) -> f64;
+
         #[rust_name = "is_depth_positive"]
         fn isDepthPositive(self: &EdgeSE3ProjectXYZOnlyPose) -> bool;
         fn set_robust_kernel(self: Pin<&mut EdgeSE3ProjectXYZOnlyPose>, reset: bool);

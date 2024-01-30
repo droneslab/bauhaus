@@ -3,13 +3,13 @@ extern crate g2o;
 use std::collections::{HashMap, HashSet};
 use cxx::UniquePtr;
 use core::{
-    config::{SETTINGS, SYSTEM}, sensor::{Sensor, FrameSensor}, matrix::{DVMatrix4, DVMatrix7x7},
+    config::{SETTINGS, SYSTEM}, sensor::{Sensor, FrameSensor}, matrix::{DVMatrix, DVMatrix4, DVMatrix7x7, DVVector3},
 };
 use log::{warn, debug, trace};
 use nalgebra::Matrix3;
 use opencv::prelude::KeyPointTraitConst;
 use crate::{
-    map::{frame::Frame, keyframe::KeyFrame, pose::{Pose, DVTranslation}, map::{Map, Id}}, registered_actors::{FEATURE_DETECTION, CAMERA}, MapLock
+    map::{frame::Frame, keyframe::KeyFrame, pose::{DVRotation, DVTranslation, Pose, Sim3}, map::{Map, Id}}, registered_actors::{FEATURE_DETECTION, CAMERA}, MapLock
 };
 
 lazy_static! {
@@ -297,7 +297,8 @@ pub fn global_bundle_adjustment(map: &Map, iterations: i32) -> BundleAdjustmentR
     for (mp_id, mappoint) in &map.mappoints {
         optimizer.pin_mut().add_mappoint_vertex(
             id_count,
-            Pose::new(*mappoint.position, Matrix3::identity()).into() // create pose out of translation only
+            Pose::new(*mappoint.position, Matrix3::identity()).into(), // create pose out of translation only
+            false, true
         );
         mp_vertex_ids.insert(*mp_id, id_count);
 
@@ -503,7 +504,8 @@ pub fn local_bundle_adjustment(
 
             optimizer.pin_mut().add_mappoint_vertex(
                 vertex_id,
-                Pose::new(*mp.position, Matrix3::identity()).into() // create pose out of translation only
+                Pose::new(*mp.position, Matrix3::identity()).into(), // create pose out of translation only
+                false, true
             );
             mp_vertex_ids.insert(*mp_id, vertex_id);
             mps_to_optimize += 1;
@@ -767,13 +769,161 @@ pub fn optimize_essential_graph() {
 }
 
 pub fn optimize_sim3(
-    map: &MapLock, _kf1: Id, _kf2: Id, _matched_mps: &mut Vec<Id>, _s12: &opencv::core::Mat, scale: f64, _th2: i32, _b_fix_scale: bool
-) -> (i32, DVMatrix7x7<f32>) {
-    todo!("LOOP CLOSING");
-    // int Optimizer::OptimizeSim3(KeyFrame *pKF1, KeyFrame *pKF2, vector<MapPoint *> &vpMatches1, g2o::Sim3 &g2oS12, const float th2,
-    //                             const bool bFixScale, Eigen::Matrix<double,7,7> &mAcumHessian, const bool bAllPoints)
+    map: &MapLock, kf1_id: Id, kf2_id: Id, matched_mps: &mut Vec<Option<Id>>,
+    sim3_rot: &DVRotation, sim3_trans: &DVTranslation, sim3_scale: &f64,
+    th2: i32, fix_scale: bool
+) -> (i32, Option<Sim3>) {
+    // From ORBSLAM2:
+    // int Optimizer::OptimizeSim3(KeyFrame *pKF1, KeyFrame *pKF2, vector<MapPoint *> &vpMatches1, 
+    //                             g2o::Sim3 &g2oS12, const float th2, const bool bFixScale)
     // but bAllPoints is always set to true
     // returns vpMatches1, mAcumHessian
+
+    let camera_param = [
+        SETTINGS.get::<f64>(CAMERA, "fx"),
+        SETTINGS.get::<f64>(CAMERA, "fy"),
+        SETTINGS.get::<f64>(CAMERA, "cx"),
+        SETTINGS.get::<f64>(CAMERA, "cy")
+    ];
+    let mut optimizer = g2o::ffi::new_sparse_optimizer(3, camera_param);
+
+    // Camera poses
+    let (kf1_rot, kf1_trans, kf2_rot, kf2_trans) = { // R1w, t1w, R2w, t2w
+        let lock = map.read();
+        let kf1 = lock.keyframes.get(&kf1_id).unwrap();
+        let kf2 = lock.keyframes.get(&kf2_id).unwrap();
+        (
+            kf1.pose.get_rotation(),
+            kf1.pose.get_translation(),
+            kf2.pose.get_rotation(),
+            kf2.pose.get_translation()
+        )
+    };
+
+    // Set Sim3 vertex
+    optimizer.pin_mut().add_sim3_vertex(
+        (Pose::new(**sim3_trans, **sim3_rot)).into(),
+        *sim3_scale,
+        fix_scale
+    );
+
+    let mut num_correspondences = 0;
+    let mut edge_indexes = vec![];
+    {
+        // Set MapPoint vertices
+        let num_mps = matched_mps.len();
+        let lock = map.read();
+        let mappoints1 = { // vpMapPoints1
+            let kf1 = lock.keyframes.get(&kf1_id).unwrap();
+            kf1.get_mp_matches()
+        };
+
+        for i in 0..num_mps {
+            let mp1 = match mappoints1[i] {
+                Some((id, _)) => {
+                    match lock.mappoints.get(&id) {
+                        Some(mp) => mp,
+                        None => continue
+                    }
+                },
+                None => continue
+            };
+            let mp2 = match matched_mps[i] {
+                Some(id) => {
+                    match lock.mappoints.get(&id) {
+                        Some(mp) => mp,
+                        None => continue
+                    }
+                },
+                None => continue
+            };
+
+            let id1 = (2 * i + 1) as i32;
+            let id2 = (2 * (i + 1)) as i32;
+            let (i2_left, _i2_right) = mp2.get_index_in_keyframe(kf2_id);
+
+            if i2_left >= 0 {
+                let p_3d_1c = *kf1_rot * *mp1.position + *kf1_trans;
+                let translation = DVTranslation::new(p_3d_1c);
+                optimizer.pin_mut().add_mappoint_vertex(
+                    id1,
+                    Pose::new(*translation, Matrix3::identity()).into(), // create pose out of translation only
+                    true, false
+                );
+
+                let p_3d_2c = *kf2_rot * *mp2.position + *kf2_trans;
+                let translation2 = DVTranslation::new(p_3d_2c);
+                optimizer.pin_mut().add_mappoint_vertex(
+                    id1,
+                    Pose::new(*translation2, Matrix3::identity()).into(), // create pose out of translation only
+                    true, false
+                );
+            } else {
+                continue;
+            }
+
+            num_correspondences += 1;
+
+            // Set edge x1 = S12*X2
+            let huber_delta = (th2 as f32).sqrt();
+            let kf1 = lock.keyframes.get(&kf1_id).unwrap();
+            let (kp1, _) = kf1.features.get_keypoint(i as usize);
+
+            // Set edge x2 = S21*X1
+            let kf2 = lock.keyframes.get(&kf2_id).unwrap();
+            let (kp2, _) = kf2.features.get_keypoint(i2_left as usize);
+
+            optimizer.pin_mut().add_both_sim_edges(
+                id2, kp1.pt().x, kp1.pt().y, INV_LEVEL_SIGMA2[kp1.octave() as usize],
+                id1, kp2.pt().x, kp2.pt().y, INV_LEVEL_SIGMA2[kp2.octave() as usize],
+                huber_delta
+            );
+
+            edge_indexes.push(i);
+        }
+    };
+
+    // Optimize!
+    optimizer.pin_mut().optimize(5, false);
+
+    // Check inliers
+    let removed_edge_indexes = optimizer.pin_mut().remove_sim3_edges_with_chi2(th2 as f32);
+    let num_bad = removed_edge_indexes.len();
+    for i in removed_edge_indexes {
+        let index = edge_indexes[i as usize];
+        matched_mps[index] = None;
+    }
+
+    let more_iterations = match num_bad > 0 {
+        true => 10,
+        false => 5
+    };
+    if num_correspondences - num_bad < 10 {
+        return (0, None);
+    }
+
+    // Optimize again only with inliers
+    optimizer.pin_mut().optimize(more_iterations, false);
+
+    let mut n_in = 0;
+    let mut i = 0;
+    for edge in optimizer.pin_mut().get_mut_sim3_edges() {
+        if edge.edge1.is_null() || edge.edge2.is_null() {
+            continue;
+        }
+
+        if edge.edge1.chi2() > th2 as f64 && edge.edge2.chi2() > th2 as f64 {
+            let index = edge_indexes[i as usize];
+            matched_mps[index] = None;
+        } else {
+            n_in += 1;
+        }
+        i += 1;
+    }
+    
+    // Recover optimized Sim3
+    let sim3 = optimizer.recover_optimized_sim3();
+    (n_in, Some(sim3.into()))
 }
 
 #[derive(Debug)]

@@ -134,7 +134,7 @@ pub fn new(
             true => todo!("Stereo"), //self.camera2.project(pos_camera),
             false => CAMERA_MODULE.project(DVVector3::new(pos_camera))
         };
-        if !self.features.check_bounds(uvx, uvy) {
+        if !self.features.is_in_image(uvx, uvy) {
             return None;
         }
 

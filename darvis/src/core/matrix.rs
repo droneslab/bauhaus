@@ -54,11 +54,53 @@ impl DVMatrix {
     pub fn new(mat: opencv::core::Mat) -> Self {
         Self ( mat )
     }
+    pub fn new_expr(mat: opencv::core::MatExpr) -> Self {
+        Self ( mat.to_mat().unwrap() )
+    }
+    pub fn new_expr_res<T: opencv::prelude::MatExprTraitConst>(mat: opencv::core::MatExprResult<T>) -> Self {
+        Self ( mat.into_result().unwrap().to_mat().unwrap() )
+    }
+
     pub fn new_clone(mat: &opencv::core::Mat) -> Self {
         Self ( mat.clone() )
     }
     pub fn mat(&self) -> &opencv::core::Mat { &self.0 }
-    pub fn row(&self, index: u32) -> Result<opencv::core::Mat, opencv::Error> { self.0.row(index as i32) }
+    pub fn row(&self, index: u32) -> DVMatrix {
+        DVMatrix::new(
+            self.0.row(index as i32).unwrap()
+        )
+    }
+    pub fn row_range(&self, start: i32, end: i32) -> DVMatrix {
+        DVMatrix::new(
+            self.0.row_range(&Range::new(start,end).unwrap()).unwrap()
+        )
+    }
+    pub fn col_range(&self, start: i32, end: i32) -> DVMatrix {
+        DVMatrix::new(
+            self.0.col_range(&Range::new(start,end).unwrap()).unwrap()
+    )
+    }
+    pub fn divide_by_scalar(&self, scalar: f32) -> DVMatrix {
+        // Should be equal to self.0 / scalar
+        DVMatrix::new(
+            self.0.mul(&((1.0 / scalar) as f64), 1.).unwrap().to_mat().unwrap()
+        )
+    }
+    pub fn neg(&self) -> DVMatrix {
+        DVMatrix::new(
+            self.0.mul(&(-1.0 as f64), 1.).unwrap().to_mat().unwrap()
+        )
+    }
+    pub fn norm(&self) -> f64 {
+        norm(&self.0, NORM_L2, &Mat::default()).unwrap()
+    }
+    pub fn at(&self, index: i32) -> f64 {
+        *self.0.at::<f64>(index).unwrap()
+    }
+    pub fn at_2d(&self, row: i32, col: i32) -> f64 {
+        *self.0.at_2d::<f64>(row, col).unwrap()
+    }
+
 }
 impl Deref for DVMatrix {
     type Target = opencv::core::Mat;
@@ -66,6 +108,14 @@ impl Deref for DVMatrix {
         &self.0
     }
 }
+impl std::ops::Mul<&DVMatrix> for DVMatrix {
+    type Output = DVMatrix;
+
+    fn mul(self, rhs: &DVMatrix) -> DVMatrix {
+        DVMatrix::new_expr_res(self.mat() * rhs.mat())
+    }
+}
+
 // For interop with custom C++ bindings to ORBSLAM
 impl From<&DVMatrix> for dvos3binding::ffi::WrapBindCVMat {
     fn from(mat: &DVMatrix) -> dvos3binding::ffi::WrapBindCVMat {
@@ -111,6 +161,18 @@ impl From<&DVMatrix3<f64>> for opencv::core::Mat {
             [mat[3], mat[4], mat[5]],
             [mat[6], mat[7], mat[8]]
         ]).unwrap()
+    }
+}
+impl<T: opencv::prelude::DataType> From<&DVMatrix4<T>> for DVMatrix {
+    fn from(mat: &DVMatrix4<T>) -> DVMatrix { 
+        DVMatrix::new(
+            Mat::from_slice_2d(&[
+                [mat[0], mat[1], mat[2], mat[3]],
+                [mat[4], mat[5], mat[6], mat[7]],
+                [mat[8], mat[9], mat[10], mat[11]],
+                [mat[12], mat[13], mat[14], mat[15]]
+            ]).unwrap()
+        )
     }
 }
 
