@@ -302,7 +302,7 @@ impl Features {
         let min_cell_y = i64::max(0, ((y-self.min_y-factor_y)*grid_element_height_inv).floor() as i64);
         let max_cell_y = i64::min(frame_grid_rows-1, ((y-self.min_y+factor_y)*grid_element_height_inv).ceil() as i64);
 
-        if !self.check_bounds(min_cell_x as f64, min_cell_y as f64) || !self.check_bounds(max_cell_x as f64, max_cell_y as f64) {
+        if !self.is_in_image(min_cell_x as f64, min_cell_y as f64) || !self.is_in_image(max_cell_x as f64, max_cell_y as f64) {
             return indices;
         }
 
@@ -347,10 +347,6 @@ impl Features {
     pub fn is_in_image(&self, x: f64, y: f64) -> bool {
         // bool KeyFrame::IsInImage(const float &x, const float &y) const
         return x >= self.min_x && x < self.max_x && y >= self.min_y && y < self.max_y;
-    }
-
-    pub fn check_bounds(&self, x: f64, y: f64) -> bool {
-        x >= self.min_x && x < self.max_x && y >= self.min_y && y < self.max_y
     }
 }
 

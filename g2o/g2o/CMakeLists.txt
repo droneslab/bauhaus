@@ -208,6 +208,8 @@ g2o/rust/rust_helper.cpp
 ../target/cxxbridge/g2o/src/lib.rs.cc
 )
 
+include_directories(../target/cxxbridge)
+
 target_link_libraries(g2o
 Eigen3::Eigen
 ${OpenCV_LIBS}

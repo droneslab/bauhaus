@@ -272,24 +272,25 @@ impl Sim3Solver {
         let M = res_to_mat(&Pr2 * Pr1.t()?)?;
 
         // Step 3: Compute N matrix
-        let N11 = M.at_2d::<f64>(0,0)? + M.at_2d::<f64>(1,1)? + M.at_2d::<f64>(2,2)?;
-        let N12 = M.at_2d::<f64>(1,2)? - M.at_2d::<f64>(2,1)?;
-        let N13 = M.at_2d::<f64>(2,0)? - M.at_2d::<f64>(0,2)?;
-        let N14 = M.at_2d::<f64>(0,1)? - M.at_2d::<f64>(1,0)?;
-        let N22 = M.at_2d::<f64>(0,0)? - M.at_2d::<f64>(1,1)? - M.at_2d::<f64>(2,2)?;
-        let N23 = M.at_2d::<f64>(0,1)? + M.at_2d::<f64>(1,0)?;
-        let N24 = M.at_2d::<f64>(2,0)? + M.at_2d::<f64>(0,2)?;
-        let N33 = -M.at_2d::<f64>(0,0)? + M.at_2d::<f64>(1,1)? - M.at_2d::<f64>(2,2)?;
-        let N34 = M.at_2d::<f64>(1,2)? + M.at_2d::<f64>(2,1)?;
-        let N44 = -M.at_2d::<f64>(0,0)? - M.at_2d::<f64>(1,1)? + M.at_2d::<f64>(2,2)?;
-    
-        let mut N = Mat::new_rows_cols_with_default(3,3, CV_64F, Scalar::all(0.0)).unwrap();
-        N = Mat::from_slice_2d(&[
-            [N11, N12, N13, N14],
-            [N12, N22, N23, N24],
-            [N13, N23, N33, N34],
-            [N14, N24, N34, N44],
-        ])?;
+        let mut N = {
+            let N11 = M.at_2d::<f64>(0,0)? + M.at_2d::<f64>(1,1)? + M.at_2d::<f64>(2,2)?;
+            let N12 = M.at_2d::<f64>(1,2)? - M.at_2d::<f64>(2,1)?;
+            let N13 = M.at_2d::<f64>(2,0)? - M.at_2d::<f64>(0,2)?;
+            let N14 = M.at_2d::<f64>(0,1)? - M.at_2d::<f64>(1,0)?;
+            let N22 = M.at_2d::<f64>(0,0)? - M.at_2d::<f64>(1,1)? - M.at_2d::<f64>(2,2)?;
+            let N23 = M.at_2d::<f64>(0,1)? + M.at_2d::<f64>(1,0)?;
+            let N24 = M.at_2d::<f64>(2,0)? + M.at_2d::<f64>(0,2)?;
+            let N33 = -M.at_2d::<f64>(0,0)? + M.at_2d::<f64>(1,1)? - M.at_2d::<f64>(2,2)?;
+            let N34 = M.at_2d::<f64>(1,2)? + M.at_2d::<f64>(2,1)?;
+            let N44 = -M.at_2d::<f64>(0,0)? - M.at_2d::<f64>(1,1)? + M.at_2d::<f64>(2,2)?;
+
+            Mat::from_slice_2d(&[
+                [N11, N12, N13, N14],
+                [N12, N22, N23, N24],
+                [N13, N23, N33, N34],
+                [N14, N24, N34, N44],
+            ])?
+        };
 
         // Step 4: Eigenvector of the highest eigenvalue
 
@@ -302,9 +303,11 @@ impl Sim3Solver {
 
         // Rotation angle. sin is the norm of the imaginary part, cos is the real part
         let ang = norm(&vec, NORM_L2, &Mat::default())?.atan2(* evec.at_2d::<f64>(0,0)?);
-        let temp_top = res_to_mat(2.0 * ang * &vec)?;
-        let temp_bottom = norm(&vec, NORM_L2, &Mat::default())?;
-        vec = res_to_mat(temp_top / temp_bottom)?; //Angle-axis representation. quaternion angle is the half
+        let mut vec = {
+            let top = res_to_mat(2.0 * ang * &vec)?;
+            let bottom = norm(&vec, NORM_L2, &Mat::default())?;
+            res_to_mat(top / bottom)? //Angle-axis representation. quaternion angle is the half
+        };
 
         let mut R12_i = Mat::default();
 
@@ -331,8 +334,10 @@ impl Sim3Solver {
         }
 
         // Step 7: Translation
-        let temp_t12_i = O1 - self.current_estimation.s12_i * &R12_i * O2;
-        self.current_estimation.t12_i = res_to_mat(temp_t12_i)?;
+        self.current_estimation.t12_i = {
+            let t12_i = O1 - self.current_estimation.s12_i * &R12_i * O2;
+            res_to_mat(t12_i)?
+        };
 
         // Step 8: Transformation
 

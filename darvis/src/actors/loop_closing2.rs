@@ -34,7 +34,7 @@ pub struct LoopClosing {
     current_kf_id: Id, // mpCurrentKF
     matched_kf: Id, // mpMatchedKF
     consistent_groups: Vec<ConsistentGroup>, // mvConsistentGroups
-    current_matched_points: Vec<Id>, // mvpCurrentMatchedPoints
+    current_matched_points: Vec<Option<Id>>, // mvpCurrentMatchedPoints
     enough_consistent_candidates: Vec<Id>, // mvpEnoughConsistentCandidates;
     current_connected_kfs: Vec<Id>, // mvpCurrentConnectedKFs
     loop_mappoints: Vec<Id>, // mvpLoopMapPoints
@@ -265,28 +265,28 @@ impl LoopClosing {
                 // If RANSAC returns a Sim3, perform a guided matching and optimize with all correspondences
                 if sim3_result.is_some() {
                     let (scm, inliers, num_inliers) = sim3_result.unwrap();
-                    let mut mappoint_matches_copy = vec![0; mappoint_matches.len()]; //vpMapPointMatches
+                    let mut mappoint_matches_copy = vec![None; mappoint_matches.len()]; //vpMapPointMatches
                     for j in 0..inliers.len() {
                         if inliers[j] {
-                            mappoint_matches_copy[j] = mappoint_matches[i][j];
+                            mappoint_matches_copy[j] = Some(mappoint_matches[i][j]);
                         }
                     }
 
                     let (R, t, s) = solver.get_estimates();
                     orbmatcher::search_by_sim3(
-                        &self.map, self.current_kf_id, kf_id, &mappoint_matches_copy, s, &R, &t, 7.5
+                        &self.map, self.current_kf_id, kf_id, &mut mappoint_matches_copy, s, &R, &t, 7.5
                     );
 
                     // g2o::Sim3 gScm(Converter::toMatrix3d(R),Converter::toVector3d(t),s); // todo is this necessary
                     let (num_inliers, acum_hessian) = optimizer::optimize_sim3(
-                        &self.map, self.current_kf_id, kf_id, &mut mappoint_matches_copy, &scm, s, 10, false
+                        &self.map, self.current_kf_id, kf_id, &mut mappoint_matches_copy, &R, &t, &s, 10, false
                     );
 
                     // If optimization is succesful stop ransacs and continue
                     if num_inliers >= 20 {
                         has_match = true;
                         self.matched_kf = kf_id;
-                        // todo these lines
+                        todo!("Check these lines");
                         // g2o::Sim3 gSmw(Converter::toMatrix3d(pKF->GetRotation()),Converter::toVector3d(pKF->GetTranslation()),1.0);
                         // mg2oScw = gScm*gSmw;
                         // mScw = Converter::toCvMat(mg2oScw);
@@ -332,14 +332,14 @@ impl LoopClosing {
 
         // Find more matches projecting with the computed Sim3
         orbmatcher::search_by_projection_for_loop_detection(
-            &self.map, &self.scw, &self.loop_mappoints, &mut self.current_matched_points, 10,
+            &self.map, &self.current_kf_id, &self.scw, &self.loop_mappoints, &mut self.current_matched_points, 10,
             0.75, true
         );
 
         // If enough matches accept Loop
         let mut n_total_matches = 0;
         for i in 0..self.current_matched_points.len() {
-            if self.current_matched_points[i] != -1 {
+            if self.current_matched_points[i].is_some() {
                 n_total_matches += 1;
             }
         }
