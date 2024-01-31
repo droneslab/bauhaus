@@ -1,38 +1,40 @@
-
 // --------------------------------------------------------------------------
 // For rust bindings...
 // Needs to be separate struct encompassing a TemplatedVocabulary because
 // I don't think the rust bindings library allows us to use templates.
 #include <cassert>
 
-#include <vector>
-#include <numeric>
-#include <fstream>
-#include <string>
 #include <algorithm>
-#include <opencv2/core/core.hpp>
+#include <fstream>
 #include <limits>
+#include <numeric>
+#include <opencv2/core/core.hpp>
+#include <string>
+#include <vector>
 
+#include "FORB.h"
 
-#include"FORB.h"
-
-#include "ORBVocabulary.h"
 #include "../../src/CVConvert.h"
 #include "../../src/Converter.h"
-#include "dvos3binding/src/lib.rs.h"
-
+#include "/home/nitin/Downloads/Darvis_Upd/darvis/darvis/target/cxxbridge/dvos3binding/src/lib.rs.h"
+#include "ORBVocabulary.h"
 
 struct DVKeyPoint;
 
-namespace DBoW2 {
+namespace DBoW2
+{
 
-ORBVocabulary::ORBVocabulary() {}
+ORBVocabulary::ORBVocabulary()
+{
+}
 
-std::unique_ptr<ORBVocabulary> load_vocabulary_from_text_file(const string &file) {
+std::unique_ptr<ORBVocabulary> load_vocabulary_from_text_file(const string &file)
+{
     std::unique_ptr<ORBVocabulary> vocabulary = std::make_unique<ORBVocabulary>();
     bool bVocLoad = vocabulary->vocabulary.loadFromTextFile(file);
 
-    if(!bVocLoad) {
+    if (!bVocLoad)
+    {
         cerr << "Wrong path to vocabulary. " << endl;
         cerr << "Failed to open at: " << file << endl;
         exit(-1);
@@ -40,28 +42,25 @@ std::unique_ptr<ORBVocabulary> load_vocabulary_from_text_file(const string &file
     return vocabulary;
 }
 
-std::size_t ORBVocabulary::size() const {
+std::size_t ORBVocabulary::size() const
+{
     vocabulary.size();
 }
 
-void ORBVocabulary::transform(
-    const orb_slam3::WrapBindCVMat& desc1, 
-    DBoW2::BowVector & bow_vector,
-    DBoW2::FeatureVector & feature_vector,
-    int32_t levelsup
-) const {
+void ORBVocabulary::transform(const orb_slam3::WrapBindCVMat &desc1, DBoW2::BowVector &bow_vector,
+                              DBoW2::FeatureVector &feature_vector, int32_t levelsup) const
+{
     vector<cv::Mat> desc2 = orb_slam3::Converter::toDescriptorVector(*desc1.mat_ptr);
 
     vocabulary.transform(desc2, bow_vector, feature_vector, levelsup);
 }
 
-float ORBVocabulary::score(
-    const std::unique_ptr<DBoW2::BowVector>& v1, 
-    const std::unique_ptr<DBoW2::BowVector>& v2
-) const {
-    DBoW2::BowVector * v1_ptr = v1.get();
-    DBoW2::BowVector * v2_ptr = v2.get();
+float ORBVocabulary::score(const std::unique_ptr<DBoW2::BowVector> &v1,
+                           const std::unique_ptr<DBoW2::BowVector> &v2) const
+{
+    DBoW2::BowVector *v1_ptr = v1.get();
+    DBoW2::BowVector *v2_ptr = v2.get();
     vocabulary.score(*v1_ptr, *v2_ptr);
 }
 
-}
+} // namespace DBoW2
