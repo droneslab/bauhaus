@@ -19,8 +19,9 @@ use crate::{
 pub static FRAME_COLOR: Color = Color { r: 1.0, g: 0.0, b: 0.0, a: 1.0 };
 pub static TRAJECTORY_COLOR: Color = Color { r: 1.0, g: 0.0, b: 0.0, a: 1.0 };
 // Mappoints and mappoint matches
-pub static MAPPOINT_COLOR: Color = Color { r: 0.0, g: 0.0, b: 1.0, a: 1.0 };
+pub static MAPPOINT_COLOR: Color = Color { r: 1.0, g: 1.0, b: 1.0, a: 1.0 };
 pub static MAPPOINT_MATCH_COLOR: Color = Color { r: 0.0, g: 1.0, b: 0.0, a: 1.0 };
+pub static MAPPOINT_LOCAL_COLOR: Color = Color { r: 0.0, g: 0.0, b: 1.0, a: 1.0 };
 pub static MAPPOINT_SIZE: Vector3 = Vector3 { x: 0.01, y: 0.01, z: 0.01 };
 //Keyframes
 pub static KEYFRAME_COLOR: Color = Color { r: 0.5, g: 0.0, b: 0.0, a: 1.0 };
@@ -189,7 +190,8 @@ impl DarvisVisualizer {
 
     fn update_draw_map(&mut self, msg: VisTrajectoryMsg) {
         self.draw_trajectory(msg.pose, msg.timestamp).expect("Visualizer could not draw trajectory!");
-        self.draw_mappoints(&msg.mappoint_matches, msg.timestamp).expect("Visualizer could not draw mappoints!");
+        self.draw_mappoints(&msg.mappoints_in_tracking, &msg.mappoint_matches, msg.timestamp).expect("Visualizer could not draw mappoints!");
+
         // Not calling this right now, need to figure out some nicer way to distribute the points so it's actually readable
         // self.draw_connected_kfs(msg.timestamp).expect("Visualizer could not draw connected kfs!");
         self.current_update_id += 1;
@@ -289,7 +291,7 @@ impl DarvisVisualizer {
         Ok(())
     }
 
-    fn draw_mappoints(&mut self, mappoint_matches: &Vec<Option<(Id, bool)>>, timestamp: Timestamp) -> Result<(), Box<dyn std::error::Error>> {
+    fn draw_mappoints(&mut self, local_mappoints: &Vec<Id>, mappoint_matches: &Vec<Option<(Id, bool)>>, timestamp: Timestamp) -> Result<(), Box<dyn std::error::Error>> {
         // Mappoints in map (different color if they are matches)
         // Should be overwritten when there is new info for a mappoint
         // self.clear_scene(timestamp, self.mappoints_channel)?;
@@ -307,19 +309,24 @@ impl DarvisVisualizer {
         let mut curr_mappoints = HashSet::new();
         for (mappoint_id, mappoint) in &map.mappoints {
             let pose = Pose::new_with_default_rot(mappoint.position);
+            curr_mappoints.insert(*mappoint_id);
 
-            let mp_sphere = match mappoint_match_ids.contains(&mappoint_id) {
-                true => self.create_sphere(&pose, MAPPOINT_MATCH_COLOR.clone(), MAPPOINT_SIZE.clone()),
-                false => {
-                    if SETTINGS.get::<bool>(VISUALIZER, "draw_all_mappoints") || !self.previous_mappoints.contains(&mappoint_id) {
-                        // Mappoint is not a match in current frame. Only draw if we are drawing all mappoints, or if the mappoint was recently created/seen.
-                        // TODO (mvp) : I'm not sure the logic behind using self.previous_mappoints is correct. I think more mps get included than should be?
-                        self.create_sphere(&pose, MAPPOINT_COLOR.clone(), MAPPOINT_SIZE.clone())
-                    } else {
-                        continue;
-                    }
-                },
+            let mp_sphere = {
+                if mappoint_match_ids.contains(&mappoint_id) {
+                    // If mappoint is a match with the current frame
+                    self.create_sphere(&pose, MAPPOINT_MATCH_COLOR.clone(), MAPPOINT_SIZE.clone())
+                } else if local_mappoints.contains(&mappoint_id) {
+                    // If mappoint is not a match, but tracking has it as a local mappoint
+                    self.create_sphere(&pose, MAPPOINT_LOCAL_COLOR.clone(), MAPPOINT_SIZE.clone())
+                } else if SETTINGS.get::<bool>(VISUALIZER, "draw_all_mappoints") || !self.previous_mappoints.contains(&mappoint_id) {
+                    // All other mappoints.
+                    // Only draw if we are drawing all mappoints, or if the mappoint was recently created/seen.
+                    self.create_sphere(&pose, MAPPOINT_COLOR.clone(), MAPPOINT_SIZE.clone())
+                } else {
+                    continue;
+                }
             };
+
             let mp_entity = self.create_scene_entity(
                 timestamp, "world",
                 format!("mp {}", mappoint_id),
@@ -328,12 +335,13 @@ impl DarvisVisualizer {
                 vec![mp_sphere]
             );
             entities.push(mp_entity);
-            curr_mappoints.insert(*mappoint_id);
         }
 
         // Delete mappoints that are no longer in the map but were previously drawn
         let deleted_mappoints = self.previous_mappoints.difference(&curr_mappoints);
-        let deletions = deleted_mappoints.map(|id|
+        // println!("Difference: {:?}", deleted_mappoints);
+
+        let deletions: Vec<SceneEntityDeletion> = deleted_mappoints.map(|id|
             self.create_scene_entity_deletion(timestamp, format!("mp {}", id),
         )).collect();
         self.previous_mappoints = curr_mappoints;

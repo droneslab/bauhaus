@@ -43,7 +43,7 @@ pub struct TrackingFull {
     // Local data used for different stages of tracking
     matches_inliers : i32, // mnMatchesInliers ... Current matches in frame
     local_keyframes: Vec<Id>, //mvpLocalKeyFrames 
-    local_mappoints: HashSet<Id>, //mvpLocalMapPoints
+    local_mappoints: Vec<Id>, //mvpLocalMapPoints
     track_in_view: HashMap::<Id, TrackedMapPointData>, // mbTrackInView , member variable in Mappoint
     track_in_view_r: HashMap::<Id, TrackedMapPointData>, // mbTrackInViewR, member variable in Mappoint
     kf_track_reference_for_frame: HashMap::<Id, Id>, // mnTrackReferenceForFrame, member variable in Keyframe
@@ -107,7 +107,7 @@ impl Actor for TrackingFull {
             last_kf_timestamp: None,
             matches_inliers: 0,
             local_keyframes: vec![],
-            local_mappoints: HashSet::new(),
+            local_mappoints: Vec::new(),
             track_in_view: HashMap::new(),
             track_in_view_r: HashMap::new(),
             kf_track_reference_for_frame: HashMap::new(),
@@ -468,6 +468,7 @@ impl TrackingFull {
             self.actor_channels.send(VISUALIZER, Box::new(VisTrajectoryMsg{
                 pose: current_frame.pose.unwrap(),
                 mappoint_matches: current_frame.mappoint_matches.matches.clone(),
+                mappoints_in_tracking: self.local_mappoints.clone(),
                 timestamp: current_frame.timestamp
             }));
         }
@@ -867,7 +868,7 @@ impl TrackingFull {
             for item in mp_ids {
                 if let Some((mp_id, _)) = item {
                     if self.mp_track_reference_for_frame.get(mp_id) != Some(&current_frame.frame_id) {
-                        self.local_mappoints.insert(*mp_id);
+                        self.local_mappoints.push(*mp_id);
                         self.mp_track_reference_for_frame.insert(*mp_id, current_frame.frame_id);
                     }
                 }

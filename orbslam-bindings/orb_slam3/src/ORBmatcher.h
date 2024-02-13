@@ -50,7 +50,7 @@ namespace orb_slam3
 
     // Computes the Hamming distance between two ORB descriptors
     int DescriptorDistance(const cv::Mat &a, const cv::Mat &b);
-    int descriptor_distance(const orb_slam3::WrapBindCVRawPtr &a, const orb_slam3::WrapBindCVRawPtr &b);
+    int descriptor_distance(const orb_slam3::WrapBindCVRawPtr &a, const orb_slam3::WrapBindCVRawPtr &b, bool print);
 
     class ORBmatcher
     {

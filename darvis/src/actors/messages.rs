@@ -48,7 +48,8 @@ pub struct MapInitializedMsg {
 impl ActorMessage for MapInitializedMsg {}
 
 pub struct InitKeyFrameMsg { 
-    pub kf_id: Id 
+    pub kf_id: Id,
+    // pub mappoint_matches: 
 }
 impl ActorMessage for InitKeyFrameMsg {}
 
@@ -90,7 +91,8 @@ pub struct VisFeatureMatchMsg {
 impl ActorMessage for VisFeatureMatchMsg {}
 pub struct VisTrajectoryMsg { 
     pub pose: Pose, 
-    pub mappoint_matches: Vec<Option<(i32, bool)>>, 
+    pub mappoint_matches: Vec<Option<(i32, bool)>>,
+    pub mappoints_in_tracking: Vec<Id>,
     pub timestamp: Timestamp
 }
 impl ActorMessage for VisTrajectoryMsg {}

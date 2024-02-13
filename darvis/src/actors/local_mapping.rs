@@ -12,6 +12,7 @@ use core::{
 };
 use log::{debug, warn, info, trace};
 use opencv::prelude::KeyPointTraitConst;
+use crate::map::map::Map;
 use crate::{ActorChannels, MapLock};
 use crate::actors::messages::LastKeyFrameUpdatedMsg;
 use crate::modules::optimizer::LEVEL_SIGMA2;
@@ -141,6 +142,7 @@ impl LocalMapping {
             LastKeyFrameUpdatedMsg{}
         )).unwrap();
 
+        // self.map.read().keyframes.get(&self.current_keyframe_id).unwrap().print_mappoints();
 
         if self.actor_channels.queue_len() < 1 {
             // Abort additional work if there are too many keyframes in the msg queue.
@@ -183,6 +185,9 @@ impl LocalMapping {
                 }
             }
         }
+
+        // BUGS 2/12: Local BA output could be wrong, but I don't think this is likely.
+        println!("Local mapping optimization. KF {}, Pose {:?}", self.current_keyframe_id, self.map.read().keyframes.get(&self.current_keyframe_id).unwrap().pose);
 
         // Initialize IMU
         if self.sensor.is_imu() && !self.imu.is_initialized {
@@ -291,6 +296,7 @@ impl LocalMapping {
             }
         });
         debug!("Mappoint culling, {} {} {} {}", discard_for_found_ratio, discard_for_observations, erased_from_recently_added, self.recently_added_mappoints.len());
+        // println!("Deleted: {:?}", deleted);
         return discard_for_observations + discard_for_found_ratio;
     }
 
@@ -388,7 +394,6 @@ impl LocalMapping {
             }
 
             // debug!("Neighbor {}, Matches: {}", neighbor_id, matches.len());
-
 
             // Triangulate each match
             for (idx1, idx2) in matches {
@@ -556,6 +561,7 @@ impl LocalMapping {
                     ];
 
                     let mp_id = lock.insert_mappoint_to_map(x3_d.unwrap(), self.current_keyframe_id, origin_map_id, observations);
+                    // println!("{} {} {},", mp_id, idx1, idx2);
                     // debug!("Add mp {} to kf {} at index {}", mp_id, self.current_keyframe_id, idx1);
                     mps_created += 1;
                     self.recently_added_mappoints.insert(mp_id);
@@ -563,6 +569,7 @@ impl LocalMapping {
 
             }
         }
+        println!("DONE");
         mps_created
     }
 
@@ -679,22 +686,9 @@ impl LocalMapping {
                 None => {}
             }
         }
-        // vpMapPointMatches = mpCurrentKeyFrame->GetMapPointMatches();
-        // for(size_t i=0, iend=vpMapPointMatches.size(); i<iend; i++)
-        // {
-        //     MapPoint* pMP=vpMapPointMatches[i];
-        //     if(pMP)
-        //     {
-        //         if(!pMP->isBad())
-        //         {
-        //             pMP->ComputeDistinctiveDescriptors();
-        //             pMP->UpdateNormalAndDepth();
-        //         }
-        //     }
-        // }
+        // BUGS 2/12: Added this line, I think it's correct.
         // Update connections in covisibility graph
-        // mpCurrentKeyFrame->UpdateConnections();
-
+        self.map.write().update_connections(self.current_keyframe_id);
     }
 
     fn keyframe_culling(&mut self) -> i32 {
