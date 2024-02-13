@@ -5,6 +5,8 @@ pub mod loop_closing; // orbslam3 loop closing.
 
 pub mod tracking_full; // end-to-end tracking
 
+pub mod tracking_optical_flow; // flow tracking
+
 // Darvis-defined actors
 pub mod visualizer;
 pub mod shutdown; // handles CTRL+C

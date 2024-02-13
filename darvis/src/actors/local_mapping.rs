@@ -199,7 +199,7 @@ impl LocalMapping {
         }
 
         // Check redundant local Keyframes
-        let kfs_culled = self.keyframe_culling();
+        let kfs_culled = 0; //self.keyframe_culling();
 
         if self.sensor.is_imu() && t_init < 50.0 {
             todo!("IMU");
