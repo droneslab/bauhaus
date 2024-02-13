@@ -11,7 +11,6 @@ pub type Id = i32;
 // pub type MapItems<T> = HashMap<Id, T, BuildHasherDefault<SeaHasher>>; // faster performance with seahasher
 pub type MapItems<T> = FxHashMap<Id, T>;
 
-
 #[derive(Debug, Clone)]
 pub struct Map {
     pub id: Id,
