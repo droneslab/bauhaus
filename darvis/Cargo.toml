@@ -71,3 +71,5 @@ env_logger = "*"
 logging_timer = "1.1.0"
 tracy-client = {version = "0.16.0", features = ["enable"] }
 tracy-client-sys = {version = "0.21.0"}
+
+ordered-map = "0.4.2"

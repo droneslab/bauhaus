@@ -105,6 +105,7 @@ pub fn new(
     }
 
     fn check_frustum(&self, viewing_cos_limit: f64, mappoint: &MapPoint, is_right: bool) -> Option<TrackedMapPointData> {
+        // print!("Check frustum {}, ", mappoint.id);
         // 3D in absolute coordinates
         let pos = mappoint.position;
 
@@ -128,6 +129,7 @@ pub fn new(
         // Check positive depth
         let pc_z = pos_camera[2];
         let inv_z = 1.0 / pc_z;
+        // print!("pc_z: {}, ", pc_z);
         if pc_z < 0.0 { return None; }
 
         let (uvx, uvy) = match is_right {
@@ -137,12 +139,14 @@ pub fn new(
         if !self.features.is_in_image(uvx, uvy) {
             return None;
         }
+        // print!("in image, ");
 
         // Check distance is in the scale invariance region of the MapPoint
         let max_distance = mappoint.get_max_distance_invariance();
         let min_distance = mappoint.get_min_distance_invariance();
         let po = *pos - *twc;
         let dist = po.norm();
+        // print!("dist: {} {} {} , ", dist, min_distance, max_distance);
         if dist < min_distance || dist > max_distance {
             return None;
         }
@@ -150,6 +154,7 @@ pub fn new(
         // Check viewing angle
         let pn = mappoint.normal_vector;
         let view_cos = po.dot(&*pn) / dist;
+        // print!("view_cos: {}, ", view_cos);
         if view_cos < viewing_cos_limit {
             return None;
         }

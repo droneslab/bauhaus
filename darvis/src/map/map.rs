@@ -160,7 +160,7 @@ impl Map {
             }
 
             // Update Connections
-            Map::update_connections(&self.mappoints, &mut self.keyframes, & self.initial_kf_id, &new_kf_id);
+            self.update_connections(new_kf_id);
         }
         info!("Created keyframe {}", new_kf_id);
 
@@ -269,7 +269,7 @@ impl Map {
 
     pub fn create_initial_map_monocular(
         &mut self, mp_matches: Vec<i32>, p3d: DVVectorOfPoint3f, initial_frame: Frame, current_frame: Frame
-    ) -> Option<(Pose, i32, i32, HashSet<Id>, Timestamp)> {
+    ) -> Option<(Pose, i32, i32, Vec<Id>, Timestamp)> {
         // Testing local mapping ... global bundle adjustment gives slightly different pose for second keyframe.
         // TODO (design) - we have to do some pretty gross things with calling functions in this section
         // so that we can have multiple references to parts of the map. This should get cleaned up, but I'm not sure how.
@@ -309,18 +309,22 @@ impl Map {
             // Create mappoint
             let point = p3d.get(kf1_index).unwrap();
             let world_pos = DVVector3::new_with(point.x as f64, point.y as f64, point.z as f64);
-            let _id = self.insert_mappoint_to_map(
+            let id = self.insert_mappoint_to_map(
                 world_pos, 
                 curr_kf_id, 
                 self.id,
                 vec![(initial_kf_id, num_keypoints, kf1_index), (curr_kf_id, num_keypoints, kf2_index as usize)]
             );
+
+            // Add connection from kf->mp
+            self.keyframes.get_mut(&initial_kf_id).unwrap().add_mp_match(kf1_index as u32, id, false);
+            self.keyframes.get_mut(&curr_kf_id).unwrap().add_mp_match(kf2_index as u32, id, false);
         }
         info!("Monocular initialization created new map with {} mappoints", count);
 
         // Update Connections
-        Map::update_connections(& self.mappoints, &mut self.keyframes, & self.initial_kf_id, &initial_kf_id);
-        Map::update_connections(& self.mappoints, &mut self.keyframes, & self.initial_kf_id, &curr_kf_id);
+        self.update_connections(initial_kf_id);
+        self.update_connections(curr_kf_id);
 
         // Bundle Adjustment
         let optimized_poses = optimizer::global_bundle_adjustment(self, 20);
@@ -392,20 +396,24 @@ impl Map {
         // Update tracking with new info
         let relevant_mappoints = self.mappoints.keys().cloned().collect();
 
+        // for (id, mp) in &self.mappoints {
+        //     println!("Mappoint {} pose {:?}", id, mp.position);
+        // }
+
         Some((curr_kf_pose, curr_kf_id, initial_kf_id, relevant_mappoints, curr_kf_timestamp))
     }
 
-    pub fn update_connections(mappoints: &MapItems<MapPoint>, keyframes: &mut MapItems<KeyFrame>, initial_kf_id: &i32, main_kf_id: &i32) {
+    pub fn update_connections(&mut self, main_kf_id: Id) {
         let _span = tracy_client::span!("update_connections");
         //For all map points in keyframe check in which other keyframes are they seen
         //Increase counter for those keyframes
         let mut kf_counter = HashMap::<Id, i32>::new();
-        let kf = keyframes.get_mut(main_kf_id).unwrap();
+        let kf = self.keyframes.get_mut(&main_kf_id).unwrap();
         for item in kf.get_mp_matches() {
             if let Some((mp_id, _)) = item {
-                if let Some(mp) = mappoints.get(&mp_id) {
+                if let Some(mp) = self.mappoints.get(&mp_id) {
                     for kf_id in mp.get_observations().keys() {
-                        if *kf_id != *main_kf_id {
+                        if *kf_id != main_kf_id {
                             *kf_counter.entry(*kf_id).or_insert(0) += 1;
                         }
                     }
@@ -427,12 +435,13 @@ impl Map {
         }
 
         for (kf_id, weight) in &kf_counter {
-            keyframes.get_mut(&kf_id).unwrap().add_connection(*main_kf_id, *weight);
+            self.keyframes.get_mut(&kf_id).unwrap().add_connection(main_kf_id, *weight);
+            self.keyframes.get_mut(&main_kf_id).unwrap().add_connection(*kf_id, *weight);
         }
-        let parent_kf_id = keyframes.get_mut(main_kf_id).unwrap().add_all_connections(kf_counter, main_kf_id == initial_kf_id);
+        let parent_kf_id = self.keyframes.get_mut(&main_kf_id).unwrap().add_all_connections(kf_counter, main_kf_id == self.initial_kf_id);
         if parent_kf_id.is_some() {
             parent_kf_id.map(|parent_kf| {
-                keyframes.get_mut(&parent_kf).unwrap().children.insert(*main_kf_id);
+                self.keyframes.get_mut(&parent_kf).unwrap().children.insert(main_kf_id);
             });
         }
     }
@@ -521,6 +530,7 @@ impl Map {
             .map(|mp| mp.update_distinctive_descriptors(best_descriptor));
 
         self.discard_mappoint(&mp_to_replace_id);
+        // println!("Replace mappoint {}", mp_to_replace_id);
     }
 
 

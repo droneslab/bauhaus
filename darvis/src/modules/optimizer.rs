@@ -85,11 +85,11 @@ pub fn optimize_pose(
     {
         // Take lock to construct factor graph
         let map_read_lock = map.read();
-        for i in 0..frame.features.num_keypoints {
-            if !frame.mappoint_matches.has(&i) {
+        for i in 0..frame.mappoint_matches.matches.len() {
+            if !frame.mappoint_matches.has(&(i as u32)) {
                 continue;
             }
-            let mp_id = frame.mappoint_matches.get(&i);
+            let mp_id = frame.mappoint_matches.get(&(i as u32));
             let position = match map_read_lock.mappoints.get(&mp_id) {
                 Some(mp) => mp.position,
                 None => {
@@ -99,7 +99,7 @@ pub fn optimize_pose(
             };
 
             let (keypoint, _) = &frame.features.get_keypoint(i as usize);
-            mp_indexes.push(i);
+            mp_indexes.push(i as u32);
 
             match sensor.frame() {
                 FrameSensor::Stereo => {
@@ -259,7 +259,7 @@ pub fn optimize_pose(
     let pose = optimizer.recover_optimized_frame_pose(0);
     frame.pose = Some(pose.into());
 
-    // debug!("Set outliers in pose optimization: {}", num_bad);
+    debug!("Set outliers in pose optimization: {}. Optimized pose: {:?}", num_bad, frame.pose.as_ref().unwrap());
 
     // Return number of inliers
     return Some(initial_correspondences - num_bad);

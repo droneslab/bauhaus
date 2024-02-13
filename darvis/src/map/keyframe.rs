@@ -13,7 +13,7 @@ pub struct KeyFrame {
     // Map connections
     pub origin_map_id: Id, // mnOriginMapId
     connections: ConnectedKeyFrames, // Parent, children, neighbors
-    mappoint_matches: MapPointMatches, // mvpmappoints , mvbOutlier
+    pub mappoint_matches: MapPointMatches, // mvpmappoints , mvbOutlier
     pub ref_kf_id: Option<Id>, //mpReferenceKF
     pub parent: Option<Id>,
     pub children: HashSet<Id>,
@@ -79,6 +79,18 @@ impl KeyFrame {
             children: HashSet::new(),
             dont_delete: false,
         }
+    }
+
+    pub fn print_mappoints(&self) {
+        println!("Mappoints for keyframe {}", self.id);
+        for item in &self.mappoint_matches.matches {
+            if let Some((mp_id, outlier)) = item {
+                println!("{}", mp_id);
+            } else {
+                println!("None");
+            }
+        }
+        println!();
     }
 
     // I'm trying to keep as much data public as possible unless updating it requires a complicated function that needs to be called each time.

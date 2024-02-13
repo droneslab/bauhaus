@@ -109,7 +109,7 @@ impl MapPoint {
         let n_levels = SETTINGS.get::<i32>(FEATURE_DETECTION, "n_levels");
 
         let max_distance = dist * level_scale_factor;
-        let min_distance = self.max_distance / (SCALE_FACTORS[(n_levels - 1) as usize] as f64);
+        let min_distance = max_distance / (SCALE_FACTORS[(n_levels - 1) as usize] as f64);
         let normal_vector = DVVector3::new(normal / (n as f64));
 
         Some((max_distance, min_distance, normal_vector))
@@ -153,20 +153,22 @@ impl MapPoint {
 
         let num_descriptors = descriptors.len();
         for i in 0..num_descriptors {
-            let mut v_descriptors = Vec::new();
+            let mut v_dists = Vec::new();
             for (key, dist) in &distances {
                 if key.0 == i || key.1 == i {
-                    v_descriptors.push(dist);
+                    v_dists.push(dist);
                 }
             }
-            v_descriptors.sort();
-            let median = v_descriptors[(v_descriptors.len()/2) as usize];
+            v_dists.sort();
+            let median = v_dists[(v_dists.len()/2) as usize];
             if median < &best_median {
                 best_median = *median;
                 best_idx = i;
             }
         }
 
+        // BUGS 2/12: This computes the wrong descriptor even when best_idx is the same value.
+        // println!("Best descriptor: {} {} {:?}", self.id, distances);
         // TODO (timing) ... this clone might take a while
         Some(DVMatrix::new(descriptors[best_idx].clone()))
     }

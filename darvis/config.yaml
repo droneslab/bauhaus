@@ -13,7 +13,7 @@ system:
       first_actor_name: TRACKING_FRONTEND # Name of actor to kick off pipeline
 
       # FPS
-      fps: 10.0
+      fps: 1.0
       use_timestamps_file: false # Instead of running at a fixed fps, use timestamps from the dataset
 
       # RESULTS
@@ -21,30 +21,96 @@ system:
       trajectory_file_name: "trajectory.txt"
 
       # DEBUGGING
-      log_level: trace # options are [trace, debug, info, warn, error]
+      log_level: debug # options are [trace, debug, info, warn, error]
       check_deadlocks: false # Spawns a new thread to check for deadlocks every 2 secs, but slows stuff down.
       # To enable profiling, set features = ["enable"] for tracy-client in Cargo.toml
       # To turn on visualizer, uncomment visualizer actor below
 
 modules:
+      # KITTI 00-02
+      # - 
+      #  name: CAMERA
+      #  settings:
+      #     - 
+      #      name: fx
+      #      value: 718.856
+      #      type: f64
+      #     - 
+      #      name: fy
+      #      value: 718.856
+      #      type: f64
+      #     - 
+      #      name: cx
+      #      value: 607.1928
+      #      type: f64
+      #     - 
+      #      name: cy
+      #      value: 185.2157
+      #      type: f64
+      #     - 
+      #      name: k1
+      #      value: 0.0
+      #      type: f64
+      #     - 
+      #      name: k2
+      #      value: 0.0
+      #      type: f64
+      #     - 
+      #      name: p1
+      #      value: 0.0
+      #      type: f64
+      #     - 
+      #      name: p2
+      #      value: 0.0
+      #      type: f64
+      #     - 
+      #      name: k3
+      #      value: 0.0
+      #      type: f64
+      #     - 
+      #      name: width
+      #      value: 1241
+      #      type: i32
+      #     - 
+      #      name: height
+      #      value: 376
+      #      type: i32
+      #     - 
+      #      name: thdepth
+      #      value: 35
+      #      type: i32
+      #     - 
+      #      name: stereo_baseline_times_fx
+      #      value: 386.1448
+      #      type: f64
+      #     - 
+      #      name: stereo_overlapping_begin
+      #      value: 0
+      #      type: i32
+      #     -
+      #      name: stereo_overlapping_end
+      #      value: 1000
+      #      type: i32
+
+      # KITTI 03
       - 
        name: CAMERA
        settings:
           - 
            name: fx
-           value: 718.856
+           value: 721.5377
            type: f64
           - 
            name: fy
-           value: 718.856
+           value: 721.5377
            type: f64
           - 
            name: cx
-           value: 607.1928
+           value: 609.5593
            type: f64
           - 
            name: cy
-           value: 185.2157
+           value: 172.854
            type: f64
           - 
            name: k1
@@ -91,6 +157,7 @@ modules:
            value: 1000
            type: i32
 
+
       - 
        name: FEATURE_DETECTION
        settings:
@@ -132,14 +199,14 @@ actors:
        settings:
           - 
             name: image_draw_type
-            value: none # options are [none, plain, features, featuresandmatches]
+            value: features # options are [none, plain, features, featuresandmatches]
             type: string
           -
             name: mcap_file_path
             value: "results/out.mcap"
             type: string
           - name: draw_all_mappoints # Not sure this works right now... If true, draws all mappoints in the map. If false, only draws matches and recently created mappoints. Set to false to save space.
-            value: true
+            value: false
             type: bool
 
       -

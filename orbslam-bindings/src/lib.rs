@@ -224,7 +224,8 @@ pub mod ffi {
         type ORBmatcher;
         fn descriptor_distance(
             a: &WrapBindCVRawPtr,
-            b: &WrapBindCVRawPtr
+            b: &WrapBindCVRawPtr,
+            print: bool
         ) -> i32;
 
         fn new_orb_matcher(
