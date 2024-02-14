@@ -161,7 +161,7 @@ actors:
             type: bool
           - 
             name: min_num_features
-            value: 6000
+            value: 1000
             type: i32
 
       # -
