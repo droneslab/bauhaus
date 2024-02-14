@@ -227,7 +227,10 @@ pub mod ffi {
             b: &WrapBindCVRawPtr,
             print: bool
         ) -> i32;
-
+        fn print_descriptors(
+            a: &WrapBindCVRawPtr,
+            b: &WrapBindCVRawPtr
+        );
         fn new_orb_matcher(
             frame_grid_cols : i32, 
             frame_grid_rows : i32,

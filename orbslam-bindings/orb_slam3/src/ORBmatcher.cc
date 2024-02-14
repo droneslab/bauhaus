@@ -2215,4 +2215,11 @@ namespace orb_slam3 {
         return DescriptorDistance(*a_mat, *b_mat);
     }
 
+    void print_descriptors(const orb_slam3::WrapBindCVRawPtr &a, const orb_slam3::WrapBindCVRawPtr &b)
+    {
+        const cv::Mat* a_mat = raw_ptr_as_mat(a.raw_ptr);
+        const cv::Mat* b_mat = raw_ptr_as_mat(b.raw_ptr);
+        std::cout << "a: " << *a_mat << std::endl;
+        std::cout << "b: " << *b_mat << std::endl;
+    }
 } //namespace ORB_SLAM

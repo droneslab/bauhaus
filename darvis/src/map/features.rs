@@ -78,12 +78,7 @@ impl Features {
         }
 
         // Image Bounds
-        let min_x = 0.0;
-        let max_x;
-        let min_y = 0.0;
-        let max_y;
-
-        match &CAMERA_MODULE.dist_coef {
+        let (min_x, max_x, min_y, max_y) = match &CAMERA_MODULE.dist_coef {
             Some(_vec) => {
                 todo!("mvp: implement code if dist_coef is non-zero");
                 // cv::Mat mat(4,2,CV_32F);
@@ -103,10 +98,9 @@ impl Features {
                 // mnMaxY = max(mat.at<float>(2,1),mat.at<float>(3,1));
             },
             None => {
-                max_x = im_width as f64;
-                max_y = im_height as f64;
+                (0.0, im_width as f64, 0.0, im_height as f64)
             }
-        }
+        };
 
         match sensor.frame() {
             FrameSensor::Mono => {
@@ -286,8 +280,7 @@ impl Features {
 
     pub fn get_features_in_area(&self, x: &f64, y: &f64, r: f64, levels: Option<(i32, i32)>,) -> Vec<u32> {
         //GetFeaturesInArea
-        let mut indices = Vec::<u32>::new();
-        indices.reserve(self.num_keypoints as usize);
+        let mut indices = vec![];
 
         let frame_grid_rows = FRAME_GRID_ROWS as i64;
         let frame_grid_cols = FRAME_GRID_COLS as i64;

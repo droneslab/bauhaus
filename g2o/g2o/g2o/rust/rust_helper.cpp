@@ -410,10 +410,11 @@ namespace g2o {
 
     // }
     // TODO (memory leaks): This might already be deleted when g2o deletes the sparseoptimizer?
-    // BridgeSparseOptimizer::~BridgeSparseOptimizer() {
+    BridgeSparseOptimizer::~BridgeSparseOptimizer() {
+        // delete optimizer;
     //     delete linearSolver;
     //     delete solver_ptr;
     //     delete solver;
-    // }
+    }
 
 } // end namespace

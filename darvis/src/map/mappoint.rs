@@ -1,6 +1,7 @@
-use std::{fmt::Debug, collections::HashMap, sync::atomic::{AtomicI32, Ordering}};
+use std::{collections::{BTreeMap, HashMap}, fmt::Debug, sync::atomic::{AtomicI32, Ordering}};
 use core::{matrix::DVMatrix, config::{SETTINGS, SYSTEM}, sensor::{Sensor, FrameSensor}};
 use log::{error, debug, warn};
+use opencv::{core::Mat, hub_prelude::MatTraitConst, prelude::Boxed};
 extern crate nalgebra as na;
 use crate::{matrix::DVVector3, modules::orbmatcher::{SCALE_FACTORS, descriptor_distance}, registered_actors::FEATURE_DETECTION};
 use super::{map::{Id, Map}, keyframe::KeyFrame, pose::DVTranslation};
@@ -11,7 +12,7 @@ pub struct MapPoint { // Full map item inserted into the map with the following 
     pub position: DVTranslation, // mWorldPos
 
     // Observations, this is a part of "map connections" but I don't think we can avoid keeping this here.
-    observations: HashMap<Id, (i32, i32)>, // mObservations ; Keyframes observing the point and associated index in keyframe
+    observations: HashMap<Id, (i32, i32)>, // mObservations ; Keyframes observing the point and associated index in keyframe. BTreeMap so it is sorted by key
     pub num_obs: i32,
 
     // Best descriptor used for fast matching
@@ -136,16 +137,21 @@ impl MapPoint {
          }
 
         // Compute distances between them
-        let mut distances = HashMap::new();
+        let mut distances = vec![vec![i32::MAX; descriptors.len()]; descriptors.len()];
         for i in 0..descriptors.len() {
-            distances.insert((i,i), 0);
+            distances[i][i] = 0;
+            // if self.id == 19 || self.id == 1 {
+            //     print_descriptors(&descriptors[i], &descriptors[i]);
+            // }
+
             for j in i+1..descriptors.len() {
                 let dist_ij = descriptor_distance(&descriptors[i], &descriptors[j]);
 
-                distances.insert((i,j), dist_ij);
-                distances.insert((j,i), dist_ij);
+                distances[i][j] = dist_ij;
+                distances[j][i] = dist_ij;
             }
         }
+
 
         // Take the descriptor with least median distance to the rest
         let mut best_median = std::i32::MAX;
@@ -153,16 +159,21 @@ impl MapPoint {
 
         let num_descriptors = descriptors.len();
         for i in 0..num_descriptors {
-            let mut v_dists = Vec::new();
-            for (key, dist) in &distances {
-                if key.0 == i || key.1 == i {
-                    v_dists.push(dist);
-                }
-            }
+            let mut v_dists = distances[i].clone();
+
+            // if self.id == 19 || self.id == 1 {
+            //     println!("Vdists: {:?}", v_dists);
+            // }
             v_dists.sort();
-            let median = v_dists[(v_dists.len()/2) as usize];
-            if median < &best_median {
-                best_median = *median;
+
+            // if self.id == 19 || self.id == 1 {
+            //     println!("After sort: {:?}", v_dists);
+            // }
+            let median = v_dists[((v_dists.len() - 1)/2) as usize];
+
+            // println!("Median: {}, Index: {}", median, ((v_dists.len() - 1)/2) as usize);
+            if median < best_median {
+                best_median = median;
                 best_idx = i;
             }
         }
@@ -331,4 +342,20 @@ impl Clone for MapPoint {
             sensor: self.sensor.clone(),
         }
     }
+}
+
+
+pub fn print_descriptors(desc1: &Mat, desc2: &Mat) {
+    dvos3binding::ffi::print_descriptors(
+        &dvos3binding::ffi::WrapBindCVRawPtr { 
+            raw_ptr: dvos3binding::BindCVRawPtr {
+                raw_ptr: desc1.as_raw()
+            } 
+        },
+        &dvos3binding::ffi::WrapBindCVRawPtr { 
+            raw_ptr: dvos3binding::BindCVRawPtr {
+                raw_ptr: desc2.as_raw()
+            } 
+        },
+    )
 }

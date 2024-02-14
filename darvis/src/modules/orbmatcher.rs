@@ -212,6 +212,7 @@ pub fn search_by_projection(
                     // AFter testing make the function below just descriptor_distance!!
                     let dist = descriptor_distance_print(&mp.best_descriptor, &descriptors, false);
                     print!("{} {}, ", idx, dist);
+                    
 
                     if dist < best_dist {
                         best_dist2 = best_dist;
