@@ -139,7 +139,7 @@ actors:
             value: "results/out.mcap"
             type: string
           - name: draw_all_mappoints # Not sure this works right now... If true, draws all mappoints in the map. If false, only draws matches and recently created mappoints. Set to false to save space.
-            value: false
+            value: true
             type: bool
 
       -

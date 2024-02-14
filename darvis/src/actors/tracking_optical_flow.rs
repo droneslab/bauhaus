@@ -727,16 +727,15 @@ impl TrackingOpticalFlow {
                 let no_motion_model = (self.imu.velocity.is_none() && !self.imu.is_initialized) || self.relocalization.frames_since_lost(&current_frame) < 2;
                 // SOFIYA...CheckReplacedInLastFrame. this might be important?
 
-                let track_success = self.track_reference_keyframe(current_frame, last_frame.as_mut().unwrap())?;
-                // let track_success = match no_motion_model {
-                //     true => self.track_reference_keyframe(current_frame, last_frame.as_mut().unwrap())?,
-                //     false => {
-                //         match self.track_with_motion_model(current_frame, last_frame.as_mut().unwrap())? {
-                //             true => true,
-                //             false => self.track_reference_keyframe(current_frame, last_frame.as_mut().unwrap())?
-                //         }
-                //     }
-                // };
+                let track_success = match no_motion_model {
+                    true => self.track_reference_keyframe(current_frame, last_frame.as_mut().unwrap())?,
+                    false => {
+                        match self.track_with_motion_model(current_frame, last_frame.as_mut().unwrap())? {
+                            true => true,
+                            false => self.track_reference_keyframe(current_frame, last_frame.as_mut().unwrap())?
+                        }
+                    }
+                };
                 self.state = match track_success {
                     true => TrackingState::Ok,
                     false => {
@@ -1005,6 +1004,9 @@ impl TrackingOpticalFlow {
             return Ok(self.sensor.is_imu());
         }
 
+
+        warn!("Current frame pose before optimization: {:?}", current_frame.pose);
+        
         // Optimize frame pose with all matches
         optimizer::optimize_pose(current_frame, &self.map);
 
