@@ -26,7 +26,7 @@ namespace g2o {
     class BridgeSparseOptimizer {
     public:
         BridgeSparseOptimizer(int opt_type, std::array<double,4> camera_param);
-        // ~BridgeSparseOptimizer();
+        ~BridgeSparseOptimizer();
 
         // vertices
         bool has_vertex(int id) const;
