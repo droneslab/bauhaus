@@ -315,9 +315,9 @@ impl Actor for TrackingOpticalFlow {
                                 last_frame_map
                             };
 
-                            // current_frame.pose = Some(relative_pose* current_frame.pose.unwrap());
-                            // current_frame.pose = Some(last_frame.as_ref().unwrap().pose.unwrap() * current_frame.pose.unwrap());
-                            // current_frame.pose = Some(current_frame.pose.unwrap() * last_pose);
+                            // last_pose= last_pose * relative_pose;
+                            current_frame.pose = Some(current_frame.pose.unwrap() * relative_pose);
+
 
                             warn!("Current frame id: {}, ref_kf_id: {:?}", curr_frame_id, current_frame.ref_kf_id);
                             warn!("Current Frame Pose: {:?}", current_frame.pose);
@@ -392,7 +392,7 @@ impl TrackingOpticalFlow {
         let mut keypoints: dvos3binding::ffi::WrapBindCVKeyPoints = DVVectorOfKeyPoint::empty().into();
 
         // TODO (C++ and Rust optimizations) ... this takes ~70 ms which is way high compared to ORB-SLAM3. I think this is because the rust and C++ bindings are not getting optimized together.
-        if self.map_initialized && (curr_frame_id - self.init_id < self.max_frames) {
+        if self.map_initialized && (curr_frame_id - self.init_id > self.max_frames) {
             self.orb_extractor_left.extractor.pin_mut().extract(&image_dv, &mut keypoints, &mut descriptors);
         } else 
         if self.sensor.is_mono() {
@@ -929,12 +929,12 @@ impl TrackingOpticalFlow {
 
         // current_frame.pose = Some(current_frame.pose.unwrap() * last_frame.pose.unwrap());
 
-        optimizer::optimize_pose(current_frame, &self.map);
+        // optimizer::optimize_pose(current_frame, &self.map);
 
         // Discard outliers
         let nmatches_map = self.delete_mappoint_outliers(current_frame);
         debug!("track reference keyframe matches after outliers {}", nmatches_map);
-
+        // let nmatches_map =20;
         match self.sensor.is_imu() {
             true => { return Ok(true); },
             false => { return Ok(nmatches_map >= 10); }
