@@ -141,6 +141,7 @@ namespace g2o {
         Eigen::Vector3d trans_vec(pose.translation.data());
         auto rot_quat_val = pose.rotation.data();
         Eigen::Quaterniond rot_quat(rot_quat_val[0], rot_quat_val[1], rot_quat_val[2],rot_quat_val[3]);
+        std::cout << "set frame vertex pose to: "<< SE3Quat(rot_quat, trans_vec) << std::endl;
         return SE3Quat(rot_quat, trans_vec);
     }
 
@@ -390,6 +391,9 @@ namespace g2o {
             (double) rotation.y(),
             (double) rotation.z()
         };
+
+        std::cout << "Optimized pose in c++: t " << SE3quat.translation().transpose() << " r " << SE3quat.rotation().vec().transpose() << std::endl;
+
         return pose;
     }
 

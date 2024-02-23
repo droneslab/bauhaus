@@ -6,13 +6,15 @@ extern crate nalgebra as na;
 use crate::{matrix::DVVector3, modules::orbmatcher::{SCALE_FACTORS, descriptor_distance}, registered_actors::FEATURE_DETECTION};
 use super::{map::{Id, Map}, keyframe::KeyFrame, pose::DVTranslation};
 
+// const  TESTMPID: i32= 176;
+
 #[derive(Debug)]
 pub struct MapPoint { // Full map item inserted into the map with the following additional fields
     pub id: Id,
     pub position: DVTranslation, // mWorldPos
 
     // Observations, this is a part of "map connections" but I don't think we can avoid keeping this here.
-    observations: HashMap<Id, (i32, i32)>, // mObservations ; Keyframes observing the point and associated index in keyframe. BTreeMap so it is sorted by key
+    observations: BTreeMap<Id, (i32, i32)>, // mObservations ; Keyframes observing the point and associated index in keyframe. BTreeMap so it is sorted by key
     pub num_obs: i32,
 
     // Best descriptor used for fast matching
@@ -56,7 +58,7 @@ impl MapPoint {
             visible: AtomicI32::new(1),
             sensor: SETTINGS.get(SYSTEM, "sensor"),
             id,
-            observations: HashMap::new(),
+            observations: BTreeMap::new(),
             normal_vector: DVVector3::zeros::<f64>(),
             max_distance: 0.0,
             min_distance: 0.0,
@@ -140,15 +142,19 @@ impl MapPoint {
         let mut distances = vec![vec![i32::MAX; descriptors.len()]; descriptors.len()];
         for i in 0..descriptors.len() {
             distances[i][i] = 0;
-            // if self.id == 19 || self.id == 1 {
-            //     print_descriptors(&descriptors[i], &descriptors[i]);
-            // }
 
             for j in i+1..descriptors.len() {
                 let dist_ij = descriptor_distance(&descriptors[i], &descriptors[j]);
 
                 distances[i][j] = dist_ij;
                 distances[j][i] = dist_ij;
+
+                // if self.id == TESTMPID {
+                //     println!("Distance between {} and {}: {}", i, j, dist_ij);
+                //     print_descriptor(&descriptors[i]);
+                //     print_descriptor(&descriptors[j]);
+                // }
+
             }
         }
 
@@ -161,17 +167,16 @@ impl MapPoint {
         for i in 0..num_descriptors {
             let mut v_dists = distances[i].clone();
 
-            // if self.id == 19 || self.id == 1 {
-            //     println!("Vdists: {:?}", v_dists);
-            // }
             v_dists.sort();
 
-            // if self.id == 19 || self.id == 1 {
-            //     println!("After sort: {:?}", v_dists);
-            // }
             let median = v_dists[((v_dists.len() - 1)/2) as usize];
 
-            // println!("Median: {}, Index: {}", median, ((v_dists.len() - 1)/2) as usize);
+            // if self.id == TESTMPID {
+            //     println!("Vdists after sort: {:?}", v_dists);
+            //     println!("Median: {}, Index: {}", median, ((num_descriptors as f32 - 1.0) * 0.5) as usize);
+            //     println!("num descriptors: {}", num_descriptors);
+            // }
+
             if median < best_median {
                 best_median = median;
                 best_idx = i;
@@ -206,7 +211,7 @@ impl MapPoint {
     }
 
     //** Observations */////////////////////////////////////////////////////////////////////////////////
-    pub fn get_observations(&self) -> &HashMap<Id, (i32, i32)> { &self.observations }
+    pub fn get_observations(&self) -> &BTreeMap<Id, (i32, i32)> { &self.observations }
     pub fn get_index_in_keyframe(&self, kf_id: Id) -> (i32, i32) { 
         match self.observations.get(&kf_id) {
             Some((left, right)) => (*left, *right),
@@ -304,6 +309,11 @@ impl MapPoint {
         for (id, (index1, index2)) in &self.observations {
             let kf = map.keyframes.get(&id).unwrap();
             descriptors.push((*kf.features.descriptors.row(*index1 as u32)).clone());
+            // if self.id == TESTMPID {
+            //     println!("Compute descriptors");
+            //     println!("kf {} descriptors: ", kf.id);
+            //     print_descriptor(&kf.features.descriptors.row(*index1 as u32));
+            // }
             match self.sensor.frame() {
                 FrameSensor::Stereo => descriptors.push((*kf.features.descriptors.row(*index2 as u32)).clone()),
                 _ => {}
@@ -345,17 +355,12 @@ impl Clone for MapPoint {
 }
 
 
-pub fn print_descriptors(desc1: &Mat, desc2: &Mat) {
-    dvos3binding::ffi::print_descriptors(
-        &dvos3binding::ffi::WrapBindCVRawPtr { 
-            raw_ptr: dvos3binding::BindCVRawPtr {
-                raw_ptr: desc1.as_raw()
-            } 
-        },
-        &dvos3binding::ffi::WrapBindCVRawPtr { 
-            raw_ptr: dvos3binding::BindCVRawPtr {
-                raw_ptr: desc2.as_raw()
-            } 
-        },
-    )
-}
+// pub fn print_descriptor(desc1: &Mat) {
+//     dvos3binding::ffi::print_descriptors(
+//         &dvos3binding::ffi::WrapBindCVRawPtr { 
+//             raw_ptr: dvos3binding::BindCVRawPtr {
+//                 raw_ptr: desc1.as_raw()
+//             } 
+//         },
+//     )
+// }

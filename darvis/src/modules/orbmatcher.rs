@@ -146,7 +146,7 @@ pub fn search_by_projection(
     let far_points_th = if fpt == 0.0 { INFINITY } else { fpt };
     let mut num_matches = 0;
 
-    print!("Search by projection. ");
+    // print!("Search by projection. ");
     let map = map.read();
     let mut local_mps_to_remove = vec![];
     for mp_id in &*mappoints {
@@ -173,7 +173,7 @@ pub fn search_by_projection(
                 r * (SCALE_FACTORS[mp_data.predicted_level as usize] as f64),
                 Some((mp_data.predicted_level-1, mp_data.predicted_level))
             );
-            println!("{}: ", mp_id);
+            // println!("{}: ", mp_id);
             if !indices.is_empty() {
                 let mut best_dist = 256;
                 let mut best_level = -1;
@@ -211,7 +211,7 @@ pub fn search_by_projection(
                     // BUGS 2/12: This return slightly different values than orbslam3 because mp.best_descriptor is different.
                     // AFter testing make the function below just descriptor_distance!!
                     let dist = descriptor_distance_print(&mp.best_descriptor, &descriptors, false);
-                    print!("{} {}, ", idx, dist);
+                    // print!("{} {}, ", idx, dist);
                     
 
                     if dist < best_dist {
@@ -226,7 +226,7 @@ pub fn search_by_projection(
                     }
                 }
 
-                println!("... {} {}", best_idx, mp_id);
+                // println!("... {} {}", best_idx, mp_id);
 
                 // Apply ratio to second match (only if best and second are in the same scale level)
                 if best_dist <= TH_HIGH {
@@ -327,7 +327,7 @@ pub fn search_by_projection(
         }
     }
 
-    println!();
+    // println!();
     mappoints.retain(|mp_id| !local_mps_to_remove.contains(&mp_id));
     return Ok(num_matches);
 }

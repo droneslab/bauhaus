@@ -67,7 +67,7 @@ impl Actor for TrackingFrontEnd {
         let max_queue_size = actor.actor_channels.receiver_bound.unwrap_or(100);
 
         tracy_client::set_thread_name!("tracking frontend");
-        
+
         'outer: loop {
             let message = actor.actor_channels.receive().unwrap();
 
