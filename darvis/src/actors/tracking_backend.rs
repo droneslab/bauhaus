@@ -126,7 +126,6 @@ impl Actor for TrackingBackend {
                         if current_frame.ref_kf_id.is_none() {
                             current_frame.ref_kf_id = actor.ref_kf_id;
                         }
-                        println!("Ref kf: {:?}", current_frame.ref_kf_id);
                         last_frame = Some(current_frame);
                         curr_frame_id += 1;
 
@@ -397,7 +396,12 @@ impl TrackingBackend {
         let relative_pose = {
             let ref_kf_pose = if created_new_kf {
                 // If we created a new kf this round, the relative keyframe pose is the same as the current frame pose.
-                // BUGS 2/12: We have to do this because ORBSLAM3 creates a new keyframe in tracking whereas we wait until beginning of local mapping. This code is fine, but we might want to make an atomic int in the map containing the latest keyframe inserted in local mapping, rather than sending that as a message from LM to T (current implementation). The way we have it now, we are always one reference keyframe behind because local mapping will insert the kf in the middle of the tracking thread loop, and then tracking will only know about it in the next iteration.
+                // We have to do this because ORBSLAM3 creates a new keyframe in tracking whereas we wait until beginning
+                // of local mapping. This code is fine, but we might want to make an atomic int in the map containing the
+                // latest keyframe inserted in local mapping, rather than sending that as a message from LM to T (current
+                // implementation). The way we have it now, we are always one reference keyframe behind because local mapping
+                // will insert the kf in the middle of the tracking thread loop, and then tracking will only know about it in
+                // the next iteration.
                 current_frame.pose.unwrap()
             } else {
                 let map = self.map.read();
