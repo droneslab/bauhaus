@@ -83,7 +83,7 @@ pub fn optimize_pose(
     let mut mp_indexes = vec![];
 
     {
-        print!("PoseOptimization mappoint data");
+        // print!("PoseOptimization mappoint data");
         // Take lock to construct factor graph
         let map_read_lock = map.read();
         for i in 0..frame.mappoint_matches.matches.len() {
@@ -130,16 +130,14 @@ pub fn optimize_pose(
                         *TH_HUBER_MONO
                     );
                     mp_indexes.push(i as u32);
-                    print!("{} {} {} {} {}, ", mp_id, i, INV_LEVEL_SIGMA2[keypoint.octave() as usize], keypoint.pt().x, keypoint.pt().y);
+                    // print!("{} {} {} {} {}, ", mp_id, i, INV_LEVEL_SIGMA2[keypoint.octave() as usize], keypoint.pt().x, keypoint.pt().y);
                     // println!("{:?}", position);
-                    // TODO (mvp): below code sets edge's camera to the frame's camera but are we sure we need it? If yes this could pose a problem since we do not have a C++ implementation of the camera
-                    // edge->pCamera = pFrame->mpCamera;
                 }
             };
 
             initial_correspondences += 1;
         }
-        println!();
+        // println!();
     }
 
     if initial_correspondences < 3 {
@@ -163,7 +161,7 @@ pub fn optimize_pose(
 
         num_bad = 0;
         let mut index = 0;
-        println!("Indexes set to bad: ");
+        // println!("Indexes set to bad: ");
         for mut edge in optimizer.pin_mut().get_mut_xyz_onlypose_edges().iter_mut() {
             if frame.mappoint_matches.is_outlier(&mp_indexes[index]) {
                 edge.inner.pin_mut().compute_error();
@@ -175,7 +173,7 @@ pub fn optimize_pose(
                 frame.mappoint_matches.set_outlier(mp_indexes[index] as usize, true);
                 edge.inner.pin_mut().set_level(1);
                 num_bad += 1;
-                print!("{}, ", mp_indexes[index]);
+                // print!("{} ({} {}), ", mp_indexes[index], chi2, chi2_mono[iteration]);
 
             } else {
                 frame.mappoint_matches.set_outlier(mp_indexes[index] as usize, false);
@@ -183,11 +181,11 @@ pub fn optimize_pose(
             }
 
             if iteration == 2 {
-                edge.inner.pin_mut().set_robust_kernel(false);
+                edge.inner.pin_mut().set_robust_kernel(true);
             }
             index += 1;
         }
-        println!();
+        // println!();
 
         // TODO (rigid body) SLAM with respect to a rigid body...probably don't have to do this rn?
         // vpEdgesMono_FHR comes from "SLAM with respect to a rigid body"
@@ -509,7 +507,7 @@ pub fn local_bundle_adjustment(
         drop(span);
         let _span = tracy_client::span!("local_bundle_adjustment:add_mp_vertices");
 
-        print!("Edges: {{");
+        // print!("Edges: {{");
         // Set MapPoint vertices
         for mp_id in &local_mappoints {
             let mp = lock.mappoints.get(mp_id).unwrap();
@@ -624,7 +622,7 @@ pub fn local_bundle_adjustment(
                             // edge->pCamera = pFrame->mpCamera;
                             edges += 1;
                             edges_kf_body.push(kf.id);
-                            print!("\"{}->{}\", ", vertex_id, kf_vertex);
+                            // print!("\"{}->{}\", ", vertex_id, kf_vertex);
                         } else {
                             warn!("Local bundle adjustment, monocular observation... Pretty sure this line shouldn't be hit.");
                         }
@@ -634,7 +632,7 @@ pub fn local_bundle_adjustment(
             vertex_id += 1;
         }
     }
-    println!("}}");
+    // println!("}}");
 
     tracy_client::plot!("LBA: KFs to Optimize", kfs_to_optimize as f64);
     tracy_client::plot!("LBA: Fixed KFs", fixed_kfs as f64);

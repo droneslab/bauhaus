@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 
 use opencv::prelude::Mat;
 use core::{
@@ -92,7 +92,7 @@ impl ActorMessage for VisFeatureMatchMsg {}
 pub struct VisTrajectoryMsg { 
     pub pose: Pose, 
     pub mappoint_matches: Vec<Option<(i32, bool)>>,
-    pub mappoints_in_tracking: Vec<Id>,
+    pub mappoints_in_tracking: BTreeSet<Id>,
     pub timestamp: Timestamp
 }
 impl ActorMessage for VisTrajectoryMsg {}
