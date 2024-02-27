@@ -1,7 +1,9 @@
+// SOFIYA TODO... re-write this after tracking backend is stable
+
 extern crate g2o;
 use cxx::UniquePtr;
 use log::{warn, info, debug, error};
-use std::{fmt, fmt::Debug, collections::{HashSet, HashMap}, sync::atomic::Ordering};
+use std::{collections::{BTreeSet, HashMap, HashSet}, fmt::{self, Debug}, sync::atomic::Ordering};
 use opencv::{prelude::*, types::VectorOfKeyPoint,};
 
 use core::{
@@ -42,8 +44,8 @@ pub struct TrackingFull {
     last_kf_timestamp: Option<Timestamp>,
     // Local data used for different stages of tracking
     matches_inliers : i32, // mnMatchesInliers ... Current matches in frame
-    local_keyframes: Vec<Id>, //mvpLocalKeyFrames 
-    local_mappoints: Vec<Id>, //mvpLocalMapPoints
+    local_keyframes: BTreeSet<Id>, //mvpLocalKeyFrames 
+    local_mappoints: BTreeSet<Id>, //mvpLocalMapPoints
     track_in_view: HashMap::<Id, TrackedMapPointData>, // mbTrackInView , member variable in Mappoint
     track_in_view_r: HashMap::<Id, TrackedMapPointData>, // mbTrackInViewR, member variable in Mappoint
     kf_track_reference_for_frame: HashMap::<Id, Id>, // mnTrackReferenceForFrame, member variable in Keyframe
@@ -106,8 +108,8 @@ impl Actor for TrackingFull {
             frames_since_last_kf: 0,
             last_kf_timestamp: None,
             matches_inliers: 0,
-            local_keyframes: vec![],
-            local_mappoints: Vec::new(),
+            local_keyframes: BTreeSet::new(),
+            local_mappoints:BTreeSet::new(),
             track_in_view: HashMap::new(),
             track_in_view_r: HashMap::new(),
             kf_track_reference_for_frame: HashMap::new(),
@@ -272,8 +274,8 @@ impl TrackingFull {
                                 Some((curr_kf_pose, curr_kf_id, ini_kf_id, local_mappoints, curr_kf_timestamp)) => {
                                     // Map needs to be initialized before tracking can begin. Received from map actor
                                     self.frames_since_last_kf = 0;
-                                    self.local_keyframes.push(curr_kf_id);
-                                    self.local_keyframes.push(ini_kf_id);
+                                    self.local_keyframes.insert(curr_kf_id);
+                                    self.local_keyframes.insert(ini_kf_id);
                                     self.local_mappoints = local_mappoints;
                                     self.ref_kf_id = Some(curr_kf_id);
                                     self.last_kf_timestamp = Some(curr_kf_timestamp);
@@ -801,6 +803,7 @@ impl TrackingFull {
 
         let (mut max, mut max_kf_id) = (0, 0);
         self.local_keyframes.clear();
+        let mut local_kf_vec = Vec::<Id>::new();
 
         // All keyframes that observe a map point are included in the local map. Also check which keyframe shares most points
         for (kf_id, count) in kf_counter {
@@ -808,7 +811,7 @@ impl TrackingFull {
                 max = count;
                 max_kf_id = kf_id;
             }
-            self.local_keyframes.push(kf_id);
+            local_kf_vec.push(kf_id);
             self.kf_track_reference_for_frame.insert(kf_id, current_frame.frame_id);
         }
 
@@ -816,19 +819,20 @@ impl TrackingFull {
         let mut i = 0;
         {
             let lock = self.map.read();
-            while self.local_keyframes.len() <= 80 && i < self.local_keyframes.len() { // Limit the number of keyframes
-                let next_kf_id = self.local_keyframes[i];
+            // TODO (Clone) ... creating vec out of local_keyframes so we can iterate over it while also editing it (can't do this with a btreeset)
+            while local_kf_vec.len() <= 80 && i < local_kf_vec.len() { // Limit the number of keyframes
+                let next_kf_id = local_kf_vec[i];
 
                 for kf_id in &lock.keyframes.get(&next_kf_id)?.get_covisibility_keyframes(10) {
                     if self.kf_track_reference_for_frame.get(kf_id) != Some(&current_frame.frame_id) {
-                        self.local_keyframes.push(*kf_id);
+                        local_kf_vec.push(*kf_id);
                         self.kf_track_reference_for_frame.insert(*kf_id, current_frame.frame_id);
                         break;
                     }
                 }
                 for kf_id in &lock.keyframes.get(&next_kf_id)?.children {
                     if self.kf_track_reference_for_frame.get(kf_id) != Some(&current_frame.frame_id) {
-                        self.local_keyframes.push(*kf_id);
+                        local_kf_vec.push(*kf_id);
                         self.kf_track_reference_for_frame.insert(*kf_id, current_frame.frame_id);
                         break;
                     }
@@ -836,12 +840,13 @@ impl TrackingFull {
         
                 if let Some(parent_id) = lock.keyframes.get(&next_kf_id)?.parent {
                     if self.kf_track_reference_for_frame.get(&parent_id) != Some(&current_frame.frame_id) {
-                        self.local_keyframes.push(parent_id);
+                        local_kf_vec.push(parent_id);
                         self.kf_track_reference_for_frame.insert(parent_id, current_frame.frame_id);
                     }
                 };
                 i += 1;
             }
+            self.local_keyframes = local_kf_vec.iter().map(|x| *x).collect();
         }
 
         // Add 10 last temporal KFs (mainly for IMU)
@@ -868,7 +873,7 @@ impl TrackingFull {
             for item in mp_ids {
                 if let Some((mp_id, _)) = item {
                     if self.mp_track_reference_for_frame.get(mp_id) != Some(&current_frame.frame_id) {
-                        self.local_mappoints.push(*mp_id);
+                        self.local_mappoints.insert(*mp_id);
                         self.mp_track_reference_for_frame.insert(*mp_id, current_frame.frame_id);
                     }
                 }
@@ -1158,7 +1163,7 @@ impl TrackingFull {
     //* Helper functions */
     fn delete_mappoint_outliers(&mut self, current_frame: &mut Frame) -> i32 {
         let discarded = current_frame.delete_mappoint_outliers();
-        for mp_id in discarded {
+        for (mp_id, index) in discarded {
             // self.map.read().mappoints.get(&mp_id).unwrap().increase_found();
             self.track_in_view.remove(&mp_id);
             self.last_frame_seen.insert(mp_id, current_frame.frame_id);

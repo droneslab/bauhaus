@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::f64::INFINITY;
 use core::config::SETTINGS;
 use core::matrix::{DVMatrix, DVMatrix4, DVVector3, DVVectorOfPoint2f};
@@ -135,7 +135,7 @@ pub fn search_for_initialization(
 }
 
 pub fn search_by_projection(
-    frame: &mut Frame, mappoints: &mut Vec<Id>, th: i32, ratio: f64,
+    frame: &mut Frame, mappoints: &mut BTreeSet<Id>, th: i32, ratio: f64,
     track_in_view: &HashMap<Id, TrackedMapPointData>, track_in_view_right: &HashMap<Id, TrackedMapPointData>, 
     map: &MapLock, sensor: Sensor
 ) -> Result<i32, Box<dyn std::error::Error>> {
@@ -149,10 +149,15 @@ pub fn search_by_projection(
     // print!("Search by projection. ");
     let map = map.read();
     let mut local_mps_to_remove = vec![];
+
+    // println!("Search by projection input mappoints: {:?}", mappoints);
+
+    // print!("Search by projection: ");
     for mp_id in &*mappoints {
         let mp = match map.mappoints.get(&mp_id) {
             Some(mp) => mp,
             None => {
+                // println!("SKIP delete {}", mp_id);
                 // Mappoint has been deleted but tracking's local_mappoints is not updated with this info
                 local_mps_to_remove.push(*mp_id);
                 continue
@@ -160,6 +165,7 @@ pub fn search_by_projection(
         };
         if let Some(mp_data) = track_in_view.get(&mp_id) {
             if mp_data.track_depth > far_points_th {
+                // println!("SKIP depth {}", mp_id);
                 continue;
             }
 
@@ -173,7 +179,9 @@ pub fn search_by_projection(
                 r * (SCALE_FACTORS[mp_data.predicted_level as usize] as f64),
                 Some((mp_data.predicted_level-1, mp_data.predicted_level))
             );
-            // println!("{}: ", mp_id);
+
+            // println!("get features in area,{}, {}, {}, {}, {}, {}, {}", mp_id, mp_data.proj_x, mp_data.proj_y, r * (SCALE_FACTORS[mp_data.predicted_level as usize] as f64), mp_data.predicted_level-1, mp_data.predicted_level, indices.len());
+
             if !indices.is_empty() {
                 let mut best_dist = 256;
                 let mut best_level = -1;
@@ -208,11 +216,8 @@ pub fn search_by_projection(
                     }
 
                     let descriptors = frame.features.descriptors.row(idx);
-                    // BUGS 2/12: This return slightly different values than orbslam3 because mp.best_descriptor is different.
-                    // AFter testing make the function below just descriptor_distance!!
-                    let dist = descriptor_distance_print(&mp.best_descriptor, &descriptors, false);
+                    let dist = descriptor_distance(&mp.best_descriptor, &descriptors);
                     // print!("{} {}, ", idx, dist);
-                    
 
                     if dist < best_dist {
                         best_dist2 = best_dist;
@@ -252,6 +257,8 @@ pub fn search_by_projection(
                     }
                 }
             }
+        } else {
+            // println!("SKIP no track data {}", mp_id);
         }
 
         if let Some(_mp_data) = track_in_view_right.get(&mp_id) {
@@ -373,6 +380,7 @@ pub fn search_by_projection_with_threshold (
 
     // debug!("search by projection keypoints {:?}", last_frame.features.get_all_keypoints().len());
     // debug!("search by projection mappoint matches {:?}", last_frame.mappoint_matches);
+    // println!("Search by projection with threshold");
     {
         let map = map.read();
         for idx1 in 0..last_frame.features.get_all_keypoints().len() {
@@ -418,6 +426,7 @@ pub fn search_by_projection_with_threshold (
                 if indices_2.is_empty() {
                     continue;
                 }
+                // print!("({},{},{},{}) ", u, v, radius, indices_2.len());
 
                 let mut best_dist = 256;
                 let mut best_idx: i32 = -1;
@@ -445,15 +454,18 @@ pub fn search_by_projection_with_threshold (
 
                     let descriptor = current_frame.features.descriptors.row(idx2);
                     let dist = descriptor_distance(&mappoint.best_descriptor, &descriptor);
+                    // print!("{} {} {}, ", idx1, idx2, dist);
 
                     if dist < best_dist {
                         best_dist = dist;
                         best_idx = idx2 as i32;
                     }
                 }
+                // println!("BEST: {} {}", best_idx, best_dist);
 
                 if best_dist <= TH_HIGH {
                     current_frame.mappoint_matches.add(best_idx as u32, mp_id, false);
+                    // matches.insert(best_idx as u32, mp_id);
 
                     if should_check_orientation {
                         check_orientation_1(
@@ -467,10 +479,20 @@ pub fn search_by_projection_with_threshold (
             }
         }
     }
+    // println!("Search by projection with threshold initial {}", num_matches);
 
     // Apply rotation consistency
     if should_check_orientation {
-        check_orientation_2(&rot_hist, &mut matches)
+        let (ind_1, ind_2, ind_3) = compute_three_maxima(&rot_hist,HISTO_LENGTH);
+        for i in 0..HISTO_LENGTH {
+            if i != ind_1 && i != ind_2 && i != ind_3 {
+                for j in 0..rot_hist[i as usize].len() {
+                    let key = rot_hist[i as usize][j];
+                    current_frame.mappoint_matches.delete_at_indices((key as i32, -1));
+                    num_matches -= 1;
+                }
+            }
+        }
     };
 
     return Ok(num_matches);
@@ -927,9 +949,22 @@ pub fn search_by_bow_f(
             j = lower_bound(&frame_featvec, &kf_featvec, j, i);
         }
     }
+    
     if should_check_orientation {
-        check_orientation_2(&rot_hist, &mut matches)
-    };
+        let (ind_1, ind_2, ind_3) = compute_three_maxima(&rot_hist,HISTO_LENGTH);
+        for i in 0..HISTO_LENGTH {
+            if i == ind_1 || i == ind_2 || i == ind_3 {
+                continue;
+            }
+            for j in 0..rot_hist[i as usize].len() {
+                let key = rot_hist[i as usize][j];
+                if matches.contains_key(&key) {
+                    matches.remove(&key);
+                }
+            }
+        }
+    }
+
 
     for (index, mp_id) in &matches {
         frame.mappoint_matches.add(*index, *mp_id, false);
@@ -1006,7 +1041,18 @@ pub fn search_by_bow_kf(
     }
 
     if should_check_orientation {
-        check_orientation_2(&rot_hist, &mut matches)
+        let (ind_1, ind_2, ind_3) = compute_three_maxima(&rot_hist,HISTO_LENGTH);
+        for i in 0..HISTO_LENGTH {
+            if i == ind_1 || i == ind_2 || i == ind_3 {
+                continue;
+            }
+            for j in 0..rot_hist[i as usize].len() {
+                let key = rot_hist[i as usize][j];
+                if matches.contains_key(&key) {
+                    matches.remove(&key);
+                }
+            }
+        }
     };
 
     return Ok(matches);
@@ -1070,6 +1116,7 @@ pub fn search_for_triangulation(
     let mut i = 0;
     let mut j = 0;
 
+    // print!("Search for triangulation.");
     while i < kf1_featvec.len() && j < kf2_featvec.len() {
         let kf1_node_id = kf1_featvec[i];
         let kf2_node_id = kf2_featvec[j];
@@ -1167,18 +1214,20 @@ pub fn search_for_triangulation(
                     //     }
                     // }
 
+                    // println!("{} {} {}, ", kf1_index, kf2_index, dist);
+
                     let epipolar = CAMERA_MODULE.epipolar_constrain(&kp1, &kp2, &r12, &t12, LEVEL_SIGMA2[kp2.octave() as usize]);
                     if course || epipolar {
                         best_index = kf2_index as i32;
                         best_dist = dist;
                     }
                 }
-                // println!("{} {} {}", kf1_indtex, best_index, best_dist);
+                // println!("BEST: {} {} {}", kf1_index, best_index, best_dist);
 
                 if best_index >= 0 {
                     let (kp2, _) = kf_2.features.get_keypoint(best_index as usize);
                     matches[kf1_index as usize] = Some(best_index as usize);
-                    // matched_already.insert(best_index as u32);
+                    matched_already.insert(best_index as u32);
                     if should_check_orientation {
                         check_orientation_1(
                             &kp1,
@@ -1444,20 +1493,6 @@ fn check_orientation_1(
     rot_hist[bin as usize].push(idx);
 }
 
-fn check_orientation_2(rot_hist: &Vec<Vec<u32>>, matches: &mut HashMap<u32, Id>) {
-    let (ind_1, ind_2, ind_3) = compute_three_maxima(&rot_hist,HISTO_LENGTH);
-    for i in 0..HISTO_LENGTH {
-        if i == ind_1 || i == ind_2 || i == ind_3 {
-            continue;
-        }
-        for j in 0..rot_hist[i as usize].len() {
-            let key = rot_hist[i as usize][j];
-            if matches.contains_key(&key) {
-                matches.remove(&key);
-            }
-        }
-    }
-}
 
 fn radius_by_viewing_cos(view_cos: f64) -> f64 {
     return match view_cos > 0.998 {

@@ -183,7 +183,6 @@ impl MapPoint {
             }
         }
 
-        // BUGS 2/12: This computes the wrong descriptor even when best_idx is the same value.
         // println!("Best descriptor: {} {} {:?}", self.id, distances);
         // TODO (timing) ... this clone might take a while
         Some(DVMatrix::new(descriptors[best_idx].clone()))

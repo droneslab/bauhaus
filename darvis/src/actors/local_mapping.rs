@@ -80,6 +80,7 @@ impl Actor for LocalMapping {
                 // Should only happen for the first two keyframes created by the map because that is the only time
                 // the keyframe is bringing in mappoints that local mapping hasn't created.
                 // TODO (Stereo) ... Tracking can insert new stereo points, so we will also need to add in new points when processing a NewKeyFrameMsg.
+                let before = actor.recently_added_mappoints.len();
                 actor.recently_added_mappoints.extend(
                     actor.map.read()
                     .keyframes.get(&actor.current_keyframe_id).unwrap()
@@ -88,6 +89,7 @@ impl Actor for LocalMapping {
                     .map(|item| item.unwrap().0)
                     .collect::<Vec<Id>>()
                 );
+                // println!("Local mapping recently added mappoints: {}, added {}", actor.recently_added_mappoints.len(), actor.recently_added_mappoints.len() - before);
 
                 actor.local_mapping();
             } else if message.is::<NewKeyFrameMsg>() {
@@ -107,6 +109,8 @@ impl Actor for LocalMapping {
                 debug!("Local mapping working on kf {}", kf_id);
 
                 actor.current_keyframe_id = kf_id;
+                // println!("Local mapping recently added mappoints: {}", actor.recently_added_mappoints.len());
+
                 actor.local_mapping();
             } else if message.is::<Reset>() {
                 // TODO (reset) need to think about how reset requests should be propagated
@@ -181,12 +185,11 @@ impl LocalMapping {
                     // Optimizer::LocalInertialBA(mpCurrentKeyFrame, &mbAbortBA, mpCurrentKeyFrame->GetMap(),num_FixedKF_BA,num_OptKF_BA,num_MPs_BA,num_edges_BA, bLarge, !mpCurrentKeyFrame->GetMap()->GetIniertialBA2());
                 },
                 false => {
-                    optimizer::local_bundle_adjustment(&self.map, self.current_keyframe_id, 0);
+                    // optimizer::local_bundle_adjustment(&self.map, self.current_keyframe_id, 0);
                 }
             }
         }
 
-        // BUGS 2/12: Local BA output could be wrong, but I don't think this is likely.
         println!("Local mapping optimization. KF {}, Pose {:?}", self.current_keyframe_id, self.map.read().keyframes.get(&self.current_keyframe_id).unwrap().pose);
 
         // Initialize IMU
@@ -264,6 +267,8 @@ impl LocalMapping {
             false => 3
         };
 
+        // print!("Mappoint culling: ");
+
         let current_kf_id = self.current_keyframe_id;
         let mut discard_for_found_ratio = 0;
         let mut discard_for_observations = 0;
@@ -277,16 +282,20 @@ impl LocalMapping {
                     discard_for_found_ratio += 1;
                     lock.discard_mappoint(&mp_id);
                     deleted.insert(mp_id);
+                    // print!("{}df ", mp_id);
                     false
                 } else if current_kf_id - mappoint.first_kf_id >= 2 && mappoint.get_observations().len() <= th_obs {
                     discard_for_observations += 1;
                     lock.discard_mappoint(&mp_id);
                     deleted.insert(mp_id);
+                    // print!("{}do ", mp_id);
                     false 
                 } else if current_kf_id - mappoint.first_kf_id >= 3 {
                     erased_from_recently_added += 1;
+                    // print!("{}e ", mp_id);
                     false // mappoint should not be deleted, but remove from recently_added_mappoints
                 } else {
+                    // print!("{}k ", mp_id);
                     true // mappoint should not be deleted, keep in recently_added_mappoints
                 }
             } else {
@@ -295,6 +304,7 @@ impl LocalMapping {
                 false
             }
         });
+        // println!();
         debug!("Mappoint culling, {} {} {} {}", discard_for_found_ratio, discard_for_observations, erased_from_recently_added, self.recently_added_mappoints.len());
         // println!("Deleted: {:?}", deleted);
         return discard_for_observations + discard_for_found_ratio;
@@ -337,6 +347,7 @@ impl LocalMapping {
             ow1 = current_kf.get_camera_center();
         }
 
+        // print!("Create new mappoints: {{");
         // Search matches with epipolar restriction and triangulate
         let mut mps_created = 0;
         for neighbor_id in neighbor_kfs {
@@ -563,13 +574,14 @@ impl LocalMapping {
                     let mp_id = lock.insert_mappoint_to_map(x3_d.unwrap(), self.current_keyframe_id, origin_map_id, observations);
                     // println!("{} {} {},", mp_id, idx1, idx2);
                     // debug!("Add mp {} to kf {} at index {}", mp_id, self.current_keyframe_id, idx1);
+                    // print!("{} {},", mp_id, idx1);
                     mps_created += 1;
                     self.recently_added_mappoints.insert(mp_id);
                 }
 
             }
         }
-        println!("DONE");
+        // println!("");
         mps_created
     }
 
@@ -686,7 +698,6 @@ impl LocalMapping {
                 None => {}
             }
         }
-        // BUGS 2/12: Added this line, I think it's correct.
         // Update connections in covisibility graph
         self.map.write().update_connections(self.current_keyframe_id);
     }

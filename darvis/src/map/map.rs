@@ -1,4 +1,4 @@
-use std::{collections::{HashMap, HashSet}, hash::BuildHasherDefault};
+use std::{collections::{BTreeSet, HashMap, HashSet}, hash::BuildHasherDefault};
 use fasthash::SeaHasher;
 use log::{info, warn, error, debug};
 use rustc_hash::FxHashMap;
@@ -207,7 +207,7 @@ impl Map {
                 let should_delete_mappoint = self.mappoints.get_mut(&mp_id).unwrap().delete_observation(&kf_id);
                 if should_delete_mappoint {
                     self.discard_mappoint(&mp_id);
-                    debug!("Discarded mappoint: {}", mp_id);
+                    // debug!("Discarded mappoint: {}", mp_id);
                 }
             }
         }
@@ -269,7 +269,7 @@ impl Map {
 
     pub fn create_initial_map_monocular(
         &mut self, mp_matches: Vec<i32>, p3d: DVVectorOfPoint3f, initial_frame: Frame, current_frame: Frame
-    ) -> Option<(Pose, i32, i32, Vec<Id>, Timestamp)> {
+    ) -> Option<(Pose, i32, i32, BTreeSet<Id>, Timestamp)> {
         // Testing local mapping ... global bundle adjustment gives slightly different pose for second keyframe.
         // TODO (design) - we have to do some pretty gross things with calling functions in this section
         // so that we can have multiple references to parts of the map. This should get cleaned up, but I'm not sure how.

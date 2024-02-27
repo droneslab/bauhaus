@@ -1,4 +1,4 @@
-use std::{borrow::Cow, fs::File, sync::Arc, collections::{BTreeMap, HashSet}, fs, io::BufWriter};
+use std::{borrow::Cow, collections::{BTreeMap, BTreeSet, HashSet}, fs::{self, File}, io::BufWriter, sync::Arc};
 use log::{warn, debug};
 use mcap::{Schema, Channel, records::MessageHeader, Writer};
 use opencv::prelude::{Mat, MatTraitConst, MatTraitConstManual};
@@ -291,7 +291,7 @@ impl DarvisVisualizer {
         Ok(())
     }
 
-    fn draw_mappoints(&mut self, local_mappoints: &Vec<Id>, mappoint_matches: &Vec<Option<(Id, bool)>>, timestamp: Timestamp) -> Result<(), Box<dyn std::error::Error>> {
+    fn draw_mappoints(&mut self, local_mappoints: &BTreeSet<Id>, mappoint_matches: &Vec<Option<(Id, bool)>>, timestamp: Timestamp) -> Result<(), Box<dyn std::error::Error>> {
         // Mappoints in map (different color if they are matches)
         // Should be overwritten when there is new info for a mappoint
         // self.clear_scene(timestamp, self.mappoints_channel)?;

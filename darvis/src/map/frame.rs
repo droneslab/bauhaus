@@ -178,7 +178,7 @@ pub fn new(
         pose * ref_kf_pose.inverse()
     }
 
-    pub fn delete_mappoint_outliers(&mut self) -> Vec<Id> {
+    pub fn delete_mappoint_outliers(&mut self) -> Vec<(Id, usize)> {
         // Should only be called on a Frame.
         // In the chance you might want to call this on a keyframe, you also need to delete the mappoints' observations to the kf!
         let mut discards = vec![];
@@ -186,7 +186,7 @@ pub fn new(
             if self.mappoint_matches.matches[i].is_some() {
                 let mp_match = self.mappoint_matches.matches[i].unwrap();
                 if mp_match.1 {
-                    discards.push(mp_match.0.clone());
+                    discards.push((mp_match.0.clone(), i));
                     self.mappoint_matches.matches[i] = None;
                 }
             }

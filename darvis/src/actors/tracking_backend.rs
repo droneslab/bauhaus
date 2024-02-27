@@ -1,4 +1,4 @@
-use std::{collections::{BTreeMap, HashMap, HashSet}, sync::atomic::Ordering};
+use std::{collections::{BTreeMap, BTreeSet, HashMap, HashSet}, sync::atomic::Ordering};
 use log::{warn, info, debug, error};
 use core::{config::*, sensor::{Sensor, FrameSensor, ImuSensor}, actor::Actor};
 use crate::{
@@ -29,8 +29,8 @@ pub struct TrackingBackend {
 
     // Local data used for different stages of tracking
     matches_inliers : i32, // mnMatchesInliers ... Current matches in frame
-    local_keyframes: Vec<Id>, //mvpLocalKeyFrames 
-    local_mappoints: Vec<Id>, //mvpLocalMapPoints
+    local_keyframes: BTreeSet<Id>, //mvpLocalKeyFrames 
+    local_mappoints: BTreeSet<Id>, //mvpLocalMapPoints
     track_in_view: HashMap::<Id, TrackedMapPointData>, // mbTrackInView , member variable in Mappoint
     track_in_view_r: HashMap::<Id, TrackedMapPointData>, // mbTrackInViewR, member variable in Mappoint
     kf_track_reference_for_frame: HashMap::<Id, Id>, // mnTrackReferenceForFrame, member variable in Keyframe
@@ -78,8 +78,8 @@ impl Actor for TrackingBackend {
             frames_since_last_kf: 0,
             last_kf_timestamp: None,
             matches_inliers: 0,
-            local_keyframes: vec![],
-            local_mappoints: Vec::new(),
+            local_keyframes: BTreeSet::new(),
+            local_mappoints: BTreeSet::new(),
             track_in_view: HashMap::new(),
             track_in_view_r: HashMap::new(),
             kf_track_reference_for_frame: HashMap::new(),
@@ -205,8 +205,8 @@ impl TrackingBackend {
                                 Some((curr_kf_pose, curr_kf_id, ini_kf_id, local_mappoints, curr_kf_timestamp)) => {
                                     // Map needs to be initialized before tracking can begin. Received from map actor
                                     self.frames_since_last_kf = 0;
-                                    self.local_keyframes.push(curr_kf_id);
-                                    self.local_keyframes.push(ini_kf_id);
+                                    self.local_keyframes.insert(curr_kf_id);
+                                    self.local_keyframes.insert(ini_kf_id);
                                     self.local_mappoints = local_mappoints;
                                     self.ref_kf_id = Some(curr_kf_id);
                                     self.last_kf_timestamp = Some(curr_kf_timestamp);
@@ -252,7 +252,6 @@ impl TrackingBackend {
             },
             (false, TrackingState::Ok) => {
                 let no_motion_model = (self.imu.velocity.is_none() && !self.imu.is_initialized) || self.relocalization.frames_since_lost(&current_frame) < 2;
-                // SOFIYA...CheckReplacedInLastFrame. this might be important?
 
                 let track_success = match no_motion_model {
                     true => self.track_reference_keyframe(current_frame, last_frame.as_mut().unwrap())?,
@@ -642,7 +641,6 @@ impl TrackingBackend {
         // We retrieve the local map and try to find matches to points in the local map.
         self.update_local_keyframes(current_frame, last_frame);
         self.update_local_points(current_frame);
-        // BUGS 2/12: EVERYTHING THE SAME UP UNTIL THIS POINT.
         self.search_local_points(current_frame);
 
         debug!("Local keyframes: {}, local points: {}", self.local_keyframes.len(), self.local_mappoints.len());
@@ -723,7 +721,8 @@ impl TrackingBackend {
         let _span = tracy_client::span!("update_local_keyframes");
         // void Tracking::UpdateLocalKeyFrames()
         // Each map point votes for the keyframes in which it has been observed
-        // BUGS 2/12: BTreeMap so items are sorted, so we have the same output as orbslam for testing. Can probably revert to regular hashmap later.
+
+        // BTreeMap so items are sorted, so we have the same output as orbslam for testing. Can probably revert to regular hashmap later.
         let mut kf_counter = BTreeMap::<Id, i32>::new();
 
         {
@@ -763,6 +762,7 @@ impl TrackingBackend {
 
         let (mut max, mut max_kf_id) = (0, 0);
         self.local_keyframes.clear();
+        let mut local_kf_vec = Vec::<Id>::new();
 
         // All keyframes that observe a map point are included in the local map. Also check which keyframe shares most points
         for (kf_id, count) in kf_counter {
@@ -770,7 +770,7 @@ impl TrackingBackend {
                 max = count;
                 max_kf_id = kf_id;
             }
-            self.local_keyframes.push(kf_id);
+            local_kf_vec.push(kf_id);
             self.kf_track_reference_for_frame.insert(kf_id, current_frame.frame_id);
         }
 
@@ -778,19 +778,19 @@ impl TrackingBackend {
         let mut i = 0;
         {
             let lock = self.map.read();
-            while self.local_keyframes.len() <= 80 && i < self.local_keyframes.len() { // Limit the number of keyframes
-                let next_kf_id = self.local_keyframes[i];
+            while local_kf_vec.len() <= 80 && i < local_kf_vec.len() { // Limit the number of keyframes
+                let next_kf_id = local_kf_vec[i];
 
                 for kf_id in &lock.keyframes.get(&next_kf_id)?.get_covisibility_keyframes(10) {
                     if self.kf_track_reference_for_frame.get(kf_id) != Some(&current_frame.frame_id) {
-                        self.local_keyframes.push(*kf_id);
+                        local_kf_vec.push(*kf_id);
                         self.kf_track_reference_for_frame.insert(*kf_id, current_frame.frame_id);
                         break;
                     }
                 }
                 for kf_id in &lock.keyframes.get(&next_kf_id)?.children {
                     if self.kf_track_reference_for_frame.get(kf_id) != Some(&current_frame.frame_id) {
-                        self.local_keyframes.push(*kf_id);
+                        local_kf_vec.push(*kf_id);
                         self.kf_track_reference_for_frame.insert(*kf_id, current_frame.frame_id);
                         break;
                     }
@@ -798,12 +798,13 @@ impl TrackingBackend {
         
                 if let Some(parent_id) = lock.keyframes.get(&next_kf_id)?.parent {
                     if self.kf_track_reference_for_frame.get(&parent_id) != Some(&current_frame.frame_id) {
-                        self.local_keyframes.push(parent_id);
+                        local_kf_vec.push(parent_id);
                         self.kf_track_reference_for_frame.insert(parent_id, current_frame.frame_id);
                     }
                 };
                 i += 1;
             }
+            self.local_keyframes = local_kf_vec.iter().map(|x| *x).collect();
         }
 
         // Add 10 last temporal KFs (mainly for IMU)
@@ -826,35 +827,36 @@ impl TrackingBackend {
         // print!("Update local points: ");
         self.local_mappoints.clear();
         let lock = self.map.read();
-        let mut skip1 = 0;
-        let mut skip2 = 0;
-        for kf_id in &self.local_keyframes {
+        for kf_id in self.local_keyframes.iter().rev() {
             let mp_ids = lock.keyframes.get(kf_id).unwrap().get_mp_matches();
-            // println!("KF: {}", kf_id);
+            // println!("KF mp matches {}: {:?}", kf_id, mp_ids);
+            // let mut i = -1;
             for item in mp_ids {
+                // i += 1;
                 if let Some((mp_id, _)) = item {
                     if self.mp_track_reference_for_frame.get(mp_id) != Some(&current_frame.frame_id) {
-                        self.local_mappoints.push(*mp_id);
+                        self.local_mappoints.insert(*mp_id);
                         self.mp_track_reference_for_frame.insert(*mp_id, current_frame.frame_id);
-                        // print!("{} {},", kf_id, mp_id);
+                        // print!("{} {} {},", kf_id, mp_id, i);
                     } else {
-                        skip1 += 1;
+                        // print!("S{},", mp_id);
+                        // skip1 += 1;
                     }
                 } else {
-                    skip2 += 1;
+                    // skip2 += 1;
                 }
             }
         }
-        println!();
+        // println!();
     }
 
     fn search_local_points(&mut self, current_frame: &mut Frame) -> Result<(), Box<dyn std::error::Error>> {
         let _span = tracy_client::span!("search_local_points");
         //void Tracking::SearchLocalPoints()
 
-        // print!("Increased visible: ");
         // Do not search map points already matched
         {
+            // print!("Remove track in view: ");
             let mut increased_visible = vec![];
             let lock = self.map.read();
             for index in 0..current_frame.mappoint_matches.matches.len() {
@@ -866,7 +868,7 @@ impl TrackingBackend {
                         self.last_frame_seen.insert(id, current_frame.frame_id);
                         self.track_in_view.remove(&id);
                         self.track_in_view_r.remove(&id);
-                        // print!("{} ", id);
+                        // print!("{}, ", id);
                     } else {
                         current_frame.mappoint_matches.delete_at_indices((index as i32, -1));
                     }
@@ -875,10 +877,11 @@ impl TrackingBackend {
             // println!();
         }
 
+        // println!("Last frame seen: {:?}", self.last_frame_seen);
         // Project points in frame and check its visibility
-        // print!("Increase visible 2: ");
         let mut to_match = 0;
         {
+            // print!("Add track in view: ");
             let lock = self.map.read();
             for mp_id in &self.local_mappoints {
                 if self.last_frame_seen.get(mp_id) == Some(&current_frame.frame_id) {
@@ -892,13 +895,17 @@ impl TrackingBackend {
                         if tracked_data_left.is_some() || tracked_data_right.is_some() {
                             lock.mappoints.get(&mp_id).unwrap().increase_visible(1);
                             to_match += 1;
-                            // print!("{} ", mp_id);
                         }
                         if let Some(d) = tracked_data_left {
                             self.track_in_view.insert(*mp_id, d);
+                            // print!("{}, ", mp_id);
+                        } else {
+                            self.track_in_view.remove(mp_id);
                         }
                         if let Some(d) = tracked_data_right {
                             self.track_in_view_r.insert(*mp_id, d);
+                        } else {
+                            self.track_in_view_r.remove(mp_id);
                         }
                     },
                     None => {
@@ -907,9 +914,6 @@ impl TrackingBackend {
                 };
             }
         }
-        // println!();
-
-        // BUGS 2/12: The stuff printed out above is the same as ORBSLAM3. 
 
         let mut matches = 0;
         if to_match > 0 {
@@ -1140,12 +1144,19 @@ impl TrackingBackend {
     //* Helper functions */
     fn discard_outliers(&mut self, current_frame: &mut Frame) -> i32 {
         let discarded = current_frame.delete_mappoint_outliers();
-        for mp_id in discarded {
-            // self.map.read().mappoints.get(&mp_id).unwrap().increase_found();
-            self.track_in_view.remove(&mp_id);
+        // Note: orbslam removes mappoint from track_in_view if the index < mCurrentFrame.Nleft but Nleft is always -1!
+        // So, commenting out for now.
+        // print!("self.track_in_view: {:?}", self.track_in_view);
+        // print!("Discard outliers (N={}): ", current_frame.features.num_keypoints);
+        for (mp_id, index) in discarded {
+            // if (index as u32) < current_frame.features.num_keypoints {
+            //     // print!("{}, ", mp_id);
+            //     self.track_in_view.remove(&mp_id);
+            //     // TODO (Stereo) ... need to remove this from track_in_view_r if the mp is seen in the right camera
+            // }
             self.last_frame_seen.insert(mp_id, current_frame.frame_id);
-            // TODO (Stereo) ... need to remove this from track_in_view_r if the mp is seen in the right camera
         }
+        // println!();
         current_frame.mappoint_matches.tracked_mappoints(&*self.map.read(), 1)
     }
 
