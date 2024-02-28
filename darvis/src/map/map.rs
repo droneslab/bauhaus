@@ -1,5 +1,5 @@
 use std::{backtrace::Backtrace, collections::{BTreeSet, HashMap, HashSet}};
-use log::{debug, error, info, warn};
+use log::{info, warn, error, debug};
 use rustc_hash::FxHashMap;
 use core::{matrix::{DVVector3, DVVectorOfPoint3f}, config::{SETTINGS, SYSTEM}, sensor::{Sensor, FrameSensor, ImuSensor}};
 use crate::{
