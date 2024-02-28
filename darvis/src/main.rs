@@ -36,14 +36,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if args.len() < 3 {
         panic!("
             [ERROR] Invalid number of input parameters.
-            Usage: cargo run -- [PATH_TO_DATA_DIRECTORY] [PATH_TO_CONFIG_FILE]
+            Usage: cargo run -- [PATH_TO_DATA_DIRECTORY] [PATH_TO_SYSTEM_CONFIG_FILE] [PATH_TO_DATASET/CAMERA_CONFIG_FILE]
         ");
     }
     let img_dir = args[1].to_owned();
-    let config_file = args[2].to_owned();
+    let system_config_file = args[2].to_owned();
+    let dataset_config_file = args[3].to_owned();
 
     // Load config, including custom settings and actor information
-    let (actor_info, _module_info, log_level) = load_config(&config_file).expect("Could not load config");
+    let (actor_info, _module_info, log_level) = load_config(&system_config_file, &dataset_config_file).expect("Could not load config");
 
     setup_logger(&log_level)?;
 
@@ -52,7 +53,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Launch actor system
     let first_actor_name = SETTINGS.get::<String>(SYSTEM, "first_actor_name"); // Actor that launches the pipeline
-    let (shutdown_flag, first_actor_tx, shutdown_tx) = spawn::launch_actor_system(actor_info, first_actor_name)?;
+    let (shutdown_flag, first_actor_tx, shutdown_tx, shutdown_join) = spawn::launch_actor_system(actor_info, first_actor_name)?;
 
     // Load vocabulary
     VOCABULARY.access();
@@ -109,6 +110,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         loop_sleep.sleep();
     }
     shutdown_tx.send(Box::new(ShutdownMsg{}))?;
+    shutdown_join.join().expect("Waiting for shutdown thread");
 
     Ok(())
 }

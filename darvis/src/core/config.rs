@@ -165,10 +165,19 @@ pub struct ModuleConf{
     pub name: String
 }
 
-pub fn load_config(file_name: &String) -> Result<(Vec<ActorConf>, Vec<ModuleConf>, String), Box<dyn std::error::Error>> {
+pub fn load_config(system_fn: &String, camera_fn: &String) -> Result<(Vec<ActorConf>, Vec<ModuleConf>, String), Box<dyn std::error::Error>> {
+    info!("Configs... System: {}, Camera: {}", system_fn, camera_fn);
+
+    let (actor_info, mut module_info, log_level) = load_system_settings(system_fn);
+    load_camera_settings(camera_fn, &mut module_info);
+
+    Ok((actor_info, module_info, log_level))
+}
+
+fn load_system_settings(system_fn: &String) -> (Vec<ActorConf>, Vec<ModuleConf>, String) {
     let mut config_string = String::new();
-    info!("{}",file_name);
-    let mut f = File::open(file_name).unwrap();
+
+    let mut f = File::open(system_fn).unwrap();
     f.read_to_string(&mut config_string).unwrap();
     let yaml_document = &yaml::YamlLoader::load_from_str(&config_string).unwrap()[0];
 
@@ -232,9 +241,42 @@ pub fn load_config(file_name: &String) -> Result<(Vec<ActorConf>, Vec<ModuleConf
         module_info.push(m_conf);
     }
 
-    Ok((actor_info, module_info, log_level))
+    (actor_info, module_info, log_level)
 }
 
+fn load_camera_settings(camera_fn: &String, module_info: &mut Vec<ModuleConf>) {
+    let mut config_string = String::new();
+    let mut f = File::open(camera_fn).unwrap();
+    f.read_to_string(&mut config_string).unwrap();
+
+    info!("CAMERA SETTINGS");
+
+    // Load additional custom settings from config file
+    let yaml_document = &yaml::YamlLoader::load_from_str(&config_string).unwrap()[0];
+    add_setting_f64("CAMERA", "fx", &yaml_document["fx"]);
+    add_setting_f64("CAMERA", "fy", &yaml_document["fy"]);
+    add_setting_f64("CAMERA", "cx", &yaml_document["cx"]);
+    add_setting_f64("CAMERA", "cy", &yaml_document["cy"]);
+    add_setting_i32("CAMERA", "width", &yaml_document["width"]);
+    add_setting_i32("CAMERA", "height", &yaml_document["height"]);
+    add_setting_i32("CAMERA", "stereo_overlapping_begin", &yaml_document["stereo_overlapping_begin"]);
+    add_setting_i32("CAMERA", "stereo_overlapping_end", &yaml_document["stereo_overlapping_end"]);
+    add_setting_f64("CAMERA", "k1", &yaml_document["k1"]);
+    add_setting_f64("CAMERA", "k2", &yaml_document["k2"]);
+    add_setting_f64("CAMERA", "p1", &yaml_document["p1"]);
+    add_setting_f64("CAMERA", "p2", &yaml_document["p2"]);
+    add_setting_f64("CAMERA", "k3", &yaml_document["k3"]);
+    add_setting_f64("CAMERA", "stereo_baseline_times_fx", &yaml_document["stereo_baseline_times_fx"]);
+    add_setting_i32("CAMERA", "thdepth", &yaml_document["thdepth"]);
+
+    // Add camera module to module_info so it gets spawned
+    let camera_module = ModuleConf {
+        name: "CAMERA".to_string(),
+    };
+    module_info.push(camera_module);
+
+
+}
 
 fn add_settings(settings: &Vec<Yaml>, namespace: &String) -> Option<()> {
     for s in 0..settings.len() {
