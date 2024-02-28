@@ -1,23 +1,22 @@
 use core::actor::Actor;
 use core::config::{SETTINGS, SYSTEM};
-use core::matrix::{DVMatrix, DVMatrix4};
-use core::sensor::{Sensor, FrameSensor, ImuSensor};
+use core::matrix::DVMatrix4;
+use core::sensor::Sensor;
 use std::collections::{HashMap, HashSet};
 use std::thread;
 use std::time::Duration;
 use log::{warn, debug};
 use crate::actors::messages::KeyFrameIdMsg;
 use crate::map::bow::VOCABULARY;
-use crate::map::pose::{Pose, DVTranslation};
 use crate::modules::sim3solver::Sim3Solver;
 use crate::modules::{optimizer, orbmatcher};
 use crate::registered_actors::LOOP_CLOSING;
 use crate::{ActorChannels, MapLock};
-use crate::map::map::{Id, Map};
+use crate::map::map::Id;
 use crate::modules::imu::ImuModule;
 
 use super::messages::{ShutdownMsg, IMUInitializedMsg};
-use crate::map::keyframe_database2::{KeyFrameDatabase};
+use crate::map::keyframe_database2::KeyFrameDatabase;
 
 type ConsistentGroup = (HashSet<Id>, i32);
 
@@ -334,7 +333,7 @@ impl LoopClosing {
         orbmatcher::search_by_projection_for_loop_detection(
             &self.map, &self.current_kf_id, &self.scw, &self.loop_mappoints, &mut self.current_matched_points, 10,
             0.75, true
-        );
+        )?;
 
         // If enough matches accept Loop
         let mut n_total_matches = 0;

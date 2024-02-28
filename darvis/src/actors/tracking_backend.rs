@@ -1,4 +1,4 @@
-use std::{collections::{BTreeMap, BTreeSet, HashMap, HashSet}, sync::atomic::Ordering};
+use std::{collections::{BTreeMap, BTreeSet, HashMap}, sync::atomic::Ordering};
 use log::{warn, info, debug, error};
 use core::{config::*, sensor::{Sensor, FrameSensor, ImuSensor}, actor::Actor};
 use crate::{
@@ -53,8 +53,8 @@ pub struct TrackingBackend {
     localization_only_mode: bool,
     frames_to_reset_imu: u32, //mnFramesToResetIMU
     insert_kfs_when_lost: bool,
-    max_frames : i64 , //mMaxFrames , Max Frames to insert keyframes and to check relocalisation
-    min_frames: u32, // mMinFrames, Min Frames to insert keyframes and to check relocalisation
+    max_frames_to_insert_kf : i32 , //mMaxFrames , Max Frames to insert keyframes and to check relocalisation
+    min_frames_to_insert_kf: i32, // mMinFrames, Min Frames to insert keyframes and to check relocalisation
     sensor: Sensor,
 }
 
@@ -71,8 +71,8 @@ impl Actor for TrackingBackend {
             localization_only_mode: SETTINGS.get::<bool>(SYSTEM, "localization_only_mode"),
             frames_to_reset_imu: SETTINGS.get::<i32>(TRACKING_BACKEND, "frames_to_reset_IMU") as u32,
             insert_kfs_when_lost: SETTINGS.get::<bool>(TRACKING_BACKEND, "insert_KFs_when_lost"),
-            max_frames: 10, // TODO MVP this should be set back to SETTINGS.get::<f64>(SYSTEM, "fps") as i64,
-            min_frames: 0,
+            max_frames_to_insert_kf: SETTINGS.get::<i32>(TRACKING_BACKEND, "max_frames_to_insert_kf"),
+            min_frames_to_insert_kf: SETTINGS.get::<i32>(TRACKING_BACKEND, "min_frames_to_insert_kf"),
             state: TrackingState::NotInitialized,
             ref_kf_id: None,
             frames_since_last_kf: 0,
@@ -215,7 +215,7 @@ impl TrackingBackend {
                                         // Set current frame's updated info from map initialization
                                         current_frame.ref_kf_id = Some(curr_kf_id);
                                         current_frame.pose = Some(curr_kf_pose);
-                                        current_frame.mappoint_matches = write_lock.keyframes.get(&curr_kf_id).unwrap().mappoint_matches.clone();
+                                        current_frame.mappoint_matches = write_lock.keyframes.get(&curr_kf_id).unwrap().clone_matches();
                                     }
                                     self.state = TrackingState::Ok;
                                     (ini_kf_id, curr_kf_id)
@@ -408,7 +408,7 @@ impl TrackingBackend {
                 ref_kf.pose
             };
 
-            println!("Update trajectory in logs. Current frame pose: {:?}, ref_kf_pose: {:?}", current_frame.pose.unwrap(), ref_kf_pose);
+            info!("Frame {} pose: {:?}", current_frame.frame_id, current_frame.pose.unwrap());
 
             current_frame.pose.unwrap() * ref_kf_pose.inverse()
         };
@@ -489,7 +489,7 @@ impl TrackingBackend {
         if self.imu.is_initialized && enough_frames_to_reset_imu {
             // Predict state with IMU if it is initialized and it doesnt need reset
             todo!("IMU");
-            self.imu.predict_state();
+            // self.imu.predict_state();
         } else {
             current_frame.pose = Some(self.imu.velocity.unwrap() * last_frame.pose.unwrap());
         }
@@ -561,10 +561,10 @@ impl TrackingBackend {
         let map_lock = self.map.read();
         let ref_kf_pose = map_lock.keyframes.get(&ref_kf_id).expect("Reference kf should be in map").pose;
         last_frame.pose = Some(*self.trajectory_poses.last().unwrap() * ref_kf_pose);
-        println!("pRef {} {:?}", ref_kf_id, ref_kf_pose);
-        println!("Tlr {:?}", *self.trajectory_poses.last().unwrap());
+        // debug!("pRef {} {:?}", ref_kf_id, ref_kf_pose);
+        // debug!("Tlr {:?}", *self.trajectory_poses.last().unwrap());
 
-        println!("Last frame pose {:?}", last_frame.pose);
+        // debug!("Last frame pose {:?}", last_frame.pose);
 
         if self.sensor.is_mono() || self.frames_since_last_kf == 0 {
             return;
@@ -641,7 +641,10 @@ impl TrackingBackend {
         // We retrieve the local map and try to find matches to points in the local map.
         self.update_local_keyframes(current_frame, last_frame);
         self.update_local_points(current_frame);
-        self.search_local_points(current_frame);
+        match self.search_local_points(current_frame) {
+            Ok(res) => res,
+            Err(e) => warn!("Error in search_local_points: {}", e)
+        }
 
         debug!("Local keyframes: {}, local points: {}", self.local_keyframes.len(), self.local_mappoints.len());
 
@@ -661,7 +664,6 @@ impl TrackingBackend {
                 if !is_outlier {
                     if let Some(mp) = self.map.read().mappoints.get(&mp_id) {
                         mp.increase_found(1);
-                        // println!("Increase found {}", mp_id);
                     }
 
                     if self.localization_only_mode {
@@ -691,7 +693,7 @@ impl TrackingBackend {
 
         // Decide if the tracking was succesful
         // More restrictive if there was a relocalization recently
-        if current_frame.frame_id < self.relocalization.last_reloc_frame_id + (self.max_frames as i32) && self.matches_inliers<50 {
+        if current_frame.frame_id < self.relocalization.last_reloc_frame_id + (self.max_frames_to_insert_kf as i32) && self.matches_inliers<50 {
             warn!("track_local_map unsuccessful; matches in frame < 50 : {}",self.matches_inliers);
             return (false, self.matches_inliers);
         }
@@ -724,41 +726,39 @@ impl TrackingBackend {
 
         // BTreeMap so items are sorted, so we have the same output as orbslam for testing. Can probably revert to regular hashmap later.
         let mut kf_counter = BTreeMap::<Id, i32>::new();
-
-        {
-            let lock = self.map.read();
-            // TODO (IMU) ... Check below should be !self.imu.is_initialized || current_frame.frame_id < self.relocalization.last_reloc_frame_id + 2
-            if current_frame.frame_id < self.relocalization.last_reloc_frame_id + 2 {
-                for i in 0..current_frame.mappoint_matches.matches.len() {
-                    if current_frame.mappoint_matches.has(&(i as u32)) {
-                        let mp_id = current_frame.mappoint_matches.get(&(i as u32));
-                        if let Some(mp) = lock.mappoints.get(&mp_id) {
-                            for kf_id in mp.get_observations().keys() {
-                                *kf_counter.entry(*kf_id).or_insert(0) += 1;
-                            }
-                        } else {
-                            current_frame.mappoint_matches.matches[i as usize] = None;
+        let lock = self.map.read();
+        // TODO (IMU) ... Check below should be !self.imu.is_initialized || current_frame.frame_id < self.relocalization.last_reloc_frame_id + 2
+        if current_frame.frame_id < self.relocalization.last_reloc_frame_id + 2 {
+            for i in 0..current_frame.mappoint_matches.matches.len() {
+                if current_frame.mappoint_matches.has(&(i as u32)) {
+                    let mp_id = current_frame.mappoint_matches.get(&(i as u32));
+                    if let Some(mp) = lock.mappoints.get(&mp_id) {
+                        for kf_id in mp.get_observations().keys() {
+                            *kf_counter.entry(*kf_id).or_insert(0) += 1;
                         }
+                    } else {
+                        current_frame.mappoint_matches.matches[i as usize] = None;
                     }
                 }
+            }
 
-            } else {
-                // Using lastframe since current frame has no matches yet
-                for i in 0..last_frame.mappoint_matches.matches.len() {
-                    if last_frame.mappoint_matches.has(&(i as u32)) {
-                        let mp_id = last_frame.mappoint_matches.get(&(i as u32));
+        } else {
+            // Using lastframe since current frame has no matches yet
+            for i in 0..last_frame.mappoint_matches.matches.len() {
+                if last_frame.mappoint_matches.has(&(i as u32)) {
+                    let mp_id = last_frame.mappoint_matches.get(&(i as u32));
 
-                        if let Some(mp) = lock.mappoints.get(&mp_id) {
-                            for kf_id in mp.get_observations().keys() {
-                                *kf_counter.entry(*kf_id).or_insert(0) += 1;
-                            }
-                        } else {
-                            last_frame.mappoint_matches.matches[i as usize] = None;
+                    if let Some(mp) = lock.mappoints.get(&mp_id) {
+                        for kf_id in mp.get_observations().keys() {
+                            *kf_counter.entry(*kf_id).or_insert(0) += 1;
                         }
+                    } else {
+                        last_frame.mappoint_matches.matches[i as usize] = None;
                     }
                 }
             }
         }
+
 
         let (mut max, mut max_kf_id) = (0, 0);
         self.local_keyframes.clear();
@@ -776,36 +776,43 @@ impl TrackingBackend {
 
         // Also include some keyframes that are neighbors to already-included keyframes
         let mut i = 0;
-        {
-            let lock = self.map.read();
-            while local_kf_vec.len() <= 80 && i < local_kf_vec.len() { // Limit the number of keyframes
-                let next_kf_id = local_kf_vec[i];
+        while local_kf_vec.len() <= 80 && i < local_kf_vec.len() { // Limit the number of keyframes
+            let next_kf_id = local_kf_vec[i];
+            let kf = lock.keyframes.get(&next_kf_id);
+            match kf {
+                Some(kf) => {
+                    for kf_id in &kf.get_covisibility_keyframes(10) {
+                        if self.kf_track_reference_for_frame.get(kf_id) != Some(&current_frame.frame_id) {
+                            local_kf_vec.push(*kf_id);
+                            self.kf_track_reference_for_frame.insert(*kf_id, current_frame.frame_id);
+                            break;
+                        }
+                    }
+                    for kf_id in &kf.children {
+                        if self.kf_track_reference_for_frame.get(kf_id) != Some(&current_frame.frame_id) {
+                            local_kf_vec.push(*kf_id);
+                            self.kf_track_reference_for_frame.insert(*kf_id, current_frame.frame_id);
+                            break;
+                        }
+                    }
 
-                for kf_id in &lock.keyframes.get(&next_kf_id)?.get_covisibility_keyframes(10) {
-                    if self.kf_track_reference_for_frame.get(kf_id) != Some(&current_frame.frame_id) {
-                        local_kf_vec.push(*kf_id);
-                        self.kf_track_reference_for_frame.insert(*kf_id, current_frame.frame_id);
-                        break;
-                    }
-                }
-                for kf_id in &lock.keyframes.get(&next_kf_id)?.children {
-                    if self.kf_track_reference_for_frame.get(kf_id) != Some(&current_frame.frame_id) {
-                        local_kf_vec.push(*kf_id);
-                        self.kf_track_reference_for_frame.insert(*kf_id, current_frame.frame_id);
-                        break;
-                    }
-                }
-        
-                if let Some(parent_id) = lock.keyframes.get(&next_kf_id)?.parent {
-                    if self.kf_track_reference_for_frame.get(&parent_id) != Some(&current_frame.frame_id) {
-                        local_kf_vec.push(parent_id);
-                        self.kf_track_reference_for_frame.insert(parent_id, current_frame.frame_id);
-                    }
-                };
-                i += 1;
-            }
-            self.local_keyframes = local_kf_vec.iter().map(|x| *x).collect();
+                    if let Some(parent_id) = kf.parent {
+                        if self.kf_track_reference_for_frame.get(&parent_id) != Some(&current_frame.frame_id) {
+                            local_kf_vec.push(parent_id);
+                            self.kf_track_reference_for_frame.insert(parent_id, current_frame.frame_id);
+                        }
+                    };
+                },
+                None => {
+                    // KF could have been deleted since constructing local_kf_vec
+                    local_kf_vec.remove(i);
+                },
+            };
+
+            i += 1;
         }
+        self.local_keyframes = local_kf_vec.iter().map(|x| *x).collect();
+        debug!("update_local_keyframes: {:?}", self.local_keyframes.len());
 
         // Add 10 last temporal KFs (mainly for IMU)
         if self.sensor.is_imu() && self.local_keyframes.len() < 80 {
@@ -824,30 +831,32 @@ impl TrackingBackend {
     fn update_local_points(&mut self, current_frame: &mut Frame) {
         let _span = tracy_client::span!("update_local_points");
         // void Tracking::UpdateLocalPoints()
-        // print!("Update local points: ");
         self.local_mappoints.clear();
         let lock = self.map.read();
+        let mut kfs_to_remove = vec![];
         for kf_id in self.local_keyframes.iter().rev() {
-            let mp_ids = lock.keyframes.get(kf_id).unwrap().get_mp_matches();
-            // println!("KF mp matches {}: {:?}", kf_id, mp_ids);
-            // let mut i = -1;
-            for item in mp_ids {
-                // i += 1;
-                if let Some((mp_id, _)) = item {
-                    if self.mp_track_reference_for_frame.get(mp_id) != Some(&current_frame.frame_id) {
-                        self.local_mappoints.insert(*mp_id);
-                        self.mp_track_reference_for_frame.insert(*mp_id, current_frame.frame_id);
-                        // print!("{} {} {},", kf_id, mp_id, i);
-                    } else {
-                        // print!("S{},", mp_id);
-                        // skip1 += 1;
+            match lock.keyframes.get(kf_id) {
+                Some(kf) => {
+                    let mp_ids = kf.get_mp_matches();
+                    for item in mp_ids {
+                        if let Some((mp_id, _)) = item {
+                            if self.mp_track_reference_for_frame.get(mp_id) != Some(&current_frame.frame_id) {
+                                self.local_mappoints.insert(*mp_id);
+                                self.mp_track_reference_for_frame.insert(*mp_id, current_frame.frame_id);
+                            }
+                        }
                     }
-                } else {
-                    // skip2 += 1;
-                }
+                },
+                None => kfs_to_remove.push(*kf_id),
             }
         }
-        // println!();
+
+        // KF could have been deleted since construction of local_keyframes
+        for kf_id in kfs_to_remove {
+            self.local_keyframes.remove(&kf_id);
+        }
+
+        debug!("self.local_mappoints: {:?}, self.local_keyframes: {:?}", self.local_mappoints.len(), self.local_keyframes.len());
     }
 
     fn search_local_points(&mut self, current_frame: &mut Frame) -> Result<(), Box<dyn std::error::Error>> {
@@ -856,7 +865,6 @@ impl TrackingBackend {
 
         // Do not search map points already matched
         {
-            // print!("Remove track in view: ");
             let mut increased_visible = vec![];
             let lock = self.map.read();
             for index in 0..current_frame.mappoint_matches.matches.len() {
@@ -868,20 +876,16 @@ impl TrackingBackend {
                         self.last_frame_seen.insert(id, current_frame.frame_id);
                         self.track_in_view.remove(&id);
                         self.track_in_view_r.remove(&id);
-                        // print!("{}, ", id);
                     } else {
                         current_frame.mappoint_matches.delete_at_indices((index as i32, -1));
                     }
                 }
             }
-            // println!();
         }
 
-        // println!("Last frame seen: {:?}", self.last_frame_seen);
         // Project points in frame and check its visibility
         let mut to_match = 0;
         {
-            // print!("Add track in view: ");
             let lock = self.map.read();
             for mp_id in &self.local_mappoints {
                 if self.last_frame_seen.get(mp_id) == Some(&current_frame.frame_id) {
@@ -898,7 +902,6 @@ impl TrackingBackend {
                         }
                         if let Some(d) = tracked_data_left {
                             self.track_in_view.insert(*mp_id, d);
-                            // print!("{}, ", mp_id);
                         } else {
                             self.track_in_view.remove(mp_id);
                         }
@@ -1062,9 +1065,9 @@ impl TrackingBackend {
         );
     }
 
-    fn need_new_keyframe(&self, current_frame: &mut Frame) -> bool {
+    fn need_new_keyframe(&mut self, current_frame: &mut Frame) -> bool {
         let num_kfs = self.map.read().keyframes.len();
-        let not_enough_frames_since_last_reloc = (current_frame.frame_id < self.relocalization.last_reloc_frame_id + (self.max_frames as i32)) && (num_kfs as i64 > self.max_frames);
+        let not_enough_frames_since_last_reloc = (current_frame.frame_id < self.relocalization.last_reloc_frame_id + (self.max_frames_to_insert_kf as i32)) && (num_kfs as i32 > self.max_frames_to_insert_kf);
         let imu_not_initialized = self.sensor.is_imu() && !self.imu.is_initialized;
 
         let too_close_to_last_kf = match self.last_kf_timestamp {
@@ -1107,9 +1110,9 @@ impl TrackingBackend {
         // debug!("tracked mps {}, {} < {} * {} = {}", self.ref_kf_id.unwrap(), self.matches_inliers, tracked_mappoints, th_ref_ratio, (self.matches_inliers as f32) < tracked_mappoints * th_ref_ratio);
 
         // Condition 1a: More than "MaxFrames" have passed from last keyframe insertion
-        let c1a = self.frames_since_last_kf >= (self.max_frames as i32);
+        let c1a = self.frames_since_last_kf >= (self.max_frames_to_insert_kf as i32);
         // Condition 1b: More than "MinFrames" have passed and Local Mapping is idle
-        let c1b = self.frames_since_last_kf >= (self.min_frames as i32) && LOCAL_MAPPING_IDLE.load(Ordering::SeqCst);
+        let c1b = self.frames_since_last_kf >= (self.min_frames_to_insert_kf as i32) && LOCAL_MAPPING_IDLE.load(Ordering::SeqCst);
         //Condition 1c: tracking is weak
         let sensor_is_right = match self.sensor {
             Sensor(FrameSensor::Mono, _) | Sensor(FrameSensor::Stereo, ImuSensor::Some) | Sensor(FrameSensor::Rgbd, ImuSensor::Some) => false,
@@ -1137,8 +1140,23 @@ impl TrackingBackend {
         };
         let c4 = ((self.matches_inliers < 75 && self.matches_inliers > 15) || recently_lost) && sensor_is_imumono;
 
+        // sofiya
+        // c3 and c4 always false because we are using mono
+        // so all that matters is (c1a || c1b || c1c) && c2
+        // of c1a, c1b, and c1c, c1b is always true and the others are always false
+        // of c2, (self.matches_inliers as f32) < tracked_mappoints * th_ref_ratio is always true and need_to_insert_close is always false
+        // so look at c1b (make min frames higher?)
+        // and self.matches_inliers < tracked_mappoints * th_ref_ratio
+        debug!("Need new kf decision ({}): {} {} {}", ((c1a||c1b||c1c) && c2), self.matches_inliers, tracked_mappoints, th_ref_ratio);
         // Note: removed code here about checking for idle local mapping and/or interrupting bundle adjustment
-        return ((c1a||c1b||c1c) && c2)||c3 ||c4;
+
+        let create_new_kf =  ((c1a||c1b||c1c) && c2)||c3 ||c4;
+        if create_new_kf {
+            self.frames_since_last_kf = 0;
+        } else {
+            self.frames_since_last_kf += 1;
+        }
+        create_new_kf
     }
 
     //* Helper functions */
@@ -1146,17 +1164,13 @@ impl TrackingBackend {
         let discarded = current_frame.delete_mappoint_outliers();
         // Note: orbslam removes mappoint from track_in_view if the index < mCurrentFrame.Nleft but Nleft is always -1!
         // So, commenting out for now.
-        // print!("self.track_in_view: {:?}", self.track_in_view);
-        // print!("Discard outliers (N={}): ", current_frame.features.num_keypoints);
-        for (mp_id, index) in discarded {
+        for (mp_id, _index) in discarded {
             // if (index as u32) < current_frame.features.num_keypoints {
-            //     // print!("{}, ", mp_id);
             //     self.track_in_view.remove(&mp_id);
             //     // TODO (Stereo) ... need to remove this from track_in_view_r if the mp is seen in the right camera
             // }
             self.last_frame_seen.insert(mp_id, current_frame.frame_id);
         }
-        // println!();
         current_frame.mappoint_matches.tracked_mappoints(&*self.map.read(), 1)
     }
 

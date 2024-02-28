@@ -3,7 +3,7 @@
 extern crate g2o;
 use cxx::UniquePtr;
 use log::{warn, info, debug, error};
-use std::{collections::{BTreeSet, HashMap, HashSet}, fmt::{self, Debug}, sync::atomic::Ordering};
+use std::{collections::{BTreeSet, HashMap}, fmt::{self, Debug}, sync::atomic::Ordering};
 use opencv::{prelude::*, types::VectorOfKeyPoint,};
 
 use core::{
@@ -32,7 +32,7 @@ pub struct TrackingFull {
 
     /// Frontend
     orb_extractor_left: DVORBextractor,
-    orb_extractor_right: Option<DVORBextractor>,
+    _orb_extractor_right: Option<DVORBextractor>,
     orb_extractor_ini: Option<DVORBextractor>,
     init_id: Id,
 
@@ -78,7 +78,7 @@ impl Actor for TrackingFull {
     fn new_actorstate(actor_channels: ActorChannels, map: Self::MapRef) -> TrackingFull {
         let max_features = SETTINGS.get::<i32>(FEATURE_DETECTION, "max_features");
         let sensor = SETTINGS.get::<Sensor>(SYSTEM, "sensor");
-        let orb_extractor_right = match sensor.frame() {
+        let _orb_extractor_right = match sensor.frame() {
             FrameSensor::Stereo => Some(DVORBextractor::new(max_features)),
             FrameSensor::Mono | FrameSensor::Rgbd => None,
         };
@@ -89,7 +89,7 @@ impl Actor for TrackingFull {
         TrackingFull {
             actor_channels,
             orb_extractor_left: DVORBextractor::new(max_features),
-            orb_extractor_right,
+            _orb_extractor_right,
             orb_extractor_ini,
             map_initialized: false,
             init_id: 0,
@@ -533,7 +533,7 @@ impl TrackingFull {
         if self.imu.is_initialized && enough_frames_to_reset_imu {
             // Predict state with IMU if it is initialized and it doesnt need reset
             todo!("IMU");
-            self.imu.predict_state();
+            // self.imu.predict_state();
         } else {
             current_frame.pose = Some(self.imu.velocity.unwrap() * last_frame.pose.unwrap());
         }

@@ -26,7 +26,7 @@ use crate::{
 pub struct TrackingFrontEnd {
     actor_channels: ActorChannels,
     orb_extractor_left: DVORBextractor,
-    orb_extractor_right: Option<DVORBextractor>,
+    _orb_extractor_right: Option<DVORBextractor>,
     orb_extractor_ini: Option<DVORBextractor>,
     map_initialized: bool,
     last_id: Id,
@@ -41,7 +41,7 @@ impl Actor for TrackingFrontEnd {
     fn new_actorstate(actor_channels: ActorChannels, _map: Self::MapRef) -> TrackingFrontEnd {
         let max_features = SETTINGS.get::<i32>(FEATURE_DETECTION, "max_features");
         let sensor = SETTINGS.get::<Sensor>(SYSTEM, "sensor");
-        let orb_extractor_right = match sensor.frame() {
+        let _orb_extractor_right = match sensor.frame() {
             FrameSensor::Stereo => Some(DVORBextractor::new(max_features)),
             FrameSensor::Mono | FrameSensor::Rgbd => None,
         };
@@ -52,7 +52,7 @@ impl Actor for TrackingFrontEnd {
         TrackingFrontEnd {
             actor_channels,
             orb_extractor_left: DVORBextractor::new(max_features),
-            orb_extractor_right,
+            _orb_extractor_right,
             orb_extractor_ini,
             map_initialized: false,
             init_id: 0,

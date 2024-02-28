@@ -1,4 +1,4 @@
-use opencv::{prelude::{Mat, MatTrait, MatTraitConst, KeyPointTraitConst}, core::{Scalar, CV_64F, KeyPoint}};
+use opencv::{prelude::{Mat, MatTrait, KeyPointTraitConst}, core::{Scalar, CV_64F, KeyPoint}};
 use core::{config::*, matrix::{DVMatrix, DVVectorOfPoint3f, DVVector3, DVMatrix3}, sensor::Sensor};
 use crate::{
     map::{pose::Pose, keyframe::KeyFrame},

@@ -3,13 +3,13 @@ extern crate g2o;
 use std::collections::{HashMap, HashSet};
 use cxx::UniquePtr;
 use core::{
-    config::{SETTINGS, SYSTEM}, sensor::{Sensor, FrameSensor}, matrix::{DVMatrix, DVMatrix4, DVMatrix7x7, DVVector3},
+    config::{SETTINGS, SYSTEM}, sensor::{Sensor, FrameSensor}
 };
-use log::{warn, debug, trace};
+use log::{warn, debug};
 use nalgebra::Matrix3;
 use opencv::prelude::KeyPointTraitConst;
 use crate::{
-    map::{frame::Frame, keyframe::KeyFrame, pose::{DVRotation, DVTranslation, Pose, Sim3}, map::{Map, Id}}, registered_actors::{FEATURE_DETECTION, CAMERA}, MapLock
+    map::{frame::Frame, pose::{DVRotation, DVTranslation, Pose, Sim3}, map::{Map, Id}}, registered_actors::{FEATURE_DETECTION, CAMERA}, MapLock
 };
 
 lazy_static! {
@@ -638,7 +638,7 @@ pub fn local_bundle_adjustment(
     tracy_client::plot!("LBA: Fixed KFs", fixed_kfs as f64);
     tracy_client::plot!("LBA: MPs to Optimize", mps_to_optimize as f64);
     tracy_client::plot!("LBA: Edges", edges as f64);
-    trace!("LBA:{},{},{},{}", kfs_to_optimize, fixed_kfs, mps_to_optimize, edges);
+    // trace!("LBA:{},{},{},{}", kfs_to_optimize, fixed_kfs, mps_to_optimize, edges);
 
     // Optimize
     {
@@ -697,8 +697,7 @@ pub fn local_bundle_adjustment(
     {
         let _span = tracy_client::span!("local_bundle_adjustment::discard");
         for (mp_id, kf_id) in mps_to_discard {
-            map.write().keyframes.get_mut(&kf_id).unwrap().delete_mp_match(mp_id);
-            map.write().mappoints.get_mut(&mp_id).unwrap().delete_observation(&kf_id);
+            map.write().delete_observation(kf_id, mp_id);
         }
     }
 

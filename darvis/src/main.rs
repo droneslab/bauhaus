@@ -6,12 +6,12 @@ use std::{fs::{OpenOptions, File}, path::Path, env, time::{self, Duration}, io::
 use map::map::Map;
 use fern::colors::{ColoredLevelConfig, Color};
 use glob::glob;
-use log::{info, warn};
+use log::info;
 use spin_sleep::LoopHelper;
 #[macro_use] extern crate lazy_static;
 
 use core::{*, config::*, actor::ActorChannels, maplock::ReadWriteMap};
-use crate::{actors::messages::{ShutdownMsg, ImageMsg}, registered_actors::{TRACKING_FRONTEND}, modules::image};
+use crate::{actors::messages::{ShutdownMsg, ImageMsg}, modules::image};
 use crate::map::{bow::VOCABULARY, map::Id};
 
 mod actors;
@@ -212,47 +212,71 @@ fn setup_logger(level: &str) -> Result<(), fern::InitError> {
         "error" => log::LevelFilter::Error,
         _ => log::LevelFilter::Trace,
     };
-    // Two loggers in chain - one for terminal output (colored) and another for file output (not colored)
+
     let start_time = chrono::Local::now();
+
+    let terminal_output = fern::Dispatch::new()
+        .level(log_level)
+        .format(move |out, message, record| {
+            out.finish(format_args!(
+                "{color_line}[{time} {target}:{line_num} {level}{color_line}] {message}\x1B[0m",
+                color_line = format_args!(
+                    "\x1B[{}m",
+                    colors.get_color(&record.level()).to_fg_str()
+                ),
+                level = colors.color(record.level()),
+                time = (chrono::Local::now() - start_time).num_milliseconds() as f64 / 1000.0,
+                target = record.file().unwrap_or("unknown"),
+                line_num = record.line().unwrap_or(0),
+                message = message
+            ))
+        })
+        .chain(std::io::stdout());
+
+    let file_output = fern::Dispatch::new()
+        .level(log_level)
+        .format(move |out, message, record| {
+            out.finish(format_args!(
+                "[{time} {target}:{line_num} {level}] {message}",
+                time = (chrono::Local::now() - start_time).num_milliseconds() as f64  / 1000.0,
+                target = record.file().unwrap_or("unknown"),
+                line_num = record.line().unwrap_or(0),
+                level = record.level(),
+                message = message
+            ))
+        })
+        .chain(OpenOptions::new()
+            .write(true)
+            .truncate(true)
+            .create(true)
+            .open(Path::new(&results_folder).join("output.log"))?
+        );
+        
+    // let trace_output = fern::Dispatch::new()
+    //     .level(log::LevelFilter::Trace)
+    //     .format(move |out, message, record| {
+    //         out.finish(format_args!(
+    //             "[{time} {target}:{line_num} {level}] {message}",
+    //             time = (chrono::Local::now() - start_time).num_milliseconds() as f64  / 1000.0,
+    //             target = record.file().unwrap_or("unknown"),
+    //             line_num = record.line().unwrap_or(0),
+    //             level = record.level(),
+    //             message = message
+    //         ))
+    //     })
+    //     .chain(OpenOptions::new()
+    //         .write(true)
+    //         .truncate(true)
+    //         .create(true)
+    //         .open(Path::new(&results_folder).join("trace.log"))?
+    //     );
+
     fern::Dispatch::new()
-    .level(log_level)
-    .chain(
-    fern::Dispatch::new()
-            .format(move |out, message, record| {
-                out.finish(format_args!(
-                    "{color_line}[{time} {target}:{line_num} {level}{color_line}] {message}\x1B[0m",
-                    color_line = format_args!(
-                        "\x1B[{}m",
-                        colors.get_color(&record.level()).to_fg_str()
-                    ),
-                    level = colors.color(record.level()),
-                    time = (chrono::Local::now() - start_time).num_milliseconds() as f64 / 1000.0,
-                    target = record.file().unwrap_or("unknown"),
-                    line_num = record.line().unwrap_or(0),
-                    message = message
-                ))
-            })
-            .chain(std::io::stdout()),
-    )
-    .chain(
-    fern::Dispatch::new()
-            .format(move |out, message, record| {
-                out.finish(format_args!(
-                    "[{time} {target}:{line_num} {level}] {message}",
-                    time = (chrono::Local::now() - start_time).num_milliseconds() as f64  / 1000.0,
-                    target = record.file().unwrap_or("unknown"),
-                    line_num = record.line().unwrap_or(0),
-                    level = record.level(),
-                    message = message
-                ))
-            })
-            .chain(OpenOptions::new()
-                .write(true)
-                .create(true)
-                .open(Path::new(&results_folder).join("output.log"))?
-            )
-    )
+    .chain(terminal_output)
+    .chain(file_output)
+    // .chain(trace_output)
     .apply()?;
+
 
     Ok(())
 }

@@ -1,6 +1,5 @@
 use std::{sync::Arc, collections::{HashSet, HashMap}};
 
-use nalgebra::min;
 use parking_lot::RwLock;
 
 use crate::{map::map::Id, MapLock};
