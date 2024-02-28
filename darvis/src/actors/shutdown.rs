@@ -79,6 +79,7 @@ impl Actor for ShutdownActor {
                 for (_, actor_tx) in &actor.actor_channels.actors {
                     actor_tx.send(Box::new(ShutdownMsg{})).unwrap();
                 }
+                return;
             }
         }
     }

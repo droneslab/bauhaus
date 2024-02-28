@@ -1,4 +1,4 @@
-use std::{sync::{Arc, Mutex}, thread, collections::HashMap};
+use std::{collections::HashMap, sync::{Arc, Mutex}, thread::{self, JoinHandle}};
 use crossbeam_channel::unbounded;
 
 use core::{
@@ -18,7 +18,7 @@ use crate::{
 // Returns mutex to shutdown flag and transmitters for first actor and shutdown actor.
 // You probably don't want to change this code.
 pub fn launch_actor_system(config: Vec::<ActorConf>, first_actor_name: String) 
-    -> Result<(Arc<std::sync::Mutex<bool>>, Sender, Sender), Box<dyn std::error::Error>> 
+    -> Result<(Arc<std::sync::Mutex<bool>>, Sender, Sender, JoinHandle<()>), Box<dyn std::error::Error>> 
 {
     // * SET UP CHANNELS *//
     // Create transmitters and receivers for user-defined actors
@@ -46,12 +46,12 @@ pub fn launch_actor_system(config: Vec::<ActorConf>, first_actor_name: String)
 
     // * SPAWN DARVIS SYSTEM ACTORS *//
     // Ctrl+c shutdown actor
-    let shutdown_flag = spawn_shutdown_actor(&transmitters, shutdown_rx);
+    let (shutdown_join, shutdown_flag) = spawn_shutdown_actor(&transmitters, shutdown_rx);
 
     //* Return transmitters for the shutdown actor and first actor in the pipeline, and the ctrl+c handler flag */
     let first_actor_tx = transmitters.get(&first_actor_name).unwrap().clone();
     let shutdown_actor_tx = transmitters.get(SHUTDOWN_ACTOR).unwrap().clone();
-    Ok((shutdown_flag, first_actor_tx, shutdown_actor_tx))
+    Ok((shutdown_flag, first_actor_tx, shutdown_actor_tx, shutdown_join))
 }
 
 
@@ -83,7 +83,7 @@ fn spawn_actor(
 }
 
 
-fn spawn_shutdown_actor(transmitters: &HashMap<String, Sender>, receiver: Receiver) -> Arc<Mutex<bool>> {
+fn spawn_shutdown_actor(transmitters: &HashMap<String, Sender>, receiver: Receiver) -> (JoinHandle<()>, Arc<Mutex<bool>>) {
     let shutdown_flag = Arc::new(Mutex::new(false));
     let flag_clone = shutdown_flag.clone();
 
@@ -95,7 +95,7 @@ fn spawn_shutdown_actor(transmitters: &HashMap<String, Sender>, receiver: Receiv
     }
     let actor_channels = ActorChannels {receiver, receiver_bound: None, actors: txs, my_name: SHUTDOWN_ACTOR.to_string()};
 
-    thread::spawn(move || { 
+    let join_handle = thread::spawn(move || { 
         registered_actors::spawn(SHUTDOWN_ACTOR.to_string(), actor_channels, None);
     } );
 
@@ -107,5 +107,5 @@ fn spawn_shutdown_actor(transmitters: &HashMap<String, Sender>, receiver: Receiv
     })
     .expect("Error setting Ctrl-C handler");
 
-    flag_clone
+    (join_handle, flag_clone)
 }

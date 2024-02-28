@@ -316,7 +316,7 @@ impl DarvisVisualizer {
                 if mappoint_match_ids.contains(&mappoint_id) {
                     // If mappoint is a match with the current frame
                     self.create_sphere(&pose, MAPPOINT_MATCH_COLOR.clone(), MAPPOINT_SIZE.clone())
-                } else if local_mappoints.contains(&mappoint_id) && SETTINGS.get::<bool>(VISUALIZER, "draw_local_mappoints") {
+                } else if local_mappoints.contains(&mappoint_id) || SETTINGS.get::<bool>(VISUALIZER, "draw_local_mappoints") {
                     // If mappoint is not a match, but tracking has it as a local mappoint
                     self.create_sphere(&pose, MAPPOINT_LOCAL_COLOR.clone(), MAPPOINT_SIZE.clone())
                 } else if SETTINGS.get::<bool>(VISUALIZER, "draw_all_mappoints") || !self.previous_mappoints.contains(&mappoint_id) {

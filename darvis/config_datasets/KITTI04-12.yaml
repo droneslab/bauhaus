@@ -1,0 +1,25 @@
+
+# Camera calibration and distortion parameters (OpenCV) 
+fx: 707.0912
+fy: 707.0912
+cx: 601.8873
+cy: 183.1104
+
+k1: 0.0
+k2: 0.0
+p1: 0.0
+p2: 0.0
+k3: 0.0
+
+stereo_baseline_times_fx: 379.8145
+thdepth: 40
+
+# Color order of the images (0: BGR, 1: RGB. It is ignored if images are grayscale)
+RGB: 1
+
+# Camera resolution
+width: 1241
+height: 376
+
+stereo_overlapping_begin: 0
+stereo_overlapping_end: 1000
