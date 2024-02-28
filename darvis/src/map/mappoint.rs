@@ -1,7 +1,6 @@
-use std::{collections::{BTreeMap, HashMap}, fmt::Debug, sync::atomic::{AtomicI32, Ordering}};
+use std::{collections::BTreeMap, fmt::Debug, sync::atomic::{AtomicI32, Ordering}};
 use core::{matrix::DVMatrix, config::{SETTINGS, SYSTEM}, sensor::{Sensor, FrameSensor}};
-use log::{error, debug, warn};
-use opencv::{core::Mat, hub_prelude::MatTraitConst, prelude::Boxed};
+use log::{error, warn};
 extern crate nalgebra as na;
 use crate::{matrix::DVVector3, modules::orbmatcher::{SCALE_FACTORS, descriptor_distance}, registered_actors::FEATURE_DETECTION};
 use super::{map::{Id, Map}, keyframe::KeyFrame, pose::DVTranslation};
@@ -217,7 +216,7 @@ impl MapPoint {
             None => (-1, -1)
         }
     }
-    pub fn delete_observation(&mut self, kf_id: &Id) -> bool {
+    pub(super) fn delete_observation(&mut self, kf_id: &Id) -> bool {
         // void MapPoint::EraseObservation(KeyFrame* pKF)
         if let Some((left_index, right_index)) = self.observations.get(kf_id) {
             if *left_index != -1 {
@@ -247,7 +246,7 @@ impl MapPoint {
         return false;
     }
 
-    pub fn add_observation(&mut self, kf_id: &Id, num_keypoints_left_for_kf: u32, index: u32) {
+    pub(super) fn add_observation(&mut self, kf_id: &Id, num_keypoints_left_for_kf: u32, index: u32) {
         let (mut left_index, mut right_index) = match self.observations.get(kf_id) {
             Some((left, right)) => (*left, *right),
             None => (-1, -1)
@@ -270,7 +269,6 @@ impl MapPoint {
         //     nObs++;
         self.num_obs += 1;
 
-        // debug!("mp {} add_observation {} -> ({}, {})", self.id, kf_id, left_index, right_index);
         self.observations.insert(*kf_id, (left_index, right_index));
     }
 
@@ -306,17 +304,25 @@ impl MapPoint {
     fn compute_descriptors(&self, map: &Map) -> Vec::<opencv::core::Mat> {
         let mut descriptors = Vec::<opencv::core::Mat>::new();
         for (id, (index1, index2)) in &self.observations {
-            let kf = map.keyframes.get(&id).unwrap();
-            descriptors.push((*kf.features.descriptors.row(*index1 as u32)).clone());
-            // if self.id == TESTMPID {
-            //     println!("Compute descriptors");
-            //     println!("kf {} descriptors: ", kf.id);
-            //     print_descriptor(&kf.features.descriptors.row(*index1 as u32));
-            // }
-            match self.sensor.frame() {
-                FrameSensor::Stereo => descriptors.push((*kf.features.descriptors.row(*index2 as u32)).clone()),
-                _ => {}
-            }
+            match map.keyframes.get(&id) {
+                Some(kf) => {
+                    descriptors.push((*kf.features.descriptors.row(*index1 as u32)).clone());
+                    // if self.id == TESTMPID {
+                    //     println!("Compute descriptors");
+                    //     println!("kf {} descriptors: ", kf.id);
+                    //     print_descriptor(&kf.features.descriptors.row(*index1 as u32));
+                    // }
+                    match self.sensor.frame() {
+                        FrameSensor::Stereo => descriptors.push((*kf.features.descriptors.row(*index2 as u32)).clone()),
+                        _ => {}
+                    }
+
+                },
+                None => {
+                    error!("Mappoint {} has observation of keyframe {} but it is not in the map", self.id, id);
+                }
+
+            };
         }
         descriptors
     }

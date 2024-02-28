@@ -1,5 +1,5 @@
 use std::{borrow::Cow, collections::{BTreeMap, BTreeSet, HashSet}, fs::{self, File}, io::BufWriter, sync::Arc};
-use log::{warn, debug};
+use log::warn;
 use mcap::{Schema, Channel, records::MessageHeader, Writer};
 use opencv::prelude::{Mat, MatTraitConst, MatTraitConstManual};
 use foxglove::{foxglove::items::{SceneEntity, SceneUpdate, SpherePrimitive, Vector3, Quaternion, Color, FrameTransform, LinePrimitive, line_primitive, Point3, RawImage, ArrowPrimitive, SceneEntityDeletion, scene_entity_deletion}, get_file_descriptor_set_bytes, make_pose};
@@ -192,8 +192,9 @@ impl DarvisVisualizer {
         self.draw_trajectory(msg.pose, msg.timestamp).expect("Visualizer could not draw trajectory!");
         self.draw_mappoints(&msg.mappoints_in_tracking, &msg.mappoint_matches, msg.timestamp).expect("Visualizer could not draw mappoints!");
 
-        // Not calling this right now, need to figure out some nicer way to distribute the points so it's actually readable
-        // self.draw_connected_kfs(msg.timestamp).expect("Visualizer could not draw connected kfs!");
+        if SETTINGS.get::<bool>(VISUALIZER, "draw_connected_kfs") {
+            self.draw_connected_kfs(msg.timestamp).expect("Visualizer could not draw connected kfs!");
+        }
         self.current_update_id += 1;
         self.prev_pose = msg.pose.into();
     }
@@ -294,7 +295,7 @@ impl DarvisVisualizer {
     fn draw_mappoints(&mut self, local_mappoints: &BTreeSet<Id>, mappoint_matches: &Vec<Option<(Id, bool)>>, timestamp: Timestamp) -> Result<(), Box<dyn std::error::Error>> {
         // Mappoints in map (different color if they are matches)
         // Should be overwritten when there is new info for a mappoint
-        // self.clear_scene(timestamp, self.mappoints_channel)?;
+        self.clear_scene(timestamp, self.mappoints_channel)?;
 
         let mut entities = Vec::new();
 
@@ -315,7 +316,7 @@ impl DarvisVisualizer {
                 if mappoint_match_ids.contains(&mappoint_id) {
                     // If mappoint is a match with the current frame
                     self.create_sphere(&pose, MAPPOINT_MATCH_COLOR.clone(), MAPPOINT_SIZE.clone())
-                } else if local_mappoints.contains(&mappoint_id) {
+                } else if local_mappoints.contains(&mappoint_id) && SETTINGS.get::<bool>(VISUALIZER, "draw_local_mappoints") {
                     // If mappoint is not a match, but tracking has it as a local mappoint
                     self.create_sphere(&pose, MAPPOINT_LOCAL_COLOR.clone(), MAPPOINT_SIZE.clone())
                 } else if SETTINGS.get::<bool>(VISUALIZER, "draw_all_mappoints") || !self.previous_mappoints.contains(&mappoint_id) {
@@ -516,7 +517,9 @@ impl DarvisVisualizer {
 }
 
 fn convert_timestamp(timestamp: Timestamp) -> (i64, i32) {
-    let timestamp = timestamp * 10.0; // Note: Can remove this later, putting this in here for now so foxglove can show the results a little slower. If removing, also modify write() function
+    // Note: Can remove this later, putting this in here for now so foxglove can show the results a little slower. If removing, also modify write() function
+    // let timestamp = timestamp * 10.0; 
+
     let seconds = timestamp.floor();
     let nanos = (timestamp - seconds) * 1000000000.0;
     (seconds as i64, nanos as i32)
@@ -561,7 +564,10 @@ impl McapWriter {
         timestamp: Timestamp,
         sequence: u32,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let time_in_nsec = timestamp * 10000000000.0; // Note: remove one 0 if removing line in convert_timestamp that makes it go slower
+        // Note: Can remove this later, putting this in here for now so foxglove can show the results a little slower
+        // let time_in_nsec = timestamp * 10000000000.0;
+
+        let time_in_nsec = timestamp * 1000000000.0;
         Ok(
             self.writer.write_to_known_channel(
                 &MessageHeader {
@@ -593,6 +599,10 @@ impl From<&Pose> for foxglove::foxglove::items::Pose {
         // TODO (mvp): These always show pointing to the right when they shouldn't be
         let quat = pose.get_quaternion();
         let orientation = Quaternion {
+            // x: quat[0],
+            // y: quat[1],
+            // z: quat[2],
+            // w: quat[3]
             x: quat[0],
             y: quat[1],
             z: quat[2],

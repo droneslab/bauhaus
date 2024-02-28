@@ -3,8 +3,7 @@ use std::f64::INFINITY;
 use core::config::SETTINGS;
 use core::matrix::{DVMatrix, DVMatrix4, DVVector3, DVVectorOfPoint2f};
 use core::sensor::{Sensor, FrameSensor};
-use log::{warn, debug};
-use opencv::core::{KeyPoint, Range};
+use opencv::core::KeyPoint;
 use opencv::prelude::*;
 use crate::MapLock;
 use crate::actors::tracking_backend::TrackedMapPointData;
@@ -355,7 +354,6 @@ pub fn search_by_projection_with_threshold (
     // double check that the descriptors works correctly. Instead of splitting descriptors into discriptors_left and right,
     // I have all of them in one long vec. I THINK this should be fine, but double check.
     let mut num_matches = 0;
-    let mut matches = HashMap::<u32, Id>::new();
 
     let factor = 1.0 / (HISTO_LENGTH as f32);
     let mut rot_hist = construct_rotation_histogram();
@@ -521,47 +519,47 @@ pub fn search_by_sim3(map: &MapLock, kf1_id: Id, kf2_id: Id, matches: &mut Vec<O
 
     // Camera 1 from world
     let kf1 = lock.keyframes.get(&kf1_id).unwrap();
-    let R1w = kf1.pose.get_rotation();
+    let r1w = kf1.pose.get_rotation();
     let t1w = kf1.pose.get_translation();
 
     // Camera 2 from world
     let kf2 = lock.keyframes.get(&kf2_id).unwrap();
-    let R2w = kf2.pose.get_rotation();
+    let r2w = kf2.pose.get_rotation();
     let tw2 = kf2.pose.get_translation();
 
     //Transformation between cameras
-    let s_R12 = s12 * **r12;
-    let s_R21 = (1.0 / s12) * r12.transpose();
-    let t21 = -s_R21 * **t12;
+    let s_r_12 = s12 * **r12;
+    let s_r_21 = (1.0 / s12) * r12.transpose();
+    let t21 = -s_r_21 * **t12;
 
     let mappoints1 = kf1.get_mp_matches();
     let mappoints2 =  kf2.get_mp_matches();
-    let N1 = mappoints1.len();
-    let N2 = mappoints2.len();
+    let n1 = mappoints1.len();
+    let n2 = mappoints2.len();
 
-    let mut already_matched1 = vec![false; N1];
-    let mut already_matched2 = vec![false; N2];
+    let mut already_matched1 = vec![false; n1];
+    let mut already_matched2 = vec![false; n2];
 
     {
         let map = map.read();
-        for i in 0..N1 {
+        for i in 0..n1 {
             let mp_id = matches[i];
             if let Some(mp) = mp_id {
                 already_matched1[i] = true;
                 let mp = map.mappoints.get(&mp).unwrap();
                 let (left_idx2, _right_idx2) = mp.get_index_in_keyframe(kf2_id);
-                if left_idx2 != -1 && left_idx2 < N2 as i32 {
+                if left_idx2 != -1 && left_idx2 < n2 as i32 {
                     already_matched2[left_idx2 as usize] = true;
                 }
             }
         }
     }
 
-    let mut match1 = vec![-1; N1];
-    let mut match2 = vec![-1; N2];
+    let mut match1 = vec![-1; n1];
+    let mut match2 = vec![-1; n2];
 
     // Transform from KF1 to KF2 and search
-    for i in 0..N1 {
+    for i in 0..n1 {
         let mp_id = match mappoints1[i] {
             Some((mp_id, _)) => mp_id,
             None => continue
@@ -576,18 +574,18 @@ pub fn search_by_sim3(map: &MapLock, kf1_id: Id, kf2_id: Id, matches: &mut Vec<O
             continue;
         }
         
-        let p_3D_w = mp.position;
-        let p_3D_c1 = (*R1w) * (*p_3D_w) + (*t1w);
-        let p_3D_c2 = s_R21 * p_3D_c1 + t21;
+        let p_3d_w = mp.position;
+        let p_3d_c1 = (*r1w) * (*p_3d_w) + (*t1w);
+        let p_3d_c2 = s_r_21 * p_3d_c1 + t21;
 
         // Depth must be positive
-        if p_3D_c2[2] < 0.0 {
+        if p_3d_c2[2] < 0.0 {
             continue;
         }
 
-        let invz = 1.0 / p_3D_c2[2];
-        let x = p_3D_c2[0] * invz;
-        let y = p_3D_c2[1] * invz;
+        let invz = 1.0 / p_3d_c2[2];
+        let x = p_3d_c2[0] * invz;
+        let y = p_3d_c2[1] * invz;
         
         let u = CAMERA_MODULE.fx * x + CAMERA_MODULE.cx;
         let v = CAMERA_MODULE.fy * y + CAMERA_MODULE.cy;
@@ -598,7 +596,7 @@ pub fn search_by_sim3(map: &MapLock, kf1_id: Id, kf2_id: Id, matches: &mut Vec<O
         }
         let max_distance = mp.get_max_distance_invariance();
         let min_distance = mp.get_min_distance_invariance();
-        let dist_3d = p_3D_c2.norm();
+        let dist_3d = p_3d_c2.norm();
 
         // Depth must be inside the scale invariance region
         if dist_3d < min_distance || dist_3d > max_distance {
@@ -643,7 +641,7 @@ pub fn search_by_sim3(map: &MapLock, kf1_id: Id, kf2_id: Id, matches: &mut Vec<O
     }
 
     // Transform from KF2 to KF2 and search
-    for i in 0..N2 {
+    for i in 0..n2 {
         let lock = map.read();
         let mp_id = match mappoints2[i] {
             Some((mp, _)) => mp,
@@ -657,18 +655,18 @@ pub fn search_by_sim3(map: &MapLock, kf1_id: Id, kf2_id: Id, matches: &mut Vec<O
             None => continue
         };
 
-        let p_3D_w = mp.position;
-        let p_3D_c2 = (*R2w) * (*p_3D_w) + (*tw2);
-        let p_3D_c1 = s_R12 * p_3D_c2 + **t12;
+        let p_3d_w = mp.position;
+        let p_3d_c2 = (*r2w) * (*p_3d_w) + (*tw2);
+        let p_3d_c1 = s_r_12 * p_3d_c2 + **t12;
 
         // Depth must be positive
-        if p_3D_c1[2] < 0.0 {
+        if p_3d_c1[2] < 0.0 {
             continue;
         }
         
-        let invz = 1.0 / p_3D_c1[2];
-        let x = p_3D_c1[0] * invz;
-        let y = p_3D_c1[1] * invz;
+        let invz = 1.0 / p_3d_c1[2];
+        let x = p_3d_c1[0] * invz;
+        let y = p_3d_c1[1] * invz;
 
         let u = CAMERA_MODULE.fx * x + CAMERA_MODULE.cx;
         let v = CAMERA_MODULE.fy * y + CAMERA_MODULE.cy;
@@ -680,7 +678,7 @@ pub fn search_by_sim3(map: &MapLock, kf1_id: Id, kf2_id: Id, matches: &mut Vec<O
 
         let max_distance = mp.get_max_distance_invariance();
         let min_distance = mp.get_min_distance_invariance();
-        let dist_3d = p_3D_c1.norm();
+        let dist_3d = p_3d_c1.norm();
 
         // Depth must be inside the scale pyramid of the image
         if dist_3d < min_distance || dist_3d > max_distance {
@@ -724,7 +722,7 @@ pub fn search_by_sim3(map: &MapLock, kf1_id: Id, kf2_id: Id, matches: &mut Vec<O
 
     // Check agreement
     let mut found = 0;
-    for i in 0..N1 {
+    for i in 0..n1 {
         let idx2 = match1[i];
         if idx2 >= 0 {
             let idx1 = match2[idx2 as usize];
@@ -754,11 +752,11 @@ pub fn search_by_projection_for_loop_detection(
 
     // Decompose Scw
     let scw_mat: DVMatrix = scw.into();
-    let s_Rcw = scw_mat.row_range(0,3).col_range(0,3);
-    let scw = (s_Rcw.row(0).dot(& *s_Rcw.row(0))? as f32).sqrt();
-    let Rcw = s_Rcw.divide_by_scalar(scw); // Should be == s_rCw / scw
+    let s_rcw = scw_mat.row_range(0,3).col_range(0,3);
+    let scw = (s_rcw.row(0).dot(& *s_rcw.row(0))? as f32).sqrt();
+    let rcw = s_rcw.divide_by_scalar(scw); // Should be == s_rCw / scw
     let tcw = DVMatrix::new(scw_mat.row_range(0,3).col(3)?).divide_by_scalar(scw); // Should be == scw_mat / scw
-    let ow = DVMatrix::new_expr(Rcw.clone().t()?).neg() * &tcw;
+    let ow = DVMatrix::new_expr(rcw.clone().t()?).neg() * &tcw;
 
     // Set of MapPoints already found in the KeyFrame
     let mut already_found = vec![false; matched_mappoints.len()];
@@ -780,7 +778,7 @@ pub fn search_by_projection_for_loop_detection(
         let p3dw: Mat = (&mp.position).into();
 
         // Transform into Camera Coords.
-        let p3dc = DVMatrix::new_expr_res(Rcw.mat() * &p3dw + tcw.mat());
+        let p3dc = DVMatrix::new_expr_res(rcw.mat() * &p3dw + tcw.mat());
 
         // Depth must be positive
         if p3dc.at(2) < 0.0 {
@@ -852,6 +850,7 @@ pub fn search_by_projection_for_loop_detection(
         if best_dist <= TH_LOW {
             matched_mappoints[best_idx as usize] = Some(mp_id);
             num_matches += 1;
+            already_found[i] = true;
         }
     }
 
@@ -1307,25 +1306,10 @@ pub fn fuse(kf_id: &Id, fuse_candidates: &Vec<Option<(Id, bool)>>, map: &MapLock
         };
     }
 
-    let mut obs_added = 0;
-    let mut mps_replaced = 0;
-    let mut quit_none = 0;
-    let mut quit_not_in_map = 0;
-    let mut quit_in_obs = 0;
-    let mut quit_depth = 0;
-    let mut quit_point_in_image = 0;
-    let mut quit_inv_sigma = 0;
-    let mut quit_best_dist = 0;
-    let mut quit_predicted_level = 0;
-    let mut quit_indices_empty = 0;
-    let mut quit_viewing_angle = 0;
-    let mut quit_inside_scale = 0;
-    
     for fuse_cand in fuse_candidates {
         let (mp_id, _) = match fuse_cand {
             Some((mp_id, _)) => (mp_id, true),
             None => {
-                quit_none += 1;
                 continue
             }
         };
@@ -1336,12 +1320,10 @@ pub fn fuse(kf_id: &Id, fuse_candidates: &Vec<Option<(Id, bool)>>, map: &MapLock
             let mappoint = match lock.mappoints.get(&mp_id) {
                 Some(mp) => mp,
                 None => {
-                    quit_not_in_map += 1;
                     continue
                 }
             };
             if mappoint.get_observations().contains_key(kf_id) {
-                quit_in_obs += 1;
                 continue;
             }
 
@@ -1350,7 +1332,6 @@ pub fn fuse(kf_id: &Id, fuse_candidates: &Vec<Option<(Id, bool)>>, map: &MapLock
 
             // Depth must be positive
             if p_3d_c[2] < 0.0 {
-                quit_depth += 1;
                 continue;
             }
 
@@ -1359,7 +1340,6 @@ pub fn fuse(kf_id: &Id, fuse_candidates: &Vec<Option<(Id, bool)>>, map: &MapLock
 
             // Point must be inside the image
             if !lock.keyframes.get(kf_id).unwrap().features.is_in_image(uv.0, uv.1) {
-                quit_point_in_image += 1;
                 continue;
             }
 
@@ -1370,14 +1350,12 @@ pub fn fuse(kf_id: &Id, fuse_candidates: &Vec<Option<(Id, bool)>>, map: &MapLock
 
             // Depth must be inside the scale pyramid of the image
             if dist_3d < min_distance || dist_3d > max_distance {
-                quit_inside_scale += 1;
                 continue;
             }
 
             // Viewing angle must be less than 60 deg
             let pn = mappoint.normal_vector;
             if po.dot(&pn) < 0.5 * dist_3d {
-                quit_viewing_angle += 1;
                 continue;
             }
 
@@ -1386,7 +1364,6 @@ pub fn fuse(kf_id: &Id, fuse_candidates: &Vec<Option<(Id, bool)>>, map: &MapLock
             let radius = th * SCALE_FACTORS[predicted_level as usize];
             let indices = lock.keyframes.get(kf_id).unwrap().features.get_features_in_area(&uv.0, &uv.1, radius as f64, None);
             if indices.is_empty() {
-                quit_indices_empty += 1;
                 continue;
             }
 
@@ -1399,7 +1376,6 @@ pub fn fuse(kf_id: &Id, fuse_candidates: &Vec<Option<(Id, bool)>>, map: &MapLock
                 let kp_level = kp.octave();
 
                 if kp_level < predicted_level - 1 || kp_level > predicted_level {
-                    quit_predicted_level += 1;
                     continue;
                 }
 
@@ -1426,7 +1402,6 @@ pub fn fuse(kf_id: &Id, fuse_candidates: &Vec<Option<(Id, bool)>>, map: &MapLock
                     ey = uv.1 - kpy;
                     e2 = ex * ex + ey * ey;
                     if e2 * INV_LEVEL_SIGMA2[kp_level as usize] as f64 > 5.99 {
-                        quit_inv_sigma += 1;
                         continue;
                     }
                 }
@@ -1457,16 +1432,9 @@ pub fn fuse(kf_id: &Id, fuse_candidates: &Vec<Option<(Id, bool)>>, map: &MapLock
                 } else {
                     map.write().replace_mappoint(mp_in_kf_id, *mp_id);
                 }
-                mps_replaced += 1;
             } else {
-                let mut write = map.write();
-                let num_keypoints = write.keyframes.get(&kf_id).expect(&format!("Could not get kf {}", kf_id)).features.num_keypoints;
-                write.mappoints.get_mut(&mp_id).unwrap().add_observation(&kf_id, num_keypoints, best_idx as u32);
-                write.keyframes.get_mut(&kf_id).unwrap().add_mp_match(best_idx as u32, *mp_id, false);
-                obs_added += 1;
+                map.write().add_observation(*kf_id, *mp_id, best_idx as u32, false);
             }
-        } else {
-            quit_best_dist += 1;
         }
     }
 

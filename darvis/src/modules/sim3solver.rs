@@ -1,20 +1,15 @@
 // Everything in this function uses opencv::Mat objects instead of nalgebra or DVMatrix (which wraps nalgebra) objects
 
-use core::matrix::{DVMatrix, DVMatrix3, DVMatrix4, DVVector3};
-use std::{cmp::{max, min}, collections::{HashMap, HashSet}};
+use std::{cmp::{max, min}, collections::HashMap};
 
-use nalgebra::{Matrix, Matrix4};
-use opencv::{core::{no_array, norm, MatExprResult, Range, Scalar, CV_64F, NORM_L2}, hub_prelude::{KeyPointTraitConst, MatExprTraitConst, MatTrait, MatTraitConst}};
+
+use opencv::{core::{no_array, norm, MatExprResult, Range, Scalar, CV_64F, NORM_L2}, hub_prelude::{KeyPointTraitConst, MatExprTraitConst, MatTraitConst}};
 use rand::Rng;
 
-use crate::{map::{keyframe::KeyFrame, map::Id, pose::{DVRotation, DVTranslation, Pose}}, modules::{camera::CAMERA_MODULE, optimizer::LEVEL_SIGMA2}, registered_actors::CAMERA, MapLock};
+use crate::{map::{map::Id, pose::{DVRotation, DVTranslation}}, modules::{camera::CAMERA_MODULE, optimizer::LEVEL_SIGMA2}, MapLock};
 use opencv::prelude::*;
 
 pub struct Sim3Solver {
-    // KeyFrames and matches
-    kf1_id: Id,
-    kf2_id: Id,
-
     x_3d_c1: Vec<Option<Mat>>, // mvX3Dc1
     x_3d_c2: Vec<Option<Mat>>, // mvX3Dc2
     max_error1: Vec<f64>, // mvnMaxError1
@@ -46,6 +41,10 @@ pub struct Sim3Solver {
     // std::vector<MapPoint*> mvpMatches12;
     // std::vector<MapPoint*> mvpMapPoints1;
     // std::vector<MapPoint*> mvpMapPoints2;
+
+    // KeyFrames and matches
+    // kf1_id: Id,
+    // kf2_id: Id,
 
 }
 
@@ -114,7 +113,7 @@ impl Sim3Solver {
         let p1_im1 = from_camera_to_image(&x_3d_c1);
         let p2_im2 = from_camera_to_image(&x_3d_c2);
 
-        let mut inliers_i = vec![false; num_features as usize]; // mvbInliersi
+        let inliers_i = vec![false; num_features as usize]; // mvbInliersi
 
         // Adjust Parameters according to number of correspondences
         let epsilon = probability / (num_features as f32);
@@ -130,15 +129,15 @@ impl Sim3Solver {
         Self {
             ransac_max_its,
             ransac_min_inliers: min_inliers,
-            kf1_id,
-            kf2_id,
+            // kf1_id,
+            // kf2_id,
             num_features,
             x_3d_c1,
             x_3d_c2,
             current_estimation: Sim3Estimation{
-                R12_i: Mat::default(),
-                t12_i: Mat::default(),
-                s12_i: 1.0,
+                r_12_i: Mat::default(),
+                t_12_i: Mat::default(),
+                s_12_i: 1.0,
                 T12_i: Mat::default(),
                 T21_i: Mat::default(),
                 inliers_i,
@@ -169,15 +168,15 @@ impl Sim3Solver {
 
         let mut no_more = false; // bNoMore
         let mut vec_inliers = vec![false; self.num_features as usize]; // vbInliers
-        let mut num_inliers = 0; // nInliers
+        let num_inliers; // nInliers
 
         if self.num_features < self.ransac_min_inliers {
             no_more = true;
             return Ok((no_more, None));
         }
 
-        let mut p_3d_c1_i = Mat::new_rows_cols_with_default(3,3, CV_64F, Scalar::all(0.0))?; // P3Dc1i
-        let mut p_3d_c2_i = Mat::new_rows_cols_with_default(3,3, CV_64F, Scalar::all(0.0))?; // P3Dc2i
+        let p_3d_c1_i = Mat::new_rows_cols_with_default(3,3, CV_64F, Scalar::all(0.0))?; // P3Dc1i
+        let p_3d_c2_i = Mat::new_rows_cols_with_default(3,3, CV_64F, Scalar::all(0.0))?; // P3Dc2i
 
         let mut current_iterations = 0;
         while self.current_ransac_state.num_iterations < self.ransac_max_its && current_iterations < num_iterations {
@@ -185,7 +184,7 @@ impl Sim3Solver {
             current_iterations += 1;
 
             // Get min set of points
-            for i in 0..3 {
+            for _ in 0..3 {
                 let randi = rand::thread_rng().gen_range(0..self.all_indices.len()-1);
 
                 let idx = self.all_indices[randi] as usize;
@@ -208,9 +207,9 @@ impl Sim3Solver {
                 self.current_ransac_state.best_inliers = self.current_estimation.inliers_i.clone();
                 self.current_ransac_state.best_inliers_count = self.current_estimation.inliers_count;
                 self.current_ransac_state.best_T12 = self.current_estimation.T12_i.clone();
-                self.current_ransac_state.best_rotation = self.current_estimation.R12_i.clone();
-                self.current_ransac_state.best_translation = self.current_estimation.t12_i.clone();
-                self.current_ransac_state.best_scale = self.current_estimation.s12_i;
+                self.current_ransac_state.best_rotation = self.current_estimation.r_12_i.clone();
+                self.current_ransac_state.best_translation = self.current_estimation.t_12_i.clone();
+                self.current_ransac_state.best_scale = self.current_estimation.s_12_i;
 
                 if self.current_estimation.inliers_count > self.ransac_min_inliers {
                     num_inliers = self.current_estimation.inliers_count;
@@ -261,34 +260,34 @@ impl Sim3Solver {
 
         // Step 1: Centroid and relative coordinates
 
-        // PR1 = Relative coordinates to centroid (set 1)
+        // pr1 = Relative coordinates to centroid (set 1)
         // O1 = Centroid of P1
-        let (Pr1, O1) = self.compute_centroid(&p1)?;
-        // PR2 = Relative coordinates to centroid (set 2)
+        let (pr1, o1) = self.compute_centroid(&p1)?;
+        // pr2 = Relative coordinates to centroid (set 2)
         // O2 = Centroid of P2
-        let (Pr2, O2) = self.compute_centroid(&p2)?;
+        let (pr2, o2) = self.compute_centroid(&p2)?;
 
         // Step 2: Compute M matrix
-        let M = res_to_mat(&Pr2 * Pr1.t()?)?;
+        let m_mat = res_to_mat(&pr2 * pr1.t()?)?;
 
         // Step 3: Compute N matrix
-        let mut N = {
-            let N11 = M.at_2d::<f64>(0,0)? + M.at_2d::<f64>(1,1)? + M.at_2d::<f64>(2,2)?;
-            let N12 = M.at_2d::<f64>(1,2)? - M.at_2d::<f64>(2,1)?;
-            let N13 = M.at_2d::<f64>(2,0)? - M.at_2d::<f64>(0,2)?;
-            let N14 = M.at_2d::<f64>(0,1)? - M.at_2d::<f64>(1,0)?;
-            let N22 = M.at_2d::<f64>(0,0)? - M.at_2d::<f64>(1,1)? - M.at_2d::<f64>(2,2)?;
-            let N23 = M.at_2d::<f64>(0,1)? + M.at_2d::<f64>(1,0)?;
-            let N24 = M.at_2d::<f64>(2,0)? + M.at_2d::<f64>(0,2)?;
-            let N33 = -M.at_2d::<f64>(0,0)? + M.at_2d::<f64>(1,1)? - M.at_2d::<f64>(2,2)?;
-            let N34 = M.at_2d::<f64>(1,2)? + M.at_2d::<f64>(2,1)?;
-            let N44 = -M.at_2d::<f64>(0,0)? - M.at_2d::<f64>(1,1)? + M.at_2d::<f64>(2,2)?;
+        let n_mat = {
+            let n11 = m_mat.at_2d::<f64>(0,0)? + m_mat.at_2d::<f64>(1,1)? + m_mat.at_2d::<f64>(2,2)?;
+            let n12 = m_mat.at_2d::<f64>(1,2)? - m_mat.at_2d::<f64>(2,1)?;
+            let n13 = m_mat.at_2d::<f64>(2,0)? - m_mat.at_2d::<f64>(0,2)?;
+            let n14 = m_mat.at_2d::<f64>(0,1)? - m_mat.at_2d::<f64>(1,0)?;
+            let n22 = m_mat.at_2d::<f64>(0,0)? - m_mat.at_2d::<f64>(1,1)? - m_mat.at_2d::<f64>(2,2)?;
+            let n23 = m_mat.at_2d::<f64>(0,1)? + m_mat.at_2d::<f64>(1,0)?;
+            let n24 = m_mat.at_2d::<f64>(2,0)? + m_mat.at_2d::<f64>(0,2)?;
+            let n33 = -m_mat.at_2d::<f64>(0,0)? + m_mat.at_2d::<f64>(1,1)? - m_mat.at_2d::<f64>(2,2)?;
+            let n34 = m_mat.at_2d::<f64>(1,2)? + m_mat.at_2d::<f64>(2,1)?;
+            let n44 = -m_mat.at_2d::<f64>(0,0)? - m_mat.at_2d::<f64>(1,1)? + m_mat.at_2d::<f64>(2,2)?;
 
             Mat::from_slice_2d(&[
-                [N11, N12, N13, N14],
-                [N12, N22, N23, N24],
-                [N13, N23, N33, N34],
-                [N14, N24, N34, N44],
+                [n11, n12, n13, n14],
+                [n12, n22, n23, n24],
+                [n13, n23, n33, n34],
+                [n14, n24, n34, n44],
             ])?
         };
 
@@ -296,7 +295,7 @@ impl Sim3Solver {
 
         let mut eval = Mat::default();
         let mut evec = Mat::default();
-        opencv::core::eigen(&N, &mut eval, &mut evec)?; //evec[0] is the quaternion of the desired rotation
+        opencv::core::eigen(&n_mat, &mut eval, &mut evec)?; //evec[0] is the quaternion of the desired rotation
 
         let mut vec = Mat::default();
         evec.row(0)?.col_range(& opencv::core::Range::new(1,2)?)?.copy_to(&mut vec)?; //extract imaginary part of the quaternion (sin*axis)
@@ -309,63 +308,63 @@ impl Sim3Solver {
             res_to_mat(top / bottom)? //Angle-axis representation. quaternion angle is the half
         };
 
-        let mut R12_i = Mat::default();
+        let mut r_12_i = Mat::default();
 
         vec = res_to_mat(2.0 * ang * &vec / norm(&vec, NORM_L2, &Mat::default())?)?;
-        opencv::calib3d::rodrigues(&vec, &mut R12_i, &mut no_array()).unwrap(); // computes the rotation matrix from angle-axis
+        opencv::calib3d::rodrigues(&vec, &mut r_12_i, &mut no_array()).unwrap(); // computes the rotation matrix from angle-axis
 
         // Step 5: Rotate set 2
-        let P3 = res_to_mat(&R12_i * Pr2)?;
+        let p3 = res_to_mat(&r_12_i * pr2)?;
 
         // Step 6: Scale
         if !self.fix_scale {
-            let norm = Pr1.dot(&P3)?;
-            let mut aux_P3 = P3.clone();
-            opencv::core::pow(&P3, 2.0, &mut aux_P3)?;
+            let norm = pr1.dot(&p3)?;
+            let mut aux_p3 = p3.clone();
+            opencv::core::pow(&p3, 2.0, &mut aux_p3)?;
             let mut den = 0.0;
-            for i in 0..aux_P3.rows() {
-                for j in 0..aux_P3.cols() {
-                    den += aux_P3.at_2d::<f64>(i,j)?;
+            for i in 0..aux_p3.rows() {
+                for j in 0..aux_p3.cols() {
+                    den += aux_p3.at_2d::<f64>(i,j)?;
                 }
             }
-            self.current_estimation.s12_i = norm / den;
+            self.current_estimation.s_12_i = norm / den;
         } else {
-            self.current_estimation.s12_i = 1.0;
+            self.current_estimation.s_12_i = 1.0;
         }
 
         // Step 7: Translation
-        self.current_estimation.t12_i = {
-            let t12_i = O1 - self.current_estimation.s12_i * &R12_i * O2;
-            res_to_mat(t12_i)?
+        self.current_estimation.t_12_i = {
+            let t_12_i = o1 - self.current_estimation.s_12_i * &r_12_i * o2;
+            res_to_mat(t_12_i)?
         };
 
         // Step 8: Transformation
 
         // Step 8.1 T12
         self.current_estimation.T12_i = Mat::new_rows_cols_with_default(4,4, CV_64F, Scalar::all(0.0)).unwrap();
-        let sR = res_to_mat(self.current_estimation.s12_i * &R12_i)?;
-        sR.copy_to(
+        let s_r = res_to_mat(self.current_estimation.s_12_i * &r_12_i)?;
+        s_r.copy_to(
             &mut self.current_estimation.T12_i
             .row_range(&Range::new(0,3)?)?
             .col_range(&Range::new(0,3)?)?
         )?;
-        self.current_estimation.t12_i.copy_to(
+        self.current_estimation.t_12_i.copy_to(
             &mut self.current_estimation.T12_i.
             row_range(&Range::new(0,3)?)?
             .col(0)?
         )?;
 
         // Step 8.2 T21
-        let s_Rinv = res_to_mat((1.0 / self.current_estimation.s12_i) * R12_i.t()?)?;
+        let s_r_inv = res_to_mat((1.0 / self.current_estimation.s_12_i) * r_12_i.t()?)?;
 
-        s_Rinv.copy_to(
+        s_r_inv.copy_to(
             &mut self.current_estimation.T21_i
             .row_range(&Range::new(0,3)?)?
             .col_range(&Range::new(0,3)?)?
         )?;
 
-        let neg_s_Rinv = s_Rinv.mul(&-1., 1.)?.to_mat()?;
-        let tinv = res_to_mat(neg_s_Rinv * &self.current_estimation.t12_i)?;
+        let neg_s_r_inv = s_r_inv.mul(&-1., 1.)?.to_mat()?;
+        let tinv = res_to_mat(neg_s_r_inv * &self.current_estimation.t_12_i)?;
         tinv.copy_to(
             &mut self.current_estimation.T21_i
             .row_range(&Range::new(0,3)?)?
@@ -435,9 +434,9 @@ impl Sim3Solver {
 
     pub fn get_estimates(&mut self) -> (DVRotation, DVTranslation, f64) {
         (
-            self.current_estimation.R12_i.clone().into(),
-            (&self.current_estimation.t12_i.clone()).into(),
-            self.current_estimation.s12_i
+            self.current_estimation.r_12_i.clone().into(),
+            (&self.current_estimation.t_12_i.clone()).into(),
+            self.current_estimation.s_12_i
         )
     }
 }
@@ -461,9 +460,9 @@ fn res_to_mat<T: opencv::prelude::MatExprTraitConst>(res: MatExprResult<T>) -> R
 }
 
 struct Sim3Estimation{
-    R12_i: Mat, // mR12i
-    t12_i: Mat, // mt12i
-    s12_i: f64, // ms12i
+    r_12_i: Mat, // mR12i
+    t_12_i: Mat, // mt12i
+    s_12_i: f64, // ms12i
     T12_i: Mat, // mT12i
     T21_i: Mat, // mT21i
     inliers_i: Vec<bool>, // mvbInliersi

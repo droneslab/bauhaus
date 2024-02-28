@@ -13,7 +13,7 @@ system:
       first_actor_name: TRACKING_FRONTEND # Name of actor to kick off pipeline
 
       # FPS
-      fps: 1.0
+      fps: 10.0
       use_timestamps_file: false # Instead of running at a fixed fps, use timestamps from the dataset
 
       # RESULTS
@@ -208,6 +208,12 @@ actors:
           - name: draw_all_mappoints # Not sure this works right now... If true, draws all mappoints in the map. If false, only draws matches and recently created mappoints. Set to false to save space.
             value: false
             type: bool
+          - name: draw_local_mappoints # Whether to draw local mappoints (not tracked, but in local map based on local keyframes)
+            value: false
+            type: bool
+          - name: draw_connected_kfs # Need to figure out some nicer way to distribute the points so it's actually readable
+            value: false
+            type: bool
 
       -
        name: TRACKING_FRONTEND
@@ -242,6 +248,14 @@ actors:
           - 
             name: min_num_features
             value: 2000
+            type: i32
+          - 
+            name: min_frames_to_insert_kf
+            value: 1
+            type: i32
+          -
+            name: max_frames_to_insert_kf
+            value: 10
             type: i32
 
       # -

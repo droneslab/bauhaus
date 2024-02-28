@@ -219,7 +219,7 @@ impl Features {
                 for i in 0..self.num_keypoints as u32 {
                     let depth = mv_depth[i as usize];
                     if depth > 0.0 && depth < th_depth {
-                        if let Some((id, is_outlier)) = mappoint_matches[i as usize] {
+                        if let Some((_id, is_outlier)) = mappoint_matches[i as usize] {
                             if !is_outlier {
                                 tracked_close += 1;
                             } else {

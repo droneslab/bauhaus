@@ -12,13 +12,12 @@ use core::{
 };
 use log::{debug, warn, info, trace};
 use opencv::prelude::KeyPointTraitConst;
-use crate::map::map::Map;
+use crate::registered_actors::TRACKING_BACKEND;
 use crate::{ActorChannels, MapLock};
 use crate::actors::messages::LastKeyFrameUpdatedMsg;
 use crate::modules::optimizer::LEVEL_SIGMA2;
-use crate::registered_actors::{TRACKING_BACKEND};
 use crate::{
-    modules::{optimizer, orbmatcher, imu::ImuModule, camera::CAMERA_MODULE, orbmatcher::SCALE_FACTORS, geometric_tools},
+    modules::{orbmatcher, imu::ImuModule, camera::CAMERA_MODULE, orbmatcher::SCALE_FACTORS, geometric_tools},
     registered_actors::{FEATURE_DETECTION, LOOP_CLOSING, MATCHER, CAMERA},
     Id,
 };
@@ -80,7 +79,7 @@ impl Actor for LocalMapping {
                 // Should only happen for the first two keyframes created by the map because that is the only time
                 // the keyframe is bringing in mappoints that local mapping hasn't created.
                 // TODO (Stereo) ... Tracking can insert new stereo points, so we will also need to add in new points when processing a NewKeyFrameMsg.
-                let before = actor.recently_added_mappoints.len();
+                // let before = actor.recently_added_mappoints.len();
                 actor.recently_added_mappoints.extend(
                     actor.map.read()
                     .keyframes.get(&actor.current_keyframe_id).unwrap()
@@ -190,7 +189,7 @@ impl LocalMapping {
             }
         }
 
-        println!("Local mapping optimization. KF {}, Pose {:?}", self.current_keyframe_id, self.map.read().keyframes.get(&self.current_keyframe_id).unwrap().pose);
+        debug!("Local mapping optimization for KF {}. Optimized pose: {:?}", self.current_keyframe_id, self.map.read().keyframes.get(&self.current_keyframe_id).unwrap().pose);
 
         // Initialize IMU
         if self.sensor.is_imu() && !self.imu.is_initialized {
@@ -415,10 +414,9 @@ impl LocalMapping {
                     (kp1, right1, kp2, right2)
                 };
 
-                let (kp1_ur, kp2_ur);
                 if right1 {
                     let lock = self.map.read();
-                    kp1_ur = lock.keyframes.get(&self.current_keyframe_id).unwrap().features.get_mv_right(idx1);
+                    let _kp1_ur = lock.keyframes.get(&self.current_keyframe_id).unwrap().features.get_mv_right(idx1);
                     pose1 = lock.keyframes.get(&self.current_keyframe_id).unwrap().get_right_pose();
                     ow1 = lock.keyframes.get(&self.current_keyframe_id).unwrap().get_right_camera_center();
                     // camera1 = mpCurrentKeyFrame->mpCamera2 TODO (STEREO) .. right now just using global CAMERA
@@ -430,7 +428,7 @@ impl LocalMapping {
                 }
                 if right2 {
                     let lock = self.map.read();
-                    kp2_ur = lock.keyframes.get(&neighbor_id).unwrap().features.get_mv_right(idx2);
+                    let _kp2_ur = lock.keyframes.get(&neighbor_id).unwrap().features.get_mv_right(idx2);
                     pose2 = lock.keyframes.get(&neighbor_id).unwrap().get_right_pose();
                     ow2 = lock.keyframes.get(&neighbor_id).unwrap().get_right_camera_center();
                     // camera2 = neighbor_kf->mpCamera2 TODO (STEREO)

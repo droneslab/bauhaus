@@ -1,6 +1,5 @@
-use std::{collections::{BTreeSet, HashMap, HashSet}, hash::BuildHasherDefault};
-use fasthash::SeaHasher;
-use log::{info, warn, error, debug};
+use std::{backtrace::Backtrace, collections::{BTreeSet, HashMap, HashSet}};
+use log::{debug, error, info, warn};
 use rustc_hash::FxHashMap;
 use core::{matrix::{DVVector3, DVVectorOfPoint3f}, config::{SETTINGS, SYSTEM}, sensor::{Sensor, FrameSensor, ImuSensor}};
 use crate::{
@@ -97,20 +96,13 @@ impl Map {
         let full_mappoint = MapPoint::new(position, ref_kf_id, origin_map_id, self.last_mp_id);
         self.mappoints.insert(self.last_mp_id, full_mappoint);
 
-        let mp = self.mappoints.get_mut(&new_mp_id).unwrap();
-        for (kf_id, num_keypoints, index) in observations_to_add {
+        for (kf_id, _num_keypoints, index) in observations_to_add {
             if self.keyframes.get(&kf_id).is_none() {
                 // Stale reference to deleted keyframe
                 continue;
             }
 
-            // Add observation for mp->kf
-            mp.add_observation(&kf_id, num_keypoints, index as u32);
-
-            // Add observation kf->mp
-            self.keyframes.get_mut(&kf_id).map(|kf| {
-                kf.add_mp_match(index as u32, mp.id, false);
-            });
+            self.add_observation(kf_id, new_mp_id, index as u32, false);
         }
 
         self.update_mappoint(new_mp_id);
@@ -141,6 +133,7 @@ impl Map {
             // split up the for loop into 2, one for the keyframe update and one for the mappoint update.
             // Possible that that is faster than cloning.
             let mp_matches = self.keyframes.get(&new_kf_id).unwrap().get_mp_matches().clone();
+            // trace!("Create kf {} mp matches: {:?}", new_kf_id, mp_matches);
 
             for i in 0..mp_matches.len() {
                 if mp_matches[i].is_some() {
@@ -148,8 +141,11 @@ impl Map {
                     // Add observation for mp->kf
                     if let Some(mp) = self.mappoints.get_mut(&mp_id) {
                         mp.add_observation(&new_kf_id, num_keypoints, i as u32);
+                        // trace!("Add observation for mp->kf: {} {} {}", mp_id, new_kf_id, i);
+                        // self.add_observation(new_kf_id, mp_id, i as u32, false);
                     } else {
-                        self.keyframes.get_mut(&new_kf_id).unwrap().delete_mp_match_at_indices((i as i32, -1));
+                        self.keyframes.get_mut(&new_kf_id).unwrap().mappoint_matches.delete_at_indices((i as i32, -1));
+                        // trace!("Delete observation for kf->mp: {} {} {}", new_kf_id, mp_id, i);
                         continue;
                         // Mappoint was deleted by local mapping but not deleted here yet 
                         // because the kf was not in the map at the time.
@@ -173,7 +169,9 @@ impl Map {
             .map(|mappoint| {
                 let obs = mappoint.get_observations();
                 for (kf_id, indexes) in obs {
-                    self.keyframes.get_mut(kf_id).unwrap().delete_mp_match_at_indices(*indexes);
+                    self.keyframes.get_mut(&kf_id).unwrap().mappoint_matches.delete_at_indices(*indexes);
+
+                    // trace!("Delete observation for kf->mp: {} {} {}", kf_id, id, indexes.0);
                 }
             });
     }
@@ -183,6 +181,8 @@ impl Map {
         if kf_id == self.initial_kf_id {
             return;
         }
+
+        info!("Discard keyframe {}", kf_id);
 
         let (connections1, matches1, parent1, mut children1);
         {
@@ -263,8 +263,6 @@ impl Map {
             self.keyframes.get_mut(&parent1.unwrap()).unwrap().children.remove(&kf_id);
         }
         self.keyframes.remove(&kf_id);
-
-        info!("Discard keyframe {}", kf_id);
     }
 
     pub fn create_initial_map_monocular(
@@ -307,18 +305,15 @@ impl Map {
             count +=1;
 
             // Create mappoint
+            // This also adds the observations from mappoint -> keyframe and keyframe -> mappoint
             let point = p3d.get(kf1_index).unwrap();
             let world_pos = DVVector3::new_with(point.x as f64, point.y as f64, point.z as f64);
-            let id = self.insert_mappoint_to_map(
+            let _id = self.insert_mappoint_to_map(
                 world_pos, 
                 curr_kf_id, 
                 self.id,
                 vec![(initial_kf_id, num_keypoints, kf1_index), (curr_kf_id, num_keypoints, kf2_index as usize)]
             );
-
-            // Add connection from kf->mp
-            self.keyframes.get_mut(&initial_kf_id).unwrap().add_mp_match(kf1_index as u32, id, false);
-            self.keyframes.get_mut(&curr_kf_id).unwrap().add_mp_match(kf2_index as u32, id, false);
         }
         info!("Monocular initialization created new map with {} mappoints", count);
 
@@ -487,6 +482,26 @@ impl Map {
 
     }
 
+    pub fn add_observation(&mut self, kf_id: Id, mp_id: Id, index: u32, is_outlier: bool) {
+        let num_keypoints = self.keyframes.get(&kf_id).expect(&format!("Could not get kf {}", kf_id)).features.num_keypoints;
+        self.mappoints.get_mut(&mp_id).unwrap().add_observation(&kf_id, num_keypoints, index);
+
+        let old_mp_match = self.keyframes.get_mut(&kf_id).unwrap().mappoint_matches.add(index, mp_id, is_outlier);
+
+        if let Some(old_mp_id) = old_mp_match {
+            warn!("There should not be an old mp match, kf {}, new mp {}, old mp {}", kf_id, mp_id, old_mp_id);
+            println!("{:?}", Backtrace::force_capture());
+
+        }
+        // trace!("Add observation mp<->kf: {} {}", mp_id, kf_id);
+    }
+
+    pub fn delete_observation(&mut self, kf_id: Id, mp_id: Id) {
+        self.keyframes.get_mut(&kf_id).unwrap().mappoint_matches.delete_with_id(mp_id);
+        self.mappoints.get_mut(&mp_id).unwrap().delete_observation(&kf_id);
+        // trace!("Delete observation mp<->kf: {} {}", mp_id, kf_id);
+    }
+
     pub fn replace_mappoint(&mut self, mp_to_replace_id: Id, mp_id: Id) {
         // void MapPoint::Replace(MapPoint* pMP)
 
@@ -502,6 +517,11 @@ impl Map {
             observations = mp_to_replace.get_observations().clone();
         }
 
+        // This function has to occur before for loop below because the function deletes the kf's observation
+        // at the indexes... which we don't want if we already replaced it with the correct new observation.
+        // There's probably some way to clean up this code so it isn't so fragile like this but it's not a priority.
+        self.discard_mappoint(&mp_to_replace_id);
+
         for (kf_id, (index_left, index_right)) in observations {
             // Replace measurement in keyframe
             let kf = self.keyframes.get_mut(&kf_id).unwrap();
@@ -509,14 +529,20 @@ impl Map {
 
             if !mp.get_observations().contains_key(&kf_id) {
                 if index_left != -1 {
-                    kf.add_mp_match(index_left as u32, mp_id, false);
-                    self.mappoints.get_mut(&mp_id).unwrap().add_observation(&kf_id, kf.features.num_keypoints, index_left as u32);
+                    let num_keypoints = self.keyframes.get(&kf_id).expect(&format!("Could not get kf {}", kf_id)).features.num_keypoints;
+                    self.mappoints.get_mut(&mp_id).unwrap().add_observation(&kf_id, num_keypoints, index_left as u32);
+                    let old_mp_match = self.keyframes.get_mut(&kf_id).unwrap().mappoint_matches.add(index_left as u32, mp_id, false);
+                    if let Some(old_mp_id) = old_mp_match {
+                        if old_mp_id != mp_to_replace_id {
+                            error!("KF ({})'s old MP match ({}) should be the same as the one that is replaced ({}).", kf_id, old_mp_id, mp_to_replace_id);
+                        }
+                    }
                 }
                 if index_right != -1 {
                     // TODO STEREO
                 }
             } else {
-                kf.delete_mp_match_at_indices((index_left, index_right));
+                kf.mappoint_matches.delete_at_indices((index_left, index_right));
             }
         }
 
@@ -528,9 +554,6 @@ impl Map {
             .and_then(|mp| mp.compute_distinctive_descriptors(&self)).unwrap();
         self.mappoints.get_mut(&mp_id)
             .map(|mp| mp.update_distinctive_descriptors(best_descriptor));
-
-        self.discard_mappoint(&mp_to_replace_id);
-        // println!("Replace mappoint {}", mp_to_replace_id);
     }
 
 

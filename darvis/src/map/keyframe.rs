@@ -13,7 +13,7 @@ pub struct KeyFrame {
     // Map connections
     pub origin_map_id: Id, // mnOriginMapId
     connections: ConnectedKeyFrames, // Parent, children, neighbors
-    pub mappoint_matches: MapPointMatches, // mvpmappoints , mvbOutlier
+    pub(super) mappoint_matches: MapPointMatches, // mvpmappoints , mvbOutlier
     pub ref_kf_id: Option<Id>, //mpReferenceKF
     pub parent: Option<Id>,
     pub children: HashSet<Id>,
@@ -84,7 +84,7 @@ impl KeyFrame {
     pub fn print_mappoints(&self) {
         println!("Mappoints for keyframe {}", self.id);
         for item in &self.mappoint_matches.matches {
-            if let Some((mp_id, outlier)) = item {
+            if let Some((mp_id, _outlier)) = item {
                 println!("{}", mp_id);
             } else {
                 println!("None");
@@ -110,19 +110,11 @@ impl KeyFrame {
     }
     pub fn delete_connection(&mut self, kf_id: Id) { self.connections.delete(&kf_id); }
 
+    pub fn clone_matches(&self) -> MapPointMatches { self.mappoint_matches.clone() }
     pub fn get_mp_matches(&self) -> &Vec<Option<(i32, bool)>> { &self.mappoint_matches.matches }
     pub fn get_mp_match(&self, index: &u32) -> Id { self.mappoint_matches.get(index) }
-    pub fn add_mp_match(&mut self, index: u32, mp_id: Id, is_outlier: bool) { 
-        self.mappoint_matches.add(index, mp_id, is_outlier);
-    }
     pub fn has_mp_match(&self, index: &u32) -> bool { self.mappoint_matches.has(index) }
-    pub fn delete_mp_match_at_indices(&mut self, indices: (i32, i32)) {
-        let (first_mp_id, second_mp_id) = self.mappoint_matches.delete_at_indices(indices);
-    }
-    pub fn delete_mp_match(&mut self, mp_id: Id) {
-        self.mappoint_matches.delete_with_id(mp_id);
-        // debug!("Delete mappoint {} for kf {}", mp_id, self.id);
-    }
+
     pub fn get_tracked_mappoints(&self, map: &Map, min_observations: u32) -> i32 { self.mappoint_matches.tracked_mappoints(map, min_observations) }
     pub fn debug_get_mps_count(&self) -> i32 { self.mappoint_matches.debug_count }
     
@@ -208,9 +200,14 @@ impl MapPointMatches {
         self.matches[*index as usize].is_some()
     }
 
-    pub fn add(&mut self, index: u32, mp_id: Id, is_outlier: bool) {
+    pub fn add(&mut self, index: u32, mp_id: Id, is_outlier: bool) -> Option<Id> {
+        let old_mp = self.matches[index as usize];
         self.matches[index as usize] = Some((mp_id, is_outlier));
         self.debug_count += 1;
+        match old_mp {
+            Some((old_mp_id, _)) => Some(old_mp_id),
+            None => None
+        }
     }
 
     pub fn delete_with_id(&mut self, mp_id: Id) {
