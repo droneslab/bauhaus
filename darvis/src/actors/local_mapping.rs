@@ -266,7 +266,7 @@ impl LocalMapping {
             false => 3
         };
 
-        // print!("Mappoint culling: ");
+        // print!("RECENT MAPPOINTS Mappoint culling: {{");
 
         let current_kf_id = self.current_keyframe_id;
         let mut discard_for_found_ratio = 0;
@@ -281,17 +281,17 @@ impl LocalMapping {
                     discard_for_found_ratio += 1;
                     lock.discard_mappoint(&mp_id);
                     deleted.insert(mp_id);
-                    // print!("{}df ", mp_id);
+                    // print!("\"df {}\", ", mp_id);
                     false
                 } else if current_kf_id - mappoint.first_kf_id >= 2 && mappoint.get_observations().len() <= th_obs {
                     discard_for_observations += 1;
                     lock.discard_mappoint(&mp_id);
                     deleted.insert(mp_id);
-                    // print!("{}do ", mp_id);
+                    // print!("\"do {}\", ", mp_id);
                     false 
                 } else if current_kf_id - mappoint.first_kf_id >= 3 {
                     erased_from_recently_added += 1;
-                    // print!("{}e ", mp_id);
+                    // print!("\"dkf {}\", ", mp_id);
                     false // mappoint should not be deleted, but remove from recently_added_mappoints
                 } else {
                     // print!("{}k ", mp_id);
@@ -300,10 +300,11 @@ impl LocalMapping {
             } else {
                  // mappoint has been deleted (fused or deleted for low observations when removing keyframe)
                  // remove from recently_added_mappoints
+                //  print!("\"db {}\", ", mp_id);
                 false
             }
         });
-        // println!();
+        // println!("}}");
         debug!("Mappoint culling, {} {} {} {}", discard_for_found_ratio, discard_for_observations, erased_from_recently_added, self.recently_added_mappoints.len());
         // println!("Deleted: {:?}", deleted);
         return discard_for_observations + discard_for_found_ratio;
@@ -346,7 +347,6 @@ impl LocalMapping {
             ow1 = current_kf.get_camera_center();
         }
 
-        // print!("Create new mappoints: {{");
         // Search matches with epipolar restriction and triangulate
         let mut mps_created = 0;
         for neighbor_id in neighbor_kfs {
@@ -403,7 +403,7 @@ impl LocalMapping {
                 rotation_transpose2 = rotation2.transpose(); // Rwc2
             }
 
-            // debug!("Neighbor {}, Matches: {}", neighbor_id, matches.len());
+            // print!("RECENT MAPPOINTS Create new mappoints for kf {}: {{", neighbor_id);
 
             // Triangulate each match
             for (idx1, idx2) in matches {
@@ -467,9 +467,15 @@ impl LocalMapping {
                     } else if right2 && cos_parallax_stereo2 < cos_parallax_stereo1 {
                         x3_d = CAMERA_MODULE.unproject_stereo(lock.keyframes.get(&neighbor_id).unwrap(), idx2);
                     } else {
+                        // print!("\"p {} {}\", ", idx1, idx2);
+                        // if idx1 == 2771 && idx2 == 3667 {
+                        
+                        //     print!("({} {} {}) ", cos_parallax_rays, cos_parallax_stereo, good_parallax_wo_imu);
+                        // }
                         continue // No stereo and very low parallax
                     }
                     if x3_d.is_none() {
+                        // print!("\"gp {} {}\", ", idx1, idx2);
                         continue
                     }
                 }
@@ -479,10 +485,12 @@ impl LocalMapping {
                 let x3_d_nalg = *x3_d.unwrap();
                 let z1 = rotation1.row(2).transpose().dot(&x3_d_nalg) + (*translation1)[2];
                 if z1 <= 0.0 {
+                    // print!("\"z1 {} {}\", ", idx1, idx2);
                     continue;
                 }
                 let z2 = rotation2.row(2).transpose().dot(&x3_d_nalg) + (*translation2)[2];
                 if z2 <= 0.0 {
+                    // print!("\"z2 {} {}\", ", idx1, idx2);
                     continue;
                 }
 
@@ -508,6 +516,7 @@ impl LocalMapping {
                     let err_x1 = uv1.0 as f32 - kp1.pt().x;
                     let err_y1 = uv1.1 as f32 - kp1.pt().y;
                     if (err_x1 * err_x1  + err_y1 * err_y1) > 5.991 * sigma_square1 {
+                        // print!("\"e {} {}\", ", idx1, idx2);
                         continue
                     }
                 }
@@ -534,6 +543,7 @@ impl LocalMapping {
                     let err_x2 = uv2.0 as f32 - kp2.pt().x;
                     let err_y2 = uv2.1 as f32 - kp2.pt().y;
                     if (err_x2 * err_x2  + err_y2 * err_y2) > 5.991 * sigma_square2 {
+                        // print!("\"e2 {} {}\", ", idx1, idx2);
                         continue
                     }
                 }
@@ -546,16 +556,19 @@ impl LocalMapping {
                 let dist2 = normal2.norm();
 
                 if dist1 == 0.0 || dist2 == 0.0 {
+                    // print!("\"d0 {} {}\", ", idx1, idx2);
                     continue;
                 }
 
                 if dist1 >= far_points_th || dist2 >= far_points_th {
+                    // print!("\"df {} {}\", ", idx1, idx2);
                     continue;
                 }
 
                 let ratio_dist = dist2 / dist1;
                 let ratio_octave = (SCALE_FACTORS[kp1.octave() as usize] / SCALE_FACTORS[kp2.octave() as usize]) as f64;
                 if ratio_dist * ratio_factor < ratio_octave || ratio_dist > ratio_octave * ratio_factor {
+                    // print!("\"r {} {}\", ", idx1, idx2);
                     continue;
                 }
 
@@ -573,13 +586,14 @@ impl LocalMapping {
                     // println!("{} {} {},", mp_id, idx1, idx2);
                     // debug!("Add mp {} to kf {} at index {}", mp_id, self.current_keyframe_id, idx1);
                     // print!("{} {},", mp_id, idx1);
+                    // print!("\"c {} {} {}\", ", idx1, idx2, mp_id);
                     mps_created += 1;
                     self.recently_added_mappoints.insert(mp_id);
                 }
 
             }
         }
-        // println!("");
+        // println!("}}");
         mps_created
     }
 

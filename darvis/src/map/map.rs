@@ -246,9 +246,11 @@ impl Map {
             }
 
             if continue_loop {
-                self.keyframes.get_mut(&child_id).unwrap().parent = Some(parent_id);
-                parent_candidates.insert(parent_id);
-                children1.remove(&child_id);
+                if child_id != -1 {
+                    self.keyframes.get_mut(&child_id).expect(&format!("Could not get child id {} from parent {}", child_id, kf_id)).parent = Some(parent_id);
+                    parent_candidates.insert(parent_id);
+                    children1.remove(&child_id);
+                }
             } else {
                 break;
             }

@@ -1,8 +1,9 @@
-use std::{borrow::Cow, collections::{BTreeMap, BTreeSet, HashSet}, fs::{self, File}, io::BufWriter, sync::Arc};
+use std::{borrow::Cow, collections::{BTreeMap, BTreeSet, HashMap, HashSet}, fs::{self, File}, io::BufWriter, sync::Arc, thread};
 use log::warn;
 use mcap::{Schema, Channel, records::MessageHeader, Writer};
 use opencv::prelude::{Mat, MatTraitConst, MatTraitConstManual};
 use foxglove::{foxglove::items::{SceneEntity, SceneUpdate, SpherePrimitive, Vector3, Quaternion, Color, FrameTransform, LinePrimitive, line_primitive, Point3, RawImage, ArrowPrimitive, SceneEntityDeletion, scene_entity_deletion}, get_file_descriptor_set_bytes, make_pose};
+use base64::{engine::general_purpose, Engine as _};
 
 use core::{
     actor::{ActorChannels, Actor}, matrix::DVVectorOfKeyPoint, config::SETTINGS,
@@ -33,13 +34,17 @@ enum ImageDrawType {
     FEATURESANDMATCHES
 }
 
+pub const IMAGE_CHANNEL: &str = "/camera";
+pub const TRANSFORM_CHANNEL: &str = "/frame_transforms";
+pub const TRAJECTORY_CHANNEL: &str = "/trajectory";
+pub const MAPPOINTS_CHANNEL: &str = "/mappoints";
+pub const CONNECTED_KFS_CHANNEL: &str = "/connected_kfs";
+
 pub struct DarvisVisualizer {
     actor_system: ActorChannels,
     map: MapLock,
-    writer: McapWriter,
 
     // For drawing images
-    image_channel: u16,
     image_draw_type: ImageDrawType,
     current_image: Option<Mat>,
     prev_image: Option<Mat>,
@@ -48,9 +53,6 @@ pub struct DarvisVisualizer {
     previous_mappoints: HashSet<Id>,
     previous_keyframes: HashSet<Id>,
 
-    trajectory_channel: u16,
-    mappoints_channel: u16,
-    connected_kfs_channel: u16,
     current_update_id: u64,
     prev_pose: Point3,
 }
@@ -59,34 +61,6 @@ impl Actor for DarvisVisualizer {
     type MapRef = MapLock;
 
     fn new_actorstate(actor_system: ActorChannels, map: Self::MapRef) -> DarvisVisualizer {
-        let mcap_file_path = SETTINGS.get::<String>(VISUALIZER, "mcap_file_path");
-        let mut writer = McapWriter::new(&mcap_file_path).unwrap();
-
-        let image_channel = writer.create_and_add_channel(
-            "foxglove.RawImage", "/camera",
-        ).expect("Could not make image channel");
-        let transform_channel = writer.create_and_add_channel(
-            "foxglove.FrameTransform", "/frame_transforms",
-        ).expect("Could not make frame transform channel");
-        let trajectory_channel = writer.create_and_add_channel(
-            "foxglove.SceneUpdate", "/trajectory",
-        ).expect("Could not make trajectory channel");
-        let mappoints_channel = writer.create_and_add_channel(
-            "foxglove.SceneUpdate", "/mappoints",
-        ).expect("Could not make mappoints channel");
-        let connected_kfs_channel = writer.create_and_add_channel(
-            "foxglove.SceneUpdate", "/connected_kfs",
-        ).expect("Could not make connected kfs channel");
-
-        let transform = FrameTransform {
-            timestamp: Some(prost_types::Timestamp { seconds: 0,  nanos: 0 }),
-            parent_frame_id: "world".to_string(),
-            child_frame_id: "camera".to_string(),
-            translation: Some(Vector3{ x: 0.0, y: 0.0, z: 0.0 }),
-            rotation: Some(Quaternion { x: 0.0, y: 0.0, z: 0.0, w: 1.0 }),
-        };
-        writer.write(transform_channel, transform, 0.0, 0).unwrap();
-
         // Trajectory starts at 0,0
         let prev_pose = Point3 { x: 0.0, y: 0.0, z: 0.0 };
 
@@ -105,13 +79,8 @@ impl Actor for DarvisVisualizer {
             actor_system,
             map,
             image_draw_type,
-            writer,
             current_update_id: 0,
             prev_pose,
-            image_channel,
-            trajectory_channel,
-            mappoints_channel,
-            connected_kfs_channel,
             current_image: None,
             prev_image: None,
             current_keypoints: None,
@@ -121,24 +90,58 @@ impl Actor for DarvisVisualizer {
         };
     }
 
-    fn spawn(actor_channels: ActorChannels, map: Self::MapRef) {
+    #[tokio::main]
+    async fn spawn(actor_channels: ActorChannels, map: Self::MapRef) {
         let mut actor = DarvisVisualizer::new_actorstate(actor_channels, map);
+
+        // Create foxglove writer, also spawns server if streaming
+        // Code in here instead of inside DarvisVisualizer to avoid making new_actorstate async
+        let channels = HashMap::from([
+            (IMAGE_CHANNEL, "foxglove.RawImage"),
+            (TRANSFORM_CHANNEL, "foxglove.FrameTransform"),
+            (TRAJECTORY_CHANNEL, "foxglove.SceneUpdate"),
+            (MAPPOINTS_CHANNEL, "foxglove.SceneUpdate"),
+            (CONNECTED_KFS_CHANNEL, "foxglove.SceneUpdate"),
+        ]);
+
+        let mut writer = if SETTINGS.get::<bool>(VISUALIZER, "stream") {
+        let server = foxglove_ws::FoxgloveWebSocket::new();
+            tokio::spawn({
+                let server = server.clone();
+                async move { server.serve(([127, 0, 0, 1], SETTINGS.get::<i32>(VISUALIZER, "port") as u16)).await }
+            });
+            FoxGloveWriter::new_with_server(server, channels).await.expect("Could not create foxglove server")
+        } else {
+            let mcap_file_path = SETTINGS.get::<String>(VISUALIZER, "mcap_file_path");
+            FoxGloveWriter::new_with_mcap_file(&mcap_file_path, channels).expect("Could not create foxglove writer")
+        };
+
+        let transform = FrameTransform {
+            timestamp: Some(prost_types::Timestamp { seconds: 0,  nanos: 0 }),
+            parent_frame_id: "world".to_string(),
+            child_frame_id: "camera".to_string(),
+            translation: Some(Vector3{ x: 0.0, y: 0.0, z: 0.0 }),
+            rotation: Some(Quaternion { x: 0.0, y: 0.0, z: 0.0, w: 1.0 }),
+        };
+        writer.write(TRANSFORM_CHANNEL, transform, 0.0, 0).await.expect("Could not write transform");
+
+
         loop {
             let message = actor.actor_system.receive().unwrap();
 
             if message.is::<VisFeaturesMsg>() {
                 let msg = message.downcast::<VisFeaturesMsg>().unwrap_or_else(|_| panic!("Could not downcast visualizer message!"));
-                actor.update_draw_image(*msg);
+                actor.update_draw_image(&mut writer, *msg).await;
             } else if message.is::<VisFeatureMatchMsg>() {
                 let msg = message.downcast::<VisFeatureMatchMsg>().unwrap_or_else(|_| panic!("Could not downcast visualizer message!"));
-                actor.update_draw_image_with_matches(*msg);
+                actor.update_draw_image_with_matches(&mut writer, *msg).await;
             } else if message.is::<VisTrajectoryMsg>() {
                 let msg = message.downcast::<VisTrajectoryMsg>().unwrap_or_else(|_| panic!("Could not downcast visualizer message!"));
-                actor.update_draw_map(*msg);
+                actor.update_draw_map(&mut writer,*msg).await;
             } else if message.is::<ShutdownMsg>() {
                 // SHUTDOWN
                 warn!("Closing mcap file");
-                actor.writer.finish().expect("Could not close file");
+                writer.finish().expect("Could not close file");
                 break;
             } else {
                 warn!("Visualizer received unknown message type!");
@@ -148,19 +151,19 @@ impl Actor for DarvisVisualizer {
 }
 
 impl DarvisVisualizer {
-    fn update_draw_image(&mut self, msg: VisFeaturesMsg) {
+    async fn update_draw_image(&mut self, writer: &mut FoxGloveWriter, msg: VisFeaturesMsg) {
         match self.image_draw_type {
             ImageDrawType::NONE => Ok(()),
             ImageDrawType::PLAIN => {
                 // Greyscale images are encoded as mono8
                 // For mono8 (CV_8UC1) each element is u8 -> size is 1
-                self.draw_image(&msg.image, "mono8", 1, msg.timestamp)
+                self.draw_image(writer, &msg.image, "mono8", 1, msg.timestamp).await
             },
             ImageDrawType::FEATURES => {
                 let image_with_features = image::write_features(&msg.image, &msg.keypoints).expect("Could not draw features to mat");
                 // This is a color image encoded as bgr8
                 // Each element is u8 (size is 1) * 3 (for 3 channels)
-                self.draw_image(&image_with_features, "bgr8", 3, msg.timestamp)
+                self.draw_image(writer, &image_with_features, "bgr8", 3, msg.timestamp).await
             },
             ImageDrawType::FEATURESANDMATCHES => Ok(()), // Draw when matches received from tracking backend
         }.expect("Visualizer could not draw image!");
@@ -173,7 +176,7 @@ impl DarvisVisualizer {
         self.current_keypoints = Some(msg.keypoints.clone());
     }
 
-    fn update_draw_image_with_matches(&mut self, msg: VisFeatureMatchMsg) {
+    async fn update_draw_image_with_matches(&mut self, writer: &mut FoxGloveWriter, msg: VisFeatureMatchMsg) {
         if matches!(self.image_draw_type, ImageDrawType::FEATURESANDMATCHES) && self.prev_image.is_some() {
             let image_with_matches = image::write_feature_matches(
                 &self.prev_image.as_ref().unwrap(),
@@ -184,22 +187,22 @@ impl DarvisVisualizer {
             ).expect("Could not write feature matches to mat");
 
             // Encoding and mat element size same as for ImageDrawType::FEATURES
-            self.draw_image(&image_with_matches, "bgr8", 3, msg.timestamp).expect("Could not draw image with matches to mat");
+            self.draw_image(writer, &image_with_matches, "bgr8", 3, msg.timestamp).await.expect("Could not draw image with matches to mat");
         };
     }
 
-    fn update_draw_map(&mut self, msg: VisTrajectoryMsg) {
-        self.draw_trajectory(msg.pose, msg.timestamp).expect("Visualizer could not draw trajectory!");
-        self.draw_mappoints(&msg.mappoints_in_tracking, &msg.mappoint_matches, msg.timestamp).expect("Visualizer could not draw mappoints!");
+    async fn update_draw_map(&mut self, writer: &mut FoxGloveWriter, msg: VisTrajectoryMsg) {
+        self.draw_trajectory(writer, msg.pose, msg.timestamp).await.expect("Visualizer could not draw trajectory!");
+        self.draw_mappoints(writer, &msg.mappoints_in_tracking, &msg.mappoint_matches, msg.timestamp).await.expect("Visualizer could not draw mappoints!");
 
         if SETTINGS.get::<bool>(VISUALIZER, "draw_connected_kfs") {
-            self.draw_connected_kfs(msg.timestamp).expect("Visualizer could not draw connected kfs!");
+            self.draw_connected_kfs(writer, msg.timestamp).await.expect("Visualizer could not draw connected kfs!");
         }
         self.current_update_id += 1;
         self.prev_pose = msg.pose.into();
     }
 
-    fn draw_trajectory(&mut self, frame_pose: Pose, timestamp: Timestamp) -> Result<(), Box<dyn std::error::Error>> {
+    async fn draw_trajectory(&mut self, writer: &mut FoxGloveWriter, frame_pose: Pose, timestamp: Timestamp) -> Result<(), Box<dyn std::error::Error>> {
         // debug!("Drawing trajectory at timestamp {} with pose {:?}", timestamp, frame_pose.inverse());
 
         // self.clear_scene(timestamp, self.trajectory_channel)?;
@@ -288,14 +291,14 @@ impl DarvisVisualizer {
             entities
         };
 
-        self.writer.write(self.trajectory_channel, sceneupdate, timestamp, 0)?;
+        writer.write(TRAJECTORY_CHANNEL, sceneupdate, timestamp, 0).await.expect("Could not write trajectory to foxglove");
         Ok(())
     }
 
-    fn draw_mappoints(&mut self, local_mappoints: &BTreeSet<Id>, mappoint_matches: &Vec<Option<(Id, bool)>>, timestamp: Timestamp) -> Result<(), Box<dyn std::error::Error>> {
+    async fn draw_mappoints(&mut self, writer: &mut FoxGloveWriter, local_mappoints: &BTreeSet<Id>, mappoint_matches: &Vec<Option<(Id, bool)>>, timestamp: Timestamp) -> Result<(), Box<dyn std::error::Error>> {
         // Mappoints in map (different color if they are matches)
         // Should be overwritten when there is new info for a mappoint
-        self.clear_scene(timestamp, self.mappoints_channel)?;
+        self.clear_scene(writer, timestamp, MAPPOINTS_CHANNEL).await?;
 
         let mut entities = Vec::new();
 
@@ -352,12 +355,12 @@ impl DarvisVisualizer {
             entities
         };
 
-        self.writer.write(self.mappoints_channel, sceneupdate, timestamp, 0)?;
+        writer.write(MAPPOINTS_CHANNEL, sceneupdate, timestamp, 0).await?;
 
         Ok(())
     }
 
-    fn draw_connected_kfs(&mut self, timestamp: Timestamp) -> Result<(), Box<dyn std::error::Error>> {
+    async fn draw_connected_kfs(&mut self, writer: &mut FoxGloveWriter, timestamp: Timestamp) -> Result<(), Box<dyn std::error::Error>> {
         // You can call this but the results don't look too good because I draw each KF at its pose
         // so it's hard to see the connections, they overlap too much. Need to find some algorithm to
         // distribute items in a graph so they're spread apart and the lines between are more visible.
@@ -405,13 +408,14 @@ impl DarvisVisualizer {
             entities
         };
 
-        self.writer.write(self.connected_kfs_channel, sceneupdate, timestamp, 0)?;
+        writer.write(CONNECTED_KFS_CHANNEL, sceneupdate, timestamp, 0).await?;
 
         Ok(())
     }
 
-    fn draw_image(
+    async fn draw_image(
         &mut self, 
+        writer: &mut FoxGloveWriter,
         image: &Mat, encoding: &str, item_byte_size: u32, timestamp: Timestamp
     ) -> Result<(), Box<dyn std::error::Error>> {
         let (seconds, nanos) = convert_timestamp(timestamp);
@@ -430,7 +434,7 @@ impl DarvisVisualizer {
             data: Mat::data_bytes(&image)?.to_vec()
         };
 
-        self.writer.write(self.image_channel, image_msg, timestamp, 0)?;
+        writer.write(IMAGE_CHANNEL, image_msg, timestamp, 0).await?;
 
         Ok(())
     }
@@ -476,7 +480,7 @@ impl DarvisVisualizer {
         }
     }
 
-    fn clear_scene(&mut self, timestamp: Timestamp, channel: u16) -> Result<(), Box<dyn std::error::Error>> {
+    async fn clear_scene(&mut self, writer: &mut FoxGloveWriter, timestamp: Timestamp, channel_name: &str) -> Result<(), Box<dyn std::error::Error>> {
         // Deletes all entities in the channel
         let (seconds, nanos) = convert_timestamp(timestamp);
         let sceneupdate = SceneUpdate {
@@ -489,7 +493,8 @@ impl DarvisVisualizer {
             ],
             entities: vec![]
         };
-        self.writer.write(channel, sceneupdate, timestamp, 0)
+        writer.write(channel_name, sceneupdate, timestamp, 0).await?;
+        Ok(())
     }
 
     fn create_scene_entity(
@@ -525,64 +530,107 @@ fn convert_timestamp(timestamp: Timestamp) -> (i64, i32) {
     (seconds as i64, nanos as i32)
 }
 
-pub struct McapWriter {
-    writer: Writer<'static, BufWriter<File>>,
+pub enum FoxGloveWriter {
+    McapFile { 
+        writer: Writer<'static, BufWriter<File>>,
+        channels: HashMap<String, u16>,
+    },
+    Stream {
+        server: foxglove_ws::FoxgloveWebSocket,
+        channels: HashMap<String, foxglove_ws::Channel>,
+    }
 }
 
-impl McapWriter {
-    pub fn new(path: &str) -> Result<McapWriter, Box<dyn std::error::Error>> {
-        Ok(McapWriter{
-            writer: Writer::new(BufWriter::new(fs::File::create(path)?))?
-        })
+impl FoxGloveWriter {
+    pub fn new_with_mcap_file(path: &str, channels_to_add: HashMap<&str, &str>) -> Result<FoxGloveWriter, Box<dyn std::error::Error>> {
+        let mut writer = Writer::new(BufWriter::new(fs::File::create(path)?))?;
+        let mut channels = HashMap::new();
+        for (topic, schema) in channels_to_add {
+            let schema = Schema {
+                name: schema.to_string(),
+                encoding: String::from("protobuf"),
+                data: Cow::Borrowed(get_file_descriptor_set_bytes()),
+            };
+            let channel = Channel {
+                topic: topic.to_string(),
+                schema: Some(Arc::new(schema)),
+                message_encoding: String::from("protobuf"),
+                metadata: BTreeMap::default()
+            };
+            channels.insert(topic.to_string(), writer.add_channel(&channel)?);
+        }
+        Ok(FoxGloveWriter::McapFile { writer, channels })
     }
 
-    pub fn create_and_add_channel(
-        &mut self,
-        schema: &str,
-        topic: &str,
-    ) -> Result<u16, Box<dyn std::error::Error>> {
-        let schema = Schema {
-            name: String::from(schema),
-            encoding: String::from("protobuf"),
-            data: Cow::Borrowed(get_file_descriptor_set_bytes()),
-        };
-        let channel = Channel {
-            topic: String::from(topic),
-            schema: Some(Arc::new(schema)),
-            message_encoding: String::from("protobuf"),
-            metadata: BTreeMap::default()
-        };
-        let channel_id = self.writer.add_channel(&channel)?;
+    pub async fn new_with_server(server: foxglove_ws::FoxgloveWebSocket, channels_to_add: HashMap<&str, &str>) -> Result<FoxGloveWriter, Box<dyn std::error::Error>> {
+        let mut channels = HashMap::new();
+        for (topic, schema) in channels_to_add {
+            let channel = server
+                .publish(
+                    topic.to_string(),
+                    "protobuf".to_string(),
+                    schema.to_string(),
+                    // Foxglove expects the schema data to be a binary FileDescriptorSet. For Foxglove WebSocket connections, 
+                    // the schema must additionally be base64-encoded because it is represented as a string.
+                    // https://docs.foxglove.dev/docs/connecting-to-data/frameworks/custom/#foxglove-websocket
+                    general_purpose::STANDARD.encode(&get_file_descriptor_set_bytes()),
+                    "protobuf".to_string(),
+                    false,
+                )
+                .await?;
 
-        Ok(channel_id)
+            channels.insert(topic.to_string(), channel);
+        }
+        Ok(FoxGloveWriter::Stream { server, channels })
     }
 
-    pub fn write<T: prost::Message>(
+    pub async fn write<T: prost::Message>(
         &mut self,
-        channel_id: u16,
+        channel_name: &str,
         data: T,
         timestamp: Timestamp,
         sequence: u32,
     ) -> Result<(), Box<dyn std::error::Error>> {
         // Note: Can remove this later, putting this in here for now so foxglove can show the results a little slower
         // let time_in_nsec = timestamp * 10000000000.0;
-
         let time_in_nsec = timestamp * 1000000000.0;
-        Ok(
-            self.writer.write_to_known_channel(
-                &MessageHeader {
-                    channel_id,
-                    sequence,
-                    log_time: time_in_nsec as u64,
-                    publish_time: time_in_nsec as u64,
-                },
-                &data.encode_to_vec()
-            )?
-        )
+
+        match self {
+            FoxGloveWriter::McapFile { writer, channels } => {
+                let channel_id = channels.get(channel_name).expect("Could not find channel");
+                Ok(
+                    writer.write_to_known_channel(
+                        &MessageHeader {
+                            channel_id: *channel_id,
+                            sequence,
+                            log_time: time_in_nsec as u64,
+                            publish_time: time_in_nsec as u64,
+                        },
+                        &data.encode_to_vec()
+                    )?
+                )
+            },
+            FoxGloveWriter::Stream { server: _, channels } => {
+                let channel = channels.get(channel_name).expect("Could not find channel");
+                Ok(
+                    channel.send(
+                        timestamp as u64,
+                        &data.encode_to_vec()
+                    )
+                    .await?
+                )
+            }
+        }
+
     }
 
     pub fn finish(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        Ok(self.writer.finish()?)
+        match self {
+            FoxGloveWriter::McapFile { writer, channels: _ } => {
+                Ok(writer.finish()?)
+            },
+            FoxGloveWriter::Stream { server: _, channels: _ } => { Ok(()) }
+        }
     }
 }
 

@@ -13,7 +13,7 @@ system:
       first_actor_name: TRACKING_FRONTEND # Name of actor to kick off pipeline
 
       # FPS
-      fps: 10.0
+      fps: 1.0
       use_timestamps_file: false # Instead of running at a fixed fps, use timestamps from the dataset
 
       # RESULTS
@@ -66,6 +66,13 @@ actors:
        tag: visualizer
        receiver_bound: -1
        settings:
+          -
+            name: stream # if true, stream to websocket. if false, save to mcap file
+            value: true
+            type: bool
+          - name: port # port used if streaming
+            value: 8765
+            type: i32
           - 
             name: image_draw_type
             value: features # options are [none, plain, features, featuresandmatches]
@@ -80,7 +87,7 @@ actors:
           - name: draw_local_mappoints # Whether to draw local mappoints (not tracked, but in local map based on local keyframes)
             value: false
             type: bool
-          - name: draw_connected_kfs # Need to figure out some nicer way to distribute the points so it's actually readable
+          - name: draw_connected_kfs # You can set this to be true but it doesn't look good. Need to figure out some nicer way to distribute the points so it's actually readable
             value: false
             type: bool
 

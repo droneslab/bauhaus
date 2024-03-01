@@ -6,7 +6,7 @@ use std::{fs::{OpenOptions, File}, path::Path, env, time::{self, Duration}, io::
 use map::map::Map;
 use fern::colors::{ColoredLevelConfig, Color};
 use glob::glob;
-use log::info;
+use log::{debug, info};
 use spin_sleep::LoopHelper;
 #[macro_use] extern crate lazy_static;
 
@@ -109,6 +109,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // and the next timestamp. Right now we are just sleeping so we keep at the target frame rate.
         loop_sleep.sleep();
     }
+    debug!("Done with dataset! Shutting down.");
     shutdown_tx.send(Box::new(ShutdownMsg{}))?;
     shutdown_join.join().expect("Waiting for shutdown thread");
 
