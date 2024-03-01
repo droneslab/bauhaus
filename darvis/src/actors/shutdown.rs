@@ -66,13 +66,32 @@ impl Actor for ShutdownActor {
                         // TODO (MVP) ... look at SaveTrajectoryEuRoC in orbslam, I think we need to apply some transform to these poses
                         // I think they are currently saved as the relative pose between frames but we need world coords
                         for i in 0..actor.trajectory_poses.len() {
-                            let string = format!("{:?} {:?}\n", actor.trajectory_times[i], actor.trajectory_poses[i]);
+                            let pose = actor.trajectory_poses[i];
+                            let trans = pose.get_translation();
+                            let rot = pose.get_quaternion();
+                            let string = format!(
+                                "{} {:.4} {:.4} {:.4} {:.4} {:.4} {:.4} {:.4}\n", 
+                                actor.trajectory_times[i], 
+                                trans[0], trans[1], trans[2],
+                                rot[0], rot[1], rot[2], rot[3]
+                            );
                             write!(f, "{}", string).expect("unable to write");
                         }
                     },
                     Err(_) => {
                         warn!("Could not create trajectory file {:?}", Path::new(&actor.results_folder).join(&actor.trajectory_filename));
-                        println!("Here is the trajectory: {:?}", actor.trajectory_poses);
+                        println!("Here is the trajectory: ");
+                        for i in 0..actor.trajectory_poses.len() {
+                            let pose = actor.trajectory_poses[i];
+                            let trans = pose.get_translation();
+                            let rot = pose.get_quaternion();
+                            println!(
+                                "{} {:.4} {:.4} {:.4} {:.4} {:.4} {:.4} {:.4}\n", 
+                                actor.trajectory_times[i], 
+                                trans[0], trans[1], trans[2],
+                                rot[0], rot[1], rot[2], rot[3]
+                            );
+                        }
                     }
                 };
 

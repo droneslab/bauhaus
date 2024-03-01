@@ -218,6 +218,16 @@ impl TrackingBackend {
                                         current_frame.mappoint_matches = write_lock.keyframes.get(&curr_kf_id).unwrap().clone_matches();
                                     }
                                     self.state = TrackingState::Ok;
+
+                                    // Log initial pose in shutdown actor
+                                    self.actor_channels.send(SHUTDOWN_ACTOR, 
+                                    Box::new(TrajectoryMsg{
+                                            pose: write_lock.keyframes.get(&ini_kf_id).unwrap().pose,
+                                            ref_kf_id: ini_kf_id,
+                                            timestamp: write_lock.keyframes.get(&ini_kf_id).unwrap().timestamp
+                                        })
+                                    );
+
                                     (ini_kf_id, curr_kf_id)
                                 },
                                 None => {

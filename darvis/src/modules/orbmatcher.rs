@@ -1115,7 +1115,6 @@ pub fn search_for_triangulation(
     let mut i = 0;
     let mut j = 0;
 
-    // print!("Search for triangulation.");
     while i < kf1_featvec.len() && j < kf2_featvec.len() {
         let kf1_node_id = kf1_featvec[i];
         let kf2_node_id = kf2_featvec[j];

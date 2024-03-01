@@ -42,7 +42,9 @@ rustc-hash = "1.1.0"
 prost-types = "*"
 prost = "*"
 mcap = "*"
-
+foxglove-ws = "0.2.2"
+tokio = "1.36.0"
+base64 = "0.21.7"
 
 #cc = { version = "1.0.79", features = ["parallel"] }
 opencv = "0.84.5"
@@ -71,5 +73,4 @@ env_logger = "*"
 logging_timer = "1.1.0"
 tracy-client = {version = "0.16.0", features = ["enable"] }
 tracy-client-sys = {version = "0.21.0"}
-
 ordered-map = "0.4.2"
