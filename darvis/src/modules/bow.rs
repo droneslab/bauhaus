@@ -3,14 +3,8 @@ use cxx::{UniquePtr, let_cxx_string};
 use log::info;
 use core::{matrix::DVMatrix, config::{SETTINGS, SYSTEM}};
 
-use super::keyframe::KeyFrame;
+use crate::map::keyframe::KeyFrame;
 
-lazy_static! {
-    pub static ref VOCABULARY: DVVocabulary = {
-        let filename = SETTINGS.get::<String>(SYSTEM, "vocabulary_file");
-        DVVocabulary::load(filename)
-    };
-}
 
 pub struct DVVocabulary {
     vocabulary: UniquePtr<dvos3binding::ffi::ORBVocabulary>,
@@ -22,10 +16,12 @@ impl DVVocabulary {
         let_cxx_string!(file = filename.clone());
         info!("Loading vocabulary...");
 
-        Self {
+        let vocab = Self {
             vocabulary: dvos3binding::ffi::load_vocabulary_from_text_file(&file),
             filename,
-        }
+        };
+
+        return vocab;
     }
     pub fn size(&self) -> usize {
         self.vocabulary.size()

@@ -1,13 +1,13 @@
 use std::{fs::File, path::Path, io::{Write, BufWriter}};
 use log::warn;
 
-use crate::map::{pose::Pose, map::Id, misc::Timestamp};
-use core::{actor::{ActorChannels, Actor}, config::{SYSTEM, SETTINGS}};
+use crate::map::{pose::Pose, map::Id};
+use core::{config::{SETTINGS, SYSTEM}, system::{Actor, System, Timestamp}};
 use super::{messages::{ShutdownMsg, TrajectoryMsg, TrackingStateMsg}, tracking_backend::TrackingState};
 
 
 pub struct ShutdownActor {
-    actor_channels: ActorChannels,
+    system: System,
     // Lists used to recover the full camera trajectory at the end of the execution.
     // Basically we store the reference keyframe for each frame and its relative transformation
     trajectory_poses: Vec<Pose>, //mlRelativeFramePoses
@@ -21,9 +21,9 @@ pub struct ShutdownActor {
 impl Actor for ShutdownActor {
     type MapRef = ();
 
-    fn new_actorstate(actor_channels: ActorChannels, _map: Self::MapRef) -> ShutdownActor {
+    fn new_actorstate(system: System, _map: Self::MapRef) -> ShutdownActor {
         ShutdownActor{
-            actor_channels,
+            system,
             trajectory_poses: Vec::new(),
             trajectory_times: Vec::new(),
             trajectory_keyframes: Vec::new(),
@@ -32,10 +32,10 @@ impl Actor for ShutdownActor {
         }
     }
 
-    fn spawn(actor_channels: ActorChannels, map: Self::MapRef) {
-        let mut actor = ShutdownActor::new_actorstate(actor_channels, map);
+    fn spawn(system: System, map: Self::MapRef) {
+        let mut actor = ShutdownActor::new_actorstate(system, map);
         loop {
-            let message = actor.actor_channels.receive().unwrap();
+            let message = actor.system.receive().unwrap();
             if message.is::<TrajectoryMsg>() {
                 let msg = message.downcast::<TrajectoryMsg>().unwrap_or_else(|_| panic!("Could not downcast shutdown actor message!"));
                 actor.trajectory_poses.push(msg.pose);
@@ -95,7 +95,7 @@ impl Actor for ShutdownActor {
                     }
                 };
 
-                for (_, actor_tx) in &actor.actor_channels.actors {
+                for (_, actor_tx) in &actor.system.actors {
                     actor_tx.send(Box::new(ShutdownMsg{})).unwrap();
                 }
                 return;

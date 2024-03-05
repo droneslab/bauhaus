@@ -2,29 +2,26 @@ use std::{collections::HashMap, sync::{Arc, Mutex}, thread::{self, JoinHandle}};
 use crossbeam_channel::unbounded;
 
 use core::{
-    config::ActorConf,
-    actor::{Sender, Receiver, ActorChannels},
-    maplock::ReadWriteMap
+    config::{ActorConf, ModuleConf}, read_only_lock::ReadWriteMap, system::{Receiver, Sender, System} 
 };
 use log::{info, warn};
 
 use crate::{
-    registered_actors::{SHUTDOWN_ACTOR, self},
-    map::map::Map,
-    actors::messages::ShutdownMsg, MapLock,
+    actors::messages::ShutdownMsg, map::map::Map, registered_actors::{self, SHUTDOWN_ACTOR, VOCABULARY}, MapLock
 };
+
 
 // Initialize actor system using config file.
 // Returns mutex to shutdown flag and transmitters for first actor and shutdown actor.
 // You probably don't want to change this code.
-pub fn launch_actor_system(config: Vec::<ActorConf>, first_actor_name: String) 
+pub fn launch_system(actor_config: Vec<ActorConf>, module_config: Vec<ModuleConf>, first_actor_name: String) 
     -> Result<(Arc<std::sync::Mutex<bool>>, Sender, Sender, JoinHandle<()>), Box<dyn std::error::Error>> 
 {
     // * SET UP CHANNELS *//
     // Create transmitters and receivers for user-defined actors
     let mut transmitters = HashMap::new();
     let mut receivers = Vec::new();
-    for actor_conf in &config {
+    for actor_conf in &actor_config {
         let (tx, rx) = unbounded(); // Note: bounded channels block on send if channel is full, so use unbounded and handle drops in receive()
         transmitters.insert(actor_conf.name.clone(), tx);
         receivers.push((actor_conf.name.clone(), actor_conf.tag.clone(), actor_conf.receiver_bound.clone(), rx));
@@ -36,10 +33,13 @@ pub fn launch_actor_system(config: Vec::<ActorConf>, first_actor_name: String)
     let (shutdown_tx, shutdown_rx) = unbounded();
     transmitters.insert(SHUTDOWN_ACTOR.to_string(), shutdown_tx);
 
-    // * SPAWN USER-DEFINED ACTORS *//
-    // Create map
+    // * CREATE MAP *//
     let writeable_map = ReadWriteMap::<Map>::new(Map::new()); // Arc::new(parking_lot::Mutex::new(Map::new()))
-    // Spawn actors
+
+    // * LOAD VOCABULARY *//
+    VOCABULARY.access();
+
+    // * SPAWN USER-DEFINED ACTORS *//
     for (actor_name, actor_tag, receiver_bound, receiver) in receivers {
         spawn_actor(actor_tag, actor_name, &transmitters, receiver, receiver_bound, Some(&writeable_map));
     }
@@ -51,6 +51,7 @@ pub fn launch_actor_system(config: Vec::<ActorConf>, first_actor_name: String)
     //* Return transmitters for the shutdown actor and first actor in the pipeline, and the ctrl+c handler flag */
     let first_actor_tx = transmitters.get(&first_actor_name).unwrap().clone();
     let shutdown_actor_tx = transmitters.get(SHUTDOWN_ACTOR).unwrap().clone();
+
     Ok((shutdown_flag, first_actor_tx, shutdown_actor_tx, shutdown_join))
 }
 
@@ -74,10 +75,10 @@ fn spawn_actor(
             txs.insert(other_actor_name.clone(), other_actor_transmitter.clone());
         }
     }
-    let actor_channels = ActorChannels {receiver, receiver_bound, actors: txs, my_name: actor_name.clone()};
+    let system = System {receiver, receiver_bound, actors: txs, my_name: actor_name.clone()};
 
     thread::spawn(move || { 
-        registered_actors::spawn(actor_tag, actor_channels, map_clone);
+        registered_actors::spawn_actor(actor_tag, system, map_clone);
     } );
 
 }
@@ -93,10 +94,10 @@ fn spawn_shutdown_actor(transmitters: &HashMap<String, Sender>, receiver: Receiv
             txs.insert(other_actor_name.clone(), other_actor_transmitter.clone());
         }
     }
-    let actor_channels = ActorChannels {receiver, receiver_bound: None, actors: txs, my_name: SHUTDOWN_ACTOR.to_string()};
+    let system = System {receiver, receiver_bound: None, actors: txs, my_name: SHUTDOWN_ACTOR.to_string()};
 
     let join_handle = thread::spawn(move || { 
-        registered_actors::spawn(SHUTDOWN_ACTOR.to_string(), actor_channels, None);
+        registered_actors::spawn_actor(SHUTDOWN_ACTOR.to_string(), system, None);
     } );
 
     let shutdown_transmitter = transmitters.get(SHUTDOWN_ACTOR).unwrap().clone();

@@ -41,7 +41,7 @@ std::unique_ptr<ORBVocabulary> load_vocabulary_from_text_file(const string &file
 }
 
 std::size_t ORBVocabulary::size() const {
-    vocabulary.size();
+    return vocabulary.size();
 }
 
 void ORBVocabulary::transform(
@@ -61,7 +61,7 @@ float ORBVocabulary::score(
 ) const {
     DBoW2::BowVector * v1_ptr = v1.get();
     DBoW2::BowVector * v2_ptr = v2.get();
-    vocabulary.score(*v1_ptr, *v2_ptr);
+    return vocabulary.score(*v1_ptr, *v2_ptr);
 }
 
 }

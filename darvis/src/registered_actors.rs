@@ -1,7 +1,8 @@
-use core::actor::{ActorChannels, Actor};
+use core::{config::{SETTINGS, SYSTEM}, system::{Actor, System}};
+use std::collections::HashMap;
 use log::error;
 
-use crate:: MapLock;
+use crate::{modules::{bow::DVVocabulary, camera::{Camera, CameraType}}, MapLock};
 
 // USER-DEFINED ACTORS: add a string to name your actor here
 // These are the names that actors in the system use to find/communicate with each other
@@ -18,13 +19,24 @@ pub static VISUALIZER: &str = "VISUALIZER";
 pub static FEATURE_DETECTION: &str = "FEATURE_DETECTION";
 pub static CAMERA: &str = "CAMERA";
 pub static MATCHER: &str = "MATCHER";
+pub static FEATURES: &str = "FEATURES";
 
 // DARVIS SYSTEM ACTORS
 pub static SHUTDOWN_ACTOR: &str = "SHUTDOWN";
 
+lazy_static! {
+    pub static ref CAMERA_MODULE: Camera = {
+        Camera::new(CameraType::Pinhole).unwrap()
+    };
+    pub static ref VOCABULARY: DVVocabulary = {
+        let filename = SETTINGS.get::<String>(SYSTEM, "vocabulary_file");
+        DVVocabulary::load(filename)
+    };
+}
 
-pub fn spawn(
-    actor_tag: String, actor_channels: ActorChannels, map: Option<MapLock>
+
+pub fn spawn_actor(
+    actor_tag: String, system: System, map: Option<MapLock>
 ) {
     // Spawn actors using the actor TAG, not NAME. These match up your intended actor with the actual file that implements it.
     // If it is clearer to you, you could make these tags equivalent to the name of the file that implements the actor.
@@ -32,30 +44,28 @@ pub fn spawn(
     // TODO : It could be nice to actually look up the file name instead of referring to a string, but I'm not sure how to do that.
     match actor_tag.as_ref() {
         str if str == "orbslam tracking frontend".to_string() => {
-            crate::actors::tracking_frontend::TrackingFrontEnd::spawn(actor_channels, ())
+            crate::actors::tracking_frontend::TrackingFrontEnd::spawn(system, ())
         },
         str if str == "orbslam tracking backend".to_string() => {
-            crate::actors::tracking_backend::TrackingBackend::spawn(actor_channels, map.expect("Tracking backend needs the map!"))
+            crate::actors::tracking_backend::TrackingBackend::spawn(system, map.expect("Tracking backend needs the map!"))
         },
         str if str == "end-to-end tracking".to_string() => {
-            crate::actors::tracking_full::TrackingFull::spawn(actor_channels, map.expect("Tracking needs the map!"))
+            crate::actors::tracking_full::TrackingFull::spawn(system, map.expect("Tracking needs the map!"))
         },
         str if str == "orbslam local mapping".to_string() => {
-            crate::actors::local_mapping::LocalMapping::spawn(actor_channels, map.expect("Local mapping needs the map!"))
+            crate::actors::local_mapping::LocalMapping::spawn(system, map.expect("Local mapping needs the map!"))
         },
-        // str if str == "orbslam2 loop closing".to_string() => {
-        //     crate::actors::loop_closing2::LoopClosing::spawn(actor_channels, map.expect("Loop closing needs the map!"))
-        // },
+        str if str == "orbslam2 loop closing".to_string() => {
+            crate::actors::loop_closing2::LoopClosing::spawn(system, map.expect("Loop closing needs the map!"))
+        },
         str if str == "visualizer".to_string() => {
-            crate::actors::visualizer::DarvisVisualizer::spawn(actor_channels, map.expect("Visualizer needs the map!"))
+            crate::actors::visualizer::DarvisVisualizer::spawn(system, map.expect("Visualizer needs the map!"))
         },
         str if str == SHUTDOWN_ACTOR.to_string() => {
-            crate::actors::shutdown::ShutdownActor::spawn(actor_channels, ())
+            crate::actors::shutdown::ShutdownActor::spawn(system, ())
         },
         _ => {
             error!("Actor not implemented: {}", actor_tag);
         },
     };
 }
-
-

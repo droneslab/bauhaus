@@ -13,7 +13,7 @@ system:
       first_actor_name: TRACKING_FRONTEND # Name of actor to kick off pipeline
 
       # FPS
-      fps: 1.0
+      fps: 10.0
       use_timestamps_file: false # Instead of running at a fixed fps, use timestamps from the dataset
 
       # RESULTS
@@ -28,36 +28,50 @@ system:
 
 modules:
       - 
-       name: FEATURE_DETECTION
-       settings:
+        name: FEATURE_DETECTION
+        tag: "feature detection"
+        settings:
           - 
-           name: max_features
-           value: 2000
-           type: i32
+            name: max_features
+            value: 2000
+            type: i32
           - 
-           name: scale_factor
-           value: 1.2
-           type: f64
+            name: scale_factor
+            value: 1.2
+            type: f64
           - 
-           name: n_levels
-           value: 8
-           type: i32
+            name: n_levels
+            value: 8
+            type: i32
           - 
-           name: ini_th_fast
-           value: 20
-           type: i32
+            name: ini_th_fast
+            value: 20
+            type: i32
           - 
-           name: min_th_fast
-           value: 7
-           type: i32
+            name: min_th_fast
+            value: 7
+            type: i32
 
       -
-       name: MATCHER
-       settings:
+        name: MATCHER
+        tag: "matcher"
+        settings:
           - 
             name: far_points_threshold
             value: 20.0
             type: f64
+      -
+        name: FEATURES
+        tag: "features"
+        settings:
+          - 
+            name: frame_grid_rows
+            value: 48
+            type: i32
+          - 
+            name: frame_grid_cols
+            value: 64
+            type: i32
 
 
 actors:
@@ -134,15 +148,15 @@ actors:
             value: 10
             type: i32
 
-      # -
-      #  name: LOOP_CLOSING
-      #  tag: "orbslam2 loop closing"
-      #  receiver_bound: -1
-      #  settings:
-      #     - 
-      #       name: covisibility_consistency_threshold
-      #       value: 3
-      #       type: i32
+      -
+       name: LOOP_CLOSING
+       tag: "orbslam2 loop closing"
+       receiver_bound: -1
+       settings:
+          - 
+            name: covisibility_consistency_threshold
+            value: 3
+            type: i32
     
       -
        name: LOCAL_MAPPING

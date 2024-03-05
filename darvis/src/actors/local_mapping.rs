@@ -4,7 +4,7 @@ use std::f64::INFINITY;
 use std::iter::FromIterator;
 use std::sync::atomic::AtomicBool;
 
-use core::actor::Actor;
+use core::system::Actor;
 use core::sensor::{Sensor, FrameSensor, ImuSensor};
 use core::{
     config::{SETTINGS, SYSTEM},
@@ -12,12 +12,12 @@ use core::{
 };
 use log::{debug, warn, info, trace};
 use opencv::prelude::KeyPointTraitConst;
-use crate::registered_actors::TRACKING_BACKEND;
-use crate::{ActorChannels, MapLock};
+use crate::registered_actors::{CAMERA_MODULE, TRACKING_BACKEND};
+use crate::{System, MapLock};
 use crate::actors::messages::LastKeyFrameUpdatedMsg;
 use crate::modules::optimizer::LEVEL_SIGMA2;
 use crate::{
-    modules::{orbmatcher, imu::ImuModule, camera::CAMERA_MODULE, orbmatcher::SCALE_FACTORS, geometric_tools},
+    modules::{orbmatcher, imu::ImuModule, orbmatcher::SCALE_FACTORS, geometric_tools},
     registered_actors::{FEATURE_DETECTION, LOOP_CLOSING, MATCHER, CAMERA},
     Id,
 };
@@ -27,9 +27,8 @@ use super::messages::{ShutdownMsg, InitKeyFrameMsg, KeyFrameIdMsg, Reset, NewKey
 // TODO (design): It would be nice for this to be a member of LocalMapping instead of floating around in the global namespace, but we can't do that easily because then Tracking would need a reference to the localmapping object.
 pub static LOCAL_MAPPING_IDLE: AtomicBool = AtomicBool::new(true);
 
-#[derive(Debug)]
 pub struct LocalMapping {
-    actor_channels: ActorChannels,
+    system: System,
     map: MapLock,
     sensor: Sensor,
 
@@ -48,11 +47,11 @@ pub struct LocalMapping {
 impl Actor for LocalMapping {
     type MapRef = MapLock;
 
-    fn new_actorstate(actor_channels: ActorChannels, map: Self::MapRef) -> LocalMapping {
+    fn new_actorstate(system: System, map: Self::MapRef) -> LocalMapping {
         let sensor: Sensor = SETTINGS.get(SYSTEM, "sensor");
 
         LocalMapping {
-            actor_channels,
+            system,
             map,
             sensor,
             current_keyframe_id: -1,
@@ -62,14 +61,14 @@ impl Actor for LocalMapping {
         }
     }
 
-    fn spawn(actor_channels: ActorChannels, map: Self::MapRef) {
-        let mut actor = LocalMapping::new_actorstate(actor_channels, map);
-        let max_queue_size = actor.actor_channels.receiver_bound.unwrap_or(100);
+    fn spawn(system: System, map: Self::MapRef) {
+        let mut actor = LocalMapping::new_actorstate(system, map);
+        let max_queue_size = actor.system.receiver_bound.unwrap_or(100);
 
         tracy_client::set_thread_name!("local mapping");
 
         'outer: loop {
-            let message = actor.actor_channels.receive().unwrap();
+            let message = actor.system.receive().unwrap();
 
             if message.is::<InitKeyFrameMsg>() {
                 LOCAL_MAPPING_IDLE.store(false, std::sync::atomic::Ordering::SeqCst);
@@ -93,7 +92,7 @@ impl Actor for LocalMapping {
                 actor.local_mapping();
             } else if message.is::<NewKeyFrameMsg>() {
                 LOCAL_MAPPING_IDLE.store(false, std::sync::atomic::Ordering::SeqCst);
-                if actor.actor_channels.queue_len() > max_queue_size {
+                if actor.system.queue_len() > max_queue_size {
                     // Abort additional work if there are too many keyframes in the msg queue.
                     info!("Local mapping dropped 1 keyframe");
                     continue;
@@ -103,7 +102,7 @@ impl Actor for LocalMapping {
                 let kf_id = actor.map.write().insert_keyframe_to_map(msg.keyframe, false);
 
                 // Send the new keyframe ID directly back to the sender so they can use the ID 
-                actor.actor_channels.find(TRACKING_BACKEND).send(Box::new(InitKeyFrameMsg{kf_id})).unwrap();
+                actor.system.find(TRACKING_BACKEND).send(Box::new(InitKeyFrameMsg{kf_id})).unwrap();
 
                 debug!("Local mapping working on kf {}", kf_id);
 
@@ -141,13 +140,13 @@ impl LocalMapping {
 
         // Triangulate new MapPoints
         let mps_created = self.create_new_mappoints();
-        self.actor_channels.find(TRACKING_BACKEND).send(Box::new(
+        self.system.find(TRACKING_BACKEND).send(Box::new(
             LastKeyFrameUpdatedMsg{}
         )).unwrap();
 
         // self.map.read().keyframes.get(&self.current_keyframe_id).unwrap().print_mappoints();
 
-        if self.actor_channels.queue_len() < 1 {
+        if self.system.queue_len() < 1 {
             // Abort additional work if there are too many keyframes in the msg queue.
             // Find more matches in neighbor keyframes and fuse point duplications
             self.search_in_neighbors();
@@ -159,7 +158,7 @@ impl LocalMapping {
         // ORBSLAM will abort additional work if there are too many keyframes in the msg queue (CheckNewKeyFrames)
         // Additionally it will abort if a stop or reset is requested (stopRequested)
         let kfs_in_map = self.map.read().keyframes.len();
-        if kfs_in_map > 2 && self.actor_channels.queue_len() < 1 {
+        if kfs_in_map > 2 && self.system.queue_len() < 1 {
             match self.sensor.is_imu() {
                 true => { // and imu_initialized
                     todo!("IMU");
@@ -251,9 +250,9 @@ impl LocalMapping {
         tracy_client::plot!("MAP INFO: Avg mp matches for kfs", avg_mappoints as f64);
         trace!("MAP INFO:{},{},{}", self.map.read().keyframes.len(), self.map.read().mappoints.len(), avg_mappoints as f64);
 
-        if self.actor_channels.actors.get(LOOP_CLOSING).is_some() {
+        if self.system.actors.get(LOOP_CLOSING).is_some() {
             // Only send if loop closing is actually running
-            let loopclosing = self.actor_channels.find(LOOP_CLOSING);
+            let loopclosing = self.system.find(LOOP_CLOSING);
             loopclosing.send(Box::new(KeyFrameIdMsg{ kf_id: self.current_keyframe_id })).unwrap();
         }
     }
@@ -350,7 +349,7 @@ impl LocalMapping {
         // Search matches with epipolar restriction and triangulate
         let mut mps_created = 0;
         for neighbor_id in neighbor_kfs {
-            if self.actor_channels.queue_len() > 1 {
+            if self.system.queue_len() > 1 {
                 // Abort additional work if there are too many keyframes in the msg queue.
                 return 0;
             }
@@ -628,7 +627,7 @@ impl LocalMapping {
             }
             target_kfs.extend(new_kfs);
 
-            if self.actor_channels.queue_len() > 1 {
+            if self.system.queue_len() > 1 {
                 // Abort additional work if there are too many keyframes in the msg queue.
                 return;
             }
@@ -667,7 +666,7 @@ impl LocalMapping {
 
         }
 
-        if self.actor_channels.queue_len() > 1 {
+        if self.system.queue_len() > 1 {
             // Abort additional work if there are too many keyframes in the msg queue.
             return;
         }
@@ -859,7 +858,7 @@ impl LocalMapping {
                         }
                     }
                 }
-                if i > 20 && self.actor_channels.queue_len() > 1 {
+                if i > 20 && self.system.queue_len() > 1 {
                     // Abort additional work if there are too many keyframes in the msg queue.
                     break;
                 }

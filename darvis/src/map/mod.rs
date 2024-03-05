@@ -7,7 +7,4 @@ pub mod frame;
 pub mod keyframe;
 pub mod mappoint;
 pub mod pose;
-pub mod misc;
 pub mod features;
-pub mod bow;
-pub mod keyframe_database2;

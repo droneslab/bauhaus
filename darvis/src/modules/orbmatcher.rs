@@ -9,10 +9,9 @@ use crate::MapLock;
 use crate::actors::tracking_backend::TrackedMapPointData;
 use crate::map::pose::{DVRotation, DVTranslation, Pose};
 use crate::modules::optimizer::LEVEL_SIGMA2;
-use crate::registered_actors::{MATCHER, FEATURE_DETECTION, CAMERA};
+use crate::registered_actors::{CAMERA, CAMERA_MODULE, FEATURE_DETECTION, MATCHER};
 use crate::map::{map::Id, keyframe::KeyFrame, frame::Frame};
 
-use super::camera::CAMERA_MODULE;
 use super::optimizer::INV_LEVEL_SIGMA2;
 
 const  TH_HIGH: i32= 100;
@@ -1001,7 +1000,7 @@ pub fn search_by_bow_kf(
                             continue;
                         }
 
-                        if kf_2.has_mp_match(&index_kf_2) {
+                        if !kf_2.has_mp_match(&index_kf_2) {
                             continue;
                         }
 

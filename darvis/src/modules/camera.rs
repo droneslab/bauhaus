@@ -1,16 +1,10 @@
 use opencv::{prelude::{Mat, MatTrait, KeyPointTraitConst}, core::{Scalar, CV_64F, KeyPoint}};
-use core::{config::*, matrix::{DVMatrix, DVVectorOfPoint3f, DVVector3, DVMatrix3}, sensor::Sensor};
+use core::{config::*, matrix::{DVMatrix, DVMatrix3, DVVector3, DVVectorOfPoint3f}, module::CameraModule, sensor::Sensor};
 use crate::{
     map::{pose::Pose, keyframe::KeyFrame},
     matrix::DVVectorOfKeyPoint, registered_actors::CAMERA
 };
 
-
-lazy_static! {
-    pub static ref CAMERA_MODULE: Camera = {
-        Camera::new(CameraType::Pinhole).unwrap()
-    };
-}
 
 #[derive(Debug, Clone, Default)]
 pub enum CameraType {
@@ -35,6 +29,8 @@ pub struct Camera {
     pub th_depth: i32, //mThDepth
     pub dist_coef: Option<Vec<f32>>, //mDistCoef
 }
+
+impl CameraModule for Camera { }
 
 impl Camera {
     pub fn new(camera_type: CameraType) -> Result<Camera, Box<dyn std::error::Error>> {

@@ -1,30 +1,31 @@
-use std::{sync::Arc, collections::{HashSet, HashMap}};
+use std::collections::{HashSet, HashMap};
 
-use parking_lot::RwLock;
+use crate::{map::{keyframe::KeyFrame, map::Id}, registered_actors::VOCABULARY, MapLock};
 
-use crate::{map::map::Id, MapLock};
-
-use super::{keyframe::KeyFrame, bow::VOCABULARY};
 
 #[derive(Debug)]
 pub struct KeyFrameDatabase {
-    inverted_file: Arc<RwLock<Vec<Vec<Id>>>> // mvInvertedFile
+    inverted_file: Vec<Vec<Id>> // mvInvertedFile
 }
 
 impl KeyFrameDatabase {
     pub fn new() -> Self {
+        let vocab_size = VOCABULARY.size();
+        println!("Vocabulary size: {}", vocab_size);
         KeyFrameDatabase { 
-            inverted_file: Arc::new(RwLock::new(Vec::with_capacity(VOCABULARY.size())))
+            inverted_file: vec![vec![]; vocab_size]
         }
     }
 
     pub fn add(&mut self, kf: &KeyFrame) {
         // void KeyFrameDatabase::add(KeyFrame *pKF)
         let word_ids = kf.bow.as_ref().unwrap().bow_vec.get_all_word_ids();
+        // print!("KEYFRAME DATABASE: {}, ", kf.id);
         for word_id in word_ids {
-            let mut inverted_file = self.inverted_file.write();
-            inverted_file[word_id as usize].push(kf.id);
+            self.inverted_file[word_id as usize].push(kf.id);
+            // print!("{} ", word_id);
         }
+        // println!();
     }
 
     pub fn erase(&mut self, kf: &KeyFrame) {
@@ -34,19 +35,18 @@ impl KeyFrameDatabase {
         let word_ids = kf.bow.as_ref().unwrap().bow_vec.get_all_word_ids();
         for word_id in word_ids {
             // List of keyframes that share the word
-            self.inverted_file.write()[word_id as usize].retain(|&x| x != kf.id);
+            self.inverted_file[word_id as usize].retain(|&x| x != kf.id);
             // TODO double check this code produces the right output! Not sure what the original is doing
         }
     }
 
     pub fn clear(&mut self) {
-        self.inverted_file.write().clear();
-        self.inverted_file.write().resize(VOCABULARY.size(), Vec::new());
+        self.inverted_file.clear();
+        self.inverted_file.resize(VOCABULARY.size(), Vec::new());
     }
 
-    pub fn detect_loop_candidates(&self, map: &MapLock, curr_kf_id: &Id, min_score: f32) -> Vec<Id> {
+    pub fn detect_loop_candidates(&mut self, map: &MapLock, curr_kf_id: &Id, min_score: f32) -> Vec<Id> {
         let map_read_lock = map.read();
-        let inv_file_read_lock = self.inverted_file.read();
         let curr_kf = map_read_lock.keyframes.get(&curr_kf_id).unwrap();
         let connected_kfs = map.read().keyframes.get(&curr_kf_id).unwrap().get_covisibility_keyframes(i32::MAX);
         let mut kfs_sharing_words = vec![]; //lKFsSharingWords
@@ -56,7 +56,9 @@ impl KeyFrameDatabase {
         // Search all keyframes that share a word with current keyframes
         // Discard keyframes connected to the query keyframe
         for word in curr_kf.bow.as_ref().unwrap().bow_vec.get_all_word_ids() {
-            for kf_i_id in &inv_file_read_lock[word as usize] {
+            // If map deleted kf, remove from inverted file. 
+            self.inverted_file[word as usize].retain(|kf_id| map_read_lock.keyframes.get(kf_id).is_some());
+            for kf_i_id in &self.inverted_file[word as usize] {
                 if (loop_query.get(kf_i_id).is_some() && loop_query[kf_i_id] != curr_kf_id)
                     || loop_query.get(kf_i_id).is_none() {
                     loop_words.insert(*kf_i_id, 0);
@@ -107,6 +109,8 @@ impl KeyFrameDatabase {
             return vec![];
         }
 
+        println!("Loop query: {:?}", loop_query);
+        println!("Loop score: {:?}", loop_score);
         // Lets now accumulate score by covisibility
         let mut acc_score_and_match = vec![];
         let mut best_acc_score = min_score;
@@ -118,9 +122,15 @@ impl KeyFrameDatabase {
             let mut best_kf_id = *kf_i_id;
 
             for kf_2_id in neighbor_kfs {
-                let loop_words = *loop_words.get(&kf_2_id).unwrap();
-                let loop_query = *loop_query.get(&kf_2_id).unwrap();
-                let loop_score = *loop_score.get(&kf_2_id).unwrap();
+                let loop_words = loop_words.get(&kf_2_id);
+                let loop_query = loop_query.get(&kf_2_id);
+                let loop_score = loop_score.get(&kf_2_id);
+                if loop_words.is_none() || loop_query.is_none() || loop_score.is_none() {
+                    continue;
+                }
+                let loop_words = *loop_words.unwrap();
+                let loop_query = *loop_query.unwrap();
+                let loop_score = *loop_score.unwrap();
                 if loop_query == curr_kf_id  && loop_words > min_common_words {
                     acc_score += loop_score;
                     if loop_score > best_score {
@@ -148,6 +158,8 @@ impl KeyFrameDatabase {
                 }
             }
         }
+
+        println!("CANDIDATES: {:?}", loop_candidates);
         return loop_candidates;
     }
 

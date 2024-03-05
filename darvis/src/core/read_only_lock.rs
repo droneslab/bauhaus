@@ -1,12 +1,3 @@
-use log::debug;
-use parking_lot::{
-    RwLock,
-    MappedRwLockReadGuard,
-    MappedRwLockWriteGuard,
-    RwLockReadGuard,
-    RwLockWriteGuard
-};
-
 /// *** Structs to wrap map to manage read/write access *** ///
 // ReadOnlyWrapper is used by all actors but the map actor.
 // Trying to write on read-only will give a compilation error.
@@ -21,6 +12,14 @@ use parking_lot::{
 //     RwLockWriteGuard, //MappedRwLockWriteGuard,
 // };
 use std::{sync::Arc, time::Instant};
+use log::debug;
+use parking_lot::{
+    RwLock,
+    MappedRwLockReadGuard,
+    MappedRwLockWriteGuard,
+    RwLockReadGuard,
+    RwLockWriteGuard
+};
 
 pub type UnlockedToRead<'a, Map> = MappedRwLockReadGuard<'a, Map>;
 

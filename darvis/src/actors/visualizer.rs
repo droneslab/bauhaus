@@ -6,10 +6,10 @@ use foxglove::{foxglove::items::{SceneEntity, SceneUpdate, SpherePrimitive, Vect
 use base64::{engine::general_purpose, Engine as _};
 
 use core::{
-    actor::{ActorChannels, Actor}, matrix::DVVectorOfKeyPoint, config::SETTINGS,
+    config::SETTINGS, matrix::DVVectorOfKeyPoint, system::{Actor, System, Timestamp}
 };
 use crate::{
-    map::{map::Id, pose::Pose, misc::Timestamp},
+    map::{map::Id, pose::Pose},
     modules::image,
     actors::messages::{ShutdownMsg, VisFeaturesMsg, VisFeatureMatchMsg, VisTrajectoryMsg},
     registered_actors::VISUALIZER, MapLock
@@ -41,7 +41,7 @@ pub const MAPPOINTS_CHANNEL: &str = "/mappoints";
 pub const CONNECTED_KFS_CHANNEL: &str = "/connected_kfs";
 
 pub struct DarvisVisualizer {
-    actor_system: ActorChannels,
+    system: System,
     map: MapLock,
 
     // For drawing images
@@ -60,7 +60,7 @@ pub struct DarvisVisualizer {
 impl Actor for DarvisVisualizer {
     type MapRef = MapLock;
 
-    fn new_actorstate(actor_system: ActorChannels, map: Self::MapRef) -> DarvisVisualizer {
+    fn new_actorstate(system: System, map: Self::MapRef) -> DarvisVisualizer {
         // Trajectory starts at 0,0
         let prev_pose = Point3 { x: 0.0, y: 0.0, z: 0.0 };
 
@@ -76,7 +76,7 @@ impl Actor for DarvisVisualizer {
         };
 
         return DarvisVisualizer{
-            actor_system,
+            system,
             map,
             image_draw_type,
             current_update_id: 0,
@@ -91,8 +91,8 @@ impl Actor for DarvisVisualizer {
     }
 
     #[tokio::main]
-    async fn spawn(actor_channels: ActorChannels, map: Self::MapRef) {
-        let mut actor = DarvisVisualizer::new_actorstate(actor_channels, map);
+    async fn spawn(system: System, map: Self::MapRef) {
+        let mut actor = DarvisVisualizer::new_actorstate(system, map);
 
         // Create foxglove writer, also spawns server if streaming
         // Code in here instead of inside DarvisVisualizer to avoid making new_actorstate async
@@ -127,7 +127,7 @@ impl Actor for DarvisVisualizer {
 
 
         loop {
-            let message = actor.actor_system.receive().unwrap();
+            let message = actor.system.receive().unwrap();
 
             if message.is::<VisFeaturesMsg>() {
                 let msg = message.downcast::<VisFeaturesMsg>().unwrap_or_else(|_| panic!("Could not downcast visualizer message!"));
@@ -221,6 +221,18 @@ impl DarvisVisualizer {
                 vec![], vec![]
             )
         );
+
+        // Write transform from world to camera
+        let trans = inverse_frame_pose.get_translation();
+        let rot = inverse_frame_pose.get_quaternion();
+        let transform = FrameTransform {
+            timestamp: Some(prost_types::Timestamp { seconds: 0,  nanos: 0 }),
+            parent_frame_id: "world".to_string(),
+            child_frame_id: "camera".to_string(),
+            translation: Some(Vector3{ x: trans[0], y: trans[1], z: trans[2] }),
+            rotation: Some(Quaternion { x: rot[0], y: rot[1], z: rot[2], w: rot[3] }),
+        };
+        writer.write(TRANSFORM_CHANNEL, transform, timestamp, 0).await.expect("Could not write transform");
 
         let map = self.map.read();
 

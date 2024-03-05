@@ -6,7 +6,7 @@ use std::{cmp::{max, min}, collections::HashMap};
 use opencv::{core::{no_array, norm, MatExprResult, Range, Scalar, CV_64F, NORM_L2}, hub_prelude::{KeyPointTraitConst, MatExprTraitConst, MatTraitConst}};
 use rand::Rng;
 
-use crate::{map::{map::Id, pose::{DVRotation, DVTranslation}}, modules::{camera::CAMERA_MODULE, optimizer::LEVEL_SIGMA2}, MapLock};
+use crate::{map::{map::Id, pose::{DVRotation, DVTranslation}}, modules::optimizer::LEVEL_SIGMA2, registered_actors::CAMERA_MODULE, MapLock};
 use opencv::prelude::*;
 
 pub struct Sim3Solver {

@@ -2,10 +2,10 @@ use std::collections::{BTreeSet, HashSet};
 
 use opencv::prelude::Mat;
 use core::{
-    matrix::{ DVVectorOfKeyPoint, DVMatrix}, actor::ActorMessage,
+    matrix::{ DVMatrix, DVVectorOfKeyPoint}, system::{ActorMessage, Timestamp},
 };
 use crate::{
-    map::{pose::Pose, map::Id, misc::Timestamp, frame::Frame},
+    map::{pose::Pose, map::Id, frame::Frame},
     actors::tracking_backend::TrackingState
 };
 

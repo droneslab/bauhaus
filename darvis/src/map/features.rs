@@ -7,19 +7,17 @@
 // But at the same time it's nice to hide a lot of this logic away from the keyframe. It would be good to
 // re-factor this eventually but it isn't high priority.
 
+use core::config::SETTINGS;
 use std::fmt::Debug;
 use core::sensor::{Sensor, FrameSensor};
 use opencv::prelude::{Mat, MatTraitConst, MatTrait, KeyPointTraitConst};
 use opencv::types::VectorOff32;
 use opencv::core::{KeyPoint, CV_32F, Scalar};
-use crate::modules::camera::CAMERA_MODULE;
+use crate::registered_actors::{CAMERA_MODULE, FEATURES};
 use crate::{
     matrix::{DVMatrix, DVVectorOfKeyPoint},
     map::map::Id,
 };
-
-const FRAME_GRID_ROWS :usize = 48;
-const FRAME_GRID_COLS :usize = 64;
 
 #[derive(Clone, Debug, Default)]
 enum KeyPoints {
@@ -58,6 +56,11 @@ pub struct Features {
     max_x: f64,//static float mnMaxX;
     min_y: f64,//static float mnMinY;
     max_y: f64,//static float mnMaxY;
+
+    // Settings
+    frame_grid_cols: i32, 
+    frame_grid_rows: i32,
+
 }
 
 impl Features {
@@ -68,10 +71,13 @@ impl Features {
         sensor: Sensor
     ) -> Result<Features, Box<dyn std::error::Error>> {
         // Grid
+        let frame_grid_cols = SETTINGS.get::<i32>(FEATURES, "frame_grid_cols");
+        let frame_grid_rows = SETTINGS.get::<i32>(FEATURES, "frame_grid_rows");
+
         let mut grid = Vec::new();
-        for _ in 0..FRAME_GRID_COLS  {
+        for _ in 0..frame_grid_cols  {
             let mut row = Vec::new();
-            for _ in 0..FRAME_GRID_ROWS {
+            for _ in 0..frame_grid_rows {
                 row.push(Vec::new());
             }
             grid.push(row);
@@ -102,20 +108,21 @@ impl Features {
             }
         };
 
+
         match sensor.frame() {
             FrameSensor::Mono => {
                 let keypoints_un = Self::undistort_keypoints(&keypoints)?;
                 let num_keypoints = keypoints.len() as u32;
 
                 // assign features to grid
-                let grid_element_width_inv =  FRAME_GRID_COLS as f64/(max_x - min_x) as f64;
-                let grid_element_height_inv = FRAME_GRID_ROWS as f64/(max_y - min_y) as f64;
+                let grid_element_width_inv =  frame_grid_cols as f64/(max_x - min_x) as f64;
+                let grid_element_height_inv = frame_grid_rows as f64/(max_y - min_y) as f64;
                 for i in 0..keypoints_un.len() as usize {
                     let kp = &keypoints_un.get(i).unwrap();
                     let pos_x = ((kp.pt().x-(min_x as f32))*grid_element_width_inv as f32).round() as i32;
                     let pos_y = ((kp.pt().y-(min_y as f32))*grid_element_height_inv as f32).round() as i32;
 
-                    let not_in_bounds = pos_x<0 || pos_x>=FRAME_GRID_COLS as i32 || pos_y<0 || pos_y>=FRAME_GRID_ROWS as i32;
+                    let not_in_bounds = pos_x<0 || pos_x>=frame_grid_cols as i32 || pos_y<0 || pos_y>=frame_grid_rows as i32;
 
                     //Keypoint's coordinates are undistorted, which could cause to go out of the image
                     if not_in_bounds {
@@ -136,6 +143,8 @@ impl Features {
                     max_x,
                     min_y,
                     max_y,
+                    frame_grid_cols,
+                    frame_grid_rows,
                 };
 
                 Ok(features)
@@ -282,8 +291,6 @@ impl Features {
         //GetFeaturesInArea
         let mut indices = vec![];
 
-        let frame_grid_rows = FRAME_GRID_ROWS as i64;
-        let frame_grid_cols = FRAME_GRID_COLS as i64;
         let grid_element_width_inv = self.grid_element_width_inv;
         let grid_element_height_inv = self.grid_element_height_inv;
 
@@ -291,9 +298,9 @@ impl Features {
         let factor_y = r;
 
         let min_cell_x = i64::max(0, ((x-self.min_x-factor_x)*grid_element_width_inv).floor() as i64);
-        let max_cell_x = i64::min(frame_grid_cols-1, ((x-self.min_x+factor_x)*grid_element_width_inv).ceil() as i64);
+        let max_cell_x = i64::min((self.frame_grid_cols-1) as i64, ((x-self.min_x+factor_x)*grid_element_width_inv).ceil() as i64);
         let min_cell_y = i64::max(0, ((y-self.min_y-factor_y)*grid_element_height_inv).floor() as i64);
-        let max_cell_y = i64::min(frame_grid_rows-1, ((y-self.min_y+factor_y)*grid_element_height_inv).ceil() as i64);
+        let max_cell_y = i64::min((self.frame_grid_rows-1) as i64, ((y-self.min_y+factor_y)*grid_element_height_inv).ceil() as i64);
 
         if !self.is_in_image(min_cell_x as f64, min_cell_y as f64) || !self.is_in_image(max_cell_x as f64, max_cell_y as f64) {
             return indices;

@@ -7,10 +7,7 @@ use std::{collections::{BTreeSet, HashMap}, fmt::{self, Debug}, sync::atomic::Or
 use opencv::{prelude::*, types::VectorOfKeyPoint,};
 
 use core::{
-    actor::Actor,
-    sensor::{Sensor, FrameSensor, ImuSensor},
-    matrix::*,
-    config::*
+    config::*, matrix::*, sensor::{FrameSensor, ImuSensor, Sensor}, system::{Actor, Timestamp}
 };
 use crate::{
     registered_actors::{FEATURE_DETECTION, CAMERA, VISUALIZER, TRACKING_BACKEND, LOCAL_MAPPING, SHUTDOWN_ACTOR},
@@ -19,15 +16,14 @@ use crate::{
         tracking_backend::TrackingState,
     },
     modules::{imu::ImuModule, relocalization::Relocalization, map_initialization::Initialization, orbmatcher, optimizer},
-    ActorChannels,
-    map::{map::Id, misc::Timestamp, pose::Pose, frame::Frame}, MapLock,
+    System,
+    map::{map::Id, pose::Pose, frame::Frame}, MapLock,
 };
 
 use super::{tracking_backend::TrackedMapPointData, local_mapping::LOCAL_MAPPING_IDLE, messages::{NewKeyFrameMsg, VisTrajectoryMsg, TrajectoryMsg, InitKeyFrameMsg}};
 
-#[derive(Debug)]
 pub struct TrackingFull {
-    actor_channels: ActorChannels,
+    system: System,
     sensor: Sensor,
 
     /// Frontend
@@ -75,7 +71,7 @@ pub struct TrackingFull {
 impl Actor for TrackingFull {
     type MapRef = MapLock;
 
-    fn new_actorstate(actor_channels: ActorChannels, map: Self::MapRef) -> TrackingFull {
+    fn new_actorstate(system: System, map: Self::MapRef) -> TrackingFull {
         let max_features = SETTINGS.get::<i32>(FEATURE_DETECTION, "max_features");
         let sensor = SETTINGS.get::<Sensor>(SYSTEM, "sensor");
         let _orb_extractor_right = match sensor.frame() {
@@ -87,7 +83,7 @@ impl Actor for TrackingFull {
             false => None
         };
         TrackingFull {
-            actor_channels,
+            system,
             orb_extractor_left: DVORBextractor::new(max_features),
             _orb_extractor_right,
             orb_extractor_ini,
@@ -123,19 +119,19 @@ impl Actor for TrackingFull {
         }
     }
 
-    fn spawn(actor_channels: ActorChannels, map: Self::MapRef) {
-        let mut actor = TrackingFull::new_actorstate(actor_channels, map);
-        let max_queue_size = actor.actor_channels.receiver_bound.unwrap_or(100);
+    fn spawn(system: System, map: Self::MapRef) {
+        let mut actor = TrackingFull::new_actorstate(system, map);
+        let max_queue_size = actor.system.receiver_bound.unwrap_or(100);
         let mut last_frame = None; // Keep last_frame here instead of in tracking object to avoid putting it in an option and doing a ton of unwraps
         let mut curr_frame_id = 0;
 
         tracy_client::set_thread_name!("tracking full");
 
         'outer: loop {
-            let message = actor.actor_channels.receive().unwrap();
+            let message = actor.system.receive().unwrap();
 
             if message.is::<ImageMsg>() {
-                if actor.actor_channels.queue_len() > max_queue_size {
+                if actor.system.queue_len() > max_queue_size {
                     // Abort additional work if there are too many frames in the msg queue.
                     info!("Tracking dropped 1 frame");
                     continue;
@@ -146,7 +142,7 @@ impl Actor for TrackingFull {
                 // Extract features
                 let image_cols = msg.image.cols() as u32;
                 let image_rows = msg.image.rows() as u32;
-                let (keypoints, descriptors) = match actor.actor_channels.actors.get(VISUALIZER).is_some() {
+                let (keypoints, descriptors) = match actor.system.actors.get(VISUALIZER).is_some() {
                     true => {
                         // TODO (timing) ... cloned if visualizer running. maybe make global shared object?
                         let (keypoints, descriptors) = actor.extract_features(msg.image.clone(), curr_frame_id);
@@ -297,10 +293,10 @@ impl TrackingFull {
                     self.init_id = ini_kf_id;
 
                     // Send first two keyframes to local mapping
-                    self.actor_channels.send(LOCAL_MAPPING, Box::new(
+                    self.system.send(LOCAL_MAPPING, Box::new(
                         InitKeyFrameMsg { kf_id: ini_kf_id }
                     ));
-                    self.actor_channels.send(LOCAL_MAPPING,Box::new(
+                    self.system.send(LOCAL_MAPPING,Box::new(
                         InitKeyFrameMsg { kf_id: curr_kf_id }
                     ));
 
@@ -347,7 +343,7 @@ impl TrackingFull {
                         // TODO (relocalization): remove the call to shutdown actor and uncomment line of code below.
                         // This is just to gracefully shut down instead of panicking at the to do 
                         error!("Relocalization! Shutting down for now.");
-                        self.actor_channels.send(SHUTDOWN_ACTOR, Box::new(ShutdownMsg{}));
+                        self.system.send(SHUTDOWN_ACTOR, Box::new(ShutdownMsg{}));
                         self.state = TrackingState::Lost;
                         return Ok(());
                         // !self.relocalization.run() && self.relocalization.sec_since_lost(&current_frame) > 3
@@ -366,7 +362,7 @@ impl TrackingFull {
                     true => {
                         warn!("Reseting current map...");
                         error!("Resetting current map! Shutting down for now.");
-                        self.actor_channels.send(SHUTDOWN_ACTOR, Box::new(ShutdownMsg{}));
+                        self.system.send(SHUTDOWN_ACTOR, Box::new(ShutdownMsg{}));
                         self.state = TrackingState::Lost;
                         return Ok(());
 
@@ -456,7 +452,7 @@ impl TrackingFull {
             relative_pose = current_frame.get_pose_relative(&map);
             self.trajectory_poses.push(relative_pose);
         }
-        self.actor_channels.send(
+        self.system.send(
             SHUTDOWN_ACTOR, 
             Box::new(TrajectoryMsg{
                 pose: relative_pose,
@@ -465,9 +461,9 @@ impl TrackingFull {
             })
         );
 
-        if self.actor_channels.actors.get(VISUALIZER).is_some() {
+        if self.system.actors.get(VISUALIZER).is_some() {
             // TODO (timing) ... cloned if visualizer running. maybe make global shared object?
-            self.actor_channels.send(VISUALIZER, Box::new(VisTrajectoryMsg{
+            self.system.send(VISUALIZER, Box::new(VisTrajectoryMsg{
                 pose: current_frame.pose.unwrap(),
                 mappoint_matches: current_frame.mappoint_matches.matches.clone(),
                 mappoints_in_tracking: self.local_mappoints.clone(),
@@ -1077,7 +1073,7 @@ impl TrackingFull {
         self.last_kf_timestamp = Some(new_kf.timestamp);
 
         // KeyFrame created here and inserted into map
-        self.actor_channels.send(
+        self.system.send(
             LOCAL_MAPPING,
             Box::new( NewKeyFrameMsg{  keyframe: new_kf, } )
         );
@@ -1179,7 +1175,7 @@ impl TrackingFull {
 
     fn send_to_visualizer(&mut self, keypoints: VectorOfKeyPoint, image: Mat, timestamp: Timestamp) {
         // Send image and features to visualizer
-        self.actor_channels.find(VISUALIZER).send(Box::new(VisFeaturesMsg {
+        self.system.find(VISUALIZER).send(Box::new(VisFeaturesMsg {
             keypoints: DVVectorOfKeyPoint::new(keypoints),
             image,
             timestamp,
