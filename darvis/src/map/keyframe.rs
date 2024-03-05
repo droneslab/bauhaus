@@ -1,8 +1,8 @@
 use std::{collections::{HashMap, HashSet}, cmp::min, backtrace::Backtrace};
-use core::{matrix::DVVector3, config::{ SETTINGS, SYSTEM}, sensor::Sensor};
+use core::{config::{ SETTINGS, SYSTEM}, matrix::DVVector3, sensor::Sensor, system::Timestamp};
 use log::{error, debug, warn};
-use crate::{map::{map::Id, pose::Pose},modules::imu::*};
-use super::{mappoint::MapPoint, map::{Map, MapItems}, features::Features, bow::{BoW, self}, misc::Timestamp, frame::Frame};
+use crate::{map::{map::Id, pose::Pose},modules::{bow::BoW, imu::*}, registered_actors::VOCABULARY};
+use super::{features::Features, frame::Frame, map::{Map, MapItems}, mappoint::MapPoint,};
 
 #[derive(Debug, Clone)]
 pub struct KeyFrame {
@@ -57,7 +57,7 @@ impl KeyFrame {
             Some(bow) => Some(bow),
             None => {
                 let mut bow = BoW::new();
-                bow::VOCABULARY.transform(&frame.features.descriptors, &mut bow);
+                VOCABULARY.transform(&frame.features.descriptors, &mut bow);
                 Some(bow)
             }
         };

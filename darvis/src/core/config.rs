@@ -162,7 +162,8 @@ pub struct ActorConf{
 #[derive(Debug, Default, Clone)]
 // Struct holding configuration parameters for a given module
 pub struct ModuleConf{
-    pub name: String
+    pub name: String, // How this module is referred to by other actors/modules
+    pub tag: String, // Tag to match up with executable in registered_actors.rs
 }
 
 pub fn load_config(system_fn: &String, camera_fn: &String) -> Result<(Vec<ActorConf>, Vec<ModuleConf>, String), Box<dyn std::error::Error>> {
@@ -235,7 +236,8 @@ fn load_system_settings(system_fn: &String) -> (Vec<ActorConf>, Vec<ModuleConf>,
     for module in yaml_document["modules"].as_vec().unwrap() {
         let h = module.as_hash().unwrap();
         let m_conf = ModuleConf {
-            name: get_val(h, "name").as_str().unwrap().to_string()
+            name: get_val(h, "name").as_str().unwrap().to_string(),
+            tag: get_val(h, "tag").as_str().unwrap().to_string(),
         };
         add_settings(get_val(h, "settings").as_vec().unwrap(), &m_conf.name);
         module_info.push(m_conf);
@@ -272,6 +274,7 @@ fn load_camera_settings(camera_fn: &String, module_info: &mut Vec<ModuleConf>) {
     // Add camera module to module_info so it gets spawned
     let camera_module = ModuleConf {
         name: "CAMERA".to_string(),
+        tag: "CAMERA".to_string(),
     };
     module_info.push(camera_module);
 

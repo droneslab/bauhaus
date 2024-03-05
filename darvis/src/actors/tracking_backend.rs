@@ -1,21 +1,20 @@
 use std::{collections::{BTreeMap, BTreeSet, HashMap}, sync::atomic::Ordering};
 use log::{warn, info, debug, error};
-use core::{config::*, sensor::{Sensor, FrameSensor, ImuSensor}, actor::Actor};
+use core::{config::*, sensor::{FrameSensor, ImuSensor, Sensor}, system::{Actor, Timestamp}};
 use crate::{
     actors::messages::{TrajectoryMsg, VisTrajectoryMsg, TrackingStateMsg, FeatureMsg, InitKeyFrameMsg, LastKeyFrameUpdatedMsg, ShutdownMsg},
     registered_actors::{LOCAL_MAPPING, TRACKING_BACKEND, SHUTDOWN_ACTOR, TRACKING_FRONTEND, VISUALIZER},
     map::{
-        map::Id, frame::Frame, pose::Pose, misc::Timestamp,
+        map::Id, frame::Frame, pose::Pose,
     },
-    modules::{imu::ImuModule, optimizer::{self}, orbmatcher, map_initialization::Initialization, relocalization::Relocalization}, ActorChannels, MapLock,
+    modules::{imu::ImuModule, optimizer::{self}, orbmatcher, map_initialization::Initialization, relocalization::Relocalization}, System, MapLock,
 };
 
 use super::{messages::{IMUInitializedMsg, NewKeyFrameMsg}, local_mapping::LOCAL_MAPPING_IDLE};
 
 
-#[derive(Debug)]
 pub struct TrackingBackend {
-    actor_channels: ActorChannels,
+    system: System,
     state: TrackingState,
 
     // Map
@@ -61,10 +60,10 @@ pub struct TrackingBackend {
 impl Actor for TrackingBackend {
     type MapRef = MapLock;
 
-    fn new_actorstate(actor_channels: ActorChannels, map: Self::MapRef) -> TrackingBackend {
+    fn new_actorstate(system: System, map: Self::MapRef) -> TrackingBackend {
         let sensor = SETTINGS.get::<Sensor>(SYSTEM, "sensor");
         TrackingBackend {
-            actor_channels,
+            system,
             map,
             sensor,
             initialization: Some(Initialization::new()),
@@ -92,20 +91,20 @@ impl Actor for TrackingBackend {
         }
     }
 
-    fn spawn(actor_channels: ActorChannels, map: Self::MapRef) {
-        let mut actor = TrackingBackend::new_actorstate(actor_channels, map);
-        let max_queue_size = actor.actor_channels.receiver_bound.unwrap_or(100);
+    fn spawn(system: System, map: Self::MapRef) {
+        let mut actor = TrackingBackend::new_actorstate(system, map);
+        let max_queue_size = actor.system.receiver_bound.unwrap_or(100);
         let mut last_frame = None; // Keep last_frame here instead of in tracking object to avoid putting it in an option and doing a ton of unwraps
         let mut curr_frame_id = 0;
 
         tracy_client::set_thread_name!("tracking backend");
 
         'outer: loop {
-            let message = actor.actor_channels.receive().unwrap();
+            let message = actor.system.receive().unwrap();
 
             if message.is::<FeatureMsg>() {
                 // Regular tracking. Received from tracking frontend
-                if actor.actor_channels.queue_len() > max_queue_size {
+                if actor.system.queue_len() > max_queue_size {
                     // Abort additional work if there are too many frames in the msg queue.
                     info!("Tracking backend dropped 1 frame");
                     continue;
@@ -220,7 +219,7 @@ impl TrackingBackend {
                                     self.state = TrackingState::Ok;
 
                                     // Log initial pose in shutdown actor
-                                    self.actor_channels.send(SHUTDOWN_ACTOR, 
+                                    self.system.send(SHUTDOWN_ACTOR, 
                                     Box::new(TrajectoryMsg{
                                             pose: write_lock.keyframes.get(&ini_kf_id).unwrap().pose,
                                             ref_kf_id: ini_kf_id,
@@ -237,7 +236,7 @@ impl TrackingBackend {
                     }
 
                     // Let tracking frontend know the map is initialized
-                    self.actor_channels.send(TRACKING_FRONTEND, Box::new(
+                    self.system.send(TRACKING_FRONTEND, Box::new(
                         TrackingStateMsg {
                             state: TrackingState::Ok,
                             init_id: curr_kf_id
@@ -245,10 +244,10 @@ impl TrackingBackend {
                     ));
 
                     // Send first two keyframes to local mapping
-                    self.actor_channels.send(LOCAL_MAPPING, Box::new(
+                    self.system.send(LOCAL_MAPPING, Box::new(
                         InitKeyFrameMsg { kf_id: ini_kf_id }
                     ));
-                    self.actor_channels.send(LOCAL_MAPPING,Box::new(
+                    self.system.send(LOCAL_MAPPING,Box::new(
                         InitKeyFrameMsg { kf_id: curr_kf_id }
                     ));
 
@@ -293,7 +292,7 @@ impl TrackingBackend {
                         // TODO (relocalization): remove the call to shutdown actor and uncomment line of code below.
                         // This is just to gracefully shut down instead of panicking at the to do 
                         error!("Relocalization! Shutting down for now.");
-                        self.actor_channels.send(SHUTDOWN_ACTOR, Box::new(ShutdownMsg{}));
+                        self.system.send(SHUTDOWN_ACTOR, Box::new(ShutdownMsg{}));
                         self.state = TrackingState::Lost;
                         return Ok(false);
                         // !self.relocalization.run() && self.relocalization.sec_since_lost(&current_frame) > 3
@@ -315,7 +314,7 @@ impl TrackingBackend {
                     true => {
                         warn!("Reseting current map...");
                         error!("Resetting current map! Shutting down for now.");
-                        self.actor_channels.send(SHUTDOWN_ACTOR, Box::new(ShutdownMsg{}));
+                        self.system.send(SHUTDOWN_ACTOR, Box::new(ShutdownMsg{}));
                         self.state = TrackingState::Lost;
                         return Ok(false);
 
@@ -411,10 +410,13 @@ impl TrackingBackend {
                 // implementation). The way we have it now, we are always one reference keyframe behind because local mapping
                 // will insert the kf in the middle of the tracking thread loop, and then tracking will only know about it in
                 // the next iteration.
+                debug!("Ref kf current, pose: {:?}", current_frame.pose);
                 current_frame.pose.unwrap()
             } else {
                 let map = self.map.read();
                 let ref_kf = map.keyframes.get(&self.ref_kf_id.unwrap()).expect("Can't get ref kf from map");
+                debug!("Ref kf {}, pose: {:?}", self.ref_kf_id.unwrap(), ref_kf.pose);
+
                 ref_kf.pose
             };
 
@@ -424,7 +426,7 @@ impl TrackingBackend {
         };
         self.trajectory_poses.push(relative_pose);
 
-        self.actor_channels.send(
+        self.system.send(
             SHUTDOWN_ACTOR, 
             Box::new(TrajectoryMsg{
                 pose: relative_pose,
@@ -433,9 +435,9 @@ impl TrackingBackend {
             })
         );
 
-        if self.actor_channels.actors.get(VISUALIZER).is_some() {
+        if self.system.actors.get(VISUALIZER).is_some() {
             // TODO (timing) ... cloned if visualizer running. maybe make global shared object?
-            self.actor_channels.send(VISUALIZER, Box::new(VisTrajectoryMsg{
+            self.system.send(VISUALIZER, Box::new(VisTrajectoryMsg{
                 pose: current_frame.pose.unwrap(),
                 mappoint_matches: current_frame.mappoint_matches.matches.clone(),
                 mappoints_in_tracking: self.local_mappoints.clone(),
@@ -1069,7 +1071,7 @@ impl TrackingBackend {
         self.last_kf_timestamp = Some(new_kf.timestamp);
 
         // KeyFrame created here and inserted into map
-        self.actor_channels.send(
+        self.system.send(
             LOCAL_MAPPING,
             Box::new( NewKeyFrameMsg{  keyframe: new_kf, } )
         );

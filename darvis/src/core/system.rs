@@ -1,17 +1,18 @@
-/// *** Actor channel and actor message implementation. *** //
+/// *** Defines actor channels and messages, module object which holds module info, and "system" object which stores references to actors/modules. *** //
 
 use std::collections::HashMap;
-use crossbeam_channel::{RecvError, unbounded};
+use crossbeam_channel::RecvError;
 
 use downcast_rs::{impl_downcast, Downcast};
 use log::error;
+
+pub type Timestamp = f64;
 
 pub type MessageBox = Box<dyn ActorMessage>;
 pub type Receiver = crossbeam_channel::Receiver<MessageBox>;
 pub type Sender = crossbeam_channel::Sender<MessageBox>;
 
-#[derive(Debug)]
-pub struct ActorChannels {
+pub struct System {
     // Note: Run-time errors
     // each actor has actorchannels struct to communicate with other actors
     // can't make DVSender an enum depending on each actor because a collection can't hold different types
@@ -20,7 +21,8 @@ pub struct ActorChannels {
     pub receiver_bound: Option<usize>,
     pub my_name: String,
 }
-impl ActorChannels {
+
+impl System {
     pub fn find(&self, name: &str) -> &Sender {
         self.actors.get(name).expect(format!("Could not find actor {}", name).as_str())
     }
@@ -63,21 +65,6 @@ impl ActorChannels {
     }
 }
 
-impl Default for ActorChannels {
-    // Required because we use the default crate for all the actors but we shouldn't actually use this
-    // It would be nice to figure out a clean way to require some variables to be explicitly set in
-    // the constructor, while others are ok to be defaulted. But this isn't a high priority at all.
-    fn default() -> Self { 
-        let (_, rx) = unbounded();
-        ActorChannels {
-            actors: HashMap::new(),
-            receiver: rx,
-            receiver_bound: None,
-            my_name: "Default".to_string()
-        }
-    }
-}
-
 pub struct NullActor { }
 impl NullActor {
     pub fn new() -> Self {
@@ -87,10 +74,10 @@ impl NullActor {
 impl Actor for NullActor {
     type MapRef = ();
 
-    fn new_actorstate(_actor_system: ActorChannels, _map: Self::MapRef) -> Self {
+    fn new_actorstate(_system: System, _map: Self::MapRef) -> Self {
         NullActor{}
     }
-    fn spawn(_actor_system: ActorChannels, _map: Self::MapRef)  {
+    fn spawn(_system: System, _map: Self::MapRef)  {
         error!("Actor Not Implemented!!");
     }
 }
@@ -106,6 +93,7 @@ impl_downcast!(Base);
 pub trait Actor {
     type MapRef;
 
-    fn new_actorstate(actor_channels: ActorChannels, map: Self::MapRef) -> Self;
-    fn spawn(actor_channels: ActorChannels, map: Self::MapRef);
+    fn new_actorstate(system: System, map: Self::MapRef) -> Self;
+    fn spawn(system: System, map: Self::MapRef);
 }
+

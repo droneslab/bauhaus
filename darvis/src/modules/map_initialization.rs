@@ -5,7 +5,7 @@ use log::debug;
 use core::matrix::DVVectorOfPoint3f;
 use opencv::prelude::KeyPointTraitConst;
 use crate::map::{frame::Frame, pose::Pose};
-use crate::modules::camera::CAMERA_MODULE;
+use crate::registered_actors::CAMERA_MODULE;
 
 use super::orbmatcher;
 

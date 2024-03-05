@@ -1,8 +1,8 @@
-use core::{sensor::{Sensor, FrameSensor}, matrix::{DVVectorOfKeyPoint, DVMatrix, DVVector3}, config::{SETTINGS, SYSTEM}};
+use core::{config::{SETTINGS, SYSTEM}, matrix::{DVMatrix, DVVector3, DVVectorOfKeyPoint}, sensor::{FrameSensor, Sensor}, system::Timestamp};
 
-use crate::{modules::{imu::{IMUBias, IMUPreIntegrated}, camera::CAMERA_MODULE}, actors::tracking_backend::TrackedMapPointData};
+use crate::{actors::tracking_backend::TrackedMapPointData, modules::{bow::BoW, imu::{IMUBias, IMUPreIntegrated}}, registered_actors::{CAMERA_MODULE, VOCABULARY}};
 
-use super::{map::{Id, Map}, misc::Timestamp, pose::Pose, keyframe::MapPointMatches, features::Features, bow::{BoW, self}, mappoint::MapPoint};
+use super::{features::Features, keyframe::MapPointMatches, map::{Id, Map}, mappoint::MapPoint, pose::Pose};
 
 
 #[derive(Debug, Clone)]
@@ -61,7 +61,7 @@ pub fn new(
             Some(bow) => Some(bow.clone()),
             None => {
                 let mut bow = BoW::new();
-                bow::VOCABULARY.transform(&frame.features.descriptors, &mut bow);
+                VOCABULARY.transform(&frame.features.descriptors, &mut bow);
                 Some(bow)
             }
         };
@@ -83,7 +83,7 @@ pub fn new(
     pub fn compute_bow(&mut self) {
         if self.bow.is_none() {
             self.bow = Some(BoW::new());
-            bow::VOCABULARY.transform(&self.features.descriptors, &mut self.bow.as_mut().unwrap());
+            VOCABULARY.transform(&self.features.descriptors, &mut self.bow.as_mut().unwrap());
         }
     }
 

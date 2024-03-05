@@ -10,9 +10,9 @@ use log::{debug, info};
 use spin_sleep::LoopHelper;
 #[macro_use] extern crate lazy_static;
 
-use core::{*, config::*, actor::ActorChannels, maplock::ReadWriteMap};
+use core::{*, config::*, system::System, read_only_lock::ReadWriteMap};
 use crate::{actors::messages::{ShutdownMsg, ImageMsg}, modules::image};
-use crate::map::{bow::VOCABULARY, map::Id};
+use crate::map::{map::Id};
 
 mod actors;
 mod registered_actors;
@@ -44,7 +44,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let dataset_config_file = args[3].to_owned();
 
     // Load config, including custom settings and actor information
-    let (actor_info, _module_info, log_level) = load_config(&system_config_file, &dataset_config_file).expect("Could not load config");
+    let (actor_info, module_info, log_level) = load_config(&system_config_file, &dataset_config_file).expect("Could not load config");
 
     setup_logger(&log_level)?;
 
@@ -53,10 +53,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Launch actor system
     let first_actor_name = SETTINGS.get::<String>(SYSTEM, "first_actor_name"); // Actor that launches the pipeline
-    let (shutdown_flag, first_actor_tx, shutdown_tx, shutdown_join) = spawn::launch_actor_system(actor_info, first_actor_name)?;
-
-    // Load vocabulary
-    VOCABULARY.access();
+    let (shutdown_flag, first_actor_tx, shutdown_tx, shutdown_join) = spawn::launch_system(actor_info, module_info, first_actor_name)?;
 
     info!("System ready to receive messages!");
 
@@ -219,7 +216,8 @@ fn setup_logger(level: &str) -> Result<(), fern::InitError> {
     let start_time = chrono::Local::now();
 
     let terminal_output = fern::Dispatch::new()
-        .level(log_level)
+        .level(log_level) // Turns off all logging for external crates, some can be very noisy
+        .level_for("foxglove", log::LevelFilter::Warn)
         .format(move |out, message, record| {
             out.finish(format_args!(
                 "{color_line}[{time} {target}:{line_num} {level}{color_line}] {message}\x1B[0m",

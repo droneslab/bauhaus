@@ -5,10 +5,7 @@ use std::{fmt, fmt::Debug};
 use opencv::{prelude::*, types::VectorOfKeyPoint,};
 
 use core::{
-    actor::Actor,
-    sensor::{Sensor, FrameSensor, ImuSensor},
-    matrix::*,
-    config::*
+    config::*, matrix::*, sensor::{FrameSensor, ImuSensor, Sensor}, system::{Actor, Timestamp}
 };
 use crate::{
     registered_actors::{FEATURE_DETECTION, CAMERA, VISUALIZER},
@@ -17,14 +14,13 @@ use crate::{
         tracking_backend::TrackingState,
     },
     modules::image,
-    ActorChannels,
-    map::{map::Id, misc::Timestamp},
+    System,
+    map::{map::Id},
 };
 
 
-#[derive(Debug)]
 pub struct TrackingFrontEnd {
-    actor_channels: ActorChannels,
+    system: System,
     orb_extractor_left: DVORBextractor,
     _orb_extractor_right: Option<DVORBextractor>,
     orb_extractor_ini: Option<DVORBextractor>,
@@ -38,7 +34,7 @@ pub struct TrackingFrontEnd {
 impl Actor for TrackingFrontEnd {
     type MapRef = ();
 
-    fn new_actorstate(actor_channels: ActorChannels, _map: Self::MapRef) -> TrackingFrontEnd {
+    fn new_actorstate(system: System, _map: Self::MapRef) -> TrackingFrontEnd {
         let max_features = SETTINGS.get::<i32>(FEATURE_DETECTION, "max_features");
         let sensor = SETTINGS.get::<Sensor>(SYSTEM, "sensor");
         let _orb_extractor_right = match sensor.frame() {
@@ -50,7 +46,7 @@ impl Actor for TrackingFrontEnd {
             false => None
         };
         TrackingFrontEnd {
-            actor_channels,
+            system,
             orb_extractor_left: DVORBextractor::new(max_features),
             _orb_extractor_right,
             orb_extractor_ini,
@@ -62,17 +58,17 @@ impl Actor for TrackingFrontEnd {
         }
     }
 
-    fn spawn(actor_channels: ActorChannels, map: Self::MapRef) {
-        let mut actor = TrackingFrontEnd::new_actorstate(actor_channels, map);
-        let max_queue_size = actor.actor_channels.receiver_bound.unwrap_or(100);
+    fn spawn(system: System, map: Self::MapRef) {
+        let mut actor = TrackingFrontEnd::new_actorstate(system, map);
+        let max_queue_size = actor.system.receiver_bound.unwrap_or(100);
 
         tracy_client::set_thread_name!("tracking frontend");
 
         'outer: loop {
-            let message = actor.actor_channels.receive().unwrap();
+            let message = actor.system.receive().unwrap();
 
             if message.is::<ImagePathMsg>() {
-                if actor.actor_channels.queue_len() > max_queue_size {
+                if actor.system.queue_len() > max_queue_size {
                     // Abort additional work if there are too many frames in the msg queue.
                     info!("Tracking frontend dropped 1 frame");
                     continue;
@@ -85,7 +81,7 @@ impl Actor for TrackingFrontEnd {
                 let image_rows = image.rows() as u32;
 
                 // TODO (timing) ... cloned if visualizer running. maybe make global shared object?
-                let (keypoints, descriptors) = match actor.actor_channels.actors.get(VISUALIZER).is_some() {
+                let (keypoints, descriptors) = match actor.system.actors.get(VISUALIZER).is_some() {
                     true => {
                         let (keypoints, descriptors) = actor.extract_features(image.clone());
                         actor.send_to_visualizer(keypoints.clone(), image, msg.timestamp);
@@ -100,7 +96,7 @@ impl Actor for TrackingFrontEnd {
 
                 actor.last_id += 1;
             } else if message.is::<ImageMsg>() {
-                if actor.actor_channels.queue_len() > max_queue_size {
+                if actor.system.queue_len() > max_queue_size {
                     // Abort additional work if there are too many frames in the msg queue.
                     info!("Tracking frontend dropped 1 frame");
                     continue;
@@ -112,7 +108,7 @@ impl Actor for TrackingFrontEnd {
                 let image_rows = msg.image.rows() as u32;
 
                 // TODO (timing) ... cloned if visualizer running. maybe make global shared object?
-                let (keypoints, descriptors) = match actor.actor_channels.actors.get(VISUALIZER).is_some() {
+                let (keypoints, descriptors) = match actor.system.actors.get(VISUALIZER).is_some() {
                     true => {
                         let (keypoints, descriptors) = actor.extract_features(msg.image.clone());
                         actor.send_to_visualizer(keypoints.clone(), msg.image, msg.timestamp);
@@ -180,7 +176,7 @@ impl TrackingFrontEnd {
         // Send features to backend
         // Note: Run-time errors ... actor lookup is runtime error
         // Note: not currently sending image to backend
-        let backend = self.actor_channels.find("TRACKING_BACKEND");
+        let backend = self.system.find("TRACKING_BACKEND");
 
         backend.send(Box::new(FeatureMsg{
             keypoints: DVVectorOfKeyPoint::new(keypoints),
@@ -194,7 +190,7 @@ impl TrackingFrontEnd {
 
     fn send_to_visualizer(&mut self, keypoints: VectorOfKeyPoint, image: Mat, timestamp: Timestamp) {
         // Send image and features to visualizer
-        self.actor_channels.find(VISUALIZER).send(Box::new(VisFeaturesMsg {
+        self.system.find(VISUALIZER).send(Box::new(VisFeaturesMsg {
             keypoints: DVVectorOfKeyPoint::new(keypoints),
             image,
             timestamp,

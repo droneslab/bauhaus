@@ -1,33 +1,31 @@
-use core::actor::Actor;
+use core::system::Actor;
 use core::config::{SETTINGS, SYSTEM};
 use core::matrix::DVMatrix4;
 use core::sensor::Sensor;
 use std::collections::{HashMap, HashSet};
 use std::thread;
 use std::time::Duration;
-use log::{warn, debug};
+use log::{debug, info, warn};
 use crate::actors::messages::KeyFrameIdMsg;
-use crate::map::bow::VOCABULARY;
+use crate::modules::keyframe_database2::KeyFrameDatabase;
 use crate::modules::sim3solver::Sim3Solver;
 use crate::modules::{optimizer, orbmatcher};
-use crate::registered_actors::LOOP_CLOSING;
-use crate::{ActorChannels, MapLock};
+use crate::registered_actors::{LOOP_CLOSING, VOCABULARY};
+use crate::{System, MapLock};
 use crate::map::map::Id;
 use crate::modules::imu::ImuModule;
 
 use super::messages::{ShutdownMsg, IMUInitializedMsg};
-use crate::map::keyframe_database2::KeyFrameDatabase;
 
 type ConsistentGroup = (HashSet<Id>, i32);
 
-#[derive(Debug)]
 pub struct LoopClosing {
-    actor_channels: ActorChannels,
-    sensor: Sensor,
+    system: System,
+    _sensor: Sensor,
 
     map: MapLock,
     keyframe_database: KeyFrameDatabase,
-    _imu: ImuModule,
+    _imu: Option<ImuModule>,
 
     // Loop detector variables
     current_kf_id: Id, // mpCurrentKF
@@ -52,14 +50,13 @@ pub struct LoopClosing {
 impl Actor for LoopClosing {
     type MapRef = MapLock;
 
-    fn new_actorstate(actor_channels: ActorChannels, map: Self::MapRef) -> LoopClosing {
-        let sensor: Sensor = SETTINGS.get(SYSTEM, "sensor");
+    fn new_actorstate(system: System, map: Self::MapRef) -> LoopClosing {
 
         LoopClosing {
-            actor_channels,
+            system,
             map,
-            _imu: ImuModule::new(None, None, sensor, false, false),
-            sensor,
+            _imu: None, // TODO (IMU): ImuModule::new(None, None, sensor, false, false),
+            _sensor: SETTINGS.get(SYSTEM, "sensor"),
             current_kf_id: -1,
             running_global_ba: false,
             finished_global_ba: false,
@@ -75,15 +72,16 @@ impl Actor for LoopClosing {
         }
     }
 
-    fn spawn(actor_channels: ActorChannels, map: Self::MapRef) {
-        let mut actor = LoopClosing::new_actorstate(actor_channels, map);
+    fn spawn(system: System, map: Self::MapRef) {
+        let mut actor = LoopClosing::new_actorstate(system, map);
         tracy_client::set_thread_name!("loop closing");
 
         'outer: loop {
-            let message = actor.actor_channels.receive().unwrap();
+            let message = actor.system.receive().unwrap();
             if message.is::<KeyFrameIdMsg>() {
                 let msg = message.downcast::<KeyFrameIdMsg>().unwrap_or_else(|_| panic!("Could not downcast loop closing message!"));
                 actor.current_kf_id = msg.kf_id;
+                debug!("Loop closing working on kf {}", actor.current_kf_id);
                 actor.loop_closing();
             } else if message.is::<IMUInitializedMsg>() {
                 todo!("IMU: Process message from local mapping");
@@ -105,6 +103,7 @@ impl LoopClosing {
 
         // Detect loop candidates and check covisibility consistency
         if self.detect_loop() {
+            info!("LOOP DETECTED!");
             self.keyframe_database.add(self.map.read().keyframes.get(&self.current_kf_id).unwrap());
 
             // Compute similarity transformation [sR|t]
@@ -120,14 +119,18 @@ impl LoopClosing {
                     debug!("Loop closing failed to compute sim3: {}", e);
                 }
             }
+        } else {
+            debug!("NO LOOP!");
         }
         self.map.write().keyframes.get_mut(&self.current_kf_id).unwrap().dont_delete = false;
-        thread::sleep(Duration::from_millis(5000));
+        thread::sleep(Duration::from_micros(5000));
     }
 
     fn detect_loop(&mut self) -> bool {
         //If the map contains less than 10 KF or less than 10 KF have passed from last loop detection
         if self.map.read().keyframes.len() < 10 {
+            self.keyframe_database.add(self.map.read().keyframes.get(&self.current_kf_id).unwrap());
+            println!("Less than 10 KF in map");
             return false;
         }
 
@@ -152,6 +155,8 @@ impl LoopClosing {
         // If there are no loop candidates, just add new keyframe and return false
         if candidate_kfs.is_empty() {
         //     mvConsistentGroups.clear();
+            self.keyframe_database.add(self.map.read().keyframes.get(&self.current_kf_id).unwrap());
+            println!("Candidate KFs empty");
             return false;
         }
 
@@ -203,6 +208,9 @@ impl LoopClosing {
 
         // Update Covisibility Consistent Groups
         self.consistent_groups = current_consistent_groups;
+
+        // Add current keyframe to database
+        self.keyframe_database.add(self.map.read().keyframes.get(&self.current_kf_id).unwrap());
 
         return !self.enough_consistent_candidates.is_empty();
     }
