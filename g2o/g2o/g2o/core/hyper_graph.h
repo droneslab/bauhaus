@@ -203,7 +203,7 @@ namespace g2o {
        */
       virtual bool changeId(Vertex* v, int newId);
 
-    protected:
+    //protected:
       VertexIDMap _vertices;
       EdgeSet _edges;
 

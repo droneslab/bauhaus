@@ -14,7 +14,7 @@
 
 namespace g2o
 {
-// using Edge = OptimizableGraph::Edge;
+using Edge = OptimizableGraph::Edge;
 struct Pose;
 struct Position;
 struct RustSim3;
@@ -27,7 +27,7 @@ class BridgeSparseOptimizer
 {
   public:
     BridgeSparseOptimizer(int opt_type, std::array<double, 4> camera_param);
-    // ~BridgeSparseOptimizer();
+    ~BridgeSparseOptimizer();
 
     // vertices
     bool has_vertex(int id) const;
@@ -62,7 +62,9 @@ class BridgeSparseOptimizer
     std::vector<RustXYZEdge> &get_mut_xyz_edges();
     std::vector<RustXYZOnlyPoseEdge> &get_mut_xyz_onlypose_edges();
     std::vector<RustSim3Edge> &get_mut_sim3_edges();
-
+    
+    // This was added to check the base pointer
+    std::vector<Edge*> edge_container_all_types;   
     void set_robust_kernel_for_edge(int edge_id, bool reset);
 
   private:

@@ -11,6 +11,7 @@
 #include "../types/types_seven_dof_expmap.h"
 #include "/home/nitin/Downloads/Darvis_Upd/darvis/darvis/target/cxxbridge/g2o/src/lib.rs.h"
 #include "../core/hyper_graph.h"
+#include <numeric>
 
 namespace g2o {
     std::unique_ptr<BridgeSparseOptimizer> new_sparse_optimizer(int opt_type, std::array<double,4> camera_param) {
@@ -18,7 +19,7 @@ namespace g2o {
         unique_ptr<BridgeSparseOptimizer> ptr(optimizer);
         return ptr;
     }
-
+ 
     BridgeSparseOptimizer::BridgeSparseOptimizer(int opt_type, std::array<double,4> camera_param) {
         this->xyz_edges = std::vector<RustXYZEdge>();
         this->xyz_onlypose_edges = std::vector<RustXYZOnlyPoseEdge>();
@@ -155,13 +156,17 @@ namespace g2o {
     }
 
     // Note: see explanation under get_mut_edges in lib.rs for why we do this
+    // This function is being called
     std::vector<RustXYZOnlyPoseEdge>& BridgeSparseOptimizer::get_mut_xyz_onlypose_edges() {
+        //std::cout << "get_mut_xyz_onlypose_edges is being called" << std::endl;
         return this->xyz_onlypose_edges;
     }
     std::vector<RustXYZEdge>& BridgeSparseOptimizer::get_mut_xyz_edges() {
+        //std::cout << "get_mut_xyz_edges is being called" << std::endl;
         return this->xyz_edges;
     }
     std::vector<RustSim3Edge>& BridgeSparseOptimizer::get_mut_sim3_edges() {
+        //std::cout << "get_mut_sim3_edges is being called" << std::endl;
         return this->sim3_edges;
     }
 
@@ -172,10 +177,23 @@ namespace g2o {
         int mappoint_id,
         float huber_delta
     ) {
+
+        // This function is being called
         Eigen::Matrix<double,2,1> obs;
         obs << keypoint_pt_x, keypoint_pt_y;
-
         EdgeSE3ProjectXYZOnlyPose * edge = new EdgeSE3ProjectXYZOnlyPose();
+
+        // This is where the edges are being pushed back into the container
+        edge_container_all_types.push_back(edge);
+
+        //if(dynamic_cast<EdgeSE3ProjectXYZOnlyPose*>(edge_container_all_types.at(1)))
+        //{
+
+        //   //std::cout << "This is the right types" << std::endl;  
+        //   EdgeSE3ProjectXYZOnlyPose * edge12 = dynamic_cast<EdgeSE3ProjectXYZOnlyPose*>(edge_container_all_types.at(1));
+        //   std::cout << edge12->fx << " This is the answer after casting" << std::endl;
+
+        //}
         edge->setVertex(0, dynamic_cast<OptimizableGraph::Vertex*>(optimizer->vertex(vertex_id)));
 
         edge->setMeasurement(obs);
@@ -211,10 +229,16 @@ namespace g2o {
         float keypoint_pt_x, float keypoint_pt_y, float inv_sigma2,
         float huber_delta
     ) {
+        // This function is being called 
         Eigen::Matrix<double,2,1> obs;
         obs << keypoint_pt_x, keypoint_pt_y;
 
+        //std::cout << "Add Edge binary is being called " << std::endl;
         EdgeSE3ProjectXYZ * edge = new EdgeSE3ProjectXYZ();
+        
+        // This is where the edges are being moved back into the container
+        edge_container_all_types.push_back(edge);
+
         edge->setVertex(0, dynamic_cast<OptimizableGraph::Vertex*>(optimizer->vertex(vertex1)));
         edge->setVertex(1, dynamic_cast<OptimizableGraph::Vertex*>(optimizer->vertex(vertex2)));
         edge->setMeasurement(obs);
@@ -279,6 +303,10 @@ namespace g2o {
         obs1 << kp_pt_x_1, kp_pt_y_1;
 
         EdgeSim3ProjectXYZ* e12 = new EdgeSim3ProjectXYZ();
+    
+        // This is where the edge goes into the vector
+        edge_container_all_types.push_back(e12);
+
         e12->setVertex(0, dynamic_cast<OptimizableGraph::Vertex*>(optimizer->vertex(vertex_id1)));
         e12->setVertex(1, dynamic_cast<OptimizableGraph::Vertex*>(optimizer->vertex(0)));
         e12->setMeasurement(obs1);
@@ -295,6 +323,10 @@ namespace g2o {
         obs2 << kp_pt_x_2, kp_pt_y_2;
 
         EdgeInverseSim3ProjectXYZ* e21 = new EdgeInverseSim3ProjectXYZ();
+
+        // This is where the edge goes into the vector
+        edge_container_all_types.push_back(e12);
+
         e21->setVertex(0, dynamic_cast<OptimizableGraph::Vertex*>(optimizer->vertex(vertex_id2)));
         e21->setVertex(1, dynamic_cast<OptimizableGraph::Vertex*>(optimizer->vertex(0)));
         e21->setMeasurement(obs2);
@@ -317,6 +349,8 @@ namespace g2o {
     }
 
     rust::Vec<int> BridgeSparseOptimizer::remove_sim3_edges_with_chi2 (float chi2_threshold) {
+
+        std::cout << "The remove_sim3_edges_with_chi2 function is being called" << std::endl;
         rust::vec<int> * deleted_indexes = new rust::Vec<int>();
         for (int i = 0; i < this->sim3_edges.size(); i++) {
             if (!this->sim3_edges[i].edge1 && !this->sim3_edges[i].edge2) {
@@ -410,10 +444,59 @@ namespace g2o {
 
     // }
     // TODO (memory leaks): This might already be deleted when g2o deletes the sparseoptimizer?
-    // BridgeSparseOptimizer::~BridgeSparseOptimizer() {
-    //     delete linearSolver;
-    //     delete solver_ptr;
-    //     delete solver;
-    // }
+     BridgeSparseOptimizer::~BridgeSparseOptimizer() {
+ 
+         // The idea here is to get all the edges and move the ownership of the edges back to something that does not call the destructor for the objects living inside
+    
+         // Verified that the edges are accessible
+         // std::cout << optimizer->_edges.size() << std::endl;
+      
+     //    for(auto it = xyz_onlypose_edges.begin(); it != xyz_onlypose_edges.end(); it++)
+     //    {
+     //    
+     //      if(optimizer->_edges.find(it->))
+     //      {
+
+     //         //std::cout << it
+     //         std::cout << "We found the edges inside the hypergraph" << std::endl;
+
+     //      }
+
+
+
+     //    }
+     //
+     //    std::cout << "These are the sizes of the vectors holding the edges" << std::endl;
+     //    std::cout << xyz_edges.size() << std::endl;
+     //    std::cout << xyz_onlypose_edges.size() << std::endl;
+          // std::cout << sim3_edges .size() << std::endl;
+
+     //    std::cout << "The printing of edge sizes is over now" << std::endl;
+         
+         for(auto it = xyz_onlypose_edges.begin(); it != xyz_onlypose_edges.end(); it++)
+         {
+            it->inner.release();
+         }
+        
+         for(auto it = xyz_edges.begin(); it != xyz_edges.end(); it++)
+         {
+            it->inner.release();
+         }
+//         
+//         for(auto it = sim3_edges.begin(); it != sim3_edges.end(); it++)
+//         {
+//            it->inner.release();
+//         }
+//
+
+          xyz_onlypose_edges.clear();
+          xyz_edges.clear();
+//          sim3_edges.clear();
+
+         delete optimizer;
+         //delete linearSolver;
+         //delete solver_ptr;
+         //delete solver;
+     }
 
 } // end namespace
