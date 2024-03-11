@@ -217,6 +217,8 @@ impl MapPoint {
         }
     }
     pub(super) fn delete_observation(&mut self, kf_id: &Id) -> bool {
+        let _span = tracy_client::span!("delete_observation");
+
         // void MapPoint::EraseObservation(KeyFrame* pKF)
         if let Some((left_index, right_index)) = self.observations.get(kf_id) {
             if *left_index != -1 {
@@ -232,13 +234,13 @@ impl MapPoint {
             }
             self.observations.remove(kf_id);
 
-            if self.ref_kf_id == *kf_id {
-                self.ref_kf_id = *self.observations.iter().next().unwrap().0; // Set to first key in hashmap
-            }
-
             // If only 2 observations or less, discard point
             if self.num_obs <= 2 {
                 return true;
+            }
+
+            if self.ref_kf_id == *kf_id {
+                self.ref_kf_id = *self.observations.iter().next().unwrap().0; // Set to first key in hashmap
             }
         } else {
             warn!("Deleting kf, has reference to this mappoint but this mappoint does not have reference to kf. KF id: {}, MP id: {}", kf_id, self.id);

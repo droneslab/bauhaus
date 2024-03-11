@@ -27,6 +27,7 @@ pub mod ffi {
     // See explanation below for get_mut_xyz_edges for why we do this.
     struct RustXYZEdge {
         inner: UniquePtr<EdgeSE3ProjectXYZ>,
+        mappoint_id: i32,
     }
     struct RustXYZOnlyPoseEdge {
         inner: UniquePtr<EdgeSE3ProjectXYZOnlyPose>,
@@ -107,6 +108,7 @@ pub mod ffi {
             robust_kernel: bool,
             vertex_id_1: i32,
             vertex_id_2: i32,
+            mp_id: i32,
             keypoint_pt_x: f32,
             keypoint_pt_y: f32,
             inv_sigma2: f32,
@@ -178,5 +180,9 @@ pub mod ffi {
         #[rust_name = "is_depth_positive"]
         fn isDepthPositive(self: &EdgeSE3ProjectXYZOnlyPose) -> bool;
         fn set_robust_kernel(self: Pin<&mut EdgeSE3ProjectXYZOnlyPose>, reset: bool);
+
+        #[rust_name = "is_depth_positive"]
+        fn isDepthPositive(self: &EdgeSE3ProjectXYZ) -> bool;
+
     }
 }

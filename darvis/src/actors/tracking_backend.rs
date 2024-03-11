@@ -104,9 +104,10 @@ impl Actor for TrackingBackend {
 
             if message.is::<FeatureMsg>() {
                 // Regular tracking. Received from tracking frontend
-                if actor.system.queue_len() > max_queue_size {
+                let queue_len = actor.system.queue_len();
+                if queue_len > max_queue_size {
                     // Abort additional work if there are too many frames in the msg queue.
-                    info!("Tracking backend dropped 1 frame");
+                    info!("Tracking backend dropped 1 frame, queue len: {}", queue_len);
                     continue;
                 }
 
@@ -130,7 +131,8 @@ impl Actor for TrackingBackend {
 
                         match actor.state {
                             TrackingState::Ok | TrackingState::RecentlyLost => {
-                                actor.update_trajectory_in_logs(last_frame.as_mut().unwrap(), created_kf).expect("Could not save trajectory")
+                                actor.update_trajectory_in_logs(last_frame.as_mut().unwrap(), created_kf).expect("Could not save trajectory");
+                                println!("Done with update trajectory");
                             },
                             _ => {},
                         };
@@ -496,6 +498,7 @@ impl TrackingBackend {
         // Update last frame pose according to its reference keyframe
         // Create "visual odometry" points if in Localization Mode
         self.update_last_frame(last_frame);
+        println!("Update last frame");
 
         let enough_frames_to_reset_imu = current_frame.frame_id <= self.relocalization.last_reloc_frame_id + (self.frames_to_reset_imu as i32);
         if self.imu.is_initialized && enough_frames_to_reset_imu {
@@ -1152,23 +1155,19 @@ impl TrackingBackend {
         };
         let c4 = ((self.matches_inliers < 75 && self.matches_inliers > 15) || recently_lost) && sensor_is_imumono;
 
-        // sofiya
-        // c3 and c4 always false because we are using mono
-        // so all that matters is (c1a || c1b || c1c) && c2
-        // of c1a, c1b, and c1c, c1b is always true and the others are always false
-        // of c2, (self.matches_inliers as f32) < tracked_mappoints * th_ref_ratio is always true and need_to_insert_close is always false
-        // so look at c1b (make min frames higher?)
-        // and self.matches_inliers < tracked_mappoints * th_ref_ratio
-        debug!("Need new kf decision ({}): {} {} {}", ((c1a||c1b||c1c) && c2), self.matches_inliers, tracked_mappoints, th_ref_ratio);
         // Note: removed code here about checking for idle local mapping and/or interrupting bundle adjustment
 
         let create_new_kf =  ((c1a||c1b||c1c) && c2)||c3 ||c4;
-        if create_new_kf {
+        if LOCAL_MAPPING_IDLE.load(Ordering::SeqCst) && create_new_kf {
             self.frames_since_last_kf = 0;
+            debug!("Need new kf decision ({}): {} {} {}", ((c1a||c1b||c1c) && c2), self.matches_inliers, tracked_mappoints, th_ref_ratio);
+            return true;
         } else {
             self.frames_since_last_kf += 1;
+            debug!("Need new kf decision ({}) busy: {} {} {}", ((c1a||c1b||c1c) && c2), self.matches_inliers, tracked_mappoints, th_ref_ratio);
+            return false;
         }
-        create_new_kf
+        
     }
 
     //* Helper functions */

@@ -328,6 +328,7 @@ pub fn global_bundle_adjustment(map: &Map, iterations: i32) -> BundleAdjustmentR
                         _edges.push(
                             optimizer.pin_mut().add_edge_monocular_binary(
                                 true, id_count, *kf_vertex_ids.get(kf_id).unwrap(),
+                                *mp_id,
                                 keypoint.pt().x, keypoint.pt().y,
                                 INV_LEVEL_SIGMA2[keypoint.octave() as usize],
                                 *TH_HUBER_2D
@@ -415,6 +416,7 @@ pub fn local_bundle_adjustment(
             if kf_i.id == lock.initial_kf_id {
                 num_fixed_kf += 1;
             }
+            // println!("KF {} matches: ", kf_i.id);
             for mp_match in kf_i.get_mp_matches() {
                 if let Some((mp_id, _)) = mp_match {
                     if let Some(mp) = lock.mappoints.get(&mp_id) {
@@ -426,6 +428,9 @@ pub fn local_bundle_adjustment(
                             if !mappoint_optimized_for_curr_kf {
                                 local_mappoints.push(*mp_id);
                                 local_ba_for_mp.insert(mp_id, keyframe_id);
+                                // print!("\"{}\", ", mp_id);
+                            } else {
+                                // print!("\"s{}\", ", mp_id);
                             }
                         }
                     }
@@ -458,9 +463,9 @@ pub fn local_bundle_adjustment(
 
         drop(span);
 
-        println!("Local mappoints: {:?}", local_mappoints);
-        println!("Local keyframes: {:?}", local_keyframes);
-        println!("Fixed keyframes: {:?}", fixed_cameras);
+        // println!("Local mappoints: {:?}", local_mappoints);
+        // println!("Local keyframes: {:?}", local_keyframes);
+        // println!("Fixed keyframes: {:?}", fixed_cameras);
 
 
         match sensor.is_imu() {
@@ -479,13 +484,15 @@ pub fn local_bundle_adjustment(
 
         let span = tracy_client::span!("local_bundle_adjustment:add_kf_vertices");
         // Set Local KeyFrame vertices
-        let mut vertex_id = 1;
+        let mut max_kf_id = 0;
         for kf_id in &local_keyframes {
             let kf = lock.keyframes.get(kf_id).unwrap();
             let set_fixed = *kf_id == lock.initial_kf_id;
-            optimizer.pin_mut().add_frame_vertex(vertex_id, (kf.pose).into(), set_fixed);
-            kf_vertex_ids.insert(*kf_id, vertex_id);
-            vertex_id += 1;
+            optimizer.pin_mut().add_frame_vertex(kf.id, (kf.pose).into(), set_fixed);
+            kf_vertex_ids.insert(*kf_id, kf.id);
+            if kf.id > max_kf_id {
+                max_kf_id = kf.id;
+            }
             if set_fixed {
                 fixed_kfs += 1;
             } else {
@@ -497,9 +504,11 @@ pub fn local_bundle_adjustment(
         // Set Fixed KeyFrame vertices
         for kf_id in &fixed_cameras {
             let kf = lock.keyframes.get(kf_id).unwrap();
-            optimizer.pin_mut().add_frame_vertex(vertex_id, (kf.pose).into(), true);
-            kf_vertex_ids.insert(*kf_id, vertex_id);
-            vertex_id += 1;
+            optimizer.pin_mut().add_frame_vertex(kf.id, (kf.pose).into(), true);
+            kf_vertex_ids.insert(*kf_id, kf.id);
+            if kf.id > max_kf_id {
+                max_kf_id = kf.id;
+            }
             fixed_kfs += 1;
         }
         // println!("Fixed keyframes: {:?}", fixed_cameras);
@@ -511,6 +520,8 @@ pub fn local_bundle_adjustment(
         // Set MapPoint vertices
         for mp_id in &local_mappoints {
             let mp = lock.mappoints.get(mp_id).unwrap();
+
+            let vertex_id = mp.id + max_kf_id + 1;
 
             optimizer.pin_mut().add_mappoint_vertex(
                 vertex_id,
@@ -607,11 +618,11 @@ pub fn local_bundle_adjustment(
                         // Monocular observation
                         if *left_index != -1 && kf.features.get_mv_right(*left_index as usize).is_none() {
                             let (kp_un, _) = kf.features.get_keypoint(*left_index as usize);
-                            let kf_vertex = *kf_vertex_ids.get(&kf.id).unwrap();
                             // debug!("Adding edge {} -> {}", vertex_id, kf_vertex);
 
                             optimizer.pin_mut().add_edge_monocular_binary(
-                                false, vertex_id, kf_vertex,
+                                true, vertex_id, kf.id,
+                                mp.id,
                                 kp_un.pt().x, kp_un.pt().y,
                                 INV_LEVEL_SIGMA2[kp_un.octave() as usize],
                                 *TH_HUBER_MONO
@@ -629,7 +640,6 @@ pub fn local_bundle_adjustment(
                     }
                 }
             }
-            vertex_id += 1;
         }
     }
     // println!("}}");
@@ -638,7 +648,14 @@ pub fn local_bundle_adjustment(
     tracy_client::plot!("LBA: Fixed KFs", fixed_kfs as f64);
     tracy_client::plot!("LBA: MPs to Optimize", mps_to_optimize as f64);
     tracy_client::plot!("LBA: Edges", edges as f64);
-    // trace!("LBA:{},{},{},{}", kfs_to_optimize, fixed_kfs, mps_to_optimize, edges);
+    debug!("LBA:{},{},{},{}", kfs_to_optimize, fixed_kfs, mps_to_optimize, edges);
+
+    // SOFIYA ... should we add in a way to stop the optimization?
+        // if(pbStopFlag)
+        // if(*pbStopFlag) {
+        //     Verbose::PrintMess("LM-LBA: Stop requested. Finishing", Verbose::VERBOSITY_NORMAL);
+        //     return;
+        // }
 
     // Optimize
     {
@@ -651,9 +668,9 @@ pub fn local_bundle_adjustment(
     {
         let _span = tracy_client::span!("local_bundle_adjustment::check_inliers");
         let mut i = 0;
-        for edge in optimizer.pin_mut().get_mut_xyz_onlypose_edges().iter() {
+        for edge in optimizer.pin_mut().get_mut_xyz_edges().iter() {
             if edge.inner.chi2() > 5.991 || !edge.inner.is_depth_positive() {
-                mps_to_discard.push((edge.mappoint_id, edges_kf_body[i]));
+                mps_to_discard.push((edges_kf_body[i], edge.mappoint_id));
             }
             i += 1;
         }
@@ -696,10 +713,16 @@ pub fn local_bundle_adjustment(
 
     {
         let _span = tracy_client::span!("local_bundle_adjustment::discard");
-        for (mp_id, kf_id) in mps_to_discard {
+        for (kf_id, mp_id) in mps_to_discard {
+            if map.read().mappoints.get(&mp_id).is_none() {
+                // Mappoint may have been deleted in call to delete_observation, if not enough matches
+                continue;
+            }
             map.write().delete_observation(kf_id, mp_id);
         }
     }
+
+    // SOFIYA...havent checked code below here yet
 
     // Recover optimized data
 
@@ -728,6 +751,11 @@ pub fn local_bundle_adjustment(
 
         //Points
         for (mp_id, vertex_id) in mp_vertex_ids {
+            if map.read().mappoints.get(&mp_id).is_none() {
+                // Mappoint could have been deleted in the delete_observation call above.
+                continue;
+            }
+
             let position = optimizer.recover_optimized_mappoint_pose(vertex_id);
             let translation = nalgebra::Translation3::new(
                 position.translation[0] as f64,

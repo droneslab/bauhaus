@@ -21,7 +21,6 @@ pub struct LoopClosing {
     sensor: Sensor,
 
     map: MapLock,
-    keyframe_database: KeyFrameDatabase,
     _imu: ImuModule,
 
     current_kf_id: Id, // mpCurrentKF
@@ -49,7 +48,6 @@ impl Actor for LoopClosing {
             last_current_kf: -1,
             running_global_ba: false,
             finished_global_ba: false,
-            keyframe_database: KeyFrameDatabase::new(),
         }
     }
 

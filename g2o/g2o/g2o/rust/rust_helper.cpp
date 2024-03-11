@@ -208,7 +208,7 @@ namespace g2o {
     }
 
     void BridgeSparseOptimizer::add_edge_monocular_binary(
-        bool robust_kernel, int vertex1, int vertex2,
+        bool robust_kernel, int vertex1, int vertex2, int mp_id,
         float keypoint_pt_x, float keypoint_pt_y, float inv_sigma2,
         float huber_delta
     ) {
@@ -238,7 +238,9 @@ namespace g2o {
         }
         // Note: see explanation under get_mut_edges in lib.rs for why we do this
         unique_ptr<EdgeSE3ProjectXYZ> ptr_edge(edge);
-        RustXYZEdge rust_edge {std::move(ptr_edge)};
+        RustXYZEdge rust_edge;
+        rust_edge.inner = std::move(ptr_edge);
+        rust_edge.mappoint_id = mp_id;
         this->xyz_edges.emplace(this->xyz_edges.end(), std::move(rust_edge));
     }
 

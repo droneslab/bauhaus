@@ -50,7 +50,7 @@ namespace g2o {
             float huber_delta
         );
         void add_edge_monocular_binary(
-            bool robust_kernel, int vertex1, int vertex2,
+            bool robust_kernel, int vertex1, int vertex2, int mp_id,
             float keypoint_pt_x, float keypoint_pt_y, float inv_sigma2,
             float huber_delta
         );

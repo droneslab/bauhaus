@@ -217,7 +217,9 @@ impl DarvisVisualizer {
                 timestamp, 
                 "world",
                 format!("cam"),
-                vec![self.create_arrow(&inverse_frame_pose, FRAME_COLOR.clone())],
+                vec![],
+                // Old code to draw arrow:
+                // vec![self.create_arrow(&inverse_frame_pose, FRAME_COLOR.clone())],
                 vec![], vec![]
             )
         );
@@ -231,6 +233,8 @@ impl DarvisVisualizer {
             child_frame_id: "camera".to_string(),
             translation: Some(Vector3{ x: trans[0], y: trans[1], z: trans[2] }),
             rotation: Some(Quaternion { x: rot[0], y: rot[1], z: rot[2], w: rot[3] }),
+            // rotation: Some(Quaternion { x: 0.0, y: 0.0, z: 0.0, w: 1.0 }),
+
         };
         writer.write(TRANSFORM_CHANNEL, transform, timestamp, 0).await.expect("Could not write transform");
 
@@ -268,7 +272,9 @@ impl DarvisVisualizer {
                     timestamp, 
                     "world",
                     format!("kf {}", id),
-                    vec![self.create_arrow(&curr_pose, KEYFRAME_COLOR.clone())],
+                    vec![],
+                    // Old code to draw arrow:
+                    // vec![self.create_arrow(&curr_pose, KEYFRAME_COLOR.clone())],
                     vec![],
                     vec![]
                 )
@@ -474,7 +480,7 @@ impl DarvisVisualizer {
         LinePrimitive {
             r#type: line_primitive::Type::LineStrip as i32,
             pose: make_pose(0.0, 0.0, 0.0),
-            thickness: 1.0,
+            thickness: 3.0,
             scale_invariant: true,
             points,
             color: Some(color),

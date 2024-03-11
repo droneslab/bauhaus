@@ -8,3 +8,4 @@ pub mod keyframe;
 pub mod mappoint;
 pub mod pose;
 pub mod features;
+pub mod keyframe_database;

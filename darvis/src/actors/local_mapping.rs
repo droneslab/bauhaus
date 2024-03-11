@@ -15,7 +15,7 @@ use opencv::prelude::KeyPointTraitConst;
 use crate::registered_actors::{CAMERA_MODULE, TRACKING_BACKEND};
 use crate::{System, MapLock};
 use crate::actors::messages::LastKeyFrameUpdatedMsg;
-use crate::modules::optimizer::LEVEL_SIGMA2;
+use crate::modules::optimizer::{local_bundle_adjustment, LEVEL_SIGMA2};
 use crate::{
     modules::{orbmatcher, imu::ImuModule, orbmatcher::SCALE_FACTORS, geometric_tools},
     registered_actors::{FEATURE_DETECTION, LOOP_CLOSING, MATCHER, CAMERA},
@@ -183,7 +183,7 @@ impl LocalMapping {
                     // Optimizer::LocalInertialBA(mpCurrentKeyFrame, &mbAbortBA, mpCurrentKeyFrame->GetMap(),num_FixedKF_BA,num_OptKF_BA,num_MPs_BA,num_edges_BA, bLarge, !mpCurrentKeyFrame->GetMap()->GetIniertialBA2());
                 },
                 false => {
-                    // optimizer::local_bundle_adjustment(&self.map, self.current_keyframe_id, 0);
+                    local_bundle_adjustment(&self.map, self.current_keyframe_id, 0);
                 }
             }
         }
@@ -246,9 +246,9 @@ impl LocalMapping {
 
         tracy_client::plot!("MAP INFO: KeyFrames", self.map.read().keyframes.len() as f64);
         tracy_client::plot!("MAP INFO: MapPoints", self.map.read().mappoints.len() as f64);
-        let avg_mappoints = self.map.read().keyframes.iter().map(|(_, kf)| kf.debug_get_mps_count()).sum::<i32>() as f64 / self.map.read().keyframes.len() as f64;
-        tracy_client::plot!("MAP INFO: Avg mp matches for kfs", avg_mappoints as f64);
-        trace!("MAP INFO:{},{},{}", self.map.read().keyframes.len(), self.map.read().mappoints.len(), avg_mappoints as f64);
+        // let avg_mappoints = self.map.read().keyframes.iter().map(|(_, kf)| kf.debug_get_mps_count()).sum::<i32>() as f64 / self.map.read().keyframes.len() as f64;
+        // tracy_client::plot!("MAP INFO: Avg mp matches for kfs", avg_mappoints as f64);
+        // trace!("MAP INFO:{},{},{}", self.map.read().keyframes.len(), self.map.read().mappoints.len(), avg_mappoints as f64);
 
         if self.system.actors.get(LOOP_CLOSING).is_some() {
             // Only send if loop closing is actually running

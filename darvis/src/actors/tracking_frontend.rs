@@ -169,6 +169,7 @@ impl TrackingFrontEnd {
             FrameSensor::Stereo => todo!("Stereo"), //Also call extractor_right, see Tracking::GrabImageStereo,
             _ => {}
         }
+        
         (keypoints.kp_ptr.kp_ptr, descriptors.mat_ptr.mat_ptr)
     }
 
