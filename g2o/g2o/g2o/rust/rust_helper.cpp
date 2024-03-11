@@ -482,18 +482,19 @@ namespace g2o {
          {
             it->inner.release();
          }
-//         
-//         for(auto it = sim3_edges.begin(); it != sim3_edges.end(); it++)
-//         {
-//            it->inner.release();
-//         }
-//
+//       
+       for(auto it = sim3_edges.begin(); it != sim3_edges.end(); it++)
+       {
+          it->edge1.release();
+          it->edge2.release();
+       }
+
 
           xyz_onlypose_edges.clear();
           xyz_edges.clear();
-//          sim3_edges.clear();
+          sim3_edges.clear();
 
-         delete optimizer;
+         //delete optimizer;
          //delete linearSolver;
          //delete solver_ptr;
          //delete solver;
