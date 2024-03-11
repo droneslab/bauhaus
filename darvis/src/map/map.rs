@@ -7,7 +7,7 @@ use crate::{
     modules::optimizer::{self}
 };
 
-use super::{frame::Frame};
+use super::{frame::Frame, keyframe_database::KeyFrameDatabase};
 
 pub type Id = i32;
 // pub type MapItems<T> = HashMap<Id, T>;
@@ -21,6 +21,8 @@ pub struct Map {
 
     pub keyframes: MapItems<KeyFrame>, // = mspKeyFrames
     pub mappoints: MapItems<MapPoint>, // = mspMapPoints
+
+    keyframe_database: KeyFrameDatabase, // = mpKeyFrameDB
 
     // KeyFrames
     last_kf_id: Id, // = mnMaxKFid
@@ -57,6 +59,7 @@ impl Map {
             initial_kf_id: -1,
             keyframes: MapItems::<KeyFrame>::default(),
             mappoints: MapItems::<MapPoint>::default(),
+            keyframe_database: KeyFrameDatabase::new(),
         }
     }
 
@@ -88,7 +91,7 @@ impl Map {
         debug!("PRINT MAP DONE");
     }
 
-    ////* &mut self ... behind map actor */////////////////////////////////////////////////////
+    ////* &mut self */////////////////////////////////////////////////////
     pub fn insert_mappoint_to_map(&mut self, position: DVVector3<f64>, ref_kf_id: Id, origin_map_id: Id, observations_to_add: Vec<(Id, u32, usize)>) -> Id {
         self.last_mp_id += 1;
         let new_mp_id = self.last_mp_id;
@@ -189,6 +192,7 @@ impl Map {
             // TODO (timing) ... map mutability
             // same as other issue in map.rs, to remove this clone we need to be able to iterate over an immutable ref to matches and children while mutating other keyframes inside the loop
             let kf = self.keyframes.get(&kf_id).unwrap();
+            
             if kf.dont_delete {
                 debug!("Loop closing working on keyframe, don't delete.");
                 return;
@@ -197,6 +201,11 @@ impl Map {
             matches1 = kf.get_mp_matches().clone();
             parent1 = kf.parent;
             children1 = kf.children.clone();
+
+            println!("Deleting {}, children: {:?}", kf_id, children1);
+
+            // Remove from kf database
+            self.keyframe_database.erase(&kf);
         }
         for conn_kf in connections1 {
             self.keyframes.get_mut(&conn_kf).unwrap().delete_connection(kf_id);
@@ -220,7 +229,7 @@ impl Map {
 
         // Assign at each iteration one children with a parent (the pair with highest covisibility weight)
         // Include that children as new parent candidate for the rest
-        let mut continue_loop = true;
+        let mut continue_loop = false;
 
         while !children1.is_empty() {
             let (mut max, mut child_id, mut parent_id) = (-1, -1, -1);
@@ -248,6 +257,8 @@ impl Map {
             if continue_loop {
                 if child_id != -1 {
                     self.keyframes.get_mut(&child_id).expect(&format!("Could not get child id {} from parent {}", child_id, kf_id)).parent = Some(parent_id);
+                    self.keyframes.get_mut(&parent_id).expect(&format!("Could not get parent id {}", parent_id).to_string()).children.insert(child_id);
+                    println!("First try, assigning parent {:?} to child {}", parent_id, child_id);
                     parent_candidates.insert(parent_id);
                     children1.remove(&child_id);
                 }
@@ -258,10 +269,14 @@ impl Map {
 
         // If a children has no covisibility links with any parent candidate, assign to the original parent of this KF
         for child_id in children1 {
+            println!("Assigning parent {:?} to child {}", parent1, child_id);
             self.keyframes.get_mut(&child_id).unwrap().parent = parent1;
+            self.keyframes.get_mut(&parent1.unwrap()).expect(&format!("Could not get parent id {}", parent1.unwrap()).to_string()).children.insert(child_id);
+
         }
 
         if parent1.is_some() {
+            println!("Parent {} kf {}", parent1.unwrap(), kf_id);
             self.keyframes.get_mut(&parent1.unwrap()).unwrap().children.remove(&kf_id);
         }
         self.keyframes.remove(&kf_id);
@@ -500,8 +515,10 @@ impl Map {
 
     pub fn delete_observation(&mut self, kf_id: Id, mp_id: Id) {
         self.keyframes.get_mut(&kf_id).unwrap().mappoint_matches.delete_with_id(mp_id);
-        self.mappoints.get_mut(&mp_id).unwrap().delete_observation(&kf_id);
-        // trace!("Delete observation mp<->kf: {} {}", mp_id, kf_id);
+        let should_delete_mappoint = self.mappoints.get_mut(&mp_id).unwrap().delete_observation(&kf_id);
+        if should_delete_mappoint {
+            self.discard_mappoint(&mp_id);
+        }
     }
 
     pub fn replace_mappoint(&mut self, mp_to_replace_id: Id, mp_id: Id) {
@@ -577,4 +594,12 @@ impl Map {
             .map(|mp| mp.update_norm_and_depth(norm_and_depth));
     }
 
+    ////* keyframe database */////////////////////////////////////////////////////
+    pub fn add_to_kf_database(&mut self, kf_id: Id) {
+        self.keyframe_database.add(self.keyframes.get(&kf_id).unwrap());
+    }
+
+    pub fn kf_db_detect_loop_candidates(&self, kf_id: Id, min_score: f32) -> Vec<Id> {
+        self.keyframe_database.detect_loop_candidates(&self, &kf_id, min_score)
+    }
 }

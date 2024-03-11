@@ -56,7 +56,7 @@ pub fn spawn_actor(
             crate::actors::local_mapping::LocalMapping::spawn(system, map.expect("Local mapping needs the map!"))
         },
         str if str == "orbslam2 loop closing".to_string() => {
-            crate::actors::loop_closing2::LoopClosing::spawn(system, map.expect("Loop closing needs the map!"))
+            crate::actors::loop_closing::LoopClosing::spawn(system, map.expect("Loop closing needs the map!"))
         },
         str if str == "visualizer".to_string() => {
             crate::actors::visualizer::DarvisVisualizer::spawn(system, map.expect("Visualizer needs the map!"))

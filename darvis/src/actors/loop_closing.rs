@@ -7,7 +7,6 @@ use std::thread;
 use std::time::Duration;
 use log::{debug, info, warn};
 use crate::actors::messages::KeyFrameIdMsg;
-use crate::modules::keyframe_database2::KeyFrameDatabase;
 use crate::modules::sim3solver::Sim3Solver;
 use crate::modules::{optimizer, orbmatcher};
 use crate::registered_actors::{LOOP_CLOSING, VOCABULARY};
@@ -24,7 +23,6 @@ pub struct LoopClosing {
     _sensor: Sensor,
 
     map: MapLock,
-    keyframe_database: KeyFrameDatabase,
     _imu: Option<ImuModule>,
 
     // Loop detector variables
@@ -60,7 +58,6 @@ impl Actor for LoopClosing {
             current_kf_id: -1,
             running_global_ba: false,
             finished_global_ba: false,
-            keyframe_database: KeyFrameDatabase::new(),
             consistent_groups: Vec::new(),
             matched_kf: -1,
             last_loop_kf_id: -1,
@@ -103,14 +100,15 @@ impl LoopClosing {
 
         // Detect loop candidates and check covisibility consistency
         if self.detect_loop() {
-            info!("LOOP DETECTED!");
-            self.keyframe_database.add(self.map.read().keyframes.get(&self.current_kf_id).unwrap());
+            debug!("KF {}: Loop candidates found", self.current_kf_id);
+            self.map.write().add_to_kf_database(self.current_kf_id);
 
             // Compute similarity transformation [sR|t]
             // In the stereo/RGBD case s=1
             match self.compute_sim3() {
                 Ok(has_match) => {
                     if has_match {
+                        info!("KF {}: Loop detected! Correcting loop...", self.current_kf_id);
                         // Perform loop fusion and pose graph optimization
                         self.correct_loop();
                     }
@@ -120,7 +118,7 @@ impl LoopClosing {
                 }
             }
         } else {
-            debug!("NO LOOP!");
+            debug!("KF {}: No loop", self.current_kf_id);
         }
         self.map.write().keyframes.get_mut(&self.current_kf_id).unwrap().dont_delete = false;
         thread::sleep(Duration::from_micros(5000));
@@ -128,8 +126,8 @@ impl LoopClosing {
 
     fn detect_loop(&mut self) -> bool {
         //If the map contains less than 10 KF or less than 10 KF have passed from last loop detection
-        if self.map.read().keyframes.len() < 10 {
-            self.keyframe_database.add(self.map.read().keyframes.get(&self.current_kf_id).unwrap());
+        if self.map.read().keyframes.len() <= 10 {
+            self.map.write().add_to_kf_database(self.current_kf_id);
             println!("Less than 10 KF in map");
             return false;
         }
@@ -150,12 +148,12 @@ impl LoopClosing {
         }
 
         // Query the database imposing the minimum score
-        let candidate_kfs = self.keyframe_database.detect_loop_candidates(&self.map, &self.current_kf_id, min_score);
+        let candidate_kfs = self.map.read().kf_db_detect_loop_candidates(self.current_kf_id, min_score);
 
         // If there are no loop candidates, just add new keyframe and return false
         if candidate_kfs.is_empty() {
         //     mvConsistentGroups.clear();
-            self.keyframe_database.add(self.map.read().keyframes.get(&self.current_kf_id).unwrap());
+            self.map.write().add_to_kf_database(self.current_kf_id);
             println!("Candidate KFs empty");
             return false;
         }
@@ -210,7 +208,7 @@ impl LoopClosing {
         self.consistent_groups = current_consistent_groups;
 
         // Add current keyframe to database
-        self.keyframe_database.add(self.map.read().keyframes.get(&self.current_kf_id).unwrap());
+        self.map.write().add_to_kf_database(self.current_kf_id);
 
         return !self.enough_consistent_candidates.is_empty();
     }
@@ -231,12 +229,13 @@ impl LoopClosing {
         {
             let map_read_lock = self.map.read();
             let current_keyframe = map_read_lock.keyframes.get(&self.current_kf_id).unwrap();
+            println!("Initial candidates: {:?}", initial_candidates);
             for i in 0..initial_candidates {
                 let keyframe = map_read_lock.keyframes.get(&self.enough_consistent_candidates[i]).unwrap();
+                println!("Searching for matches between {} and {}", current_keyframe.id, keyframe.id);
                 let mappoint_matches = orbmatcher::search_by_bow_kf(current_keyframe, keyframe, true, 0.75)?;
                 if mappoint_matches.len() < 20 {
                     discarded[i] = true;
-                    continue;
                 } else {
                     let sim3_solver = Sim3Solver::new(
                         &self.map,
@@ -244,8 +243,8 @@ impl LoopClosing {
                         0.99, 20, 300
                     );
                     solvers.insert(i, sim3_solver);
+                    num_candidates += 1;
                 }
-                num_candidates += 1;
             }
         }
         let mut has_match = false;

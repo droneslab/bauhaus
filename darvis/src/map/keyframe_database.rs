@@ -1,9 +1,13 @@
+//*** KEYFRAME DATABASE FROM ORBSLAM2 ***/
+
 use std::collections::{HashSet, HashMap};
 
 use crate::{map::{keyframe::KeyFrame, map::Id}, registered_actors::VOCABULARY, MapLock};
 
+use super::map::Map;
 
-#[derive(Debug)]
+
+#[derive(Debug, Clone)]
 pub struct KeyFrameDatabase {
     inverted_file: Vec<Vec<Id>> // mvInvertedFile
 }
@@ -45,19 +49,19 @@ impl KeyFrameDatabase {
         self.inverted_file.resize(VOCABULARY.size(), Vec::new());
     }
 
-    pub fn detect_loop_candidates(&mut self, map: &MapLock, curr_kf_id: &Id, min_score: f32) -> Vec<Id> {
-        let map_read_lock = map.read();
-        let curr_kf = map_read_lock.keyframes.get(&curr_kf_id).unwrap();
-        let connected_kfs = map.read().keyframes.get(&curr_kf_id).unwrap().get_covisibility_keyframes(i32::MAX);
+    pub fn detect_loop_candidates(&self, map: &Map, curr_kf_id: &Id, min_score: f32) -> Vec<Id> {
+        let curr_kf = map.keyframes.get(&curr_kf_id).unwrap();
+        let connected_kfs = map.keyframes.get(&curr_kf_id).unwrap().get_covisibility_keyframes(i32::MAX);
         let mut kfs_sharing_words = vec![]; //lKFsSharingWords
         let mut loop_words = HashMap::new(); // mnLoopWords
         let mut loop_query = HashMap::new(); // mnLoopQuery
 
+        print!("Connected kfs: {:?}", connected_kfs);
+        print!("KFs sharing words: ");
         // Search all keyframes that share a word with current keyframes
         // Discard keyframes connected to the query keyframe
         for word in curr_kf.bow.as_ref().unwrap().bow_vec.get_all_word_ids() {
-            // If map deleted kf, remove from inverted file. 
-            self.inverted_file[word as usize].retain(|kf_id| map_read_lock.keyframes.get(kf_id).is_some());
+            // print!("({})", word);
             for kf_i_id in &self.inverted_file[word as usize] {
                 if (loop_query.get(kf_i_id).is_some() && loop_query[kf_i_id] != curr_kf_id)
                     || loop_query.get(kf_i_id).is_none() {
@@ -65,11 +69,13 @@ impl KeyFrameDatabase {
                     if !connected_kfs.contains(&kf_i_id) {
                         loop_query.insert(*kf_i_id, curr_kf_id);
                         kfs_sharing_words.push(*kf_i_id);
+                        print!("{} ({}), ", kf_i_id, word);
                     }
                 }
                 *loop_words.get_mut(kf_i_id).unwrap() += 1;
             }
         }
+        println!();
         if kfs_sharing_words.is_empty() {
             return vec![];
         }
@@ -91,14 +97,18 @@ impl KeyFrameDatabase {
         let mut n_scores = 0;
         let mut score_and_match = vec![];
 
+        println!("Max common words: {}, min common words: {}", max_common_words, min_common_words);
+
+        print!("Similarity scores: ");
         // Compute similarity score. Retain the matches whose score is higher than minScore
         let mut loop_score = HashMap::new(); // mLoopScore
         for kf_i_id in &kfs_sharing_words {
             if loop_words[&kf_i_id] > min_common_words {
                 n_scores += 1;
-                let kf_i = map_read_lock.keyframes.get(&kf_i_id).unwrap();
+                let kf_i = map.keyframes.get(&kf_i_id).unwrap();
                 let si = VOCABULARY.score(curr_kf, kf_i);
                 loop_score.insert(kf_i_id, si);
+                print!("{}: {}, ", kf_i_id, si);
                 if si >= min_score {
                     score_and_match.push((si, kf_i_id));
                 }
@@ -111,11 +121,12 @@ impl KeyFrameDatabase {
 
         println!("Loop query: {:?}", loop_query);
         println!("Loop score: {:?}", loop_score);
+        print!("Accumulated score: ");
         // Lets now accumulate score by covisibility
         let mut acc_score_and_match = vec![];
         let mut best_acc_score = min_score;
         for (score, kf_i_id) in score_and_match {
-            let kf_i = map_read_lock.keyframes.get(&kf_i_id).unwrap();
+            let kf_i = map.keyframes.get(&kf_i_id).unwrap();
             let neighbor_kfs = kf_i.get_covisibility_keyframes(10);
             let mut best_score = score;
             let mut acc_score = best_score;
@@ -133,6 +144,7 @@ impl KeyFrameDatabase {
                 let loop_score = *loop_score.unwrap();
                 if loop_query == curr_kf_id  && loop_words > min_common_words {
                     acc_score += loop_score;
+                    print!("{}: {}, ", kf_2_id, loop_score);
                     if loop_score > best_score {
                         best_kf_id = kf_2_id;
                         best_score = loop_score;
@@ -145,6 +157,9 @@ impl KeyFrameDatabase {
                 best_acc_score = acc_score;
             }
         }
+        println!();
+
+        println!("Min score to retain: {}, best acc score: {}", 0.75 * best_acc_score, best_acc_score);
 
         // Return all those keyframes with a score higher than 0.75*bestScore
         let mut loop_candidates = vec![];
@@ -160,6 +175,7 @@ impl KeyFrameDatabase {
         }
 
         println!("CANDIDATES: {:?}", loop_candidates);
+
         return loop_candidates;
     }
 

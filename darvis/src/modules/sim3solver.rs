@@ -3,6 +3,7 @@
 use std::{cmp::{max, min}, collections::HashMap};
 
 
+use log::error;
 use opencv::{core::{no_array, norm, MatExprResult, Range, Scalar, CV_64F, NORM_L2}, hub_prelude::{KeyPointTraitConst, MatExprTraitConst, MatTraitConst}};
 use rand::Rng;
 
@@ -75,16 +76,25 @@ impl Sim3Solver {
         let mut x_3d_c2 = vec![None; num_features as usize]; // mvX3Dc2
         let mut all_indices = vec![]; // mvAllIndices
 
+        // Sofiya... sometimes keyframe_mp1 does not have any of the indexes in matches
+        // Matches found in search_by_bow_kf
+        println!("Matches: {:?}", matches);
+        println!("KF matches: {:?}", keyframe_mp1);
+        print!("Skipping...");
         for (index, mp2_id) in matches {
             let mp1_id = match keyframe_mp1[*index as usize] {
                 Some((mp1_id, _)) => mp1_id,
-                None => continue
+                None => {
+                    print!("s1 {}, ", index);
+                    panic!("This should not happen?")
+                }
             };
 
             let (kf1_left_idx, _) = map.read().mappoints.get(&mp1_id).unwrap().get_index_in_keyframe(kf1_id);
             let (kf2_left_idx, _) = map.read().mappoints.get(&mp2_id).unwrap().get_index_in_keyframe(kf2_id);
 
             if kf1_left_idx < 0 || kf2_left_idx < 0 {
+                print!("s2 {}, ", index);
                 continue;
             }
 
@@ -105,7 +115,7 @@ impl Sim3Solver {
             x_3d_c1.push(Some(res_to_mat(&kf1_rot * x_3d_1w + &kf1_trans).unwrap()));
 
             let x_3d_2w: Mat = (&map.read().mappoints.get(&mp2_id).unwrap().position).into();
-            x_3d_c2.push(Some(res_to_mat(&kf2_rot * x_3d_2w + &kf2_trans).unwrap()));
+            x_3d_c2[*index as usize] = Some(res_to_mat(&kf2_rot * x_3d_2w + &kf2_trans).unwrap());
 
             all_indices.push(*index);
         }
@@ -188,12 +198,29 @@ impl Sim3Solver {
                 let randi = rand::thread_rng().gen_range(0..self.all_indices.len()-1);
 
                 let idx = self.all_indices[randi] as usize;
-                self.x_3d_c1[idx].as_ref().unwrap().copy_to(
-                    &mut p_3d_c1_i.row(idx as i32)?
-                )?;
-                self.x_3d_c2[idx].as_ref().unwrap().copy_to(
-                    &mut p_3d_c2_i.row(idx as i32)?
-                )?;
+                match self.x_3d_c1[idx] {
+                    None => {
+                        error!("x_3d_c1: {:?}", self.x_3d_c1);
+                        panic!("x_3d_c1[{}] is None", idx)
+                    },
+                    Some(_) => {
+                        self.x_3d_c1[idx].as_ref().unwrap().copy_to(
+                            &mut p_3d_c1_i.row(idx as i32)?
+                        )?;
+                    }
+                };
+
+                match self.x_3d_c2[idx] {
+                    None => {
+                        error!("x_3d_c1: {:?}", self.x_3d_c1);
+                        panic!("x_3d_c2[{}] is None", idx)
+                    },
+                    Some(_) => {
+                        self.x_3d_c2[idx].as_ref().unwrap().copy_to(
+                            &mut p_3d_c2_i.row(idx as i32)?
+                        )?;
+                    }
+                };
 
                 self.all_indices[randi] = self.all_indices.pop().unwrap(); // todo is this equivalent to .back() followed by pop_back() ?
             }

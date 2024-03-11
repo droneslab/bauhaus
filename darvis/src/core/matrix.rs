@@ -150,10 +150,13 @@ impl<'a> From<&'a DVMatrix> for dvos3binding::BindCVMatRef<'a> {
 impl From<&DVVector3<f64>> for opencv::core::Mat {
     fn from(mat: &DVVector3<f64>) -> opencv::core::Mat { 
         Mat::from_slice_2d(&[
-            [mat[0], mat[1], mat[2]],
+            [mat[0]],
+            [mat[1]],
+            [mat[2]],
         ]).unwrap()
     }
 }
+
 impl From<&DVMatrix3<f64>> for opencv::core::Mat {
     fn from(mat: &DVMatrix3<f64>) -> opencv::core::Mat { 
         Mat::from_slice_2d(&[
