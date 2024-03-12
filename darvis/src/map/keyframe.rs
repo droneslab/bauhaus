@@ -10,6 +10,8 @@ pub struct KeyFrame {
     pub timestamp: Timestamp,
     pub pose: Pose,
 
+    pub gba_pose: Option<Pose>, // mTcwGBA // todo can we avoid having this in the kf?
+
     // Map connections
     pub origin_map_id: Id, // mnOriginMapId
     connections: ConnectedKeyFrames, // Parent, children, neighbors
@@ -66,6 +68,7 @@ impl KeyFrame {
             timestamp: frame.timestamp,
             mappoint_matches: frame.mappoint_matches,
             pose: frame.pose.expect("Frame should have pose by now"),
+            gba_pose: None,
             features: frame.features,
             bow,
             imu_bias: frame.imu_bias,

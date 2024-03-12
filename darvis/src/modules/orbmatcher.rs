@@ -7,7 +7,7 @@ use opencv::core::KeyPoint;
 use opencv::prelude::*;
 use crate::MapLock;
 use crate::actors::tracking_backend::TrackedMapPointData;
-use crate::map::pose::{DVRotation, DVTranslation, Pose};
+use crate::map::pose::{DVRotation, DVTranslation, Pose, Sim3};
 use crate::modules::optimizer::LEVEL_SIGMA2;
 use crate::registered_actors::{CAMERA, CAMERA_MODULE, FEATURE_DETECTION, MATCHER};
 use crate::map::{map::Id, keyframe::KeyFrame, frame::Frame};
@@ -509,7 +509,7 @@ pub fn _search_by_projection_reloc (
     todo!("Relocalization");
 }
 
-pub fn search_by_sim3(map: &MapLock, kf1_id: Id, kf2_id: Id, matches: &mut Vec<Option<Id>>, s12: f64, r12: &DVRotation, t12: &DVTranslation, th: f32) -> i32 {
+pub fn search_by_sim3(map: &MapLock, kf1_id: Id, kf2_id: Id, matches: &mut HashMap<usize, i32>, s12: f64, r12: &DVRotation, t12: &DVTranslation, th: f32) -> i32 {
     // From ORB-SLAM2:
     // int ORBmatcher::SearchBySim3(KeyFrame *pKF1, KeyFrame *pKF2, vector<MapPoint*> &vpMatches12,
     //                          const float &s12, const cv::Mat &R12, const cv::Mat &t12, const float th)
@@ -542,7 +542,7 @@ pub fn search_by_sim3(map: &MapLock, kf1_id: Id, kf2_id: Id, matches: &mut Vec<O
     {
         let map = map.read();
         for i in 0..n1 {
-            let mp_id = matches[i];
+            let mp_id = matches.get(&i);
             if let Some(mp) = mp_id {
                 already_matched1[i] = true;
                 let mp = map.mappoints.get(&mp).unwrap();
@@ -726,7 +726,7 @@ pub fn search_by_sim3(map: &MapLock, kf1_id: Id, kf2_id: Id, matches: &mut Vec<O
         if idx2 >= 0 {
             let idx1 = match2[idx2 as usize];
             if idx1 == i as i32 {
-                matches[i] = Some(mappoints2[i].unwrap().0);
+                matches.insert(i, mappoints2[i].unwrap().0);
                 found += 1;
             }
         }
@@ -737,7 +737,7 @@ pub fn search_by_sim3(map: &MapLock, kf1_id: Id, kf2_id: Id, matches: &mut Vec<O
 
 pub fn search_by_projection_for_loop_detection(
     map: &MapLock, kf_id: &Id,
-    scw: &DVMatrix4<f32>, candidate_mps: &Vec<Id>, matched_mappoints: &mut Vec<Option<Id>>, threshold: i32,
+    scw: &Sim3, candidate_mps: &Vec<Id>, matched_mappoints: &mut HashMap<usize, Id>, threshold: i32,
     ratio: f64, check_orientation: bool
 ) -> Result<i32, Box<dyn std::error::Error>>{
     // Project MapPoints using a Similarity Transformation and search matches.
@@ -750,11 +750,19 @@ pub fn search_by_projection_for_loop_detection(
     let lock = map.read();
 
     // Decompose Scw
-    let scw_mat: DVMatrix = scw.into();
-    let s_rcw = scw_mat.row_range(0,3).col_range(0,3);
+    let s_rcw = {
+        let rot_mat: Mat = (&scw.pose.get_rotation()).into();
+        DVMatrix::new(rot_mat)
+    };
+    let s_tcw = {
+        let trans_mat: Mat = (&scw.pose.get_translation()).into();
+        trans_mat
+    };
+
     let scw = (s_rcw.row(0).dot(& *s_rcw.row(0))? as f32).sqrt();
     let rcw = s_rcw.divide_by_scalar(scw); // Should be == s_rCw / scw
-    let tcw = DVMatrix::new(scw_mat.row_range(0,3).col(3)?).divide_by_scalar(scw); // Should be == scw_mat / scw
+
+    let tcw = DVMatrix::new(s_tcw).divide_by_scalar(scw); // Should be == scw_mat / scw
     let ow = DVMatrix::new_expr(rcw.clone().t()?).neg() * &tcw;
 
     // Set of MapPoints already found in the KeyFrame
@@ -831,7 +839,7 @@ pub fn search_by_projection_for_loop_detection(
         let mut best_dist = std::i32::MAX;
         let mut best_idx = -1;
         for idx in indices { 
-            if matched_mappoints[idx as usize].is_some() {
+            if matched_mappoints.get(&(idx as usize)).is_some() {
                 continue;
             }
             let kp_level = kf.features.get_octave(idx as usize);
@@ -847,7 +855,7 @@ pub fn search_by_projection_for_loop_detection(
             }
         }
         if best_dist <= TH_LOW {
-            matched_mappoints[best_idx as usize] = Some(mp_id);
+            matched_mappoints.insert(best_idx as usize, mp_id);
             num_matches += 1;
             already_found[i] = true;
         }
@@ -976,65 +984,86 @@ pub fn search_by_bow_kf(
     ratio: f64
 ) -> Result<HashMap<u32, Id>, Box<dyn std::error::Error>> {
     // int SearchByBoW(KeyFrame *pKF1, KeyFrame* pKF2, std::vector<MapPoint*> &vpMatches12);
-    let mut matches = HashMap::<u32, Id>::new();
+    let mut matches = HashMap::<u32, Id>::new(); // vpMatches12
+    let mut matched_already_in_kf2 = HashSet::<Id>::new(); // vbMatched2
 
     let factor = 1.0 / (HISTO_LENGTH as f32);
     let mut rot_hist = construct_rotation_histogram();
 
-    for node_id_kf_1 in kf_1.bow.as_ref().unwrap().feat_vec.get_all_nodes() {
-        for node_id_kf_2 in kf_2.bow.as_ref().unwrap().feat_vec.get_all_nodes() {
-            if node_id_kf_1 == node_id_kf_2 {
-                let indices_kf_1_size = kf_1.bow.as_ref().unwrap().feat_vec.vec_size(node_id_kf_1);
-                let indices_kf_2_size = kf_2.bow.as_ref().unwrap().feat_vec.vec_size(node_id_kf_2);
+    let kf_1_featvec = kf_1.bow.as_ref().unwrap().feat_vec.get_all_nodes();
+    let kf_2_featvec = kf_2.bow.as_ref().unwrap().feat_vec.get_all_nodes();
+    let mut i = 0;
+    let mut j = 0;
+
+    while i < kf_1_featvec.len() && j < kf_2_featvec.len() {
+        let kf_1_node_id = kf_1_featvec[i];
+        let kf_2_node_id = kf_2_featvec[j];
+        if kf_1_node_id == kf_2_node_id {
+            let kf_1_indices_size = kf_1.bow.as_ref().unwrap().feat_vec.vec_size(kf_1_node_id);
+
+            for index_kf1 in 0..kf_1_indices_size {
+                let real_idx_kf1 = kf_1.bow.as_ref().unwrap().feat_vec.vec_get(kf_1_node_id, index_kf1);
 
 
-                for index1 in 0..indices_kf_1_size {
-                    let index_kf_1 = kf_1.bow.as_ref().unwrap().feat_vec.vec_get(node_id_kf_1, index1);
-                    let mut best_dist = (256, 256);
-                    let mut best_index = -1;
-                    let descriptors_kf_1 = kf_1.features.descriptors.row(index_kf_1);
+                if kf_1.features.has_left_kp().map_or(false, |n_left| real_idx_kf1 > n_left) 
+                    || !kf_1.has_mp_match(&real_idx_kf1) {
+                    continue;
+                }
 
-                    for index2 in 0..indices_kf_2_size {
-                        let index_kf_2 = kf_2.bow.as_ref().unwrap().feat_vec.vec_get(node_id_kf_2, index2);
-                        if kf_2.features.has_left_kp().map_or(false, |n_left| index_kf_2 > n_left) {
-                            continue;
-                        }
 
-                        if !kf_2.has_mp_match(&index_kf_2) {
-                            continue;
-                        }
+                let mut best_dist1 = 256;
+                let mut best_dist2 = 256;
+                let mut best_idx2: i32 = -1;
+                let descriptors_kf_1 = kf_1.features.descriptors.row(real_idx_kf1);
 
-                        let descriptors_kf_2 = kf_2.features.descriptors.row(index_kf_2);
-                        let dist = descriptor_distance(&descriptors_kf_1, &descriptors_kf_2);
+                let kf_2_indices_size = kf_2.bow.as_ref().unwrap().feat_vec.vec_size(kf_2_node_id);
 
-                        if dist < best_dist.0 {
-                            best_dist.1 = best_dist.0;
-                            best_dist.0 = dist;
-                            best_index = index_kf_2 as i32;
-                        } else if dist < best_dist.1 {
-                            best_dist.1 = dist;
-                        }
+                for index_kf2 in 0..kf_2_indices_size {
+                    let real_idx_kf2 = kf_2.bow.as_ref().unwrap().feat_vec.vec_get(kf_2_node_id, index_kf2);
+
+                    if kf_2.features.has_left_kp().map_or(false, |n_left| real_idx_kf2 > n_left) 
+                        || matched_already_in_kf2.contains(&(real_idx_kf2 as i32))
+                        || !kf_2.has_mp_match(&real_idx_kf2) {
+                        continue;
                     }
 
-                    if best_dist.0 <= TH_LOW {
-                        let mp_id = &kf_2.get_mp_match(&(best_index as u32));
+                    let descriptors_kf_2 = kf_2.features.descriptors.row(real_idx_kf2);
 
-                        if (best_dist.0 as f64) < ratio * (best_dist.1 as f64) {
-                            matches.insert(index_kf_1, *mp_id); // for Kf_1
+                    let dist = descriptor_distance(&descriptors_kf_1, &descriptors_kf_2);
 
-                            if should_check_orientation {
-                                check_orientation_1(
-                                    &kf_1.features.get_keypoint(index_kf_1 as usize).0,
-                                    &kf_2.features.get_keypoint(best_index as usize).0,
-                                    &mut rot_hist, factor, index_kf_1
-                                );
-                            }
-                        }
+                    if dist < best_dist1 {
+                        best_dist2 = best_dist1;
+                        best_dist1 = dist;
+                        best_idx2 = real_idx_kf2 as i32;
+                    } else if dist < best_dist2 {
+                        best_dist2 = dist;
                     }
 
                 }
 
+                if best_dist1 <= TH_LOW {
+                    if (best_dist1 as f64) < ratio * (best_dist2 as f64) {
+                        matches.insert(real_idx_kf1 as u32, kf_2.get_mp_match(&(best_idx2 as u32)));
+                        matched_already_in_kf2.insert(best_idx2 as i32);
+
+                        if should_check_orientation {
+                            check_orientation_1(
+                                &kf_1.features.get_keypoint(real_idx_kf1 as usize).0,
+                                &kf_2.features.get_keypoint(best_idx2 as usize).0,
+                                &mut rot_hist, factor, real_idx_kf1 as u32
+                            );
+                        };
+                    }
+                }
             }
+            i += 1;
+            j += 1;
+        } else if kf_1_node_id < kf_2_node_id {
+            i = lower_bound(&kf_1_featvec, &kf_2_featvec, i, j);
+        } else {
+            j = lower_bound(&kf_2_featvec, &kf_1_featvec, j, i);
+            print!("{} {}, ", i, j);
+
         }
     }
 
@@ -1276,7 +1305,7 @@ pub fn search_for_triangulation(
     return Ok(matched_pairs);
 }
 
-pub fn fuse_from_loop_closing(kf_id: &Id, scw: &Pose, mappoints: &Vec<Id>, map: &MapLock, th: i32, nnratio: f32) ->  Vec<Option<Id>> {
+pub fn fuse_from_loop_closing(kf_id: &Id, scw: &Sim3, mappoints: &Vec<Id>, map: &MapLock, th: i32, nnratio: f32) ->  Vec<Option<Id>> {
     // int ORBmatcher::Fuse(KeyFrame *pKF, Sophus::Sim3f &Scw, const vector<MapPoint *> &vpPoints, float th, vector<MapPoint *> &vpReplacePoint)
 
     // not sure why this function is different from the other fuse function, could be a really small difference with a lot of copied code, so double-check the code to save some time
@@ -1285,7 +1314,7 @@ pub fn fuse_from_loop_closing(kf_id: &Id, scw: &Pose, mappoints: &Vec<Id>, map: 
 
 pub fn fuse(kf_id: &Id, fuse_candidates: &Vec<Option<(Id, bool)>>, map: &MapLock, th: f32, is_right: bool) {
     // int ORBmatcher::Fuse(KeyFrame *pKF, const vector<MapPoint *> &vpMapPoints, const float th, const bool bRight)
-    
+
     let (tcw, rcw, ow, _camera);
     {
         let lock = map.read();

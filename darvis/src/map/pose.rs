@@ -218,6 +218,22 @@ impl std::fmt::Debug for Pose {
 
 
 pub struct Sim3 {
-    pose: Pose,
-    scale: f64,
+    pub pose: Pose,
+    pub scale: f64,
+}
+impl Sim3 {
+    pub fn identity() -> Sim3 {
+        Sim3 {
+            pose: Pose::identity(),
+            scale: 1.0
+        }
+    }
+}
+impl Clone for Sim3 {
+    fn clone(&self) -> Self {
+        Sim3 {
+            pose: self.pose.clone(),
+            scale: self.scale
+        }
+    }
 }

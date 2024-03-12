@@ -414,13 +414,22 @@ namespace g2o {
         return position;
     }
 
-    // }
-    // TODO (memory leaks): This might already be deleted when g2o deletes the sparseoptimizer?
     BridgeSparseOptimizer::~BridgeSparseOptimizer() {
-        // delete optimizer;
-    //     delete linearSolver;
-    //     delete solver_ptr;
-    //     delete solver;
+        // Drop pointers to edges, these are already deleted when the optimizer is deleted
+        for(auto it = xyz_onlypose_edges.begin(); it != xyz_onlypose_edges.end(); it++) {
+            it->inner.release();
+        }
+        for(auto it = xyz_edges.begin(); it != xyz_edges.end(); it++) {
+            it->inner.release();
+        }
+        for(auto it = sim3_edges.begin(); it != sim3_edges.end(); it++) {
+            it->edge1.release();
+            it->edge2.release();
+        }
+        xyz_onlypose_edges.clear();
+        xyz_edges.clear();
+        sim3_edges.clear();
+        delete optimizer;
     }
 
 } // end namespace

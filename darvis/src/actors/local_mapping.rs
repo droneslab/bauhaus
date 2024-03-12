@@ -778,7 +778,7 @@ impl LocalMapping {
                         }
                     }
 
-                    if !self.map.read().mappoints.contains_key(&mp_id) {
+                    if !read_lock.mappoints.contains_key(&mp_id) {
                         continue
                     }
                     let mp = read_lock.mappoints.get(&mp_id).unwrap();
