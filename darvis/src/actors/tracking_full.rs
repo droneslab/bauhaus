@@ -521,6 +521,8 @@ impl TrackingFull {
         // their position in the last frame. The pose is then optimized
         // with the found correspondences.
 
+        println!("Track with motion model begin");
+
         // Update last frame pose according to its reference keyframe
         // Create "visual odometry" points if in Localization Mode
         self.update_last_frame(last_frame);
@@ -542,6 +544,8 @@ impl TrackingFull {
             _ => 7
         };
 
+        println!("search by projection begin");
+
         let mut matches = orbmatcher::search_by_projection_with_threshold(
             current_frame,
             last_frame,
@@ -552,6 +556,8 @@ impl TrackingFull {
         )?;
 
         // debug!("motion model matches {}", current_frame.mappoint_matches.matches.len());
+
+        println!("motion model initial matches done");
 
         // If few matches, uses a wider window search
         if matches < 20 {
@@ -567,6 +573,8 @@ impl TrackingFull {
             )?;
         }
 
+        println!("motion model wider search done");
+
         // debug!("motion model matches with wider search {}", current_frame.mappoint_matches.matches.len());
 
         if matches < 20 {
@@ -576,6 +584,8 @@ impl TrackingFull {
 
         // Optimize frame pose with all matches
         optimizer::optimize_pose(current_frame, &self.map);
+
+            println!("optimization done");
 
         // Discard outliers
         let nmatches_map = self.delete_mappoint_outliers(current_frame);

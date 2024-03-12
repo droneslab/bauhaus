@@ -132,7 +132,6 @@ impl Actor for TrackingBackend {
                         match actor.state {
                             TrackingState::Ok | TrackingState::RecentlyLost => {
                                 actor.update_trajectory_in_logs(last_frame.as_mut().unwrap(), created_kf).expect("Could not save trajectory");
-                                println!("Done with update trajectory");
                             },
                             _ => {},
                         };
@@ -497,8 +496,9 @@ impl TrackingBackend {
 
         // Update last frame pose according to its reference keyframe
         // Create "visual odometry" points if in Localization Mode
+        debug!("Track motion model start");
         self.update_last_frame(last_frame);
-        println!("Update last frame");
+        debug!("Done with update last frame");
 
         let enough_frames_to_reset_imu = current_frame.frame_id <= self.relocalization.last_reloc_frame_id + (self.frames_to_reset_imu as i32);
         if self.imu.is_initialized && enough_frames_to_reset_imu {
@@ -550,6 +550,8 @@ impl TrackingBackend {
 
         // Optimize frame pose with all matches
         optimizer::optimize_pose(current_frame, &self.map);
+
+        debug!("Done with optimization");
 
         // Discard outliers
         let nmatches_map = self.discard_outliers(current_frame);

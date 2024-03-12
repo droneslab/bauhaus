@@ -809,7 +809,7 @@ pub fn optimize_essential_graph() {
 }
 
 pub fn optimize_sim3(
-    map: &MapLock, kf1_id: Id, kf2_id: Id, matched_mps: &mut Vec<Option<Id>>,
+    map: &MapLock, kf1_id: Id, kf2_id: Id, matched_mps: &mut HashMap<usize, i32>,
     sim3_rot: &DVRotation, sim3_trans: &DVTranslation, sim3_scale: &f64,
     th2: i32, fix_scale: bool
 ) -> (i32, Option<Sim3>) {
@@ -868,13 +868,8 @@ pub fn optimize_sim3(
                 },
                 None => continue
             };
-            let mp2 = match matched_mps[i] {
-                Some(id) => {
-                    match lock.mappoints.get(&id) {
-                        Some(mp) => mp,
-                        None => continue
-                    }
-                },
+            let mp2 = match lock.mappoints.get(&matched_mps.get(&i).unwrap()) {
+                Some(mp) => mp,
                 None => continue
             };
 
@@ -931,7 +926,7 @@ pub fn optimize_sim3(
     let num_bad = removed_edge_indexes.len();
     for i in removed_edge_indexes {
         let index = edge_indexes[i as usize];
-        matched_mps[index] = None;
+        matched_mps.remove(&index);
     }
 
     let more_iterations = match num_bad > 0 {
@@ -954,7 +949,7 @@ pub fn optimize_sim3(
 
         if edge.edge1.chi2() > th2 as f64 && edge.edge2.chi2() > th2 as f64 {
             let index = edge_indexes[i as usize];
-            matched_mps[index] = None;
+            matched_mps.remove(&index);
         } else {
             n_in += 1;
         }

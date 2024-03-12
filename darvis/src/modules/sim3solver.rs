@@ -3,7 +3,7 @@
 use std::{cmp::{max, min}, collections::HashMap};
 
 
-use log::error;
+use log::{error, warn};
 use opencv::{core::{no_array, norm, MatExprResult, Range, Scalar, CV_64F, NORM_L2}, hub_prelude::{KeyPointTraitConst, MatExprTraitConst, MatTraitConst}};
 use rand::Rng;
 
@@ -11,23 +11,20 @@ use crate::{map::{map::Id, pose::{DVRotation, DVTranslation}}, modules::optimize
 use opencv::prelude::*;
 
 pub struct Sim3Solver {
-    x_3d_c1: Vec<Option<Mat>>, // mvX3Dc1
-    x_3d_c2: Vec<Option<Mat>>, // mvX3Dc2
+    x_3d_c1: Vec<Mat>, // mvX3Dc1
+    x_3d_c2: Vec<Mat>, // mvX3Dc2
     max_error1: Vec<f64>, // mvnMaxError1
     max_error2: Vec<f64>, // mvnMaxError2
     indices1: Vec<u32>,
 
-    num_features: i32, // N, mN1 ... same number
+    num_matches: i32, // N, mN1 ... same number
 
     current_estimation: Sim3Estimation,
     current_ransac_state: RansacState,
 
-    // Indices for random selection
-    all_indices: Vec<u32>,
-
     // Projections
-    p1_im1: Vec<Option<(f64, f64)>>, // mvP1im1
-    p2_im2: Vec<Option<(f64, f64)>>, // mvP2im2
+    p1_im1: Vec<(f64, f64)>, // mvP1im1
+    p2_im2: Vec<(f64, f64)>, // mvP2im2
 
     // RANSAC
     ransac_min_inliers: i32, // mRansacMinInliers
@@ -53,48 +50,40 @@ impl Sim3Solver {
     pub fn new(
         map: &MapLock,
         kf1_id: Id, kf2_id: Id, matches: &HashMap<u32, i32>, fix_scale: bool,
-        probability: f32, min_inliers: i32, max_iterations:i32
-    ) -> Self {
+    ) -> Result<Self, Box<dyn std::error::Error>> {
         let map_lock = map.read();
         let kf1 = map_lock.keyframes.get(&kf1_id).unwrap();
         let kf2 = map_lock.keyframes.get(&kf2_id).unwrap();
 
         let keyframe_mp1 = kf1.get_mp_matches(); // vpKeyFrameMP1
-        let num_features = keyframe_mp1.len() as i32; // N
 
         let kf1_rot: Mat = (&kf1.pose.get_rotation()).into(); // Rcw1
         let kf1_trans: Mat = (&kf1.pose.get_translation()).into(); // tcw1
         let kf2_rot: Mat = (&kf2.pose.get_rotation()).into(); // Rcw2
         let kf2_trans: Mat = (&kf2.pose.get_translation()).into(); // tcw2
 
+        let num_matches = matches.len();
         let mut max_error1 = vec![]; // mvnMaxError1
         let mut max_error2 = vec![]; // mvnMaxError2
-        let mut mappoints1 = vec![-1; num_features as usize]; // mvpMapPoints1
-        let mut mappoints2 = vec![-1; num_features as usize]; // mvpMapPoints2
-        let mut indices1 = vec![0; num_features as usize]; // mvnIndices1 // todo maybe this shouldn't be 0
-        let mut x_3d_c1 = vec![None; num_features as usize]; // mvX3Dc1
-        let mut x_3d_c2 = vec![None; num_features as usize]; // mvX3Dc2
-        let mut all_indices = vec![]; // mvAllIndices
+        let mut mappoints1 = vec![]; // mvpMapPoints1
+        let mut mappoints2 = vec![]; // mvpMapPoints2
+        let mut indices1 = vec![]; // mvnIndices1
+        let mut x_3d_c1 = vec![]; // mvX3Dc1
+        let mut x_3d_c2 = vec![]; // mvX3Dc2
 
-        // Sofiya... sometimes keyframe_mp1 does not have any of the indexes in matches
-        // Matches found in search_by_bow_kf
-        println!("Matches: {:?}", matches);
-        println!("KF matches: {:?}", keyframe_mp1);
-        print!("Skipping...");
         for (index, mp2_id) in matches {
             let mp1_id = match keyframe_mp1[*index as usize] {
                 Some((mp1_id, _)) => mp1_id,
                 None => {
-                    print!("s1 {}, ", index);
-                    panic!("This should not happen?")
+                    warn!("KF {} does not have MP match at index {}. This should not happen?", kf1_id, index);
+                    continue
                 }
             };
 
-            let (kf1_left_idx, _) = map.read().mappoints.get(&mp1_id).unwrap().get_index_in_keyframe(kf1_id);
-            let (kf2_left_idx, _) = map.read().mappoints.get(&mp2_id).unwrap().get_index_in_keyframe(kf2_id);
+            let (kf1_left_idx, _) = map_lock.mappoints.get(&mp1_id).unwrap().get_index_in_keyframe(kf1_id);
+            let (kf2_left_idx, _) = map_lock.mappoints.get(&mp2_id).unwrap().get_index_in_keyframe(kf2_id);
 
             if kf1_left_idx < 0 || kf2_left_idx < 0 {
-                print!("s2 {}, ", index);
                 continue;
             }
 
@@ -111,45 +100,30 @@ impl Sim3Solver {
             mappoints2.push(*mp2_id);
             indices1.push(*index);
 
-            let x_3d_1w: Mat = (&map.read().mappoints.get(&mp1_id).unwrap().position).into();
-            x_3d_c1.push(Some(res_to_mat(&kf1_rot * x_3d_1w + &kf1_trans).unwrap()));
+            let x_3d_1w: Mat = (&map_lock.mappoints.get(&mp1_id).unwrap().position).into();
+            x_3d_c1.push(res_to_mat(&kf1_rot * x_3d_1w + &kf1_trans).unwrap());
 
-            let x_3d_2w: Mat = (&map.read().mappoints.get(&mp2_id).unwrap().position).into();
-            x_3d_c2[*index as usize] = Some(res_to_mat(&kf2_rot * x_3d_2w + &kf2_trans).unwrap());
-
-            all_indices.push(*index);
+            let x_3d_2w: Mat = (&map_lock.mappoints.get(&mp2_id).unwrap().position).into();
+            x_3d_c2.push(res_to_mat(&kf2_rot * x_3d_2w + &kf2_trans).unwrap());
         }
 
         let p1_im1 = from_camera_to_image(&x_3d_c1);
         let p2_im2 = from_camera_to_image(&x_3d_c2);
 
-        let inliers_i = vec![false; num_features as usize]; // mvbInliersi
+        let inliers_i = vec![false; num_matches as usize]; // mvbInliersi
 
-        // Adjust Parameters according to number of correspondences
-        let epsilon = probability / (num_features as f32);
-
-        // Set RANSAC iterations according to probability, epsilon, and max iterations
-        let iterations = match min_inliers == num_features as i32 {
-            true => 1,
-            false => ((1.0 - probability).ln() / (1.0 - epsilon.powf(3.0)).ln()).ceil() as i32
-        }; // todo double check that c++ log() is the same as ln() here
-
-        let ransac_max_its = max(1, min(iterations, max_iterations));
-
-        Self {
-            ransac_max_its,
-            ransac_min_inliers: min_inliers,
-            // kf1_id,
-            // kf2_id,
-            num_features,
+        let mut sim3_solver = Self {
+            ransac_max_its: 300,
+            ransac_min_inliers: 6,
+            num_matches: num_matches as i32,
             x_3d_c1,
             x_3d_c2,
             current_estimation: Sim3Estimation{
                 r_12_i: Mat::default(),
                 t_12_i: Mat::default(),
                 s_12_i: 1.0,
-                T12_i: Mat::default(),
-                T21_i: Mat::default(),
+                T12_i: Mat::new_rows_cols_with_default(4,4, CV_64F, Scalar::all(0.0))?,
+                T21_i: Mat::new_rows_cols_with_default(4,4, CV_64F, Scalar::all(0.0))?,
                 inliers_i,
                 inliers_count: 0,
             },
@@ -162,14 +136,31 @@ impl Sim3Solver {
                 best_translation: Mat::default(),
                 best_scale: 1.0,
             },
-            all_indices,
             p1_im1,
             p2_im2,
             max_error1,
             max_error2,
             indices1,
             fix_scale
-        }
+        };
+
+        sim3_solver.set_ransac_parameters(0.99, 6, 300);
+
+        Ok(sim3_solver)
+    }
+
+    pub fn set_ransac_parameters(&mut self, probability: f32, min_inliers: i32, max_iterations: i32) {
+        // Adjust Parameters according to number of correspondences
+        let epsilon = (min_inliers as f32) / (self.num_matches as f32);
+
+        // Set RANSAC iterations according to probability, epsilon, and max iterations
+        let iterations = match min_inliers == self.num_matches as i32 {
+            true => 1,
+            false => ((1.0 - probability).ln() / (1.0 - epsilon.powf(3.0)).ln()) as i32
+        }; // todo double check that c++ log() is the same as ln() here
+
+        self.ransac_max_its = max(1, min(iterations, max_iterations));
+        println!("Ransac max its: {}", self.ransac_max_its);
     }
 
     pub fn iterate(&mut self, num_iterations: i32) -> Result<(bool, Option<(Mat, Vec<bool>, i32)>), opencv::Error> {
@@ -177,10 +168,10 @@ impl Sim3Solver {
         // Returns bool &bNoMore, vector<bool> &vbInliers, bool &bConverge
 
         let mut no_more = false; // bNoMore
-        let mut vec_inliers = vec![false; self.num_features as usize]; // vbInliers
+        let mut vec_inliers = vec![false; self.num_matches as usize]; // vbInliers
         let num_inliers; // nInliers
 
-        if self.num_features < self.ransac_min_inliers {
+        if self.num_matches < self.ransac_min_inliers {
             no_more = true;
             return Ok((no_more, None));
         }
@@ -189,45 +180,35 @@ impl Sim3Solver {
         let p_3d_c2_i = Mat::new_rows_cols_with_default(3,3, CV_64F, Scalar::all(0.0))?; // P3Dc2i
 
         let mut current_iterations = 0;
+        // println!("Ransac max its: {}", self.ransac_max_its);
+        // println!("self.current_ransac_state.num_iterations: {}", self.current_ransac_state.num_iterations);
         while self.current_ransac_state.num_iterations < self.ransac_max_its && current_iterations < num_iterations {
             self.current_ransac_state.num_iterations += 1;
             current_iterations += 1;
 
+            let mut available_indices: Vec<usize> = (0..self.x_3d_c1.len()).collect();
+
             // Get min set of points
-            for _ in 0..3 {
-                let randi = rand::thread_rng().gen_range(0..self.all_indices.len()-1);
+            for i in 0..3 {
+                let randi = rand::thread_rng().gen_range(0..available_indices.len()-1);
 
-                let idx = self.all_indices[randi] as usize;
-                match self.x_3d_c1[idx] {
-                    None => {
-                        error!("x_3d_c1: {:?}", self.x_3d_c1);
-                        panic!("x_3d_c1[{}] is None", idx)
-                    },
-                    Some(_) => {
-                        self.x_3d_c1[idx].as_ref().unwrap().copy_to(
-                            &mut p_3d_c1_i.row(idx as i32)?
-                        )?;
-                    }
-                };
+                let idx = available_indices[randi] as usize;
+                self.x_3d_c1[idx].copy_to(
+                    &mut p_3d_c1_i.col(i)?
+                )?;
 
-                match self.x_3d_c2[idx] {
-                    None => {
-                        error!("x_3d_c1: {:?}", self.x_3d_c1);
-                        panic!("x_3d_c2[{}] is None", idx)
-                    },
-                    Some(_) => {
-                        self.x_3d_c2[idx].as_ref().unwrap().copy_to(
-                            &mut p_3d_c2_i.row(idx as i32)?
-                        )?;
-                    }
-                };
+                self.x_3d_c2[idx].copy_to(
+                    &mut p_3d_c2_i.col(i)?
+                )?;
 
-                self.all_indices[randi] = self.all_indices.pop().unwrap(); // todo is this equivalent to .back() followed by pop_back() ?
+                available_indices[randi] = available_indices.pop().unwrap();
             }
 
-            self.compute_sim3(&p_3d_c1_i, &p_3d_c2_i)?; 
+            self.compute_sim3(&p_3d_c1_i, &p_3d_c2_i)?;
 
             self.check_inliers()?;
+
+            // println!("Inliers count: {:?}", self.current_estimation.inliers_count);
 
             // todo get rid of these clones?
             if self.current_estimation.inliers_count > self.current_ransac_state.best_inliers_count {
@@ -241,7 +222,7 @@ impl Sim3Solver {
                 if self.current_estimation.inliers_count > self.ransac_min_inliers {
                     num_inliers = self.current_estimation.inliers_count;
 
-                    for i in 0..self.num_features {
+                    for i in 0..self.num_matches {
                         if self.current_estimation.inliers_i[i as usize] {
                             vec_inliers[self.indices1[i as usize] as usize] = true;
                         }
@@ -268,9 +249,9 @@ impl Sim3Solver {
         opencv::core::reduce(&p, &mut c, 0, opencv::core::REDUCE_SUM, CV_64F)?;
 
         let division = 1.0 / p.cols() as f64;
-        c = c.mul(&division, 1.)?.to_mat()?;
+        c = c.mul(&division, 1.)?.t()?.to_mat()?;
 
-        let pr = Mat::default();
+        let pr = Mat::new_rows_cols_with_default(3, p.cols(), CV_64F, Scalar::all(0.0))?;
         for i in 0..p.cols() {
             let temp = res_to_mat(p.col(i)? - &c)?;
             temp.copy_to(&mut pr.col(i)?)?;
@@ -324,12 +305,12 @@ impl Sim3Solver {
         let mut evec = Mat::default();
         opencv::core::eigen(&n_mat, &mut eval, &mut evec)?; //evec[0] is the quaternion of the desired rotation
 
-        let mut vec = Mat::default();
-        evec.row(0)?.col_range(& opencv::core::Range::new(1,2)?)?.copy_to(&mut vec)?; //extract imaginary part of the quaternion (sin*axis)
+        let mut vec = Mat::new_rows_cols_with_default(0, 3, CV_64F, Scalar::all(0.0))?;
+        evec.row(0)?.col_range(& opencv::core::Range::new(1,4)?)?.copy_to(&mut vec)?; //extract imaginary part of the quaternion (sin*axis)
 
         // Rotation angle. sin is the norm of the imaginary part, cos is the real part
         let ang = norm(&vec, NORM_L2, &Mat::default())?.atan2(* evec.at_2d::<f64>(0,0)?);
-        let mut vec = {
+        vec = {
             let top = res_to_mat(2.0 * ang * &vec)?;
             let bottom = norm(&vec, NORM_L2, &Mat::default())?;
             res_to_mat(top / bottom)? //Angle-axis representation. quaternion angle is the half
@@ -338,7 +319,7 @@ impl Sim3Solver {
         let mut r_12_i = Mat::default();
 
         vec = res_to_mat(2.0 * ang * &vec / norm(&vec, NORM_L2, &Mat::default())?)?;
-        opencv::calib3d::rodrigues(&vec, &mut r_12_i, &mut no_array()).unwrap(); // computes the rotation matrix from angle-axis
+        opencv::calib3d::rodrigues(&vec, &mut r_12_i, &mut no_array())?; // computes the rotation matrix from angle-axis
 
         // Step 5: Rotate set 2
         let p3 = res_to_mat(&r_12_i * pr2)?;
@@ -368,7 +349,7 @@ impl Sim3Solver {
         // Step 8: Transformation
 
         // Step 8.1 T12
-        self.current_estimation.T12_i = Mat::new_rows_cols_with_default(4,4, CV_64F, Scalar::all(0.0)).unwrap();
+        self.current_estimation.T12_i = Mat::new_rows_cols_with_default(4,4, CV_64F, Scalar::all(0.0))?;
         let s_r = res_to_mat(self.current_estimation.s_12_i * &r_12_i)?;
         s_r.copy_to(
             &mut self.current_estimation.T12_i
@@ -409,20 +390,27 @@ impl Sim3Solver {
         self.current_estimation.inliers_count = 0;
 
         for i in 0..self.p1_im1.len() {
-            if self.p1_im1[i].is_none() || self.p2_im2[i].is_none() {
-                continue;
-            }
             let dist1 = Mat::from_slice_2d(&[
-                [self.p1_im1[i].unwrap().0 - v_p2_im1[i].0],
-                [self.p1_im1[i].unwrap().1 - v_p2_im1[i].1]
+                [self.p1_im1[i].0 - v_p2_im1[i].0],
+                [self.p1_im1[i].1 - v_p2_im1[i].1]
             ])?;
             let dist2 = Mat::from_slice_2d(&[
-                [v_p1_im2[i].0 - self.p2_im2[i].unwrap().0],
-                [v_p1_im2[i].1 - self.p2_im2[i].unwrap().1]
+                [v_p1_im2[i].0 - self.p2_im2[i].0],
+                [v_p1_im2[i].1 - self.p2_im2[i].1]
             ])?;
 
             let err1 = dist1.dot(&dist1)?;
             let err2 = dist2.dot(&dist2)?;
+
+            // println!("self.p1_im1: {:?}", self.p1_im1[i]);
+            // println!("v_p2_im1: {:?}", v_p2_im1[i]);
+            // println!("v_p1_im2: {:?}", v_p1_im2[i]);
+            // println!("self.p2_im2: {:?}", self.p2_im2[i]);
+
+            // println!("dist1: {:?}", dist1.data_typed::<f64>()?);
+            // println!("dist2: {:?}", dist2.data_typed::<f64>()?);
+            // println!("err1: {:?}", err1);
+            // println!("err2: {:?}", err2);
 
             if err1 < self.max_error1[i] && err2 < self.max_error2[i] {
                 self.current_estimation.inliers_i[i] = true;
@@ -431,21 +419,19 @@ impl Sim3Solver {
                 self.current_estimation.inliers_i[i] = false;
             }
         }
+        println!();
 
         Ok(())
     }
 
-    fn project(&self, p3d_w: &Vec<Option<Mat>>, tcw: &Mat) -> Result<Vec<(f64, f64)>, opencv::Error> {
+    fn project(&self, p3d_w: &Vec<Mat>, tcw: &Mat) -> Result<Vec<(f64, f64)>, opencv::Error> {
         // void Sim3Solver::Project(const vector<Eigen::Vector3f> &vP3Dw, vector<Eigen::Vector2f> &vP2D, Eigen::Matrix4f Tcw, GeometricCamera* pCamera)
 
         let rcw = tcw.row_range(& Range::new(0,3)?)?.col_range(& Range::new(0,3)?)?;
         let tcw = tcw.row_range(& Range::new(0,3)?)?.col(3)?;
-        let mut p2d = vec![(0.0,0.0); p3d_w.len()];
+        let mut p2d = vec![];
         for pose_in_vec in p3d_w {
-            if pose_in_vec.is_none() {
-                continue;
-            }
-            let p3d_c = res_to_mat(&rcw * pose_in_vec.as_ref().unwrap() + &tcw)?;
+            let p3d_c = res_to_mat(&rcw * pose_in_vec + &tcw)?;
             let invz = 1.0 / p3d_c.at::<f64>(2)?;
             let x = p3d_c.at::<f64>(0)? * invz;
             let y = p3d_c.at::<f64>(1)? * invz;
@@ -456,7 +442,7 @@ impl Sim3Solver {
             ));
         }
 
-        return Ok(p2d);
+        Ok(p2d)
     }
 
     pub fn get_estimates(&mut self) -> (DVRotation, DVTranslation, f64) {
@@ -468,17 +454,14 @@ impl Sim3Solver {
     }
 }
 
-fn from_camera_to_image(p3dc: &Vec<Option<Mat>>) -> Vec<Option<(f64, f64)>> {
+fn from_camera_to_image(p3dc: &Vec<Mat>) -> Vec<(f64, f64)> {
     // void Sim3Solver::FromCameraToImage(const vector<Eigen::Vector3f> &vP3Dc, vector<Eigen::Vector2f> &vP2D, GeometricCamera* pCamera)
-    let mut p2d = vec![None; p3dc.len()];
+    let mut p2d = vec![];
     for i in 0..p3dc.len() {
-        if p3dc[i].is_none() {
-            continue;
-        }
-        let pt_2d = CAMERA_MODULE.project(p3dc[i].as_ref().unwrap().into());
-        p2d.push(Some(pt_2d));
+        let pt_2d = CAMERA_MODULE.project((&p3dc[i]).into());
+        p2d.push(pt_2d);
     }
-    return p2d;
+    p2d
 }
 
 fn res_to_mat<T: opencv::prelude::MatExprTraitConst>(res: MatExprResult<T>) -> Result<Mat, opencv::Error> {

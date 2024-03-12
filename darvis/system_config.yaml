@@ -22,7 +22,7 @@ system:
 
       # DEBUGGING
       log_level: debug # options are [trace, debug, info, warn, error]
-      check_deadlocks: false # Spawns a new thread to check for deadlocks every 2 secs, but slows stuff down.
+      check_deadlocks: true # Spawns a new thread to check for deadlocks every 2 secs, but slows stuff down.
       # To enable profiling, set features = ["enable"] for tracy-client in Cargo.toml
       # To turn on visualizer, uncomment visualizer actor below
 
@@ -89,7 +89,7 @@ actors:
             type: i32
           - 
             name: image_draw_type
-            value: features # options are [none, plain, features, featuresandmatches]
+            value: plain # options are [none, plain, features, featuresandmatches]
             type: string
           -
             name: mcap_file_path
@@ -148,15 +148,15 @@ actors:
             value: 10
             type: i32
 
-      # -
-      #  name: LOOP_CLOSING
-      #  tag: "orbslam2 loop closing"
-      #  receiver_bound: -1
-      #  settings:
-      #     - 
-      #       name: covisibility_consistency_threshold
-      #       value: 3
-      #       type: i32
+      -
+       name: LOOP_CLOSING
+       tag: "orbslam2 loop closing"
+       receiver_bound: -1
+       settings:
+          - 
+            name: covisibility_consistency_threshold
+            value: 3
+            type: i32
     
       -
        name: LOCAL_MAPPING
