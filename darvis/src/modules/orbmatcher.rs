@@ -509,7 +509,7 @@ pub fn _search_by_projection_reloc (
     todo!("Relocalization");
 }
 
-pub fn search_by_sim3(map: &MapLock, kf1_id: Id, kf2_id: Id, matches: &mut HashMap<usize, i32>, s12: f64, r12: &DVRotation, t12: &DVTranslation, th: f32) -> i32 {
+pub fn search_by_sim3(map: &MapLock, kf1_id: Id, kf2_id: Id, matches: &mut HashMap<usize, i32>, sim3: &Sim3, th: f32) -> i32 {
     // From ORB-SLAM2:
     // int ORBmatcher::SearchBySim3(KeyFrame *pKF1, KeyFrame *pKF2, vector<MapPoint*> &vpMatches12,
     //                          const float &s12, const cv::Mat &R12, const cv::Mat &t12, const float th)
@@ -527,9 +527,12 @@ pub fn search_by_sim3(map: &MapLock, kf1_id: Id, kf2_id: Id, matches: &mut HashM
     let tw2 = kf2.pose.get_translation();
 
     //Transformation between cameras
-    let s_r_12 = s12 * **r12;
+    let s12 = sim3.scale;
+    let r12 = sim3.pose.get_rotation();
+    let t12 = sim3.pose.get_translation();
+    let s_r_12 = s12 * *r12;
     let s_r_21 = (1.0 / s12) * r12.transpose();
-    let t21 = -s_r_21 * **t12;
+    let t21 = -s_r_21 * *t12;
 
     let mappoints1 = kf1.get_mp_matches();
     let mappoints2 =  kf2.get_mp_matches();
@@ -656,7 +659,7 @@ pub fn search_by_sim3(map: &MapLock, kf1_id: Id, kf2_id: Id, matches: &mut HashM
 
         let p_3d_w = mp.position;
         let p_3d_c2 = (*r2w) * (*p_3d_w) + (*tw2);
-        let p_3d_c1 = s_r_12 * p_3d_c2 + **t12;
+        let p_3d_c1 = s_r_12 * p_3d_c2 + *t12;
 
         // Depth must be positive
         if p_3d_c1[2] < 0.0 {
@@ -987,6 +990,8 @@ pub fn search_by_bow_kf(
     let mut matches = HashMap::<u32, Id>::new(); // vpMatches12
     let mut matched_already_in_kf2 = HashSet::<Id>::new(); // vbMatched2
 
+    // sofiya could this be finding wrong matches?
+
     let factor = 1.0 / (HISTO_LENGTH as f32);
     let mut rot_hist = construct_rotation_histogram();
 
@@ -995,6 +1000,7 @@ pub fn search_by_bow_kf(
     let mut i = 0;
     let mut j = 0;
 
+    println!("Search by bow loop closing");
     while i < kf_1_featvec.len() && j < kf_2_featvec.len() {
         let kf_1_node_id = kf_1_featvec[i];
         let kf_2_node_id = kf_2_featvec[j];
@@ -1004,12 +1010,12 @@ pub fn search_by_bow_kf(
             for index_kf1 in 0..kf_1_indices_size {
                 let real_idx_kf1 = kf_1.bow.as_ref().unwrap().feat_vec.vec_get(kf_1_node_id, index_kf1);
 
-
                 if kf_1.features.has_left_kp().map_or(false, |n_left| real_idx_kf1 > n_left) 
                     || !kf_1.has_mp_match(&real_idx_kf1) {
                     continue;
                 }
 
+                print!("{} ... ", real_idx_kf1);
 
                 let mut best_dist1 = 256;
                 let mut best_dist2 = 256;
@@ -1024,12 +1030,16 @@ pub fn search_by_bow_kf(
                     if kf_2.features.has_left_kp().map_or(false, |n_left| real_idx_kf2 > n_left) 
                         || matched_already_in_kf2.contains(&(real_idx_kf2 as i32))
                         || !kf_2.has_mp_match(&real_idx_kf2) {
+                        // print!("{}: S, ", real_idx_kf2);
                         continue;
                     }
+
 
                     let descriptors_kf_2 = kf_2.features.descriptors.row(real_idx_kf2);
 
                     let dist = descriptor_distance(&descriptors_kf_1, &descriptors_kf_2);
+
+                    print!("{}: {}, ", real_idx_kf2, dist);
 
                     if dist < best_dist1 {
                         best_dist2 = best_dist1;
@@ -1040,6 +1050,7 @@ pub fn search_by_bow_kf(
                     }
 
                 }
+                println!();
 
                 if best_dist1 <= TH_LOW {
                     if (best_dist1 as f64) < ratio * (best_dist2 as f64) {
@@ -1062,8 +1073,6 @@ pub fn search_by_bow_kf(
             i = lower_bound(&kf_1_featvec, &kf_2_featvec, i, j);
         } else {
             j = lower_bound(&kf_2_featvec, &kf_1_featvec, j, i);
-            print!("{} {}, ", i, j);
-
         }
     }
 
@@ -1305,11 +1314,146 @@ pub fn search_for_triangulation(
     return Ok(matched_pairs);
 }
 
-pub fn fuse_from_loop_closing(kf_id: &Id, scw: &Sim3, mappoints: &Vec<Id>, map: &MapLock, th: i32, nnratio: f32) ->  Vec<Option<Id>> {
+pub fn fuse_from_loop_closing(kf_id: &Id, scw: &Sim3, mappoints: &Vec<Id>, map: &MapLock, th: i32, nnratio: f32) ->  Result<HashMap<usize, Id>, Box<dyn std::error::Error>> {
     // int ORBmatcher::Fuse(KeyFrame *pKF, Sophus::Sim3f &Scw, const vector<MapPoint *> &vpPoints, float th, vector<MapPoint *> &vpReplacePoint)
 
-    // not sure why this function is different from the other fuse function, could be a really small difference with a lot of copied code, so double-check the code to save some time
-    todo!("LOOP CLOSING");
+    // Decompose Scw
+    let s_rcw = {
+        let rot_mat: Mat = (&scw.pose.get_rotation()).into();
+        DVMatrix::new(rot_mat)
+    };
+    let s_tcw = {
+        let trans_mat: Mat = (&scw.pose.get_translation()).into();
+        trans_mat
+    };
+
+    let scw = (s_rcw.row(0).dot(& *s_rcw.row(0))? as f32).sqrt();
+    let rcw = s_rcw.divide_by_scalar(scw); // Should be == s_rCw / scw
+
+    let tcw = DVMatrix::new(s_tcw).divide_by_scalar(scw); // Should be == scw_mat / scw
+    let ow = DVMatrix::new_expr(rcw.clone().t()?).neg() * &tcw;
+
+    let mut replace_point = HashMap::<usize, Id>::new();
+    let mut n_fused = 0;
+    let observations_to_add = {
+        let mut observations_to_add = vec![];
+        let map_lock = map.read();
+        let current_kf = map_lock.keyframes.get(kf_id).unwrap();
+
+        // Set of MapPoints already found in the KeyFrame
+        let mut already_found = current_kf.clone_matches();
+        let mut n_points = mappoints.len();
+
+        // For each candidate MapPoint project and match
+        for i in 0..mappoints.len() {
+            let mp_id = mappoints[i];
+            let mappoint = match map_lock.mappoints.get(&mp_id) {
+                Some(mp) => mp,
+                None => continue
+            };
+            
+            // Discard already found
+            if current_kf.has_mp_match(&(mp_id as u32)) {
+                continue;
+            }
+
+            // Get 3D Coords.
+            let p3dw: Mat = (&mappoint.position).into();
+
+            // Transform into Camera Coords.
+            let p3dc = DVMatrix::new_expr_res(rcw.mat() * &p3dw + tcw.mat());
+
+            // Depth must be positive
+            if p3dc.at(2) < 0.0 {
+                continue;
+            }
+
+            // Project into Image
+            let invz = 1.0 / p3dc.at(2);
+            let x = p3dc.at(0) * invz;
+            let y = p3dc.at(1) * invz;
+
+            let u = CAMERA_MODULE.fx * x + CAMERA_MODULE.cx;
+            let v = CAMERA_MODULE.fy * y + CAMERA_MODULE.cy;
+
+            // Point must be inside the image
+            if !current_kf.features.is_in_image(u, v) {
+                continue;
+            }
+
+            // Depth must be inside the scale pyramid of the image
+            let max_distance = mappoint.get_max_distance_invariance();
+            let min_distance = mappoint.get_min_distance_invariance();
+            let po = DVMatrix::new_expr((p3dw - ow.mat()).into_result()?);
+            let dist_3d = po.norm();
+
+            if dist_3d < min_distance || dist_3d > max_distance {
+                continue;
+            }
+
+            // Viewing angle must be less than 60 deg
+            let pn: Mat = (&mappoint.normal_vector).into();
+
+            if po.dot(&pn)? < 0.5 * dist_3d {
+                continue;
+            }
+
+            // Compute predicted scale level
+            let predicted_level = mappoint.predict_scale(&dist_3d);
+
+            // Search in a radius
+            let radius = th as f32 * SCALE_FACTORS[predicted_level as usize];
+
+            let indices = current_kf.features.get_features_in_area(&u, &v, radius as f64, None);
+
+            if indices.is_empty() {
+                continue;
+            }
+
+            // Match to the most similar keypoint in the radius
+            let d_mp = &mappoint.best_descriptor;
+
+            let mut best_dist = i32::MAX;
+            let mut best_idx = -1;
+            for idx in indices {
+                let (kp, is_right) = current_kf.features.get_keypoint(idx as usize);
+                let kp_level = kp.octave();
+
+                if kp_level < predicted_level - 1 || kp_level > predicted_level {
+                    continue;
+                }
+
+                let descriptors_kf = current_kf.features.descriptors.row(idx);
+                let dist = descriptor_distance(&d_mp, &descriptors_kf);
+
+                if dist < best_dist {
+                    best_dist = dist;
+                    best_idx = idx as i32;
+                }
+            }
+
+            // If there is already a MapPoint replace otherwise add new measurement
+            if best_dist <= TH_LOW {
+                if current_kf.has_mp_match(&(best_idx as u32)){
+                    replace_point.insert(i, current_kf.get_mp_match(&(best_idx as u32)));
+                } else {
+                    let mp_id = current_kf.get_mp_match(&(best_idx as u32));
+                    let mp = map_lock.mappoints.get(&mp_id).unwrap();
+                    observations_to_add.push((kf_id, mp_id, best_idx));
+                }
+                n_fused += 1;
+            }
+        }
+        observations_to_add
+    };
+
+    let mut map_write_lock = map.write();
+    for (kf_id, mp_id, idx) in observations_to_add {
+        map_write_lock.add_observation(*kf_id, mp_id, idx as u32, false);
+    }
+
+    Ok(replace_point)
+
 }
 
 pub fn fuse(kf_id: &Id, fuse_candidates: &Vec<Option<(Id, bool)>>, map: &MapLock, th: f32, is_right: bool) {

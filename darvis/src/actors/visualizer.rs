@@ -193,7 +193,10 @@ impl DarvisVisualizer {
 
     async fn update_draw_map(&mut self, writer: &mut FoxGloveWriter, msg: VisTrajectoryMsg) {
         self.draw_trajectory(writer, msg.pose, msg.timestamp).await.expect("Visualizer could not draw trajectory!");
-        self.draw_mappoints(writer, &msg.mappoints_in_tracking, &msg.mappoint_matches, msg.timestamp).await.expect("Visualizer could not draw mappoints!");
+
+        if !SETTINGS.get::<bool>(VISUALIZER, "draw_only_trajectory") {
+            self.draw_mappoints(writer, &msg.mappoints_in_tracking, &msg.mappoint_matches, msg.timestamp).await.expect("Visualizer could not draw mappoints!");
+        }
 
         if SETTINGS.get::<bool>(VISUALIZER, "draw_connected_kfs") {
             self.draw_connected_kfs(writer, msg.timestamp).await.expect("Visualizer could not draw connected kfs!");

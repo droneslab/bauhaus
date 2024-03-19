@@ -22,6 +22,7 @@ namespace g2o {
     BridgeSparseOptimizer::BridgeSparseOptimizer(int opt_type, std::array<double,4> camera_param) {
         this->xyz_edges = std::vector<RustXYZEdge>();
         this->xyz_onlypose_edges = std::vector<RustXYZOnlyPoseEdge>();
+        this->sim3_projxyz_edges = std::vector<RustSim3ProjectXYZEdge>();
         this->sim3_edges = std::vector<RustSim3Edge>();
 
         if (opt_type == 1) {
@@ -55,6 +56,19 @@ namespace g2o {
             optimizer->setAlgorithm(solver);
 
             optimizer_type = 3;
+        } else if (opt_type == 4) {
+            // For OptimizeEssentialGraph
+            optimizer = new SparseOptimizer();
+
+            g2o::BlockSolver_7_3::LinearSolverType * linearSolver = new g2o::LinearSolverEigen<g2o::BlockSolver_7_3::PoseMatrixType>();
+            g2o::BlockSolver_7_3 * solver_ptr= new g2o::BlockSolver_7_3(linearSolver);
+
+            g2o::OptimizationAlgorithmLevenberg* solver = new g2o::OptimizationAlgorithmLevenberg(solver_ptr);
+            optimizer->setVerbose(false);
+            solver->setUserLambdaInit(1e-16);
+            optimizer->setAlgorithm(solver);
+
+            optimizer_type = 4;
         } else {
             // For Optimizer::PoseInertialOptimizationLastFrame, Optimizer::PoseInertialOptimizationLastKeyFrame,
             optimizer = new SparseOptimizer();
@@ -99,6 +113,8 @@ namespace g2o {
             vSE3->setId(vertex_id);
             vSE3->setFixed(set_fixed);
             optimizer->addVertex(vSE3);
+        } else if (optimizer_type == 3 || optimizer_type == 4) {
+            std::cout << "WARNING: Use add_frame_vertex_sim3 instead of add_frame_vertex for OptimizeEssentialGraph or OptimizeSim3" << std::endl;
         } else {
             // For Optimizer::PoseInertialOptimizationLastFrame and Optimizer::PoseInertialOptimizationLastKeyFrame
             // TODO (IMU)
@@ -162,8 +178,8 @@ namespace g2o {
     std::vector<RustXYZEdge>& BridgeSparseOptimizer::get_mut_xyz_edges() {
         return this->xyz_edges;
     }
-    std::vector<RustSim3Edge>& BridgeSparseOptimizer::get_mut_sim3_edges() {
-        return this->sim3_edges;
+    std::vector<RustSim3ProjectXYZEdge>& BridgeSparseOptimizer::get_mut_sim3_edges() {
+        return this->sim3_projxyz_edges;
     }
 
     void BridgeSparseOptimizer::add_edge_monocular_unary(
@@ -246,30 +262,33 @@ namespace g2o {
 
     // ** SIM3 ** //
     // Functions similar to those above, just specific to sim3 optimization. Keeping them all in one place.
-    void BridgeSparseOptimizer::add_sim3_vertex (
-        Pose pose, double scale, bool fix_scale
+    void BridgeSparseOptimizer::add_vertex_sim3_expmap (
+        int vertex_id, RustSim3 sim3, bool fix_scale, bool set_fixed, bool set_camera_params
     ) {
         g2o::VertexSim3Expmap * vSim3 = new g2o::VertexSim3Expmap();    
+        vSim3->setEstimate(this->format_sim3(sim3));
+        vSim3->setId(vertex_id);
+        vSim3->setFixed(set_fixed);
         vSim3->_fix_scale=fix_scale;
-        vSim3->setEstimate(this->format_sim3(pose, scale));
-        vSim3->setId(0);
-        vSim3->setFixed(false);
-        vSim3->_principle_point1[0] = cx;
-        vSim3->_principle_point1[1] = cy;
-        vSim3->_focal_length1[0] = fx;
-        vSim3->_focal_length1[1] = fy;
-        vSim3->_principle_point2[0] = cx;
-        vSim3->_principle_point2[1] = cy;
-        vSim3->_focal_length2[0] = fx;
-        vSim3->_focal_length2[1] = fy;
+
+        if (set_camera_params) {
+            vSim3->_principle_point1[0] = cx;
+            vSim3->_principle_point1[1] = cy;
+            vSim3->_focal_length1[0] = fx;
+            vSim3->_focal_length1[1] = fy;
+            vSim3->_principle_point2[0] = cx;
+            vSim3->_principle_point2[1] = cy;
+            vSim3->_focal_length2[0] = fx;
+            vSim3->_focal_length2[1] = fy;
+        }
         optimizer->addVertex(vSim3);
     }
 
-    Sim3 BridgeSparseOptimizer::format_sim3(Pose pose, float scale) const {
-        Eigen::Vector3d trans_vec(pose.translation.data());
-        auto rot_quat_val = pose.rotation.data();
+    Sim3 BridgeSparseOptimizer::format_sim3(RustSim3 sim3) const {
+        Eigen::Vector3d trans_vec(sim3.translation.data());
+        auto rot_quat_val = sim3.rotation.data();
         Eigen::Quaterniond rot_quat(rot_quat_val[0], rot_quat_val[1], rot_quat_val[2],rot_quat_val[3]);
-        return Sim3(rot_quat, trans_vec, scale);
+        return Sim3(rot_quat, trans_vec, sim3.scale);
     }
 
     void BridgeSparseOptimizer::add_both_sim_edges(
@@ -310,38 +329,59 @@ namespace g2o {
         optimizer->addEdge(e21);
 
         // Note: see explanation under get_mut_edges in lib.rs for why we do this
-        RustSim3Edge rust_edge;
+        RustSim3ProjectXYZEdge rust_edge;
         unique_ptr<EdgeSim3ProjectXYZ> edge1(e12);
         unique_ptr<EdgeInverseSim3ProjectXYZ> edge2(e21);
 
         rust_edge.edge1 = std::move(edge1);
         rust_edge.edge2 = std::move(edge2);
+        this->sim3_projxyz_edges.emplace(this->sim3_projxyz_edges.end(), std::move(rust_edge));
+    }
+
+    void BridgeSparseOptimizer::add_one_sim3_edge(
+        int vertex_id_i, int vertex_id_j,
+        RustSim3 observation
+    ) {
+        const Eigen::Matrix<double,7,7> matLambda = Eigen::Matrix<double,7,7>::Identity();
+
+        EdgeSim3* e = new EdgeSim3();
+        e->setVertex(1, dynamic_cast<OptimizableGraph::Vertex*>(optimizer->vertex(vertex_id_j)));
+        e->setVertex(0, dynamic_cast<OptimizableGraph::Vertex*>(optimizer->vertex(vertex_id_i)));
+        e->setMeasurement(this->format_sim3(observation));
+        e->information() = matLambda;
+
+        optimizer->addEdge(e);
+
+        // Note: see explanation under get_mut_edges in lib.rs for why we do this
+        RustSim3Edge rust_edge;
+        unique_ptr<EdgeSim3> edge(e);
+        rust_edge.edge = std::move(edge);
         this->sim3_edges.emplace(this->sim3_edges.end(), std::move(rust_edge));
     }
 
     rust::Vec<int> BridgeSparseOptimizer::remove_sim3_edges_with_chi2 (float chi2_threshold) {
         rust::vec<int> * deleted_indexes = new rust::Vec<int>();
-        for (int i = 0; i < this->sim3_edges.size(); i++) {
-            if (!this->sim3_edges[i].edge1 && !this->sim3_edges[i].edge2) {
+        for (int i = 0; i < this->sim3_projxyz_edges.size(); i++) {
+            if (!this->sim3_projxyz_edges[i].edge1 && !this->sim3_projxyz_edges[i].edge2) {
                 continue;
             }
-            if (this->sim3_edges[i].edge1->chi2() > chi2_threshold || this->sim3_edges[i].edge2->chi2() > chi2_threshold) {
-                optimizer->removeEdge(this->sim3_edges[i].edge1.get());
-                optimizer->removeEdge(this->sim3_edges[i].edge2.get());
+            if (this->sim3_projxyz_edges[i].edge1->chi2() > chi2_threshold || this->sim3_projxyz_edges[i].edge2->chi2() > chi2_threshold) {
+                optimizer->removeEdge(this->sim3_projxyz_edges[i].edge1.get());
+                optimizer->removeEdge(this->sim3_projxyz_edges[i].edge2.get());
 
                 // After removing from graph, set sim3_edges element to null
-                RustSim3Edge null_rust_edge;
+                RustSim3ProjectXYZEdge null_rust_edge;
                 null_rust_edge.edge1 = std::unique_ptr<EdgeSim3ProjectXYZ>(nullptr);
                 null_rust_edge.edge2 = std::unique_ptr<EdgeInverseSim3ProjectXYZ>(nullptr);
-                this->sim3_edges[i] = std::move(null_rust_edge);
+                this->sim3_projxyz_edges[i] = std::move(null_rust_edge);
                 deleted_indexes->push_back(i);
             }
         }
         return *deleted_indexes;
     }
 
-    RustSim3 BridgeSparseOptimizer::recover_optimized_sim3() const {
-        g2o::VertexSim3Expmap* vSim3_recov = static_cast<g2o::VertexSim3Expmap*>(optimizer->vertex(0));
+    RustSim3 BridgeSparseOptimizer::recover_optimized_sim3(int vertex_id) const {
+        g2o::VertexSim3Expmap* vSim3_recov = static_cast<g2o::VertexSim3Expmap*>(optimizer->vertex(vertex_id));
 
         g2o::Sim3 g2oS12= vSim3_recov->estimate();
 
@@ -422,12 +462,16 @@ namespace g2o {
         for(auto it = xyz_edges.begin(); it != xyz_edges.end(); it++) {
             it->inner.release();
         }
-        for(auto it = sim3_edges.begin(); it != sim3_edges.end(); it++) {
+        for(auto it = sim3_projxyz_edges.begin(); it != sim3_projxyz_edges.end(); it++) {
             it->edge1.release();
             it->edge2.release();
         }
+        for(auto it = sim3_edges.begin(); it != sim3_edges.end(); it++) {
+            it->edge.release();
+        }
         xyz_onlypose_edges.clear();
         xyz_edges.clear();
+        sim3_projxyz_edges.clear();
         sim3_edges.clear();
         delete optimizer;
     }

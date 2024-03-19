@@ -33,9 +33,12 @@ pub mod ffi {
         inner: UniquePtr<EdgeSE3ProjectXYZOnlyPose>,
         mappoint_id: i32,
     }
-    struct RustSim3Edge {
+    struct RustSim3ProjectXYZEdge {
         edge1: UniquePtr<EdgeSim3ProjectXYZ>,
         edge2: UniquePtr<EdgeInverseSim3ProjectXYZ>,
+    }
+    struct RustSim3Edge {
+        edge: UniquePtr<EdgeSim3>,
     }
 
     unsafe extern "C++" {
@@ -50,15 +53,18 @@ pub mod ffi {
         type EdgeSE3ProjectXYZ;
         type EdgeSim3ProjectXYZ;
         type EdgeInverseSim3ProjectXYZ;
+        type EdgeSim3;
 
         fn new_sparse_optimizer(opt_type: i32, camera_param: [f64;4]) -> UniquePtr<BridgeSparseOptimizer>;
 
         // creating/adding vertices to graph
-        fn add_sim3_vertex(
+        fn add_vertex_sim3_expmap(
             self: Pin<&mut BridgeSparseOptimizer>,
-            pose: Pose,
-            scale: f64,
-            set_fixed: bool
+            vertex_id: i32,
+            pose: RustSim3,
+            fix_scale: bool,
+            set_fixed: bool,
+            set_camera_params: bool
         );
         fn add_frame_vertex(
             self: Pin<&mut BridgeSparseOptimizer>,
@@ -90,6 +96,12 @@ pub mod ffi {
             vertex_id1: i32, keypoint_pt_x1: f32, keypoint_pt_y1: f32, inv_sigma1: f32,
             vertex_id2: i32, keypoint_pt_x2: f32, keypoint_pt_y2: f32, inv_sigma2: f32,
             huber_delta: f32
+        );
+        fn add_one_sim3_edge(
+            self: Pin<&mut BridgeSparseOptimizer>,
+            vertex_id_i: i32,
+            vertex_id_j: i32,
+            observation: RustSim3,
         );
         fn add_edge_monocular_unary(
             self: Pin<&mut BridgeSparseOptimizer>,
@@ -150,6 +162,7 @@ pub mod ffi {
         ) -> Position;
         fn recover_optimized_sim3(
             self: &BridgeSparseOptimizer,
+            vertex: i32,
         ) -> RustSim3;
 
         // optimization within edge
@@ -164,7 +177,7 @@ pub mod ffi {
         // used by the optimizer!
         fn get_mut_xyz_edges(self: Pin<&mut BridgeSparseOptimizer>) -> Pin<&mut CxxVector<RustXYZEdge>>;
         fn get_mut_xyz_onlypose_edges(self: Pin<&mut BridgeSparseOptimizer>) -> Pin<&mut CxxVector<RustXYZOnlyPoseEdge>>;
-        fn get_mut_sim3_edges(self: Pin<&mut BridgeSparseOptimizer>) -> Pin<&mut CxxVector<RustSim3Edge>>;
+        fn get_mut_sim3_edges(self: Pin<&mut BridgeSparseOptimizer>) -> Pin<&mut CxxVector<RustSim3ProjectXYZEdge>>;
         #[rust_name = "set_level"]
         fn setLevel(
             self: Pin<&mut EdgeSE3ProjectXYZOnlyPose>,

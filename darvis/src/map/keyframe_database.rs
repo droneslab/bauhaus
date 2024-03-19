@@ -51,7 +51,7 @@ impl KeyFrameDatabase {
 
     pub fn detect_loop_candidates(&self, map: &Map, curr_kf_id: &Id, min_score: f32) -> Vec<Id> {
         let curr_kf = map.keyframes.get(&curr_kf_id).unwrap();
-        let connected_kfs = map.keyframes.get(&curr_kf_id).unwrap().get_covisibility_keyframes(i32::MAX);
+        let connected_kfs = map.keyframes.get(&curr_kf_id).unwrap().get_connected_keyframes();
         let mut kfs_sharing_words = vec![]; //lKFsSharingWords
         let mut loop_words = HashMap::new(); // mnLoopWords
         let mut loop_query = HashMap::new(); // mnLoopQuery
@@ -63,7 +63,7 @@ impl KeyFrameDatabase {
                 if (loop_query.get(kf_i_id).is_some() && loop_query[kf_i_id] != curr_kf_id)
                     || loop_query.get(kf_i_id).is_none() {
                     loop_words.insert(*kf_i_id, 0);
-                    if !connected_kfs.contains(&kf_i_id) {
+                    if !connected_kfs.contains_key(&kf_i_id) {
                         loop_query.insert(*kf_i_id, curr_kf_id);
                         kfs_sharing_words.push(*kf_i_id);
                     }

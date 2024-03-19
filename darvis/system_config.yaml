@@ -104,6 +104,9 @@ actors:
           - name: draw_connected_kfs # You can set this to be true but it doesn't look good. Need to figure out some nicer way to distribute the points so it's actually readable
             value: false
             type: bool
+          - name: draw_only_trajectory
+            value: true
+            type: bool
 
       -
        name: TRACKING_FRONTEND

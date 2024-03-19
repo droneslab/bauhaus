@@ -9,8 +9,7 @@ pub struct KeyFrame {
     pub id: Id,
     pub timestamp: Timestamp,
     pub pose: Pose,
-
-    pub gba_pose: Option<Pose>, // mTcwGBA // todo can we avoid having this in the kf?
+    pub frame_id: i32,
 
     // Map connections
     pub origin_map_id: Id, // mnOriginMapId
@@ -19,6 +18,7 @@ pub struct KeyFrame {
     pub ref_kf_id: Option<Id>, //mpReferenceKF
     pub parent: Option<Id>,
     pub children: HashSet<Id>,
+    pub(super) loop_edges: HashSet<Id>, // mvpLoopEdges
 
     // Vision //
     pub features: Features, // KeyPoints, stereo coordinate and descriptors (all associated by an index)
@@ -32,6 +32,10 @@ pub struct KeyFrame {
 
     // todo I would like to get rid of this but until we have fine-grained locking this is the only way to prevent deletion without taking the entire map
     pub dont_delete: bool, // mbNotErase
+
+    // todo loop closing can we avoid having this in the kf?
+    pub ba_global_for_kf: Id, // mnBAGlobalForKF
+    pub gba_pose: Option<Pose>, // mTcwGBA 
 
     // DON'T SET THESE! Either never used, or moved into actor implementation
     // mbCurrentPlaceRecognition
@@ -49,9 +53,6 @@ pub struct KeyFrame {
     // pub place_recognition_score: f32, //mPlaceRecognitionScore
     // // Variables used by loop closing
     // pub mnBAGlobalForKF: u64,
-    // // Variables used by merging
-    // pub mnMergeCorrectedForKF: u64,
-    // pub mnBALocalForMerge: u64,
 }
 impl KeyFrame {
     pub(super) fn new(frame: Frame, origin_map_id: Id, id: Id) -> Self {
@@ -66,6 +67,7 @@ impl KeyFrame {
 
         Self {
             timestamp: frame.timestamp,
+            frame_id: frame.frame_id,
             mappoint_matches: frame.mappoint_matches,
             pose: frame.pose.expect("Frame should have pose by now"),
             gba_pose: None,
@@ -80,7 +82,9 @@ impl KeyFrame {
             sensor: SETTINGS.get::<Sensor>(SYSTEM, "sensor"),
             parent: None,
             children: HashSet::new(),
+            loop_edges: HashSet::new(),
             dont_delete: false,
+            ba_global_for_kf: -1,
         }
     }
 
@@ -112,6 +116,7 @@ impl KeyFrame {
         }
     }
     pub fn delete_connection(&mut self, kf_id: Id) { self.connections.delete(&kf_id); }
+    pub fn get_loop_edges(&self) -> &HashSet<Id> { &self.loop_edges }
 
     pub fn clone_matches(&self) -> MapPointMatches { self.mappoint_matches.clone() }
     pub fn get_mp_matches(&self) -> &Vec<Option<(i32, bool)>> { &self.mappoint_matches.matches }
@@ -171,11 +176,28 @@ impl KeyFrame {
     }
 
     pub fn get_covisibility_keyframes(&self, num: i32) -> Vec<Id> {
-        //vector<KeyFrame*> KeyFrame::GetVectorCovisibleKeyFrames(), KeyFrame::GetConnectedKeyFrames
+        // vector<KeyFrame*> KeyFrame::GetVectorCovisibleKeyFrames(), KeyFrame::GetBestCovisibilityKeyFrames
         // To get all connections, pass in i32::MAX as `num`
+        // num is the target number of keyframes to return
        let max_len = min(self.connections.ordered_connected_keyframes.len(), num as usize);
        let (connections, _) : (Vec<i32>, Vec<i32>) = self.connections.ordered_connected_keyframes[0..max_len].iter().cloned().unzip();
        connections
+    }
+
+    pub fn get_covisibles_by_weight(&self, weight: i32) -> Vec<Id> {
+        // vector<KeyFrame*> KeyFrame::GetCovisiblesByWeight(const int &w)
+        // Like get_covisibility_keyframes, but instead of returning the best x keyframes,
+        // it returns all keyframes with a weight > x
+        self.connections.ordered_connected_keyframes.iter()
+            .filter(|(_, w)| w > &weight)
+            .map(|(kf_id, _)| *kf_id)
+            .collect()
+    }
+
+    pub fn get_connected_keyframes(&self) -> &HashMap<Id, i32> {
+        // set<KeyFrame*> KeyFrame::GetConnectedKeyFrames()
+        // Connected/covisible keyframes sorted by weight
+        &self.connections.map_connected_keyframes
     }
 
 }
