@@ -1,6 +1,7 @@
 use std::ops::{Mul, Deref};
-use core::matrix::{DVVector3, DVMatrix3};
+use core::matrix::{DVMatrix, DVMatrix3, DVVector3};
 use num_traits::abs;
+use opencv::core::Mat;
 use serde::{Deserialize, Serialize};
 
 pub type DVTranslation = DVVector3<f64>;
@@ -217,22 +218,72 @@ impl std::fmt::Debug for Pose {
 }
 
 
+#[derive(Copy)]
 pub struct Sim3 {
     pub pose: Pose,
     pub scale: f64,
 }
 impl Sim3 {
+    pub fn new(trans: DVTranslation, rot: DVRotation, scale: f64) -> Sim3 {
+        Sim3 {
+            pose: Pose::new(*trans,* rot),
+            scale
+        }
+    }
     pub fn identity() -> Sim3 {
         Sim3 {
             pose: Pose::identity(),
             scale: 1.0
         }
     }
+    pub fn inverse(&self) -> Sim3 {
+        let inv_pose = self.pose.inverse();
+        Sim3 {
+            pose: inv_pose,
+            scale: self.scale // todo (loop closing) is this right or should it be 1/ self.scale?
+        }
+    }
+    pub fn map(&self, other: &DVVector3<f64>) -> DVVector3<f64> {
+        // todo (loop closing) is this right? should match sim3.h map function:
+        // Vector3d map (const Vector3d& xyz) const {
+        //     return s*(r*xyz) + t;
+        // }
+
+        let quat = self.pose.get_quaternion();
+        let mut rot_vec = nalgebra::DMatrix::<f64>::zeros(0, 3);
+        rot_vec[0] = quat.w;
+        rot_vec[1] = quat.i;
+        rot_vec[2] = quat.j;
+        rot_vec[3] = quat.k;
+
+        DVVector3::new((rot_vec * **other).mul(self.scale) + *self.pose.get_translation())
+    }
 }
 impl Clone for Sim3 {
     fn clone(&self) -> Self {
         Sim3 {
             pose: self.pose.clone(),
+            scale: self.scale
+        }
+    }
+}
+impl Mul for Sim3 {
+    type Output = Sim3;
+
+    fn mul(self, _other: Sim3) -> Sim3 {
+        // todo (loop closing) is this the right way to multiply a sim3?
+        Sim3 {
+            pose: self.pose * _other.pose,
+            scale: self.scale * _other.scale
+        }
+    }
+}
+impl Into<g2o::ffi::RustSim3> for Sim3 {
+    fn into(self) -> g2o::ffi::RustSim3 {
+        let pose: g2o::ffi::Pose = self.pose.into();
+        g2o::ffi::RustSim3 {
+            translation: pose.translation,
+            rotation: pose.rotation,
             scale: self.scale
         }
     }

@@ -1,6 +1,6 @@
 extern crate g2o;
 
-use std::collections::{HashMap, HashSet};
+use std::{cmp::{max, min}, collections::{HashMap, HashSet}};
 use cxx::UniquePtr;
 use core::{
     config::{SETTINGS, SYSTEM}, sensor::{Sensor, FrameSensor}
@@ -9,7 +9,7 @@ use log::{warn, debug};
 use nalgebra::Matrix3;
 use opencv::prelude::KeyPointTraitConst;
 use crate::{
-    map::{frame::Frame, pose::{DVRotation, DVTranslation, Pose, Sim3}, map::{Map, Id}}, registered_actors::{FEATURE_DETECTION, CAMERA}, MapLock
+    actors::loop_closing::KeyFrameAndPose, map::{frame::Frame, map::{Id, Map}, pose::{DVRotation, DVTranslation, Pose, Sim3}}, registered_actors::{CAMERA, FEATURE_DETECTION}, MapLock
 };
 
 lazy_static! {
@@ -801,17 +801,206 @@ pub fn optimize_essential_graph_4dof() {
     //                                 const LoopClosing::KeyFrameAndPose &CorrectedSim3,
     //                                 const map<KeyFrame *, set<KeyFrame *> > &LoopConnections);
 }
-pub fn optimize_essential_graph() {
-    todo!("LOOP CLOSING");
-    // void static OptimizeEssentialGraph(KeyFrame* pCurKF, vector<KeyFrame*> &vpFixedKFs, vector<KeyFrame*> &vpFixedCorrectedKFs,
-    //                                 vector<KeyFrame*> &vpNonFixedKFs, vector<MapPoint*> &vpNonCorrectedMPs);
+pub fn optimize_essential_graph(
+    map: &MapLock, loop_kf: Id, curr_kf: Id,
+    loop_connections: HashMap<Id, HashSet<Id>>,
+    non_corrected_sim3: &KeyFrameAndPose, corrected_sim3: &KeyFrameAndPose,
+    fix_scale: bool
+) {
+    // void Optimizer::OptimizeEssentialGraph(Map* pMap, KeyFrame* pLoopKF, KeyFrame* pCurKF,
+    //                                        const LoopClosing::KeyFrameAndPose &NonCorrectedSim3,
+    //                                        const LoopClosing::KeyFrameAndPose &CorrectedSim3,
+    //                                        const map<KeyFrame *, set<KeyFrame *> > &LoopConnections, const bool &bFixScale)
 
+    let camera_param = [
+        SETTINGS.get::<f64>(CAMERA, "fx"),
+        SETTINGS.get::<f64>(CAMERA, "fy"),
+        SETTINGS.get::<f64>(CAMERA, "cx"),
+        SETTINGS.get::<f64>(CAMERA, "cy")
+    ];
+    let mut optimizer = g2o::ffi::new_sparse_optimizer(4, camera_param);
+
+    let mut v_scw = vec![]; // vScw
+
+    let mut inserted_edges = HashSet::new(); // sInsertedEdges
+    {
+        // Set KeyFrame vertices
+        let lock = map.read();
+        for (kf_id, kf) in &lock.keyframes {
+            let estimate = match corrected_sim3.get(kf_id) {
+                Some(sim3) => { sim3.clone() },
+                None => {
+                    Sim3 {
+                        pose: kf.pose,
+                        scale: 1.0
+                    }
+                }
+            };
+            v_scw.push(estimate);
+
+            optimizer.pin_mut().add_vertex_sim3_expmap(
+                kf.id,
+                estimate.into(),
+                fix_scale,
+                *kf_id == loop_kf,
+                false,
+
+            );
+        }
+
+        // Set loop edges
+        let min_feat = 100;
+        for (kf_id, connected_kfs) in &loop_connections {
+            let kf = lock.keyframes.get(kf_id).unwrap();
+            let siw = v_scw[*kf_id as usize];
+            let swi = siw.inverse();
+
+            for connected_kf_id in connected_kfs {
+                if (*kf_id != curr_kf || *connected_kf_id != loop_kf) && kf.get_connected_kf_weight(*connected_kf_id) < min_feat {
+                    continue;
+                }
+
+                let sjw = v_scw[*connected_kf_id as usize];
+                let sji = sjw * swi;
+                optimizer.pin_mut().add_one_sim3_edge(
+                    *kf_id,
+                    *connected_kf_id,
+                    sji.into(),
+                );
+                inserted_edges.insert((min(*kf_id, *connected_kf_id), max(*kf_id, *connected_kf_id)));
+            }
+        }
+
+        // Set normal edges
+        for (kf_id, kf) in &lock.keyframes {
+            let swi = match non_corrected_sim3.get(&kf_id) {
+                Some(sim3) => sim3.inverse(),
+                None => v_scw[*kf_id as usize].inverse()
+            };
+
+            // Spanning tree edge
+            match kf.parent {
+                Some(parent_id) => {
+                    let sjw = match non_corrected_sim3.get(&parent_id) {
+                        Some(sim3) => sim3.clone(),
+                        None => v_scw[parent_id as usize]
+                    };
+                    let sji = sjw * swi;
+                    optimizer.pin_mut().add_one_sim3_edge(
+                        *kf_id,
+                        parent_id,
+                        sji.into(),
+                    );
+                },
+                None => {}
+            };
+
+            // Loop edges
+            let loop_edges = kf.get_loop_edges();
+            for edge_kf_id in loop_edges {
+                if *edge_kf_id != *kf_id {
+                    let slw = match non_corrected_sim3.get(&edge_kf_id) {
+                        Some(sim3) => sim3.clone(),
+                        None => v_scw[*edge_kf_id as usize]
+                    };
+                    let sli = slw * swi;
+                    optimizer.pin_mut().add_one_sim3_edge(
+                        *kf_id,
+                        *edge_kf_id,
+                        sli.into(),
+                    );
+                }
+            }
+
+            // Covisibility graph edges
+            let parent_kf = kf.parent;
+            for covis_kf_id in kf.get_covisibles_by_weight(min_feat) {
+                if (parent_kf != Some(covis_kf_id) && !kf.children.contains(&covis_kf_id)) && !loop_edges.contains(&covis_kf_id) {
+                    if covis_kf_id < *kf_id {
+                        if inserted_edges.contains(&(min(covis_kf_id, *kf_id), max(covis_kf_id, *kf_id))) {
+                            continue;
+                        }
+                        let snw = match non_corrected_sim3.get(&covis_kf_id) {
+                            Some(sim3) => sim3.clone(),
+                            None => v_scw[covis_kf_id as usize]
+                        };
+                        let sni = snw * swi;
+
+                        optimizer.pin_mut().add_one_sim3_edge(
+                            *kf_id,
+                            covis_kf_id,
+                            sni.into(),
+                        );
+                    }
+                }
+            }
+
+        }
+    }
+
+    // Optimize!
+    optimizer.pin_mut().optimize(20, false);
+
+    let mut corrected_swc = HashMap::new();
+    {
+        // SE3 Pose Recovering. Sim3:[sR t;0 1] -> SE3:[R t/s;0 1]
+        let mut lock = map.write();
+        for kf in lock.keyframes.values_mut() {
+            let sim3: Sim3 = optimizer.recover_optimized_sim3(kf.id).into();
+            corrected_swc.insert(kf.id, sim3.inverse());
+    
+            let trans = *sim3.pose.get_translation() * (1.0 / sim3.scale); //[R t/s;0 1]
+            let new_pose = Pose::new(trans, *sim3.pose.get_rotation());
+
+            kf.pose = new_pose;
+        }
+    }
+
+    {
+        // Correct points. Transform to "non-optimized" reference keyframe pose and transform back with optimized pose
+        let mp_ids = map.read().mappoints.keys().cloned().collect::<Vec<Id>>();
+        for mp_id in mp_ids {
+            let idr =  {
+                let lock = map.read();
+                let mp = lock.mappoints.get(&mp_id).unwrap();
+                match mp.corrected_reference {
+                    Some((kf_id, corrected_reference)) => {
+                        if kf_id == curr_kf {
+                            corrected_reference
+                        } else {
+                            mp.ref_kf_id
+                        }
+                    },
+                    None => {
+                        mp.ref_kf_id
+                    }
+                }
+            };
+
+            let srw = v_scw[idr as usize];
+            let corrected_swr = corrected_swc[&idr];
+
+            {
+                let mut lock = map.write();
+                let mp = lock.mappoints.get_mut(&mp_id).unwrap();
+                let p_3d_w = mp.position;
+                mp.position = corrected_swr.map(&srw.map(&p_3d_w));
+            }
+            
+            let norm_and_depth = map.read().mappoints.get(&mp_id).unwrap().get_norm_and_depth(&map.read());
+            if norm_and_depth.is_some() {
+                map.write().mappoints.get_mut(&mp_id).unwrap().update_norm_and_depth(norm_and_depth.unwrap());
+            }
+
+        }
+
+    }
+    
 }
 
 pub fn optimize_sim3(
     map: &MapLock, kf1_id: Id, kf2_id: Id, matched_mps: &mut HashMap<usize, i32>,
-    sim3_rot: &DVRotation, sim3_trans: &DVTranslation, sim3_scale: &f64,
-    th2: i32, fix_scale: bool
+    sim3: &Sim3, th2: i32, fix_scale: bool
 ) -> (i32, Option<Sim3>) {
     // From ORBSLAM2:
     // int Optimizer::OptimizeSim3(KeyFrame *pKF1, KeyFrame *pKF2, vector<MapPoint *> &vpMatches1, 
@@ -841,10 +1030,12 @@ pub fn optimize_sim3(
     };
 
     // Set Sim3 vertex
-    optimizer.pin_mut().add_sim3_vertex(
-        (Pose::new(**sim3_trans, **sim3_rot)).into(),
-        *sim3_scale,
-        fix_scale
+    optimizer.pin_mut().add_vertex_sim3_expmap(
+        0,
+        (*sim3).into(),
+        fix_scale,
+        false,
+        true
     );
 
     let mut num_correspondences = 0;
@@ -957,7 +1148,7 @@ pub fn optimize_sim3(
     }
     
     // Recover optimized Sim3
-    let sim3 = optimizer.recover_optimized_sim3();
+    let sim3 = optimizer.recover_optimized_sim3(0);
     (n_in, Some(sim3.into()))
 }
 

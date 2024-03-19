@@ -575,6 +575,13 @@ impl Map {
             .map(|mp| mp.update_distinctive_descriptors(best_descriptor));
     }
 
+    pub fn update_norm_and_depth(&mut self, mp_id: Id) {
+        // Update normal and depth
+        let norm_and_depth = self.mappoints.get(&mp_id)
+            .and_then(|mp| {mp.get_norm_and_depth(&self)}).unwrap();
+        self.mappoints.get_mut(&mp_id)
+            .map(|mp| mp.update_norm_and_depth(norm_and_depth));
+    }
 
     pub fn update_mappoint(&mut self, mp_id: Id) {
         // These two functions are called together all the time, and our implementation is more complicated
@@ -594,7 +601,20 @@ impl Map {
             .map(|mp| mp.update_norm_and_depth(norm_and_depth));
     }
 
+    pub fn add_kf_loop_edges(&mut self, kf1_id: Id, kf2_id: Id) {
+        let kfs = self.keyframes.get_many_mut([&kf1_id, &kf2_id]).unwrap();
+        kfs[0].loop_edges.insert(kf2_id);
+        kfs[1].loop_edges.insert(kf1_id);
+        // todo loop closing concurrency
+        {
+            kfs[0].dont_delete = true;
+            kfs[1].dont_delete = true;
+        }
+    }
+
     ////* keyframe database */////////////////////////////////////////////////////
+    // Keyframe database sometimes needs a reference to the map, so it's easier to make keyframe_database private in map
+    // and call these passthrough functions instead.
     pub fn add_to_kf_database(&mut self, kf_id: Id) {
         self.keyframe_database.add(self.keyframes.get(&kf_id).unwrap());
     }

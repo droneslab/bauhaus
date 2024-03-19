@@ -157,10 +157,17 @@ impl Sim3Solver {
         let iterations = match min_inliers == self.num_matches as i32 {
             true => 1,
             false => ((1.0 - probability).ln() / (1.0 - epsilon.powf(3.0)).ln()) as i32
-        }; // todo double check that c++ log() is the same as ln() here
-
+        };
+        
         self.ransac_max_its = max(1, min(iterations, max_iterations));
-        println!("Ransac max its: {}", self.ransac_max_its);
+
+        // println!("min inliers: {}, num matches: {}", min_inliers, self.num_matches);
+        // println!("ransac prob {}, epsilon {}", probability, epsilon);
+        // println!("pow epsilon: {}", epsilon.powf(3.0));
+        // println!("log epsilon: {}", (1.0 - epsilon.powf(3.0)).ln());
+        // println!("iterations {}, max iterations {}", iterations, max_iterations);
+        println!("Final Ransac max its: {}", self.ransac_max_its);
+
     }
 
     pub fn iterate(&mut self, num_iterations: i32) -> Result<(bool, Option<(Mat, Vec<bool>, i32)>), opencv::Error> {
@@ -208,7 +215,7 @@ impl Sim3Solver {
 
             self.check_inliers()?;
 
-            // println!("Inliers count: {:?}", self.current_estimation.inliers_count);
+            println!("Inliers count: {:?}", self.current_estimation.inliers_count);
 
             // todo get rid of these clones?
             if self.current_estimation.inliers_count > self.current_ransac_state.best_inliers_count {
@@ -387,6 +394,11 @@ impl Sim3Solver {
         let v_p2_im1 = self.project(&self.x_3d_c2, &self.current_estimation.T12_i)?; // vP2im1
         let v_p1_im2 = self.project(&self.x_3d_c1, &self.current_estimation.T21_i)?; // vP1im2
 
+        // println!("Current estimation T12: {:?}", self.current_estimation.T12_i);
+        // println!("Current estimation T21: {:?}", self.current_estimation.T21_i);
+        // println!("Projected im1: {:?}", v_p2_im1);
+        // println!("Projected im2: {:?}", v_p1_im2);
+
         self.current_estimation.inliers_count = 0;
 
         for i in 0..self.p1_im1.len() {
@@ -407,10 +419,9 @@ impl Sim3Solver {
             // println!("v_p1_im2: {:?}", v_p1_im2[i]);
             // println!("self.p2_im2: {:?}", self.p2_im2[i]);
 
-            // println!("dist1: {:?}", dist1.data_typed::<f64>()?);
-            // println!("dist2: {:?}", dist2.data_typed::<f64>()?);
-            // println!("err1: {:?}", err1);
-            // println!("err2: {:?}", err2);
+            // println!("dist1: {:?}, dist2: {:?}", dist1.data_typed::<f64>()?, dist2.data_typed::<f64>()?);
+            // println!("err1: {:?}, err2: {:?}", err1, err2);
+            // println!("max error 1: {:?}, max error 2: {:?}", self.max_error1[i], self.max_error2[i]);
 
             if err1 < self.max_error1[i] && err2 < self.max_error2[i] {
                 self.current_estimation.inliers_i[i] = true;
@@ -419,7 +430,6 @@ impl Sim3Solver {
                 self.current_estimation.inliers_i[i] = false;
             }
         }
-        println!();
 
         Ok(())
     }

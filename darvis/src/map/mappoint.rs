@@ -31,12 +31,18 @@ pub struct MapPoint { // Full map item inserted into the map with the following 
     // rather than duplicating all these connections across all the objects and hoping we remember
     // to update them correctly after a map modification
     pub origin_map_id: Id,
-    ref_kf_id: Id, // mpRefKF
+    pub ref_kf_id: Id, // mpRefKF
     pub first_kf_id: Id, // mnFirstKFid
 
     // Set in tracking, used by local mapping to make decision about deleting mappoint
     found: AtomicI32, //nFound
     visible: AtomicI32, // nVisible
+
+    // Used by loop closing
+    // todo loop closing can we avoid having these in here and keep it thread local instead?
+    pub ba_global_for_kf: Id, // mnBAGlobalForKF
+    pub gba_pose: Option<DVTranslation>, // mTcwGBA
+    pub corrected_reference: Option<(Id, i32)>, // (mnCorrectedByKF, mCorrectedReference)
 
     // Variables in ORBSLAM, DON'T Set these!!
     // mnFirstFrame ... literally never used meaningfully
@@ -62,7 +68,10 @@ impl MapPoint {
             max_distance: 0.0,
             min_distance: 0.0,
             best_descriptor: DVMatrix::empty(),
+            gba_pose: None,
             num_obs: 0,
+            ba_global_for_kf: -1,
+            corrected_reference: None
         }
     }
 
@@ -124,7 +133,7 @@ impl MapPoint {
         self.normal_vector = vals.2;
     }
 
-    pub(super) fn compute_distinctive_descriptors(&self, map: &Map) -> Option<DVMatrix> {
+    pub fn compute_distinctive_descriptors(&self, map: &Map) -> Option<DVMatrix> {
         // Part 1 of void MapPoint::ComputeDistinctiveDescriptors()
         if self.num_obs == 0 {
             error!("mappoint::compute_distinctive_descriptors;No observations");
@@ -357,6 +366,9 @@ impl Clone for MapPoint {
             found: AtomicI32::new(self.found.load(Ordering::Relaxed)),
             visible: AtomicI32::new(self.visible.load(Ordering::Relaxed)),
             sensor: self.sensor.clone(),
+            gba_pose: self.gba_pose.clone(),
+            ba_global_for_kf: self.ba_global_for_kf,
+            corrected_reference: self.corrected_reference
         }
     }
 }

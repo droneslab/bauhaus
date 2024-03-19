@@ -7,7 +7,7 @@ use std::thread;
 use std::time::Duration;
 use log::{debug, info, warn};
 use crate::actors::messages::KeyFrameIdMsg;
-use crate::map::pose::{Pose, Sim3};
+use crate::map::pose::{DVTranslation, Pose, Sim3};
 use crate::modules::sim3solver::Sim3Solver;
 use crate::modules::{optimizer, orbmatcher};
 use crate::registered_actors::{LOOP_CLOSING, VOCABULARY};
@@ -17,12 +17,12 @@ use crate::modules::imu::ImuModule;
 
 use super::messages::{ShutdownMsg, IMUInitializedMsg};
 
-type ConsistentGroup = (HashSet<Id>, i32);
-type KeyFrameAndPose = HashMap<Id, Sim3>;
+type ConsistentGroup = (Vec<Id>, i32);
+pub type KeyFrameAndPose = HashMap<Id, Sim3>;
 
 pub struct LoopClosing {
     system: System,
-    _sensor: Sensor,
+    sensor: Sensor,
 
     map: MapLock,
     _imu: Option<ImuModule>,
@@ -54,7 +54,7 @@ impl Actor for LoopClosing {
             system,
             map,
             _imu: None, // TODO (IMU): ImuModule::new(None, None, sensor, false, false),
-            _sensor: SETTINGS.get(SYSTEM, "sensor"),
+            sensor: SETTINGS.get(SYSTEM, "sensor"),
             current_kf_id: -1,
             running_global_ba: false,
             finished_global_ba: false,
@@ -78,6 +78,12 @@ impl Actor for LoopClosing {
             let message = actor.system.receive().unwrap();
             if message.is::<KeyFrameIdMsg>() {
                 let msg = message.downcast::<KeyFrameIdMsg>().unwrap_or_else(|_| panic!("Could not downcast loop closing message!"));
+                
+                if msg.kf_id == 0 {
+                    // Don't add very first keyframe
+                    continue;
+                }
+
                 actor.current_kf_id = msg.kf_id;
                 debug!("Loop closing working on kf {}", actor.current_kf_id);
                 actor.loop_closing();
@@ -97,11 +103,12 @@ impl Actor for LoopClosing {
 impl LoopClosing {
     fn loop_closing(&mut self) {
         // Avoid that a keyframe can be erased while it is being process by this thread
+        // TODO would be great if we could just lock this keyframe
         self.map.write().keyframes.get_mut(&self.current_kf_id).unwrap().dont_delete = true;
 
         // Detect loop candidates and check covisibility consistency
         if self.detect_loop() {
-            debug!("KF {}: Loop candidates found", self.current_kf_id);
+            debug!("KF {}: step 1 passed", self.current_kf_id);
             // Add current keyframe to database
             self.map.write().add_to_kf_database(self.current_kf_id);
 
@@ -130,9 +137,9 @@ impl LoopClosing {
     }
 
     fn detect_loop(&mut self) -> bool {
+        debug!("Begin detect loop");
         //If the map contains less than 10 KF or less than 10 KF have passed from last loop detection
         if self.map.read().keyframes.len() <= 10 {
-            println!("Less than 10 KF in map");
             return false;
         }
 
@@ -158,10 +165,12 @@ impl LoopClosing {
         // Query the database imposing the minimum score
         let candidate_kfs = self.map.read().kf_db_detect_loop_candidates(self.current_kf_id, min_score);
 
+        debug!("Candidate kfs: {:?}", candidate_kfs);
+
         // If there are no loop candidates, just add new keyframe and return false
         if candidate_kfs.is_empty() {
             self.consistent_groups.clear();
-            println!("Candidate KFs empty");
+            debug!("No loop candidates");
             return false;
         }
 
@@ -173,11 +182,12 @@ impl LoopClosing {
         let mut current_consistent_groups = Vec::new(); // vCurrentConsistentGroups
         let mut consistent_group = vec![false; self.consistent_groups.len()]; // vbConsistentGroup
 
+        // Sofiya: I think there should be way fewer candidates than this, especially at the beginning.
         for cand_kf_id in candidate_kfs {
             let map_read_lock = self.map.read();
             let candidate_kf = map_read_lock.keyframes.get(&cand_kf_id).unwrap();
-            let mut candidate_group: HashSet<Id> = HashSet::from_iter(candidate_kf.get_covisibility_keyframes(i32::MAX).iter().cloned());
-            candidate_group.insert(cand_kf_id);
+            let mut candidate_group: Vec<Id> = candidate_kf.get_connected_keyframes().keys().cloned().collect();
+            candidate_group.push(cand_kf_id);
 
             let mut enough_consistent = false;
             let mut consistent_for_some_group = false;
@@ -214,6 +224,8 @@ impl LoopClosing {
         // Update Covisibility Consistent Groups
         self.consistent_groups = current_consistent_groups;
 
+        debug!("Detect loop, final consistent candidates: {:?}", self.enough_consistent_candidates);
+
         return !self.enough_consistent_candidates.is_empty();
     }
 
@@ -229,8 +241,7 @@ impl LoopClosing {
         let mut num_candidates = 0; // nCandidates, candidates with enough matches
         let mut mappoint_matches: Vec<HashMap<u32, Id>> = vec![HashMap::new(); initial_candidates]; // vpMapPointMatches
 
-
-        println!("Initial candidates: {:?}",self.enough_consistent_candidates);
+        debug!("Begin compute sim3");
         {
             for i in 0..initial_candidates {
                 let candidate_kf_id = self.enough_consistent_candidates[i];
@@ -241,14 +252,16 @@ impl LoopClosing {
 
                     let keyframe = map_read_lock.keyframes.get(&candidate_kf_id).unwrap();
                     let mappoint_matches = orbmatcher::search_by_bow_kf(current_keyframe, keyframe, true, 0.75)?;
-                    println!("Searching for matches between {} and {}", current_keyframe.id, keyframe.id);
+                    debug!("Searching for matches between {} (frame {}) and {} (frame {})", current_keyframe.id, current_keyframe.frame_id, keyframe.id, keyframe.frame_id);
                     mappoint_matches
                 };
+
+                println!("mappoint_matches: {:?}", mappoint_matches[i]);
 
                 if mappoint_matches[i].len() < 20 {
                     discarded[i] = true;
                 } else {
-                    println!("Create sim3 solver for {}", self.current_kf_id);
+                    debug!("Create sim3 solver for {}", candidate_kf_id);
                     let mut sim3_solver = Sim3Solver::new(
                         &self.map,
                         self.current_kf_id, candidate_kf_id, &mappoint_matches[i], false,
@@ -262,7 +275,7 @@ impl LoopClosing {
         let mut has_match = false;
 
         debug!("Compute sim3, num candidates: {}", num_candidates);
-        // todo testing loop detection. not tested below here
+        // Sofiya testing loop detection. iterate always returns no inliers so not tested any code below here
 
         // Perform alternatively RANSAC iterations for each candidate
         // until one is succesful or all fail
@@ -296,13 +309,13 @@ impl LoopClosing {
                     }
 
                     let (R, t, s) = solver.get_estimates();
+                    let sim3 = Sim3::new(t, R, s);
                     orbmatcher::search_by_sim3(
-                        &self.map, self.current_kf_id, kf_id, &mut mappoint_matches_copy, s, &R, &t, 7.5
+                        &self.map, self.current_kf_id, kf_id, &mut mappoint_matches_copy, &sim3, 7.5
                     );
 
-                    // g2o::Sim3 gScm(Converter::toMatrix3d(R),Converter::toVector3d(t),s); // todo is this necessary
                     let (num_inliers, acum_hessian) = optimizer::optimize_sim3(
-                        &self.map, self.current_kf_id, kf_id, &mut mappoint_matches_copy, &R, &t, &s, 10, false
+                        &self.map, self.current_kf_id, kf_id, &mut mappoint_matches_copy, &sim3, 10, false
                     );
 
                     // If optimization is succesful stop ransacs and continue
@@ -383,31 +396,34 @@ impl LoopClosing {
 
     }
 
-    fn correct_loop(&mut self) {
+    fn correct_loop(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         info!("Loop detected!");
+        // Note: there's some really gross stuff in here to deal with mutable and immutable references to the map
 
         // Send a stop signal to Local Mapping
         // Avoid new keyframes are inserted while correcting the loop
 
-        // TODO concurrency
-        // mpLocalMapper->RequestStop();
-        // If a Global Bundle Adjustment is running, abort it
-        // if(isRunningGBA())
-        // {
-        //     unique_lock<mutex> lock(mMutexGBA);
-        //     mbStopGBA = true;
-        //     mnFullBAIdx++;
-        //     if(mpThreadGBA)
-        //     {
-        //         mpThreadGBA->detach();
-        //         delete mpThreadGBA;
-        //     }
-        // }
-        // Wait until Local Mapping has effectively stopped
-        // while(!mpLocalMapper->isStopped())
-        // {
-        //     usleep(1000);
-        // }
+        // TODO loop closing concurrency
+        {
+            // mpLocalMapper->RequestStop();
+            // If a Global Bundle Adjustment is running, abort it
+            // if(isRunningGBA())
+            // {
+            //     unique_lock<mutex> lock(mMutexGBA);
+            //     mbStopGBA = true;
+            //     mnFullBAIdx++;
+            //     if(mpThreadGBA)
+            //     {
+            //         mpThreadGBA->detach();
+            //         delete mpThreadGBA;
+            //     }
+            // }
+            // Wait until Local Mapping has effectively stopped
+            // while(!mpLocalMapper->isStopped())
+            // {
+            //     usleep(1000);
+            // }
+        }
 
         // Ensure current keyframe is updated
         self.map.write().update_connections(self.current_kf_id);
@@ -417,163 +433,171 @@ impl LoopClosing {
         self.current_connected_kfs.push(self.current_kf_id);
 
         let mut corrected_sim3 = KeyFrameAndPose::new();
-        let non_corrected_sim3 = KeyFrameAndPose::new();
+        let mut non_corrected_sim3 = KeyFrameAndPose::new();
         corrected_sim3.insert(self.current_kf_id, self.scw.clone());
         let twc = self.map.read().keyframes.get(&self.current_kf_id).unwrap().pose.inverse();
 
+        for connected_kf_id in &self.current_connected_kfs {
+            let map = self.map.read();
+            let connected_kf = map.keyframes.get(connected_kf_id).unwrap();
+            let pose = connected_kf.pose;
 
+            if connected_kf_id != &self.current_kf_id {
+                let tic = pose * twc;
+                let ric = tic.get_rotation();
+                let tic = tic.get_translation();
+                let g2o_sic = Sim3 { 
+                    pose: Pose::new(*tic, *ric), 
+                    scale: 1.0
+                };
+                let g2o_corrected_siw = g2o_sic * self.scw;
+                //Pose corrected with the Sim3 of the loop closure
+                corrected_sim3.insert(*connected_kf_id, g2o_corrected_siw);
+            }
+            let g2o_siw = Sim3 {
+                pose: pose.clone(),
+                scale: 1.0
+            };
+            // Pose without correction
+            non_corrected_sim3.insert(*connected_kf_id, g2o_siw);
+        }
 
-        //     for(vector<KeyFrame*>::iterator vit=mvpCurrentConnectedKFs.begin(), vend=mvpCurrentConnectedKFs.end(); vit!=vend; vit++)
-        //     {
-        //         KeyFrame* pKFi = *vit;
+        // Correct all MapPoints observed by current keyframe and neighbors, so that they align with the other side of the loop
+        let mut mp_corrected_by_kf = HashMap::<Id, Id>::new(); // mpCorrectedByKF
+        let mut corrected_mp_references = HashMap::<Id, Id>::new(); // mnCorrectedReference in mappoints
+        for (kf_id, g2o_corrected_siw) in &corrected_sim3 {
+            let g2o_corrected_swi = g2o_corrected_siw.inverse();
+            let g2o_siw = non_corrected_sim3.get(kf_id).unwrap();
+            let mappoints = {
+                let map = self.map.read();
+                let connected_kf = map.keyframes.get(kf_id).unwrap();
+                connected_kf.get_mp_matches().clone()
+            };
+            for i in 0..mappoints.len() {
+                let mp_id = match mappoints.get(i).unwrap() {
+                    Some((id, _)) => id,
+                    None => continue
+                };
+                if mp_corrected_by_kf.contains_key(mp_id) && mp_corrected_by_kf.get(mp_id).unwrap() == kf_id {
+                    continue;
+                }
 
-        //         cv::Mat Tiw = pKFi->GetPose();
+                // Project with non-corrected pose and project back with corrected pose
+                {
+                    let mut map = self.map.write();
+                    let mp = map.mappoints.get_mut(mp_id).unwrap();
+                    let p3d_w = mp.position;
+                    let corrected_p3d_w = g2o_corrected_swi.map(&g2o_siw.map(&p3d_w));
+                    mp.position = corrected_p3d_w;
+                    mp_corrected_by_kf.insert(*mp_id, *kf_id);
+                }
 
-        //         if(pKFi!=mpCurrentKF)
-        //         {
-        //             cv::Mat Tic = Tiw*Twc;
-        //             cv::Mat Ric = Tic.rowRange(0,3).colRange(0,3);
-        //             cv::Mat tic = Tic.rowRange(0,3).col(3);
-        //             g2o::Sim3 g2oSic(Converter::toMatrix3d(Ric),Converter::toVector3d(tic),1.0);
-        //             g2o::Sim3 g2oCorrectedSiw = g2oSic*mg2oScw;
-        //             //Pose corrected with the Sim3 of the loop closure
-        //             CorrectedSim3[pKFi]=g2oCorrectedSiw;
-        //         }
+                corrected_mp_references.insert(*mp_id, *kf_id);
 
-        //         cv::Mat Riw = Tiw.rowRange(0,3).colRange(0,3);
-        //         cv::Mat tiw = Tiw.rowRange(0,3).col(3);
-        //         g2o::Sim3 g2oSiw(Converter::toMatrix3d(Riw),Converter::toVector3d(tiw),1.0);
-        //         //Pose without correction
-        //         NonCorrectedSim3[pKFi]=g2oSiw;
-        //     }
+                let norm_and_depth = self.map.read().mappoints.get(mp_id).unwrap().get_norm_and_depth(&self.map.read());
+                if norm_and_depth.is_some() {
+                    self.map.write().mappoints.get_mut(mp_id).unwrap().update_norm_and_depth(norm_and_depth.unwrap());
+                }
+            }
 
-        //     // Correct all MapPoints obsrved by current keyframe and neighbors, so that they align with the other side of the loop
-        //     for(KeyFrameAndPose::iterator mit=CorrectedSim3.begin(), mend=CorrectedSim3.end(); mit!=mend; mit++)
-        //     {
-        //         KeyFrame* pKFi = mit->first;
-        //         g2o::Sim3 g2oCorrectedSiw = mit->second;
-        //         g2o::Sim3 g2oCorrectedSwi = g2oCorrectedSiw.inverse();
+            // Update keyframe pose with corrected Sim3. First transform Sim3 to SE3 (scale translation)
+            let new_t = *g2o_corrected_siw.pose.get_translation() * (1.0 / g2o_corrected_siw.scale); //[R t/s;0 1]
+            {
+                let mut map = self.map.write();
+                let keyframe = map.keyframes.get_mut(kf_id).unwrap();
+                keyframe.pose = Pose::new(new_t, *g2o_corrected_siw.pose.get_rotation());
 
-        //         g2o::Sim3 g2oSiw =NonCorrectedSim3[pKFi];
+                // Make sure connections are updated
+                self.map.write().update_connections(*kf_id);
+            }
+        }
 
-        //         vector<MapPoint*> vpMPsi = pKFi->GetMapPointMatches();
-        //         for(size_t iMP=0, endMPi = vpMPsi.size(); iMP<endMPi; iMP++)
-        //         {
-        //             MapPoint* pMPi = vpMPsi[iMP];
-        //             if(!pMPi)
-        //                 continue;
-        //             if(pMPi->isBad())
-        //                 continue;
-        //             if(pMPi->mnCorrectedByKF==mpCurrentKF->mnId)
-        //                 continue;
-
-        //             // Project with non-corrected pose and project back with corrected pose
-        //             cv::Mat P3Dw = pMPi->GetWorldPos();
-        //             Eigen::Matrix<double,3,1> eigP3Dw = Converter::toVector3d(P3Dw);
-        //             Eigen::Matrix<double,3,1> eigCorrectedP3Dw = g2oCorrectedSwi.map(g2oSiw.map(eigP3Dw));
-
-        //             cv::Mat cvCorrectedP3Dw = Converter::toCvMat(eigCorrectedP3Dw);
-        //             pMPi->SetWorldPos(cvCorrectedP3Dw);
-        //             pMPi->mnCorrectedByKF = mpCurrentKF->mnId;
-        //             pMPi->mnCorrectedReference = pKFi->mnId;
-        //             pMPi->UpdateNormalAndDepth();
-        //         }
-
-        //         // Update keyframe pose with corrected Sim3. First transform Sim3 to SE3 (scale translation)
-        //         Eigen::Matrix3d eigR = g2oCorrectedSiw.rotation().toRotationMatrix();
-        //         Eigen::Vector3d eigt = g2oCorrectedSiw.translation();
-        //         double s = g2oCorrectedSiw.scale();
-
-        //         eigt *=(1./s); //[R t/s;0 1]
-
-        //         cv::Mat correctedTiw = Converter::toCvSE3(eigR,eigt);
-
-        //         pKFi->SetPose(correctedTiw);
-
-        //         // Make sure connections are updated
-        //         pKFi->UpdateConnections();
-        //     }
-
-        //     // Start Loop Fusion
-        //     // Update matched map points and replace if duplicated
-        //     for(size_t i=0; i<mvpCurrentMatchedPoints.size(); i++)
-        //     {
-        //         if(mvpCurrentMatchedPoints[i])
-        //         {
-        //             MapPoint* pLoopMP = mvpCurrentMatchedPoints[i];
-        //             MapPoint* pCurMP = mpCurrentKF->GetMapPoint(i);
-        //             if(pCurMP)
-        //                 pCurMP->Replace(pLoopMP);
-        //             else
-        //             {
-        //                 mpCurrentKF->AddMapPoint(pLoopMP,i);
-        //                 pLoopMP->AddObservation(mpCurrentKF,i);
-        //                 pLoopMP->ComputeDistinctiveDescriptors();
-        //             }
-        //         }
-        //     }
-
+        // Start Loop Fusion
+        // Update matched map points and replace if duplicated
+        for (index, loop_mp_id) in &self.current_matched_points {
+            let map = self.map.write();
+            let curr_kf = map.keyframes.get(&self.current_kf_id).unwrap();
+            if curr_kf.has_mp_match(&(*index as u32)) {
+                let curr_mp_id = curr_kf.get_mp_match(&(*index as u32));
+                self.map.write().replace_mappoint(curr_mp_id, *loop_mp_id);
+            } else {
+                self.map.write().add_observation(self.current_kf_id, *loop_mp_id, *index as u32, false);
+                let best_descriptor = self.map.read().mappoints.get(&loop_mp_id)
+                    .and_then(|mp| mp.compute_distinctive_descriptors(&self.map.read())).unwrap();
+                self.map.write().mappoints.get_mut(&loop_mp_id)
+                    .map(|mp| mp.update_distinctive_descriptors(best_descriptor));
+            }
+        }
 
         // Project MapPoints observed in the neighborhood of the loop keyframe
         // into the current keyframe and neighbors using corrected poses.
         // Fuse duplications.
-        self.search_and_fuse(corrected_sim3);
+        self.search_and_fuse(&corrected_sim3)?;
 
         // After the MapPoint fusion, new links in the covisibility graph will appear attaching both sides of the loop
-        // map<KeyFrame*, set<KeyFrame*> > LoopConnections;
+        let mut loop_connections: HashMap::<Id, HashSet<Id>> = HashMap::new();
+        for kf_id in &self.current_connected_kfs {
+            let mut map = self.map.write();
+            let previous_neighbors = {
+                let kf = map.keyframes.get_mut(kf_id).unwrap();
+                let previous_neighbors = kf.get_covisibility_keyframes(i32::MAX);
+                loop_connections.insert(*kf_id, kf.get_connected_keyframes().iter().map(|(id, _)| *id).collect());
+                previous_neighbors
+            };
 
-        // for(vector<KeyFrame*>::iterator vit=mvpCurrentConnectedKFs.begin(), vend=mvpCurrentConnectedKFs.end(); vit!=vend; vit++)
-        // {
-        //     KeyFrame* pKFi = *vit;
-        //     vector<KeyFrame*> vpPreviousNeighbors = pKFi->GetVectorCovisibleKeyFrames();
+            // Update connections. Detect new links.
+            map.update_connections(*kf_id);
+            for neighbor_id in previous_neighbors {
+                loop_connections.get_mut(kf_id).unwrap().remove(&neighbor_id);
+            }
+            for neighbor_id in &self.current_connected_kfs {
+                loop_connections.get_mut(kf_id).unwrap().remove(neighbor_id);
+            }
+        }
 
-        //     // Update connections. Detect new links.
-        //     pKFi->UpdateConnections();
-        //     LoopConnections[pKFi]=pKFi->GetConnectedKeyFrames();
-        //     for(vector<KeyFrame*>::iterator vit_prev=vpPreviousNeighbors.begin(), vend_prev=vpPreviousNeighbors.end(); vit_prev!=vend_prev; vit_prev++)
-        //     {
-        //         LoopConnections[pKFi].erase(*vit_prev);
-        //     }
-        //     for(vector<KeyFrame*>::iterator vit2=mvpCurrentConnectedKFs.begin(), vend2=mvpCurrentConnectedKFs.end(); vit2!=vend2; vit2++)
-        //     {
-        //         LoopConnections[pKFi].erase(*vit2);
-        //     }
-        // }
+        // Optimize graph
+        optimizer::optimize_essential_graph(
+            &self.map, self.matched_kf, self.current_kf_id,
+                loop_connections, &non_corrected_sim3, &corrected_sim3, 
+                !self.sensor.is_mono()
+        );
 
-        // // Optimize graph
-        // Optimizer::OptimizeEssentialGraph(mpMap, mpMatchedKF, mpCurrentKF, NonCorrectedSim3, CorrectedSim3, LoopConnections, mbFixScale);
-
-
-        // // Add loop edge
-        // mpMatchedKF->AddLoopEdge(mpCurrentKF);
-        // mpCurrentKF->AddLoopEdge(mpMatchedKF);
+        // Add loop edge
+        self.map.write().add_kf_loop_edges(self.matched_kf, self.current_kf_id);
 
         // Launch a new thread to perform Global Bundle Adjustment
         self.running_global_ba = true;
         self.finished_global_ba = false;
-        // todo need to separate out run_gba into its own function outside of loop closing but then map needs to be passed to it, so maybe it's best to make it a separate actor?
-        // thread::spawn(move || {
-        //     self.run_gba();
-        // });
-        // mbStopGBA = false;
-        // mpThreadGBA = new thread(&LoopClosing::RunGlobalBundleAdjustment,this,mpCurrentKF->mnId);
+
+        let map_copy = self.map.clone();
+        let current_kf_id = self.current_kf_id;
+        let running_global_ba = self.running_global_ba;
+        thread::spawn(move || {
+            run_gba(map_copy, current_kf_id, running_global_ba);
+            // finished_global_ba = true;
+            // running_global_ba = false;
+        });
 
         // todo concurrency
-        // Loop closed. Release Local Mapping.
-        // mpLocalMapper->Release();    
+        {
+            // mbStopGBA = false;
+            // Loop closed. Release Local Mapping.
+            // mpLocalMapper->Release();
+        }
 
         self.last_loop_kf_id = self.current_kf_id;
 
+        Ok(())
     }
 
-    fn search_and_fuse(&mut self, corrected_poses_map: KeyFrameAndPose) {
+    fn search_and_fuse(&mut self, corrected_poses_map: &KeyFrameAndPose) -> Result<(), Box<dyn std::error::Error>> {
         for (kf_id, g2o_scw) in corrected_poses_map {
             let replace_points = orbmatcher::fuse_from_loop_closing(
                 &kf_id, &g2o_scw, &self.loop_mappoints, &self.map, 3, 0.8
-            );
+            )?;
 
             for i in 0..self.loop_mappoints.len() {
-                match replace_points.get(i).unwrap() {
+                match replace_points.get(&i) {
                     Some(mp_id) => {
                         self.map.write().replace_mappoint(*mp_id, self.loop_mappoints[i]);
                     },
@@ -581,36 +605,37 @@ impl LoopClosing {
                 }
             }
         }
+        Ok(())
     }
 
-    fn run_gba(&mut self) {
-        // void LoopClosing::RunGlobalBundleAdjustment(unsigned long nLoopKF)
 
-        info!("Starting Global Bundle Adjustment");
+}
 
-        let idx = self.full_ba_idx; // idx
-        optimizer::global_bundle_adjustment(&self.map.write(), 10);
 
-        // Update all MapPoints and KeyFrames
-        // Local Mapping was active during BA, that means that there might be new keyframes
-        // not included in the Global BA and they are not consistent with the updated map.
-        // We need to propagate the correction through the spanning tree
+fn run_gba(map: MapLock, loop_kf: Id, running_global_ba: bool) {
+    // void LoopClosing::RunGlobalBundleAdjustment(unsigned long nLoopKF)
 
-        if idx != self.full_ba_idx {
-            return;
-        }
+    info!("Starting Global Bundle Adjustment");
 
-        if !self.running_global_ba {
-            return;
-        }
+    optimizer::global_bundle_adjustment(&map.write(), 10);
 
-        // todo  concurrency, all code below is under this check
-        // if(!mbStopGBA)
-        // { ...
+    // Update all MapPoints and KeyFrames
+    // Local Mapping was active during BA, that means that there might be new keyframes
+    // not included in the Global BA and they are not consistent with the updated map.
+    // We need to propagate the correction through the spanning tree
 
-        debug!("Global bundle adjustment finished. Updating map...");
+    if !running_global_ba {
+        return;
+    }
 
-        // todo concurrency
+    // todo concurrency, all code below is under this check
+    // if(!mbStopGBA)
+    // { ...
+
+    debug!("Global bundle adjustment finished. Updating map...");
+
+    // todo concurrency
+    {
         // mpLocalMapper->RequestStop();
         // Wait until Local Mapping has effectively stopped
 
@@ -618,78 +643,81 @@ impl LoopClosing {
         // {
         //     usleep(1000);
         // }
-
-
-        // Correct keyframes starting at map first keyframe
-        let mut kfs_to_check = vec![self.map.read().initial_kf_id];
-        let mut ba_global_for_kf = HashMap::<Id, Pose>::new();
-        let mut i = 0;
-        while i < kfs_to_check.len() {
-            let curr_kf_id = kfs_to_check[i];
-            let (kf_pose, kf_gba_pose, children) = {
-                let map = self.map.read();
-                let kf = map.keyframes.get(& curr_kf_id).unwrap();
-                (kf.pose, kf.gba_pose.unwrap(), kf.children.clone())
-            };
-
-            for child_id in & children {
-                let map = self.map.read();
-                let child = map.keyframes.get(child_id).unwrap();
-                if !ba_global_for_kf.contains_key(child_id) {
-                    let tchildc = child.pose * kf_pose;
-                    ba_global_for_kf.insert(*child_id, tchildc * kf_gba_pose); // Tchildc*pKF->mTcwGBA
-                }
-                kfs_to_check.push(*child_id);
-            }
-
-            // pKF->mTcwBefGBA = pKF->GetPose();
-            let mut map = self.map.write();
-            let kf = map.keyframes.get_mut(&curr_kf_id).unwrap();
-            kf.pose = kf_gba_pose.clone();
-
-            i += 1;
-        }
-
-        // Correct MapPoints
-        let mut map = self.map.write();
-        for mp in &mut map.mappoints {
-        //     if(pMP->mnBAGlobalForKF==nLoopKF)
-        //     {
-        //         // If optimized by Global BA, just update
-        //         pMP->SetWorldPos(pMP->mPosGBA);
-        //     }
-        //     else
-        //     {
-        //         // Update according to the correction of its reference keyframe
-        //         KeyFrame* pRefKF = pMP->GetReferenceKeyFrame();
-
-        //         if(pRefKF->mnBAGlobalForKF!=nLoopKF)
-        //             continue;
-
-        //         // Map to non-corrected camera
-        //         cv::Mat Rcw = pRefKF->mTcwBefGBA.rowRange(0,3).colRange(0,3);
-        //         cv::Mat tcw = pRefKF->mTcwBefGBA.rowRange(0,3).col(3);
-        //         cv::Mat Xc = Rcw*pMP->GetWorldPos()+tcw;
-
-        //         // Backproject using corrected camera
-        //         cv::Mat Twc = pRefKF->GetPoseInverse();
-        //         cv::Mat Rwc = Twc.rowRange(0,3).colRange(0,3);
-        //         cv::Mat twc = Twc.rowRange(0,3).col(3);
-
-        //         pMP->SetWorldPos(Rwc*Xc+twc);
-        //     }
-        }
-
-        // todo concurrency
-        // mpLocalMapper->Release();
-
-        info!("Map updated!");
-
-        self.finished_global_ba = true;
-        self.running_global_ba = false;
-
     }
 
+    // Correct keyframes starting at map first keyframe
+    let mut kfs_to_check = vec![map.read().initial_kf_id];
+    let mut ba_global_for_kf = HashMap::<Id, Pose>::new();
+    let mut i = 0;
+    let mut tcw_bef_gba: HashMap<Id, Pose> = HashMap::new();
+    while i < kfs_to_check.len() {
+        let curr_kf_id = kfs_to_check[i];
+        let (kf_pose, kf_gba_pose, children) = {
+            let map = map.read();
+            let kf = map.keyframes.get(& curr_kf_id).unwrap();
+            (kf.pose, kf.gba_pose.unwrap(), kf.children.clone())
+        };
+
+        for child_id in & children {
+            let map = map.read();
+            let child = map.keyframes.get(child_id).unwrap();
+            if !ba_global_for_kf.contains_key(child_id) {
+                let tchildc = child.pose * kf_pose;
+                ba_global_for_kf.insert(*child_id, tchildc * kf_gba_pose); // Tchildc*pKF->mTcwGBA
+            }
+            kfs_to_check.push(*child_id);
+        }
+
+        tcw_bef_gba.insert(curr_kf_id, kf_pose);
+        let mut map = map.write();
+        let kf = map.keyframes.get_mut(&curr_kf_id).unwrap();
+        kf.pose = kf_gba_pose.clone();
+
+        i += 1;
+    }
+
+    // Correct MapPoints
+    let mps_to_update = {
+        let map_lock = map.read();
+        let mut mps_to_update = HashMap::new();
+        for (id, mp) in &map_lock.mappoints {
+            if mp.ba_global_for_kf == loop_kf {
+                // If optimized by Global BA, just update
+                mps_to_update.insert(*id, mp.gba_pose.unwrap());
+            } else {
+                // Update according to the correction of its reference keyframe
+                let kf = map_lock.keyframes.get(&mp.ref_kf_id).unwrap();
+
+                if kf.ba_global_for_kf != loop_kf {
+                    continue;
+                }
+
+                // Map to non-corrected camera
+                let rcw = tcw_bef_gba.get(&mp.ref_kf_id).unwrap().get_rotation();
+                let tcw = tcw_bef_gba.get(&mp.ref_kf_id).unwrap().get_translation();
+                let xc = *rcw * *mp.position + *tcw;
+
+                // Backproject using corrected camera
+                let twc = kf.pose.inverse();
+                let rwc = twc.get_rotation();
+                let twc = twc.get_translation();
+
+                mps_to_update.insert(*id, DVTranslation::new(*rwc * xc + *twc));
+            }
+        }
+        mps_to_update
+    };
+
+    {
+        let mut map_lock = map.write();
+        for mp in mps_to_update {
+            map_lock.mappoints.get_mut(&mp.0).unwrap().position = mp.1;
+        }
+    }
+
+    // todo concurrency
+    // mpLocalMapper->Release();
+
+    info!("Map updated!");
 
 }
-
