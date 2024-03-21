@@ -35,7 +35,6 @@ mod vision_tests {
         let expected_desc = fs::read_to_string("src/tests/data/kitti00_frame0_descriptors.txt").unwrap();
         let real_descs = format_descriptors(&features);
         // assert_eq!(real_descs, expected_desc);
-        println!("{:?}", real_descs);
 
         // Test keypoints
         // let expected_kps = fs::read_to_string("src/tests/data/kitti00_000000_keypoints.txt").unwrap();

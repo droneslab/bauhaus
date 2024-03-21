@@ -30,10 +30,10 @@ pub struct KeyFrame {
     pub imu_preintegrated: Option<IMUPreIntegrated>,
     pub sensor: Sensor,
 
-    // todo I would like to get rid of this but until we have fine-grained locking this is the only way to prevent deletion without taking the entire map
+    // todo (design, fine-grained locking) I would like to get rid of this but until we have fine-grained locking this is the only way to prevent deletion without taking the entire map
     pub dont_delete: bool, // mbNotErase
 
-    // todo loop closing can we avoid having this in the kf?
+    // todo (design, variable locations) loop closing can we avoid having this in the kf?
     pub ba_global_for_kf: Id, // mnBAGlobalForKF
     pub gba_pose: Option<Pose>, // mTcwGBA 
 
@@ -153,8 +153,6 @@ impl KeyFrame {
             if let Some((mp_id, _)) = self.mappoint_matches.matches[index as usize] {
                 if mappoints.get(&mp_id).is_none() {
                     error!("Map point not found in map. This shouldn't happen!! KF ID = {}, MP ID = {}", self.id, mp_id);
-                    println!("Custom backtrace: {}", Backtrace::force_capture());
-
                     continue;
                 }
                 let world_pos = *(mappoints.get(&mp_id).unwrap().position);

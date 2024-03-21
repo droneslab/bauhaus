@@ -360,24 +360,24 @@ namespace g2o {
     }
 
     rust::Vec<int> BridgeSparseOptimizer::remove_sim3_edges_with_chi2 (float chi2_threshold) {
-        rust::vec<int> * deleted_indexes = new rust::Vec<int>();
+        rust::vec<int> deleted_indexes;
         for (int i = 0; i < this->sim3_projxyz_edges.size(); i++) {
             if (!this->sim3_projxyz_edges[i].edge1 && !this->sim3_projxyz_edges[i].edge2) {
                 continue;
             }
             if (this->sim3_projxyz_edges[i].edge1->chi2() > chi2_threshold || this->sim3_projxyz_edges[i].edge2->chi2() > chi2_threshold) {
-                optimizer->removeEdge(this->sim3_projxyz_edges[i].edge1.get());
-                optimizer->removeEdge(this->sim3_projxyz_edges[i].edge2.get());
+                optimizer->removeEdge(this->sim3_projxyz_edges[i].edge1.release());
+                optimizer->removeEdge(this->sim3_projxyz_edges[i].edge2.release());
 
                 // After removing from graph, set sim3_edges element to null
                 RustSim3ProjectXYZEdge null_rust_edge;
                 null_rust_edge.edge1 = std::unique_ptr<EdgeSim3ProjectXYZ>(nullptr);
                 null_rust_edge.edge2 = std::unique_ptr<EdgeInverseSim3ProjectXYZ>(nullptr);
                 this->sim3_projxyz_edges[i] = std::move(null_rust_edge);
-                deleted_indexes->push_back(i);
+                deleted_indexes.push_back(i);
             }
         }
-        return *deleted_indexes;
+        return deleted_indexes;
     }
 
     RustSim3 BridgeSparseOptimizer::recover_optimized_sim3(int vertex_id) const {

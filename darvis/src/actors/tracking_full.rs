@@ -521,8 +521,6 @@ impl TrackingFull {
         // their position in the last frame. The pose is then optimized
         // with the found correspondences.
 
-        println!("Track with motion model begin");
-
         // Update last frame pose according to its reference keyframe
         // Create "visual odometry" points if in Localization Mode
         self.update_last_frame(last_frame);

@@ -487,12 +487,12 @@ impl From<opencv::core::Mat> for DVMatrix3<f64> {
             *mat.at_2d::<f64>(0,0).unwrap(),
             *mat.at_2d::<f64>(0, 1).unwrap(),
             *mat.at_2d::<f64>(0, 2).unwrap(),
-            *mat.at_2d::<f64>(1, 3).unwrap(),
-            *mat.at_2d::<f64>(1, 4).unwrap(),
-            *mat.at_2d::<f64>(1, 5).unwrap(),
-            *mat.at_2d::<f64>(2, 6).unwrap(),
-            *mat.at_2d::<f64>(2, 7).unwrap(),
-            *mat.at_2d::<f64>(2, 8).unwrap(),
+            *mat.at_2d::<f64>(1, 0).unwrap(),
+            *mat.at_2d::<f64>(1, 1).unwrap(),
+            *mat.at_2d::<f64>(1, 2).unwrap(),
+            *mat.at_2d::<f64>(2, 0).unwrap(),
+            *mat.at_2d::<f64>(2, 1).unwrap(),
+            *mat.at_2d::<f64>(2, 2).unwrap(),
         ))
     }
 }

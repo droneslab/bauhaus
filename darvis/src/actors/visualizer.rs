@@ -364,7 +364,6 @@ impl DarvisVisualizer {
 
         // Delete mappoints that are no longer in the map but were previously drawn
         let deleted_mappoints = self.previous_mappoints.difference(&curr_mappoints);
-        // println!("Difference: {:?}", deleted_mappoints);
 
         let deletions: Vec<SceneEntityDeletion> = deleted_mappoints.map(|id|
             self.create_scene_entity_deletion(timestamp, format!("mp {}", id),
@@ -665,13 +664,9 @@ impl From<&Pose> for foxglove::foxglove::items::Pose {
             z: trans[2]
         };
 
-        // TODO (mvp): These always show pointing to the right when they shouldn't be
+        // TODO (visualizer): These always show pointing to the right when they shouldn't be
         let quat = pose.get_quaternion();
         let orientation = Quaternion {
-            // x: quat[0],
-            // y: quat[1],
-            // z: quat[2],
-            // w: quat[3]
             x: quat[0],
             y: quat[1],
             z: quat[2],

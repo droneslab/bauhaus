@@ -347,15 +347,26 @@ Strings are formatted like: ``TODO (string)``
         - **RGBD**
     - Modules
         - **relocalization**
-        - **local mapping**
         - **loop closing**
     - Features
         - **multimaps**
         - **reset**
+        - **timestamps** -- playing frames based on timestamps in timestamps file, instead of a set fps
+        - **visualizer** 
 - Design TO DOs
     - **design**
-    - **memory** 
+        - **fine-grained locking** -- locking on singular keyframes
+        - **concurrency** -- concurrency control between local mapping and loop closing
+        - **variable locations** -- variables stored somewhere that isn't ideal ... e.g. global variables that could be messages, member variables that could be local to a function
+        - **code organization** -- messy code that could be cleaner
+        - **rust issues** -- things rust won't let us do. mostly for references to the map, like getting simultaneous mutable and immutable references to different parts of the map
+        - **map connections** -- places where mappoints or keyframes have connections to other parts of the map. it would be nice if we could guarantee that the connections are updated/correct rather than duplicating all these connections across all the objects and hoping we remember to update them correctly after a map modification
+    - **timing** -- things that take too long. mostly clones, sometimes LTO for ffi bindings
 - Notes
     - **note**
     - **paper note**
     - **testing**
+
+
+design
+timestamps

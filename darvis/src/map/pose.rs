@@ -244,19 +244,7 @@ impl Sim3 {
         }
     }
     pub fn map(&self, other: &DVVector3<f64>) -> DVVector3<f64> {
-        // todo (loop closing) is this right? should match sim3.h map function:
-        // Vector3d map (const Vector3d& xyz) const {
-        //     return s*(r*xyz) + t;
-        // }
-
-        let quat = self.pose.get_quaternion();
-        let mut rot_vec = nalgebra::DMatrix::<f64>::zeros(0, 3);
-        rot_vec[0] = quat.w;
-        rot_vec[1] = quat.i;
-        rot_vec[2] = quat.j;
-        rot_vec[3] = quat.k;
-
-        DVVector3::new((rot_vec * **other).mul(self.scale) + *self.pose.get_translation())
+        DVVector3::new((*self.pose.get_rotation() * **other).mul(self.scale) + *self.pose.get_translation())
     }
 }
 impl Clone for Sim3 {

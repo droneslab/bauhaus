@@ -32,13 +32,13 @@ pub struct Map {
     last_mp_id: Id,
 
     sensor: Sensor,
-    // TODO (mvp): following are in orbslam3, not sure if we need:
+    // Following are in orbslam3, not sure if we need:
     // mvpKeyFrameOrigins: Vec<KeyFrame>
     // mvBackupKeyFrameOriginsId: Vec<: u32>
     // mpFirstRegionKF: KeyFrame* 
     // mpKFlowerID: KeyFrame*
 
-    // TODO (mvp): following are in orbslam3, probably don't need
+    // Following are in orbslam3, probably don't need
     // mbFail: bool
     // nNextId: : u32
     // mbImuInitialized: bool
@@ -202,8 +202,6 @@ impl Map {
             parent1 = kf.parent;
             children1 = kf.children.clone();
 
-            println!("Deleting {}, children: {:?}", kf_id, children1);
-
             // Remove from kf database
             self.keyframe_database.erase(&kf);
         }
@@ -258,7 +256,6 @@ impl Map {
                 if child_id != -1 {
                     self.keyframes.get_mut(&child_id).expect(&format!("Could not get child id {} from parent {}", child_id, kf_id)).parent = Some(parent_id);
                     self.keyframes.get_mut(&parent_id).expect(&format!("Could not get parent id {}", parent_id).to_string()).children.insert(child_id);
-                    println!("First try, assigning parent {:?} to child {}", parent_id, child_id);
                     parent_candidates.insert(parent_id);
                     children1.remove(&child_id);
                 }
@@ -269,14 +266,12 @@ impl Map {
 
         // If a children has no covisibility links with any parent candidate, assign to the original parent of this KF
         for child_id in children1 {
-            println!("Assigning parent {:?} to child {}", parent1, child_id);
             self.keyframes.get_mut(&child_id).unwrap().parent = parent1;
             self.keyframes.get_mut(&parent1.unwrap()).expect(&format!("Could not get parent id {}", parent1.unwrap()).to_string()).children.insert(child_id);
 
         }
 
         if parent1.is_some() {
-            println!("Parent {} kf {}", parent1.unwrap(), kf_id);
             self.keyframes.get_mut(&parent1.unwrap()).unwrap().children.remove(&kf_id);
         }
         self.keyframes.remove(&kf_id);
@@ -286,11 +281,11 @@ impl Map {
         &mut self, mp_matches: Vec<i32>, p3d: DVVectorOfPoint3f, initial_frame: Frame, current_frame: Frame
     ) -> Option<(Pose, i32, i32, BTreeSet<Id>, Timestamp)> {
         // Testing local mapping ... global bundle adjustment gives slightly different pose for second keyframe.
-        // TODO (design) - we have to do some pretty gross things with calling functions in this section
+        // TODO (design, rust issues) - we have to do some pretty gross things with calling functions in this section
         // so that we can have multiple references to parts of the map. This should get cleaned up, but I'm not sure how.
-        // TODO (design) - can this function be moved into map_initialization.rs ? Would require a bit of back-and-forth
+        // TODO (design, code organization) - can this function be moved into map_initialization.rs ? Would require a bit of back-and-forth
         // between creating map objects and inserting them
-        
+
         match self.sensor {
             Sensor(FrameSensor::Mono, ImuSensor::Some) => todo!("IMU"), // pKFini->mpImuPreintegrated = (IMU::Preintegrated*)(NULL);
             _ => {}
@@ -403,14 +398,9 @@ impl Map {
         let curr_kf_pose = self.keyframes.get_mut(&curr_kf_id)?.pose;
         let curr_kf_timestamp = self.keyframes.get(&curr_kf_id)?.timestamp;
 
-        // self.print_current_map("initialization done".to_string());
 
         // Update tracking with new info
         let relevant_mappoints = self.mappoints.keys().cloned().collect();
-
-        // for (id, mp) in &self.mappoints {
-        //     println!("Mappoint {} pose {:?}", id, mp.position);
-        // }
 
         Some((curr_kf_pose, curr_kf_id, initial_kf_id, relevant_mappoints, curr_kf_timestamp))
     }
@@ -507,7 +497,6 @@ impl Map {
 
         if let Some(old_mp_id) = old_mp_match {
             warn!("There should not be an old mp match, kf {}, new mp {}, old mp {}", kf_id, mp_id, old_mp_id);
-            println!("{:?}", Backtrace::force_capture());
 
         }
         // trace!("Add observation mp<->kf: {} {}", mp_id, kf_id);
@@ -558,7 +547,7 @@ impl Map {
                     }
                 }
                 if index_right != -1 {
-                    // TODO STEREO
+                    // TODO (STEREO)
                 }
             } else {
                 kf.mappoint_matches.delete_at_indices((index_left, index_right));
@@ -605,7 +594,7 @@ impl Map {
         let kfs = self.keyframes.get_many_mut([&kf1_id, &kf2_id]).unwrap();
         kfs[0].loop_edges.insert(kf2_id);
         kfs[1].loop_edges.insert(kf1_id);
-        // todo loop closing concurrency
+        // todo (concurrency)
         {
             kfs[0].dont_delete = true;
             kfs[1].dont_delete = true;

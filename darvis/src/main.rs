@@ -168,7 +168,7 @@ impl LoopSleep {
     pub fn start(&mut self) {
         match &mut self.loop_type {
             LoopType::Timestamps(_timestamps, ref mut _current_index, ref mut _now) => {
-                todo!("Compile error with using timestamps file");
+                todo!("timestamps: Compile error with using timestamps file");
                 // now = &mut time::Instant::now();
                 // current_index = &mut (*current_index + 1);
             },

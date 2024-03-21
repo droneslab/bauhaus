@@ -24,7 +24,7 @@ use crate::{
 
 use super::messages::{ShutdownMsg, InitKeyFrameMsg, KeyFrameIdMsg, Reset, NewKeyFrameMsg};
 
-// TODO (design): It would be nice for this to be a member of LocalMapping instead of floating around in the global namespace, but we can't do that easily because then Tracking would need a reference to the localmapping object.
+// TODO (design, variable locations): It would be nice for this to be a member of LocalMapping instead of floating around in the global namespace, but we can't do that easily because then Tracking would need a reference to the localmapping object.
 pub static LOCAL_MAPPING_IDLE: AtomicBool = AtomicBool::new(true);
 
 pub struct LocalMapping {
@@ -41,7 +41,7 @@ pub struct LocalMapping {
 
     // Modules
     imu: ImuModule,
-    
+
 }
 
 impl Actor for LocalMapping {
@@ -78,7 +78,6 @@ impl Actor for LocalMapping {
                 // Should only happen for the first two keyframes created by the map because that is the only time
                 // the keyframe is bringing in mappoints that local mapping hasn't created.
                 // TODO (Stereo) ... Tracking can insert new stereo points, so we will also need to add in new points when processing a NewKeyFrameMsg.
-                // let before = actor.recently_added_mappoints.len();
                 actor.recently_added_mappoints.extend(
                     actor.map.read()
                     .keyframes.get(&actor.current_keyframe_id).unwrap()
@@ -87,7 +86,6 @@ impl Actor for LocalMapping {
                     .map(|item| item.unwrap().0)
                     .collect::<Vec<Id>>()
                 );
-                // println!("Local mapping recently added mappoints: {}, added {}", actor.recently_added_mappoints.len(), actor.recently_added_mappoints.len() - before);
 
                 actor.local_mapping();
             } else if message.is::<NewKeyFrameMsg>() {
@@ -107,7 +105,6 @@ impl Actor for LocalMapping {
                 debug!("Local mapping working on kf {}", kf_id);
 
                 actor.current_keyframe_id = kf_id;
-                // println!("Local mapping recently added mappoints: {}", actor.recently_added_mappoints.len());
 
                 actor.local_mapping();
             } else if message.is::<Reset>() {
@@ -144,14 +141,11 @@ impl LocalMapping {
             LastKeyFrameUpdatedMsg{}
         )).unwrap();
 
-        // self.map.read().keyframes.get(&self.current_keyframe_id).unwrap().print_mappoints();
-
         if self.system.queue_len() < 1 {
             // Abort additional work if there are too many keyframes in the msg queue.
             // Find more matches in neighbor keyframes and fuse point duplications
             self.search_in_neighbors();
         }
-
 
         let t_init = 0.0;
 
@@ -246,9 +240,6 @@ impl LocalMapping {
 
         tracy_client::plot!("MAP INFO: KeyFrames", self.map.read().keyframes.len() as f64);
         tracy_client::plot!("MAP INFO: MapPoints", self.map.read().mappoints.len() as f64);
-        // let avg_mappoints = self.map.read().keyframes.iter().map(|(_, kf)| kf.debug_get_mps_count()).sum::<i32>() as f64 / self.map.read().keyframes.len() as f64;
-        // tracy_client::plot!("MAP INFO: Avg mp matches for kfs", avg_mappoints as f64);
-        // trace!("MAP INFO:{},{},{}", self.map.read().keyframes.len(), self.map.read().mappoints.len(), avg_mappoints as f64);
 
         if self.system.actors.get(LOOP_CLOSING).is_some() {
             // Only send if loop closing is actually running
@@ -265,8 +256,6 @@ impl LocalMapping {
             false => 3
         };
 
-        // print!("RECENT MAPPOINTS Mappoint culling: {{");
-
         let current_kf_id = self.current_keyframe_id;
         let mut discard_for_found_ratio = 0;
         let mut discard_for_observations = 0;
@@ -280,32 +269,24 @@ impl LocalMapping {
                     discard_for_found_ratio += 1;
                     lock.discard_mappoint(&mp_id);
                     deleted.insert(mp_id);
-                    // print!("\"df {}\", ", mp_id);
                     false
                 } else if current_kf_id - mappoint.first_kf_id >= 2 && mappoint.get_observations().len() <= th_obs {
                     discard_for_observations += 1;
                     lock.discard_mappoint(&mp_id);
                     deleted.insert(mp_id);
-                    // print!("\"do {}\", ", mp_id);
                     false 
                 } else if current_kf_id - mappoint.first_kf_id >= 3 {
                     erased_from_recently_added += 1;
-                    // print!("\"dkf {}\", ", mp_id);
                     false // mappoint should not be deleted, but remove from recently_added_mappoints
                 } else {
-                    // print!("{}k ", mp_id);
                     true // mappoint should not be deleted, keep in recently_added_mappoints
                 }
             } else {
                  // mappoint has been deleted (fused or deleted for low observations when removing keyframe)
                  // remove from recently_added_mappoints
-                //  print!("\"db {}\", ", mp_id);
                 false
             }
         });
-        // println!("}}");
-        debug!("Mappoint culling, {} {} {} {}", discard_for_found_ratio, discard_for_observations, erased_from_recently_added, self.recently_added_mappoints.len());
-        // println!("Deleted: {:?}", deleted);
         return discard_for_observations + discard_for_found_ratio;
     }
 
@@ -402,8 +383,6 @@ impl LocalMapping {
                 rotation_transpose2 = rotation2.transpose(); // Rwc2
             }
 
-            // print!("RECENT MAPPOINTS Create new mappoints for kf {}: {{", neighbor_id);
-
             // Triangulate each match
             for (idx1, idx2) in matches {
                 let (kp1, right1, kp2, right2) = {
@@ -466,15 +445,9 @@ impl LocalMapping {
                     } else if right2 && cos_parallax_stereo2 < cos_parallax_stereo1 {
                         x3_d = CAMERA_MODULE.unproject_stereo(lock.keyframes.get(&neighbor_id).unwrap(), idx2);
                     } else {
-                        // print!("\"p {} {}\", ", idx1, idx2);
-                        // if idx1 == 2771 && idx2 == 3667 {
-                        
-                        //     print!("({} {} {}) ", cos_parallax_rays, cos_parallax_stereo, good_parallax_wo_imu);
-                        // }
                         continue // No stereo and very low parallax
                     }
                     if x3_d.is_none() {
-                        // print!("\"gp {} {}\", ", idx1, idx2);
                         continue
                     }
                 }
@@ -484,12 +457,10 @@ impl LocalMapping {
                 let x3_d_nalg = *x3_d.unwrap();
                 let z1 = rotation1.row(2).transpose().dot(&x3_d_nalg) + (*translation1)[2];
                 if z1 <= 0.0 {
-                    // print!("\"z1 {} {}\", ", idx1, idx2);
                     continue;
                 }
                 let z2 = rotation2.row(2).transpose().dot(&x3_d_nalg) + (*translation2)[2];
                 if z2 <= 0.0 {
-                    // print!("\"z2 {} {}\", ", idx1, idx2);
                     continue;
                 }
 
@@ -515,7 +486,6 @@ impl LocalMapping {
                     let err_x1 = uv1.0 as f32 - kp1.pt().x;
                     let err_y1 = uv1.1 as f32 - kp1.pt().y;
                     if (err_x1 * err_x1  + err_y1 * err_y1) > 5.991 * sigma_square1 {
-                        // print!("\"e {} {}\", ", idx1, idx2);
                         continue
                     }
                 }
@@ -542,7 +512,6 @@ impl LocalMapping {
                     let err_x2 = uv2.0 as f32 - kp2.pt().x;
                     let err_y2 = uv2.1 as f32 - kp2.pt().y;
                     if (err_x2 * err_x2  + err_y2 * err_y2) > 5.991 * sigma_square2 {
-                        // print!("\"e2 {} {}\", ", idx1, idx2);
                         continue
                     }
                 }
@@ -555,22 +524,18 @@ impl LocalMapping {
                 let dist2 = normal2.norm();
 
                 if dist1 == 0.0 || dist2 == 0.0 {
-                    // print!("\"d0 {} {}\", ", idx1, idx2);
                     continue;
                 }
 
                 if dist1 >= far_points_th || dist2 >= far_points_th {
-                    // print!("\"df {} {}\", ", idx1, idx2);
                     continue;
                 }
 
                 let ratio_dist = dist2 / dist1;
                 let ratio_octave = (SCALE_FACTORS[kp1.octave() as usize] / SCALE_FACTORS[kp2.octave() as usize]) as f64;
                 if ratio_dist * ratio_factor < ratio_octave || ratio_dist > ratio_octave * ratio_factor {
-                    // print!("\"r {} {}\", ", idx1, idx2);
                     continue;
                 }
-
 
                 // Triangulation is successful
                 {
@@ -582,17 +547,12 @@ impl LocalMapping {
                     ];
 
                     let mp_id = lock.insert_mappoint_to_map(x3_d.unwrap(), self.current_keyframe_id, origin_map_id, observations);
-                    // println!("{} {} {},", mp_id, idx1, idx2);
-                    // debug!("Add mp {} to kf {} at index {}", mp_id, self.current_keyframe_id, idx1);
-                    // print!("{} {},", mp_id, idx1);
-                    // print!("\"c {} {} {}\", ", idx1, idx2, mp_id);
                     mps_created += 1;
                     self.recently_added_mappoints.insert(mp_id);
                 }
 
             }
         }
-        // println!("}}");
         mps_created
     }
 

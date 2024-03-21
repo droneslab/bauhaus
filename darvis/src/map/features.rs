@@ -3,7 +3,7 @@
 // "all feature data" into a struct that has different variables depending
 // on the type of sensor.
 
-// TODO (design) ... I don't think it makes the most sense to name this "features" or even to have it separate from a keyframe
+// TODO (design, code organization) ... I don't think it makes the most sense to name this "features" or even to have it separate from a keyframe
 // But at the same time it's nice to hide a lot of this logic away from the keyframe. It would be good to
 // re-factor this eventually but it isn't high priority.
 

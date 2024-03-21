@@ -43,6 +43,7 @@ pub struct LoopClosing {
     running_global_ba: bool, // mbRunningGBA
     finished_global_ba: bool, // mbFinishedGBA
     full_ba_idx: i32,
+
 }
 
 impl Actor for LoopClosing {
@@ -86,7 +87,12 @@ impl Actor for LoopClosing {
 
                 actor.current_kf_id = msg.kf_id;
                 debug!("Loop closing working on kf {}", actor.current_kf_id);
-                actor.loop_closing();
+                match actor.loop_closing() {
+                    Ok(_) => {},
+                    Err(e) => {
+                        warn!("Loop closing failed: {}", e);
+                    }
+                }
             } else if message.is::<IMUInitializedMsg>() {
                 todo!("IMU: Process message from local mapping");
             } else if message.is::<ShutdownMsg>() {
@@ -101,9 +107,9 @@ impl Actor for LoopClosing {
 }
 
 impl LoopClosing {
-    fn loop_closing(&mut self) {
+    fn loop_closing(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         // Avoid that a keyframe can be erased while it is being process by this thread
-        // TODO would be great if we could just lock this keyframe
+        // TODO (design, fine-grained locking) would be great if we could just lock this keyframe
         self.map.write().keyframes.get_mut(&self.current_kf_id).unwrap().dont_delete = true;
 
         // Detect loop candidates and check covisibility consistency
@@ -114,17 +120,10 @@ impl LoopClosing {
 
             // Compute similarity transformation [sR|t]
             // In the stereo/RGBD case s=1
-            match self.compute_sim3() {
-                Ok(has_match) => {
-                    if has_match {
-                        info!("KF {}: Loop detected! Correcting loop...", self.current_kf_id);
-                        // Perform loop fusion and pose graph optimization
-                        self.correct_loop();
-                    }
-                },
-                Err(e) => {
-                    warn!("Loop closing failed to compute sim3: {}", e);
-                }
+            if self.compute_sim3()? {
+                info!("KF {}: Loop detected! Correcting loop...", self.current_kf_id);
+                // Perform loop fusion and pose graph optimization
+                self.correct_loop()?;
             }
         } else {
             // Add current keyframe to database
@@ -134,6 +133,7 @@ impl LoopClosing {
         }
         self.map.write().keyframes.get_mut(&self.current_kf_id).unwrap().dont_delete = false;
         thread::sleep(Duration::from_micros(5000));
+        Ok(())
     }
 
     fn detect_loop(&mut self) -> bool {
@@ -241,7 +241,6 @@ impl LoopClosing {
         let mut num_candidates = 0; // nCandidates, candidates with enough matches
         let mut mappoint_matches: Vec<HashMap<u32, Id>> = vec![HashMap::new(); initial_candidates]; // vpMapPointMatches
 
-        debug!("Begin compute sim3");
         {
             for i in 0..initial_candidates {
                 let candidate_kf_id = self.enough_consistent_candidates[i];
@@ -255,8 +254,6 @@ impl LoopClosing {
                     debug!("Searching for matches between {} (frame {}) and {} (frame {})", current_keyframe.id, current_keyframe.frame_id, keyframe.id, keyframe.frame_id);
                     mappoint_matches
                 };
-
-                println!("mappoint_matches: {:?}", mappoint_matches[i]);
 
                 if mappoint_matches[i].len() < 20 {
                     discarded[i] = true;
@@ -275,7 +272,6 @@ impl LoopClosing {
         let mut has_match = false;
 
         debug!("Compute sim3, num candidates: {}", num_candidates);
-        // Sofiya testing loop detection. iterate always returns no inliers so not tested any code below here
 
         // Perform alternatively RANSAC iterations for each candidate
         // until one is succesful or all fail
@@ -290,8 +286,6 @@ impl LoopClosing {
                 let solver = solvers.get_mut(&i).unwrap();
                 let (no_more, sim3_result) = solver.iterate(5)?;
 
-                debug!("Compute sim3, sim3_result: {:?}", sim3_result);
-
                 // If Ransac reachs max. iterations discard keyframe
                 if no_more {
                     discarded[i] = true;
@@ -300,32 +294,37 @@ impl LoopClosing {
 
                 // If RANSAC returns a Sim3, perform a guided matching and optimize with all correspondences
                 if sim3_result.is_some() {
-                    let (scm, inliers, num_inliers) = sim3_result.unwrap();
+                    let (inliers, num_inliers) = sim3_result.unwrap();
                     let mut mappoint_matches_copy = HashMap::new(); //vpMapPointMatches
                     for j in 0..inliers.len() {
                         if inliers[j] {
                             mappoint_matches_copy.insert(j, *mappoint_matches[i].get(&(j as u32)).unwrap());
                         }
                     }
+                    // println!("Initial inliers: {}", num_inliers);
 
-                    let (R, t, s) = solver.get_estimates();
-                    let sim3 = Sim3::new(t, R, s);
+                    let mut sim3 = solver.get_estimates();
                     orbmatcher::search_by_sim3(
                         &self.map, self.current_kf_id, kf_id, &mut mappoint_matches_copy, &sim3, 7.5
                     );
 
-                    let (num_inliers, acum_hessian) = optimizer::optimize_sim3(
-                        &self.map, self.current_kf_id, kf_id, &mut mappoint_matches_copy, &sim3, 10, false
+                    let num_inliers = optimizer::optimize_sim3(
+                        &self.map, self.current_kf_id, kf_id, &mut mappoint_matches_copy, &mut sim3, 10, false
                     );
+                    // println!("Optimize sim3 inliers: {}", num_inliers);
 
                     // If optimization is succesful stop ransacs and continue
                     if num_inliers >= 20 {
                         has_match = true;
                         self.matched_kf = kf_id;
-                        todo!("Check these lines");
-                        // g2o::Sim3 gSmw(Converter::toMatrix3d(pKF->GetRotation()),Converter::toVector3d(pKF->GetTranslation()),1.0);
-                        // mg2oScw = gScm*gSmw;
-                        // mScw = Converter::toCvMat(mg2oScw);
+                        let lock = self.map.read();
+                        let kf = lock.keyframes.get(&kf_id).unwrap();
+
+                        let smw = Sim3 {
+                            pose: Pose::new(*kf.pose.get_translation(), *kf.pose.get_rotation()),
+                            scale: 1.0
+                        };
+                        self.scw = smw * sim3;
 
                         self.current_matched_points = mappoint_matches_copy;
                         break;
@@ -366,21 +365,17 @@ impl LoopClosing {
             }
         }
 
+        // println!("Loop mappoints: {:?}", self.loop_mappoints);
+
         // Find more matches projecting with the computed Sim3
         orbmatcher::search_by_projection_for_loop_detection(
             &self.map, &self.current_kf_id, &self.scw, &self.loop_mappoints, &mut self.current_matched_points, 10,
             0.75, true
         )?;
 
-        // If enough matches accept Loop
-        let mut n_total_matches = 0;
-        for i in 0..self.current_matched_points.len() {
-            if self.current_matched_points.get(&i).is_some() {
-                n_total_matches += 1;
-            }
-        }
+        // println!("total matches: {:?}", self.current_matched_points.len());
 
-        if n_total_matches >= 40 {
+        if self.current_matched_points.len()  >= 40 {
             for i in 0..initial_candidates {
                 if self.enough_consistent_candidates[i] != self.matched_kf {
                     self.map.write().keyframes.get_mut(&self.enough_consistent_candidates[i]).unwrap().dont_delete = true;
@@ -397,13 +392,12 @@ impl LoopClosing {
     }
 
     fn correct_loop(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        info!("Loop detected!");
         // Note: there's some really gross stuff in here to deal with mutable and immutable references to the map
 
         // Send a stop signal to Local Mapping
         // Avoid new keyframes are inserted while correcting the loop
 
-        // TODO loop closing concurrency
+        // TODO (design, concurrency):
         {
             // mpLocalMapper->RequestStop();
             // If a Global Bundle Adjustment is running, abort it
@@ -508,23 +502,23 @@ impl LoopClosing {
                 keyframe.pose = Pose::new(new_t, *g2o_corrected_siw.pose.get_rotation());
 
                 // Make sure connections are updated
-                self.map.write().update_connections(*kf_id);
+                map.update_connections(*kf_id);
             }
         }
 
         // Start Loop Fusion
         // Update matched map points and replace if duplicated
         for (index, loop_mp_id) in &self.current_matched_points {
-            let map = self.map.write();
+            let mut map = self.map.write();
             let curr_kf = map.keyframes.get(&self.current_kf_id).unwrap();
             if curr_kf.has_mp_match(&(*index as u32)) {
                 let curr_mp_id = curr_kf.get_mp_match(&(*index as u32));
-                self.map.write().replace_mappoint(curr_mp_id, *loop_mp_id);
+                map.replace_mappoint(curr_mp_id, *loop_mp_id);
             } else {
-                self.map.write().add_observation(self.current_kf_id, *loop_mp_id, *index as u32, false);
-                let best_descriptor = self.map.read().mappoints.get(&loop_mp_id)
-                    .and_then(|mp| mp.compute_distinctive_descriptors(&self.map.read())).unwrap();
-                self.map.write().mappoints.get_mut(&loop_mp_id)
+                map.add_observation(self.current_kf_id, *loop_mp_id, *index as u32, false);
+                let best_descriptor = map.mappoints.get(&loop_mp_id)
+                    .and_then(|mp| mp.compute_distinctive_descriptors(&map)).unwrap();
+                map.mappoints.get_mut(&loop_mp_id)
                     .map(|mp| mp.update_distinctive_descriptors(best_descriptor));
             }
         }
@@ -578,7 +572,7 @@ impl LoopClosing {
             // running_global_ba = false;
         });
 
-        // todo concurrency
+        // TODO (design, concurrency):
         {
             // mbStopGBA = false;
             // Loop closed. Release Local Mapping.
@@ -628,13 +622,13 @@ fn run_gba(map: MapLock, loop_kf: Id, running_global_ba: bool) {
         return;
     }
 
-    // todo concurrency, all code below is under this check
+    // TODO (design, concurrency):, all code below is under this check
     // if(!mbStopGBA)
     // { ...
 
     debug!("Global bundle adjustment finished. Updating map...");
 
-    // todo concurrency
+    // TODO (design, concurrency):
     {
         // mpLocalMapper->RequestStop();
         // Wait until Local Mapping has effectively stopped
@@ -715,7 +709,7 @@ fn run_gba(map: MapLock, loop_kf: Id, running_global_ba: bool) {
         }
     }
 
-    // todo concurrency
+    // TODO (design, concurrency):
     // mpLocalMapper->Release();
 
     info!("Map updated!");

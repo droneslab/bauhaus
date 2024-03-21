@@ -43,7 +43,7 @@ pub struct TrackingBackend {
     relocalization: Relocalization,
 
     // Idk where to put these
-    map_updated : bool,  // TODO (mvp) I'm not sure we want to use this
+    map_updated : bool,  // TODO (design, variable locations) I'm not sure we want to use this
 
     // Poses in trajectory
     trajectory_poses: Vec<Pose>, //mlRelativeFramePoses
@@ -437,7 +437,6 @@ impl TrackingBackend {
         );
 
         if self.system.actors.get(VISUALIZER).is_some() {
-            // TODO (timing) ... cloned if visualizer running. maybe make global shared object?
             self.system.send(VISUALIZER, Box::new(VisTrajectoryMsg{
                 pose: current_frame.pose.unwrap(),
                 mappoint_matches: current_frame.mappoint_matches.matches.clone(),
@@ -496,9 +495,7 @@ impl TrackingBackend {
 
         // Update last frame pose according to its reference keyframe
         // Create "visual odometry" points if in Localization Mode
-        debug!("Track motion model start");
         self.update_last_frame(last_frame);
-        debug!("Done with update last frame");
 
         let enough_frames_to_reset_imu = current_frame.frame_id <= self.relocalization.last_reloc_frame_id + (self.frames_to_reset_imu as i32);
         if self.imu.is_initialized && enough_frames_to_reset_imu {
