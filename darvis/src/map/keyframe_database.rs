@@ -40,7 +40,6 @@ impl KeyFrameDatabase {
         for word_id in word_ids {
             // List of keyframes that share the word
             self.inverted_file[word_id as usize].retain(|&x| x != kf.id);
-            // TODO double check this code produces the right output! Not sure what the original is doing
         }
     }
 

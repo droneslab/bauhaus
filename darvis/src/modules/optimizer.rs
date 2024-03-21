@@ -130,14 +130,11 @@ pub fn optimize_pose(
                         *TH_HUBER_MONO
                     );
                     mp_indexes.push(i as u32);
-                    // print!("{} {} {} {} {}, ", mp_id, i, INV_LEVEL_SIGMA2[keypoint.octave() as usize], keypoint.pt().x, keypoint.pt().y);
-                    // println!("{:?}", position);
                 }
             };
 
             initial_correspondences += 1;
         }
-        // println!();
     }
 
     if initial_correspondences < 3 {
@@ -161,7 +158,6 @@ pub fn optimize_pose(
 
         num_bad = 0;
         let mut index = 0;
-        // println!("Indexes set to bad: ");
         for mut edge in optimizer.pin_mut().get_mut_xyz_onlypose_edges().iter_mut() {
             if frame.mappoint_matches.is_outlier(&mp_indexes[index]) {
                 edge.inner.pin_mut().compute_error();
@@ -173,7 +169,6 @@ pub fn optimize_pose(
                 frame.mappoint_matches.set_outlier(mp_indexes[index] as usize, true);
                 edge.inner.pin_mut().set_level(1);
                 num_bad += 1;
-                // print!("{} ({} {}), ", mp_indexes[index], chi2, chi2_mono[iteration]);
 
             } else {
                 frame.mappoint_matches.set_outlier(mp_indexes[index] as usize, false);
@@ -185,7 +180,6 @@ pub fn optimize_pose(
             }
             index += 1;
         }
-        // println!();
 
         // TODO (rigid body) SLAM with respect to a rigid body...probably don't have to do this rn?
         // vpEdgesMono_FHR comes from "SLAM with respect to a rigid body"
@@ -416,7 +410,6 @@ pub fn local_bundle_adjustment(
             if kf_i.id == lock.initial_kf_id {
                 num_fixed_kf += 1;
             }
-            // println!("KF {} matches: ", kf_i.id);
             for mp_match in kf_i.get_mp_matches() {
                 if let Some((mp_id, _)) = mp_match {
                     if let Some(mp) = lock.mappoints.get(&mp_id) {
@@ -428,9 +421,6 @@ pub fn local_bundle_adjustment(
                             if !mappoint_optimized_for_curr_kf {
                                 local_mappoints.push(*mp_id);
                                 local_ba_for_mp.insert(mp_id, keyframe_id);
-                                // print!("\"{}\", ", mp_id);
-                            } else {
-                                // print!("\"s{}\", ", mp_id);
                             }
                         }
                     }
@@ -463,11 +453,6 @@ pub fn local_bundle_adjustment(
 
         drop(span);
 
-        // println!("Local mappoints: {:?}", local_mappoints);
-        // println!("Local keyframes: {:?}", local_keyframes);
-        // println!("Fixed keyframes: {:?}", fixed_cameras);
-
-
         match sensor.is_imu() {
             true => {
                 todo!("IMU");
@@ -478,7 +463,7 @@ pub fn local_bundle_adjustment(
             false => {}
         }
 
-        // TODO (mvp): mbAbortBA 
+        // TODO (concurrency): mbAbortBA 
         // if(pbStopFlag)
         //     optimizer.setForceStopFlag(pbStopFlag);
 
@@ -499,7 +484,6 @@ pub fn local_bundle_adjustment(
                 kfs_to_optimize += 1;
             }
         }
-        // println!("Local keyframes: {:?}", local_keyframes);
 
         // Set Fixed KeyFrame vertices
         for kf_id in &fixed_cameras {
@@ -511,12 +495,10 @@ pub fn local_bundle_adjustment(
             }
             fixed_kfs += 1;
         }
-        // println!("Fixed keyframes: {:?}", fixed_cameras);
 
         drop(span);
         let _span = tracy_client::span!("local_bundle_adjustment:add_mp_vertices");
 
-        // print!("Edges: {{");
         // Set MapPoint vertices
         for mp_id in &local_mappoints {
             let mp = lock.mappoints.get(mp_id).unwrap();
@@ -627,13 +609,8 @@ pub fn local_bundle_adjustment(
                                 INV_LEVEL_SIGMA2[kp_un.octave() as usize],
                                 *TH_HUBER_MONO
                             );
-
-                            // TODO (mvp): below code sets edge's camera to the frame's camera
-                            // but are we sure we need it?
-                            // edge->pCamera = pFrame->mpCamera;
                             edges += 1;
                             edges_kf_body.push(kf.id);
-                            // print!("\"{}->{}\", ", vertex_id, kf_vertex);
                         } else {
                             warn!("Local bundle adjustment, monocular observation... Pretty sure this line shouldn't be hit.");
                         }
@@ -642,15 +619,13 @@ pub fn local_bundle_adjustment(
             }
         }
     }
-    // println!("}}");
 
     tracy_client::plot!("LBA: KFs to Optimize", kfs_to_optimize as f64);
     tracy_client::plot!("LBA: Fixed KFs", fixed_kfs as f64);
     tracy_client::plot!("LBA: MPs to Optimize", mps_to_optimize as f64);
     tracy_client::plot!("LBA: Edges", edges as f64);
-    debug!("LBA:{},{},{},{}", kfs_to_optimize, fixed_kfs, mps_to_optimize, edges);
 
-    // SOFIYA ... should we add in a way to stop the optimization?
+    // TODO (concurrency): ... should we add in a way to stop the optimization?
         // if(pbStopFlag)
         // if(*pbStopFlag) {
         //     Verbose::PrintMess("LM-LBA: Stop requested. Finishing", Verbose::VERBOSITY_NORMAL);
@@ -722,10 +697,7 @@ pub fn local_bundle_adjustment(
         }
     }
 
-    // SOFIYA...havent checked code below here yet
-
     // Recover optimized data
-
     {
         let _span = tracy_client::span!("local_bundle_adjustment::recover");
         for (kf_id, vertex_id) in kf_vertex_ids {
@@ -995,13 +967,12 @@ pub fn optimize_essential_graph(
         }
 
     }
-    
 }
 
 pub fn optimize_sim3(
     map: &MapLock, kf1_id: Id, kf2_id: Id, matched_mps: &mut HashMap<usize, i32>,
-    sim3: &Sim3, th2: i32, fix_scale: bool
-) -> (i32, Option<Sim3>) {
+    sim3: &mut Sim3, th2: i32, fix_scale: bool
+) -> i32 {
     // From ORBSLAM2:
     // int Optimizer::OptimizeSim3(KeyFrame *pKF1, KeyFrame *pKF2, vector<MapPoint *> &vpMatches1, 
     //                             g2o::Sim3 &g2oS12, const float th2, const bool bFixScale)
@@ -1042,15 +1013,14 @@ pub fn optimize_sim3(
     let mut edge_indexes = vec![];
     {
         // Set MapPoint vertices
-        let num_mps = matched_mps.len();
         let lock = map.read();
         let mappoints1 = { // vpMapPoints1
             let kf1 = lock.keyframes.get(&kf1_id).unwrap();
             kf1.get_mp_matches()
         };
 
-        for i in 0..num_mps {
-            let mp1 = match mappoints1[i] {
+        for (i, mp2_id) in matched_mps.iter() {
+            let mp1 = match mappoints1[*i] {
                 Some((id, _)) => {
                     match lock.mappoints.get(&id) {
                         Some(mp) => mp,
@@ -1059,7 +1029,7 @@ pub fn optimize_sim3(
                 },
                 None => continue
             };
-            let mp2 = match lock.mappoints.get(&matched_mps.get(&i).unwrap()) {
+            let mp2 = match lock.mappoints.get(&mp2_id) {
                 Some(mp) => mp,
                 None => continue
             };
@@ -1080,7 +1050,7 @@ pub fn optimize_sim3(
                 let p_3d_2c = *kf2_rot * *mp2.position + *kf2_trans;
                 let translation2 = DVTranslation::new(p_3d_2c);
                 optimizer.pin_mut().add_mappoint_vertex(
-                    id1,
+                    id2,
                     Pose::new(*translation2, Matrix3::identity()).into(), // create pose out of translation only
                     true, false
                 );
@@ -1093,7 +1063,7 @@ pub fn optimize_sim3(
             // Set edge x1 = S12*X2
             let huber_delta = (th2 as f32).sqrt();
             let kf1 = lock.keyframes.get(&kf1_id).unwrap();
-            let (kp1, _) = kf1.features.get_keypoint(i as usize);
+            let (kp1, _) = kf1.features.get_keypoint(*i);
 
             // Set edge x2 = S21*X1
             let kf2 = lock.keyframes.get(&kf2_id).unwrap();
@@ -1105,9 +1075,9 @@ pub fn optimize_sim3(
                 huber_delta
             );
 
-            edge_indexes.push(i);
+            edge_indexes.push(*i);
         }
-    };
+    }
 
     // Optimize!
     optimizer.pin_mut().optimize(5, false);
@@ -1125,7 +1095,7 @@ pub fn optimize_sim3(
         false => 5
     };
     if num_correspondences - num_bad < 10 {
-        return (0, None);
+        return 0;
     }
 
     // Optimize again only with inliers
@@ -1146,10 +1116,11 @@ pub fn optimize_sim3(
         }
         i += 1;
     }
-    
+
     // Recover optimized Sim3
-    let sim3 = optimizer.recover_optimized_sim3(0);
-    (n_in, Some(sim3.into()))
+    let optimized_sim3: Sim3 = optimizer.recover_optimized_sim3(0).into();
+    *sim3 = optimized_sim3;
+    return n_in;
 }
 
 #[derive(Debug)]

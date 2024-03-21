@@ -144,18 +144,13 @@ pub fn search_by_projection(
     let far_points_th = if fpt == 0.0 { INFINITY } else { fpt };
     let mut num_matches = 0;
 
-    // print!("Search by projection. ");
     let map = map.read();
     let mut local_mps_to_remove = vec![];
 
-    // println!("Search by projection input mappoints: {:?}", mappoints);
-
-    // print!("Search by projection: ");
     for mp_id in &*mappoints {
         let mp = match map.mappoints.get(&mp_id) {
             Some(mp) => mp,
             None => {
-                // println!("SKIP delete {}", mp_id);
                 // Mappoint has been deleted but tracking's local_mappoints is not updated with this info
                 local_mps_to_remove.push(*mp_id);
                 continue
@@ -163,7 +158,6 @@ pub fn search_by_projection(
         };
         if let Some(mp_data) = track_in_view.get(&mp_id) {
             if mp_data.track_depth > far_points_th {
-                // println!("SKIP depth {}", mp_id);
                 continue;
             }
 
@@ -177,8 +171,6 @@ pub fn search_by_projection(
                 r * (SCALE_FACTORS[mp_data.predicted_level as usize] as f64),
                 Some((mp_data.predicted_level-1, mp_data.predicted_level))
             );
-
-            // println!("get features in area,{}, {}, {}, {}, {}, {}, {}", mp_id, mp_data.proj_x, mp_data.proj_y, r * (SCALE_FACTORS[mp_data.predicted_level as usize] as f64), mp_data.predicted_level-1, mp_data.predicted_level, indices.len());
 
             if !indices.is_empty() {
                 let mut best_dist = 256;
@@ -215,7 +207,6 @@ pub fn search_by_projection(
 
                     let descriptors = frame.features.descriptors.row(idx);
                     let dist = descriptor_distance(&mp.best_descriptor, &descriptors);
-                    // print!("{} {}, ", idx, dist);
 
                     if dist < best_dist {
                         best_dist2 = best_dist;
@@ -228,8 +219,6 @@ pub fn search_by_projection(
                         best_dist2 = dist;
                     }
                 }
-
-                // println!("... {} {}", best_idx, mp_id);
 
                 // Apply ratio to second match (only if best and second are in the same scale level)
                 if best_dist <= TH_HIGH {
@@ -255,8 +244,6 @@ pub fn search_by_projection(
                     }
                 }
             }
-        } else {
-            // println!("SKIP no track data {}", mp_id);
         }
 
         if let Some(_mp_data) = track_in_view_right.get(&mp_id) {
@@ -332,7 +319,6 @@ pub fn search_by_projection(
         }
     }
 
-    // println!();
     mappoints.retain(|mp_id| !local_mps_to_remove.contains(&mp_id));
     return Ok(num_matches);
 }
@@ -375,9 +361,6 @@ pub fn search_by_projection_with_threshold (
     let forward = tlc[2] > CAMERA_MODULE.stereo_baseline && !sensor.is_mono();
     let backward = -tlc[2] > CAMERA_MODULE.stereo_baseline && !sensor.is_mono();
 
-    // debug!("search by projection keypoints {:?}", last_frame.features.get_all_keypoints().len());
-    // debug!("search by projection mappoint matches {:?}", last_frame.mappoint_matches);
-    // println!("Search by projection with threshold");
     {
         let map = map.read();
         for idx1 in 0..last_frame.features.get_all_keypoints().len() {
@@ -423,7 +406,6 @@ pub fn search_by_projection_with_threshold (
                 if indices_2.is_empty() {
                     continue;
                 }
-                // print!("({},{},{},{}) ", u, v, radius, indices_2.len());
 
                 let mut best_dist = 256;
                 let mut best_idx: i32 = -1;
@@ -451,14 +433,12 @@ pub fn search_by_projection_with_threshold (
 
                     let descriptor = current_frame.features.descriptors.row(idx2);
                     let dist = descriptor_distance(&mappoint.best_descriptor, &descriptor);
-                    // print!("{} {} {}, ", idx1, idx2, dist);
 
                     if dist < best_dist {
                         best_dist = dist;
                         best_idx = idx2 as i32;
                     }
                 }
-                // println!("BEST: {} {}", best_idx, best_dist);
 
                 if best_dist <= TH_HIGH {
                     current_frame.mappoint_matches.add(best_idx as u32, mp_id, false);
@@ -476,7 +456,6 @@ pub fn search_by_projection_with_threshold (
             }
         }
     }
-    // println!("Search by projection with threshold initial {}", num_matches);
 
     // Apply rotation consistency
     if should_check_orientation {
@@ -494,8 +473,6 @@ pub fn search_by_projection_with_threshold (
 
     return Ok(num_matches);
 } 
-
-// TODO (mvp): other searchbyprojection functions we will have to implement later:
 
 pub fn _search_by_projection_reloc (
     _current_frame: &mut Frame, _keyframe: &KeyFrame,
@@ -542,17 +519,14 @@ pub fn search_by_sim3(map: &MapLock, kf1_id: Id, kf2_id: Id, matches: &mut HashM
     let mut already_matched1 = vec![false; n1];
     let mut already_matched2 = vec![false; n2];
 
-    {
-        let map = map.read();
-        for i in 0..n1 {
-            let mp_id = matches.get(&i);
-            if let Some(mp) = mp_id {
-                already_matched1[i] = true;
-                let mp = map.mappoints.get(&mp).unwrap();
-                let (left_idx2, _right_idx2) = mp.get_index_in_keyframe(kf2_id);
-                if left_idx2 != -1 && left_idx2 < n2 as i32 {
-                    already_matched2[left_idx2 as usize] = true;
-                }
+    for i in 0..n1 {
+        let mp_id = matches.get(&i);
+        if let Some(mp) = mp_id {
+            already_matched1[i] = true;
+            let mp = lock.mappoints.get(&mp).unwrap();
+            let (left_idx2, _right_idx2) = mp.get_index_in_keyframe(kf2_id);
+            if left_idx2 != -1 && left_idx2 < n2 as i32 {
+                already_matched2[left_idx2 as usize] = true;
             }
         }
     }
@@ -566,7 +540,6 @@ pub fn search_by_sim3(map: &MapLock, kf1_id: Id, kf2_id: Id, matches: &mut HashM
             Some((mp_id, _)) => mp_id,
             None => continue
         };
-        let lock = map.read();
         let mp = match lock.mappoints.get(&mp_id) {
             Some(mp) => mp,
             None => continue
@@ -644,7 +617,6 @@ pub fn search_by_sim3(map: &MapLock, kf1_id: Id, kf2_id: Id, matches: &mut HashM
 
     // Transform from KF2 to KF2 and search
     for i in 0..n2 {
-        let lock = map.read();
         let mp_id = match mappoints2[i] {
             Some((mp, _)) => mp,
             None => continue
@@ -729,7 +701,7 @@ pub fn search_by_sim3(map: &MapLock, kf1_id: Id, kf2_id: Id, matches: &mut HashM
         if idx2 >= 0 {
             let idx1 = match2[idx2 as usize];
             if idx1 == i as i32 {
-                matches.insert(i, mappoints2[i].unwrap().0);
+                matches.insert(i, mappoints2[idx2 as usize].unwrap().0);
                 found += 1;
             }
         }
@@ -749,7 +721,7 @@ pub fn search_by_projection_for_loop_detection(
     // int ORBmatcher::SearchByProjection(KeyFrame* pKF, cv::Mat Scw, const vector<MapPoint*> &vpPoints, vector<MapPoint*> &vpMatched, int th)
 
     // Some of the matrix stuff in here really sucks because we're using the opencv matrixes (DVMatrix) instead of nalgebra
-    
+
     let lock = map.read();
 
     // Decompose Scw
@@ -769,7 +741,7 @@ pub fn search_by_projection_for_loop_detection(
     let ow = DVMatrix::new_expr(rcw.clone().t()?).neg() * &tcw;
 
     // Set of MapPoints already found in the KeyFrame
-    let mut already_found = vec![false; matched_mappoints.len()];
+    let already_found = matched_mappoints.values().into_iter().map(|mp_id| *mp_id).collect::<BTreeSet<Id>>();
 
     let mut num_matches = 0;
 
@@ -780,7 +752,7 @@ pub fn search_by_projection_for_loop_detection(
             Some(mp) => mp,
             None => continue
         };
-        if already_found[i] {
+        if already_found.get(&mp_id).is_some() {
             continue;
         }
 
@@ -860,18 +832,10 @@ pub fn search_by_projection_for_loop_detection(
         if best_dist <= TH_LOW {
             matched_mappoints.insert(best_idx as usize, mp_id);
             num_matches += 1;
-            already_found[i] = true;
         }
     }
 
     Ok(num_matches)
-}
-
-pub fn search_by_projection_for_place_recognition() {
-    todo!("LOOP CLOSING");
-    // Project MapPoints using a Similarity Transformation and search matches.
-    // Used in Place Recognition
-    // int SearchByProjection(KeyFrame* pKF, Sophus::Sim3<float> &Scw, const std::vector<MapPoint*> &vpPoints, const std::vector<KeyFrame*> &vpPointsKFs, std::vector<MapPoint*> &vpMatched, std::vector<KeyFrame*> &vpMatchedKF, int th, float ratioHamming=1.0);
 }
 
 pub fn search_by_bow_f(
@@ -923,7 +887,6 @@ pub fn search_by_bow_f(
                     let descriptors_f = frame.features.descriptors.row(real_idx_frame);
 
                     let dist = descriptor_distance(&descriptors_kf, &descriptors_f);
-                    // println!("{} {} {}", real_idx_kf, real_idx_frame, dist);
 
                     if dist < best_dist1 {
                         best_dist2 = best_dist1;
@@ -937,7 +900,6 @@ pub fn search_by_bow_f(
 
                 if best_dist1 <= TH_LOW {
                     if (best_dist1 as f64) < ratio * (best_dist2 as f64) {
-                        // println!("Match: {} {}", best_idx, mp_id);
                         matches.insert(best_idx as u32, *mp_id);
 
                         if should_check_orientation {
@@ -990,8 +952,6 @@ pub fn search_by_bow_kf(
     let mut matches = HashMap::<u32, Id>::new(); // vpMatches12
     let mut matched_already_in_kf2 = HashSet::<Id>::new(); // vbMatched2
 
-    // sofiya could this be finding wrong matches?
-
     let factor = 1.0 / (HISTO_LENGTH as f32);
     let mut rot_hist = construct_rotation_histogram();
 
@@ -1000,7 +960,6 @@ pub fn search_by_bow_kf(
     let mut i = 0;
     let mut j = 0;
 
-    println!("Search by bow loop closing");
     while i < kf_1_featvec.len() && j < kf_2_featvec.len() {
         let kf_1_node_id = kf_1_featvec[i];
         let kf_2_node_id = kf_2_featvec[j];
@@ -1015,8 +974,6 @@ pub fn search_by_bow_kf(
                     continue;
                 }
 
-                print!("{} ... ", real_idx_kf1);
-
                 let mut best_dist1 = 256;
                 let mut best_dist2 = 256;
                 let mut best_idx2: i32 = -1;
@@ -1030,16 +987,12 @@ pub fn search_by_bow_kf(
                     if kf_2.features.has_left_kp().map_or(false, |n_left| real_idx_kf2 > n_left) 
                         || matched_already_in_kf2.contains(&(real_idx_kf2 as i32))
                         || !kf_2.has_mp_match(&real_idx_kf2) {
-                        // print!("{}: S, ", real_idx_kf2);
                         continue;
                     }
-
 
                     let descriptors_kf_2 = kf_2.features.descriptors.row(real_idx_kf2);
 
                     let dist = descriptor_distance(&descriptors_kf_1, &descriptors_kf_2);
-
-                    print!("{}: {}, ", real_idx_kf2, dist);
 
                     if dist < best_dist1 {
                         best_dist2 = best_dist1;
@@ -1050,7 +1003,6 @@ pub fn search_by_bow_kf(
                     }
 
                 }
-                println!();
 
                 if best_dist1 <= TH_LOW {
                     if (best_dist1 as f64) < ratio * (best_dist2 as f64) {
@@ -1103,8 +1055,6 @@ pub fn search_for_triangulation(
     //int ORBmatcher::SearchForTriangulation(KeyFrame *pKF1, KeyFrame *pKF2, vector<pair<size_t, size_t> > &vMatchedPairs, const bool bOnlyStereo, const bool bCoarse)
     // Some math based on ORB-SLAM2 to avoid some confusion with Sophus.
     // Look here: https://github.com/raulmur/ORB_SLAM2/blob/master/src/ORBmatcher.cc#L657
-
-    // let _span = tracy_client::span!("search_for_triangulation");
 
     //Compute epipole in second image
     let cw = *kf_1.get_camera_center(); //Cw
@@ -1249,15 +1199,12 @@ pub fn search_for_triangulation(
                     //     }
                     // }
 
-                    // println!("{} {} {}, ", kf1_index, kf2_index, dist);
-
                     let epipolar = CAMERA_MODULE.epipolar_constrain(&kp1, &kp2, &r12, &t12, LEVEL_SIGMA2[kp2.octave() as usize]);
                     if course || epipolar {
                         best_index = kf2_index as i32;
                         best_dist = dist;
                     }
                 }
-                // println!("BEST: {} {} {}", kf1_index, best_index, best_dist);
 
                 if best_index >= 0 {
                     let (kp2, _) = kf_2.features.get_keypoint(best_index as usize);
@@ -1282,11 +1229,6 @@ pub fn search_for_triangulation(
         }
     }
 
-    // println!("DONE");
-    // Debugging
-    // println!("search for triangulation: {} {} {} {} {}", skipped1, skipped2, skipped3, skipped4, loops);
-
-    
     if should_check_orientation {
         let (ind_1, ind_2, ind_3) = compute_three_maxima(&rot_hist,HISTO_LENGTH);
         for i in 0..HISTO_LENGTH {
@@ -1309,7 +1251,6 @@ pub fn search_for_triangulation(
             None => {}
         }
     }
-    // println!("DONE");
 
     return Ok(matched_pairs);
 }
@@ -1351,7 +1292,7 @@ pub fn fuse_from_loop_closing(kf_id: &Id, scw: &Sim3, mappoints: &Vec<Id>, map: 
                 Some(mp) => mp,
                 None => continue
             };
-            
+
             // Discard already found
             if current_kf.has_mp_match(&(mp_id as u32)) {
                 continue;
@@ -1608,11 +1549,6 @@ pub fn fuse(kf_id: &Id, fuse_candidates: &Vec<Option<(Id, bool)>>, map: &MapLock
             }
         }
     }
-
-    // debug!("Fuse statistics.. none: {}, not in map: {}, already in obs: {}, depth negative: {}, point not in image: {}", quit_none, quit_not_in_map, quit_in_obs, quit_depth, quit_point_in_image);
-    // debug!("Statistics continued... indices empty: {}, inv sigma: {}, best dist: {}, predicted level: {}, viewing angle: {}, inside scale: {}", quit_indices_empty, quit_inv_sigma, quit_best_dist, quit_predicted_level, quit_viewing_angle, quit_inside_scale);
-
-    // debug!("search_in_neighbors, kf: {}, observations added: {}, mappoints replaced: {}", kf_id, obs_added, mps_replaced);
 }
 
 fn check_orientation_1(
@@ -1684,7 +1620,6 @@ fn compute_three_maxima(histo : &Vec<Vec<u32>> , histo_length: i32) -> (i32, i32
 }
 
 fn lower_bound(vec1: &Vec<u32>, vec2: &Vec<u32>, i: usize, j: usize) -> usize {
-    // TODO (timing) ... this could be sped up
     let mut curr = i;
     while vec1[curr] < vec2[j] {
         curr += 1;
@@ -1693,35 +1628,14 @@ fn lower_bound(vec1: &Vec<u32>, vec2: &Vec<u32>, i: usize, j: usize) -> usize {
 }
 
 
-pub fn descriptor_distance_print(desc1: &Mat, desc2: &Mat, print: bool) -> i32 {
-    // I know I said don't use BindCVRawPtr if possible
-    // In this case it's ok because we are not doing anything with the pointer
-    // other than reading and immediately discarding. It would be wasteful
-    // to clone here if we wanted to do the safer strategy of contructing
-    // a DVMatrix from the Mat.
-
+pub fn descriptor_distance(desc1: &Mat, desc2: &Mat) -> i32 {
     // This code is equivalent to:
     // return opencv::core::norm2(
     //     a, b, opencv::core::NormTypes::NORM_HAMMING as i32, &Mat::default()
     // ).unwrap() as i32;
     // But much faster!!
 
-    dvos3binding::ffi::descriptor_distance(
-        &dvos3binding::ffi::WrapBindCVRawPtr { 
-            raw_ptr: dvos3binding::BindCVRawPtr {
-                raw_ptr: desc1.as_raw()
-            } 
-        },
-        &dvos3binding::ffi::WrapBindCVRawPtr { 
-            raw_ptr: dvos3binding::BindCVRawPtr {
-                raw_ptr: desc2.as_raw()
-            } 
-        },
-        print
-    )
-}
 
-pub fn descriptor_distance(desc1: &Mat, desc2: &Mat) -> i32 {
     dvos3binding::ffi::descriptor_distance(
         &dvos3binding::ffi::WrapBindCVRawPtr { 
             raw_ptr: dvos3binding::BindCVRawPtr {

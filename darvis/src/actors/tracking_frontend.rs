@@ -53,7 +53,7 @@ impl Actor for TrackingFrontEnd {
             map_initialized: false,
             init_id: 0,
             last_id: 0,
-            max_frames: 10, // TODO (MVP): this should be set to:  SETTINGS.get::<f64>(SYSTEM, "fps") as i32,
+            max_frames: SETTINGS.get::<f64>(SYSTEM, "fps") as i32,
             sensor,
         }
     }
@@ -150,7 +150,7 @@ impl TrackingFrontEnd {
         let mut descriptors: dvos3binding::ffi::WrapBindCVMat = (&DVMatrix::default()).into();
         let mut keypoints: dvos3binding::ffi::WrapBindCVKeyPoints = DVVectorOfKeyPoint::empty().into();
 
-        // TODO (C++ and Rust optimizations) ... this takes ~70 ms which is way high compared to ORB-SLAM3. I think this is because the rust and C++ bindings are not getting optimized together.
+        // TODO (timing) ... this takes ~70 ms which is way high compared to ORB-SLAM3. I think this is because the rust and C++ bindings are not getting optimized together.
         match self.sensor {
             Sensor(FrameSensor::Mono, ImuSensor::None) => {
                 if !self.map_initialized || (self.last_id - self.init_id < self.max_frames) {

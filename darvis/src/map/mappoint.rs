@@ -5,8 +5,6 @@ extern crate nalgebra as na;
 use crate::{matrix::DVVector3, modules::orbmatcher::{SCALE_FACTORS, descriptor_distance}, registered_actors::FEATURE_DETECTION};
 use super::{map::{Id, Map}, keyframe::KeyFrame, pose::DVTranslation};
 
-// const  TESTMPID: i32= 176;
-
 #[derive(Debug)]
 pub struct MapPoint { // Full map item inserted into the map with the following additional fields
     pub id: Id,
@@ -27,7 +25,7 @@ pub struct MapPoint { // Full map item inserted into the map with the following 
     min_distance: f64,
 
     // Map connections
-    // TODO (design): it would be nice if we could guarantee that the connections are updated/correct
+    // TODO (design, map connections): it would be nice if we could guarantee that the connections are updated/correct
     // rather than duplicating all these connections across all the objects and hoping we remember
     // to update them correctly after a map modification
     pub origin_map_id: Id,
@@ -39,7 +37,7 @@ pub struct MapPoint { // Full map item inserted into the map with the following 
     visible: AtomicI32, // nVisible
 
     // Used by loop closing
-    // todo loop closing can we avoid having these in here and keep it thread local instead?
+    // todo (design, variable locations) can we avoid having these in here and keep it thread local instead?
     pub ba_global_for_kf: Id, // mnBAGlobalForKF
     pub gba_pose: Option<DVTranslation>, // mTcwGBA
     pub corrected_reference: Option<(Id, i32)>, // (mnCorrectedByKF, mCorrectedReference)
@@ -156,16 +154,8 @@ impl MapPoint {
 
                 distances[i][j] = dist_ij;
                 distances[j][i] = dist_ij;
-
-                // if self.id == TESTMPID {
-                //     println!("Distance between {} and {}: {}", i, j, dist_ij);
-                //     print_descriptor(&descriptors[i]);
-                //     print_descriptor(&descriptors[j]);
-                // }
-
             }
         }
-
 
         // Take the descriptor with least median distance to the rest
         let mut best_median = std::i32::MAX;
@@ -179,19 +169,12 @@ impl MapPoint {
 
             let median = v_dists[((v_dists.len() - 1)/2) as usize];
 
-            // if self.id == TESTMPID {
-            //     println!("Vdists after sort: {:?}", v_dists);
-            //     println!("Median: {}, Index: {}", median, ((num_descriptors as f32 - 1.0) * 0.5) as usize);
-            //     println!("num descriptors: {}", num_descriptors);
-            // }
-
             if median < best_median {
                 best_median = median;
                 best_idx = i;
             }
         }
 
-        // println!("Best descriptor: {} {} {:?}", self.id, distances);
         // TODO (timing) ... this clone might take a while
         Some(DVMatrix::new(descriptors[best_idx].clone()))
     }
@@ -318,11 +301,6 @@ impl MapPoint {
             match map.keyframes.get(&id) {
                 Some(kf) => {
                     descriptors.push((*kf.features.descriptors.row(*index1 as u32)).clone());
-                    // if self.id == TESTMPID {
-                    //     println!("Compute descriptors");
-                    //     println!("kf {} descriptors: ", kf.id);
-                    //     print_descriptor(&kf.features.descriptors.row(*index1 as u32));
-                    // }
                     match self.sensor.frame() {
                         FrameSensor::Stereo => descriptors.push((*kf.features.descriptors.row(*index2 as u32)).clone()),
                         _ => {}
@@ -372,14 +350,3 @@ impl Clone for MapPoint {
         }
     }
 }
-
-
-// pub fn print_descriptor(desc1: &Mat) {
-//     dvos3binding::ffi::print_descriptors(
-//         &dvos3binding::ffi::WrapBindCVRawPtr { 
-//             raw_ptr: dvos3binding::BindCVRawPtr {
-//                 raw_ptr: desc1.as_raw()
-//             } 
-//         },
-//     )
-// }

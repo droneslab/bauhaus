@@ -41,7 +41,6 @@ pub fn spawn_actor(
     // Spawn actors using the actor TAG, not NAME. These match up your intended actor with the actual file that implements it.
     // If it is clearer to you, you could make these tags equivalent to the name of the file that implements the actor.
     // But you don't HAVE to (ie, we don't actually use the file name at all).
-    // TODO : It could be nice to actually look up the file name instead of referring to a string, but I'm not sure how to do that.
     match actor_tag.as_ref() {
         str if str == "orbslam tracking frontend".to_string() => {
             crate::actors::tracking_frontend::TrackingFrontEnd::spawn(system, ())
