@@ -3,6 +3,7 @@ use std::f64::INFINITY;
 use core::config::SETTINGS;
 use core::matrix::{DVMatrix, DVMatrix4, DVVector3, DVVectorOfPoint2f};
 use core::sensor::{Sensor, FrameSensor};
+use log::debug;
 use opencv::core::KeyPoint;
 use opencv::prelude::*;
 use crate::MapLock;
@@ -864,7 +865,7 @@ pub fn search_by_bow_f(
             for index_kf in 0..kf_indices_size {
                 let real_idx_kf = kf.bow.as_ref().unwrap().feat_vec.vec_get(kf_node_id, index_kf);
 
-                if !kf.has_mp_match(&real_idx_kf) {
+                if !kf.has_mp_match_at_index(&real_idx_kf) {
                     continue
                 }
                 let mp_id = &kf.get_mp_match(&real_idx_kf);
@@ -970,7 +971,7 @@ pub fn search_by_bow_kf(
                 let real_idx_kf1 = kf_1.bow.as_ref().unwrap().feat_vec.vec_get(kf_1_node_id, index_kf1);
 
                 if kf_1.features.has_left_kp().map_or(false, |n_left| real_idx_kf1 > n_left) 
-                    || !kf_1.has_mp_match(&real_idx_kf1) {
+                    || !kf_1.has_mp_match_at_index(&real_idx_kf1) {
                     continue;
                 }
 
@@ -986,7 +987,7 @@ pub fn search_by_bow_kf(
 
                     if kf_2.features.has_left_kp().map_or(false, |n_left| real_idx_kf2 > n_left) 
                         || matched_already_in_kf2.contains(&(real_idx_kf2 as i32))
-                        || !kf_2.has_mp_match(&real_idx_kf2) {
+                        || !kf_2.has_mp_match_at_index(&real_idx_kf2) {
                         continue;
                     }
 
@@ -1112,7 +1113,7 @@ pub fn search_for_triangulation(
                 let kf1_index = kf_1.bow.as_ref().unwrap().feat_vec.vec_get(kf1_node_id, i1); // = idx1
 
                 // If there is already a MapPoint skip
-                if kf_1.has_mp_match(&kf1_index) {
+                if kf_1.has_mp_match_at_index(&kf1_index) {
                     continue
                 };
 
@@ -1135,7 +1136,7 @@ pub fn search_for_triangulation(
                     let kf2_index = kf_2.bow.as_ref().unwrap().feat_vec.vec_get(kf2_node_id, i2); // = idx2
 
                     // If we have already matched or there is a MapPoint skip
-                    if kf_2.has_mp_match(&kf2_index) || matched_already.contains(&kf2_index) {
+                    if kf_2.has_mp_match_at_index(&kf2_index) || matched_already.contains(&kf2_index) {
                         continue
                     };
 
@@ -1255,7 +1256,7 @@ pub fn search_for_triangulation(
     return Ok(matched_pairs);
 }
 
-pub fn fuse_from_loop_closing(kf_id: &Id, scw: &Sim3, mappoints: &Vec<Id>, map: &MapLock, th: i32, nnratio: f32) ->  Result<HashMap<usize, Id>, Box<dyn std::error::Error>> {
+pub fn fuse_from_loop_closing(kf_id: &Id, scw: &Sim3, mappoints: &Vec<Id>, map: &MapLock, th: i32, nnratio: f32) ->  Result<HashMap<Id, Id>, Box<dyn std::error::Error>> {
     // int ORBmatcher::Fuse(KeyFrame *pKF, Sophus::Sim3f &Scw, const vector<MapPoint *> &vpPoints, float th, vector<MapPoint *> &vpReplacePoint)
 
     // Decompose Scw
@@ -1274,7 +1275,7 @@ pub fn fuse_from_loop_closing(kf_id: &Id, scw: &Sim3, mappoints: &Vec<Id>, map: 
     let tcw = DVMatrix::new(s_tcw).divide_by_scalar(scw); // Should be == scw_mat / scw
     let ow = DVMatrix::new_expr(rcw.clone().t()?).neg() * &tcw;
 
-    let mut replace_point = HashMap::<usize, Id>::new();
+    let mut replace_point = HashMap::<Id, Id>::new();
     let mut n_fused = 0;
     let observations_to_add = {
         let mut observations_to_add = vec![];
@@ -1294,7 +1295,7 @@ pub fn fuse_from_loop_closing(kf_id: &Id, scw: &Sim3, mappoints: &Vec<Id>, map: 
             };
 
             // Discard already found
-            if current_kf.has_mp_match(&(mp_id as u32)) {
+            if current_kf.get_mp_match_index(&mp_id).is_some() {
                 continue;
             }
 
@@ -1375,11 +1376,9 @@ pub fn fuse_from_loop_closing(kf_id: &Id, scw: &Sim3, mappoints: &Vec<Id>, map: 
 
             // If there is already a MapPoint replace otherwise add new measurement
             if best_dist <= TH_LOW {
-                if current_kf.has_mp_match(&(best_idx as u32)){
-                    replace_point.insert(i, current_kf.get_mp_match(&(best_idx as u32)));
+                if current_kf.has_mp_match_at_index(&(best_idx as u32)){
+                    replace_point.insert(mp_id, current_kf.get_mp_match(&(best_idx as u32)));
                 } else {
-                    let mp_id = current_kf.get_mp_match(&(best_idx as u32));
-                    let mp = map_lock.mappoints.get(&mp_id).unwrap();
                     observations_to_add.push((kf_id, mp_id, best_idx));
                 }
                 n_fused += 1;
@@ -1530,7 +1529,7 @@ pub fn fuse(kf_id: &Id, fuse_candidates: &Vec<Option<(Id, bool)>>, map: &MapLock
 
         // If there is already a MapPoint replace otherwise add new measurement
         if best_dist <= TH_LOW {
-            let has_mappoint_match = map.read().keyframes.get(kf_id).unwrap().has_mp_match(&(best_idx as u32));
+            let has_mappoint_match = map.read().keyframes.get(kf_id).unwrap().has_mp_match_at_index(&(best_idx as u32));
             if has_mappoint_match {
                 let (mp_in_kf_id, mp_in_kf_obs, mp_obs);
                 {

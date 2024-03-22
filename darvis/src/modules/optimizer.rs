@@ -5,11 +5,11 @@ use cxx::UniquePtr;
 use core::{
     config::{SETTINGS, SYSTEM}, sensor::{Sensor, FrameSensor}
 };
-use log::{warn, debug};
+use log::{debug, info, warn};
 use nalgebra::Matrix3;
 use opencv::prelude::KeyPointTraitConst;
 use crate::{
-    actors::loop_closing::KeyFrameAndPose, map::{frame::Frame, map::{Id, Map}, pose::{DVRotation, DVTranslation, Pose, Sim3}}, registered_actors::{CAMERA, FEATURE_DETECTION}, MapLock
+    actors::loop_closing::{KeyFrameAndPose, GBA_KILL_SWITCH}, map::{frame::Frame, map::{Id, Map}, pose::{DVRotation, DVTranslation, Pose, Sim3}}, registered_actors::{CAMERA, FEATURE_DETECTION}, MapLock
 };
 
 lazy_static! {
@@ -291,8 +291,8 @@ pub fn global_bundle_adjustment(map: &Map, iterations: i32) -> BundleAdjustmentR
     }
 
     let mut mp_vertex_ids = HashMap::new();
-    // Set MapPoint vertices
 
+    // Set MapPoint vertices
     let mut _edges = Vec::new();
     for (mp_id, mappoint) in &map.mappoints {
         optimizer.pin_mut().add_mappoint_vertex(
@@ -625,12 +625,11 @@ pub fn local_bundle_adjustment(
     tracy_client::plot!("LBA: MPs to Optimize", mps_to_optimize as f64);
     tracy_client::plot!("LBA: Edges", edges as f64);
 
-    // TODO (concurrency): ... should we add in a way to stop the optimization?
-        // if(pbStopFlag)
-        // if(*pbStopFlag) {
-        //     Verbose::PrintMess("LM-LBA: Stop requested. Finishing", Verbose::VERBOSITY_NORMAL);
-        //     return;
-        // }
+    // TODO (concurrency): pbStopFlag
+    if GBA_KILL_SWITCH.load(std::sync::atomic::Ordering::SeqCst) {
+        info!("LM-LBA: Stop requested. Finishing");
+        return;
+    }
 
     // Optimize
     {
@@ -703,17 +702,9 @@ pub fn local_bundle_adjustment(
         for (kf_id, vertex_id) in kf_vertex_ids {
             let pose = optimizer.recover_optimized_frame_pose(vertex_id);
             let mut lock = map.write();
-            let initial_kf_id = lock.initial_kf_id;
 
             if let Some(kf) = lock.keyframes.get_mut(&kf_id) {
-                if loop_kf == initial_kf_id {
-                    kf.pose = pose.into();
-                } else {
-                    todo!("MVP LOOP CLOSING");
-                    // Code from ORBSLAM, not sure if we need it
-                    // pKF->mTcwGBA = Sophus::SE3d(SE3quat.rotation(),SE3quat.translation()).cast<float>();
-                    // pKF->mnBAGlobalForKF = nLoopKF;
-                }
+                kf.pose = pose.into();
             } else {
                 // Possible that map actor deleted mappoint after local BA has finished but before
                 // this message is processed
@@ -735,24 +726,27 @@ pub fn local_bundle_adjustment(
                 position.translation[2] as f64
             );
             let mut lock = map.write();
-
             if loop_kf == lock.initial_kf_id {
                 match lock.mappoints.get_mut(&mp_id) {
                     // Possible that map actor deleted mappoint after local BA has finished but before
                     // this message is processed
                     Some(mp) => {
-                        mp.position = DVTranslation::new(translation.vector);
-                        let norm_and_depth = lock.mappoints.get(&mp_id).unwrap().get_norm_and_depth(&lock);
-                        if norm_and_depth.is_some() {
-                            lock.mappoints.get_mut(&mp_id).unwrap().update_norm_and_depth(norm_and_depth.unwrap());
-                        }
+                            mp.position = DVTranslation::new(translation.vector);
+                            let norm_and_depth = lock.mappoints.get(&mp_id).unwrap().get_norm_and_depth(&lock);
+                            if norm_and_depth.is_some() {
+                                lock.mappoints.get_mut(&mp_id).unwrap().update_norm_and_depth(norm_and_depth.unwrap());
+                            }
                     },
                     None => continue,
                 };
             } else {
-                todo!("MVP LOOP CLOSING");
-                // pMP->mPosGBA = vPoint->estimate().cast<float>();
-                // pMP->mnBAGlobalForKF = nLoopKF;
+                match lock.mappoints.get_mut(&mp_id) {
+                    Some(mp) => {
+                        mp.gba_pose = Some(DVTranslation::new(translation.vector));
+                        mp.ba_global_for_kf = loop_kf;
+                    },
+                    None => continue
+                };
             }
         }
     }
@@ -792,7 +786,7 @@ pub fn optimize_essential_graph(
     ];
     let mut optimizer = g2o::ffi::new_sparse_optimizer(4, camera_param);
 
-    let mut v_scw = vec![]; // vScw
+    let mut v_scw: HashMap<Id, Sim3> = HashMap::new(); // vScw
 
     let mut inserted_edges = HashSet::new(); // sInsertedEdges
     {
@@ -808,7 +802,7 @@ pub fn optimize_essential_graph(
                     }
                 }
             };
-            v_scw.push(estimate);
+            v_scw.insert(*kf_id, estimate);
 
             optimizer.pin_mut().add_vertex_sim3_expmap(
                 kf.id,
@@ -824,7 +818,7 @@ pub fn optimize_essential_graph(
         let min_feat = 100;
         for (kf_id, connected_kfs) in &loop_connections {
             let kf = lock.keyframes.get(kf_id).unwrap();
-            let siw = v_scw[*kf_id as usize];
+            let siw = v_scw.get(&kf_id).unwrap();
             let swi = siw.inverse();
 
             for connected_kf_id in connected_kfs {
@@ -832,8 +826,8 @@ pub fn optimize_essential_graph(
                     continue;
                 }
 
-                let sjw = v_scw[*connected_kf_id as usize];
-                let sji = sjw * swi;
+                let sjw = v_scw.get(&connected_kf_id).unwrap();
+                let sji = *sjw * swi;
                 optimizer.pin_mut().add_one_sim3_edge(
                     *kf_id,
                     *connected_kf_id,
@@ -847,7 +841,7 @@ pub fn optimize_essential_graph(
         for (kf_id, kf) in &lock.keyframes {
             let swi = match non_corrected_sim3.get(&kf_id) {
                 Some(sim3) => sim3.inverse(),
-                None => v_scw[*kf_id as usize].inverse()
+                None => * v_scw.get(&kf_id).unwrap()
             };
 
             // Spanning tree edge
@@ -855,7 +849,7 @@ pub fn optimize_essential_graph(
                 Some(parent_id) => {
                     let sjw = match non_corrected_sim3.get(&parent_id) {
                         Some(sim3) => sim3.clone(),
-                        None => v_scw[parent_id as usize]
+                        None => * v_scw.get(&parent_id).unwrap()
                     };
                     let sji = sjw * swi;
                     optimizer.pin_mut().add_one_sim3_edge(
@@ -873,7 +867,7 @@ pub fn optimize_essential_graph(
                 if *edge_kf_id != *kf_id {
                     let slw = match non_corrected_sim3.get(&edge_kf_id) {
                         Some(sim3) => sim3.clone(),
-                        None => v_scw[*edge_kf_id as usize]
+                        None => * v_scw.get(&edge_kf_id).unwrap()
                     };
                     let sli = slw * swi;
                     optimizer.pin_mut().add_one_sim3_edge(
@@ -894,7 +888,7 @@ pub fn optimize_essential_graph(
                         }
                         let snw = match non_corrected_sim3.get(&covis_kf_id) {
                             Some(sim3) => sim3.clone(),
-                            None => v_scw[covis_kf_id as usize]
+                            None => * v_scw.get(&covis_kf_id).unwrap()
                         };
                         let sni = snw * swi;
 
@@ -949,7 +943,7 @@ pub fn optimize_essential_graph(
                 }
             };
 
-            let srw = v_scw[idr as usize];
+            let srw = v_scw.get(&idr).unwrap();
             let corrected_swr = corrected_swc[&idr];
 
             {

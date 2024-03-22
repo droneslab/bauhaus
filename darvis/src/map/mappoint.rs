@@ -68,7 +68,7 @@ impl MapPoint {
             best_descriptor: DVMatrix::empty(),
             gba_pose: None,
             num_obs: 0,
-            ba_global_for_kf: -1,
+            ba_global_for_kf: 0,
             corrected_reference: None
         }
     }
