@@ -3,6 +3,7 @@ use core::config::{SETTINGS, SYSTEM};
 use core::matrix::DVMatrix4;
 use core::sensor::Sensor;
 use std::collections::{HashMap, HashSet};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::Duration;
 use log::{debug, info, warn};
@@ -10,15 +11,19 @@ use crate::actors::messages::KeyFrameIdMsg;
 use crate::map::pose::{DVTranslation, Pose, Sim3};
 use crate::modules::sim3solver::Sim3Solver;
 use crate::modules::{optimizer, orbmatcher};
-use crate::registered_actors::{LOOP_CLOSING, VOCABULARY};
+use crate::registered_actors::{LOCAL_MAPPING, LOOP_CLOSING, VOCABULARY};
 use crate::{System, MapLock};
 use crate::map::map::Id;
 use crate::modules::imu::ImuModule;
 
-use super::messages::{ShutdownMsg, IMUInitializedMsg};
+use super::local_mapping::{LOCAL_MAPPING_PAUSED};
+use super::messages::{IMUInitializedMsg, ShutdownMsg};
 
 type ConsistentGroup = (Vec<Id>, i32);
 pub type KeyFrameAndPose = HashMap<Id, Sim3>;
+
+pub static GBA_KILL_SWITCH: AtomicBool = AtomicBool::new(false); // mbStopGBA
+static GBA_RUNNING: AtomicBool = AtomicBool::new(false); // mbRunningGBA
 
 pub struct LoopClosing {
     system: System,
@@ -39,11 +44,8 @@ pub struct LoopClosing {
 
     last_loop_kf_id: Id, // mLastLoopKFid
 
-    // Variables related to global BA, might be able to get rid of these?
-    running_global_ba: bool, // mbRunningGBA
-    finished_global_ba: bool, // mbFinishedGBA
-    full_ba_idx: i32,
-
+    // Global BA
+    full_ba_idx: i32, // mnFullBAIdx
 }
 
 impl Actor for LoopClosing {
@@ -57,8 +59,6 @@ impl Actor for LoopClosing {
             _imu: None, // TODO (IMU): ImuModule::new(None, None, sensor, false, false),
             sensor: SETTINGS.get(SYSTEM, "sensor"),
             current_kf_id: -1,
-            running_global_ba: false,
-            finished_global_ba: false,
             full_ba_idx: 0,
             consistent_groups: Vec::new(),
             matched_kf: -1,
@@ -79,7 +79,7 @@ impl Actor for LoopClosing {
             let message = actor.system.receive().unwrap();
             if message.is::<KeyFrameIdMsg>() {
                 let msg = message.downcast::<KeyFrameIdMsg>().unwrap_or_else(|_| panic!("Could not downcast loop closing message!"));
-                
+
                 if msg.kf_id == 0 {
                     // Don't add very first keyframe
                     continue;
@@ -258,7 +258,6 @@ impl LoopClosing {
                 if mappoint_matches[i].len() < 20 {
                     discarded[i] = true;
                 } else {
-                    debug!("Create sim3 solver for {}", candidate_kf_id);
                     let mut sim3_solver = Sim3Solver::new(
                         &self.map,
                         self.current_kf_id, candidate_kf_id, &mappoint_matches[i], false,
@@ -270,8 +269,6 @@ impl LoopClosing {
             }
         }
         let mut has_match = false;
-
-        debug!("Compute sim3, num candidates: {}", num_candidates);
 
         // Perform alternatively RANSAC iterations for each candidate
         // until one is succesful or all fail
@@ -311,7 +308,6 @@ impl LoopClosing {
                     let num_inliers = optimizer::optimize_sim3(
                         &self.map, self.current_kf_id, kf_id, &mut mappoint_matches_copy, &mut sim3, 10, false
                     );
-                    // println!("Optimize sim3 inliers: {}", num_inliers);
 
                     // If optimization is succesful stop ransacs and continue
                     if num_inliers >= 20 {
@@ -365,15 +361,11 @@ impl LoopClosing {
             }
         }
 
-        // println!("Loop mappoints: {:?}", self.loop_mappoints);
-
         // Find more matches projecting with the computed Sim3
         orbmatcher::search_by_projection_for_loop_detection(
             &self.map, &self.current_kf_id, &self.scw, &self.loop_mappoints, &mut self.current_matched_points, 10,
             0.75, true
         )?;
-
-        // println!("total matches: {:?}", self.current_matched_points.len());
 
         if self.current_matched_points.len()  >= 40 {
             for i in 0..initial_candidates {
@@ -397,26 +389,20 @@ impl LoopClosing {
         // Send a stop signal to Local Mapping
         // Avoid new keyframes are inserted while correcting the loop
 
-        // TODO (design, concurrency):
         {
-            // mpLocalMapper->RequestStop();
+            // TODO (design, concurency) local mapping request stop
+            LOCAL_MAPPING_PAUSED.store(true, Ordering::SeqCst);
+
             // If a Global Bundle Adjustment is running, abort it
-            // if(isRunningGBA())
-            // {
-            //     unique_lock<mutex> lock(mMutexGBA);
-            //     mbStopGBA = true;
-            //     mnFullBAIdx++;
-            //     if(mpThreadGBA)
-            //     {
-            //         mpThreadGBA->detach();
-            //         delete mpThreadGBA;
-            //     }
-            // }
+            if GBA_RUNNING.load(Ordering::SeqCst) {
+                self.full_ba_idx += 1;
+                GBA_KILL_SWITCH.store(true, Ordering::SeqCst);
+            }
+
             // Wait until Local Mapping has effectively stopped
-            // while(!mpLocalMapper->isStopped())
-            // {
-            //     usleep(1000);
-            // }
+            while !LOCAL_MAPPING_PAUSED.load(Ordering::SeqCst) {
+                thread::sleep(Duration::from_millis(1000));
+            }
         }
 
         // Ensure current keyframe is updated
@@ -488,7 +474,11 @@ impl LoopClosing {
 
                 corrected_mp_references.insert(*mp_id, *kf_id);
 
-                let norm_and_depth = self.map.read().mappoints.get(mp_id).unwrap().get_norm_and_depth(&self.map.read());
+                let norm_and_depth = {
+                    let map = self.map.read();
+                    let mp = map.mappoints.get(mp_id).unwrap();
+                    mp.get_norm_and_depth(&map)
+                };
                 if norm_and_depth.is_some() {
                     self.map.write().mappoints.get_mut(mp_id).unwrap().update_norm_and_depth(norm_and_depth.unwrap());
                 }
@@ -511,7 +501,7 @@ impl LoopClosing {
         for (index, loop_mp_id) in &self.current_matched_points {
             let mut map = self.map.write();
             let curr_kf = map.keyframes.get(&self.current_kf_id).unwrap();
-            if curr_kf.has_mp_match(&(*index as u32)) {
+            if curr_kf.has_mp_match_at_index(&(*index as u32)) {
                 let curr_mp_id = curr_kf.get_mp_match(&(*index as u32));
                 map.replace_mappoint(curr_mp_id, *loop_mp_id);
             } else {
@@ -560,24 +550,17 @@ impl LoopClosing {
         self.map.write().add_kf_loop_edges(self.matched_kf, self.current_kf_id);
 
         // Launch a new thread to perform Global Bundle Adjustment
-        self.running_global_ba = true;
-        self.finished_global_ba = false;
+        GBA_RUNNING.store(true, Ordering::SeqCst);
 
         let map_copy = self.map.clone();
         let current_kf_id = self.current_kf_id;
-        let running_global_ba = self.running_global_ba;
         thread::spawn(move || {
-            run_gba(map_copy, current_kf_id, running_global_ba);
-            // finished_global_ba = true;
-            // running_global_ba = false;
+            run_gba(map_copy, current_kf_id);
+            GBA_RUNNING.store(false, Ordering::SeqCst);
+            GBA_KILL_SWITCH.store(false, Ordering::SeqCst);
+            // Loop closed. Release local mapping.
+            LOCAL_MAPPING_PAUSED.store(false, Ordering::SeqCst);
         });
-
-        // TODO (design, concurrency):
-        {
-            // mbStopGBA = false;
-            // Loop closed. Release Local Mapping.
-            // mpLocalMapper->Release();
-        }
 
         self.last_loop_kf_id = self.current_kf_id;
 
@@ -590,13 +573,8 @@ impl LoopClosing {
                 &kf_id, &g2o_scw, &self.loop_mappoints, &self.map, 3, 0.8
             )?;
 
-            for i in 0..self.loop_mappoints.len() {
-                match replace_points.get(&i) {
-                    Some(mp_id) => {
-                        self.map.write().replace_mappoint(*mp_id, self.loop_mappoints[i]);
-                    },
-                    None => continue
-                }
+            for (mp_to_replace, mp_id) in replace_points {
+                self.map.write().replace_mappoint(mp_to_replace, mp_id);
             }
         }
         Ok(())
@@ -606,10 +584,15 @@ impl LoopClosing {
 }
 
 
-fn run_gba(map: MapLock, loop_kf: Id, running_global_ba: bool) {
+fn run_gba(map: MapLock, loop_kf: Id) {
     // void LoopClosing::RunGlobalBundleAdjustment(unsigned long nLoopKF)
 
     info!("Starting Global Bundle Adjustment");
+
+    // TODO (design, concurrency) mbStopGBA called from within loop closing
+    if GBA_KILL_SWITCH.load(Ordering::SeqCst) {
+        return;
+    }
 
     optimizer::global_bundle_adjustment(&map.write(), 10);
 
@@ -618,54 +601,47 @@ fn run_gba(map: MapLock, loop_kf: Id, running_global_ba: bool) {
     // not included in the Global BA and they are not consistent with the updated map.
     // We need to propagate the correction through the spanning tree
 
-    if !running_global_ba {
-        return;
-    }
-
-    // TODO (design, concurrency):, all code below is under this check
-    // if(!mbStopGBA)
-    // { ...
-
     debug!("Global bundle adjustment finished. Updating map...");
 
-    // TODO (design, concurrency):
-    {
-        // mpLocalMapper->RequestStop();
-        // Wait until Local Mapping has effectively stopped
-
-        // while(!mpLocalMapper->isStopped() && !mpLocalMapper->isFinished())
-        // {
-        //     usleep(1000);
-        // }
+    // TODO (design, concurency) local mapping request stop
+    LOCAL_MAPPING_PAUSED.store(true, Ordering::SeqCst);
+    // Wait until Local Mapping has effectively stopped
+    while !LOCAL_MAPPING_PAUSED.load(Ordering::SeqCst) {
+        thread::sleep(Duration::from_millis(1000));
     }
 
     // Correct keyframes starting at map first keyframe
     let mut kfs_to_check = vec![map.read().initial_kf_id];
-    let mut ba_global_for_kf = HashMap::<Id, Pose>::new();
     let mut i = 0;
     let mut tcw_bef_gba: HashMap<Id, Pose> = HashMap::new();
     while i < kfs_to_check.len() {
+        let mut lock = map.write();
         let curr_kf_id = kfs_to_check[i];
-        let (kf_pose, kf_gba_pose, children) = {
-            let map = map.read();
-            let kf = map.keyframes.get(& curr_kf_id).unwrap();
-            (kf.pose, kf.gba_pose.unwrap(), kf.children.clone())
-        };
+        let children = lock.keyframes.get(& curr_kf_id).unwrap().children.clone();
 
         for child_id in & children {
-            let map = map.read();
-            let child = map.keyframes.get(child_id).unwrap();
-            if !ba_global_for_kf.contains_key(child_id) {
-                let tchildc = child.pose * kf_pose;
-                ba_global_for_kf.insert(*child_id, tchildc * kf_gba_pose); // Tchildc*pKF->mTcwGBA
+            let kfs = lock.keyframes.get_many_mut([&curr_kf_id, child_id]).unwrap();
+            if !kfs[0].ba_global_for_kf != loop_kf {
+                let tchildc = kfs[0].pose * kfs[1].pose;
+                kfs[1].gba_pose = Some(tchildc * kfs[0].gba_pose.unwrap());
+                kfs[1].ba_global_for_kf = loop_kf;
+                debug!("Set gba pose: {} {:?}", kfs[1].id, kfs[1].gba_pose);
+
+
+                //             if !child.ba_global_for_kf != loop_kf {
+                // let tchildc = child.pose * kf.pose;
+                // child.gba_pose = Some(tchildc * kf.gba_pose.unwrap());
+                // child.ba_global_for_kf = loop_kf;
+                // debug!("Set gba pose: {} {:?}", child.id, child.gba_pose);
+
             }
             kfs_to_check.push(*child_id);
         }
 
-        tcw_bef_gba.insert(curr_kf_id, kf_pose);
-        let mut map = map.write();
-        let kf = map.keyframes.get_mut(&curr_kf_id).unwrap();
-        kf.pose = kf_gba_pose.clone();
+        let kf = lock.keyframes.get_mut(&curr_kf_id).unwrap();
+        tcw_bef_gba.insert(curr_kf_id, kf.pose);
+        kf.pose = kf.gba_pose.unwrap().clone();
+        debug!("Set gba pose: {} {:?}", kf.id, kf.gba_pose);
 
         i += 1;
     }
@@ -704,14 +680,10 @@ fn run_gba(map: MapLock, loop_kf: Id, running_global_ba: bool) {
 
     {
         let mut map_lock = map.write();
-        for mp in mps_to_update {
-            map_lock.mappoints.get_mut(&mp.0).unwrap().position = mp.1;
+        for (mp_id, gba_pose) in mps_to_update {
+            map_lock.mappoints.get_mut(&mp_id).unwrap().position = gba_pose;
         }
     }
 
-    // TODO (design, concurrency):
-    // mpLocalMapper->Release();
-
     info!("Map updated!");
-
 }

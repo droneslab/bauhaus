@@ -14,7 +14,7 @@ use log::{debug, warn, info, trace};
 use opencv::prelude::KeyPointTraitConst;
 use crate::registered_actors::{CAMERA_MODULE, TRACKING_BACKEND};
 use crate::{System, MapLock};
-use crate::actors::messages::LastKeyFrameUpdatedMsg;
+use crate::actors::messages::{LastKeyFrameUpdatedMsg};
 use crate::modules::optimizer::{local_bundle_adjustment, LEVEL_SIGMA2};
 use crate::{
     modules::{orbmatcher, imu::ImuModule, orbmatcher::SCALE_FACTORS, geometric_tools},
@@ -26,6 +26,7 @@ use super::messages::{ShutdownMsg, InitKeyFrameMsg, KeyFrameIdMsg, Reset, NewKey
 
 // TODO (design, variable locations): It would be nice for this to be a member of LocalMapping instead of floating around in the global namespace, but we can't do that easily because then Tracking would need a reference to the localmapping object.
 pub static LOCAL_MAPPING_IDLE: AtomicBool = AtomicBool::new(true);
+pub static LOCAL_MAPPING_PAUSED: AtomicBool = AtomicBool::new(false); // sent from loop closing to stop until gba is done, equivalent to calling RequestStop and isStopped
 
 pub struct LocalMapping {
     system: System,
@@ -89,6 +90,10 @@ impl Actor for LocalMapping {
 
                 actor.local_mapping();
             } else if message.is::<NewKeyFrameMsg>() {
+                if LOCAL_MAPPING_PAUSED.load(std::sync::atomic::Ordering::SeqCst) {
+                    continue;
+                }
+
                 LOCAL_MAPPING_IDLE.store(false, std::sync::atomic::Ordering::SeqCst);
                 if actor.system.queue_len() > max_queue_size {
                     // Abort additional work if there are too many keyframes in the msg queue.
@@ -103,9 +108,7 @@ impl Actor for LocalMapping {
                 actor.system.find(TRACKING_BACKEND).send(Box::new(InitKeyFrameMsg{kf_id})).unwrap();
 
                 debug!("Local mapping working on kf {}", kf_id);
-
                 actor.current_keyframe_id = kf_id;
-
                 actor.local_mapping();
             } else if message.is::<Reset>() {
                 // TODO (reset) need to think about how reset requests should be propagated
@@ -726,7 +729,7 @@ impl LocalMapping {
                 let th_obs = 3;
 
                 for i in 0..keyframe.get_mp_matches().len() {
-                    if !keyframe.has_mp_match(&(i as u32)) {
+                    if !keyframe.has_mp_match_at_index(&(i as u32)) {
                         continue;
                     }
                     let mp_id = keyframe.get_mp_match(&(i as u32));

@@ -121,11 +121,14 @@ impl KeyFrame {
     pub fn clone_matches(&self) -> MapPointMatches { self.mappoint_matches.clone() }
     pub fn get_mp_matches(&self) -> &Vec<Option<(i32, bool)>> { &self.mappoint_matches.matches }
     pub fn get_mp_match(&self, index: &u32) -> Id { self.mappoint_matches.get(index) }
-    pub fn has_mp_match(&self, index: &u32) -> bool { self.mappoint_matches.has(index) }
+    pub fn has_mp_match_at_index(&self, index: &u32) -> bool { self.mappoint_matches.has(index) }
+    pub fn get_mp_match_index(&self, id: &Id) -> Option<usize> { 
+        self.mappoint_matches.matches.iter().position(|item| item.is_some() && item.unwrap().0 == *id)
+    }
 
     pub fn get_tracked_mappoints(&self, map: &Map, min_observations: u32) -> i32 { self.mappoint_matches.tracked_mappoints(map, min_observations) }
     pub fn debug_get_mps_count(&self) -> i32 { self.mappoint_matches.debug_count }
-    
+
     pub fn get_camera_center(&self) -> DVVector3<f64> {
         self.pose.inverse().get_translation()
         // Note: In Orbslam, this is: mTwc.translation()

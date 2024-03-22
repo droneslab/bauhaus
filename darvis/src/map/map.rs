@@ -454,10 +454,9 @@ impl Map {
                 if loop_kf == self.initial_kf_id {
                     kf.pose = pose;
                 } else {
-                    todo!("MVP LOOP CLOSING");
-                    // Code from ORBSLAM, not sure if we need it
-                    // pKF->mTcwGBA = Sophus::SE3d(SE3quat.rotation(),SE3quat.translation()).cast<float>();
-                    // pKF->mnBAGlobalForKF = nLoopKF;
+                    debug!("Set gba pose: {} {:?}", kf_id, pose);
+                    kf.gba_pose = Some(pose);
+                    kf.ba_global_for_kf = loop_kf;
                 }
             } else {
                 // Possible that map actor deleted mappoint after local BA has finished but before
@@ -467,24 +466,24 @@ impl Map {
         }
 
         for (mp_id, position) in optimized_poses.new_mp_poses {
-            if loop_kf == self.initial_kf_id {
-                match self.mappoints.get_mut(&mp_id) {
-                    // Possible that map actor deleted mappoint after local BA has finished but before
-                    // this message is processed
-                    Some(mp) => {
+            match self.mappoints.get_mut(&mp_id) {
+                // Possible that map actor deleted mappoint after local BA has finished but before
+                // this message is processed
+                Some(mp) => {
+                    if loop_kf == self.initial_kf_id {
+
                         mp.position = position;
                         let norm_and_depth = self.mappoints.get(&mp_id).unwrap().get_norm_and_depth(&self);
                         if norm_and_depth.is_some() {
                             self.mappoints.get_mut(&mp_id).unwrap().update_norm_and_depth(norm_and_depth.unwrap());
                         }
-                    },
-                    None => continue,
-                };
-            } else {
-                todo!("MVP LOOP CLOSING");
-                // pMP->mPosGBA = vPoint->estimate().cast<float>();
-                // pMP->mnBAGlobalForKF = nLoopKF;
-            }
+                    } else {
+                        mp.gba_pose = Some(position);
+                        mp.ba_global_for_kf = loop_kf;
+                    }
+                },
+                None => continue,
+            };
         }
 
     }
