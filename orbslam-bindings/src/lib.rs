@@ -290,6 +290,16 @@ pub mod ffi {
             bow_vec1: &UniquePtr<BowVector>,
             bow_vec2: &UniquePtr<BowVector>
         ) -> f32;
+
+    }
+
+    
+    #[namespace = "DUtils"]
+    unsafe extern "C++" {
+
+        include!("orb_slam3/DBoW2/DUtils/Random.h");
+        #[rust_name = "RandomInt"]
+        fn RandomInt(min: i32, max: i32) -> i32;
     }
 }
 

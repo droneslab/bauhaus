@@ -13,3 +13,5 @@
 **/.vscode/**
 darvis/results/*
 foxglove/results/*
+darvis/autogen_*
+*.pyc

@@ -188,7 +188,8 @@ impl Sim3Solver {
 
             // Get min set of points
             for i in 0..3 {
-                let randi = rand::thread_rng().gen_range(0..available_indices.len()-1);
+                // let randi = rand::thread_rng().gen_range(0..available_indices.len()-1);
+                let randi = dvos3binding::ffi::RandomInt(0, self.all_indices.len() as i32 - 1) as usize;
 
                 let idx = available_indices[randi] as usize;
                 self.x_3d_c1[idx].copy_to(

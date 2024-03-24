@@ -127,3 +127,7 @@ DUtils::Random::UnrepeatedRandomizer::operator=
 // ---------------------------------------------------------------------------
 
 
+  int DUtils::RandomInt(int min, int max)
+  {
+      return DUtils::Random::RandomInt(min, max);
+  }
