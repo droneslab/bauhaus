@@ -178,6 +178,9 @@ protected:
 
 };
 
+ // rust binding
+
+  int RandomInt(int min, int max);
 }
 
 #endif
