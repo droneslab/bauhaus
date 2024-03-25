@@ -1,7 +1,7 @@
 extern crate g2o;
 
 use std::{cmp::{max, min}, collections::{HashMap, HashSet}};
-use cxx::UniquePtr;
+use cxx::{SharedPtr, UniquePtr};
 use core::{
     config::{SETTINGS, SYSTEM}, sensor::{Sensor, FrameSensor}
 };
@@ -153,7 +153,8 @@ pub fn optimize_pose(
             0, 
             (*frame.pose.as_ref().unwrap()).into()
         );
-
+        
+        // println!("optimize pose");
         optimizer.pin_mut().optimize(iterations[iteration], false);
 
         num_bad = 0;
@@ -259,13 +260,13 @@ pub fn optimize_pose(
     let pose = optimizer.recover_optimized_frame_pose(0);
     frame.pose = Some(pose.into());
 
-    debug!("Set outliers in pose optimization: {}. Optimized pose: {:?}", num_bad, frame.pose.as_ref().unwrap());
+    // debug!("Set outliers in pose optimization: {}. Optimized pose: {:?}", num_bad, frame.pose.as_ref().unwrap());
 
     // Return number of inliers
     return Some(initial_correspondences - num_bad);
 }
 
-pub fn global_bundle_adjustment(map: &Map, iterations: i32) -> BundleAdjustmentResult {
+pub fn global_bundle_adjustment(map: &mut MapLock, iterations: i32, robust: bool, loop_kf: Id) { // stop_flag: Option<SharedPtr<bool>>
     let _span = tracy_client::span!("global_bundle_adjustment");
     // void Optimizer::GlobalBundleAdjustemnt(Map* pMap, int nIterations, bool* pbStopFlag, const unsigned long nLoopKF, const bool bRobust)
     let sensor: Sensor = SETTINGS.get(SYSTEM, "sensor");
@@ -276,83 +277,146 @@ pub fn global_bundle_adjustment(map: &Map, iterations: i32) -> BundleAdjustmentR
     let camera_param = [fx, fy, cx,cy];
 
     let mut optimizer = g2o::ffi::new_sparse_optimizer(1, camera_param);
+    // if enable_stop_flag {
+    //     optimizer.enable_stop_flag();
+    // }
 
-    // Set KeyFrame vertices
-    let mut kf_vertex_ids = HashMap::new();
-    let mut id_count = 0;
-    for (kf_id, kf) in &map.keyframes {
-        optimizer.pin_mut().add_frame_vertex(
-            id_count,
-            (kf.pose).into(),
-            *kf_id == map.initial_kf_id
-        );
-        kf_vertex_ids.insert(*kf_id, id_count);
-        id_count += 1;
-    }
+    let (kf_vertex_ids, mp_vertex_ids) = {
+        let lock = map.read();
 
-    let mut mp_vertex_ids = HashMap::new();
+        // Set KeyFrame vertices
+        let mut kf_vertex_ids = HashMap::new();
+        let mut id_count = 0;
+        for (kf_id, kf) in &lock.keyframes {
+            optimizer.pin_mut().add_frame_vertex(
+                id_count,
+                (kf.pose).into(),
+                *kf_id == lock.initial_kf_id
+            );
+            kf_vertex_ids.insert(*kf_id, id_count);
+            id_count += 1;
+        }
 
-    // Set MapPoint vertices
-    let mut _edges = Vec::new();
-    for (mp_id, mappoint) in &map.mappoints {
-        optimizer.pin_mut().add_mappoint_vertex(
-            id_count,
-            Pose::new(*mappoint.position, Matrix3::identity()).into(), // create pose out of translation only
-            false, true
-        );
-        mp_vertex_ids.insert(*mp_id, id_count);
+        let mut mp_vertex_ids = HashMap::new();
 
-        let mut n_edges = 0;
+        // Set MapPoint vertices
+        let mut _edges = Vec::new();
+        for (mp_id, mappoint) in &lock.mappoints {
+            optimizer.pin_mut().add_mappoint_vertex(
+                id_count,
+                Pose::new(*mappoint.position, Matrix3::identity()).into(), // create pose out of translation only
+                false, true
+            );
+            mp_vertex_ids.insert(*mp_id, id_count);
 
-        //SET EDGES
-        for (kf_id, (left_index, _right_index)) in mappoint.get_observations() {
-            if !optimizer.has_vertex(id_count) || !optimizer.has_vertex(*kf_id) {
+            let mut n_edges = 0;
+
+            //SET EDGES
+            for (kf_id, (left_index, _right_index)) in mappoint.get_observations() {
+                if !optimizer.has_vertex(id_count) || !optimizer.has_vertex(*kf_id) {
+                    continue;
+                }
+
+                match sensor.frame() {
+                    FrameSensor::Stereo => {
+                        todo!("Stereo, Optimizer lines 194-226");
+                    },
+                    _ => {
+                        if *left_index != -1 {
+                            n_edges += 1;
+
+                            let (keypoint, _) = lock.keyframes.get(kf_id).unwrap().features.get_keypoint(*left_index as usize);
+                            _edges.push(
+                                optimizer.pin_mut().add_edge_monocular_binary(
+                                    robust, id_count, *kf_vertex_ids.get(kf_id).unwrap(),
+                                    *mp_id,
+                                    keypoint.pt().x, keypoint.pt().y,
+                                    INV_LEVEL_SIGMA2[keypoint.octave() as usize],
+                                    *TH_HUBER_2D
+                                )
+                            );
+                        }
+                    }
+                };
+
+                match sensor.frame() {
+                    FrameSensor::Stereo => {
+                        todo!("Stereo, optimizer lines 229-261");
+                        // if pkf->mpcamera2...
+                    },
+                    _ => {}
+                }
+            }
+            if n_edges == 0 {
+                warn!("Removed vertex");
+                optimizer.pin_mut().remove_vertex(id_count);
+                mp_vertex_ids.remove(mp_id);
+            }
+            id_count += 1;
+        }
+
+        // Optimize!
+        let span = tracy_client::span!("global_bundle_adjustment::optimize");
+        println!("optimize gba");
+        optimizer.pin_mut().optimize(iterations, false);
+        drop(span);
+        (kf_vertex_ids, mp_vertex_ids)
+    };
+
+
+    {
+        let mut lock = map.write();
+        let initial_kf_id = lock.initial_kf_id;
+        for (kf_id, vertex_id) in kf_vertex_ids {
+            if let Some(kf) = lock.keyframes.get_mut(&kf_id) {
+                let pose = optimizer.recover_optimized_frame_pose(vertex_id);
+
+                if loop_kf == initial_kf_id {
+                    kf.pose = pose.into();
+                } else {
+                    // debug!("Set gba pose: {} {:?}", kf_id, pose);
+                    kf.gba_pose = Some(pose.into());
+                    kf.ba_global_for_kf = loop_kf;
+                }
+            } else {
+                // Possible that map actor deleted mappoint after local BA has finished but before
+                // this message is processed
                 continue;
             }
+        }
 
-            match sensor.frame() {
-                FrameSensor::Stereo => {
-                    todo!("Stereo, Optimizer lines 194-226");
-                },
-                _ => {
-                    if *left_index != -1 {
-                        n_edges += 1;
+        for (mp_id, vertex_id) in mp_vertex_ids {
+            match lock.mappoints.get_mut(&mp_id) {
+                // Possible that map actor deleted mappoint after local BA has finished but before
+                // this message is processed
+                Some(mp) => {
+                    let position = optimizer.recover_optimized_mappoint_pose(vertex_id);
+                    let translation = nalgebra::Translation3::new(
+                        position.translation[0] as f64,
+                        position.translation[1] as f64,
+                        position.translation[2] as f64
+                    );
+                    let pos = DVTranslation::new(translation.vector);
 
-                        let (keypoint, _) = map.keyframes.get(kf_id).unwrap().features.get_keypoint(*left_index as usize);
-                        _edges.push(
-                            optimizer.pin_mut().add_edge_monocular_binary(
-                                true, id_count, *kf_vertex_ids.get(kf_id).unwrap(),
-                                *mp_id,
-                                keypoint.pt().x, keypoint.pt().y,
-                                INV_LEVEL_SIGMA2[keypoint.octave() as usize],
-                                *TH_HUBER_2D
-                            )
-                        );
+                    // new_mp_poses.insert(mp_id, DVTranslation::new(translation.vector));
+
+                    if loop_kf == initial_kf_id {
+                        mp.position = pos;
+                        let norm_and_depth = lock.mappoints.get(&mp_id).unwrap().get_norm_and_depth(&lock);
+                        if norm_and_depth.is_some() {
+                            lock.mappoints.get_mut(&mp_id).unwrap().update_norm_and_depth(norm_and_depth.unwrap());
+                        }
+                    } else {
+                        mp.gba_pose = Some(pos);
+                        mp.ba_global_for_kf = loop_kf;
                     }
-                }
-            };
-
-            match sensor.frame() {
-                FrameSensor::Stereo => {
-                    todo!("Stereo, optimizer lines 229-261");
-                    // if pkf->mpcamera2...
                 },
-                _ => {}
-            }
+                None => continue,
+            };
         }
-
-        if n_edges == 0 {
-            warn!("Removed vertex");
-            optimizer.pin_mut().remove_vertex(id_count);
-            mp_vertex_ids.remove(mp_id);
-        }
-        id_count += 1;
     }
 
-    // Optimize!
-    optimizer.pin_mut().optimize(iterations, false);
-
-    BundleAdjustmentResult::new(optimizer, kf_vertex_ids, mp_vertex_ids, vec![], vec![])
+    // BundleAdjustmentResult::new(optimizer, kf_vertex_ids, mp_vertex_ids, vec![], vec![])
 }
 
 pub fn local_bundle_adjustment(
@@ -905,6 +969,7 @@ pub fn optimize_essential_graph(
     }
 
     // Optimize!
+    println!("optimize essential");
     optimizer.pin_mut().optimize(20, false);
 
     let mut corrected_swc = HashMap::new();

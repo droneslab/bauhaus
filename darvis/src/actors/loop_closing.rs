@@ -114,14 +114,14 @@ impl LoopClosing {
 
         // Detect loop candidates and check covisibility consistency
         if self.detect_loop() {
-            debug!("KF {}: step 1 passed", self.current_kf_id);
+            // debug!("KF {}: step 1 passed", self.current_kf_id);
             // Add current keyframe to database
             self.map.write().add_to_kf_database(self.current_kf_id);
 
             // Compute similarity transformation [sR|t]
             // In the stereo/RGBD case s=1
             if self.compute_sim3()? {
-                info!("KF {}: Loop detected! Correcting loop...", self.current_kf_id);
+                // info!("KF {}: Loop detected! Correcting loop...", self.current_kf_id);
                 // Perform loop fusion and pose graph optimization
                 self.correct_loop()?;
             }
@@ -129,7 +129,7 @@ impl LoopClosing {
             // Add current keyframe to database
             self.map.write().add_to_kf_database(self.current_kf_id);
 
-            debug!("KF {}: No loop", self.current_kf_id);
+            // debug!("KF {}: No loop", self.current_kf_id);
         }
         self.map.write().keyframes.get_mut(&self.current_kf_id).unwrap().dont_delete = false;
         thread::sleep(Duration::from_micros(5000));
@@ -137,7 +137,7 @@ impl LoopClosing {
     }
 
     fn detect_loop(&mut self) -> bool {
-        debug!("Begin detect loop");
+        let _span = tracy_client::span!("detect_loop");
         //If the map contains less than 10 KF or less than 10 KF have passed from last loop detection
         if self.map.read().keyframes.len() <= 10 {
             return false;
@@ -165,12 +165,12 @@ impl LoopClosing {
         // Query the database imposing the minimum score
         let candidate_kfs = self.map.read().kf_db_detect_loop_candidates(self.current_kf_id, min_score);
 
-        debug!("Candidate kfs: {:?}", candidate_kfs);
+        // debug!("Candidate kfs: {:?}", candidate_kfs);
 
         // If there are no loop candidates, just add new keyframe and return false
         if candidate_kfs.is_empty() {
             self.consistent_groups.clear();
-            debug!("No loop candidates");
+            // debug!("No loop candidates");
             return false;
         }
 
@@ -224,12 +224,14 @@ impl LoopClosing {
         // Update Covisibility Consistent Groups
         self.consistent_groups = current_consistent_groups;
 
-        debug!("Detect loop, final consistent candidates: {:?}", self.enough_consistent_candidates);
+        // debug!("Detect loop, final consistent candidates: {:?}", self.enough_consistent_candidates);
 
         return !self.enough_consistent_candidates.is_empty();
     }
 
     fn compute_sim3(&mut self) -> Result<bool, Box<dyn std::error::Error>> {
+        let _span = tracy_client::span!("compute_sim3");
+
         // For each consistent loop candidate we try to compute a Sim3
         let initial_candidates = self.enough_consistent_candidates.len();
 
@@ -251,7 +253,7 @@ impl LoopClosing {
 
                     let keyframe = map_read_lock.keyframes.get(&candidate_kf_id).unwrap();
                     let mappoint_matches = orbmatcher::search_by_bow_kf(current_keyframe, keyframe, true, 0.75)?;
-                    debug!("Searching for matches between {} (frame {}) and {} (frame {})", current_keyframe.id, current_keyframe.frame_id, keyframe.id, keyframe.frame_id);
+                    // debug!("Searching for matches between {} (frame {}) and {} (frame {})", current_keyframe.id, current_keyframe.frame_id, keyframe.id, keyframe.frame_id);
                     mappoint_matches
                 };
 
@@ -384,6 +386,8 @@ impl LoopClosing {
     }
 
     fn correct_loop(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        let _span = tracy_client::span!("correct_loop");
+
         // Note: there's some really gross stuff in here to deal with mutable and immutable references to the map
 
         // Send a stop signal to Local Mapping
@@ -552,14 +556,10 @@ impl LoopClosing {
         // Launch a new thread to perform Global Bundle Adjustment
         GBA_RUNNING.store(true, Ordering::SeqCst);
 
-        let map_copy = self.map.clone();
+        let mut map_copy = self.map.clone();
         let current_kf_id = self.current_kf_id;
         thread::spawn(move || {
-            run_gba(map_copy, current_kf_id);
-            GBA_RUNNING.store(false, Ordering::SeqCst);
-            GBA_KILL_SWITCH.store(false, Ordering::SeqCst);
-            // Loop closed. Release local mapping.
-            LOCAL_MAPPING_PAUSED.store(false, Ordering::SeqCst);
+            run_gba(&mut map_copy, current_kf_id);
         });
 
         self.last_loop_kf_id = self.current_kf_id;
@@ -568,6 +568,8 @@ impl LoopClosing {
     }
 
     fn search_and_fuse(&mut self, corrected_poses_map: &KeyFrameAndPose) -> Result<(), Box<dyn std::error::Error>> {
+        let _span = tracy_client::span!("search_and_fuse");
+
         for (kf_id, g2o_scw) in corrected_poses_map {
             let replace_points = orbmatcher::fuse_from_loop_closing(
                 &kf_id, &g2o_scw, &self.loop_mappoints, &self.map, 3, 0.8
@@ -584,7 +586,9 @@ impl LoopClosing {
 }
 
 
-fn run_gba(map: MapLock, loop_kf: Id) {
+fn run_gba(map: &mut MapLock, loop_kf: Id) {
+    let _span = tracy_client::span!("run_gba_in_thread");
+
     // void LoopClosing::RunGlobalBundleAdjustment(unsigned long nLoopKF)
 
     info!("Starting Global Bundle Adjustment");
@@ -594,7 +598,7 @@ fn run_gba(map: MapLock, loop_kf: Id) {
         return;
     }
 
-    optimizer::global_bundle_adjustment(&map.write(), 10);
+    optimizer::global_bundle_adjustment(map, 10, false, loop_kf);
 
     // Update all MapPoints and KeyFrames
     // Local Mapping was active during BA, that means that there might be new keyframes
@@ -603,87 +607,82 @@ fn run_gba(map: MapLock, loop_kf: Id) {
 
     debug!("Global bundle adjustment finished. Updating map...");
 
-    // TODO (design, concurency) local mapping request stop
     LOCAL_MAPPING_PAUSED.store(true, Ordering::SeqCst);
     // Wait until Local Mapping has effectively stopped
     while !LOCAL_MAPPING_PAUSED.load(Ordering::SeqCst) {
         thread::sleep(Duration::from_millis(1000));
     }
 
-    // Correct keyframes starting at map first keyframe
-    let mut kfs_to_check = vec![map.read().initial_kf_id];
-    let mut i = 0;
-    let mut tcw_bef_gba: HashMap<Id, Pose> = HashMap::new();
-    while i < kfs_to_check.len() {
-        let mut lock = map.write();
-        let curr_kf_id = kfs_to_check[i];
-        let children = lock.keyframes.get(& curr_kf_id).unwrap().children.clone();
-
-        for child_id in & children {
-            let kfs = lock.keyframes.get_many_mut([&curr_kf_id, child_id]).unwrap();
-            if !kfs[0].ba_global_for_kf != loop_kf {
-                let tchildc = kfs[0].pose * kfs[1].pose;
-                kfs[1].gba_pose = Some(tchildc * kfs[0].gba_pose.unwrap());
-                kfs[1].ba_global_for_kf = loop_kf;
-                debug!("Set gba pose: {} {:?}", kfs[1].id, kfs[1].gba_pose);
-
-
-                //             if !child.ba_global_for_kf != loop_kf {
-                // let tchildc = child.pose * kf.pose;
-                // child.gba_pose = Some(tchildc * kf.gba_pose.unwrap());
-                // child.ba_global_for_kf = loop_kf;
-                // debug!("Set gba pose: {} {:?}", child.id, child.gba_pose);
-
-            }
-            kfs_to_check.push(*child_id);
-        }
-
-        let kf = lock.keyframes.get_mut(&curr_kf_id).unwrap();
-        tcw_bef_gba.insert(curr_kf_id, kf.pose);
-        kf.pose = kf.gba_pose.unwrap().clone();
-        debug!("Set gba pose: {} {:?}", kf.id, kf.gba_pose);
-
-        i += 1;
-    }
-
-    // Correct MapPoints
-    let mps_to_update = {
-        let map_lock = map.read();
-        let mut mps_to_update = HashMap::new();
-        for (id, mp) in &map_lock.mappoints {
-            if mp.ba_global_for_kf == loop_kf {
-                // If optimized by Global BA, just update
-                mps_to_update.insert(*id, mp.gba_pose.unwrap());
-            } else {
-                // Update according to the correction of its reference keyframe
-                let kf = map_lock.keyframes.get(&mp.ref_kf_id).unwrap();
-
-                if kf.ba_global_for_kf != loop_kf {
-                    continue;
-                }
-
-                // Map to non-corrected camera
-                let rcw = tcw_bef_gba.get(&mp.ref_kf_id).unwrap().get_rotation();
-                let tcw = tcw_bef_gba.get(&mp.ref_kf_id).unwrap().get_translation();
-                let xc = *rcw * *mp.position + *tcw;
-
-                // Backproject using corrected camera
-                let twc = kf.pose.inverse();
-                let rwc = twc.get_rotation();
-                let twc = twc.get_translation();
-
-                mps_to_update.insert(*id, DVTranslation::new(*rwc * xc + *twc));
-            }
-        }
-        mps_to_update
-    };
-
     {
-        let mut map_lock = map.write();
+        let mut lock = map.write();
+        // Correct keyframes starting at map first keyframe
+        let mut kfs_to_check = vec![lock.initial_kf_id];
+        let mut i = 0;
+        let mut tcw_bef_gba: HashMap<Id, Pose> = HashMap::new();
+        while i < kfs_to_check.len() {
+            let curr_kf_id = kfs_to_check[i];
+            let children = lock.keyframes.get(& curr_kf_id).unwrap().children.clone();
+
+            for child_id in & children {
+                let kfs = lock.keyframes.get_many_mut([&curr_kf_id, child_id]).unwrap();
+                if !kfs[0].ba_global_for_kf != loop_kf {
+                    let tchildc = kfs[0].pose * kfs[1].pose;
+                    kfs[1].gba_pose = Some(tchildc * kfs[0].gba_pose.unwrap());
+                    kfs[1].ba_global_for_kf = loop_kf;
+                    // debug!("Set gba pose: {} {:?}", kfs[1].id, kfs[1].gba_pose);
+                }
+                kfs_to_check.push(*child_id);
+            }
+
+            let kf = lock.keyframes.get_mut(&curr_kf_id).unwrap();
+            tcw_bef_gba.insert(curr_kf_id, kf.pose);
+            kf.pose = kf.gba_pose.unwrap().clone();
+            // debug!("Set gba pose: {} {:?}", kf.id, kf.gba_pose);
+
+            i += 1;
+        }
+
+        // Correct MapPoints
+        let mps_to_update = {
+            let mut mps_to_update = HashMap::new();
+            for (id, mp) in &lock.mappoints {
+                if mp.ba_global_for_kf == loop_kf {
+                    // If optimized by Global BA, just update
+                    mps_to_update.insert(*id, mp.gba_pose.unwrap());
+                } else {
+                    // Update according to the correction of its reference keyframe
+                    let kf = lock.keyframes.get(&mp.ref_kf_id).unwrap();
+
+                    if kf.ba_global_for_kf != loop_kf {
+                        continue;
+                    }
+
+                    // Map to non-corrected camera
+                    let rcw = tcw_bef_gba.get(&mp.ref_kf_id).unwrap().get_rotation();
+                    let tcw = tcw_bef_gba.get(&mp.ref_kf_id).unwrap().get_translation();
+                    let xc = *rcw * *mp.position + *tcw;
+
+                    // Backproject using corrected camera
+                    let twc = kf.pose.inverse();
+                    let rwc = twc.get_rotation();
+                    let twc = twc.get_translation();
+
+                    mps_to_update.insert(*id, DVTranslation::new(*rwc * xc + *twc));
+                }
+            }
+            mps_to_update
+        };
+
+
         for (mp_id, gba_pose) in mps_to_update {
-            map_lock.mappoints.get_mut(&mp_id).unwrap().position = gba_pose;
+            lock.mappoints.get_mut(&mp_id).unwrap().position = gba_pose;
         }
     }
+
+    GBA_RUNNING.store(false, Ordering::SeqCst);
+    GBA_KILL_SWITCH.store(false, Ordering::SeqCst);
+    // Loop closed. Release local mapping.
+    LOCAL_MAPPING_PAUSED.store(false, Ordering::SeqCst);
 
     info!("Map updated!");
 }

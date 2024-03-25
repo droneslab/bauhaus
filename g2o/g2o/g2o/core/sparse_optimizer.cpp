@@ -378,7 +378,8 @@ void SparseOptimizer::printStats() {
   int SparseOptimizer::optimize(int iterations, bool online)
   {
     if (_ivMap.size() == 0) {
-      cerr << __PRETTY_FUNCTION__ << ": 0 vertices to optimize, maybe forgot to call initializeOptimization()" << endl;
+    //   cerr << __PRETTY_FUNCTION__ << ": 0 vertices to optimize, maybe forgot to call initializeOptimization()" << endl;
+      std::cout << "0 vertices to optimize, maybe forgot to call initializeOptimization()" << std::endl;
       return -1;
     }
 

@@ -94,6 +94,17 @@ namespace g2o {
 
     }
  
+    // void BridgeSparseOptimizer::enable_stop_flag() {
+    //     // Allows the optimizer to be turned off with a pointer to a stop flag
+    //     stopFlag = false;
+    //     optimizer->setForceStopFlag(*stopFlag);
+    // }
+
+    // void BridgeSparseOptimizer::set_stop_flag(bool should_stop) {
+    //     // If true, turns off optimizer
+    //     stopFlag = should_stop;
+    // }
+
     //* Vertices *//
     bool BridgeSparseOptimizer::has_vertex(int id) const {
         return optimizer->vertex(id) != NULL;

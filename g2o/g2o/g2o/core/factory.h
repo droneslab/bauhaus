@@ -109,7 +109,7 @@ namespace g2o {
         
           ~CreatorInformation()
           {
-            std::cout << "Deleting " << (void*) creator << std::endl;
+            // std::cout << "Deleting " << (void*) creator << std::endl;
             
             delete creator;
           }

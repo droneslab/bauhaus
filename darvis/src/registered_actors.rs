@@ -48,9 +48,9 @@ pub fn spawn_actor(
         str if str == "orbslam tracking backend".to_string() => {
             crate::actors::tracking_backend::TrackingBackend::spawn(system, map.expect("Tracking backend needs the map!"))
         },
-        str if str == "end-to-end tracking".to_string() => {
-            crate::actors::tracking_full::TrackingFull::spawn(system, map.expect("Tracking needs the map!"))
-        },
+        // str if str == "end-to-end tracking".to_string() => {
+        //     crate::actors::tracking_full::TrackingFull::spawn(system, map.expect("Tracking needs the map!"))
+        // },
         str if str == "orbslam local mapping".to_string() => {
             crate::actors::local_mapping::LocalMapping::spawn(system, map.expect("Local mapping needs the map!"))
         },

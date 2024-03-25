@@ -25,7 +25,7 @@ pub struct Map {
     keyframe_database: KeyFrameDatabase, // = mpKeyFrameDB
 
     // KeyFrames
-    last_kf_id: Id, // = mnMaxKFid
+    pub last_kf_id: Id, // = mnMaxKFid
     pub initial_kf_id: Id, // TODO (multimaps): this is the initial kf id that was added to this map, when this map is made. should tie together map versioning better, maybe in a single struct
 
     // MapPoints
@@ -277,134 +277,6 @@ impl Map {
         self.keyframes.remove(&kf_id);
     }
 
-    pub fn create_initial_map_monocular(
-        &mut self, mp_matches: Vec<i32>, p3d: DVVectorOfPoint3f, initial_frame: Frame, current_frame: Frame
-    ) -> Option<(Pose, i32, i32, BTreeSet<Id>, Timestamp)> {
-        // Testing local mapping ... global bundle adjustment gives slightly different pose for second keyframe.
-        // TODO (design, rust issues) - we have to do some pretty gross things with calling functions in this section
-        // so that we can have multiple references to parts of the map. This should get cleaned up, but I'm not sure how.
-        // TODO (design, code organization) - can this function be moved into map_initialization.rs ? Would require a bit of back-and-forth
-        // between creating map objects and inserting them
-
-        match self.sensor {
-            Sensor(FrameSensor::Mono, ImuSensor::Some) => todo!("IMU"), // pKFini->mpImuPreintegrated = (IMU::Preintegrated*)(NULL);
-            _ => {}
-        }
-
-        if self.last_kf_id == 0 {
-            self.initial_kf_id = self.last_kf_id + 1;
-        }
-
-        let num_keypoints = initial_frame.features.num_keypoints;
-
-        // Create KeyFrames
-        let initial_kf_id = self.insert_keyframe_to_map(
-            initial_frame,
-            true
-        );
-        let curr_kf_id = self.insert_keyframe_to_map(
-            current_frame,
-            true
-        );
-
-        let mut count = 0;
-        for kf1_index in 0..mp_matches.len() {
-            // Get index for kf1 and kf2
-            let kf2_index = mp_matches[kf1_index];
-            if kf2_index == -1 {
-                continue;
-            }
-            count +=1;
-
-            // Create mappoint
-            // This also adds the observations from mappoint -> keyframe and keyframe -> mappoint
-            let point = p3d.get(kf1_index).unwrap();
-            let world_pos = DVVector3::new_with(point.x as f64, point.y as f64, point.z as f64);
-            let _id = self.insert_mappoint_to_map(
-                world_pos, 
-                curr_kf_id, 
-                self.id,
-                vec![(initial_kf_id, num_keypoints, kf1_index), (curr_kf_id, num_keypoints, kf2_index as usize)]
-            );
-        }
-        info!("Monocular initialization created new map with {} mappoints", count);
-
-        // Update Connections
-        self.update_connections(initial_kf_id);
-        self.update_connections(curr_kf_id);
-
-        // Bundle Adjustment
-        let optimized_poses = optimizer::global_bundle_adjustment(self, 20);
-        self.update_after_ba(optimized_poses, 0);
-
-        let median_depth = self.keyframes.get_mut(&initial_kf_id)?.compute_scene_median_depth(& self.mappoints, 2);
-        let inverse_median_depth = match self.sensor {
-            Sensor(FrameSensor::Mono, ImuSensor::Some) => 4.0 / median_depth,
-            _ => 1.0 / median_depth
-        };
-
-        if median_depth < 0.0 || self.keyframes.get(&curr_kf_id)?.get_tracked_mappoints(&self, 1) < 50 {
-            // reset active map
-            warn!("map::create_initial_map_monocular;wrong initialization");
-            return None;
-        }
-
-        // Scale initial baseline
-        {
-            let curr_kf = self.keyframes.get_mut(&curr_kf_id)?;
-            let new_trans = *(curr_kf.pose.get_translation()) * inverse_median_depth;
-            curr_kf.pose.set_translation(new_trans);
-        }
-
-        // Scale points
-        for item in self.keyframes.get(&initial_kf_id)?.get_mp_matches() {
-            if let Some((mp_id, _)) = item {
-                let mp = self.mappoints.get_mut(&mp_id)?;
-                mp.position = DVVector3::new((*mp.position) * inverse_median_depth);
-
-                let norm_and_depth = self.mappoints.get(&mp_id)
-                    .and_then(|mp| {mp.get_norm_and_depth(&self)})?;
-                self.mappoints.get_mut(&mp_id)
-                    .map(|mp| mp.update_norm_and_depth(norm_and_depth));
-            }
-        }
-
-        match self.sensor {
-            Sensor(FrameSensor::Mono, ImuSensor::Some) => {
-                todo!("IMU");
-            //     pKFcur->mPrevKF = pKFini;
-            //     pKFini->mNextKF = pKFcur;
-            //     pKFcur->mpImuPreintegrated = mpImuPreintegratedFromLastKF;
-
-            //     mpImuPreintegratedFromLastKF = new IMU::Preintegrated(pKFcur->mpImuPreintegrated->GetUpdatedBias(),pKFcur->mImuCalib);
-            },
-            _ => {}
-        };
-
-        // TODO (mvp): commented this out because I don't think they ever use it??
-        // Compute here initial velocity
-        // let delta_t = self.keyframes.get(&self.last_kf_id).unwrap().pose * self.keyframes.get(&1).unwrap().pose.inverse();
-        // let velocity = false;
-        // Eigen::Vector3f phi = deltaT.so3().log(); need to convert to rust
-        // let initial_frame_ts = inidata.initial_frame.as_ref().unwrap().timestamp;
-        // let curr_frame_ts = inidata.current_frame.as_ref().unwrap().timestamp;
-        // let last_frame_ts = inidata.last_frame.as_ref().unwrap().timestamp;
-        // let aux = (curr_frame_ts - last_frame_ts).to_std().unwrap().as_secs() / (curr_frame_ts - initial_frame_ts).to_std().unwrap().as_secs();
-        // phi *= aux;
-
-        // TODO (multimaps)
-        // mpAtlas->GetCurrentMap()->mvpKeyFrameOrigins.push_back(pKFini)
-
-        let curr_kf_pose = self.keyframes.get_mut(&curr_kf_id)?.pose;
-        let curr_kf_timestamp = self.keyframes.get(&curr_kf_id)?.timestamp;
-
-
-        // Update tracking with new info
-        let relevant_mappoints = self.mappoints.keys().cloned().collect();
-
-        Some((curr_kf_pose, curr_kf_id, initial_kf_id, relevant_mappoints, curr_kf_timestamp))
-    }
-
     pub fn update_connections(&mut self, main_kf_id: Id) {
         let _span = tracy_client::span!("update_connections");
         //For all map points in keyframe check in which other keyframes are they seen
@@ -448,46 +320,6 @@ impl Map {
         }
     }
 
-    pub fn update_after_ba(&mut self, optimized_poses: optimizer::BundleAdjustmentResult, loop_kf: Id) {
-        for (kf_id, pose) in optimized_poses.new_kf_poses {
-            if let Some(kf) = self.keyframes.get_mut(&kf_id) {
-                if loop_kf == self.initial_kf_id {
-                    kf.pose = pose;
-                } else {
-                    debug!("Set gba pose: {} {:?}", kf_id, pose);
-                    kf.gba_pose = Some(pose);
-                    kf.ba_global_for_kf = loop_kf;
-                }
-            } else {
-                // Possible that map actor deleted mappoint after local BA has finished but before
-                // this message is processed
-                continue;
-            }
-        }
-
-        for (mp_id, position) in optimized_poses.new_mp_poses {
-            match self.mappoints.get_mut(&mp_id) {
-                // Possible that map actor deleted mappoint after local BA has finished but before
-                // this message is processed
-                Some(mp) => {
-                    if loop_kf == self.initial_kf_id {
-
-                        mp.position = position;
-                        let norm_and_depth = self.mappoints.get(&mp_id).unwrap().get_norm_and_depth(&self);
-                        if norm_and_depth.is_some() {
-                            self.mappoints.get_mut(&mp_id).unwrap().update_norm_and_depth(norm_and_depth.unwrap());
-                        }
-                    } else {
-                        mp.gba_pose = Some(position);
-                        mp.ba_global_for_kf = loop_kf;
-                    }
-                },
-                None => continue,
-            };
-        }
-
-    }
-
     pub fn add_observation(&mut self, kf_id: Id, mp_id: Id, index: u32, is_outlier: bool) {
         let num_keypoints = self.keyframes.get(&kf_id).expect(&format!("Could not get kf {}", kf_id)).features.num_keypoints;
         self.mappoints.get_mut(&mp_id).unwrap().add_observation(&kf_id, num_keypoints, index);
@@ -498,7 +330,6 @@ impl Map {
             warn!("There should not be an old mp match, kf {}, new mp {}, old mp {}", kf_id, mp_id, old_mp_id);
 
         }
-        // trace!("Add observation mp<->kf: {} {}", mp_id, kf_id);
     }
 
     pub fn delete_observation(&mut self, kf_id: Id, mp_id: Id) {
