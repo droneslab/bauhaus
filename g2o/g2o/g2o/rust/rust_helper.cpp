@@ -442,37 +442,17 @@ namespace g2o {
         return position;
     }
 
-    // }
-    // TODO (memory leaks): This might already be deleted when g2o deletes the sparseoptimizer?
      BridgeSparseOptimizer::~BridgeSparseOptimizer() {
  
-         // The idea here is to get all the edges and move the ownership of the edges back to something that does not call the destructor for the objects living inside
-    
-         // Verified that the edges are accessible
-         // std::cout << optimizer->_edges.size() << std::endl;
-      
-     //    for(auto it = xyz_onlypose_edges.begin(); it != xyz_onlypose_edges.end(); it++)
-     //    {
-     //    
-     //      if(optimizer->_edges.find(it->))
-     //      {
-
-     //         //std::cout << it
-     //         std::cout << "We found the edges inside the hypergraph" << std::endl;
-
-     //      }
-
-
-
-     //    }
-     //
-     //    std::cout << "These are the sizes of the vectors holding the edges" << std::endl;
-     //    std::cout << xyz_edges.size() << std::endl;
-     //    std::cout << xyz_onlypose_edges.size() << std::endl;
-          // std::cout << sim3_edges .size() << std::endl;
-
-     //    std::cout << "The printing of edge sizes is over now" << std::endl;
-         
+    /****************************************************************************LEAK FIX*****************************************************************************************************************
+    *
+    * The sparse optimizer object inside this object stores the edges of a graph. In C++ land, things are fine, when this object is no longer required, we can call delete on the sparse optimizer. This w
+    * will delete all the edges for the sparse optimizer, the edges are stored within a vector. However things take a turn when we use ffi bindings to pass unique pointers from Cpp to Rust. We require ** Rust to have access to the above mentioned edges.
+    *
+    * As a result they will have to be wrapped up in unique pointers. Why does this pose an issue? When we attempt to delete the BridgeSparseOptimizer, there are going to be two attempts to delete the
+    * same edges. One from the normal destructor within the library and another when the vector of edges belonging to the BridgeSparseOptimizer object gets deleted when the BridgeSparseObject destructor* gets called. To remedy this, the unique pointers let go of their allegiance to their individual pointers so that the normal destructor calls just delete the edges. This is instrumented with releas* e().  
+    * 
+    *****************************************************************************************************************************************************************************************************/
          for(auto it = xyz_onlypose_edges.begin(); it != xyz_onlypose_edges.end(); it++)
          {
             it->inner.release();
@@ -482,22 +462,18 @@ namespace g2o {
          {
             it->inner.release();
          }
-//       
+
        for(auto it = sim3_edges.begin(); it != sim3_edges.end(); it++)
        {
           it->edge1.release();
           it->edge2.release();
        }
 
-
           xyz_onlypose_edges.clear();
           xyz_edges.clear();
           sim3_edges.clear();
 
          delete optimizer;
-         //delete linearSolver;
-         //delete solver_ptr;
-         //delete solver;
      }
 
 } // end namespace
