@@ -105,12 +105,14 @@ namespace g2o {
           {
             creator = 0;
             elementTypeBit = -1;
+            //std::cout << "Allocated Creator Information in the heap" << std::endl;
           }
         
           ~CreatorInformation()
           {
-            std::cout << "Deleting " << (void*) creator << std::endl;
+            //std::cout << "Deleting " << (void*) creator << std::endl;
             
+            //std::cout << "Deallocated Creator information from the heap" << std::endl;
             delete creator;
           }
       };

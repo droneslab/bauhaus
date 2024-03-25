@@ -51,6 +51,7 @@ Factory::~Factory()
 # ifdef G2O_DEBUG_FACTORY
   cerr << "# Factory destroying " << (void*)this << endl;
 # endif
+  // std::cout << "This is being called ~Factory()" << std::endl;
   for (CreatorMap::iterator it = _creator.begin(); it != _creator.end(); ++it) {
     delete it->second->creator;
   }
@@ -61,6 +62,7 @@ Factory::~Factory()
 Factory* Factory::instance()
 {
   if (factoryInstance == 0) {
+    //std::cout << "Factory allocated in the heap" << std::endl;
     factoryInstance = new Factory;
 #  ifdef G2O_DEBUG_FACTORY
     cerr << "# Factory allocated " << (void*)factoryInstance << endl;
@@ -72,6 +74,8 @@ Factory* Factory::instance()
 
 void Factory::registerType(const std::string& tag, AbstractHyperGraphElementCreator* c)
 {
+  // This function is being called
+  //std::cout << "Register Type is being called" << std::endl;
   CreatorMap::const_iterator foundIt = _creator.find(tag);
   if (foundIt != _creator.end()) {
     cerr << "FACTORY WARNING: Overwriting Vertex tag " << tag << endl;
@@ -130,23 +134,25 @@ void Factory::registerType(const std::string& tag, AbstractHyperGraphElementCrea
     // Look for the tag
     CreatorMap::iterator tagPosition = _creator.find(tag);
 
-    if (tagPosition != _creator.end()) {
+    //if (tagPosition != _creator.end()) {
 
-      AbstractHyperGraphElementCreator* c = tagPosition->second->creator;
+    //  AbstractHyperGraphElementCreator* c = tagPosition->second->creator;
 
-      // If we found it, remove the creator from the tag lookup map
-      TagLookup::iterator classPosition = _tagLookup.find(c->name());
-      if (classPosition != _tagLookup.end())
-        {
-          _tagLookup.erase(classPosition);
-        }
-      _creator.erase(tagPosition);
-    }
+    //  // If we found it, remove the creator from the tag lookup map
+    //  TagLookup::iterator classPosition = _tagLookup.find(c->name());
+    //  if (classPosition != _tagLookup.end())
+    //    {
+    //      _tagLookup.erase(classPosition);
+    //    }
+    //  _creator.erase(tagPosition);
+    //}
     for (CreatorMap::iterator it = _creator.begin(); it != _creator.end(); ++it) {
      delete it->second;
   }
   _creator.clear();
   _tagLookup.clear();
+
+  this->destroy();
  
   }
 
@@ -191,6 +197,7 @@ bool Factory::knowsTag(const std::string& tag, int* elementType) const
 
 void Factory::destroy()
 {
+  //std::cout << "Factory deallocated in the heap" << std::endl;
   delete factoryInstance;
   factoryInstance = 0;
 }
