@@ -142,6 +142,12 @@ void Factory::registerType(const std::string& tag, AbstractHyperGraphElementCrea
         }
       _creator.erase(tagPosition);
     }
+    for (CreatorMap::iterator it = _creator.begin(); it != _creator.end(); ++it) {
+     delete it->second;
+  }
+  _creator.clear();
+  _tagLookup.clear();
+ 
   }
 
 HyperGraph::HyperGraphElement* Factory::construct(const std::string& tag) const

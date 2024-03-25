@@ -494,7 +494,7 @@ namespace g2o {
           xyz_edges.clear();
           sim3_edges.clear();
 
-         //delete optimizer;
+         delete optimizer;
          //delete linearSolver;
          //delete solver_ptr;
          //delete solver;
