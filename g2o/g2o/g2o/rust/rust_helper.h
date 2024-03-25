@@ -75,6 +75,9 @@ namespace g2o {
         std::vector<RustXYZOnlyPoseEdge>& get_mut_xyz_onlypose_edges();
         std::vector<RustSim3ProjectXYZEdge>& get_mut_sim3_edges();
 
+        // void enable_stop_flag();
+        // void set_stop_flag(bool should_stop);
+
         void set_robust_kernel_for_edge(int edge_id, bool reset);
 
     private:
@@ -87,6 +90,7 @@ namespace g2o {
         float thHuber2D;
         float thHuber3D;
         vector<size_t> vnIndexEdgeMono;
+        bool stopFlag;
 
         SE3Quat format_pose(Pose pose) const;
         Sim3 format_sim3(RustSim3 sim3) const;

@@ -75,38 +75,38 @@ modules:
 
 
 actors:
-      -
-       name: VISUALIZER
-       tag: visualizer
-       receiver_bound: -1
-       settings:
-          -
-            name: stream # if true, stream to websocket. if false, save to mcap file
-            value: true
-            type: bool
-          - name: port # port used if streaming
-            value: 8765
-            type: i32
-          - 
-            name: image_draw_type
-            value: plain # options are [none, plain, features, featuresandmatches]
-            type: string
-          -
-            name: mcap_file_path
-            value: "results/out.mcap"
-            type: string
-          - name: draw_all_mappoints # Not sure this works right now... If true, draws all mappoints in the map. If false, only draws matches and recently created mappoints. Set to false to save space.
-            value: false
-            type: bool
-          - name: draw_local_mappoints # Whether to draw local mappoints (not tracked, but in local map based on local keyframes)
-            value: false
-            type: bool
-          - name: draw_connected_kfs # You can set this to be true but it doesn't look good. Need to figure out some nicer way to distribute the points so it's actually readable
-            value: false
-            type: bool
-          - name: draw_only_trajectory
-            value: true
-            type: bool
+      # -
+      #  name: VISUALIZER
+      #  tag: visualizer
+      #  receiver_bound: -1
+      #  settings:
+      #     -
+      #       name: stream # if true, stream to websocket. if false, save to mcap file
+      #       value: true
+      #       type: bool
+      #     - name: port # port used if streaming
+      #       value: 8765
+      #       type: i32
+      #     - 
+      #       name: image_draw_type
+      #       value: plain # options are [none, plain, features, featuresandmatches]
+      #       type: string
+      #     -
+      #       name: mcap_file_path
+      #       value: "results/out.mcap"
+      #       type: string
+      #     - name: draw_all_mappoints # Not sure this works right now... If true, draws all mappoints in the map. If false, only draws matches and recently created mappoints. Set to false to save space.
+      #       value: false
+      #       type: bool
+      #     - name: draw_local_mappoints # Whether to draw local mappoints (not tracked, but in local map based on local keyframes)
+      #       value: false
+      #       type: bool
+      #     - name: draw_connected_kfs # You can set this to be true but it doesn't look good. Need to figure out some nicer way to distribute the points so it's actually readable
+      #       value: false
+      #       type: bool
+      #     - name: draw_only_trajectory
+      #       value: true
+      #       type: bool
 
       -
        name: TRACKING_FRONTEND

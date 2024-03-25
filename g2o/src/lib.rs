@@ -56,6 +56,8 @@ pub mod ffi {
         type EdgeSim3;
 
         fn new_sparse_optimizer(opt_type: i32, camera_param: [f64;4]) -> UniquePtr<BridgeSparseOptimizer>;
+        // fn set_stop_flag(self: Pin<&mut BridgeSparseOptimizer>, should_stop: bool);
+        // fn enable_stop_flag(self: Pin<&mut BridgeSparseOptimizer>);
 
         // creating/adding vertices to graph
         fn add_vertex_sim3_expmap(

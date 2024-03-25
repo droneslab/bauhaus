@@ -185,7 +185,7 @@ impl LocalMapping {
             }
         }
 
-        debug!("Local mapping optimization for KF {}. Optimized pose: {:?}", self.current_keyframe_id, self.map.read().keyframes.get(&self.current_keyframe_id).unwrap().pose);
+        // debug!("Local mapping optimization for KF {}. Optimized pose: {:?}", self.current_keyframe_id, self.map.read().keyframes.get(&self.current_keyframe_id).unwrap().pose);
 
         // Initialize IMU
         if self.sensor.is_imu() && !self.imu.is_initialized {
