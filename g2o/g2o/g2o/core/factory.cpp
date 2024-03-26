@@ -51,9 +51,15 @@ Factory::~Factory()
 # ifdef G2O_DEBUG_FACTORY
   cerr << "# Factory destroying " << (void*)this << endl;
 # endif
-  // std::cout << "This is being called ~Factory()" << std::endl;
+
+ /************************************************************************************************LEAK FIX************************************************************************************************
+    * 
+    * delete it->second->creator was changed to delete it->second. This is to delete the CreatorInformation object, the destructor for the CreatorInformation object deletes the creator object
+    * within its destructor, this->destroy() called within the unregister method calls this destructor(~Factory()) and deallocates this object from the heap.
+    *
+ ********************************************************************************************************************************************************************************************************/
   for (CreatorMap::iterator it = _creator.begin(); it != _creator.end(); ++it) {
-    delete it->second->creator;
+    delete it->second;
   }
   _creator.clear();
   _tagLookup.clear();
@@ -134,23 +140,26 @@ void Factory::registerType(const std::string& tag, AbstractHyperGraphElementCrea
     // Look for the tag
     CreatorMap::iterator tagPosition = _creator.find(tag);
 
-    //if (tagPosition != _creator.end()) {
+    /************************************************************************************************LEAK FIX*********************************************************************************************
+    * 
+    * This is commented out because some of the references to the CreatorInformation objects are removed within this call before deletion. 
+    * this->destroy() calls the destructor for the Factory object and enables deallocation of all the memory. The destructor was not being called earlier.
+    *
+    *****************************************************************************************************************************************************************************************************/
+    /* 
+    if (tagPosition != _creator.end()) {
 
-    //  AbstractHyperGraphElementCreator* c = tagPosition->second->creator;
+      AbstractHyperGraphElementCreator* c = tagPosition->second->creator;
 
-    //  // If we found it, remove the creator from the tag lookup map
-    //  TagLookup::iterator classPosition = _tagLookup.find(c->name());
-    //  if (classPosition != _tagLookup.end())
-    //    {
-    //      _tagLookup.erase(classPosition);
-    //    }
-    //  _creator.erase(tagPosition);
-    //}
-    for (CreatorMap::iterator it = _creator.begin(); it != _creator.end(); ++it) {
-     delete it->second;
-  }
-  _creator.clear();
-  _tagLookup.clear();
+      // If we found it, remove the creator from the tag lookup map
+      TagLookup::iterator classPosition = _tagLookup.find(c->name());
+      if (classPosition != _tagLookup.end())
+        {
+          _tagLookup.erase(classPosition);
+        }
+      _creator.erase(tagPosition);
+    }
+    */
 
   this->destroy();
  
@@ -227,3 +236,4 @@ HyperGraph::HyperGraphElement* Factory::construct(const std::string& tag, const 
 }
 
 } // end namespace
+
