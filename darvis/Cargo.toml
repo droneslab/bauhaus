@@ -28,7 +28,8 @@ IDL_PACKAGE_FILTER = { value = "std_msgs;r2r_minimal_node_msgs" }
 g2o = { path = "../g2o" }
 dvos3binding = { path = "../orbslam-bindings" }
 foxglove = { path = "../foxglove" }
-
+tokio-macros = "=2.2.0"
+futures-macro = "=0.3.29"
 
 once_cell = "*"
 chrono = { version = "*", features = ["serde"] }

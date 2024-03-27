@@ -17,7 +17,8 @@ use crate::{
     System,
     map::{map::Id},
 };
-
+use core::matrix::DVMatrix;
+use core::matrix::DVVectorOfKeyPoint;
 
 pub struct TrackingFrontEnd {
     system: System,

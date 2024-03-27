@@ -20,6 +20,7 @@ mod spawn;
 mod map;
 mod modules;
 mod tests;
+use core::config::load_config;
 
 pub type MapLock = ReadWriteMap<Map>;
 // pub type MapLock = Arc<Mutex<Map>>; // Replace above line with this if you want to switch all locks to mutexes
