@@ -28,8 +28,9 @@ system:
 
 modules:
       - 
-       name: FEATURE_DETECTION
-       settings:
+        name: FEATURE_DETECTION
+        tag: "feature detection"
+        settings:
           - 
            name: max_features
            value: 2000
@@ -52,31 +53,64 @@ modules:
            type: i32
 
       -
-       name: MATCHER
-       settings:
+        name: MATCHER
+        tag: "matcher"
+        settings:
           - 
             name: far_points_threshold
             value: 20.0
             type: f64
+      -
+        name: FEATURES
+        tag: "features"
+        settings:
+          - 
+            name: frame_grid_rows
+            value: 48
+            type: i32
+          - 
+            name: frame_grid_cols
+            value: 64
+            type: i32
 
-
+            
 actors:
-      # -
-      #  name: VISUALIZER
-      #  tag: visualizer
-      #  receiver_bound: -1
-      #  settings:
-      #     - 
-      #       name: image_draw_type
-      #       value: none # options are [none, plain, features, featuresandmatches]
-      #       type: string
-      #     -
-      #       name: mcap_file_path
-      #       value: "results/out.mcap"
-      #       type: string
-      #     - name: draw_all_mappoints # Not sure this works right now... If true, draws all mappoints in the map. If false, only draws matches and recently created mappoints. Set to false to save space.
-      #       value: true
-      #       type: bool
+
+
+
+
+      -
+       name: VISUALIZER
+       tag: visualizer
+       receiver_bound: -1
+       settings:
+          -
+            name: stream # if true, stream to websocket. if false, save to mcap file
+            value: true
+            type: bool
+          - name: port # port used if streaming
+            value: 8765
+            type: i32
+          - 
+            name: image_draw_type
+            value: plain # options are [none, plain, features, featuresandmatches]
+            type: string
+          -
+            name: mcap_file_path
+            value: "results/out.mcap"
+            type: string
+          - name: draw_all_mappoints # Not sure this works right now... If true, draws all mappoints in the map. If false, only draws matches and recently created mappoints. Set to false to save space.
+            value: false
+            type: bool
+          - name: draw_local_mappoints # Whether to draw local mappoints (not tracked, but in local map based on local keyframes)
+            value: true
+            type: bool
+          - name: draw_connected_kfs # You can set this to be true but it doesn't look good. Need to figure out some nicer way to distribute the points so it's actually readable
+            value: true
+            type: bool
+          - name: draw_only_trajectory
+            value: false
+            type: bool
 
       -
        name: TRACKING_FRONTEND
@@ -112,6 +146,14 @@ actors:
             name: min_num_features
             value: 2000
             type: i32
+          - 
+            name: min_frames_to_insert_kf
+            value: 0
+            type: i32
+          -
+            name: max_frames_to_insert_kf
+            value: 10
+            type: i32
 
       -
        name: LOCAL_MAPPING
@@ -133,7 +175,10 @@ actors:
 
       -
        name: LOOP_CLOSING
-       tag: "orbslam loop closing"
+       tag: "orbslam2 loop closing"
        receiver_bound: -1
        settings:
           - 
+            name: covisibility_consistency_threshold
+            value: 3
+            type: i32
