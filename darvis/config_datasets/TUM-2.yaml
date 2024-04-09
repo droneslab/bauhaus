@@ -1,0 +1,33 @@
+# # General sensor definitions.
+# sensor_type: RGB camera 
+
+# Freiburg 2 RGB	520.9	521.0	325.1	249.7	0.2312	-0.7849	-0.0033	-0.0001	0.9172
+
+
+# Camera calibration and distortion parameters (OpenCV) 
+fx: 520.9
+fy:	521.0
+cx: 325.1
+cy: 249.7
+
+k1: 0.2312
+k2: -0.7849
+p1: -0.0033	
+p2: -0.0001
+k3: 0.9172
+
+stereo_baseline_times_fx: 386.1448
+thdepth: 35
+
+# Color order of the images (0: BGR, 1: RGB. It is ignored if images are grayscale)
+RGB: 1
+
+# Camera resolution
+width: 640
+height: 480
+
+stereo_overlapping_begin: 0
+stereo_overlapping_end: 1000
+
+
+
