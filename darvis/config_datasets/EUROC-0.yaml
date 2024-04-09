@@ -1,3 +1,6 @@
+#dataset name
+dataset: EUROC
+
 # # General sensor definitions.
 # sensor_type: camera
 # comment: VI-Sensor cam0 (MT9M034)

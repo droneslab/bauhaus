@@ -1,3 +1,6 @@
+#dataset name
+dataset: TUM
+
 # # General sensor definitions.
 # sensor_type: RGB camera 
 # Freiburg 1 RGB	517.3	516.5	318.6	255.3	0.2624	-0.9531	-0.0054	0.0026	1.1633
