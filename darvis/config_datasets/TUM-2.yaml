@@ -1,3 +1,6 @@
+#dataset name
+dataset: TUM
+
 # # General sensor definitions.
 # sensor_type: RGB camera 
 

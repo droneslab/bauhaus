@@ -271,6 +271,9 @@ fn load_camera_settings(camera_fn: &String, module_info: &mut Vec<ModuleConf>) {
     add_setting_f64("CAMERA", "stereo_baseline_times_fx", &yaml_document["stereo_baseline_times_fx"]);
     add_setting_i32("CAMERA", "thdepth", &yaml_document["thdepth"]);
 
+    // Add dataset name
+    add_setting_string("CAMERA", "dataset", &yaml_document["dataset"]);
+
     // Add camera module to module_info so it gets spawned
     let camera_module = ModuleConf {
         name: "CAMERA".to_string(),

@@ -1,4 +1,7 @@
 KITTI_COMMON = '''
+#dataset name
+dataset: KITTI
+
 
 k1: 0.0
 k2: 0.0

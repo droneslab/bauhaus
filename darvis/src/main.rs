@@ -35,16 +35,15 @@ pub type MapLock = ReadWriteMap<Map>;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
-    if args.len() < 4 {
+    if args.len() < 3 {
         panic!("
             [ERROR] Invalid number of input parameters.
-            Usage: cargo run -- [PATH_TO_DATA_DIRECTORY] [PATH_TO_SYSTEM_CONFIG_FILE] [PATH_TO_DATASET/CAMERA_CONFIG_FILE] [DATASET_NAME]
+            Usage: cargo run -- [PATH_TO_DATA_DIRECTORY] [PATH_TO_SYSTEM_CONFIG_FILE] [PATH_TO_DATASET/CAMERA_CONFIG_FILE]
         ");
     }
     let img_dir = args[1].to_owned();
     let system_config_file = args[2].to_owned();
     let dataset_config_file = args[3].to_owned();
-    let dataset_name = args[4].to_owned();
 
     // Load config, including custom settings and actor information
     let (actor_info, module_info, log_level) = load_config(&system_config_file, &dataset_config_file).expect("Could not load config");
@@ -60,6 +59,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     info!("System ready to receive messages!");
 
+    let dataset_name = SETTINGS.get::<String>("CAMERA", "dataset");
+
+    info!("Dataset name: {}", dataset_name);
     let (timestamps, images_path) = if dataset_name == "KITTI" {
         let image_name = "image_0";
 
