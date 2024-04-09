@@ -11,13 +11,15 @@ use core::config::SETTINGS;
 use std::fmt::Debug;
 use core::sensor::{Sensor, FrameSensor};
 use opencv::prelude::{Mat, MatTraitConst, MatTrait, KeyPointTraitConst};
-use opencv::types::VectorOff32;
-use opencv::core::{KeyPoint, CV_32F, Scalar};
+use opencv::types::{VectorOff32};
+use opencv::core::{KeyPoint, CV_32F, Scalar, Point2f};
 use crate::registered_actors::{CAMERA_MODULE, FEATURES};
 use crate::{
     matrix::{DVMatrix, DVVectorOfKeyPoint},
     map::map::Id,
 };
+
+use std::cmp::{max, min};
 
 #[derive(Clone, Debug, Default)]
 enum KeyPoints {
@@ -63,6 +65,25 @@ pub struct Features {
 
 }
 
+
+// Function to find minimum of two f32 values
+fn min_float(a: f32, b: f32) -> f32 {
+    if a < b {
+        a
+    } else {
+        b
+    }
+}
+
+// Function to find maximum of two f32 values
+fn max_float(a: f32, b: f32) -> f32 {
+    if a > b {
+        a
+    } else {
+        b
+    }
+}
+
 impl Features {
     pub fn new(
         keypoints: DVVectorOfKeyPoint,
@@ -86,25 +107,64 @@ impl Features {
         // Image Bounds
         let (min_x, max_x, min_y, max_y) = match &CAMERA_MODULE.dist_coef {
             Some(_vec) => {
-                todo!("mvp: implement code if dist_coef is non-zero");
-                // cv::Mat mat(4,2,CV_32F);
-                // mat.at<float>(0,0)=0.0; mat.at<float>(0,1)=0.0;
-                // mat.at<float>(1,0)=imLeft.cols; mat.at<float>(1,1)=0.0;
-                // mat.at<float>(2,0)=0.0; mat.at<float>(2,1)=imLeft.rows;
-                // mat.at<float>(3,0)=imLeft.cols; mat.at<float>(3,1)=imLeft.rows;
 
-                // mat=mat.reshape(2);
-                // cv::undistortPoints(mat,mat,static_cast<Pinhole*>(mpCamera)->toK(),mDistCoef,cv::Mat(),mK);
-                // mat=mat.reshape(1);
+                let points = vec![
+                    Point2f::new(0.0, 0.0),
+                    Point2f::new(im_width as f32, 0.0),
+                    Point2f::new(0.0, im_height as f32),
+                    Point2f::new(im_width as f32, im_height as f32),
+                ];
 
-                // // Undistort corners
-                // mnMinX = min(mat.at<float>(0,0),mat.at<float>(2,0));
-                // mnMaxX = max(mat.at<float>(1,0),mat.at<float>(3,0));
-                // mnMinY = min(mat.at<float>(0,1),mat.at<float>(1,1));
-                // mnMaxY = max(mat.at<float>(2,1),mat.at<float>(3,1));
+                // keypoints for point2f
+                
+
+                // Reshape points
+                let mut mat = Mat::from_slice_2d(&points.iter().map(|p| vec![p.x, p.y]).collect::<Vec<_>>()).unwrap();
+
+                mat = mat.reshape(2, 0).unwrap();
+
+                let mut undistorted_points = mat.clone();
+                // Undistort points
+                // let mut undistorted_points = Mat::default();
+                let dist_coefs = VectorOff32::from_iter((*_vec).clone());
+                opencv::calib3d::undistort_points(
+                    &mat,
+                    &mut undistorted_points,
+                    &CAMERA_MODULE.k_matrix.mat(),
+                    &dist_coefs,
+                    &Mat::eye(3, 3, opencv::core::CV_32F)?,
+                    &CAMERA_MODULE.k_matrix.mat(),
+                )?;
+                let mut undistorted_points = undistorted_points.reshape(1, 0).unwrap();
+
+                // Get the min and max values
+                let mn_min_x = min_float(
+                    *undistorted_points.at_2d::<f32>(0, 0).unwrap(),
+                    *undistorted_points.at_2d::<f32>(2, 0).unwrap(),
+                );
+                let mn_max_x = max_float(
+                    *undistorted_points.at_2d::<f32>(1, 0).unwrap(),
+                    *undistorted_points.at_2d::<f32>(3, 0).unwrap(),
+                );
+                let mn_min_y = min_float(
+                    *undistorted_points.at_2d::<f32>(0, 1).unwrap(),
+                    *undistorted_points.at_2d::<f32>(1, 1).unwrap(),
+                );
+                let mn_max_y = max_float(
+                    *undistorted_points.at_2d::<f32>(2, 1).unwrap(),
+                    *undistorted_points.at_2d::<f32>(3, 1).unwrap(),
+                );
+                
+                let mn_max_x_f64 = mn_max_x as f64;
+                let mn_max_y_f64 = mn_max_y as f64;
+                let mn_min_x_f64 = mn_min_x as f64;
+                let mn_min_y_f64 = mn_min_y as f64;
+
+                (mn_min_x_f64, mn_max_x_f64, mn_min_y_f64, mn_max_y_f64)
+            
             },
             None => {
-                (0.0, im_width as f64, 0.0, im_height as f64)
+                (0.0 as f64 , im_width as f64, 0.0 as f64, im_height as f64)
             }
         };
 
