@@ -1,5 +1,4 @@
 /// *** Traits for modules. *** //
-use lazy_static::lazy_static;
 
 
 pub trait CameraModule { }

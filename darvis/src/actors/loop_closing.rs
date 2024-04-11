@@ -1,29 +1,29 @@
 use core::system::Actor;
 use core::config::{SETTINGS, SYSTEM};
-use core::matrix::DVMatrix4;
 use core::sensor::Sensor;
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::Duration;
 use log::{debug, info, warn};
+use crate::actors::local_mapping::LOCAL_MAPPING_IDLE;
 use crate::actors::messages::KeyFrameIdMsg;
 use crate::map::pose::{DVTranslation, Pose, Sim3};
 use crate::modules::sim3solver::Sim3Solver;
 use crate::modules::{optimizer, orbmatcher};
-use crate::registered_actors::{LOCAL_MAPPING, LOOP_CLOSING, VOCABULARY};
+use crate::registered_actors::{LOOP_CLOSING, VOCABULARY};
 use crate::{System, MapLock};
 use crate::map::map::Id;
 use crate::modules::imu::ImuModule;
 
-use super::local_mapping::{LOCAL_MAPPING_PAUSED};
+use super::local_mapping::LOCAL_MAPPING_PAUSE_SWITCH;
 use super::messages::{IMUInitializedMsg, ShutdownMsg};
 
 type ConsistentGroup = (Vec<Id>, i32);
 pub type KeyFrameAndPose = HashMap<Id, Sim3>;
 
 pub static GBA_KILL_SWITCH: AtomicBool = AtomicBool::new(false); // mbStopGBA
-static GBA_RUNNING: AtomicBool = AtomicBool::new(false); // mbRunningGBA
+static GBA_IDLE: AtomicBool = AtomicBool::new(false); // mbRunningGBA
 
 pub struct LoopClosing {
     system: System,
@@ -86,13 +86,13 @@ impl Actor for LoopClosing {
                 }
 
                 actor.current_kf_id = msg.kf_id;
-                debug!("Loop closing working on kf {}", actor.current_kf_id);
                 match actor.loop_closing() {
                     Ok(_) => {},
                     Err(e) => {
                         warn!("Loop closing failed: {}", e);
                     }
                 }
+                println!();
             } else if message.is::<IMUInitializedMsg>() {
                 todo!("IMU: Process message from local mapping");
             } else if message.is::<ShutdownMsg>() {
@@ -112,16 +112,18 @@ impl LoopClosing {
         // TODO (design, fine-grained locking) would be great if we could just lock this keyframe
         self.map.write().keyframes.get_mut(&self.current_kf_id).unwrap().dont_delete = true;
 
+        debug!("Loop closing working on kf {} (frame {})", self.current_kf_id, self.map.read().keyframes.get(&self.current_kf_id).unwrap().frame_id);
+
         // Detect loop candidates and check covisibility consistency
         if self.detect_loop() {
-            // debug!("KF {}: step 1 passed", self.current_kf_id);
+            debug!("KF {}: step 1 passed", self.current_kf_id);
             // Add current keyframe to database
             self.map.write().add_to_kf_database(self.current_kf_id);
 
             // Compute similarity transformation [sR|t]
             // In the stereo/RGBD case s=1
             if self.compute_sim3()? {
-                // info!("KF {}: Loop detected! Correcting loop...", self.current_kf_id);
+                info!("KF {}: Loop detected! Correcting loop...", self.current_kf_id);
                 // Perform loop fusion and pose graph optimization
                 self.correct_loop()?;
             }
@@ -149,28 +151,32 @@ impl LoopClosing {
         let min_score = {
             let lock = self.map.read();
             let connected_keyframes = lock.keyframes.get(&self.current_kf_id).unwrap().get_covisibility_keyframes(i32::MAX);
+            print!("Connected KFs: ");
+
             let mut min_score = 1.0;
             for kf_id in connected_keyframes {
                 let kf1 = lock.keyframes.get(&self.current_kf_id).unwrap();
                 let kf2 = lock.keyframes.get(&kf_id).unwrap();
 
                 let score = VOCABULARY.score(&kf1, &kf2);
+                print!("{}:{}, ", kf2.id, score);
                 if score < min_score {
                     min_score = score;
                 }
             }
             min_score
         };
+        println!();
 
         // Query the database imposing the minimum score
         let candidate_kfs = self.map.read().kf_db_detect_loop_candidates(self.current_kf_id, min_score);
 
-        // debug!("Candidate kfs: {:?}", candidate_kfs);
+        debug!("Candidate kfs: {:?}", candidate_kfs);
 
         // If there are no loop candidates, just add new keyframe and return false
         if candidate_kfs.is_empty() {
             self.consistent_groups.clear();
-            // debug!("No loop candidates");
+            debug!("No loop candidates");
             return false;
         }
 
@@ -182,7 +188,6 @@ impl LoopClosing {
         let mut current_consistent_groups = Vec::new(); // vCurrentConsistentGroups
         let mut consistent_group = vec![false; self.consistent_groups.len()]; // vbConsistentGroup
 
-        // Sofiya: I think there should be way fewer candidates than this, especially at the beginning.
         for cand_kf_id in candidate_kfs {
             let map_read_lock = self.map.read();
             let candidate_kf = map_read_lock.keyframes.get(&cand_kf_id).unwrap();
@@ -224,7 +229,7 @@ impl LoopClosing {
         // Update Covisibility Consistent Groups
         self.consistent_groups = current_consistent_groups;
 
-        // debug!("Detect loop, final consistent candidates: {:?}", self.enough_consistent_candidates);
+        debug!("Final consistent candidates: {:?}", self.enough_consistent_candidates);
 
         return !self.enough_consistent_candidates.is_empty();
     }
@@ -253,7 +258,8 @@ impl LoopClosing {
 
                     let keyframe = map_read_lock.keyframes.get(&candidate_kf_id).unwrap();
                     let mappoint_matches = orbmatcher::search_by_bow_kf(current_keyframe, keyframe, true, 0.75)?;
-                    // debug!("Searching for matches between {} (frame {}) and {} (frame {})", current_keyframe.id, current_keyframe.frame_id, keyframe.id, keyframe.frame_id);
+                    debug!("Searching for matches between {} (frame {}) and {} (frame {})", current_keyframe.id, current_keyframe.frame_id, keyframe.id, keyframe.frame_id);
+                    debug!("(Mappoint matches: {})", mappoint_matches.len());
                     mappoint_matches
                 };
 
@@ -271,6 +277,8 @@ impl LoopClosing {
             }
         }
         let mut has_match = false;
+
+        println!("Compute sim3, initial candidates: {}", initial_candidates);
 
         // Perform alternatively RANSAC iterations for each candidate
         // until one is succesful or all fail
@@ -291,9 +299,15 @@ impl LoopClosing {
                     num_candidates -= 1;
                 }
 
+                if sim3_result.is_none() {
+                    debug!("Sim3 result: None");
+                }
+
                 // If RANSAC returns a Sim3, perform a guided matching and optimize with all correspondences
                 if sim3_result.is_some() {
                     let (inliers, num_inliers) = sim3_result.unwrap();
+                    debug!("Sim3 result: {:?}", num_inliers);
+
                     let mut mappoint_matches_copy = HashMap::new(); //vpMapPointMatches
                     for j in 0..inliers.len() {
                         if inliers[j] {
@@ -311,6 +325,7 @@ impl LoopClosing {
                         &self.map, self.current_kf_id, kf_id, &mut mappoint_matches_copy, &mut sim3, 10, false
                     );
 
+                    debug!("Inliers: {}", num_inliers);
                     // If optimization is succesful stop ransacs and continue
                     if num_inliers >= 20 {
                         has_match = true;
@@ -365,9 +380,10 @@ impl LoopClosing {
 
         // Find more matches projecting with the computed Sim3
         orbmatcher::search_by_projection_for_loop_detection(
-            &self.map, &self.current_kf_id, &self.scw, &self.loop_mappoints, &mut self.current_matched_points, 10,
-            0.75, true
+            &self.map, &self.current_kf_id, &self.scw, &self.loop_mappoints, &mut self.current_matched_points, 10
         )?;
+
+        println!("Current matched points: {:?}", self.current_matched_points);
 
         if self.current_matched_points.len()  >= 40 {
             for i in 0..initial_candidates {
@@ -395,16 +411,18 @@ impl LoopClosing {
 
         {
             // TODO (design, concurency) local mapping request stop
-            LOCAL_MAPPING_PAUSED.store(true, Ordering::SeqCst);
+            LOCAL_MAPPING_PAUSE_SWITCH.store(true, Ordering::SeqCst);
+            println!("Pausing local mapping");
 
             // If a Global Bundle Adjustment is running, abort it
-            if GBA_RUNNING.load(Ordering::SeqCst) {
+            if !GBA_IDLE.load(Ordering::SeqCst) {
                 self.full_ba_idx += 1;
                 GBA_KILL_SWITCH.store(true, Ordering::SeqCst);
             }
 
             // Wait until Local Mapping has effectively stopped
-            while !LOCAL_MAPPING_PAUSED.load(Ordering::SeqCst) {
+            while !LOCAL_MAPPING_IDLE.load(Ordering::SeqCst) {
+                println!("Waiting for local mapping to finish...");
                 thread::sleep(Duration::from_millis(1000));
             }
         }
@@ -554,13 +572,13 @@ impl LoopClosing {
         self.map.write().add_kf_loop_edges(self.matched_kf, self.current_kf_id);
 
         // Launch a new thread to perform Global Bundle Adjustment
-        GBA_RUNNING.store(true, Ordering::SeqCst);
-
         let mut map_copy = self.map.clone();
         let current_kf_id = self.current_kf_id;
         thread::spawn(move || {
             run_gba(&mut map_copy, current_kf_id);
         });
+
+        LOCAL_MAPPING_PAUSE_SWITCH.store(false, Ordering::SeqCst);
 
         self.last_loop_kf_id = self.current_kf_id;
 
@@ -587,16 +605,16 @@ impl LoopClosing {
 
 
 fn run_gba(map: &mut MapLock, loop_kf: Id) {
-    let _span = tracy_client::span!("run_gba_in_thread");
-
     // void LoopClosing::RunGlobalBundleAdjustment(unsigned long nLoopKF)
-
+    let _span = tracy_client::span!("run_gba_in_thread");
     info!("Starting Global Bundle Adjustment");
 
     // TODO (design, concurrency) mbStopGBA called from within loop closing
     if GBA_KILL_SWITCH.load(Ordering::SeqCst) {
         return;
     }
+
+    GBA_IDLE.store(false, Ordering::SeqCst);
 
     optimizer::global_bundle_adjustment(map, 10, false, loop_kf);
 
@@ -607,9 +625,13 @@ fn run_gba(map: &mut MapLock, loop_kf: Id) {
 
     debug!("Global bundle adjustment finished. Updating map...");
 
-    LOCAL_MAPPING_PAUSED.store(true, Ordering::SeqCst);
+    if GBA_KILL_SWITCH.load(Ordering::SeqCst) {
+        return;
+    }
+
+    LOCAL_MAPPING_PAUSE_SWITCH.store(true, Ordering::SeqCst);
     // Wait until Local Mapping has effectively stopped
-    while !LOCAL_MAPPING_PAUSED.load(Ordering::SeqCst) {
+    while !LOCAL_MAPPING_IDLE.load(Ordering::SeqCst) {
         thread::sleep(Duration::from_millis(1000));
     }
 
@@ -679,10 +701,11 @@ fn run_gba(map: &mut MapLock, loop_kf: Id) {
         }
     }
 
-    GBA_RUNNING.store(false, Ordering::SeqCst);
+    GBA_IDLE.store(true, Ordering::SeqCst);
     GBA_KILL_SWITCH.store(false, Ordering::SeqCst);
     // Loop closed. Release local mapping.
-    LOCAL_MAPPING_PAUSED.store(false, Ordering::SeqCst);
+    println!("Resuming local mapping");
+    LOCAL_MAPPING_PAUSE_SWITCH.store(false, Ordering::SeqCst);
 
     info!("Map updated!");
 }

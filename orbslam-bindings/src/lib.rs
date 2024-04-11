@@ -181,8 +181,8 @@ pub mod ffi {
             levels: i32,
             ini_th_fast: i32,
             min_th_fast: i32,
-            overlap_begin: i32,
-            overlap_end: i32,
+            // overlap_begin: i32,
+            // overlap_end: i32,
         ) -> UniquePtr<ORBextractor>;
         #[rust_name = "extract"]
         fn extract_rust(

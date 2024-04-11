@@ -71,6 +71,118 @@ namespace orb_slam3 {
     const int PATCH_SIZE = 31;
     const int HALF_PATCH_SIZE = 15;
     const int EDGE_THRESHOLD = 19;
+
+
+    std::unique_ptr<ORBextractor> new_orb_extractor(int features, float scale_factor, int levels, int ini_th_FAST, int min_th_FAST) {
+        return std::unique_ptr<ORBextractor>(new ORBextractor(features, scale_factor, levels, ini_th_FAST, min_th_FAST));
+    }
+
+    int ORBextractor::extract_rust(const orb_slam3::WrapBindCVMat & image, orb_slam3::WrapBindCVKeyPoints & keypoints, orb_slam3::WrapBindCVMat & descriptors) {
+        // vector<int> lapping = {overlap_begin, overlap_end};
+
+        auto num_extracted = extract(*image.mat_ptr, cv::Mat(), *keypoints.kp_ptr, *descriptors.mat_ptr);
+
+        // Assign data from cpp to rust variables
+        // cout << "keypoints" << endl;
+        // for(int i =0;i < keypoints_1.size(); i++) {
+        //     keypoints.push_back(*reinterpret_cast<orb_slam3::DVKeyPoint* >(&keypoints_1[i]));
+        //     // cout << keypoints_1[i].pt << " " << keypoints_1[i].size << " " << keypoints_1[i].angle << " " << keypoints_1[i].response << " " << keypoints_1[i].octave << "// ";
+        // }
+    //    cout << endl;
+        return num_extracted;
+    }
+
+    int ORBextractor::extract2(orb_slam3::WrapBindCVKeyPoints & keypoints, orb_slam3::WrapBindCVMat & descriptors) {
+        // vector<int> lapping = {overlap_begin, overlap_end};
+
+        cout << "Just testing" << endl;
+        Mat image = cv::imread("/home/sofiya/datasets/kitti_00_0/000001.png",cv::IMREAD_GRAYSCALE); //,cv::IMREAD_UNCHANGED);
+
+        vector<KeyPoint> kp;
+        cv::Mat desc;
+        auto num_extracted = extract(image, cv::Mat(), kp, desc);
+
+        cv::Mat output;
+        cv::drawKeypoints(image, kp, output, cv::Scalar::all(-1), cv::DrawMatchesFlags::DEFAULT);
+        cv::imwrite("000001_orb.png", output);
+
+        return num_extracted;
+    }
+
+
+    static float IC_Angle(const Mat& image, Point2f pt,  const vector<int> & u_max)
+    {
+        int m_01 = 0, m_10 = 0;
+
+        const uchar* center = &image.at<uchar> (cvRound(pt.y), cvRound(pt.x));
+
+        // Treat the center line differently, v=0
+        for (int u = -HALF_PATCH_SIZE; u <= HALF_PATCH_SIZE; ++u)
+            m_10 += u * center[u];
+
+        // Go line by line in the circuI853lar patch
+        int step = (int)image.step1();
+        for (int v = 1; v <= HALF_PATCH_SIZE; ++v)
+        {
+            // Proceed over the two lines
+            int v_sum = 0;
+            int d = u_max[v];
+            for (int u = -d; u <= d; ++u)
+            {
+                int val_plus = center[u + v*step], val_minus = center[u - v*step];
+                v_sum += (val_plus - val_minus);
+                m_10 += u * (val_plus + val_minus);
+            }
+            m_01 += v * v_sum;
+        }
+
+        return fastAtan2((float)m_01, (float)m_10);
+    }
+
+
+    const float factorPI = (float)(CV_PI/180.f);
+    static void computeOrbDescriptor(const KeyPoint& kpt,
+                                    const Mat& img, const Point* pattern,
+                                    uchar* desc)
+    {
+        float angle = (float)kpt.angle*factorPI;
+        float a = (float)cos(angle), b = (float)sin(angle);
+
+        const uchar* center = &img.at<uchar>(cvRound(kpt.pt.y), cvRound(kpt.pt.x));
+        const int step = (int)img.step;
+
+        #define GET_VALUE(idx) \
+            center[cvRound(pattern[idx].x*b + pattern[idx].y*a)*step + \
+                cvRound(pattern[idx].x*a - pattern[idx].y*b)]
+
+
+        for (int i = 0; i < 32; ++i, pattern += 16)
+        {
+            int t0, t1, val;
+            t0 = GET_VALUE(0); t1 = GET_VALUE(1);
+            val = t0 < t1;
+            t0 = GET_VALUE(2); t1 = GET_VALUE(3);
+            val |= (t0 < t1) << 1;
+            t0 = GET_VALUE(4); t1 = GET_VALUE(5);
+            val |= (t0 < t1) << 2;
+            t0 = GET_VALUE(6); t1 = GET_VALUE(7);
+            val |= (t0 < t1) << 3;
+            t0 = GET_VALUE(8); t1 = GET_VALUE(9);
+            val |= (t0 < t1) << 4;
+            t0 = GET_VALUE(10); t1 = GET_VALUE(11);
+            val |= (t0 < t1) << 5;
+            t0 = GET_VALUE(12); t1 = GET_VALUE(13);
+            val |= (t0 < t1) << 6;
+            t0 = GET_VALUE(14); t1 = GET_VALUE(15);
+            val |= (t0 < t1) << 7;
+
+            desc[i] = (uchar)val;
+        }
+
+        #undef GET_VALUE
+    }
+
+
     static int bit_pattern_31_[256*4] =
     {
         8,-3, 9,5/*mean (0), correlation (0)*/,
@@ -331,12 +443,10 @@ namespace orb_slam3 {
         -1,-6, 0,-11/*mean (0.127148), correlation (0.547401)*/
     };
 
-    std::unique_ptr<ORBextractor> new_orb_extractor(int features, float scale_factor, int levels, int ini_th_FAST, int min_th_FAST, int overlap_begin, int overlap_end) {
-        return std::unique_ptr<ORBextractor>(new ORBextractor(features, scale_factor, levels, ini_th_FAST, min_th_FAST, overlap_begin, overlap_end));
-    }
-
-    ORBextractor::ORBextractor(int _nfeatures, float _scaleFactor, int _nlevels, int _iniThFAST, int _minThFAST, int _overlap_begin, int _overlap_end):
-        nfeatures(_nfeatures), scaleFactor(_scaleFactor), nlevels(_nlevels), iniThFAST(_iniThFAST), minThFAST(_minThFAST), overlap_begin(_overlap_begin), overlap_end(_overlap_end)
+    ORBextractor::ORBextractor(int _nfeatures, float _scaleFactor, int _nlevels,
+            int _iniThFAST, int _minThFAST):
+        nfeatures(_nfeatures), scaleFactor(_scaleFactor), nlevels(_nlevels),
+        iniThFAST(_iniThFAST), minThFAST(_minThFAST)
     {
         mvScaleFactor.resize(nlevels);
         mvLevelSigma2.resize(nlevels);
@@ -395,82 +505,10 @@ namespace orb_slam3 {
         }
     }
 
-    static float IC_Angle(const Mat& image, Point2f pt,  const vector<int> & u_max)
-    {
-        int m_01 = 0, m_10 = 0;
-
-        const uchar* center = &image.at<uchar> (cvRound(pt.y), cvRound(pt.x));
-
-        // Treat the center line differently, v=0
-        for (int u = -HALF_PATCH_SIZE; u <= HALF_PATCH_SIZE; ++u)
-            m_10 += u * center[u];
-
-        // Go line by line in the circuI853lar patch
-        int step = (int)image.step1();
-        for (int v = 1; v <= HALF_PATCH_SIZE; ++v)
-        {
-            // Proceed over the two lines
-            int v_sum = 0;
-            int d = u_max[v];
-            for (int u = -d; u <= d; ++u)
-            {
-                int val_plus = center[u + v*step], val_minus = center[u - v*step];
-                v_sum += (val_plus - val_minus);
-                m_10 += u * (val_plus + val_minus);
-            }
-            m_01 += v * v_sum;
-        }
-
-        return fastAtan2((float)m_01, (float)m_10);
-    }
-
-
-    const float factorPI = (float)(CV_PI/180.f);
-    static void computeOrbDescriptor(const KeyPoint& kpt,
-                                     const Mat& img, const Point* pattern,
-                                     uchar* desc)
-    {
-        float angle = (float)kpt.angle*factorPI;
-        float a = (float)cos(angle), b = (float)sin(angle);
-
-        const uchar* center = &img.at<uchar>(cvRound(kpt.pt.y), cvRound(kpt.pt.x));
-        const int step = (int)img.step;
-
-#define GET_VALUE(idx) \
-        center[cvRound(pattern[idx].x*b + pattern[idx].y*a)*step + \
-               cvRound(pattern[idx].x*a - pattern[idx].y*b)]
-
-
-        for (int i = 0; i < 32; ++i, pattern += 16)
-        {
-            int t0, t1, val;
-            t0 = GET_VALUE(0); t1 = GET_VALUE(1);
-            val = t0 < t1;
-            t0 = GET_VALUE(2); t1 = GET_VALUE(3);
-            val |= (t0 < t1) << 1;
-            t0 = GET_VALUE(4); t1 = GET_VALUE(5);
-            val |= (t0 < t1) << 2;
-            t0 = GET_VALUE(6); t1 = GET_VALUE(7);
-            val |= (t0 < t1) << 3;
-            t0 = GET_VALUE(8); t1 = GET_VALUE(9);
-            val |= (t0 < t1) << 4;
-            t0 = GET_VALUE(10); t1 = GET_VALUE(11);
-            val |= (t0 < t1) << 5;
-            t0 = GET_VALUE(12); t1 = GET_VALUE(13);
-            val |= (t0 < t1) << 6;
-            t0 = GET_VALUE(14); t1 = GET_VALUE(15);
-            val |= (t0 < t1) << 7;
-
-            desc[i] = (uchar)val;
-        }
-
-#undef GET_VALUE
-    }
-
     static void computeOrientation(const Mat& image, vector<KeyPoint>& keypoints, const vector<int>& umax)
     {
         for (vector<KeyPoint>::iterator keypoint = keypoints.begin(),
-                     keypointEnd = keypoints.end(); keypoint != keypointEnd; ++keypoint)
+            keypointEnd = keypoints.end(); keypoint != keypointEnd; ++keypoint)
         {
             keypoint->angle = IC_Angle(image, keypoint->pt, umax);
         }
@@ -534,27 +572,10 @@ namespace orb_slam3 {
 
     }
 
-    static bool compareNodes(pair<int,ExtractorNode*>& e1, pair<int,ExtractorNode*>& e2){
-        if(e1.first < e2.first){
-            return true;
-        }
-        else if(e1.first > e2.first){
-            return false;
-        }
-        else{
-            if(e1.second->UL.x < e2.second->UL.x){
-                return true;
-            }
-            else{
-                return false;
-            }
-        }
-    }
-
     vector<cv::KeyPoint> ORBextractor::DistributeOctTree(const vector<cv::KeyPoint>& vToDistributeKeys, const int &minX,
-                                                         const int &maxX, const int &minY, const int &maxY, const int &N, const int &level)
+                                        const int &maxX, const int &minY, const int &maxY, const int &N, const int &level)
     {
-        // Compute how many initial nodes
+        // Compute how many initial nodes   
         const int nIni = round(static_cast<float>(maxX-minX)/(maxY-minY));
 
         const float hX = static_cast<float>(maxX-minX)/nIni;
@@ -635,7 +656,7 @@ namespace orb_slam3 {
                     // Add childs if they contain points
                     if(n1.vKeys.size()>0)
                     {
-                        lNodes.push_front(n1);
+                        lNodes.push_front(n1);                    
                         if(n1.vKeys.size()>1)
                         {
                             nToExpand++;
@@ -677,7 +698,7 @@ namespace orb_slam3 {
                     lit=lNodes.erase(lit);
                     continue;
                 }
-            }
+            }       
 
             // Finish if there are more nodes than required features
             // or all nodes contain just one point
@@ -696,7 +717,7 @@ namespace orb_slam3 {
                     vector<pair<int,ExtractorNode*> > vPrevSizeAndPointerToNode = vSizeAndPointerToNode;
                     vSizeAndPointerToNode.clear();
 
-                    sort(vPrevSizeAndPointerToNode.begin(),vPrevSizeAndPointerToNode.end(),compareNodes);
+                    sort(vPrevSizeAndPointerToNode.begin(),vPrevSizeAndPointerToNode.end());
                     for(int j=vPrevSizeAndPointerToNode.size()-1;j>=0;j--)
                     {
                         ExtractorNode n1,n2,n3,n4;
@@ -781,7 +802,7 @@ namespace orb_slam3 {
     {
         allKeypoints.resize(nlevels);
 
-        const float W = 35;
+        const float W = 30;
 
         for (int level = 0; level < nlevels; ++level)
         {
@@ -821,40 +842,13 @@ namespace orb_slam3 {
                         maxX = maxBorderX;
 
                     vector<cv::KeyPoint> vKeysCell;
-
                     FAST(mvImagePyramid[level].rowRange(iniY,maxY).colRange(iniX,maxX),
-                         vKeysCell,iniThFAST,true);
-
-                    /*if(bRight && j <= 13){
-                        FAST(mvImagePyramid[level].rowRange(iniY,maxY).colRange(iniX,maxX),
-                             vKeysCell,10,true);
-                    }
-                    else if(!bRight && j >= 16){
-                        FAST(mvImagePyramid[level].rowRange(iniY,maxY).colRange(iniX,maxX),
-                             vKeysCell,10,true);
-                    }
-                    else{
-                        FAST(mvImagePyramid[level].rowRange(iniY,maxY).colRange(iniX,maxX),
-                             vKeysCell,iniThFAST,true);
-                    }*/
-
+                        vKeysCell,iniThFAST,true);
 
                     if(vKeysCell.empty())
                     {
                         FAST(mvImagePyramid[level].rowRange(iniY,maxY).colRange(iniX,maxX),
-                             vKeysCell,minThFAST,true);
-                        /*if(bRight && j <= 13){
-                            FAST(mvImagePyramid[level].rowRange(iniY,maxY).colRange(iniX,maxX),
-                                 vKeysCell,5,true);
-                        }
-                        else if(!bRight && j >= 16){
-                            FAST(mvImagePyramid[level].rowRange(iniY,maxY).colRange(iniX,maxX),
-                                 vKeysCell,5,true);
-                        }
-                        else{
-                            FAST(mvImagePyramid[level].rowRange(iniY,maxY).colRange(iniX,maxX),
-                                 vKeysCell,minThFAST,true);
-                        }*/
+                            vKeysCell,minThFAST,true);
                     }
 
                     if(!vKeysCell.empty())
@@ -874,7 +868,7 @@ namespace orb_slam3 {
             keypoints.reserve(nfeatures);
 
             keypoints = DistributeOctTree(vToDistributeKeys, minBorderX, maxBorderX,
-                                          minBorderY, maxBorderY,mnFeaturesPerLevel[level], level);
+                                        minBorderY, maxBorderY,mnFeaturesPerLevel[level], level);
 
             const int scaledPatchSize = PATCH_SIZE*mvScaleFactor[level];
 
@@ -1074,7 +1068,7 @@ namespace orb_slam3 {
     }
 
     static void computeDescriptors(const Mat& image, vector<KeyPoint>& keypoints, Mat& descriptors,
-                                   const vector<Point>& pattern)
+                                const vector<Point>& pattern)
     {
         descriptors = Mat::zeros((int)keypoints.size(), 32, CV_8UC1);
 
@@ -1082,44 +1076,11 @@ namespace orb_slam3 {
             computeOrbDescriptor(keypoints[i], image, &pattern[0], descriptors.ptr((int)i));
     }
 
-    int ORBextractor::extract_rust(const orb_slam3::WrapBindCVMat & image, orb_slam3::WrapBindCVKeyPoints & keypoints, orb_slam3::WrapBindCVMat & descriptors) {
-        vector<int> lapping = {overlap_begin, overlap_end};
-
-        auto num_extracted = extract(*image.mat_ptr, cv::Mat(), *keypoints.kp_ptr, *descriptors.mat_ptr, lapping);
-
-        // Assign data from cpp to rust variables
-        // cout << "keypoints" << endl;
-        // for(int i =0;i < keypoints_1.size(); i++) {
-        //     keypoints.push_back(*reinterpret_cast<orb_slam3::DVKeyPoint* >(&keypoints_1[i]));
-        //     // cout << keypoints_1[i].pt << " " << keypoints_1[i].size << " " << keypoints_1[i].angle << " " << keypoints_1[i].response << " " << keypoints_1[i].octave << "// ";
-        // }
-    //    cout << endl;
-        return num_extracted;
-    }
-
-    int ORBextractor::extract2(orb_slam3::WrapBindCVKeyPoints & keypoints, orb_slam3::WrapBindCVMat & descriptors) {
-        vector<int> lapping = {overlap_begin, overlap_end};
-
-        cout << "Just testing" << endl;
-        Mat image = cv::imread("/home/sofiya/datasets/kitti_00_0/000001.png",cv::IMREAD_GRAYSCALE); //,cv::IMREAD_UNCHANGED);
-
-        vector<KeyPoint> kp;
-        cv::Mat desc;
-        auto num_extracted = extract(image, cv::Mat(), kp, desc, lapping);
-
-        cv::Mat output;
-        cv::drawKeypoints(image, kp, output, cv::Scalar::all(-1), cv::DrawMatchesFlags::DEFAULT);
-        cv::imwrite("000001_orb.png", output);
-
-        return num_extracted;
-    }
-
     int ORBextractor::extract( InputArray _image, InputArray _mask, vector<KeyPoint>& _keypoints,
-                                  OutputArray _descriptors, std::vector<int> &vLappingArea)
-    {
-        //cout << "[ORBextractor]: Max Features: " << nfeatures << endl;
+                        OutputArray _descriptors)
+    { 
         if(_image.empty())
-            return -1;
+            return 0;
 
         Mat image = _image.getMat();
         assert(image.type() == CV_8UC1 );
@@ -1144,13 +1105,11 @@ namespace orb_slam3 {
             descriptors = _descriptors.getMat();
         }
 
-        //_keypoints.clear();
-        //_keypoints.reserve(nkeypoints);
-        _keypoints = vector<cv::KeyPoint>(nkeypoints);
+        _keypoints.clear();
+        _keypoints.reserve(nkeypoints);
 
         int offset = 0;
-        //Modified for speeding up stereo fisheye matching
-        int monoIndex = 0, stereoIndex = nkeypoints-1;
+        int extracted = 0;
         for (int level = 0; level < nlevels; ++level)
         {
             vector<KeyPoint>& keypoints = allKeypoints[level];
@@ -1164,48 +1123,28 @@ namespace orb_slam3 {
             GaussianBlur(workingMat, workingMat, Size(7, 7), 2, 2, BORDER_REFLECT_101);
 
             // Compute the descriptors
-            //Mat desc = descriptors.rowRange(offset, offset + nkeypointsLevel);
-            Mat desc = cv::Mat(nkeypointsLevel, 32, CV_8U);
+            Mat desc = descriptors.rowRange(offset, offset + nkeypointsLevel);
             computeDescriptors(workingMat, keypoints, desc, pattern);
 
             offset += nkeypointsLevel;
 
-
-            float scale = mvScaleFactor[level]; //getScale(level, firstLevel, scaleFactor);
-            int i = 0;
-            for (vector<KeyPoint>::iterator keypoint = keypoints.begin(),
-                         keypointEnd = keypoints.end(); keypoint != keypointEnd; ++keypoint){
-
-                // Scale keypoint coordinates
-                if (level != 0){
+            // Scale keypoint coordinates
+            if (level != 0)
+            {
+                float scale = mvScaleFactor[level]; //getScale(level, firstLevel, scaleFactor);
+                for (vector<KeyPoint>::iterator keypoint = keypoints.begin(),
+                    keypointEnd = keypoints.end(); keypoint != keypointEnd; ++keypoint)
                     keypoint->pt *= scale;
-                }
-
-                if(keypoint->pt.x >= vLappingArea[0] && keypoint->pt.x <= vLappingArea[1]){
-                    _keypoints.at(stereoIndex) = (*keypoint);
-                    desc.row(i).copyTo(descriptors.row(stereoIndex));
-                    stereoIndex--;
-                }
-                else{
-                    _keypoints.at(monoIndex) = (*keypoint);
-                    desc.row(i).copyTo(descriptors.row(monoIndex));
-                    monoIndex++;
-                }
-                i++;
             }
+            // And add the keypoints to the output
+            _keypoints.insert(_keypoints.end(), keypoints.begin(), keypoints.end());
+            extracted += nkeypointsLevel;
         }
-
-        // cv::Mat output;
-        // cv::drawKeypoints(image, _keypoints, output, cv::Scalar::all(-1), cv::DrawMatchesFlags::DEFAULT);
-        // cv::imwrite("000001_orb.png", output);
-
-
-        return monoIndex;
+        return extracted;
     }
 
     void ORBextractor::ComputePyramid(cv::Mat image)
     {
-
         for (int level = 0; level < nlevels; ++level)
         {
             float scale = mvInvScaleFactor[level];
@@ -1220,15 +1159,14 @@ namespace orb_slam3 {
                 resize(mvImagePyramid[level-1], mvImagePyramid[level], sz, 0, 0, INTER_LINEAR);
 
                 copyMakeBorder(mvImagePyramid[level], temp, EDGE_THRESHOLD, EDGE_THRESHOLD, EDGE_THRESHOLD, EDGE_THRESHOLD,
-                               BORDER_REFLECT_101+BORDER_ISOLATED);
+                            BORDER_REFLECT_101+BORDER_ISOLATED);            
             }
             else
             {
                 copyMakeBorder(image, temp, EDGE_THRESHOLD, EDGE_THRESHOLD, EDGE_THRESHOLD, EDGE_THRESHOLD,
-                               BORDER_REFLECT_101);
+                            BORDER_REFLECT_101);            
             }
         }
 
     }
-
 } //namespace ORB_SLAM

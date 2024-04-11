@@ -1,15 +1,14 @@
 extern crate g2o;
 
 use std::{cmp::{max, min}, collections::{HashMap, HashSet}};
-use cxx::{SharedPtr, UniquePtr};
 use core::{
     config::{SETTINGS, SYSTEM}, sensor::{Sensor, FrameSensor}
 };
-use log::{debug, info, warn};
+use log::{info, warn};
 use nalgebra::Matrix3;
 use opencv::prelude::KeyPointTraitConst;
 use crate::{
-    actors::loop_closing::{KeyFrameAndPose, GBA_KILL_SWITCH}, map::{frame::Frame, map::{Id, Map}, pose::{DVRotation, DVTranslation, Pose, Sim3}}, registered_actors::{CAMERA, FEATURE_DETECTION}, MapLock
+    actors::loop_closing::{KeyFrameAndPose, GBA_KILL_SWITCH}, map::{frame::Frame, map::Id, pose::{DVTranslation, Pose, Sim3}}, registered_actors::{CAMERA, FEATURE_DETECTION}, MapLock
 };
 
 lazy_static! {
@@ -357,7 +356,6 @@ pub fn global_bundle_adjustment(map: &mut MapLock, iterations: i32, robust: bool
 
         // Optimize!
         let span = tracy_client::span!("global_bundle_adjustment::optimize");
-        println!("optimize gba");
         optimizer.pin_mut().optimize(iterations, false);
         drop(span);
         (kf_vertex_ids, mp_vertex_ids)
@@ -816,7 +814,7 @@ pub fn local_bundle_adjustment(
     }
 }
 
-pub fn optimize_essential_graph_6dof() {
+pub fn _optimize_essential_graph_6dof() {
     todo!("STEREO, RGBD. Used by loop closing");
     // void static OptimizeEssentialGraph(Map* pMap, KeyFrame* pLoopKF, KeyFrame* pCurKF,
     //                                 const LoopClosing::KeyFrameAndPose &NonCorrectedSim3,
@@ -824,13 +822,14 @@ pub fn optimize_essential_graph_6dof() {
     //                                 const map<KeyFrame *, set<KeyFrame *> > &LoopConnections,
 }
 
-pub fn optimize_essential_graph_4dof() {
+pub fn _optimize_essential_graph_4dof() {
     todo!("IMU. Used by Loop closing");
     // void static OptimizeEssentialGraph4DoF(Map* pMap, KeyFrame* pLoopKF, KeyFrame* pCurKF,
     //                                 const LoopClosing::KeyFrameAndPose &NonCorrectedSim3,
     //                                 const LoopClosing::KeyFrameAndPose &CorrectedSim3,
     //                                 const map<KeyFrame *, set<KeyFrame *> > &LoopConnections);
 }
+
 pub fn optimize_essential_graph(
     map: &MapLock, loop_kf: Id, curr_kf: Id,
     loop_connections: HashMap<Id, HashSet<Id>>,
@@ -969,7 +968,6 @@ pub fn optimize_essential_graph(
     }
 
     // Optimize!
-    println!("optimize essential");
     optimizer.pin_mut().optimize(20, false);
 
     let mut corrected_swc = HashMap::new();
@@ -979,7 +977,7 @@ pub fn optimize_essential_graph(
         for kf in lock.keyframes.values_mut() {
             let sim3: Sim3 = optimizer.recover_optimized_sim3(kf.id).into();
             corrected_swc.insert(kf.id, sim3.inverse());
-    
+
             let trans = *sim3.pose.get_translation() * (1.0 / sim3.scale); //[R t/s;0 1]
             let new_pose = Pose::new(trans, *sim3.pose.get_rotation());
 
@@ -1017,7 +1015,7 @@ pub fn optimize_essential_graph(
                 let p_3d_w = mp.position;
                 mp.position = corrected_swr.map(&srw.map(&p_3d_w));
             }
-            
+
             let norm_and_depth = map.read().mappoints.get(&mp_id).unwrap().get_norm_and_depth(&map.read());
             if norm_and_depth.is_some() {
                 map.write().mappoints.get_mut(&mp_id).unwrap().update_norm_and_depth(norm_and_depth.unwrap());
@@ -1180,47 +1178,4 @@ pub fn optimize_sim3(
     let optimized_sim3: Sim3 = optimizer.recover_optimized_sim3(0).into();
     *sim3 = optimized_sim3;
     return n_in;
-}
-
-#[derive(Debug)]
-pub struct BundleAdjustmentResult {
-    pub new_mp_poses: HashMap::<Id, DVTranslation>,
-    pub new_kf_poses: HashMap::<Id, Pose>,
-    pub mps_to_discard: Vec<i32>,
-    pub kfs_to_discard: Vec<i32>,
-}
-impl BundleAdjustmentResult {
-    pub fn new(
-        optimizer: UniquePtr<g2o::ffi::BridgeSparseOptimizer>, kf_vertex_ids: HashMap<i32, i32>, mp_vertex_ids: HashMap<i32, i32>,
-        mps_to_discard: Vec<i32>, kfs_to_discard: Vec<i32>
-    ) -> Self {
-        // Recover optimized data
-        // Keyframes
-        let mut new_kf_poses = HashMap::<Id, Pose>::new();
-        for (kf_id, vertex_id) in kf_vertex_ids {
-            let pose = optimizer.recover_optimized_frame_pose(vertex_id);
-            new_kf_poses.insert(kf_id, pose.into());
-        }
-
-        //Points
-        let mut new_mp_poses = HashMap::<Id, DVTranslation>::new();
-        for (mp_id, vertex_id) in mp_vertex_ids {
-            let position = optimizer.recover_optimized_mappoint_pose(vertex_id);
-            let translation = nalgebra::Translation3::new(
-                position.translation[0] as f64,
-                position.translation[1] as f64,
-                position.translation[2] as f64
-            );
-
-            new_mp_poses.insert(mp_id, DVTranslation::new(translation.vector));
-        }
-
-        BundleAdjustmentResult { 
-            new_mp_poses,
-            new_kf_poses,
-            mps_to_discard,
-            kfs_to_discard
-        }
-
-    }
 }

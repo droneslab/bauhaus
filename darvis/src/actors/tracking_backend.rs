@@ -192,9 +192,6 @@ impl TrackingBackend {
                 }
                 let init_success = self.initialization.as_mut().unwrap().try_initialize(&current_frame)?;
                 if init_success {
-                    // Give up ownership of self.initialization to avoid clone, we don't need it from now on
-                    // let mut init = None;
-                    // std::mem::swap(&mut init, &mut self.initialization);
 
                     let (ini_kf_id, curr_kf_id);
                     {
@@ -213,6 +210,7 @@ impl TrackingBackend {
                                         // Set current frame's updated info from map initialization
                                         current_frame.ref_kf_id = Some(curr_kf_id);
                                         current_frame.pose = Some(curr_kf_pose);
+                                        println!("Initialization, set curr frame pose to: {:?}, {:?}", current_frame.pose.unwrap().get_translation(), current_frame.pose.unwrap().get_rotation());
                                         current_frame.mappoint_matches = self.map.read().keyframes.get(&curr_kf_id).unwrap().clone_matches();
                                     }
                                     self.state = TrackingState::Ok;
@@ -360,7 +358,7 @@ impl TrackingBackend {
             let last_frame = last_frame.as_ref();
             if !last_frame.is_none() && !last_frame.unwrap().pose.is_none() && !current_frame.pose.is_none() {
                 let last_pose = last_frame.expect("No last frame in tracking?").pose.as_ref().expect("Can't get last frame's pose?");
-                let last_twc = last_pose.inverse();
+                let last_twc = Pose::new(*last_frame.unwrap().get_camera_center().unwrap(), last_pose.get_rotation().try_inverse().unwrap());
                 self.imu.velocity = Some(*current_frame.pose.as_ref().expect("Can't get current frame?") * last_twc);
             } else {
                 self.imu.velocity = None;
@@ -420,6 +418,7 @@ impl TrackingBackend {
             };
 
             info!("Frame {} pose: {:?}", current_frame.frame_id, current_frame.pose.unwrap());
+            debug!("Frame {} rotation: {:?}", current_frame.frame_id, current_frame.pose.unwrap().get_rotation());
 
             current_frame.pose.unwrap() * ref_kf_pose.inverse()
         };
@@ -452,6 +451,7 @@ impl TrackingBackend {
         // We perform first an ORB matching with the reference keyframe
         // If enough matches are found we setup a PnP solver
 
+        debug!("Track reference keyframe");
         current_frame.compute_bow();
         let nmatches;
         {
@@ -467,6 +467,7 @@ impl TrackingBackend {
         }
 
         current_frame.pose = Some(last_frame.pose.unwrap());
+        debug!("Track Ref KF, set pose to: {:?}, {:?}", current_frame.pose.unwrap().get_translation(), current_frame.pose.unwrap().get_rotation());
 
         optimizer::optimize_pose(current_frame, &self.map);
 
@@ -502,6 +503,10 @@ impl TrackingBackend {
             // self.imu.predict_state();
         } else {
             current_frame.pose = Some(self.imu.velocity.unwrap() * last_frame.pose.unwrap());
+            debug!("Update current frame, set pose to: {:?}, {:?}", current_frame.pose.unwrap().get_translation(), current_frame.pose.unwrap().get_rotation());
+            debug!("...velocity: {:?}, {:?}", self.imu.velocity.unwrap().get_translation(), self.imu.velocity.unwrap().get_rotation());
+            debug!("...last frame tcw: {:?}, {:?}", last_frame.pose.unwrap().get_translation(), last_frame.pose.unwrap().get_rotation());
+
         }
 
         current_frame.mappoint_matches.clear();
@@ -574,7 +579,10 @@ impl TrackingBackend {
         // debug!("pRef {} {:?}", ref_kf_id, ref_kf_pose);
         // debug!("Tlr {:?}", *self.trajectory_poses.last().unwrap());
 
+        debug!("Update last frame, set pose to: {:?}, {:?}", last_frame.pose.unwrap().get_translation(), last_frame.pose.unwrap().get_rotation());
         // debug!("Last frame pose {:?}", last_frame.pose);
+        debug!("...ref kf pose: {:?}, {:?}", ref_kf_pose.get_translation(), ref_kf_pose.get_rotation());
+        debug!("...last trajectory pose: {:?}, {:?}", self.trajectory_poses.last().unwrap().get_translation(), self.trajectory_poses.last().unwrap().get_rotation());
 
         if self.sensor.is_mono() || self.frames_since_last_kf == 0 {
             return;
@@ -667,7 +675,6 @@ impl TrackingBackend {
         }
 
         self.matches_inliers = 0;
-        let mut num_outliers = 0;
         // Update MapPoints Statistics
         for index in 0..current_frame.mappoint_matches.matches.len() {
             if let Some((mp_id, is_outlier)) = current_frame.mappoint_matches.matches[index as usize] {
@@ -693,8 +700,6 @@ impl TrackingBackend {
                     todo!("Stereo");
                     //mCurrentFrame.mappoint_matches[i] = static_cast<MapPoint*>(NULL);
                     // current_frame.as_mut().unwrap().mappoint_matches.remove(&index);
-                } else {
-                    num_outliers += 1;
                 }
             }
         }
@@ -928,7 +933,6 @@ impl TrackingBackend {
             }
         }
 
-        let mut matches = 0;
         if to_match > 0 {
             let mut th = match self.sensor.frame() {
                 FrameSensor::Rgbd => 3,
@@ -953,7 +957,7 @@ impl TrackingBackend {
                 _ => {}
             }
 
-            matches = orbmatcher::search_by_projection(
+            orbmatcher::search_by_projection(
                 current_frame,
                 &mut self.local_mappoints,
                 th, 0.8,

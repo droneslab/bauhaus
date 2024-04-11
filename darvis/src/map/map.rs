@@ -1,11 +1,8 @@
-use std::{backtrace::Backtrace, collections::{BTreeSet, HashMap, HashSet}};
+use std::collections::{HashMap, HashSet};
 use log::{info, warn, error, debug};
 use rustc_hash::FxHashMap;
-use core::{config::{SETTINGS, SYSTEM}, matrix::{DVVector3, DVVectorOfPoint3f}, sensor::{FrameSensor, ImuSensor, Sensor}, system::Timestamp};
-use crate::{
-    map::{keyframe::*, mappoint::*, pose::Pose},
-    modules::optimizer::{self}
-};
+use core::{config::{SETTINGS, SYSTEM}, matrix::DVVector3, sensor::Sensor};
+use crate::map::{keyframe::*, mappoint::*};
 
 use super::{frame::Frame, keyframe_database::KeyFrameDatabase};
 
@@ -31,7 +28,7 @@ pub struct Map {
     // MapPoints
     last_mp_id: Id,
 
-    sensor: Sensor,
+    _sensor: Sensor,
     // Following are in orbslam3, not sure if we need:
     // mvpKeyFrameOrigins: Vec<KeyFrame>
     // mvBackupKeyFrameOriginsId: Vec<: u32>
@@ -49,11 +46,9 @@ pub struct Map {
 
 impl Map {
     pub fn new() -> Map {
-        let sensor: Sensor = SETTINGS.get(SYSTEM, "sensor");
-
         Map {
             id: 0, // TODO (Multimaps): this should increase when new maps are made
-            sensor,
+            _sensor: SETTINGS.get(SYSTEM, "sensor"),
             last_kf_id: -1,
             last_mp_id: -1,
             initial_kf_id: -1,

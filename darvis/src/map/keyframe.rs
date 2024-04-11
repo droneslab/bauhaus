@@ -1,4 +1,4 @@
-use std::{collections::{HashMap, HashSet}, cmp::min, backtrace::Backtrace};
+use std::{collections::{HashMap, HashSet}, cmp::min};
 use core::{config::{ SETTINGS, SYSTEM}, matrix::DVVector3, sensor::Sensor, system::Timestamp};
 use log::{error, debug, warn};
 use crate::{map::{map::Id, pose::Pose},modules::{bow::BoW, imu::*}, registered_actors::VOCABULARY};
