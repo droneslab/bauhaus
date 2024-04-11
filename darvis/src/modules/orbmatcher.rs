@@ -1,14 +1,13 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::f64::INFINITY;
 use core::config::SETTINGS;
-use core::matrix::{DVMatrix, DVMatrix4, DVVector3, DVVectorOfPoint2f};
+use core::matrix::{DVMatrix, DVVector3, DVVectorOfPoint2f};
 use core::sensor::{Sensor, FrameSensor};
-use log::debug;
 use opencv::core::KeyPoint;
 use opencv::prelude::*;
 use crate::MapLock;
 use crate::actors::tracking_backend::TrackedMapPointData;
-use crate::map::pose::{DVRotation, DVTranslation, Pose, Sim3};
+use crate::map::pose::Sim3;
 use crate::modules::optimizer::LEVEL_SIGMA2;
 use crate::registered_actors::{CAMERA, CAMERA_MODULE, FEATURE_DETECTION, MATCHER};
 use crate::map::{map::Id, keyframe::KeyFrame, frame::Frame};
@@ -714,7 +713,6 @@ pub fn search_by_sim3(map: &MapLock, kf1_id: Id, kf2_id: Id, matches: &mut HashM
 pub fn search_by_projection_for_loop_detection(
     map: &MapLock, kf_id: &Id,
     scw: &Sim3, candidate_mps: &Vec<Id>, matched_mappoints: &mut HashMap<usize, Id>, threshold: i32,
-    ratio: f64, check_orientation: bool
 ) -> Result<i32, Box<dyn std::error::Error>>{
     // Project MapPoints using a Similarity Transformation and search matches.
     // Used in loop detection
@@ -961,17 +959,21 @@ pub fn search_by_bow_kf(
     let mut i = 0;
     let mut j = 0;
 
+    // print!("Search by bow loop closing: ");
     while i < kf_1_featvec.len() && j < kf_2_featvec.len() {
         let kf_1_node_id = kf_1_featvec[i];
         let kf_2_node_id = kf_2_featvec[j];
+        // print!("{} {}, ", kf_1_node_id, kf_2_node_id);
         if kf_1_node_id == kf_2_node_id {
             let kf_1_indices_size = kf_1.bow.as_ref().unwrap().feat_vec.vec_size(kf_1_node_id);
 
+            // print!("{}: ", kf_1_node_id);
             for index_kf1 in 0..kf_1_indices_size {
                 let real_idx_kf1 = kf_1.bow.as_ref().unwrap().feat_vec.vec_get(kf_1_node_id, index_kf1);
+                // print!("(kf1 idx: {}), ", real_idx_kf1);
+                // print!("{}, ", real_idx_kf1);
 
-                if kf_1.features.has_left_kp().map_or(false, |n_left| real_idx_kf1 > n_left) 
-                    || !kf_1.has_mp_match_at_index(&real_idx_kf1) {
+                if !kf_1.has_mp_match_at_index(&real_idx_kf1) {
                     continue;
                 }
 
@@ -985,8 +987,7 @@ pub fn search_by_bow_kf(
                 for index_kf2 in 0..kf_2_indices_size {
                     let real_idx_kf2 = kf_2.bow.as_ref().unwrap().feat_vec.vec_get(kf_2_node_id, index_kf2);
 
-                    if kf_2.features.has_left_kp().map_or(false, |n_left| real_idx_kf2 > n_left) 
-                        || matched_already_in_kf2.contains(&(real_idx_kf2 as i32))
+                    if matched_already_in_kf2.contains(&(real_idx_kf2 as i32))
                         || !kf_2.has_mp_match_at_index(&real_idx_kf2) {
                         continue;
                     }
@@ -1004,6 +1005,7 @@ pub fn search_by_bow_kf(
                     }
 
                 }
+                // println!("{} {} = {}, ", real_idx_kf1, best_idx2, best_dist1);
 
                 if best_dist1 <= TH_LOW {
                     if (best_dist1 as f64) < ratio * (best_dist2 as f64) {
@@ -1028,6 +1030,7 @@ pub fn search_by_bow_kf(
             j = lower_bound(&kf_2_featvec, &kf_1_featvec, j, i);
         }
     }
+    // println!();
 
     if should_check_orientation {
         let (ind_1, ind_2, ind_3) = compute_three_maxima(&rot_hist,HISTO_LENGTH);
@@ -1276,15 +1279,10 @@ pub fn fuse_from_loop_closing(kf_id: &Id, scw: &Sim3, mappoints: &Vec<Id>, map: 
     let ow = DVMatrix::new_expr(rcw.clone().t()?).neg() * &tcw;
 
     let mut replace_point = HashMap::<Id, Id>::new();
-    let mut n_fused = 0;
     let observations_to_add = {
         let mut observations_to_add = vec![];
         let map_lock = map.read();
         let current_kf = map_lock.keyframes.get(kf_id).unwrap();
-
-        // Set of MapPoints already found in the KeyFrame
-        let mut already_found = current_kf.clone_matches();
-        let mut n_points = mappoints.len();
 
         // For each candidate MapPoint project and match
         for i in 0..mappoints.len() {
@@ -1358,7 +1356,7 @@ pub fn fuse_from_loop_closing(kf_id: &Id, scw: &Sim3, mappoints: &Vec<Id>, map: 
             let mut best_dist = i32::MAX;
             let mut best_idx = -1;
             for idx in indices {
-                let (kp, is_right) = current_kf.features.get_keypoint(idx as usize);
+                let (kp, _is_right) = current_kf.features.get_keypoint(idx as usize);
                 let kp_level = kp.octave();
 
                 if kp_level < predicted_level - 1 || kp_level > predicted_level {
@@ -1381,7 +1379,6 @@ pub fn fuse_from_loop_closing(kf_id: &Id, scw: &Sim3, mappoints: &Vec<Id>, map: 
                 } else {
                     observations_to_add.push((kf_id, mp_id, best_idx));
                 }
-                n_fused += 1;
             }
         }
         observations_to_add

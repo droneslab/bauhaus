@@ -28,7 +28,7 @@ use opencv::platform_types::size_t;
 use serde::{Deserialize, Serialize};
 
 use opencv::{
-    prelude::*, core::*, hub_prelude::{MatExprTraitConst}
+    prelude::*, core::*, hub_prelude::MatExprTraitConst
 };
 // extern crate nalgebra as na;
 

@@ -49,9 +49,16 @@ public:
     enum {HARRIS_SCORE=0, FAST_SCORE=1 };
 
     ORBextractor(int nfeatures, float scaleFactor, int nlevels,
-                 int iniThFAST, int minThFAST, int overlap_begin, int overlap_end);
+                 int iniThFAST, int minThFAST);
 
     ~ORBextractor(){}
+
+    // // Compute the ORB features and descriptors on an image.
+    // // ORB are dispersed on the image using an octree.
+    // // Mask is ignored in the current implementation.
+    // void operator()( cv::InputArray image, cv::InputArray mask,
+    //   std::vector<cv::KeyPoint>& keypoints,
+    //   cv::OutputArray descriptors);
 
     // Compute the ORB features and descriptors on an image.
     // ORB are dispersed on the image using an octree.
@@ -60,7 +67,7 @@ public:
     int extract2(orb_slam3::WrapBindCVKeyPoints & keypoints, orb_slam3::WrapBindCVMat & descriptors);
     int extract(cv::InputArray _image, cv::InputArray _mask,
                     std::vector<cv::KeyPoint>& _keypoints,
-                    cv::OutputArray _descriptors, std::vector<int> &vLappingArea);
+                    cv::OutputArray _descriptors);
 
 
     int inline GetLevels(){
@@ -111,14 +118,10 @@ protected:
     std::vector<float> mvInvScaleFactor;    
     std::vector<float> mvLevelSigma2;
     std::vector<float> mvInvLevelSigma2;
-
-    // For stereo camera
-    int overlap_begin;
-    int overlap_end;
 };
 
 // For rust bindings
-std::unique_ptr<ORBextractor> new_orb_extractor(int features, float scale_factor, int levels, int ini_th_FAST, int min_th_FAST, int overlap_begin, int overlap_end);
+std::unique_ptr<ORBextractor> new_orb_extractor(int features, float scale_factor, int levels, int ini_th_FAST, int min_th_FAST);
 
 } //namespace ORB_SLAM
 

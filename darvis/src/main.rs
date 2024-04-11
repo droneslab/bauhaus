@@ -12,7 +12,7 @@ use spin_sleep::LoopHelper;
 
 use core::{*, config::*, system::System, read_only_lock::ReadWriteMap};
 use crate::{actors::messages::{ShutdownMsg, ImageMsg}, modules::image};
-use crate::map::{map::Id};
+use crate::map::map::Id;
 
 mod actors;
 mod registered_actors;
