@@ -433,7 +433,11 @@ impl Map {
         self.keyframe_database.add(self.keyframes.get(&kf_id).unwrap());
     }
 
-    pub fn detect_loop_candidates(&self, kf_id: Id, num_candidates: i32) -> (Vec<Id>, Vec<Id>) {
+    pub fn detect_top_n_loop_candidates(&self, kf_id: Id, num_candidates: i32) -> (Vec<Id>, Vec<Id>) {
         self.keyframe_database.detect_n_best_candidates(&self, &kf_id, num_candidates)
+    }
+
+    pub fn detect_loop_candidates_above_min_score(&self, kf_id: Id, min_score: f32) -> Vec<Id> {
+        self.keyframe_database.detect_candidates_above_score(&self, &kf_id, min_score)
     }
 }

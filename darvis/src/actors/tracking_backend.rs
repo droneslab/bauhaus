@@ -503,9 +503,9 @@ impl TrackingBackend {
             // self.imu.predict_state();
         } else {
             current_frame.pose = Some(self.imu.velocity.unwrap() * last_frame.pose.unwrap());
-            debug!("Update current frame, set pose to: {:?}, {:?}", current_frame.pose.unwrap().get_translation(), current_frame.pose.unwrap().get_rotation());
-            debug!("...velocity: {:?}, {:?}", self.imu.velocity.unwrap().get_translation(), self.imu.velocity.unwrap().get_rotation());
-            debug!("...last frame tcw: {:?}, {:?}", last_frame.pose.unwrap().get_translation(), last_frame.pose.unwrap().get_rotation());
+            // debug!("Update current frame, set pose to: {:?}, {:?}", current_frame.pose.unwrap().get_translation(), current_frame.pose.unwrap().get_rotation());
+            // debug!("...velocity: {:?}, {:?}", self.imu.velocity.unwrap().get_translation(), self.imu.velocity.unwrap().get_rotation());
+            // debug!("...last frame tcw: {:?}, {:?}", last_frame.pose.unwrap().get_translation(), last_frame.pose.unwrap().get_rotation());
 
         }
 
@@ -579,10 +579,10 @@ impl TrackingBackend {
         // debug!("pRef {} {:?}", ref_kf_id, ref_kf_pose);
         // debug!("Tlr {:?}", *self.trajectory_poses.last().unwrap());
 
-        debug!("Update last frame, set pose to: {:?}, {:?}", last_frame.pose.unwrap().get_translation(), last_frame.pose.unwrap().get_rotation());
+        // debug!("Update last frame, set pose to: {:?}, {:?}", last_frame.pose.unwrap().get_translation(), last_frame.pose.unwrap().get_rotation());
         // debug!("Last frame pose {:?}", last_frame.pose);
-        debug!("...ref kf pose: {:?}, {:?}", ref_kf_pose.get_translation(), ref_kf_pose.get_rotation());
-        debug!("...last trajectory pose: {:?}, {:?}", self.trajectory_poses.last().unwrap().get_translation(), self.trajectory_poses.last().unwrap().get_rotation());
+        // debug!("...ref kf pose: {:?}, {:?}", ref_kf_pose.get_translation(), ref_kf_pose.get_rotation());
+        // debug!("...last trajectory pose: {:?}, {:?}", self.trajectory_poses.last().unwrap().get_translation(), self.trajectory_poses.last().unwrap().get_rotation());
 
         if self.sensor.is_mono() || self.frames_since_last_kf == 0 {
             return;

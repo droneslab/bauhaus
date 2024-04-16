@@ -3,6 +3,7 @@ use std::f64::INFINITY;
 use core::config::SETTINGS;
 use core::matrix::{DVMatrix, DVVector3, DVVectorOfPoint2f};
 use core::sensor::{Sensor, FrameSensor};
+use log::debug;
 use opencv::core::KeyPoint;
 use opencv::prelude::*;
 use crate::MapLock;
@@ -730,6 +731,16 @@ pub fn search_by_projection_for_loop_detection(
     let mut num_matches = 0;
 
     // For each Candidate MapPoint Project and Match
+    let mut n_already_found = 0;
+    let mut n_depth = 0;
+    let mut n_not_in_image = 0;
+    let mut n_wrong_dist = 0;
+    let mut n_viewing_angle = 0;
+    let mut n_indices = 0;
+    let mut n_has_match  = 0;
+    let mut n_levels  = 0;
+    let mut n_final_dist_too_low = 0;
+
     for (_, mp_id) in candidates {
         // Discard Bad MapPoints and already found
         let mp = match lock.mappoints.get(&mp_id) {
@@ -737,6 +748,7 @@ pub fn search_by_projection_for_loop_detection(
             None => continue
         };
         if already_found.get(&mp_id).is_some() {
+            n_already_found += 1;
             continue;
         }
 
@@ -748,6 +760,7 @@ pub fn search_by_projection_for_loop_detection(
 
         // Depth must be positive
         if p3dc[2] < 0.0 {
+            n_depth += 1;
             continue;
         }
 
@@ -762,6 +775,7 @@ pub fn search_by_projection_for_loop_detection(
         // Point must be inside the image
         let kf = lock.keyframes.get(&kf_id).unwrap();
         if !kf.features.is_in_image(u, v) {
+            n_not_in_image += 1;
             continue;
         }
 
@@ -772,12 +786,14 @@ pub fn search_by_projection_for_loop_detection(
         let dist = po.norm();
 
         if dist < min_distance || dist > max_distance {
+            n_wrong_dist += 1;
             continue;
         }
 
         // Viewing angle must be less than 60 deg
         let pn = &mp.normal_vector;
         if po.dot(pn) < 0.5 * dist {
+            n_viewing_angle += 1;
             continue;
         }
 
@@ -789,6 +805,7 @@ pub fn search_by_projection_for_loop_detection(
         let indices = kf.features.get_features_in_area(&u, &v, radius as f64, None);
 
         if indices.is_empty() {
+            n_indices += 1;
             continue;
         }
 
@@ -799,10 +816,12 @@ pub fn search_by_projection_for_loop_detection(
         let mut best_idx = -1;
         for idx in indices { 
             if matches.get(&(idx as usize)).is_some() {
+                n_has_match += 1;
                 continue;
             }
             let kp_level = kf.features.get_octave(idx as usize);
             if kp_level < n_predicted_level - 1 || kp_level > n_predicted_level {
+                n_levels += 1;
                 continue;
             }
 
@@ -816,8 +835,13 @@ pub fn search_by_projection_for_loop_detection(
         if (best_dist as f64) <= (TH_LOW as f64) * hamming_ratio {
             matches.insert(best_idx as usize, *mp_id);
             num_matches += 1;
+        } else {
+            n_final_dist_too_low += 1;
         }
     }
+
+    
+    debug!("Search by projection for loop detection: already found {}, depth {}, not in image {}, wrong dist {}, viewing angle {}, indices {}, has match {}, levels {}, final dist too low {}", n_already_found, n_depth, n_not_in_image, n_wrong_dist, n_viewing_angle, n_indices, n_has_match, n_levels, n_final_dist_too_low);
 
     Ok(num_matches)
 }
@@ -948,19 +972,21 @@ pub fn search_by_bow_kf(
     while i < kf_1_featvec.len() && j < kf_2_featvec.len() {
         let kf_1_node_id = kf_1_featvec[i];
         let kf_2_node_id = kf_2_featvec[j];
-        // print!("{} {}, ", kf_1_node_id, kf_2_node_id);
         if kf_1_node_id == kf_2_node_id {
             let kf_1_indices_size = kf_1.bow.as_ref().unwrap().feat_vec.vec_size(kf_1_node_id);
 
-            // print!("{}: ", kf_1_node_id);
             for index_kf1 in 0..kf_1_indices_size {
                 let real_idx_kf1 = kf_1.bow.as_ref().unwrap().feat_vec.vec_get(kf_1_node_id, index_kf1);
-                // print!("(kf1 idx: {}), ", real_idx_kf1);
-                // print!("{}, ", real_idx_kf1);
 
                 if !kf_1.has_mp_match_at_index(&real_idx_kf1) {
-                    continue;
+                    // if kf_1.frame_id > 1581 && kf_1.frame_id < 1584 {
+                    //     println!("{}: skip1", real_idx_kf1);
+                    // }
+                   continue;
                 }
+                // if kf_1.frame_id > 1581 && kf_1.frame_id < 1584 {
+                //     println!("{}:", real_idx_kf1);
+                // }
 
                 let mut best_dist1 = 256;
                 let mut best_dist2 = 256;
@@ -972,8 +998,15 @@ pub fn search_by_bow_kf(
                 for index_kf2 in 0..kf_2_indices_size {
                     let real_idx_kf2 = kf_2.bow.as_ref().unwrap().feat_vec.vec_get(kf_2_node_id, index_kf2);
 
+                    // if kf_1.frame_id > 1581 && kf_1.frame_id < 1584 {
+                    //     print!("... {}: ", real_idx_kf2);
+                    // }
+
                     if matched_already_in_kf2.contains(&(real_idx_kf2 as i32))
                         || !kf_2.has_mp_match_at_index(&real_idx_kf2) {
+                        // if kf_1.frame_id > 1581 && kf_1.frame_id < 1584 {
+                        //     println!("(skip)");
+                        // }
                         continue;
                     }
 
@@ -988,9 +1021,14 @@ pub fn search_by_bow_kf(
                     } else if dist < best_dist2 {
                         best_dist2 = dist;
                     }
+                    // if kf_1.frame_id > 1581 && kf_1.frame_id < 1584 {
+                    //     println!("{}", dist);
+                    // }
 
                 }
-                // println!("{} {} = {}, ", real_idx_kf1, best_idx2, best_dist1);
+                // if kf_1.frame_id > 1581 && kf_1.frame_id < 1584 {
+                //     println!("best: {} ({} {}), ", best_idx2, best_dist1, best_dist2);
+                // }
 
                 if best_dist1 <= TH_LOW {
                     if (best_dist1 as f64) < ratio * (best_dist2 as f64) {
@@ -1007,6 +1045,7 @@ pub fn search_by_bow_kf(
                     }
                 }
             }
+
             i += 1;
             j += 1;
         } else if kf_1_node_id < kf_2_node_id {
@@ -1015,7 +1054,6 @@ pub fn search_by_bow_kf(
             j = lower_bound(&kf_2_featvec, &kf_1_featvec, j, i);
         }
     }
-    // println!();
 
     if should_check_orientation {
         let (ind_1, ind_2, ind_3) = compute_three_maxima(&rot_hist,HISTO_LENGTH);

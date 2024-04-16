@@ -156,7 +156,12 @@ impl LoopClosing {
 
                     self.loop_mappoints = self.loop_mps.clone(); // mvpLoopMapPoints = mvpLoopMPs;
 
-                    self.correct_loop();
+                    match self.correct_loop() {
+                        Ok(_) => {},
+                        Err(e) => {
+                            warn!("Loop correction failed: {}", e);
+                        }
+                    }
 
                     // Reset all variables
                     self.map.write().keyframes.get_mut(&self.matched_kf).unwrap().dont_delete = false;
@@ -181,8 +186,8 @@ impl LoopClosing {
 
     fn detect_common_regions(&mut self) -> Result<(bool, bool), Box<dyn std::error::Error>>{
         // bool LoopClosing::NewDetectCommonRegions
+        let _span = tracy_client::span!("detect_common_regions");
 
-        let _span = tracy_client::span!("detect_loop");
         //If the map contains less than 12 KF
         if self.map.read().keyframes.len() < 12 {
             return Ok((false, false));
@@ -190,7 +195,7 @@ impl LoopClosing {
 
         // Check the last candidates with geometric validation
         // Loop candidates
-        let mut loop_detected = false; // bLoopDetectedInKF
+        let mut loop_detected_in_kf = false; // bLoopDetectedInKF
         if self.num_coincidences > 0 {
             // Find from the last KF candidates
             let mut scw = {
@@ -200,7 +205,7 @@ impl LoopClosing {
             };
             let common_region = self.detect_and_reffine_sim3_from_last_kf(&mut scw)?;
             if common_region {
-                loop_detected = true;
+                loop_detected_in_kf = true;
 
                 self.num_coincidences += 1;
                 self.last_current_kf = self.current_kf_id;
@@ -213,8 +218,10 @@ impl LoopClosing {
                 if !self.loop_detected {
                     debug!("Loop detected with Reffine Sim3");
                 }
+
+                println!("Common region detected, num coincidences: {}", self.num_coincidences);
             } else {
-                loop_detected = false;
+                loop_detected_in_kf = false;
                 self.num_not_found += 1;
                 if self.num_not_found >= 2 {
                     self.map.write().keyframes.get_mut(&self.last_current_kf).unwrap().dont_delete = false;
@@ -234,23 +241,23 @@ impl LoopClosing {
         }
 
         if merge_detected || self.loop_detected {
+            println!("Return 1");
             self.map.write().add_to_kf_database(self.current_kf_id);
-            return Ok((merge_detected, loop_detected));
+            return Ok((merge_detected, loop_detected_in_kf));
         }
 
         // Extract candidates from the bag of words
-        let (merge_bow_cand, loop_bow_cand) = match !merge_detected && !loop_detected {
+        let (merge_bow_cand, loop_bow_cand) = match !merge_detected || !loop_detected_in_kf {
             true => {
                 // Search in BoW
-                self.map.read().detect_loop_candidates(self.current_kf_id, 3)
-
+                self.map.read().detect_top_n_loop_candidates(self.current_kf_id, 3)
             },
             false => (Vec::new(), Vec::new())
         };
 
         // Check the BoW candidates if the geometric candidate list is empty
         // Loop candidates
-        if !loop_detected && loop_bow_cand.is_empty() {
+        if !loop_detected_in_kf && !loop_bow_cand.is_empty() {
             self.loop_detected = self.detect_common_regions_from_bow(
                 &loop_bow_cand,
             )?;
@@ -264,7 +271,8 @@ impl LoopClosing {
         self.map.write().add_to_kf_database(self.current_kf_id);
 
         if merge_detected || self.loop_detected {
-            return Ok((merge_detected, loop_detected));
+            println!("Return 2");
+            return Ok((merge_detected, self.loop_detected));
         }
 
         self.map.write().keyframes.get_mut(&self.current_kf_id).unwrap().dont_delete = false; 
@@ -274,8 +282,9 @@ impl LoopClosing {
 
     fn detect_and_reffine_sim3_from_last_kf(&mut self, scw: &mut Sim3) -> Result<bool, Box<dyn std::error::Error>> {
         // bool LoopClosing::DetectAndReffineSim3FromLastKF(KeyFrame* pCurrentKF, KeyFrame* pMatchedKF, g2o::Sim3 &gScw, int &nNumProjMatches, std::vector<MapPoint*> &vpMPs, std::vector<MapPoint*> &vpMatchedMPs)
-
+        let _span = tracy_client::span!("detect_and_reffine_sim3_from_last_kf");
         debug!("detect_and_reffine_sim3_from_last_kf");
+
         let num_proj_matches = self.find_matches_by_projection(scw)?;
 
         if num_proj_matches >= 30 {
@@ -309,8 +318,9 @@ impl LoopClosing {
 
      fn find_matches_by_projection(&mut self, scw: &mut Sim3) -> Result<i32, Box<dyn std::error::Error>> {
         // int LoopClosing::FindMatchesByProjection(KeyFrame* pCurrentKF, KeyFrame* pMatchedKFw, g2o::Sim3 &g2oScw, set<MapPoint*> &spMatchedMPinOrigin, vector<MapPoint*> &vpMapPoints, vector<MapPoint*> &vpMatchedMapPoints)
-    
+        let _span = tracy_client::span!("find_matches_by_projection");
         debug!("find_matches_by_projection");
+
         let num_covisibles = 10;
         let mut cov_kf_matched = self.map.read().keyframes.get(&self.matched_kf).unwrap().get_covisibility_keyframes(num_covisibles); // vpCovKFm
         let initial_cov = cov_kf_matched.len();
@@ -361,6 +371,7 @@ impl LoopClosing {
 
     fn detect_common_regions_from_last_kf(&mut self, scw: &mut Sim3) -> Result<(bool, i32), Box<dyn std::error::Error>>{
         // bool LoopClosing::DetectCommonRegionsFromLastKF(KeyFrame* pCurrentKF, KeyFrame* pMatchedKF, g2o::Sim3 &gScw, int &nNumProjMatches, std::vector<MapPoint*> &vpMPs, std::vector<MapPoint*> &vpMatchedMPs)
+        let _span = tracy_client::span!("detect_common_regions_from_last_kf");
         debug!("detect_common_regions_from_last_kf");
 
         let num_proj_matches = self.find_matches_by_projection(scw)?;
@@ -372,7 +383,7 @@ impl LoopClosing {
 
     fn detect_common_regions_from_bow(&mut self, bow_cands: &Vec<Id>) -> Result<bool, Box<dyn std::error::Error>> {
         // bool LoopClosing::DetectCommonRegionsFromBoW(std::vector<KeyFrame*> &vpBowCand, KeyFrame* &pMatchedKF2, KeyFrame* &pLastCurrentKF, g2o::Sim3 &g2oScw, int &nNumCoincidences, std::vector<MapPoint*> &vpMPs, std::vector<MapPoint*> &vpMatchedMPs)
-        
+        let _span = tracy_client::span!("detect_common_regions_from_bow");
         debug!("detect_common_regions_from_bow");
         
         let bow_matches_threshold = 20; // nBoWMatches
@@ -396,13 +407,13 @@ impl LoopClosing {
         let mut vn_stage = vec![0; num_candidates]; // vnStage
         let mut vn_matches_stage = vec![0; num_candidates]; // vnMatchesStage
 
+        debug!("DetectCommonRegionsFromBoW: candidates: {:?}", bow_cands);
         let mut index = 0;
         for kf_i_id in bow_cands {
             if self.map.read().keyframes.get(&kf_i_id).is_none() {
                 continue;
             }
 
-            debug!("KF candidate: {}", kf_i_id);
             // Current KF against KF with covisibles version
             let mut cov_kf = self.map.read().keyframes.get(&kf_i_id).unwrap().get_covisibility_keyframes(num_covisibles); // vpCovKFi
             if cov_kf.len() == 0 {
@@ -427,7 +438,7 @@ impl LoopClosing {
             }
             debug!("Check BoW continue because is far to the matched one");
 
-            let mut vvp_matched_mps = vec![HashMap::new(); cov_kf.len()]; // vvpMatchedMPs
+            let mut vvp_matched_mps = vec![]; // vvpMatchedMPs
             let mut sp_matched_mpi = HashSet::new(); // spMatchedMPi
             let mut num_bow_matches = 0; // numBoWMatches
             let mut vp_matched_mappoints = HashMap::new(); // vpMatchedPoints
@@ -436,34 +447,39 @@ impl LoopClosing {
             let most_bow_matches_kf = kf_i_id; // pMostBoWMatchesKF
             let mut most_bow_num_matches = 0; // nMostBoWNumMatches
 
-            for j in 0..cov_kf.len() {
-                let matches = orbmatcher::search_by_bow_kf(
-                    self.map.read().keyframes.get(&self.current_kf_id).unwrap(),
-                    self.map.read().keyframes.get(&cov_kf[j]).unwrap(),
-                    true,
-                    0.9
-                )?;
-                if matches.len() > most_bow_num_matches {
-                    most_bow_num_matches = matches.len();
+            {
+                let read = self.map.read();
+                let curr_kf = read.keyframes.get(&self.current_kf_id).unwrap();
+                for j in 0..cov_kf.len() {
+                    let matches = orbmatcher::search_by_bow_kf(
+                        curr_kf,
+                        read.keyframes.get(&cov_kf[j]).unwrap(),
+                        true,
+                        0.9
+                    )?;
+                    debug!("Searching for matches between {} (frame {}) and {} (frame {})", self.current_kf_id, read.keyframes.get(&self.current_kf_id).unwrap().frame_id, cov_kf[j], read.keyframes.get(&cov_kf[j]).unwrap().frame_id);
+                    debug!("(Mappoint matches: {})", matches.len());
+                    if matches.len() > most_bow_num_matches {
+                        most_bow_num_matches = matches.len();
+                    }
+                    vvp_matched_mps.push(matches);
                 }
-                vvp_matched_mps.push(matches);
             }
 
+            println!("vvp_matched_mps: {:?}", vvp_matched_mps.len());
+            println!("cov_kf: {:?}", cov_kf.len());
+
             for j in 0..cov_kf.len() {
-                for k in 0..vvp_matched_mps[j].len() {
-                    match vvp_matched_mps[j].get(&(k as u32)) {
-                        None => continue,
-                        Some(mp_id) => {
-                            if !sp_matched_mpi.contains(mp_id) {
-                                sp_matched_mpi.insert(mp_id);
-                                num_bow_matches += 1;
-                                vp_matched_mappoints.insert(k, *mp_id);
-                                keyframe_matched_mp.insert(k, cov_kf[j]);
-                            }
-                        }
+                for (index, mp_id) in &vvp_matched_mps[j] {
+                    if !sp_matched_mpi.contains(&mp_id) {
+                        sp_matched_mpi.insert(mp_id);
+                        num_bow_matches += 1;
+                        vp_matched_mappoints.insert(*index as usize, *mp_id);
+                        keyframe_matched_mp.insert(*index as usize, cov_kf[j]);
                     }
                 }
             }
+            println!("num_bow_matches: {}", num_bow_matches);
 
             if num_bow_matches >= bow_matches_threshold {
                 // Geometric validation
@@ -475,6 +491,7 @@ impl LoopClosing {
                     Sensor(FrameSensor::Mono, ImuSensor::None) => false,
                     _ => true
                 };
+                debug!("Solver with {}", most_bow_matches_kf);
                 let mut solver = Sim3Solver::new(
                     &self.map,
                     self.current_kf_id,
@@ -500,6 +517,8 @@ impl LoopClosing {
                         cov_kf = self.map.read().keyframes.get(&most_bow_matches_kf).unwrap().get_covisibility_keyframes(num_covisibles);
                         cov_kf.push(*most_bow_matches_kf);
 
+                        debug!("There are {} near KFs", cov_kf.len());
+
                         let mut candidates = HashMap::new(); // vpMapPoints
                         let mut sp_map_points = HashSet::new(); // spMapPoints
                         for kf_id in cov_kf {
@@ -514,6 +533,7 @@ impl LoopClosing {
                                 }
                             }
                         }
+                        println!("Candidate mappoints: {:?}", candidates);
 
                         let mut sim3 = solver.get_estimates(); // gScm
                         let smw = Sim3 {
@@ -521,6 +541,7 @@ impl LoopClosing {
                             scale: 1.0
                         }; // gSmw
                         let scw = sim3 * smw; // gScw // Similarity matrix of current from the world position
+                        debug!("scw: {:?}", scw.pose);
 
                         let mut matched_mps = HashMap::new(); // vpMatchedMP
                         let num_proj_matches = orbmatcher::search_by_projection_for_loop_detection(
@@ -528,7 +549,7 @@ impl LoopClosing {
                             &candidates, &mut matched_mps,
                             8, 1.5
                         )?;
-
+                        debug!("Search by projection for loop detection, {} matches", num_proj_matches);
                         if num_proj_matches >= proj_matches_threshold {
                             // Optimize Sim3 transformation with every matches
 
