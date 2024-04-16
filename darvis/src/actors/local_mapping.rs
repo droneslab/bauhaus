@@ -240,7 +240,7 @@ impl LocalMapping {
         }
 
         debug!("For keyframe {}, culled {} mappoints, created {} mappoints, culled {} keyframes", self.current_keyframe_id, mps_culled, mps_created, kfs_culled);
-        debug!("KeyFrame {} new translation: {:?}, rotation: {:?}", self.current_keyframe_id, self.map.read().keyframes.get(&self.current_keyframe_id).unwrap().pose.get_translation(), self.map.read().keyframes.get(&self.current_keyframe_id).unwrap().pose.get_rotation());
+
         tracy_client::plot!("MAP INFO: KeyFrames", self.map.read().keyframes.len() as f64);
         tracy_client::plot!("MAP INFO: MapPoints", self.map.read().mappoints.len() as f64);
 

@@ -53,9 +53,6 @@ pub fn spawn_actor(
         str if str == "orbslam local mapping".to_string() => {
             crate::actors::local_mapping::LocalMapping::spawn(system, map.expect("Local mapping needs the map!"))
         },
-        // str if str == "orbslam2 loop closing".to_string() => {
-        //     crate::actors::loop_closing2::LoopClosing::spawn(system, map.expect("Loop closing needs the map!"))
-        // },
         str if str == "orbslam3 loop closing".to_string() => {
             crate::actors::loop_closing::LoopClosing::spawn(system, map.expect("Loop closing needs the map!"))
         },

@@ -39,7 +39,7 @@ impl Sim3Solver {
     pub fn new(
         map: &MapLock,
         kf1_id: Id, kf2_id: Id, matches: &HashMap<usize, Id>, fix_scale: bool,
-        keyframe_matched_mp: HashMap<usize, Id>
+        mut keyframe_matched_mp: HashMap<usize, Id>
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let map_lock = map.read();
         let kf1 = map_lock.keyframes.get(&kf1_id).unwrap();
@@ -95,24 +95,25 @@ impl Sim3Solver {
             // void Sim3Solver::FromCameraToImage(const vector<Eigen::Vector3f> &vP3Dc, vector<Eigen::Vector2f> &vP2D, GeometricCamera* pCamera)
 
             let x_3d_1w: Mat = (&map_lock.mappoints.get(&mp1_id).unwrap().position).into();
-            println!("x_3d_1w: {:?}, ", x_3d_1w.data_typed::<f64>()?);
+            // println!("x_3d_1w: {:?}, ", x_3d_1w.data_typed::<f64>()?);
 
             let this_x3dc1 = res_to_mat(&kf1_rot * x_3d_1w + &kf1_trans).unwrap();
-            println!("kf1_rot: {:?}, ", kf1_rot.data_typed::<f64>()?);
-            println!("kf1_trans: {:?}, ", kf1_trans.data_typed::<f64>()?);
-            println!("...this_x3dc1: {:?}, ", this_x3dc1.data_typed::<f64>()?);
+            // println!("kf1_rot without into: {:?}", kf1.pose.get_rotation());
+            // println!("kf1_rot: {:?}, ", kf1_rot.data_typed::<f64>()?);
+            // println!("kf1_trans: {:?}, ", kf1_trans.data_typed::<f64>()?);
+            // println!("...this_x3dc1: {:?}, ", this_x3dc1.data_typed::<f64>()?);
 
             p1_im1.push(CAMERA_MODULE.project((&this_x3dc1).into()));
             x_3d_c1.push(this_x3dc1);
 
             let x_3d_2w: Mat = (&map_lock.mappoints.get(&mp2_id).unwrap().position).into();
-            println!("x_3d_2w: {:?}, ", x_3d_2w.data_typed::<f64>()?);
+            // println!("x_3d_2w: {:?}, ", x_3d_2w.data_typed::<f64>()?);
 
             let this_x3dc2 = res_to_mat(&kf2_rot * x_3d_2w + &kf2_trans).unwrap();
-            println!("kf2_rot: {:?}, ", kf2_rot.data_typed::<f64>()?);
-            println!("kf2_trans: {:?}, ", kf2_trans.data_typed::<f64>()?);
-            println!("...this_x3dc2: {:?}, ", this_x3dc2.data_typed::<f64>()?);
-            println!("===");
+            // println!("kf2_rot: {:?}, ", kf2_rot.data_typed::<f64>()?);
+            // println!("kf2_trans: {:?}, ", kf2_trans.data_typed::<f64>()?);
+            // println!("...this_x3dc2: {:?}, ", this_x3dc2.data_typed::<f64>()?);
+            // println!("===");
 
             p2_im2.push(CAMERA_MODULE.project((&this_x3dc2).into()));
             x_3d_c2.push(this_x3dc2);
@@ -220,7 +221,7 @@ impl Sim3Solver {
 
             self.check_inliers()?;
 
-            println!("Sim3 inliers: {}", self.current_estimation.inliers_count);
+            // println!("Sim3 inliers: {}", self.current_estimation.inliers_count);
 
             if self.current_estimation.inliers_count > self.current_ransac_state.best_inliers_count {
                 self.current_ransac_state.best_inliers = self.current_estimation.inliers_i.clone();
@@ -275,9 +276,9 @@ impl Sim3Solver {
 
         // Step 1: Centroid and relative coordinates
 
-        println!("ComputeSim3");
-        println!("P1: {:?}", &p1.data_typed::<f64>()?);
-        println!("P2: {:?}", &p2.data_typed::<f64>()?);
+        // println!("ComputeSim3");
+        // println!("P1: {:?}", &p1.data_typed::<f64>()?);
+        // println!("P2: {:?}", &p2.data_typed::<f64>()?);
 
         // pr1 = Relative coordinates to centroid (set 1)
         // O1 = Centroid of P1
@@ -415,7 +416,7 @@ impl Sim3Solver {
             let err1 = dist1.dot(&dist1)?;
             let err2 = dist2.dot(&dist2)?;
 
-            println!("Error: {} < {}, {} < {}", err1, self.max_error1[i], err2, self.max_error2[i]);
+            // println!("Error: {} < {}, {} < {}", err1, self.max_error1[i], err2, self.max_error2[i]);
 
             if err1 < self.max_error1[i] && err2 < self.max_error2[i] {
                 self.current_estimation.inliers_i[i] = true;

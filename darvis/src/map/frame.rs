@@ -87,7 +87,6 @@ pub fn new(
         if self.bow.is_none() {
             self.bow = Some(BoW::new());
             VOCABULARY.transform(&self.features.descriptors, &mut self.bow.as_mut().unwrap());
-            println!("Compute bow in frame! Frame id: {}", self.frame_id);
         }
     }
 
