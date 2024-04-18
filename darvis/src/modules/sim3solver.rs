@@ -7,7 +7,7 @@ use log::warn;
 use opencv::{core::{no_array, norm, MatExprResult, Range, Scalar, CV_64F, NORM_L2}, hub_prelude::{KeyPointTraitConst, MatExprTraitConst, MatTraitConst}};
 use rand::Rng;
 
-use crate::{map::{map::Id, pose::Sim3}, modules::optimizer::LEVEL_SIGMA2, registered_actors::CAMERA_MODULE, MapLock};
+use crate::{map::{map::Id, pose::{DVRotation, Sim3}}, modules::optimizer::LEVEL_SIGMA2, registered_actors::CAMERA_MODULE, MapLock};
 use opencv::prelude::*;
 
 pub struct Sim3Solver {
@@ -451,9 +451,12 @@ impl Sim3Solver {
     }
 
     pub fn get_estimates(&mut self) -> Sim3 {
+        println!("Sim3Solver rotation matrix, before: {:?}", self.current_ransac_state.best_rotation.data_typed::<f64>().unwrap());
+        let rot: DVRotation = self.current_ransac_state.best_rotation.clone().into();
+        println!("Sim3Solver rotation matrix, after: {:?}", rot);
         Sim3::new(
             (&self.current_ransac_state.best_translation.clone()).into(),
-            self.current_ransac_state.best_rotation.clone().into(),
+            rot,
             self.current_ransac_state.best_scale
         )
     }

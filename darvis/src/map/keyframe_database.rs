@@ -25,15 +25,10 @@ impl KeyFrameDatabase {
 
     pub fn add(&mut self, kf: &KeyFrame) {
         // void KeyFrameDatabase::add(KeyFrame *pKF)
-        debug!("Add KF {}", kf.id);
         let word_ids = kf.bow.as_ref().unwrap().bow_vec.get_all_word_ids();
-        // println!("Word ids: {}", word_ids.len());
-        // print!("KEYFRAME DATABASE: {}, ", kf.id);
         for word_id in word_ids {
             self.inverted_file[word_id as usize].push(kf.id);
-            // print!("{} ", word_id);
         }
-        // println!();
     }
 
     pub fn erase(&mut self, kf: &KeyFrame) {
@@ -63,7 +58,7 @@ impl KeyFrameDatabase {
         let mut place_recognition_words = HashMap::new(); // mnPlaceRecognitionWords
 
         // Search all keyframes that share a word with current frame
-        print!("Detect loop candidates... kfs sharing words: ");
+        // print!("Detect loop candidates... kfs sharing words: ");
         for word in curr_kf.bow.as_ref().unwrap().bow_vec.get_all_word_ids() {
             for kf_i_id in &self.inverted_file[word as usize] {
                 let different_query = place_recognition_query.get(kf_i_id).is_some() && place_recognition_query[kf_i_id] != curr_kf_id;
@@ -74,13 +69,13 @@ impl KeyFrameDatabase {
                     if !connected_kfs.contains_key(&kf_i_id) {
                         place_recognition_query.insert(*kf_i_id, curr_kf_id);
                         kfs_sharing_words.push(*kf_i_id);
-                        print!("{} ({}), ", kf_i_id, map.keyframes.get(&kf_i_id).unwrap().frame_id);
+                        // print!("{} ({}), ", kf_i_id, map.keyframes.get(&kf_i_id).unwrap().frame_id);
                     }
                 }
                 *place_recognition_words.get_mut(kf_i_id).unwrap() += 1;
             }
         }
-        println!();
+        // println!();
 
         if kfs_sharing_words.is_empty() {
             return (vec![], vec![]);
@@ -104,7 +99,7 @@ impl KeyFrameDatabase {
         let min_common_words = (max_common_words as f32 * 0.8) as i32;
         let mut score_and_match = vec![];
 
-        debug!("Detect loop candidates... max common words: {}, min common words: {}, max word kf id: {}", max_common_words, min_common_words, max_word_kf_id);
+        // debug!("Detect loop candidates... max common words: {}, min common words: {}, max word kf id: {}", max_common_words, min_common_words, max_word_kf_id);
 
         // Compute similarity score.
         let mut place_recognition_score = HashMap::new(); // mPlaceRecognitionScore
@@ -117,7 +112,7 @@ impl KeyFrameDatabase {
             }
         }
         // println!();
-        debug!("Detect loop candidates... similarity scores: {:?}", score_and_match);
+        // debug!("Detect loop candidates... similarity scores: {:?}", score_and_match);
 
         if score_and_match.is_empty() {
             return (vec![], vec![]);
@@ -169,7 +164,7 @@ impl KeyFrameDatabase {
             i+= 1;
         }
 
-        println!("Keyframe DB, loop candidates: {:?}", loop_candidates);
+        // println!("Keyframe DB, loop candidates: {:?}", loop_candidates);
         return (merge_candidates, loop_candidates);
     }
 
@@ -183,7 +178,7 @@ impl KeyFrameDatabase {
         let mut loop_words = HashMap::new(); // mnLoopWords
         let mut loop_query = HashMap::new(); // mnLoopQuery
 
-        debug!("Detect loop candidates... min score: {}", min_score);
+        // debug!("Detect loop candidates... min score: {}", min_score);
 
         // Search all keyframes that share a word with current keyframes
         // Discard keyframes connected to the query keyframe
@@ -209,7 +204,7 @@ impl KeyFrameDatabase {
         }
         // println!();
 
-        debug!("Detect loop candidates... kfs sharing words: {:?}", kfs_sharing_words);
+        // debug!("Detect loop candidates... kfs sharing words: {:?}", kfs_sharing_words);
         // debug!("Detect loop candidates... loop words: {:?}", loop_words);
 
         if kfs_sharing_words.is_empty() {
@@ -234,7 +229,7 @@ impl KeyFrameDatabase {
         let min_common_words = (max_common_words as f32 * 0.8) as i32;
         let mut score_and_match = vec![];
 
-        debug!("Detect loop candidates... max common words: {}, min common words: {}, max word kf id: {}", max_common_words, min_common_words, max_word_kf_id);
+        // debug!("Detect loop candidates... max common words: {}, min common words: {}, max word kf id: {}", max_common_words, min_common_words, max_word_kf_id);
 
         // print!("Similarity scores... ");
         // Compute similarity score. Retain the matches whose score is higher than minScore
