@@ -35,7 +35,8 @@ pub struct LoopClosing {
     loop_mappoints: HashMap<usize, Id>, // mvpLoopMapPoints
     loop_mps: HashMap<usize, Id>, // mvpLoopMPs
     current_matched_points: HashMap<usize, Id>, // mvpLoopMatchedMPs
-    slw: Sim3, // mg2oLoopSlw
+    loop_slw: Sim3, // mg2oLoopSlw
+    loop_matched_kf: Id, // mpLoopMatchedKF
 
     // removing as member variables
     // current_kf_id: Id, // mpCurrentKF
@@ -46,7 +47,6 @@ pub struct LoopClosing {
     num_not_found: i32, // mnLoopNumNotFound
     last_current_kf: Id, // mpLoopLastCurrentKF
     last_corrected_loop_kf_id: Id, // mLastLoopKFid
-    last_matched_kf: Id,
 
     // Global BA
     full_ba_idx: i32, // mnFullBAIdx
@@ -63,13 +63,13 @@ impl Actor for LoopClosing {
             _imu: None, // TODO (IMU): ImuModule::new(None, None, sensor, false, false),
             sensor: SETTINGS.get(SYSTEM, "sensor"),
             full_ba_idx: 0,
-            last_matched_kf: -1,
             last_corrected_loop_kf_id: -1,
             current_matched_points: HashMap::new(),
             loop_mappoints: HashMap::new(),
+            loop_matched_kf: -1,
             // scw: Sim3::identity(),
             num_coincidences: 0,
-            slw: Sim3::identity(),
+            loop_slw: Sim3::identity(),
             last_current_kf: -1,
             num_not_found: 0,
             loop_mps: HashMap::new(),
@@ -149,8 +149,8 @@ impl LoopClosing {
 
                         self.loop_mappoints = self.loop_mps.clone(); // mvpLoopMapPoints = mvpLoopMPs;
 
-                        println!("Doing correct loop with self.slw: rot {:?} trans {:?} scale {:?}", self.slw.pose.get_rotation(), self.slw.pose.get_translation(), self.slw.scale);
-                        match self.correct_loop(current_kf_id, loop_kf, self.slw) {
+                        println!("Doing correct loop with self.slw: rot {:?} trans {:?} scale {:?}", self.loop_slw.pose.get_rotation(), self.loop_slw.pose.get_translation(), self.loop_slw.scale);
+                        match self.correct_loop(current_kf_id, loop_kf, self.loop_slw) {
                             Ok(_) => {},
                             Err(e) => {
                                 warn!("Loop correction failed: {}", e);
@@ -202,18 +202,18 @@ impl LoopClosing {
             let mut scw = {
                 let tcl = self.map.read().keyframes.get(&current_kf_id).unwrap().pose * self.map.read().keyframes.get(&self.last_current_kf).unwrap().pose.inverse();
                 let tcl_as_sim3 = Sim3::new(tcl.get_translation(), tcl.get_rotation(), 1.0);
-                tcl_as_sim3 * self.slw
+                tcl_as_sim3 * self.loop_slw
             };
             println!("scw when loop num coincidences > 0: rot {:?} trans {:?} scale {:?}", scw.pose.get_rotation(), scw.pose.get_translation(), scw.scale);
             println!("current kf id: {}, last current kf: {}", current_kf_id, self.last_current_kf);
 
-            match self.detect_and_reffine_sim3_from_last_kf(current_kf_id, &mut scw)? {
+            match self.detect_and_reffine_sim3_from_last_kf(current_kf_id, self.loop_matched_kf, &mut scw)? {
                 Some(scw) => {
                     loop_detected_in_kf = true;
 
                     self.num_coincidences += 1;
                     self.last_current_kf = current_kf_id;
-                    self.slw = scw;
+                    self.loop_slw = scw;
                     self.map.write().keyframes.get_mut(&self.last_current_kf).unwrap().dont_delete = false;
 
                     loop_detected = self.num_coincidences >= 3;
@@ -285,12 +285,12 @@ impl LoopClosing {
         return Ok((None, None, None));
     }
 
-    fn detect_and_reffine_sim3_from_last_kf(&mut self, current_kf_id: Id, scw: &mut Sim3) -> Result<Option<Sim3>, Box<dyn std::error::Error>> {
+    fn detect_and_reffine_sim3_from_last_kf(&mut self, current_kf_id: Id, loop_kf: Id, scw: &mut Sim3) -> Result<Option<Sim3>, Box<dyn std::error::Error>> {
         // bool LoopClosing::DetectAndReffineSim3FromLastKF(KeyFrame* pCurrentKF, KeyFrame* pMatchedKF, g2o::Sim3 &gScw, int &nNumProjMatches, std::vector<MapPoint*> &vpMPs, std::vector<MapPoint*> &vpMatchedMPs)
         let _span = tracy_client::span!("detect_and_reffine_sim3_from_last_kf");
 
-        println!("Last matched kf: {:?}", self.last_matched_kf);
-        let num_proj_matches = self.find_matches_by_projection(current_kf_id, scw, self.last_matched_kf)?;
+        println!("Last matched kf: {:?}", loop_kf);
+        let num_proj_matches = self.find_matches_by_projection(current_kf_id, scw, loop_kf)?;
 
         if num_proj_matches >= 30 {
             let mut scm = {
@@ -307,11 +307,11 @@ impl LoopClosing {
                 _ => false
             };
             let num_opt_matches = optimizer::optimize_sim3(
-                &self.map, current_kf_id, self.last_matched_kf, &mut self.current_matched_points, &mut scm, 10, fixed_scale
+                &self.map, current_kf_id, loop_kf, &mut self.current_matched_points, &mut scm, 10, fixed_scale
             );
 
             if num_opt_matches > 50 {
-                let num_proj_matches  = self.find_matches_by_projection(current_kf_id, scw, self.last_matched_kf)?;
+                let num_proj_matches  = self.find_matches_by_projection(current_kf_id, scw, loop_kf)?;
                 if num_proj_matches >= 100 {
                     return Ok(Some(*scw)); // todo is this right?
                 }
@@ -674,13 +674,14 @@ impl LoopClosing {
         }
 
         if num_best_matches_reproj > 0 {
-            self.last_current_kf = current_kf_id;
-            self.num_coincidences = best_num_coincidences;
-            self.map.write().keyframes.get_mut(&best_matched_kf).unwrap().dont_delete = true;
+            self.last_current_kf = current_kf_id; // pLastCurrentKF = mpCurrentKF;
+            self.num_coincidences = best_num_coincidences; // nNumCoincidences = nBestNumCoindicendes;
+            self.map.write().keyframes.get_mut(&best_matched_kf).unwrap().dont_delete = true; // pMatchedKF2->SetNotErase();
             let matched_kf = Some(best_matched_kf);
             self.loop_mps = best_mappoints;  // vpMPs = vpBestMapPoints;
             self.current_matched_points = best_matched_mappoints; // vpMatchedMPs = vpBestMatchedMapPoints;
-            self.last_matched_kf =  best_matched_kf;
+            self.loop_matched_kf = best_matched_kf; // pMatchedKF2 = pBestMatchedKF;
+            self.loop_slw = best_scw; // g2oScw = g2oBestScw;
 
             debug!("...finally: best kf is {} with {} matches. Num coincidences: {}", best_matched_kf, num_best_matches_reproj, self.num_coincidences);
 
