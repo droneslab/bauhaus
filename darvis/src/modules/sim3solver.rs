@@ -451,12 +451,12 @@ impl Sim3Solver {
     }
 
     pub fn get_estimates(&mut self) -> Sim3 {
-        println!("Sim3Solver rotation matrix, before: {:?}", self.current_ransac_state.best_rotation.data_typed::<f64>().unwrap());
-        let rot: DVRotation = self.current_ransac_state.best_rotation.clone().into();
-        println!("Sim3Solver rotation matrix, after: {:?}", rot);
+        // println!("Sim3Solver rotation matrix, before: {:?}", self.current_ransac_state.best_rotation.data_typed::<f64>().unwrap());
+        // let rot: DVRotation = self.current_ransac_state.best_rotation.clone().into();
+        // println!("Sim3Solver rotation matrix, after: {:?}", rot);
         Sim3::new(
             (&self.current_ransac_state.best_translation.clone()).into(),
-            rot,
+            self.current_ransac_state.best_rotation.clone().into(),
             self.current_ransac_state.best_scale
         )
     }
