@@ -10,11 +10,11 @@ use core::{
     config::{SETTINGS, SYSTEM},
     matrix::DVVector3
 };
-use log::{debug, warn, info, trace};
+use log::{debug, warn, info};
 use opencv::prelude::KeyPointTraitConst;
 use crate::registered_actors::{CAMERA_MODULE, TRACKING_BACKEND};
 use crate::{System, MapLock};
-use crate::actors::messages::{LastKeyFrameUpdatedMsg};
+use crate::actors::messages::LastKeyFrameUpdatedMsg;
 use crate::modules::optimizer::{local_bundle_adjustment, LEVEL_SIGMA2};
 use crate::{
     modules::{orbmatcher, imu::ImuModule, orbmatcher::SCALE_FACTORS, geometric_tools},
@@ -26,7 +26,7 @@ use super::messages::{ShutdownMsg, InitKeyFrameMsg, KeyFrameIdMsg, Reset, NewKey
 
 // TODO (design, variable locations): It would be nice for this to be a member of LocalMapping instead of floating around in the global namespace, but we can't do that easily because then Tracking would need a reference to the localmapping object.
 pub static LOCAL_MAPPING_IDLE: AtomicBool = AtomicBool::new(true);
-pub static LOCAL_MAPPING_PAUSED: AtomicBool = AtomicBool::new(false); // sent from loop closing to stop until gba is done, equivalent to calling RequestStop and isStopped
+pub static LOCAL_MAPPING_PAUSE_SWITCH: AtomicBool = AtomicBool::new(false); // sent from loop closing to stop until gba is done, equivalent to calling RequestStop and isStopped
 
 pub struct LocalMapping {
     system: System,
@@ -90,7 +90,7 @@ impl Actor for LocalMapping {
 
                 actor.local_mapping();
             } else if message.is::<NewKeyFrameMsg>() {
-                if LOCAL_MAPPING_PAUSED.load(std::sync::atomic::Ordering::SeqCst) {
+                if LOCAL_MAPPING_PAUSE_SWITCH.load(std::sync::atomic::Ordering::SeqCst) {
                     continue;
                 }
 

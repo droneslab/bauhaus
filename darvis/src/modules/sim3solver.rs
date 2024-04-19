@@ -3,11 +3,11 @@
 use std::{cmp::{max, min}, collections::HashMap};
 
 
-use log::{error, warn};
+use log::warn;
 use opencv::{core::{no_array, norm, MatExprResult, Range, Scalar, CV_64F, NORM_L2}, hub_prelude::{KeyPointTraitConst, MatExprTraitConst, MatTraitConst}};
 use rand::Rng;
 
-use crate::{map::{map::Id, pose::{DVRotation, DVTranslation, Sim3}}, modules::optimizer::LEVEL_SIGMA2, registered_actors::CAMERA_MODULE, MapLock};
+use crate::{map::{map::Id, pose::{DVRotation, Sim3}}, modules::optimizer::LEVEL_SIGMA2, registered_actors::CAMERA_MODULE, MapLock};
 use opencv::prelude::*;
 
 pub struct Sim3Solver {
@@ -38,7 +38,8 @@ pub struct Sim3Solver {
 impl Sim3Solver {
     pub fn new(
         map: &MapLock,
-        kf1_id: Id, kf2_id: Id, matches: &HashMap<u32, i32>, fix_scale: bool,
+        kf1_id: Id, kf2_id: Id, matches: &HashMap<usize, Id>, fix_scale: bool,
+        mut keyframe_matched_mp: HashMap<usize, Id>
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let map_lock = map.read();
         let kf1 = map_lock.keyframes.get(&kf1_id).unwrap();
@@ -67,6 +68,7 @@ impl Sim3Solver {
         let mut p2_im2 = vec![]; // mvP2im2
 
         let mut i = 0;
+        // println!("sim3solver NEW: ");
         for (index, mp2_id) in matches {
             let mp1_id = match keyframe_mp1[*index as usize] {
                 Some((mp1_id, _)) => mp1_id,
@@ -93,23 +95,36 @@ impl Sim3Solver {
             // void Sim3Solver::FromCameraToImage(const vector<Eigen::Vector3f> &vP3Dc, vector<Eigen::Vector2f> &vP2D, GeometricCamera* pCamera)
 
             let x_3d_1w: Mat = (&map_lock.mappoints.get(&mp1_id).unwrap().position).into();
+            // println!("x_3d_1w: {:?}, ", x_3d_1w.data_typed::<f64>()?);
+
             let this_x3dc1 = res_to_mat(&kf1_rot * x_3d_1w + &kf1_trans).unwrap();
+            // println!("kf1_rot without into: {:?}", kf1.pose.get_rotation());
+            // println!("kf1_rot: {:?}, ", kf1_rot.data_typed::<f64>()?);
+            // println!("kf1_trans: {:?}, ", kf1_trans.data_typed::<f64>()?);
+            // println!("...this_x3dc1: {:?}, ", this_x3dc1.data_typed::<f64>()?);
+
             p1_im1.push(CAMERA_MODULE.project((&this_x3dc1).into()));
             x_3d_c1.push(this_x3dc1);
 
             let x_3d_2w: Mat = (&map_lock.mappoints.get(&mp2_id).unwrap().position).into();
+            // println!("x_3d_2w: {:?}, ", x_3d_2w.data_typed::<f64>()?);
+
             let this_x3dc2 = res_to_mat(&kf2_rot * x_3d_2w + &kf2_trans).unwrap();
+            // println!("kf2_rot: {:?}, ", kf2_rot.data_typed::<f64>()?);
+            // println!("kf2_trans: {:?}, ", kf2_trans.data_typed::<f64>()?);
+            // println!("...this_x3dc2: {:?}, ", this_x3dc2.data_typed::<f64>()?);
+            // println!("===");
+
             p2_im2.push(CAMERA_MODULE.project((&this_x3dc2).into()));
             x_3d_c2.push(this_x3dc2);
 
             max_error1.push(9.210 * sigma_square1 as f64);
             max_error2.push(9.210 * sigma_square2 as f64);
 
-            indices1.push(*index);
+            indices1.push(*index as u32);
             all_indices.push(i);
             i += 1;
         }
-
 
         let mut sim3_solver = Self {
             ransac_max_its: 300,
@@ -188,8 +203,8 @@ impl Sim3Solver {
 
             // Get min set of points
             for i in 0..3 {
-                // let randi = rand::thread_rng().gen_range(0..available_indices.len()-1);
-                let randi = dvos3binding::ffi::RandomInt(0, available_indices.len() as i32 - 2) as usize;
+                let randi = rand::thread_rng().gen_range(0..available_indices.len()-1);
+                // let randi = dvos3binding::ffi::RandomInt(0, available_indices.len() as i32 - 2) as usize;
                 let idx = available_indices[randi] as usize;
                 self.x_3d_c1[idx].copy_to(
                     &mut p_3d_c1_i.col(i)?
@@ -201,10 +216,12 @@ impl Sim3Solver {
 
                 available_indices[randi] = available_indices.pop().unwrap();
             }
-
+            
             self.compute_sim3(&p_3d_c1_i, &p_3d_c2_i)?;
 
             self.check_inliers()?;
+
+            // println!("Sim3 inliers: {}", self.current_estimation.inliers_count);
 
             if self.current_estimation.inliers_count > self.current_ransac_state.best_inliers_count {
                 self.current_ransac_state.best_inliers = self.current_estimation.inliers_i.clone();
@@ -258,6 +275,10 @@ impl Sim3Solver {
         // Horn 1987, Closed-form solution of absolute orientataion using unit quaternions
 
         // Step 1: Centroid and relative coordinates
+
+        // println!("ComputeSim3");
+        // println!("P1: {:?}", &p1.data_typed::<f64>()?);
+        // println!("P2: {:?}", &p2.data_typed::<f64>()?);
 
         // pr1 = Relative coordinates to centroid (set 1)
         // O1 = Centroid of P1
@@ -371,6 +392,7 @@ impl Sim3Solver {
             .col(3)?
         )?;
 
+
         Ok(())
     }
 
@@ -393,6 +415,8 @@ impl Sim3Solver {
 
             let err1 = dist1.dot(&dist1)?;
             let err2 = dist2.dot(&dist2)?;
+
+            // println!("Error: {} < {}, {} < {}", err1, self.max_error1[i], err2, self.max_error2[i]);
 
             if err1 < self.max_error1[i] && err2 < self.max_error2[i] {
                 self.current_estimation.inliers_i[i] = true;
@@ -427,6 +451,9 @@ impl Sim3Solver {
     }
 
     pub fn get_estimates(&mut self) -> Sim3 {
+        // println!("Sim3Solver rotation matrix, before: {:?}", self.current_ransac_state.best_rotation.data_typed::<f64>().unwrap());
+        // let rot: DVRotation = self.current_ransac_state.best_rotation.clone().into();
+        // println!("Sim3Solver rotation matrix, after: {:?}", rot);
         Sim3::new(
             (&self.current_ransac_state.best_translation.clone()).into(),
             self.current_ransac_state.best_rotation.clone().into(),

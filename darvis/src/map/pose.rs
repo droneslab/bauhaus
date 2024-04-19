@@ -1,7 +1,6 @@
 use std::ops::{Mul, Deref};
-use core::matrix::{DVMatrix, DVMatrix3, DVVector3};
+use core::matrix::{DVMatrix3, DVVector3};
 use num_traits::abs;
-use opencv::core::Mat;
 use serde::{Deserialize, Serialize};
 
 pub type DVTranslation = DVVector3<f64>;

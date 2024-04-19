@@ -1,7 +1,7 @@
 use std::fmt;
 use cxx::{UniquePtr, let_cxx_string};
 use log::info;
-use core::{matrix::DVMatrix, config::{SETTINGS, SYSTEM}};
+use core::matrix::DVMatrix;
 
 use crate::map::keyframe::KeyFrame;
 

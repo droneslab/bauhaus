@@ -28,7 +28,7 @@ use opencv::platform_types::size_t;
 use serde::{Deserialize, Serialize};
 
 use opencv::{
-    prelude::*, core::*, hub_prelude::{MatExprTraitConst}
+    prelude::*, core::*, hub_prelude::MatExprTraitConst
 };
 // extern crate nalgebra as na;
 
@@ -160,9 +160,9 @@ impl From<&DVVector3<f64>> for opencv::core::Mat {
 impl From<&DVMatrix3<f64>> for opencv::core::Mat {
     fn from(mat: &DVMatrix3<f64>) -> opencv::core::Mat { 
         Mat::from_slice_2d(&[
-            [mat[0], mat[1], mat[2]],
-            [mat[3], mat[4], mat[5]],
-            [mat[6], mat[7], mat[8]]
+            [mat[0], mat[3], mat[6]],
+            [mat[1], mat[4], mat[7]],
+            [mat[2], mat[5], mat[8]]
         ]).unwrap()
     }
 }

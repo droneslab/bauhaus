@@ -1,8 +1,10 @@
 use core::{config::{SETTINGS, SYSTEM}, matrix::{DVMatrix, DVVector3, DVVectorOfKeyPoint}, sensor::{FrameSensor, Sensor}, system::Timestamp};
 
+use nalgebra::Translation;
+
 use crate::{actors::tracking_backend::TrackedMapPointData, modules::{bow::BoW, imu::{IMUBias, IMUPreIntegrated}}, registered_actors::{CAMERA_MODULE, VOCABULARY}};
 
-use super::{features::Features, keyframe::MapPointMatches, map::{Id, Map}, mappoint::MapPoint, pose::Pose};
+use super::{features::Features, keyframe::MapPointMatches, map::{Id, Map}, mappoint::MapPoint, pose::{DVTranslation, Pose}};
 
 
 #[derive(Debug, Clone)]
@@ -51,20 +53,21 @@ pub fn new(
             mappoint_matches: MapPointMatches::new(num_keypoints),
             imu_preintegrated: None,
             pose: None,
-            ref_kf_id: None
+            ref_kf_id: None,
         };
         Ok(frame)
     }
 
     pub fn new_clone(frame: &Frame) -> Frame {
-        let bow = match &frame.bow {
-            Some(bow) => Some(bow.clone()),
-            None => {
-                let mut bow = BoW::new();
-                VOCABULARY.transform(&frame.features.descriptors, &mut bow);
-                Some(bow)
-            }
-        };
+        // let bow = match &frame.bow {
+        //     Some(bow) => Some(bow.clone()),
+        //     None => {
+        //         println!("Compute bow in clone! frame id: {}", frame.frame_id);
+        //         let mut bow = BoW::new();
+        //         VOCABULARY.transform(&frame.features.descriptors, &mut bow);
+        //         Some(bow)
+        //     }
+        // };
 
         Frame {
             timestamp: frame.timestamp,
@@ -74,7 +77,7 @@ pub fn new(
             features: frame.features.clone(),
             imu_bias: frame.imu_bias,
             imu_preintegrated: frame.imu_preintegrated,
-            bow,
+            bow: frame.bow.clone(),
             ref_kf_id: frame.ref_kf_id,
             sensor: frame.sensor,
         }
@@ -85,6 +88,10 @@ pub fn new(
             self.bow = Some(BoW::new());
             VOCABULARY.transform(&self.features.descriptors, &mut self.bow.as_mut().unwrap());
         }
+    }
+
+    pub fn get_camera_center(&self) -> Option<DVTranslation> {
+        Some(DVTranslation::new(-self.pose?.get_rotation().transpose() * *self.pose?.get_translation()))
     }
 
     pub fn check_close_tracked_mappoints(&self) -> (i32, i32) {
