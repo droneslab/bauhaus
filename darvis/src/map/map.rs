@@ -433,7 +433,7 @@ impl Map {
         self.keyframe_database.add(self.keyframes.get(&kf_id).unwrap());
     }
 
-    pub fn kf_db_detect_loop_candidates(&self, kf_id: Id, min_score: f32) -> Vec<Id> {
-        self.keyframe_database.detect_loop_candidates(&self, &kf_id, min_score)
+    pub fn detect_loop_candidates(&self, kf_id: Id, num_candidates: i32) -> (Vec<Id>, Vec<Id>) {
+        self.keyframe_database.detect_n_best_candidates(&self, &kf_id, num_candidates)
     }
 }
