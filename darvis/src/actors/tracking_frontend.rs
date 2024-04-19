@@ -15,7 +15,7 @@ use crate::{
     },
     modules::image,
     System,
-    map::{map::Id},
+    map::map::Id,
 };
 
 
@@ -42,7 +42,7 @@ impl Actor for TrackingFrontEnd {
             FrameSensor::Mono | FrameSensor::Rgbd => None,
         };
         let orb_extractor_ini = match sensor.is_mono() {
-            true => Some(DVORBextractor::new(max_features*5)),
+            true => Some(DVORBextractor::new(max_features*5)), // sofiya orbslam2 loop closing
             false => None
         };
         TrackingFrontEnd {

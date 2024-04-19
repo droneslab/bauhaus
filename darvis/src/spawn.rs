@@ -14,7 +14,7 @@ use crate::{
 // Initialize actor system using config file.
 // Returns mutex to shutdown flag and transmitters for first actor and shutdown actor.
 // You probably don't want to change this code.
-pub fn launch_system(actor_config: Vec<ActorConf>, module_config: Vec<ModuleConf>, first_actor_name: String) 
+pub fn launch_system(actor_config: Vec<ActorConf>, _module_config: Vec<ModuleConf>, first_actor_name: String) 
     -> Result<(Arc<std::sync::Mutex<bool>>, Sender, Sender, JoinHandle<()>), Box<dyn std::error::Error>> 
 {
     // * SET UP CHANNELS *//

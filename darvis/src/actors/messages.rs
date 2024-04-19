@@ -61,8 +61,8 @@ impl ActorMessage for Reset {}
 
 // * LOCAL MAPPING */
 pub struct IMUInitializedMsg {
-    imu_initialized: bool,
-    imu_ba2: bool
+    _imu_initialized: bool,
+    _imu_ba2: bool
 }
 impl ActorMessage for IMUInitializedMsg {}
 

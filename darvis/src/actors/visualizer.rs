@@ -1,4 +1,4 @@
-use std::{borrow::Cow, collections::{BTreeMap, BTreeSet, HashMap, HashSet}, fs::{self, File}, io::BufWriter, sync::Arc, thread};
+use std::{borrow::Cow, collections::{BTreeMap, BTreeSet, HashMap, HashSet}, fs::{self, File}, io::BufWriter, sync::Arc};
 use log::warn;
 use mcap::{Schema, Channel, records::MessageHeader, Writer};
 use opencv::prelude::{Mat, MatTraitConst, MatTraitConstManual};
@@ -17,7 +17,6 @@ use crate::{
 
 // Default visual stuff //
 // Trajectory and frame
-pub static FRAME_COLOR: Color = Color { r: 1.0, g: 0.0, b: 0.0, a: 1.0 };
 pub static TRAJECTORY_COLOR: Color = Color { r: 1.0, g: 0.0, b: 0.0, a: 1.0 };
 // Mappoints and mappoint matches
 pub static MAPPOINT_COLOR: Color = Color { r: 1.0, g: 1.0, b: 1.0, a: 1.0 };
@@ -467,7 +466,7 @@ impl DarvisVisualizer {
         }
     }
 
-    fn create_arrow(&self, pose: &Pose, color: Color) -> ArrowPrimitive {
+    fn _create_arrow(&self, pose: &Pose, color: Color) -> ArrowPrimitive {
         ArrowPrimitive { 
             pose: Some(pose.into()),
             color: Some(color),

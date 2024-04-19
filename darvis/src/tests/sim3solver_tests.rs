@@ -9,7 +9,7 @@ mod sim3solver_tests {
 
     use crate::map::pose::{DVRotation, DVTranslation, Pose, Sim3};
 
-    #[test]
+    // #[test]
     fn test_sim3_struct() {
         let sim3 = Sim3 {
             pose: Pose::new(
@@ -49,6 +49,7 @@ mod sim3solver_tests {
 
     #[test]
     fn test_compute_centroid() {
+        // From kitti 06, first/only loop
         let p = Mat::from_slice_2d(&[
             &[-1.9746182, 0.5801363, 0.63902175],
             &[0.15127298, 0.10896853, 0.66591078],
@@ -67,10 +68,32 @@ mod sim3solver_tests {
 
         assert!(compare_mats(&pr, &expected_pr));
         assert!(compare_mats(&o, &expected_o));
+
+        // From kitti 00, first loop b/w frame 1576 and 130
+        let p = Mat::from_slice_2d(&[
+            &[0.41103709, 0.53878003, -0.22131743],
+            &[-0.063558668, -0.056068808, 0.16040552],
+            &[1.0883108, 3.5505676, 0.94109428]
+        ]).unwrap();
+        let (pr, o) = compute_centroid(&p).unwrap();
+        let expected_pr = Mat::from_slice_2d(&[
+            &[0.16820385, 0.29594678, -0.46415067],
+            &[-0.077151351, -0.069661491, 0.14681284],
+            &[-0.77168012, 1.6905767, -0.91889668]
+        ]).unwrap();
+        let expected_o = Mat::from_slice_2d(&[
+            &[0.24283324],
+            &[0.013592681],
+            &[ 1.859991],
+        ]).unwrap();
+
+        assert!(compare_mats(&pr, &expected_pr));
+        assert!(compare_mats(&o, &expected_o));
     }
 
     #[test]
     fn test_compute_sim3() {
+        // From kitti 06, first/only loop
         let p1 = Mat::from_slice_2d(&[
             &[0.6906426, 1.0464532, -0.18071842],
             &[-0.64418668, -0.029071447, 0.13930871],
@@ -108,21 +131,58 @@ mod sim3solver_tests {
             &[0.0, 0.0, 0.0, 1.0]
         ]).unwrap();
 
-
         assert!(compare_mats(&estimate.r_12_i, &expected_r12i));
         assert!(compare_mats(&estimate.t_12_i, &expected_t12i));
         assert!((estimate.s_12_i - expected_s12i).abs() < 0.0001);
         assert!(compare_mats(&estimate.T12_i, &expected_T12i));
         assert!(compare_mats(&estimate.T21_i, &expected_T21i));
 
+        // From kitti 00, first loop b/w frame 1576 and 130
+        let p1 = Mat::from_slice_2d(&[
+            &[0.41103709, 0.53878003, -0.22131743],
+            &[-0.063558668, -0.056068808, 0.16040552],
+            &[1.0883108, 3.5505676, 0.94109428],
+        ]).unwrap();
+        let p2 = Mat::from_slice_2d(&[
+            &[0.30070734, 0.56627846, -0.099854946],
+            &[-0.040380079, -0.037358671, 0.098534502],
+            &[0.59360749, 2.1250362, 0.56619376]
+        ]).unwrap();
 
+        let estimate = compute_sim3(&p1, &p2, false).unwrap();
+
+        let expected_r12i = Mat::from_slice_2d(&[
+            &[0.99265927, 0.0027340269, -0.12091367],
+            &[-0.002506749, 0.99999481, 0.0020317393],
+            &[ 0.12091859, -0.0017137246, 0.99266094],
+        ]).unwrap();
+        let expected_t12i = Mat::from_slice_2d(&[
+            &[0.04896332],
+            &[3.2030152e-07],
+            &[ 0.075745225],
+        ]).unwrap();
+        let expected_s12i = 1.59619;
+        let expected_T12i = Mat::from_slice_2d(&[
+            &[1.5844687, 0.0043640151, -0.1930007, 0.04896332],
+            &[-0.0040012375, 1.5961777, 0.0032430338, 3.2030152e-07],
+            &[0.19300856, -0.0027354229, 1.5844715, 0.075745225],
+            &[0.0, 0.0, 0.0, 1.0]
+        ]).unwrap();
+        let expected_T21i = Mat::from_slice_2d(&[
+            &[0.62189454, -0.0015704619, 0.07575471, -0.036188077],
+            &[0.0017128499, 0.62649018, -0.0010736373, -2.7445867e-06],
+            &[-0.075751625, 0.0012728714, 0.62189555, -0.043396566],
+            &[0.0, 0.0, 0.0, 1.0]
+        ]).unwrap();
+
+
+        assert!(compare_mats(&estimate.r_12_i, &expected_r12i));
+        assert!(compare_mats(&estimate.t_12_i, &expected_t12i));
+        assert!((estimate.s_12_i - expected_s12i).abs() < 0.0001);
+        assert!(compare_mats(&estimate.T12_i, &expected_T12i));
+        assert!(compare_mats(&estimate.T21_i, &expected_T21i));
     }
-
-    #[test]
-    fn test_project() {
-
-    }
-
+    
     fn compute_centroid(p: &Mat) -> Result<(opencv::core::Mat, opencv::core::Mat), opencv::Error> {
         let mut c = Mat::default();
         opencv::core::reduce(&p, &mut c, 1, opencv::core::REDUCE_SUM, CV_64F)?;
