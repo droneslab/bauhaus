@@ -21,6 +21,8 @@ mod map;
 mod modules;
 mod tests;
 
+use std::path::PathBuf;
+
 pub type MapLock = ReadWriteMap<Map>;
 // pub type MapLock = Arc<Mutex<Map>>; // Replace above line with this if you want to switch all locks to mutexes
 
@@ -57,8 +59,34 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     info!("System ready to receive messages!");
 
-    let mut loop_sleep = LoopSleep::new(&img_dir);
-    let timestamps = read_timestamps_file(&img_dir);
+    let dataset_name = SETTINGS.get::<String>("CAMERA", "dataset");
+
+    info!("Dataset name: {}", dataset_name);
+    let (timestamps, images_path) = if dataset_name == "KITTI" {
+        let image_name = "image_0";
+
+        let mut path = PathBuf::from(img_dir.clone());
+        path.push(image_name);
+        (read_timestamps_file_kitti(&img_dir), path.to_str().unwrap().to_string())
+    } else if dataset_name == "EUROC" {
+        let image_name = "data";
+
+        let mut path = PathBuf::from(img_dir.clone());
+        path.push(image_name);
+
+        (read_timestamps_file_euroc(&img_dir), path.to_str().unwrap().to_string())
+    } else if dataset_name == "TUM" {
+        let image_name = "rgb";
+
+        let mut path = PathBuf::from(img_dir.clone());
+        path.push(image_name);
+
+        (read_timestamps_file_tum(&img_dir), path.to_str().unwrap().to_string())
+    }  else {
+        panic!("Invalid dataset name");
+    };
+
+    let mut loop_sleep = LoopSleep::new(&timestamps);
 
     if SETTINGS.get::<bool>(SYSTEM, "check_deadlocks") {
         // This slows stuff down, so only enable this if you really need to.
@@ -86,7 +114,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Process images
     // let now = SystemTime::now();
     let mut i = 0;
-    for path in &generate_image_paths(img_dir + "/image_0/") {
+    for path in &generate_image_paths(images_path){ //img_dir + "/image_0/") {
         if *shutdown_flag.lock().unwrap() { break; }
         loop_sleep.start();
         tracy_client::frame_mark();
@@ -130,13 +158,36 @@ fn generate_image_paths(img_dir: String) -> Vec<String> {
     img_paths
 }
 
-fn read_timestamps_file(img_dir: &String) -> Vec<f64> {
-    let file = File::open(img_dir.clone() + "/times.txt")
+fn read_timestamps_file_kitti(time_stamp_dir: &String) -> Vec<f64> {
+    let file = File::open(time_stamp_dir.clone() + "/times.txt")
         .expect("Could not open timestamps file");
     io::BufReader::new(file).lines()
         .map(|x| x.unwrap().parse::<f64>().unwrap())
         .collect::<Vec<f64>>()
 }
+
+fn read_timestamps_file_euroc(time_stamp_dir: &String) -> Vec<f64> {
+    println!("Reading timestamps file {}", time_stamp_dir.clone());
+    let file = File::open(time_stamp_dir.clone() + "/data.csv")
+        .expect("Could not open timestamps file");
+
+    // timestamps
+    io::BufReader::new(file).lines().skip(1)
+        .map(|x| x.unwrap().split(',').next().unwrap().parse::<f64>().unwrap())
+        .collect::<Vec<f64>>()
+}
+
+fn read_timestamps_file_tum(time_stamp_dir: &String) -> Vec<f64> {
+    println!("Reading timestamps file {}", time_stamp_dir.clone());
+    let file = File::open(time_stamp_dir.clone() + "/rgb.txt")
+        .expect("Could not open timestamps file");
+
+    // timestamps
+    io::BufReader::new(file).lines().skip(3)
+        .map(|x| x.unwrap().split(' ').next().unwrap().parse::<f64>().unwrap())
+        .collect::<Vec<f64>>()
+}
+
 
 enum LoopType {
     Fps(LoopHelper),
@@ -147,12 +198,12 @@ struct LoopSleep {
     loop_type: LoopType
 }
 impl LoopSleep {
-    pub fn new(img_dir: &String) -> Self {
+    pub fn new(timestamps: &Vec<f64>) -> Self {
         let loop_type = match SETTINGS.get::<bool>(SYSTEM, "use_timestamps_file") {
             true => {
                 // Use dataset timestamps file to run loop
-                let timestamps = read_timestamps_file(img_dir);
-                LoopType::Timestamps(timestamps, -1, time::Instant::now())
+                // let timestamps = read_timestamps_file(img_dir);
+                LoopType::Timestamps(timestamps.clone(), -1, time::Instant::now())
             },
             false => {
                 // Run loop at fps rate

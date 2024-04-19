@@ -427,7 +427,7 @@ impl TrackingBackend {
         self.system.send(
             SHUTDOWN_ACTOR, 
             Box::new(TrajectoryMsg{
-                pose: relative_pose,
+                pose: current_frame.pose.unwrap().inverse(),
                 ref_kf_id: current_frame.ref_kf_id.unwrap(),
                 timestamp: current_frame.timestamp
             })

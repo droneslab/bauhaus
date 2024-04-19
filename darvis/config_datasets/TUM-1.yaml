@@ -1,17 +1,23 @@
 #dataset name
-dataset: KITTI
+dataset: TUM
+
+# # General sensor definitions.
+# sensor_type: RGB camera 
+# Freiburg 1 RGB	517.3	516.5	318.6	255.3	0.2624	-0.9531	-0.0054	0.0026	1.1633
+
+
 
 # Camera calibration and distortion parameters (OpenCV) 
-fx: 718.856
-fy: 718.856
-cx: 607.1928
-cy: 185.2157
+fx: 517.3
+fy:	516.5
+cx: 318.6
+cy: 255.3
 
-k1: 0.0
-k2: 0.0
-p1: 0.0
-p2: 0.0
-k3: 0.0
+k1: 0.2624
+k2: -0.9531
+p1: -0.0054	
+p2: 0.0026
+k3: 1.1633
 
 stereo_baseline_times_fx: 386.1448
 thdepth: 35
@@ -20,8 +26,11 @@ thdepth: 35
 RGB: 1
 
 # Camera resolution
-width: 1241
-height: 376
+width: 640
+height: 480
 
 stereo_overlapping_begin: 0
 stereo_overlapping_end: 1000
+
+
+
