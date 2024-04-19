@@ -7,22 +7,22 @@ master:
 
 system:
       localization_only_mode: false
-      vocabulary_file: "../../Vocabulary/ORBvoc.txt"
+      vocabulary_file: "../Vocabulary/ORBvoc.txt"
       framesensor: Mono
       imusensor: None
       first_actor_name: TRACKING_FRONTEND # Name of actor to kick off pipeline
 
       # FPS
-      fps: 10.0
+      fps: 4.0
       use_timestamps_file: false # Instead of running at a fixed fps, use timestamps from the dataset
 
       # RESULTS
-      results_folder: "../results"
+      results_folder: "results"
       trajectory_file_name: "trajectory.txt"
 
       # DEBUGGING
-      log_level: trace # options are [trace, debug, info, warn, error]
-      check_deadlocks: false # Spawns a new thread to check for deadlocks every 2 secs, but slows stuff down.
+      log_level: debug # options are [trace, debug, info, warn, error]
+      check_deadlocks: true # Spawns a new thread to check for deadlocks every 2 secs, but slows stuff down.
       # To enable profiling, set features = ["enable"] for tracy-client in Cargo.toml
       # To turn on visualizer, uncomment visualizer actor below
 
@@ -58,7 +58,7 @@ modules:
         settings:
           - 
             name: far_points_threshold
-            value: 20.0
+            value: 0.0
             type: f64
       -
         name: FEATURES
@@ -176,7 +176,7 @@ actors:
       -
        name: LOOP_CLOSING
        tag: "orbslam2 loop closing"
-       receiver_bound: -1
+       receiver_bound: 1
        settings:
           - 
             name: covisibility_consistency_threshold
