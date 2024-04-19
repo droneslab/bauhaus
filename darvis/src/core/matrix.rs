@@ -483,7 +483,6 @@ impl<T: Clone> From<&DVMatrix3<T>> for nalgebra::Matrix3<T> {
 }
 impl From<opencv::core::Mat> for DVMatrix3<f64> {
     fn from(mat: opencv::core::Mat) -> DVMatrix3<f64> { 
-        // Note: this changes the rotation matrix from
         DVMatrix3::new(nalgebra::Matrix3::<f64>::new(
             *mat.at_2d::<f64>(0,0).unwrap(),
             *mat.at_2d::<f64>(0, 1).unwrap(),

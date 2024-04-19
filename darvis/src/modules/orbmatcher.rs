@@ -711,43 +711,29 @@ pub fn search_by_sim3(map: &MapLock, kf1_id: Id, kf2_id: Id, matches: &mut HashM
 
 }
 
-pub fn search_by_projection_for_loop_detection2(
+pub fn search_by_projection_for_loop_detection(
     map: &MapLock, kf_id: &Id, scw: &Sim3, 
     candidates: &HashMap<usize, Id>,
     matches: &mut HashMap<usize, Id>,
     threshold: i32, hamming_ratio: f64
 ) -> Result<i32, Box<dyn std::error::Error>>{
+    // int ORBmatcher::SearchByProjection(KeyFrame* pKF, Sophus::Sim3f &Scw, const vector<MapPoint*> &vpPoints, vector<MapPoint*> &vpMatched, int th, float ratioHamming)
     // int ORBmatcher::SearchByProjection(KeyFrame* pKF, Sophus::Sim3<float> &Scw, const std::vector<MapPoint*> &vpPoints, const std::vector<KeyFrame*> &vpPointsKFs, std::vector<MapPoint*> &vpMatched, std::vector<KeyFrame*> &vpMatchedKF, int th, float ratioHamming)
+    // Pretty sure these functions do the same thing because vpPointsKFs and vpMatchedKF are never meaningfully used
     // Used in loop detection
 
-    println!("Search by projection type 2");
     let lock = map.read();
 
-    // // Decompose Scw
-    // let s_rcw = {
-    //     let rot_mat: Mat = (&scw.pose.get_rotation()).into();
-    //     DVMatrix::new(rot_mat)
-    // };
-    // let s_tcw = {
-    //     let trans_mat: Mat = (&scw.pose.get_translation()).into();
-    //     trans_mat
-    // };
-
-    // let scw = (s_rcw.row(0).dot(& *s_rcw.row(0))? as f32).sqrt();
-    // let rcw = s_rcw.divide_by_scalar(scw); // Should be == s_rCw / scw
-
-    // let tcw = DVMatrix::new(s_tcw).divide_by_scalar(scw); // Should be == scw_mat / scw
-    // let ow = DVMatrix::new_expr(rcw.clone().t()?).neg() * &tcw;
-
     // ORBSLAM3:
-    let tcw = Pose::new(*scw.pose.get_translation() / scw.scale , scw.pose.get_rotation().transpose());
+    // todo scw translation and rotation may need to be scaled by scale somehow? see Sophus::Sim3f mScw = Converter::toSophus(gScw);
+    // in this code in orbslam3 they divide translation by scale but not rotation
+    // but also when creating the se3 object in loop closing right before the call to this function, 
+    // the conversion from g2o to se3 multiplies the rotation by the scale but not the translation
+    // see Sophus::Sim3f mScw = Converter::toSophus(gScw);
+    let tcw = Pose::new(*scw.pose.get_translation() , *scw.pose.get_rotation());// * scw.scale);
     let rot = tcw.get_rotation();
     let trans = tcw.get_translation();
     let ow = tcw.inverse().get_translation();
-
-    println!("scw... rot: {:?} trans: {:?} scale: {:?}", scw.pose.get_rotation(), scw.pose.get_translation(), scw.scale);
-    println!("tcw... rot: {:?} trans: {:?}", tcw.get_rotation(), tcw.get_translation());
-    println!("ow: {:?}", ow);
 
     // Set of MapPoints already found in the KeyFrame
     let already_found = matches.values().into_iter().map(|mp_id| *mp_id).collect::<BTreeSet<Id>>();
@@ -781,11 +767,7 @@ pub fn search_by_projection_for_loop_detection2(
 
         // Transform into Camera Coords.
         let p3dc = *rot * p3dw + *trans;
-        // let p3dc = rcw.mat() * &p3dw + tcw.mat(); //*tcw * **p3dw;
-
-        println!("mp position: {:?}", p3dw);
-        println!("p3dc: {:?}", p3dc);
-
+    
         // Depth must be positive
         if p3dc[2] < 0.0 {
             n_depth += 1;
@@ -868,175 +850,10 @@ pub fn search_by_projection_for_loop_detection2(
         }
     }
 
-    
     debug!("...Search by projection for loop detection stats:  already found {}, depth {}, not in image {}, wrong dist {}, viewing angle {}, indices {}, has match {}, levels {}, final dist too low {}", n_already_found, n_depth, n_not_in_image, n_wrong_dist, n_viewing_angle, n_indices, n_has_match, n_levels, n_final_dist_too_low);
 
     Ok(num_matches)
 
-}
-
-pub fn search_by_projection_for_loop_detection1(
-    map: &MapLock, kf_id: &Id, scw: &Sim3, 
-    points: &HashMap<usize, Id>,
-    matches: &mut HashMap<usize, Id>,
-    threshold: i32, hamming_ratio: f64
-) -> Result<i32, Box<dyn std::error::Error>>{
-    // int ORBmatcher::SearchByProjection(KeyFrame* pKF, Sophus::Sim3f &Scw, const vector<MapPoint*> &vpPoints, vector<MapPoint*> &vpMatched, int th, float ratioHamming)
-    // Used in loop detection
-
-    println!("Search by projection type 1");
-    let lock = map.read();
-
-    // // Decompose Scw
-    // let s_rcw = {
-    //     let rot_mat: Mat = (&scw.pose.get_rotation()).into();
-    //     DVMatrix::new(rot_mat)
-    // };
-    // let s_tcw = {
-    //     let trans_mat: Mat = (&scw.pose.get_translation()).into();
-    //     trans_mat
-    // };
-
-    // let scw = (s_rcw.row(0).dot(& *s_rcw.row(0))? as f32).sqrt();
-    // let rcw = s_rcw.divide_by_scalar(scw); // Should be == s_rCw / scw
-
-    // let tcw = DVMatrix::new(s_tcw).divide_by_scalar(scw); // Should be == scw_mat / scw
-    // let ow = DVMatrix::new_expr(rcw.clone().t()?).neg() * &tcw;
-
-
-    // ORBSLAM3:
-    let tcw = Pose::new(*scw.pose.get_translation() / scw.scale , scw.pose.get_rotation().transpose());
-    let rot = tcw.get_rotation();
-    let trans = tcw.get_translation();
-    let ow = tcw.inverse().get_translation();
-
-    println!("scw: {:?}, scale: {:?}", scw.pose, scw.scale);
-    println!("tcw: rot {:?}, trans {:?}", tcw.get_rotation(), tcw.get_translation());
-    println!("ow: {:?}", ow);
-
-    // Set of MapPoints already found in the KeyFrame
-    let already_found = matches.values().into_iter().map(|mp_id| *mp_id).collect::<BTreeSet<Id>>();
-
-    let mut num_matches = 0;
-
-    // For each Candidate MapPoint Project and Match
-    let mut n_already_found = 0;
-    let mut n_depth = 0;
-    let mut n_not_in_image = 0;
-    let mut n_wrong_dist = 0;
-    let mut n_viewing_angle = 0;
-    let mut n_indices = 0;
-    let mut n_has_match  = 0;
-    let mut n_levels  = 0;
-    let mut n_final_dist_too_low = 0;
-
-    for (_, mp_id) in points {
-        // Discard Bad MapPoints and already found
-        let mp = match lock.mappoints.get(&mp_id) {
-            Some(mp) => mp,
-            None => continue
-        };
-        if already_found.get(&mp_id).is_some() {
-            n_already_found += 1;
-            continue;
-        }
-
-        // Get 3D Coords.
-        let p3dw = *mp.position;
-
-        // Transform into Camera Coords.
-        let p3dc = *rot * p3dw + *trans;
-        // let p3dc = rcw.mat() * &p3dw + tcw.mat(); //*tcw * **p3dw;
-
-        println!("mp position: {:?}", p3dw);
-        println!("p3dc: {:?}", p3dc);
-
-        // Depth must be positive
-        if p3dc[2] < 0.0 {
-            n_depth += 1;
-            continue;
-        }
-
-        // Project into Image
-        let invz = 1.0 / p3dc[2];
-        let x = p3dc[0] * invz;
-        let y = p3dc[1] * invz;
-
-        let u = CAMERA_MODULE.fx * x + CAMERA_MODULE.cx;
-        let v = CAMERA_MODULE.fy * y + CAMERA_MODULE.cy;
-
-        // Point must be inside the image
-        let kf = lock.keyframes.get(&kf_id).unwrap();
-        if !kf.features.is_in_image(u, v) {
-            n_not_in_image += 1;
-            continue;
-        }
-
-        // Depth must be inside the scale invariance region of the point
-        let max_distance = mp.get_max_distance_invariance();
-        let min_distance = mp.get_min_distance_invariance();
-        let po = p3dw - *ow;
-        let dist = po.norm();
-
-        if dist < min_distance || dist > max_distance {
-            n_wrong_dist += 1;
-            continue;
-        }
-
-        // Viewing angle must be less than 60 deg
-        let pn = &mp.normal_vector;
-        if po.dot(&pn) < 0.5 * dist {
-            n_viewing_angle += 1;
-            continue;
-        }
-
-        let n_predicted_level = mp.predict_scale(&dist);
-
-        // Search in a radius
-        let radius = threshold as f32 * SCALE_FACTORS[n_predicted_level as usize];
-
-        let indices = kf.features.get_features_in_area(&u, &v, radius as f64, None);
-
-        if indices.is_empty() {
-            n_indices += 1;
-            continue;
-        }
-
-        // Match to the most similar keypoint in the radius
-        let d_mp = &mp.best_descriptor;
-
-        let mut best_dist = std::i32::MAX;
-        let mut best_idx = -1;
-        for idx in indices { 
-            if matches.get(&(idx as usize)).is_some() {
-                n_has_match += 1;
-                continue;
-            }
-            let kp_level = kf.features.get_octave(idx as usize);
-            if kp_level < n_predicted_level - 1 || kp_level > n_predicted_level {
-                n_levels += 1;
-                continue;
-            }
-
-            let descriptors_kf = kf.features.descriptors.row(idx);
-            let dist = descriptor_distance(&d_mp, &descriptors_kf);
-            if dist < best_dist {
-                best_dist = dist;
-                best_idx = idx as i32;
-            }
-        }
-        if (best_dist as f64) <= (TH_LOW as f64) * hamming_ratio {
-            matches.insert(best_idx as usize, *mp_id);
-            num_matches += 1;
-        } else {
-            n_final_dist_too_low += 1;
-        }
-    }
-
-    
-    debug!("...Search by projection for loop detection stats:  already found {}, depth {}, not in image {}, wrong dist {}, viewing angle {}, indices {}, has match {}, levels {}, final dist too low {}", n_already_found, n_depth, n_not_in_image, n_wrong_dist, n_viewing_angle, n_indices, n_has_match, n_levels, n_final_dist_too_low);
-
-    Ok(num_matches)
 }
 
 pub fn search_by_bow_f(
