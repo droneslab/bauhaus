@@ -210,7 +210,6 @@ impl TrackingBackend {
                                         // Set current frame's updated info from map initialization
                                         current_frame.ref_kf_id = Some(curr_kf_id);
                                         current_frame.pose = Some(curr_kf_pose);
-                                        println!("Initialization, set curr frame pose to: {:?}, {:?}", current_frame.pose.unwrap().get_translation(), current_frame.pose.unwrap().get_rotation());
                                         current_frame.mappoint_matches = self.map.read().keyframes.get(&curr_kf_id).unwrap().clone_matches();
                                     }
                                     self.state = TrackingState::Ok;

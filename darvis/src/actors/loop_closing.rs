@@ -106,7 +106,6 @@ impl Actor for LoopClosing {
                         warn!("Loop closing failed: {}", e);
                     }
                 }
-                println!();
             } else if message.is::<IMUInitializedMsg>() {
                 todo!("IMU: Process message from local mapping");
             } else if message.is::<ShutdownMsg>() {
@@ -289,7 +288,6 @@ impl LoopClosing {
         // bool LoopClosing::DetectAndReffineSim3FromLastKF(KeyFrame* pCurrentKF, KeyFrame* pMatchedKF, g2o::Sim3 &gScw, int &nNumProjMatches, std::vector<MapPoint*> &vpMPs, std::vector<MapPoint*> &vpMatchedMPs)
         let _span = tracy_client::span!("detect_and_reffine_sim3_from_last_kf");
 
-        println!("Last matched kf: {:?}", loop_kf);
         let num_proj_matches = self.find_matches_by_projection(current_kf_id, scw, loop_kf)?;
 
         if num_proj_matches >= 30 {
@@ -465,9 +463,6 @@ impl LoopClosing {
                 }
             }
 
-            println!("vvp_matched_mps: {:?}", vvp_matched_mps.len());
-            println!("cov_kf: {:?}", cov_kf.len());
-
             for j in 0..cov_kf.len() {
                 for (index, mp_id) in &vvp_matched_mps[j] {
                     if !sp_matched_mpi.contains(&mp_id) {
@@ -530,7 +525,6 @@ impl LoopClosing {
                                 }
                             }
                         }
-                        println!("Candidate mappoints: {:?}", candidates);
 
                         let mut sim3 = solver.get_estimates(); // gScm
                         let smw = Sim3 {
