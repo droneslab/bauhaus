@@ -73,12 +73,22 @@ impl Actor for LoopClosing {
 
     fn spawn(system: System, map: Self::MapRef) {
         let mut actor = LoopClosing::new_actorstate(system, map);
+
+        let max_queue_size = actor.system.receiver_bound.unwrap_or(100);
         tracy_client::set_thread_name!("loop closing");
 
         'outer: loop {
             let message = actor.system.receive().unwrap();
             if message.is::<KeyFrameIdMsg>() {
                 let msg = message.downcast::<KeyFrameIdMsg>().unwrap_or_else(|_| panic!("Could not downcast loop closing message!"));
+
+
+                let queue_len = actor.system.queue_len();
+                if queue_len > max_queue_size {
+                    // Abort additional work if there are too many frames in the msg queue.
+                    info!("Loop Closing dropped 1 frame, queue len: {}", queue_len);
+                    continue;
+                }
 
                 if msg.kf_id == 0 {
                     // Don't add very first keyframe
@@ -110,28 +120,29 @@ impl LoopClosing {
     fn loop_closing(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         // Avoid that a keyframe can be erased while it is being process by this thread
         // TODO (design, fine-grained locking) would be great if we could just lock this keyframe
-        self.map.write().keyframes.get_mut(&self.current_kf_id).unwrap().dont_delete = true;
+        // self.map.write().keyframes.get_mut(&self.current_kf_id).unwrap().dont_delete = true;
 
         // Detect loop candidates and check covisibility consistency
         if self.detect_loop() {
-            // debug!("KF {}: step 1 passed", self.current_kf_id);
+            debug!("KF {}: Loop detected! step 1 passed", self.current_kf_id);
             // Add current keyframe to database
-            self.map.write().add_to_kf_database(self.current_kf_id);
+            // self.map.write().add_to_kf_database(self.current_kf_id);
 
             // Compute similarity transformation [sR|t]
             // In the stereo/RGBD case s=1
             if self.compute_sim3()? {
-                // info!("KF {}: Loop detected! Correcting loop...", self.current_kf_id);
+                info!("KF {}: Loop detected! Correcting loop...", self.current_kf_id);
                 // Perform loop fusion and pose graph optimization
                 self.correct_loop()?;
             }
-        } else {
-            // Add current keyframe to database
-            self.map.write().add_to_kf_database(self.current_kf_id);
+        } 
+        // else {
+        //     // Add current keyframe to database
+        //     // self.map.write().add_to_kf_database(self.current_kf_id);
 
-            // debug!("KF {}: No loop", self.current_kf_id);
-        }
-        self.map.write().keyframes.get_mut(&self.current_kf_id).unwrap().dont_delete = false;
+        //     // debug!("KF {}: No loop", self.current_kf_id);
+        // }
+        // self.map.write().keyframes.get_mut(&self.current_kf_id).unwrap().dont_delete = false;
         thread::sleep(Duration::from_micros(5000));
         Ok(())
     }
@@ -139,7 +150,16 @@ impl LoopClosing {
     fn detect_loop(&mut self) -> bool {
         let _span = tracy_client::span!("detect_loop");
         //If the map contains less than 10 KF or less than 10 KF have passed from last loop detection
-        if self.map.read().keyframes.len() <= 10 {
+        // if self.map.read().keyframes.len() <= 10 {
+        //     return false;
+        // }
+        self.map.write().keyframes.get_mut(&self.current_kf_id).unwrap().dont_delete = true;
+
+        if self.current_kf_id < self.last_loop_kf_id+10
+        {
+            self.map.write().add_to_kf_database(self.current_kf_id);
+            self.map.write().keyframes.get_mut(&self.current_kf_id).unwrap().dont_delete = false;
+
             return false;
         }
 
@@ -234,7 +254,8 @@ impl LoopClosing {
 
         // For each consistent loop candidate we try to compute a Sim3
         let initial_candidates = self.enough_consistent_candidates.len();
-
+        
+        debug!("Detect loop, final consistent candidates: {:?}", self.enough_consistent_candidates);
         // We compute first ORB matches for each candidate
         // If enough matches are found, we setup a Sim3Solver
 
@@ -252,9 +273,11 @@ impl LoopClosing {
                     let current_keyframe = map_read_lock.keyframes.get(&self.current_kf_id).unwrap();
 
                     let keyframe = map_read_lock.keyframes.get(&candidate_kf_id).unwrap();
-                    let mappoint_matches = orbmatcher::search_by_bow_kf(current_keyframe, keyframe, true, 0.75)?;
-                    // debug!("Searching for matches between {} (frame {}) and {} (frame {})", current_keyframe.id, current_keyframe.frame_id, keyframe.id, keyframe.frame_id);
-                    mappoint_matches
+                    let mappoint_matches_found = orbmatcher::search_by_bow_kf(current_keyframe, keyframe, true, 0.9)?;
+                    debug!("Searching for matches between {} (frame {}) and {} (frame {})", current_keyframe.id, current_keyframe.frame_id, keyframe.id, keyframe.frame_id);
+
+                    debug!("{} frame Matches {}", current_keyframe.frame_id,  mappoint_matches_found.len());
+                    mappoint_matches_found
                 };
 
                 if mappoint_matches[i].len() < 20 {
@@ -267,11 +290,14 @@ impl LoopClosing {
                     sim3_solver.set_ransac_parameters(0.99, 20, 300);
                     solvers.insert(i, sim3_solver);
                     num_candidates += 1;
+                    debug!("Detect loop, num_candidates incremented: {:?}", num_candidates);
                 }
             }
         }
         let mut has_match = false;
-
+        
+        debug!("Detect loop, num_candidates: {:?}", num_candidates);
+        
         // Perform alternatively RANSAC iterations for each candidate
         // until one is succesful or all fail
         while num_candidates > 0 && !has_match {

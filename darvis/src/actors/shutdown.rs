@@ -70,7 +70,7 @@ impl Actor for ShutdownActor {
                             let trans = pose.get_translation();
                             let rot = pose.get_quaternion();
                             let string = format!(
-                                "{} {:.4} {:.4} {:.4} {:.4} {:.4} {:.4} {:.4}\n", 
+                                "{} {:.6} {:.7} {:.7} {:.7} {:.7} {:.7} {:.7}\n", 
                                 actor.trajectory_times[i], 
                                 trans[0], trans[1], trans[2],
                                 rot[0], rot[1], rot[2], rot[3]
