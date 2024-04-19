@@ -1,3 +1,5 @@
+#dataset name
+dataset: KITTI
 
 # Camera calibration and distortion parameters (OpenCV) 
 fx: 707.0912
