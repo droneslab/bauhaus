@@ -148,9 +148,9 @@ impl LoopClosing {
                         };
 
                         self.loop_mappoints = self.loop_mps.clone(); // mvpLoopMapPoints = mvpLoopMPs;
-                        self.last_matched_kf = loop_kf;
 
-                        match self.correct_loop(current_kf_id, loop_kf, scw) {
+                        println!("Doing correct loop with self.slw: rot {:?} trans {:?} scale {:?}", self.slw.pose.get_rotation(), self.slw.pose.get_translation(), self.slw.scale);
+                        match self.correct_loop(current_kf_id, loop_kf, self.slw) {
                             Ok(_) => {},
                             Err(e) => {
                                 warn!("Loop correction failed: {}", e);
@@ -204,6 +204,9 @@ impl LoopClosing {
                 let tcl_as_sim3 = Sim3::new(tcl.get_translation(), tcl.get_rotation(), 1.0);
                 tcl_as_sim3 * self.slw
             };
+            println!("scw when loop num coincidences > 0: rot {:?} trans {:?} scale {:?}", scw.pose.get_rotation(), scw.pose.get_translation(), scw.scale);
+            println!("current kf id: {}, last current kf: {}", current_kf_id, self.last_current_kf);
+
             match self.detect_and_reffine_sim3_from_last_kf(current_kf_id, &mut scw)? {
                 Some(scw) => {
                     loop_detected_in_kf = true;
@@ -286,6 +289,7 @@ impl LoopClosing {
         // bool LoopClosing::DetectAndReffineSim3FromLastKF(KeyFrame* pCurrentKF, KeyFrame* pMatchedKF, g2o::Sim3 &gScw, int &nNumProjMatches, std::vector<MapPoint*> &vpMPs, std::vector<MapPoint*> &vpMatchedMPs)
         let _span = tracy_client::span!("detect_and_reffine_sim3_from_last_kf");
 
+        println!("Last matched kf: {:?}", self.last_matched_kf);
         let num_proj_matches = self.find_matches_by_projection(current_kf_id, scw, self.last_matched_kf)?;
 
         if num_proj_matches >= 30 {
@@ -361,7 +365,7 @@ impl LoopClosing {
                 }
             }
         }
-        let num_matches = orbmatcher::search_by_projection_for_loop_detection1(
+        let num_matches = orbmatcher::search_by_projection_for_loop_detection(
             &self.map, &current_kf_id, &scw, &self.loop_mappoints, &mut self.current_matched_points, 3, 1.5
         )?;
 
@@ -372,6 +376,7 @@ impl LoopClosing {
         // bool LoopClosing::DetectCommonRegionsFromLastKF(KeyFrame* pCurrentKF, KeyFrame* pMatchedKF, g2o::Sim3 &gScw, int &nNumProjMatches, std::vector<MapPoint*> &vpMPs, std::vector<MapPoint*> &vpMatchedMPs)
         let _span = tracy_client::span!("detect_common_regions_from_last_kf");
 
+        println!("Final stage of loop detection, detect common regions from last kf. current kf id: {}, loop kf id: {}", current_kf_id, loop_kf);
         let num_proj_matches = self.find_matches_by_projection(current_kf_id, scw, loop_kf)?;
         if num_proj_matches >= 30 {
             return Ok((true, num_proj_matches));
@@ -531,12 +536,14 @@ impl LoopClosing {
                         let smw = Sim3 {
                             pose: self.map.read().keyframes.get(&most_bow_matches_kf).unwrap().pose,
                             scale: 1.0
-                        }; // gSmw
+                        }; // gSmwco
                         let scw = sim3 * smw; // gScw // Similarity matrix of current from the world position
-                        println!("scw: {:?}", scw.pose);
+                        println!("sim3: rot {:?} trans {:?} scale {:?}", sim3.pose.get_rotation(), sim3.pose.get_translation(), sim3.scale);
+                        println!("smw: rot {:?} trans {:?}", smw.pose.get_rotation(), smw.pose.get_translation());
+                        println!("result scw: rot {:?} trans {:?}", scw.pose.get_rotation(), scw.pose.get_translation());
 
                         let mut matched_mps = HashMap::new(); // vpMatchedMP
-                        let num_proj_matches = orbmatcher::search_by_projection_for_loop_detection2(
+                        let num_proj_matches = orbmatcher::search_by_projection_for_loop_detection(
                             &self.map, &current_kf_id, &scw, 
                             &candidates, &mut matched_mps,
                             8, 1.5
@@ -571,7 +578,7 @@ impl LoopClosing {
                                 let scw = sim3 * smw; // gScw // Similarity matrix of current from the world position
 
                                 let mut matched_mps = HashMap::new(); // vpMatchedMP
-                                let num_proj_opt_matches = orbmatcher::search_by_projection_for_loop_detection1(
+                                let num_proj_opt_matches = orbmatcher::search_by_projection_for_loop_detection(
                                     &self.map, &current_kf_id, &scw, 
                                     &candidates, &mut matched_mps,
                                     5, 1.0
@@ -618,15 +625,20 @@ impl LoopClosing {
                                     while num_kfs < 3 && j < current_cov_kfs.len() {
                                         let mut sjw = {
                                             let kf_j_pose = self.map.read().keyframes.get(&current_cov_kfs[j]).unwrap().pose;
-                                            Sim3 {
+                                            let sjc = Sim3 {
                                                 pose: kf_j_pose * current_kf_pose.inverse(),
                                                 scale: 1.0
-                                            }
+                                            };
+
+                                            sjc * scw
                                         }; // gSjw
 
+                                        println!("gscw: {:?} scale {:?}", scw.pose, scw.scale);
+                                        println!("result sjw... rot: {:?}, trans: {:?}, scale {:?}", sjw.pose.get_rotation(), sjw.pose.get_translation(), sjw.scale);
+
                                         // bool bValid = DetectCommonRegionsFromLastKF(pKFj,pMostBoWMatchesKF, gSjw,numProjMatches_j, vpMapPoints, vpMatchedMPs_j);
-                                        let (valid, _num_proj_matches_j) = self.detect_common_regions_from_last_kf(current_kf_id, &mut sjw, *most_bow_matches_kf)?;
-                                        debug!("... detect common regions from last kf .. valid? {}", valid);
+                                        let (valid, num_proj_matches_j) = self.detect_common_regions_from_last_kf(current_kf_id, &mut sjw, *most_bow_matches_kf)?;
+                                        debug!("... detect common regions from last kf .. valid? {}, num matches: {}", valid, num_proj_matches_j);
 
 
                                         if valid {
@@ -668,6 +680,7 @@ impl LoopClosing {
             let matched_kf = Some(best_matched_kf);
             self.loop_mps = best_mappoints;  // vpMPs = vpBestMapPoints;
             self.current_matched_points = best_matched_mappoints; // vpMatchedMPs = vpBestMatchedMapPoints;
+            self.last_matched_kf =  best_matched_kf;
 
             debug!("...finally: best kf is {} with {} matches. Num coincidences: {}", best_matched_kf, num_best_matches_reproj, self.num_coincidences);
 
