@@ -38,7 +38,8 @@ pub struct Sim3Solver {
 impl Sim3Solver {
     pub fn new(
         map: &MapLock,
-        kf1_id: Id, kf2_id: Id, matches: &HashMap<u32, Id>, fix_scale: bool,
+        kf1_id: Id, kf2_id: Id, matches: &HashMap<usize, Id>, fix_scale: bool,
+        keyframe_matched_mp: HashMap<usize, Id>
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let map_lock = map.read();
         let kf1 = map_lock.keyframes.get(&kf1_id).unwrap();
@@ -119,7 +120,7 @@ impl Sim3Solver {
             max_error1.push(9.210 * sigma_square1 as f64);
             max_error2.push(9.210 * sigma_square2 as f64);
 
-            indices1.push(*index);
+            indices1.push(*index as u32);
             all_indices.push(i);
             i += 1;
         }

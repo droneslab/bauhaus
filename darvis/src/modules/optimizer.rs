@@ -1027,7 +1027,7 @@ pub fn optimize_essential_graph(
 }
 
 pub fn optimize_sim3(
-    map: &MapLock, kf1_id: Id, kf2_id: Id, matched_mps: &mut HashMap<usize, i32>,
+    map: &MapLock, kf1_id: Id, kf2_id: Id, matched_mps: &mut HashMap<usize, Id>,
     sim3: &mut Sim3, th2: i32, fix_scale: bool
 ) -> i32 {
     // From ORBSLAM2:

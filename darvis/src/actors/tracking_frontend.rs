@@ -42,7 +42,7 @@ impl Actor for TrackingFrontEnd {
             FrameSensor::Mono | FrameSensor::Rgbd => None,
         };
         let orb_extractor_ini = match sensor.is_mono() {
-            true => Some(DVORBextractor::new(max_features*2)),
+            true => Some(DVORBextractor::new(max_features*5)), // sofiya orbslam2 loop closing
             false => None
         };
         TrackingFrontEnd {
@@ -214,8 +214,8 @@ impl DVORBextractor {
                 SETTINGS.get::<i32>(FEATURE_DETECTION, "n_levels"),
                 SETTINGS.get::<i32>(FEATURE_DETECTION, "ini_th_fast"),
                 SETTINGS.get::<i32>(FEATURE_DETECTION, "min_th_fast"),
-                // SETTINGS.get::<i32>(CAMERA, "stereo_overlapping_begin"),
-                // SETTINGS.get::<i32>(CAMERA, "stereo_overlapping_end")
+                SETTINGS.get::<i32>(CAMERA, "stereo_overlapping_begin"),
+                SETTINGS.get::<i32>(CAMERA, "stereo_overlapping_end")
             )
         }
     }
