@@ -18,6 +18,10 @@ endif()
 
 MESSAGE(STATUS "BUILD TYPE:" ${CMAKE_BUILD_TYPE})
 
+set(CMAKE_CXX_COMPILER "/home/nitin/Downloads/clang+llvm-17.0.6-x86_64-linux-gnu-ubuntu-22.04/bin/clang")
+add_link_options(-fuse-ld=lld)
+set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
+
 SET (G2O_LIB_TYPE STATIC)
 
 # There seems to be an issue with MSVC8
@@ -62,8 +66,6 @@ ENDIF(OPENMP_FOUND AND G2O_USE_OPENMP)
 # Sofiya: Removed -march=native, based on https://github.com/raulmur/ORB_SLAM2/issues/341 
 # Sofiya: Removed -O3, set cmake build type to be debug or release in build.rs instead
 # Sofiya: Added -flto=thin to enable link time optimization with Rust: https://doc.rust-lang.org/rustc/linker-plugin-lto.html#toolchain-compatibility
-SET(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -flto=thin")
-SET(CMAKE_C_FLAGS_RELEASE  "${CMAKE_C_FLAGS_RELEASE} -flto=thin") 
 
 # activate warnings !!!
 SET(g2o_C_FLAGS "${g2o_C_FLAGS} -Wall -W")

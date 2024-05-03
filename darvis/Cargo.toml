@@ -4,6 +4,8 @@ version = "0.1.0"
 authors = ["Sofiya Semenova <sofiyase@buffalo.edu>", "Pranay Meshram <pranaywa@buffalo.edu>", "TJ Chase <tbchase@buffalo.edu>"]
 edition = "2021"
 
+[build]
+rustflags = ["-Zshare=generics=n"]
 
 [[bin]]
 name = "bindarvis"
