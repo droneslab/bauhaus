@@ -1,4 +1,8 @@
 cmake_minimum_required (VERSION 3.0)
+
+cmake_policy(SET CMP0069 NEW) 
+set(CMAKE_POLICY_DEFAULT_CMP0069 NEW)
+
 project(orb_slam3)
 
 IF(NOT CMAKE_BUILD_TYPE)
@@ -70,7 +74,7 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -g") # -std=c++17
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -g")
 
 set(CMAKE_CXX_COMPILER "/home/nitin/Downloads/clang+llvm-17.0.6-x86_64-linux-gnu-ubuntu-22.04/bin/clang")
-add_link_options(-fuse-ld=lld)
+add_link_options(-fuse-ld=/home/nitin/Downloads/clang+llvm-17.0.6-x86_64-linux-gnu-ubuntu-22.04/bin/ld.lld)
 set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
 # Sofiya: Removed -march=native, based on https://github.com/raulmur/ORB_SLAM2/issues/341 
 # Sofiya: Added -flto=thin to enable link time optimization with Rust: https://doc.rust-lang.org/rustc/linker-plugin-lto.html#toolchain-compatibility

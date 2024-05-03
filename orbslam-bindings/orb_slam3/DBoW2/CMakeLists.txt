@@ -1,4 +1,8 @@
 cmake_minimum_required(VERSION 2.8)
+
+cmake_policy(SET CMP0069 NEW) 
+set(CMAKE_POLICY_DEFAULT_CMP0069 NEW)
+
 project(DBoW2)
 
 if(NOT CMAKE_BUILD_TYPE)
@@ -9,7 +13,7 @@ endif()
 # Sofiya: Added -flto=thin to enable link time optimization with Rust: https://doc.rust-lang.org/rustc/linker-plugin-lto.html#toolchain-compatibility
 
 set(CMAKE_CXX_COMPILER "/home/nitin/Downloads/clang+llvm-17.0.6-x86_64-linux-gnu-ubuntu-22.04/bin/clang")
-add_link_options(-fuse-ld=lld)
+add_link_options(-fuse-ld=/home/nitin/Downloads/clang+llvm-17.0.6-x86_64-linux-gnu-ubuntu-22.04/bin/ld.lld)
 set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
 
 set(HDRS_DBOW2

@@ -1,4 +1,8 @@
 cmake_minimum_required(VERSION 3.4)
+
+cmake_policy(SET CMP0069 NEW) 
+set(CMAKE_POLICY_DEFAULT_CMP0069 NEW)
+
 project(Sophus VERSION 1.1.0)
 
 include(CMakePackageConfigHelpers)
@@ -11,7 +15,7 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 set(CMAKE_CXX_COMPILER "/home/nitin/Downloads/clang+llvm-17.0.6-x86_64-linux-gnu-ubuntu-22.04/bin/clang")
-add_link_options(-fuse-ld=lld)
+add_link_options(-fuse-ld=/home/nitin/Downloads/clang+llvm-17.0.6-x86_64-linux-gnu-ubuntu-22.04/bin/ld.lld)
 set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
 
 # Set compiler specific settings (FixMe: Should not cmake do this for us automatically?)
