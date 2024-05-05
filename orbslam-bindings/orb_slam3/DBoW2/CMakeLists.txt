@@ -12,7 +12,7 @@ endif()
 # Sofiya: Removed -march=native, based on https://github.com/raulmur/ORB_SLAM2/issues/341 
 # Sofiya: Added -flto=thin to enable link time optimization with Rust: https://doc.rust-lang.org/rustc/linker-plugin-lto.html#toolchain-compatibility
 
-set(CMAKE_CXX_COMPILER "/home/nitin/Downloads/clang+llvm-17.0.6-x86_64-linux-gnu-ubuntu-22.04/bin/clang")
+set(CMAKE_CXX_COMPILER "/home/nitin/Downloads/LLVM_18/llvm-project-18.1.3.src/build/bin/clang")
 add_link_options(-fuse-ld=/home/nitin/Downloads/clang+llvm-17.0.6-x86_64-linux-gnu-ubuntu-22.04/bin/ld.lld)
 set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
 

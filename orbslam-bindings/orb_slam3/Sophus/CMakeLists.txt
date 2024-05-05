@@ -15,7 +15,7 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 set(CMAKE_CXX_COMPILER "/home/nitin/Downloads/clang+llvm-17.0.6-x86_64-linux-gnu-ubuntu-22.04/bin/clang")
-add_link_options(-fuse-ld=/home/nitin/Downloads/clang+llvm-17.0.6-x86_64-linux-gnu-ubuntu-22.04/bin/ld.lld)
+add_link_options(-fuse-ld=/home/nitin/Downloads/LLVM_18/llvm-project-18.1.3.src/lld_build/bin/ld.lld)
 set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
 
 # Set compiler specific settings (FixMe: Should not cmake do this for us automatically?)

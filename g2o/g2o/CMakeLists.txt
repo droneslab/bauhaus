@@ -22,8 +22,8 @@ endif()
 
 MESSAGE(STATUS "BUILD TYPE:" ${CMAKE_BUILD_TYPE})
 
-set(CMAKE_CXX_COMPILER "/home/nitin/Downloads/clang+llvm-17.0.6-x86_64-linux-gnu-ubuntu-22.04/bin/clang")
-add_link_options(-fuse-ld=/home/nitin/Downloads/clang+llvm-17.0.6-x86_64-linux-gnu-ubuntu-22.04/bin/ld.lld)
+set(CMAKE_CXX_COMPILER "/home/nitin/Downloads/LLVM_18/llvm-project-18.1.3.src/build/bin/clang")
+add_link_options(-fuse-ld=/home/nitin/Downloads/LLVM_18/llvm-project-18.1.3.src/lld_build/bin/ld.lld)
 set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
 
 SET (G2O_LIB_TYPE STATIC)

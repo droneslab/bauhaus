@@ -73,8 +73,8 @@ MESSAGE("Build type: " ${CMAKE_BUILD_TYPE})
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -g") # -std=c++17
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -g")
 
-set(CMAKE_CXX_COMPILER "/home/nitin/Downloads/clang+llvm-17.0.6-x86_64-linux-gnu-ubuntu-22.04/bin/clang")
-add_link_options(-fuse-ld=/home/nitin/Downloads/clang+llvm-17.0.6-x86_64-linux-gnu-ubuntu-22.04/bin/ld.lld)
+set(CMAKE_CXX_COMPILER "/home/nitin/Downloads/LLVM_18/llvm-project-18.1.3.src/build/bin/clang")
+add_link_options(-fuse-ld=/home/nitin/Downloads/LLVM_18/llvm-project-18.1.3.src/lld_build/bin/ld.lld)
 set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
 # Sofiya: Removed -march=native, based on https://github.com/raulmur/ORB_SLAM2/issues/341 
 # Sofiya: Added -flto=thin to enable link time optimization with Rust: https://doc.rust-lang.org/rustc/linker-plugin-lto.html#toolchain-compatibility
