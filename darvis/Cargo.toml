@@ -16,9 +16,9 @@ name = "core"
 path = "src/core/lib.rs"
 
 [profile.release]
-debug = true
+#debug = true
 #codegen-units = 1
-lto = "fat"
+
 
 [rust]
 debuginfo-level = 1
