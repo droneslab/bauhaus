@@ -184,12 +184,11 @@ pub fn new(
         // Should only be called on a Frame.
         // In the chance you might want to call this on a keyframe, you also need to delete the mappoints' observations to the kf!
         let mut discards = vec![];
-        for i in 0..self.mappoint_matches.matches.len() {
-            if self.mappoint_matches.matches[i].is_some() {
-                let mp_match = self.mappoint_matches.matches[i].unwrap();
-                if mp_match.1 {
-                    discards.push((mp_match.0.clone(), i));
-                    self.mappoint_matches.matches[i] = None;
+        for i in 0..self.mappoint_matches.len() {
+            if let Some((mp_id, is_outlier)) = self.mappoint_matches.get(i as usize) {
+                if is_outlier {
+                    discards.push((mp_id, i));
+                    self.mappoint_matches.delete_at_indices((i as i32, -1));
                 }
             }
         }
@@ -199,12 +198,12 @@ pub fn new(
     pub fn delete_mappoints_without_observations(&mut self, map: &Map) {
         // Should only be called on a Frame.
         // In the chance you might want to call this on a keyframe, you also need to delete the mappoints' observations to the kf!
-        for mp_match in &mut self.mappoint_matches.matches {
-            if let Some((mp_id, _)) = mp_match {
-                match map.mappoints.get(mp_id) {
+        for i in 0..self.mappoint_matches.len() {
+            if let Some((mp_id, is_outlier)) = self.mappoint_matches.get(i as usize) {
+                match map.mappoints.get(&mp_id) {
                     Some(mp) => {
                         if mp.get_observations().len() == 0 {
-                            *mp_match = None;
+                            self.mappoint_matches.delete_at_indices((i as i32, -1));
                         }
                     },
                     None => {}

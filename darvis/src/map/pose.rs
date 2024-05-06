@@ -217,7 +217,7 @@ impl std::fmt::Debug for Pose {
 }
 
 
-#[derive(Copy)]
+#[derive(Copy, Debug)]
 pub struct Sim3 {
     pub pose: Pose,
     pub scale: f64,
@@ -226,6 +226,12 @@ impl Sim3 {
     pub fn new(trans: DVTranslation, rot: DVRotation, scale: f64) -> Sim3 {
         Sim3 {
             pose: Pose::new(*trans,* rot),
+            scale
+        }
+    }
+    pub fn new_from_pose(pose: Pose, scale: f64) -> Sim3 {
+        Sim3 {
+            pose,
             scale
         }
     }

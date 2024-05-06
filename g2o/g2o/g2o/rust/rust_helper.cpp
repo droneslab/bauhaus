@@ -64,7 +64,7 @@ namespace g2o {
             g2o::BlockSolver_7_3 * solver_ptr= new g2o::BlockSolver_7_3(linearSolver);
 
             g2o::OptimizationAlgorithmLevenberg* solver = new g2o::OptimizationAlgorithmLevenberg(solver_ptr);
-            optimizer->setVerbose(false);
+            optimizer->setVerbose(true);
             solver->setUserLambdaInit(1e-16);
             optimizer->setAlgorithm(solver);
 
@@ -280,6 +280,7 @@ namespace g2o {
         vSim3->setEstimate(this->format_sim3(sim3));
         vSim3->setId(vertex_id);
         vSim3->setFixed(set_fixed);
+        vSim3->setMarginalized(false);
         vSim3->_fix_scale=fix_scale;
 
         if (set_camera_params) {
@@ -356,8 +357,8 @@ namespace g2o {
         const Eigen::Matrix<double,7,7> matLambda = Eigen::Matrix<double,7,7>::Identity();
 
         EdgeSim3* e = new EdgeSim3();
-        e->setVertex(1, dynamic_cast<OptimizableGraph::Vertex*>(optimizer->vertex(vertex_id_j)));
-        e->setVertex(0, dynamic_cast<OptimizableGraph::Vertex*>(optimizer->vertex(vertex_id_i)));
+        e->setVertex(1, dynamic_cast<OptimizableGraph::Vertex*>(optimizer->vertex(vertex_id_i)));
+        e->setVertex(0, dynamic_cast<OptimizableGraph::Vertex*>(optimizer->vertex(vertex_id_j)));
         e->setMeasurement(this->format_sim3(observation));
         e->information() = matLambda;
 
@@ -418,9 +419,18 @@ namespace g2o {
 
 
     //** Optimization *//
-    void BridgeSparseOptimizer::optimize(int iterations, bool online) {
+    void BridgeSparseOptimizer::optimize(int iterations, bool online, bool compute_active_errors) {
         optimizer->initializeOptimization();
+
+        if (compute_active_errors) {
+            optimizer->computeActiveErrors();
+        }
+
         optimizer->optimize(iterations, online);
+
+        if (compute_active_errors) {
+            optimizer->computeActiveErrors();
+        }
     }
 
     Pose BridgeSparseOptimizer::recover_optimized_frame_pose(int vertex_id) const {

@@ -153,6 +153,7 @@ pub mod ffi {
             self: Pin<&mut BridgeSparseOptimizer>,
             iterations: i32,
             online: bool,
+            compute_active_errors: bool
         );
         fn recover_optimized_frame_pose(
             self: &BridgeSparseOptimizer,

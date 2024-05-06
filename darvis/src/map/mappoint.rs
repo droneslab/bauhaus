@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, fmt::Debug, sync::atomic::{AtomicI32, Ordering}};
+use std::{backtrace::Backtrace, collections::BTreeMap, fmt::Debug, sync::atomic::{AtomicI32, Ordering}};
 use core::{matrix::DVMatrix, config::{SETTINGS, SYSTEM}, sensor::{Sensor, FrameSensor}};
 use log::{error, warn};
 extern crate nalgebra as na;

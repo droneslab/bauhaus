@@ -1,4 +1,4 @@
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 use opencv::prelude::Mat;
 use core::{
@@ -77,6 +77,20 @@ pub struct KeyFrameIdMsg {
 }
 impl ActorMessage for KeyFrameIdMsg {}
 
+pub struct LoopClosureMapPointFusionMsg {
+    pub mappoint_matches: Vec<Id>,
+    pub loop_mappoints: Vec<Id>,
+    pub keyframes_affected: Vec<Id>,
+    pub timestamp: Timestamp,
+}
+impl ActorMessage for LoopClosureMapPointFusionMsg {}
+
+pub struct LoopClosureEssentialGraphMsg {
+    pub relevant_keyframes: HashSet<Id>,
+    pub timestamp: Timestamp,
+}
+impl ActorMessage for LoopClosureEssentialGraphMsg {}
+
 //* VISUALIZER */
 pub struct VisFeaturesMsg {
     pub keypoints: DVVectorOfKeyPoint,
@@ -92,6 +106,7 @@ impl ActorMessage for VisFeatureMatchMsg {}
 pub struct VisTrajectoryMsg { 
     pub pose: Pose, 
     pub mappoint_matches: Vec<Option<(i32, bool)>>,
+    pub nontracked_mappoints: HashMap<Id, i32>,
     pub mappoints_in_tracking: BTreeSet<Id>,
     pub timestamp: Timestamp
 }

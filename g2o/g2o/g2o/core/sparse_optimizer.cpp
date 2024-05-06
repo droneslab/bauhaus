@@ -44,6 +44,7 @@
 #include "../../config.h"
 #include "../types/types_six_dof_expmap.h"
 
+
 namespace g2o{
   using namespace std;
 
@@ -412,6 +413,10 @@ void SparseOptimizer::printStats() {
       double ts = get_monotonic_time();
       result = _algorithm->solve(i, online);
       ok = ( result == OptimizationAlgorithm::OK );
+
+      if (iterations == 20) {
+        std::cout << "SOFIYA... OK ? " << ok << ", force stop flag? " << terminate() << std::endl;
+      }
 
       bool errorComputed = false;
       if (_computeBatchStatistics) {

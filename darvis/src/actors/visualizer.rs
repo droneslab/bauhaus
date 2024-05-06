@@ -2,7 +2,7 @@ use std::{borrow::Cow, collections::{BTreeMap, BTreeSet, HashMap, HashSet}, fs::
 use log::warn;
 use mcap::{Schema, Channel, records::MessageHeader, Writer};
 use opencv::prelude::{Mat, MatTraitConst, MatTraitConstManual};
-use foxglove::{foxglove::items::{SceneEntity, SceneUpdate, SpherePrimitive, Vector3, Quaternion, Color, FrameTransform, LinePrimitive, line_primitive, Point3, RawImage, ArrowPrimitive, SceneEntityDeletion, scene_entity_deletion}, get_file_descriptor_set_bytes, make_pose};
+use foxglove::{foxglove::items::{line_primitive, scene_entity_deletion, ArrowPrimitive, Color, FrameTransform, LinePrimitive, MapInfo, Point3, Quaternion, RawImage, SceneEntity, SceneEntityDeletion, SceneUpdate, SpherePrimitive, Vector3}, get_file_descriptor_set_bytes, make_pose};
 use base64::{engine::general_purpose, Engine as _};
 
 use core::{
@@ -15,6 +15,8 @@ use crate::{
     registered_actors::VISUALIZER, MapLock
 };
 
+use super::messages::{LoopClosureEssentialGraphMsg, LoopClosureMapPointFusionMsg};
+
 // Default visual stuff //
 // Trajectory and frame
 pub static TRAJECTORY_COLOR: Color = Color { r: 1.0, g: 0.0, b: 0.0, a: 1.0 };
@@ -23,6 +25,7 @@ pub static MAPPOINT_COLOR: Color = Color { r: 1.0, g: 1.0, b: 1.0, a: 1.0 };
 pub static MAPPOINT_MATCH_COLOR: Color = Color { r: 0.0, g: 1.0, b: 0.0, a: 1.0 };
 pub static MAPPOINT_LOCAL_COLOR: Color = Color { r: 0.0, g: 0.0, b: 1.0, a: 1.0 };
 pub static MAPPOINT_SIZE: Vector3 = Vector3 { x: 0.01, y: 0.01, z: 0.01 };
+pub static MAPPOINT_LARGE_SIZE: Vector3 = Vector3 { x: 0.1, y: 0.1, z: 0.1 };
 //Keyframes
 pub static KEYFRAME_COLOR: Color = Color { r: 0.5, g: 0.0, b: 0.0, a: 1.0 };
 
@@ -37,7 +40,9 @@ pub const IMAGE_CHANNEL: &str = "/camera";
 pub const TRANSFORM_CHANNEL: &str = "/frame_transforms";
 pub const TRAJECTORY_CHANNEL: &str = "/trajectory";
 pub const MAPPOINTS_CHANNEL: &str = "/mappoints";
+pub const LOOP_CLOSURE_CHANNEL: &str = "/loop_closure";
 pub const CONNECTED_KFS_CHANNEL: &str = "/connected_kfs";
+pub const MAP_INFO_CHANNEL: &str = "/map_info";
 
 pub struct DarvisVisualizer {
     system: System,
@@ -100,7 +105,9 @@ impl Actor for DarvisVisualizer {
             (TRANSFORM_CHANNEL, "foxglove.FrameTransform"),
             (TRAJECTORY_CHANNEL, "foxglove.SceneUpdate"),
             (MAPPOINTS_CHANNEL, "foxglove.SceneUpdate"),
+            (LOOP_CLOSURE_CHANNEL, "foxglove.SceneUpdate"),
             (CONNECTED_KFS_CHANNEL, "foxglove.SceneUpdate"),
+            (MAP_INFO_CHANNEL, "foxglove.MapInfo")
         ]);
 
         let mut writer = if SETTINGS.get::<bool>(VISUALIZER, "stream") {
@@ -137,6 +144,12 @@ impl Actor for DarvisVisualizer {
             } else if message.is::<VisTrajectoryMsg>() {
                 let msg = message.downcast::<VisTrajectoryMsg>().unwrap_or_else(|_| panic!("Could not downcast visualizer message!"));
                 actor.update_draw_map(&mut writer,*msg).await;
+            } else if message.is::<LoopClosureMapPointFusionMsg>() {
+                let msg = message.downcast::<LoopClosureMapPointFusionMsg>().unwrap_or_else(|_| panic!("Could not downcast visualizer message!"));
+                actor.update_loop_closure_mappoint_fusion(&mut writer,*msg).await;
+            } else if message.is::<LoopClosureEssentialGraphMsg>() {
+                // let msg = message.downcast::<LoopClosureEssentialGraphMsg>().unwrap_or_else(|_| panic!("Could not downcast visualizer message!"));
+                // actor.update_loop_closure_essential_graph(&mut writer,*msg).await;
             } else if message.is::<ShutdownMsg>() {
                 // SHUTDOWN
                 warn!("Closing mcap file");
@@ -150,6 +163,94 @@ impl Actor for DarvisVisualizer {
 }
 
 impl DarvisVisualizer {
+    async fn update_loop_closure_essential_graph(
+        &mut self, writer: &mut FoxGloveWriter, msg: LoopClosureEssentialGraphMsg
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        self.clear_scene(writer, msg.timestamp, LOOP_CLOSURE_CHANNEL).await?;
+        let mut entities = Vec::new();
+        let lock = self.map.read();
+
+        for kf_id in &msg.relevant_keyframes {
+            let kf = lock.keyframes.get(kf_id).unwrap();
+            let pose = kf.pose.inverse();
+            let kf_entity = self.create_scene_entity(
+                msg.timestamp, "world",
+                format!("kf {}", kf_id),
+                vec![],
+                vec![],
+                vec![self.create_sphere(&pose, Color { r: 1.0, g: 0.0, b: 0.0, a: 1.0 }, MAPPOINT_LARGE_SIZE.clone())]
+            );
+            entities.push(kf_entity);
+        }
+
+        let sceneupdate = SceneUpdate {
+            deletions: vec![],
+            entities
+        };
+
+        writer.write(LOOP_CLOSURE_CHANNEL, sceneupdate, msg.timestamp, 1).await?;
+        Ok(())
+    }
+
+    async fn update_loop_closure_mappoint_fusion(
+        &mut self, writer: &mut FoxGloveWriter, msg: LoopClosureMapPointFusionMsg
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        self.clear_scene(writer, msg.timestamp, LOOP_CLOSURE_CHANNEL).await?;
+        let mut entities = Vec::new();
+        let lock = self.map.read();
+
+        for (mappoint_id, mappoint) in &lock.mappoints {
+            let mp_sphere = {
+                if msg.mappoint_matches.contains(&mappoint_id) {
+                    let pose = Pose::new_with_default_rot(mappoint.position);
+                    Some(self.create_sphere(&pose, MAPPOINT_MATCH_COLOR.clone(), MAPPOINT_LARGE_SIZE.clone()))
+                } else if msg.loop_mappoints.contains(&mappoint_id) {
+                    let pose = Pose::new_with_default_rot(mappoint.position);
+                    Some(self.create_sphere(&pose, MAPPOINT_LOCAL_COLOR.clone(), MAPPOINT_LARGE_SIZE.clone()))
+                } else {
+                    // let pose = Pose::new_with_default_rot(mappoint.position);
+                    // self.create_sphere(&pose, MAPPOINT_COLOR.clone(), MAPPOINT_SIZE.clone())
+                    None
+                }
+            };
+
+            match mp_sphere {
+                Some(mp_sphere) => {
+                    let mp_entity = self.create_scene_entity(
+                        msg.timestamp, "world",
+                        format!("mp {}", mappoint_id),
+                        vec![],
+                        vec![],
+                        vec![mp_sphere]
+                    );
+                    entities.push(mp_entity);
+                },
+                None => continue
+            }
+        }
+
+        for kf_id in &msg.keyframes_affected {
+            let kf = lock.keyframes.get(kf_id).unwrap();
+            let pose = kf.pose.inverse();
+            let kf_entity = self.create_scene_entity(
+                msg.timestamp, "world",
+                format!("kf {}", kf_id),
+                vec![],
+                vec![],
+                vec![self.create_sphere(&pose, KEYFRAME_COLOR.clone(), MAPPOINT_LARGE_SIZE.clone())]
+            );
+            entities.push(kf_entity);
+        }
+
+        let sceneupdate = SceneUpdate {
+            deletions: vec![],
+            entities
+        };
+
+        writer.write(LOOP_CLOSURE_CHANNEL, sceneupdate, msg.timestamp, 0).await?;
+        Ok(())
+    }
+
     async fn update_draw_image(&mut self, writer: &mut FoxGloveWriter, msg: VisFeaturesMsg) {
         match self.image_draw_type {
             ImageDrawType::NONE => Ok(()),
@@ -192,6 +293,8 @@ impl DarvisVisualizer {
 
     async fn update_draw_map(&mut self, writer: &mut FoxGloveWriter, msg: VisTrajectoryMsg) {
         self.draw_trajectory(writer, msg.pose, msg.timestamp).await.expect("Visualizer could not draw trajectory!");
+
+        self.plot_map_info(writer, &msg.mappoint_matches, msg.timestamp).await.expect("Visualizer could not plot map info!");
 
         if !SETTINGS.get::<bool>(VISUALIZER, "draw_only_trajectory") {
             self.draw_mappoints(writer, &msg.mappoints_in_tracking, &msg.mappoint_matches, msg.timestamp).await.expect("Visualizer could not draw mappoints!");
@@ -269,6 +372,10 @@ impl DarvisVisualizer {
                 )
             );
 
+            // if *id > 800 {
+            //     println!("Drawing keyframe {} with pose {:?}", id, map.keyframes.get(id).unwrap().pose);
+            // }
+
             entities.push(
                 self.create_scene_entity(
                     timestamp, 
@@ -315,19 +422,29 @@ impl DarvisVisualizer {
         Ok(())
     }
 
+    async fn plot_map_info(&mut self, writer: &mut FoxGloveWriter, tracked_mappoints: &Vec<std::option::Option<(i32, bool)>>, timestamp: Timestamp) -> Result<(), Box<dyn std::error::Error>> {
+        // Write map info to foxglove
+        let map = self.map.read();
+
+        let map_info = MapInfo {
+            keyframes: map.keyframes.len() as f64,
+            mappoints: map.mappoints.len() as f64,
+            tracked_mappoints: tracked_mappoints.iter().filter(|item| item.is_some()).count() as f64,
+        };
+
+        writer.write(MAP_INFO_CHANNEL, map_info, timestamp, 0).await?;
+        Ok(())
+
+    }
+
     async fn draw_mappoints(&mut self, writer: &mut FoxGloveWriter, local_mappoints: &BTreeSet<Id>, mappoint_matches: &Vec<Option<(Id, bool)>>, timestamp: Timestamp) -> Result<(), Box<dyn std::error::Error>> {
         // Mappoints in map (different color if they are matches)
         // Should be overwritten when there is new info for a mappoint
-        self.clear_scene(writer, timestamp, MAPPOINTS_CHANNEL).await?;
+        // self.clear_scene(writer, timestamp, MAPPOINTS_CHANNEL).await?;
 
         let mut entities = Vec::new();
 
-        let mut mappoint_match_ids = HashSet::<Id>::new();
-        for item in mappoint_matches {
-            if let Some((mappoint_id, _)) = item {
-                mappoint_match_ids.insert(*mappoint_id);
-            }
-        }
+        let mappoint_match_ids = mappoint_matches.iter().filter_map(|item| item.map(|(id, _)| id)).collect::<HashSet<Id>>();
 
         let map = self.map.read();
         let mut curr_mappoints = HashSet::new();

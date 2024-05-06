@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+package foxglove;
+
+// Custom foxglove message for SLAM map information
+message MapInfo {
+    double keyframes = 1;
+    double mappoints = 2;
+    double tracked_mappoints = 3;
+}

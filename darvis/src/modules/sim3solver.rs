@@ -160,7 +160,7 @@ impl Sim3Solver {
             fix_scale
         };
 
-        sim3_solver.set_ransac_parameters(0.99, 6, 300);
+        sim3_solver.set_ransac_parameters(0.99, 15, 300);
 
         Ok(sim3_solver)
     }
