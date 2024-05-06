@@ -48,7 +48,7 @@ namespace g2o {
     _goodStepUpperScale = 2./3.;
     _goodStepLowerScale = 1./3.;
     _userLambdaInit = _properties.makeProperty<Property<double> >("initialLambda", 0.);
-    _maxTrialsAfterFailure = _properties.makeProperty<Property<int> >("maxTrialsAfterFailure", 20); // Carlos: Originally 10 iterations
+    _maxTrialsAfterFailure = _properties.makeProperty<Property<int> >("maxTrialsAfterFailure", 10); // Carlos: Originally 10 iterations
     _ni=2.;
     _levenbergIterations = 0;
     _nBad = 0;
