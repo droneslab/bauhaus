@@ -191,11 +191,11 @@ impl TrackingFrontEnd {
 
     fn send_to_visualizer(&mut self, keypoints: VectorOfKeyPoint, image: Mat, timestamp: Timestamp) {
         // Send image and features to visualizer
-        self.system.find(VISUALIZER).send(Box::new(VisFeaturesMsg {
+        self.system.send(VISUALIZER, Box::new(VisFeaturesMsg {
             keypoints: DVVectorOfKeyPoint::new(keypoints),
             image,
             timestamp,
-        })).unwrap();
+        }));
     }
 }
 

@@ -11,7 +11,8 @@ fn main() -> Result<()> {
         "foxglove/SceneEntityDeletion.proto",
         "foxglove/SpherePrimitive.proto",
         "foxglove/FrameTransform.proto",
-        "foxglove/RawImage.proto"
+        "foxglove/RawImage.proto",
+        "foxglove/MapInfo.proto"
         ], &[""])?;
     Ok(())
 }

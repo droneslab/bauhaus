@@ -244,11 +244,13 @@ impl LocalMapping {
         tracy_client::plot!("MAP INFO: KeyFrames", self.map.read().keyframes.len() as f64);
         tracy_client::plot!("MAP INFO: MapPoints", self.map.read().mappoints.len() as f64);
 
-        if self.system.actors.get(LOOP_CLOSING).is_some() {
-            // Only send if loop closing is actually running
-            let loopclosing = self.system.find(LOOP_CLOSING);
-            loopclosing.send(Box::new(KeyFrameIdMsg{ kf_id: self.current_keyframe_id })).unwrap();
-        }
+        // print!("KF matches after local mapping:");
+        // for (kf_id, kf) in &self.map.read().keyframes {
+        //     print!("{}: {}, ", kf_id, kf.get_mp_matches().iter().filter(|item| item.is_some()).count());
+        // }
+        // println!();
+
+        self.system.try_send(LOOP_CLOSING, Box::new(KeyFrameIdMsg{ kf_id: self.current_keyframe_id }));
     }
 
     fn mappoint_culling(&mut self) -> i32 {
@@ -264,6 +266,13 @@ impl LocalMapping {
         let mut discard_for_observations = 0;
         let mut erased_from_recently_added = 0;
         let mut deleted = HashSet::new();
+
+        // print!("KF matches before mappoint culling:");
+        // for (kf_id, kf) in &self.map.read().keyframes {
+        //     print!("{}: {}, ", kf_id, kf.get_mp_matches().iter().filter(|item| item.is_some()).count());
+        // }
+        // println!();
+        
         self.recently_added_mappoints.retain(|&mp_id| {
             let mut lock = self.map.write();
             if let Some(mappoint) = lock.mappoints.get(&mp_id) {
@@ -290,6 +299,14 @@ impl LocalMapping {
                 false
             }
         });
+        // println!("Mappoint culling... discard for found ratio: {}, discard for observations: {}", discard_for_found_ratio, discard_for_observations);
+
+        // print!("KF matches after mappoint culling:");
+        // for (kf_id, kf) in &self.map.read().keyframes {
+        //     print!("{}: {}, ", kf_id, kf.get_mp_matches().iter().filter(|item| item.is_some()).count());
+        // }
+        // println!();
+
         return discard_for_observations + discard_for_found_ratio;
     }
 
@@ -729,54 +746,52 @@ impl LocalMapping {
                 let th_obs = 3;
 
                 for i in 0..keyframe.get_mp_matches().len() {
-                    if !keyframe.has_mp_match_at_index(&(i as u32)) {
-                        continue;
-                    }
-                    let mp_id = keyframe.get_mp_match(&(i as u32));
-                    if !self.sensor.is_mono() {
-                        let mv_depth = keyframe.features.get_mv_depth(i as usize).unwrap();
-                        let th_depth = SETTINGS.get::<i32>(CAMERA, "thdepth") as f32;
-                        if mv_depth > th_depth || mv_depth < 0.0 {
-                            continue
-                        }
-                    }
-
-                    if !read_lock.mappoints.contains_key(&mp_id) {
-                        continue
-                    }
-                    let mp = read_lock.mappoints.get(&mp_id).unwrap();
-                    num_mps += 1;
-
-                    if mp.get_observations().len() > th_obs {
-                        let scale_level = keyframe.features.get_octave(i as usize);
-                        let mut num_obs = 0;
-                        for (obs_kf_id, (left_index, right_index)) in mp.get_observations() {
-                            if *obs_kf_id == kf_id {
+                    if let Some((mp_id, _is_outlier)) = keyframe.get_mp_match(&(i as u32)) {
+                        if !self.sensor.is_mono() {
+                            let mv_depth = keyframe.features.get_mv_depth(i as usize).unwrap();
+                            let th_depth = SETTINGS.get::<i32>(CAMERA, "thdepth") as f32;
+                            if mv_depth > th_depth || mv_depth < 0.0 {
                                 continue
                             }
-                            let obs_kf = read_lock.keyframes.get(obs_kf_id).unwrap();
-                            let scale_level_i = match self.sensor.frame() {
-                                FrameSensor::Stereo => {
-                                    let right_level = if *right_index != -1 { obs_kf.features.get_octave(*right_index as usize)} else { -1 };
-                                    let left_level = if *left_index != -1 { obs_kf.features.get_octave(*left_index as usize)} else { -1 };
-                                    if left_level == -1 || left_level > right_level {
-                                        right_level
-                                    } else {
-                                        left_level
-                                    }
-                                },
-                                _ => {
-                                    obs_kf.features.get_octave(*left_index as usize)
-                                }
-                            };
-                            if scale_level_i <= scale_level + 1 {
-                                num_obs += 1;
-                                if num_obs > th_obs { break; }
-                            }
                         }
 
-                        if num_obs > th_obs {
-                            num_redundant_obs += 1;
+                        if !read_lock.mappoints.contains_key(&mp_id) {
+                            continue
+                        }
+                        let mp = read_lock.mappoints.get(&mp_id).unwrap();
+                        num_mps += 1;
+
+                        if mp.get_observations().len() > th_obs {
+                            let scale_level = keyframe.features.get_octave(i as usize);
+                            let mut num_obs = 0;
+                            for (obs_kf_id, (left_index, right_index)) in mp.get_observations() {
+                                if *obs_kf_id == kf_id {
+                                    continue
+                                }
+                                let obs_kf = read_lock.keyframes.get(obs_kf_id).unwrap();
+                                let scale_level_i = match self.sensor.frame() {
+                                    FrameSensor::Stereo => {
+                                        let right_level = if *right_index != -1 { obs_kf.features.get_octave(*right_index as usize)} else { -1 };
+                                        let left_level = if *left_index != -1 { obs_kf.features.get_octave(*left_index as usize)} else { -1 };
+                                        if left_level == -1 || left_level > right_level {
+                                            right_level
+                                        } else {
+                                            left_level
+                                        }
+                                    },
+                                    _ => {
+                                        obs_kf.features.get_octave(*left_index as usize)
+                                    }
+                                };
+                                if scale_level_i <= scale_level + 1 {
+                                    num_obs += 1;
+                                    if num_obs > th_obs { break; }
+                                }
+                            }
+
+                            if num_obs > th_obs {
+                                num_redundant_obs += 1;
+                            }
                         }
                     }
                 }
@@ -828,8 +843,8 @@ impl LocalMapping {
             }
         }
 
-        for kf_id in 0..to_delete.len() {
-            self.map.write().discard_keyframe(to_delete[kf_id]);
+        for i in 0..to_delete.len() {
+            self.map.write().discard_keyframe(to_delete[i]);
         }
 
         return to_delete.len() as i32;

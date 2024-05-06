@@ -4,7 +4,7 @@ use std::{cmp::{max, min}, collections::{HashMap, HashSet}};
 use core::{
     config::{SETTINGS, SYSTEM}, sensor::{Sensor, FrameSensor}
 };
-use log::{info, warn};
+use log::{error, info, warn};
 use nalgebra::Matrix3;
 use opencv::prelude::KeyPointTraitConst;
 use crate::{
@@ -85,54 +85,52 @@ pub fn optimize_pose(
         // print!("PoseOptimization mappoint data");
         // Take lock to construct factor graph
         let map_read_lock = map.read();
-        for i in 0..frame.mappoint_matches.matches.len() {
-            if !frame.mappoint_matches.has(&(i as u32)) {
-                continue;
+        for i in 0..frame.mappoint_matches.len() {
+            if let Some((mp_id, is_outlier)) = frame.mappoint_matches.get(i) {
+                let position = match map_read_lock.mappoints.get(&mp_id) {
+                    Some(mp) => mp.position,
+                    None => {
+                        frame.mappoint_matches.delete_at_indices((i as i32, -1)); // TODO (STEREO)
+                        continue;
+                    },
+                };
+
+                let (keypoint, _) = &frame.features.get_keypoint(i as usize);
+
+                match sensor.frame() {
+                    FrameSensor::Stereo => {
+                        // Stereo observations
+                        todo!("Stereo");
+                        // let edge = optimizer.create_edge_stereo(
+                        //     keypoint.octave(), keypoint.pt().x, keypoint.pt().y,
+                        //    frame.keypoints_data.mv_right.get(mp_id).unwrap(),
+                        //     self.inv_level_sigma2[keypoint.octave() as usize]
+                        // );
+
+                        // {
+                        //     let map_read_lock = map.read();
+                        //     let position = &map_read_lock.mappoints.get(mp_id).unwrap().position;
+                        //     optimizer.add_edge_stereo(
+                        //         i as i32, edge.clone(), (position).into()
+                        //     );
+                        // }
+                    },
+                    _ => {
+                        // Mono observations
+                        frame.mappoint_matches.set_outlier(i as usize, false);
+                        optimizer.pin_mut().add_edge_monocular_unary(
+                            true, 0, keypoint.octave(), keypoint.pt().x, keypoint.pt().y,
+                            INV_LEVEL_SIGMA2[keypoint.octave() as usize],
+                            (position).into(),
+                            mp_id,
+                            *TH_HUBER_MONO
+                        );
+                        mp_indexes.push(i as u32);
+                    }
+                };
+
+                initial_correspondences += 1;
             }
-            let mp_id = frame.mappoint_matches.get(&(i as u32));
-            let position = match map_read_lock.mappoints.get(&mp_id) {
-                Some(mp) => mp.position,
-                None => {
-                    frame.mappoint_matches.delete_at_indices((i as i32, -1)); // TODO (STEREO)
-                    continue;
-                },
-            };
-
-            let (keypoint, _) = &frame.features.get_keypoint(i as usize);
-
-            match sensor.frame() {
-                FrameSensor::Stereo => {
-                    // Stereo observations
-                    todo!("Stereo");
-                    // let edge = optimizer.create_edge_stereo(
-                    //     keypoint.octave(), keypoint.pt().x, keypoint.pt().y,
-                    //    frame.keypoints_data.mv_right.get(mp_id).unwrap(),
-                    //     self.inv_level_sigma2[keypoint.octave() as usize]
-                    // );
-
-                    // {
-                    //     let map_read_lock = map.read();
-                    //     let position = &map_read_lock.mappoints.get(mp_id).unwrap().position;
-                    //     optimizer.add_edge_stereo(
-                    //         i as i32, edge.clone(), (position).into()
-                    //     );
-                    // }
-                },
-                _ => {
-                    // Mono observations
-                    frame.mappoint_matches.set_outlier(i as usize, false);
-                    optimizer.pin_mut().add_edge_monocular_unary(
-                        true, 0, keypoint.octave(), keypoint.pt().x, keypoint.pt().y,
-                        INV_LEVEL_SIGMA2[keypoint.octave() as usize],
-                        (position).into(),
-                        mp_id,
-                        *TH_HUBER_MONO
-                    );
-                    mp_indexes.push(i as u32);
-                }
-            };
-
-            initial_correspondences += 1;
         }
     }
 
@@ -153,8 +151,8 @@ pub fn optimize_pose(
             (*frame.pose.as_ref().unwrap()).into()
         );
         
-        // println!("optimize pose");
-        optimizer.pin_mut().optimize(iterations[iteration], false);
+        println!("optimize pose");
+        optimizer.pin_mut().optimize(iterations[iteration], false, false);
 
         num_bad = 0;
         let mut index = 0;
@@ -355,12 +353,14 @@ pub fn global_bundle_adjustment(map: &mut MapLock, iterations: i32, robust: bool
         }
 
         // Optimize!
+        println!("optimize gba");
         let span = tracy_client::span!("global_bundle_adjustment::optimize");
-        optimizer.pin_mut().optimize(iterations, false);
+        optimizer.pin_mut().optimize(iterations, false, false);
         drop(span);
         (kf_vertex_ids, mp_vertex_ids)
     };
 
+    println!("Gba optimization done");
 
     {
         let mut lock = map.write();
@@ -696,7 +696,8 @@ pub fn local_bundle_adjustment(
     // Optimize
     {
         let _span = tracy_client::span!("local_bundle_adjustment::optimize");
-        optimizer.pin_mut().optimize(10, false);
+        println!("optimize lba");
+        optimizer.pin_mut().optimize(10, false, false);
     }
 
     // Check inlier observations
@@ -857,7 +858,12 @@ pub fn optimize_essential_graph(
         let lock = map.read();
         for (kf_id, kf) in &lock.keyframes {
             let estimate = match corrected_sim3.get(kf_id) {
-                Some(sim3) => { sim3.clone() },
+                Some(sim3) => { 
+                    Sim3 {
+                        pose: Pose::new(*sim3.pose.get_translation() * sim3.scale, *sim3.pose.get_rotation()),
+                        scale: sim3.scale
+                    }
+                },
                 None => {
                     Sim3 {
                         pose: kf.pose,
@@ -868,23 +874,25 @@ pub fn optimize_essential_graph(
             v_scw.insert(*kf_id, estimate);
 
             optimizer.pin_mut().add_vertex_sim3_expmap(
-                kf.id,
+                *kf_id,
                 estimate.into(),
                 fix_scale,
-                *kf_id == loop_kf,
+                *kf_id == lock.initial_kf_id,
                 false,
-
             );
+            // println!("keyframe vertex {} with estimate {:?}", kf.id, estimate);
         }
 
         // Set loop edges
-        let min_feat = 100;
+        let min_feat = 60;
+        // print!("Loop edges #1: ");
         for (kf_id, connected_kfs) in &loop_connections {
             let kf = lock.keyframes.get(kf_id).unwrap();
             let siw = v_scw.get(&kf_id).unwrap();
             let swi = siw.inverse();
 
             for connected_kf_id in connected_kfs {
+                // println!("kf_id: {}, curr_kf: {}, connected_kf_id: {}, loop_kf: {}, weight: {}", kf_id, curr_kf, connected_kf_id, loop_kf, kf.get_connected_kf_weight(*connected_kf_id));
                 if (*kf_id != curr_kf || *connected_kf_id != loop_kf) && kf.get_connected_kf_weight(*connected_kf_id) < min_feat {
                     continue;
                 }
@@ -892,22 +900,26 @@ pub fn optimize_essential_graph(
                 let sjw = v_scw.get(&connected_kf_id).unwrap();
                 let sji = *sjw * swi;
                 optimizer.pin_mut().add_one_sim3_edge(
-                    *kf_id,
                     *connected_kf_id,
+                    *kf_id,
                     sji.into(),
                 );
-                inserted_edges.insert((min(*kf_id, *connected_kf_id), max(*kf_id, *connected_kf_id)));
+                // print!("{} -> {} , ", connected_kf_id, kf_id);
+                inserted_edges.insert((min(*kf_id, *connected_kf_id), max(*connected_kf_id, *kf_id)));
             }
         }
+        // println!();
 
         // Set normal edges
         for (kf_id, kf) in &lock.keyframes {
+            // println!("Set normal edges for kf {}", kf_id);
             let swi = match non_corrected_sim3.get(&kf_id) {
                 Some(sim3) => sim3.inverse(),
                 None => * v_scw.get(&kf_id).unwrap()
             };
 
             // Spanning tree edge
+            // print!("Span edges: ");
             match kf.parent {
                 Some(parent_id) => {
                     let sjw = match non_corrected_sim3.get(&parent_id) {
@@ -916,15 +928,19 @@ pub fn optimize_essential_graph(
                     };
                     let sji = sjw * swi;
                     optimizer.pin_mut().add_one_sim3_edge(
-                        *kf_id,
                         parent_id,
+                        *kf_id,
                         sji.into(),
                     );
+                    // print!("{} -> {}, ", parent_id, kf_id);
                 },
-                None => {}
+                None => { error!("No parent kf for kf {}", kf_id);}
             };
+            // println!();
+
 
             // Loop edges
+            // print!("Loop edges #2: ");
             let loop_edges = kf.get_loop_edges();
             for edge_kf_id in loop_edges {
                 if *edge_kf_id != *kf_id {
@@ -934,16 +950,20 @@ pub fn optimize_essential_graph(
                     };
                     let sli = slw * swi;
                     optimizer.pin_mut().add_one_sim3_edge(
-                        *kf_id,
                         *edge_kf_id,
+                        *kf_id,
                         sli.into(),
                     );
+                    // print!("{} -> {} (LOOP EDGE), ", edge_kf_id, kf_id);
                 }
             }
+            // println!();
+
 
             // Covisibility graph edges
             let parent_kf = kf.parent;
-            for covis_kf_id in kf.get_covisibles_by_weight(min_feat) {
+            // print!("Covisible edges: ");
+            for covis_kf_id in kf.get_covisibles_by_weight(100) {
                 if (parent_kf != Some(covis_kf_id) && !kf.children.contains(&covis_kf_id)) && !loop_edges.contains(&covis_kf_id) {
                     if covis_kf_id < *kf_id {
                         if inserted_edges.contains(&(min(covis_kf_id, *kf_id), max(covis_kf_id, *kf_id))) {
@@ -956,19 +976,22 @@ pub fn optimize_essential_graph(
                         let sni = snw * swi;
 
                         optimizer.pin_mut().add_one_sim3_edge(
-                            *kf_id,
                             covis_kf_id,
+                            *kf_id,
                             sni.into(),
                         );
+                        // print!("{} -> {}, ", covis_kf_id, kf_id);
                     }
                 }
             }
+            // println!();
 
         }
     }
 
     // Optimize!
-    optimizer.pin_mut().optimize(20, false);
+    println!("optimize essential");
+    optimizer.pin_mut().optimize(20, false, true);
 
     let mut corrected_swc = HashMap::new();
     {
@@ -982,6 +1005,8 @@ pub fn optimize_essential_graph(
             let new_pose = Pose::new(trans, *sim3.pose.get_rotation());
 
             kf.pose = new_pose;
+            println!("Optimize essential graph, for kf {} : {:?}", kf.id, new_pose);
+            println!("Unscaled sim3 is: {:?}", sim3);
         }
     }
 
@@ -1137,7 +1162,8 @@ pub fn optimize_sim3(
     }
 
     // Optimize!
-    optimizer.pin_mut().optimize(5, false);
+    println!("optimize sim3");
+    optimizer.pin_mut().optimize(5, false, false);
 
     // Check inliers
     let removed_edge_indexes = optimizer.pin_mut().remove_sim3_edges_with_chi2(th2 as f32);
@@ -1156,7 +1182,8 @@ pub fn optimize_sim3(
     }
 
     // Optimize again only with inliers
-    optimizer.pin_mut().optimize(more_iterations, false);
+    println!("optimize sim3");
+    optimizer.pin_mut().optimize(more_iterations, false, false);
 
     let mut n_in = 0;
     let mut i = 0;

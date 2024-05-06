@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::f64::INFINITY;
 use core::config::SETTINGS;
@@ -8,7 +9,7 @@ use opencv::core::KeyPoint;
 use opencv::prelude::*;
 use crate::MapLock;
 use crate::actors::tracking_backend::TrackedMapPointData;
-use crate::map::pose::{Pose, Sim3};
+use crate::map::pose::{DVTranslation, Pose, Sim3};
 use crate::modules::optimizer::LEVEL_SIGMA2;
 use crate::registered_actors::{CAMERA, CAMERA_MODULE, FEATURE_DETECTION, MATCHER};
 use crate::map::{map::Id, keyframe::KeyFrame, frame::Frame};
@@ -137,13 +138,15 @@ pub fn search_by_projection(
     frame: &mut Frame, mappoints: &mut BTreeSet<Id>, th: i32, ratio: f64,
     track_in_view: &HashMap<Id, TrackedMapPointData>, track_in_view_right: &HashMap<Id, TrackedMapPointData>, 
     map: &MapLock, sensor: Sensor
-) -> Result<i32, Box<dyn std::error::Error>> {
+) -> Result<(HashMap<Id, i32>, i32), Box<dyn std::error::Error>> {
     // int SearchByProjection(Frame &F, const std::vector<MapPoint*> &vpMapPoints, const float th=3, const bool bFarPoints = false, const float thFarPoints = 50.0f);
     // Search matches between Frame keypoints and projected MapPoints. Returns number of matches
     // Used to track the local map (Tracking)
     let fpt = SETTINGS.get::<f64>(MATCHER, "far_points_threshold");
     let far_points_th = if fpt == 0.0 { INFINITY } else { fpt };
     let mut num_matches = 0;
+
+    let mut non_tracked_points = HashMap::new();
 
     let map = map.read();
     let mut local_mps_to_remove = vec![];
@@ -182,9 +185,8 @@ pub fn search_by_projection(
 
                 // Get best and second matches with near keypoints
                 for idx in indices {
-                    if frame.mappoint_matches.has(&idx) {
-                        let id = frame.mappoint_matches.get(&idx);
-                        if let Some(mp) = map.mappoints.get(&id) {
+                    if let Some((mp_id, _is_outlier)) = frame.mappoint_matches.get(idx as usize) {
+                        if let Some(mp) = map.mappoints.get(&mp_id) {
                             if mp.get_observations().len() > 0 {
                                 continue;
                             }
@@ -321,7 +323,7 @@ pub fn search_by_projection(
     }
 
     mappoints.retain(|mp_id| !local_mps_to_remove.contains(&mp_id));
-    return Ok(num_matches);
+    return Ok((non_tracked_points, num_matches));
 }
 
 // Project MapPoints tracked in last frame into the current frame and search matches.
@@ -344,20 +346,11 @@ pub fn search_by_projection_with_threshold (
     let factor = 1.0 / (HISTO_LENGTH as f32);
     let mut rot_hist = construct_rotation_histogram();
 
-    // Note: this code copied from ORBSLAM2, not ORBSLAM3
-    // ORBSLAM2 : https://github.com/raulmur/ORB_SLAM2/blob/master/src/ORBmatcher.cc#L1328
-    // ORBSLAM3 : https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/ORBmatcher.cc#L1676
-    // I think it is doing the same thing, just that orbslam3 uses Sophus SE3 objects
-    // and ORBSLAM2 uses matrices
-    // But, copying the matrices is more straightforward than figuring out what Sophus::SE3
-    // is doing, especially around the matrix multiplications
-    let rcw = current_frame.pose.unwrap().get_rotation();
-    let tcw = current_frame.pose.unwrap().get_translation();
-    let twc = -rcw.transpose() * (*tcw);
+    let tcw = current_frame.pose.unwrap();
+    let twc = tcw.inverse().get_translation();
 
-    let rlw = last_frame.pose.unwrap().get_rotation();
-    let tlw = current_frame.pose.unwrap().get_translation();
-    let tlc = (*rlw) * twc + (*tlw);
+    let tlw = last_frame.pose.unwrap();
+    let tlc = (*tlw.get_rotation()) * (*twc) + (*tlw.get_translation());
 
     let forward = tlc[2] > CAMERA_MODULE.stereo_baseline && !sensor.is_mono();
     let backward = -tlc[2] > CAMERA_MODULE.stereo_baseline && !sensor.is_mono();
@@ -365,8 +358,7 @@ pub fn search_by_projection_with_threshold (
     {
         let map = map.read();
         for idx1 in 0..last_frame.features.get_all_keypoints().len() {
-            if last_frame.mappoint_matches.has(&(idx1 as u32)) {
-                let mp_id = last_frame.mappoint_matches.get(&(idx1 as u32));
+            if let Some((mp_id, is_outlier)) = last_frame.mappoint_matches.get(idx1 as usize) {
                 if last_frame.mappoint_matches.is_outlier(&(idx1 as u32)) { continue; }
                 // Project
                 let mappoint = match map.mappoints.get(&mp_id) {
@@ -378,15 +370,12 @@ pub fn search_by_projection_with_threshold (
                     }
                 };
                 let x_3d_w = mappoint.position;
-                let x_3d_c = (*rcw) * (*x_3d_w) + (*tcw);
+                let x_3d_c = (*tcw.get_rotation()) * (*x_3d_w) + (*tcw.get_translation());
 
-                let xc = x_3d_c[0];
-                let yc = x_3d_c[1];
                 let invzc = 1.0 / x_3d_c[2];
                 if invzc < 0.0 { continue; }
 
-                let u = CAMERA_MODULE.fx * xc * invzc + CAMERA_MODULE.cx;
-                let v = CAMERA_MODULE.fy * yc * invzc + CAMERA_MODULE.cy;
+                let (u, v) = CAMERA_MODULE.project(x_3d_c.into());
                 if !current_frame.features.is_in_image(u, v) {
                     continue;
                 }
@@ -412,9 +401,8 @@ pub fn search_by_projection_with_threshold (
                 let mut best_idx: i32 = -1;
 
                 for idx2 in indices_2 {
-                    if current_frame.mappoint_matches.has(&idx2) {
-                        let id = current_frame.mappoint_matches.get(&idx2);
-                        if let Some(mappoint) = map.mappoints.get(&id) {
+                    if let Some((mp_id, is_outlier)) = current_frame.mappoint_matches.get(idx2 as usize) {
+                        if let Some(mappoint) = map.mappoints.get(&mp_id) {
                             if mappoint.get_observations().len() > 0 { 
                                 continue;
                             }
@@ -461,6 +449,7 @@ pub fn search_by_projection_with_threshold (
     // Apply rotation consistency
     if should_check_orientation {
         let (ind_1, ind_2, ind_3) = compute_three_maxima(&rot_hist,HISTO_LENGTH);
+
         for i in 0..HISTO_LENGTH {
             if i != ind_1 && i != ind_2 && i != ind_3 {
                 for j in 0..rot_hist[i as usize].len() {
@@ -711,15 +700,162 @@ pub fn search_by_sim3(map: &MapLock, kf1_id: Id, kf2_id: Id, matches: &mut HashM
 
 }
 
-pub fn search_by_projection_for_loop_detection(
+pub fn search_by_projection_for_loop_detection1(
+    map: &MapLock, kf_id: &Id, scw: &Sim3, 
+    candidates: &HashMap<usize, Id>, // vpPoints
+    kfs_for_candidates: &HashMap<usize, Id>, // vpPointsKFs
+    matches: &mut HashMap<usize, Id>, // vpMatched
+    threshold: i32, hamming_ratio: f64
+) -> Result<(i32, HashMap<usize, Id>), Box<dyn std::error::Error>>{
+    // int ORBmatcher::SearchByProjection(KeyFrame* pKF, Sophus::Sim3<float> &Scw, const std::vector<MapPoint*> &vpPoints, const std::vector<KeyFrame*> &vpPointsKFs, std::vector<MapPoint*> &vpMatched, std::vector<KeyFrame*> &vpMatchedKF, int th, float ratioHamming)
+    // return vpMatchedKF
+    // Used in loop detection
+
+    let lock = map.read();
+
+    // ORBSLAM3:
+    // todo scw translation and rotation may need to be scaled by scale somehow? see Sophus::Sim3f mScw = Converter::toSophus(gScw);
+    // in this code in orbslam3 they divide translation by scale but not rotation
+    // but also when creating the se3 object in loop closing right before the call to this function, 
+    // the conversion from g2o to se3 multiplies the rotation by the scale but not the translation
+    // see Sophus::Sim3f mScw = Converter::toSophus(gScw);
+    let tcw = Pose::new(*scw.pose.get_translation() , *scw.pose.get_rotation());// * scw.scale);
+    let rot = tcw.get_rotation();
+    let trans = tcw.get_translation();
+    let ow = tcw.inverse().get_translation();
+
+    // Set of MapPoints already found in the KeyFrame
+    let already_found = matches.values().into_iter().map(|mp_id| *mp_id).collect::<BTreeSet<Id>>();
+
+    let mut num_matches = 0;
+
+    // For each Candidate MapPoint Project and Match
+    let mut n_already_found = 0;
+    let mut n_depth = 0;
+    let mut n_not_in_image = 0;
+    let mut n_wrong_dist = 0;
+    let mut n_viewing_angle = 0;
+    let mut n_indices = 0;
+    let mut n_has_match  = 0;
+    let mut n_levels  = 0;
+    let mut n_final_dist_too_low = 0;
+
+    let mut matched_kfs = HashMap::new();
+
+    for (index, mp_id) in candidates {
+        // Discard Bad MapPoints and already found
+        let mp = match lock.mappoints.get(&mp_id) {
+            Some(mp) => mp,
+            None => continue
+        };
+        if already_found.get(&mp_id).is_some() {
+            n_already_found += 1;
+            continue;
+        }
+        let kf_i = kfs_for_candidates.get(&index).unwrap();
+
+        // Get 3D Coords.
+        let p3dw = *mp.position;
+
+        // Transform into Camera Coords.
+        let p3dc = *rot * p3dw + *trans;
+    
+        // Depth must be positive
+        if p3dc[2] < 0.0 {
+            n_depth += 1;
+            continue;
+        }
+
+        // Project into Image
+        let invz = 1.0 / p3dc[2];
+        let x = p3dc[0] * invz;
+        let y = p3dc[1] * invz;
+
+        let u = CAMERA_MODULE.fx * x + CAMERA_MODULE.cx;
+        let v = CAMERA_MODULE.fy * y + CAMERA_MODULE.cy;
+
+        // Point must be inside the image
+        let kf = lock.keyframes.get(&kf_id).unwrap();
+        if !kf.features.is_in_image(u, v) {
+            n_not_in_image += 1;
+            continue;
+        }
+
+        // Depth must be inside the scale invariance region of the point
+        let max_distance = mp.get_max_distance_invariance();
+        let min_distance = mp.get_min_distance_invariance();
+        let po = p3dw - *ow;
+        let dist = po.norm();
+
+        if dist < min_distance || dist > max_distance {
+            n_wrong_dist += 1;
+            continue;
+        }
+
+        // Viewing angle must be less than 60 deg
+        let pn = &mp.normal_vector;
+        if po.dot(&pn) < 0.5 * dist {
+            n_viewing_angle += 1;
+            continue;
+        }
+
+        let n_predicted_level = mp.predict_scale(&dist);
+
+        // Search in a radius
+        let radius = threshold as f32 * SCALE_FACTORS[n_predicted_level as usize];
+
+        let indices = kf.features.get_features_in_area(&u, &v, radius as f64, None);
+
+        if indices.is_empty() {
+            n_indices += 1;
+            continue;
+        }
+
+        // Match to the most similar keypoint in the radius
+        let d_mp = &mp.best_descriptor;
+
+        let mut best_dist = std::i32::MAX;
+        let mut best_idx = -1;
+        for idx in indices { 
+            // if matches.get(&(idx as usize)).is_some() {
+            //     n_has_match += 1;
+            //     continue;
+            // }
+            let kp_level = kf.features.get_octave(idx as usize);
+            if kp_level < n_predicted_level - 1 || kp_level > n_predicted_level {
+                n_levels += 1;
+                continue;
+            }
+
+            let descriptors_kf = kf.features.descriptors.row(idx);
+            let dist = descriptor_distance(&d_mp, &descriptors_kf);
+            if dist < best_dist {
+                best_dist = dist;
+                best_idx = idx as i32;
+            }
+        }
+        if (best_dist as f64) <= (TH_LOW as f64) * hamming_ratio {
+            matches.insert(best_idx as usize, *mp_id);
+            matched_kfs.insert(best_idx as usize, *kf_i);
+            num_matches += 1;
+        } else {
+            n_final_dist_too_low += 1;
+        }
+    }
+
+    // debug!("...Search by projection for loop detection stats:  already found {}, depth {}, not in image {}, wrong dist {}, viewing angle {}, indices {}, levels {}, final dist too low {}", n_already_found, n_depth, n_not_in_image, n_wrong_dist, n_viewing_angle, n_indices, n_levels, n_final_dist_too_low);
+
+    Ok((num_matches, matched_kfs))
+
+}
+
+pub fn search_by_projection_for_loop_detection2(
     map: &MapLock, kf_id: &Id, scw: &Sim3, 
     candidates: &HashMap<usize, Id>,
     matches: &mut HashMap<usize, Id>,
     threshold: i32, hamming_ratio: f64
 ) -> Result<i32, Box<dyn std::error::Error>>{
-    // int ORBmatcher::SearchByProjection(KeyFrame* pKF, Sophus::Sim3f &Scw, const vector<MapPoint*> &vpPoints, vector<MapPoint*> &vpMatched, int th, float ratioHamming)
     // int ORBmatcher::SearchByProjection(KeyFrame* pKF, Sophus::Sim3<float> &Scw, const std::vector<MapPoint*> &vpPoints, const std::vector<KeyFrame*> &vpPointsKFs, std::vector<MapPoint*> &vpMatched, std::vector<KeyFrame*> &vpMatchedKF, int th, float ratioHamming)
-    // Pretty sure these functions do the same thing because vpPointsKFs and vpMatchedKF are never meaningfully used
     // Used in loop detection
 
     let lock = map.read();
@@ -767,7 +903,7 @@ pub fn search_by_projection_for_loop_detection(
 
         // Transform into Camera Coords.
         let p3dc = *rot * p3dw + *trans;
-    
+
         // Depth must be positive
         if p3dc[2] < 0.0 {
             n_depth += 1;
@@ -775,12 +911,7 @@ pub fn search_by_projection_for_loop_detection(
         }
 
         // Project into Image
-        let invz = 1.0 / p3dc[2];
-        let x = p3dc[0] * invz;
-        let y = p3dc[1] * invz;
-
-        let u = CAMERA_MODULE.fx * x + CAMERA_MODULE.cx;
-        let v = CAMERA_MODULE.fy * y + CAMERA_MODULE.cy;
+        let (u, v) = CAMERA_MODULE.project(DVTranslation::new(p3dc));
 
         // Point must be inside the image
         let kf = lock.keyframes.get(&kf_id).unwrap();
@@ -850,7 +981,7 @@ pub fn search_by_projection_for_loop_detection(
         }
     }
 
-    debug!("...Search by projection for loop detection stats:  already found {}, depth {}, not in image {}, wrong dist {}, viewing angle {}, indices {}, has match {}, levels {}, final dist too low {}", n_already_found, n_depth, n_not_in_image, n_wrong_dist, n_viewing_angle, n_indices, n_has_match, n_levels, n_final_dist_too_low);
+    // debug!("...Search by projection for loop detection stats:  already found {}, depth {}, not in image {}, wrong dist {}, viewing angle {}, indices {}, has match {}, levels {}, final dist too low {}", n_already_found, n_depth, n_not_in_image, n_wrong_dist, n_viewing_angle, n_indices, n_has_match, n_levels, n_final_dist_too_low);
 
     Ok(num_matches)
 
@@ -872,7 +1003,6 @@ pub fn search_by_bow_f(
     let mut i = 0;
     let mut j = 0;
 
-
     while i < kf_featvec.len() && j < frame_featvec.len() {
         let kf_node_id = kf_featvec[i];
         let frame_node_id = frame_featvec[j];
@@ -882,51 +1012,49 @@ pub fn search_by_bow_f(
             for index_kf in 0..kf_indices_size {
                 let real_idx_kf = kf.bow.as_ref().unwrap().feat_vec.vec_get(kf_node_id, index_kf);
 
-                if !kf.has_mp_match_at_index(&real_idx_kf) {
-                    continue
-                }
-                let mp_id = &kf.get_mp_match(&real_idx_kf);
-                // print!("{} ", mp_id);
+                if let Some((mp_id, _is_outlier)) = kf.get_mp_match(&real_idx_kf) {
+                    // print!("{} ", mp_id);
 
-                let mut best_dist1 = 256;
-                let mut best_dist2 = 256;
-                let mut best_idx: i32 = -1;
-                let descriptors_kf = kf.features.descriptors.row(real_idx_kf);
+                    let mut best_dist1 = 256;
+                    let mut best_dist2 = 256;
+                    let mut best_idx: i32 = -1;
+                    let descriptors_kf = kf.features.descriptors.row(real_idx_kf);
 
-                let frame_indices_size = frame.bow.as_ref().unwrap().feat_vec.vec_size(frame_node_id);
+                    let frame_indices_size = frame.bow.as_ref().unwrap().feat_vec.vec_size(frame_node_id);
 
-                for index_frame in 0..frame_indices_size {
-                    let real_idx_frame = frame.bow.as_ref().unwrap().feat_vec.vec_get(frame_node_id, index_frame);
+                    for index_frame in 0..frame_indices_size {
+                        let real_idx_frame = frame.bow.as_ref().unwrap().feat_vec.vec_get(frame_node_id, index_frame);
 
-                    if matches.contains_key(&real_idx_frame) {
-                        continue;
+                        if matches.contains_key(&real_idx_frame) {
+                            continue;
+                        }
+
+                        let descriptors_f = frame.features.descriptors.row(real_idx_frame);
+
+                        let dist = descriptor_distance(&descriptors_kf, &descriptors_f);
+
+                        if dist < best_dist1 {
+                            best_dist2 = best_dist1;
+                            best_dist1 = dist;
+                            best_idx = real_idx_frame as i32;
+                        } else if dist < best_dist2 {
+                            best_dist2 = dist;
+                        }
+
                     }
 
-                    let descriptors_f = frame.features.descriptors.row(real_idx_frame);
+                    if best_dist1 <= TH_LOW {
+                        if (best_dist1 as f64) < ratio * (best_dist2 as f64) {
+                            matches.insert(best_idx as u32, mp_id);
 
-                    let dist = descriptor_distance(&descriptors_kf, &descriptors_f);
-
-                    if dist < best_dist1 {
-                        best_dist2 = best_dist1;
-                        best_dist1 = dist;
-                        best_idx = real_idx_frame as i32;
-                    } else if dist < best_dist2 {
-                        best_dist2 = dist;
-                    }
-
-                }
-
-                if best_dist1 <= TH_LOW {
-                    if (best_dist1 as f64) < ratio * (best_dist2 as f64) {
-                        matches.insert(best_idx as u32, *mp_id);
-
-                        if should_check_orientation {
-                            check_orientation_1(
-                                &kf.features.get_keypoint(real_idx_kf as usize).0,
-                                &frame.features.get_keypoint(best_idx as usize).0,
-                                &mut rot_hist, factor, best_idx as u32
-                            );
-                        };
+                            if should_check_orientation {
+                                check_orientation_1(
+                                    &kf.features.get_keypoint(real_idx_kf as usize).0,
+                                    &frame.features.get_keypoint(best_idx as usize).0,
+                                    &mut rot_hist, factor, best_idx as u32
+                                );
+                            };
+                        }
                     }
                 }
             }
@@ -988,70 +1116,51 @@ pub fn search_by_bow_kf(
             for index_kf1 in 0..kf_1_indices_size {
                 let real_idx_kf1 = kf_1.bow.as_ref().unwrap().feat_vec.vec_get(kf_1_node_id, index_kf1);
 
-                if !kf_1.has_mp_match_at_index(&real_idx_kf1) {
-                    // if kf_1.frame_id > 1581 && kf_1.frame_id < 1584 {
-                    //     println!("{}: skip1", real_idx_kf1);
-                    // }
-                   continue;
-                }
-                // if kf_1.frame_id > 1581 && kf_1.frame_id < 1584 {
-                //     println!("{}:", real_idx_kf1);
-                // }
+                if let Some((mp_id, is_outlier)) = kf_1.get_mp_match(&real_idx_kf1) {
+                    let mut best_dist1 = 256;
+                    let mut best_dist2 = 256;
+                    let mut best_idx2: i32 = -1;
+                    let descriptors_kf_1 = kf_1.features.descriptors.row(real_idx_kf1);
 
-                let mut best_dist1 = 256;
-                let mut best_dist2 = 256;
-                let mut best_idx2: i32 = -1;
-                let descriptors_kf_1 = kf_1.features.descriptors.row(real_idx_kf1);
+                    let kf_2_indices_size = kf_2.bow.as_ref().unwrap().feat_vec.vec_size(kf_2_node_id);
 
-                let kf_2_indices_size = kf_2.bow.as_ref().unwrap().feat_vec.vec_size(kf_2_node_id);
+                    for index_kf2 in 0..kf_2_indices_size {
+                        let real_idx_kf2 = kf_2.bow.as_ref().unwrap().feat_vec.vec_get(kf_2_node_id, index_kf2);
 
-                for index_kf2 in 0..kf_2_indices_size {
-                    let real_idx_kf2 = kf_2.bow.as_ref().unwrap().feat_vec.vec_get(kf_2_node_id, index_kf2);
+                        if matched_already_in_kf2.contains(&(real_idx_kf2 as i32))
+                            || kf_2.get_mp_match(&real_idx_kf2).is_none() {
+                            // if kf_1.frame_id > 1581 && kf_1.frame_id < 1584 {
+                            //     println!("(skip)");
+                            // }
+                            continue;
+                        }
 
-                    // if kf_1.frame_id > 1581 && kf_1.frame_id < 1584 {
-                    //     print!("... {}: ", real_idx_kf2);
-                    // }
+                        let descriptors_kf_2 = kf_2.features.descriptors.row(real_idx_kf2);
 
-                    if matched_already_in_kf2.contains(&(real_idx_kf2 as i32))
-                        || !kf_2.has_mp_match_at_index(&real_idx_kf2) {
-                        // if kf_1.frame_id > 1581 && kf_1.frame_id < 1584 {
-                        //     println!("(skip)");
-                        // }
-                        continue;
+                        let dist = descriptor_distance(&descriptors_kf_1, &descriptors_kf_2);
+
+                        if dist < best_dist1 {
+                            best_dist2 = best_dist1;
+                            best_dist1 = dist;
+                            best_idx2 = real_idx_kf2 as i32;
+                        } else if dist < best_dist2 {
+                            best_dist2 = dist;
+                        }
                     }
 
-                    let descriptors_kf_2 = kf_2.features.descriptors.row(real_idx_kf2);
+                    if best_dist1 <= TH_LOW {
+                        if (best_dist1 as f64) < ratio * (best_dist2 as f64) {
+                            matches.insert(real_idx_kf1 as u32, kf_2.get_mp_match(&(best_idx2 as u32)).unwrap().0);
+                            matched_already_in_kf2.insert(best_idx2 as i32);
 
-                    let dist = descriptor_distance(&descriptors_kf_1, &descriptors_kf_2);
-
-                    if dist < best_dist1 {
-                        best_dist2 = best_dist1;
-                        best_dist1 = dist;
-                        best_idx2 = real_idx_kf2 as i32;
-                    } else if dist < best_dist2 {
-                        best_dist2 = dist;
-                    }
-                    // if kf_1.frame_id > 1581 && kf_1.frame_id < 1584 {
-                    //     println!("{}", dist);
-                    // }
-
-                }
-                // if kf_1.frame_id > 1581 && kf_1.frame_id < 1584 {
-                //     println!("best: {} ({} {}), ", best_idx2, best_dist1, best_dist2);
-                // }
-
-                if best_dist1 <= TH_LOW {
-                    if (best_dist1 as f64) < ratio * (best_dist2 as f64) {
-                        matches.insert(real_idx_kf1 as u32, kf_2.get_mp_match(&(best_idx2 as u32)));
-                        matched_already_in_kf2.insert(best_idx2 as i32);
-
-                        if should_check_orientation {
-                            check_orientation_1(
-                                &kf_1.features.get_keypoint(real_idx_kf1 as usize).0,
-                                &kf_2.features.get_keypoint(best_idx2 as usize).0,
-                                &mut rot_hist, factor, real_idx_kf1 as u32
-                            );
-                        };
+                            if should_check_orientation {
+                                check_orientation_1(
+                                    &kf_1.features.get_keypoint(real_idx_kf1 as usize).0,
+                                    &kf_2.features.get_keypoint(best_idx2 as usize).0,
+                                    &mut rot_hist, factor, real_idx_kf1 as u32
+                                );
+                            };
+                        }
                     }
                 }
             }
@@ -1088,6 +1197,7 @@ pub fn search_for_triangulation(
     should_check_orientation: bool, _only_stereo: bool, course: bool,
     sensor: Sensor
 ) -> Result<Vec<(usize, usize)>, Box<dyn std::error::Error>> {
+    let _span = tracy_client::span!("search_for_triangulation");
     // Testing local mapping ... this function return slightly different results than ORB-SLAM. Could be because the optimized pose is slightly different but could also be an error. Uncomment the println lines (and same lines in ORB-SLAM3), then compare the strings.
     //int ORBmatcher::SearchForTriangulation(KeyFrame *pKF1, KeyFrame *pKF2, vector<pair<size_t, size_t> > &vMatchedPairs, const bool bOnlyStereo, const bool bCoarse)
     // Some math based on ORB-SLAM2 to avoid some confusion with Sophus.
@@ -1139,121 +1249,133 @@ pub fn search_for_triangulation(
     let mut i = 0;
     let mut j = 0;
 
+    let mut total_visited = 0;
+    let mut total_outer_loop = 0;
+    let mut total_inner_loop = 0;
+
     while i < kf1_featvec.len() && j < kf2_featvec.len() {
         let kf1_node_id = kf1_featvec[i];
         let kf2_node_id = kf2_featvec[j];
         if kf1_node_id == kf2_node_id {
+            total_visited += 1;
             let kf1_indices_size = kf_1.bow.as_ref().unwrap().feat_vec.vec_size(kf1_node_id);
+            total_outer_loop += kf1_indices_size;
+
+            // let _span = tracy_client::span!("search_for_triangulation_outerloop");
 
             for i1 in 0..kf1_indices_size {
                 let kf1_index = kf_1.bow.as_ref().unwrap().feat_vec.vec_get(kf1_node_id, i1); // = idx1
 
                 // If there is already a MapPoint skip
-                if kf_1.has_mp_match_at_index(&kf1_index) {
+                if let Some((_id, _is_outlier)) = kf_1.get_mp_match(&kf1_index) {
                     continue
-                };
+                } else {
 
-                let stereo1 = match sensor.frame() {
-                    FrameSensor::Stereo => {
-                        todo!("Stereo");
-                    },
-                    _ => false
-                };
-
-                let (kp1, _right1) = kf_1.features.get_keypoint(kf1_index as usize);
-
-                let mut best_dist = TH_LOW;
-                let mut best_index = -1;
-                let descriptors_kf_1 = kf_1.features.descriptors.row(kf1_index);
-
-                let kf2_indices_size = kf_2.bow.as_ref().unwrap().feat_vec.vec_size(kf2_node_id);
-
-                for i2 in 0..kf2_indices_size {
-                    let kf2_index = kf_2.bow.as_ref().unwrap().feat_vec.vec_get(kf2_node_id, i2); // = idx2
-
-                    // If we have already matched or there is a MapPoint skip
-                    if kf_2.has_mp_match_at_index(&kf2_index) || matched_already.contains(&kf2_index) {
-                        continue
-                    };
-
-                    let stereo2 = match sensor.frame() {
+                    let stereo1 = match sensor.frame() {
                         FrameSensor::Stereo => {
                             todo!("Stereo");
                         },
                         _ => false
                     };
 
-                    let descriptors_kf_2 = kf_2.features.descriptors.row(kf2_index);
-                    let dist = descriptor_distance(&descriptors_kf_1, &descriptors_kf_2);
+                    let (kp1, _right1) = kf_1.features.get_keypoint(kf1_index as usize);
 
-                    if dist > TH_LOW || dist > best_dist {
-                        continue
-                    }
+                    let mut best_dist = TH_LOW;
+                    let mut best_index = -1;
+                    let descriptors_kf_1 = kf_1.features.descriptors.row(kf1_index);
 
-                    let (kp2, _right2) = kf_2.features.get_keypoint(kf2_index as usize);
+                    let kf2_indices_size = kf_2.bow.as_ref().unwrap().feat_vec.vec_size(kf2_node_id);
 
-                    if !stereo1 && !stereo2 { // && !kf1->mpCamera2 ... TODO (STEREO)
-                        let dist_ex = (ep.0 as f32) - kp2.pt().x;
-                        let dist_ey = (ep.1 as f32) - kp2.pt().y;
-                        if dist_ex * dist_ex + dist_ey * dist_ey < 100.0 * SCALE_FACTORS[kp2.octave() as usize] {
+                    total_inner_loop += kf2_indices_size;
+                    // let _span = tracy_client::span!("search_for_triangulation_innerloop");
+
+                    for i2 in 0..kf2_indices_size {
+                        let kf2_index = kf_2.bow.as_ref().unwrap().feat_vec.vec_get(kf2_node_id, i2); // = idx2
+
+                        // If we have already matched or there is a MapPoint skip
+                        if kf_2.get_mp_match(&kf2_index).is_some() || matched_already.contains(&kf2_index) {
                             continue
+                        };
+
+                        let stereo2 = match sensor.frame() {
+                            FrameSensor::Stereo => {
+                                todo!("Stereo");
+                            },
+                            _ => false
+                        };
+
+                        let descriptors_kf_2 = kf_2.features.descriptors.row(kf2_index);
+                        let dist = descriptor_distance(&descriptors_kf_1, &descriptors_kf_2);
+
+                        if dist > TH_LOW || dist > best_dist {
+                            continue
+                        }
+
+                        let (kp2, _right2) = kf_2.features.get_keypoint(kf2_index as usize);
+
+                        if !stereo1 && !stereo2 { // && !kf1->mpCamera2 ... TODO (STEREO)
+                            let dist_ex = (ep.0 as f32) - kp2.pt().x;
+                            let dist_ey = (ep.1 as f32) - kp2.pt().y;
+                            if dist_ex * dist_ex + dist_ey * dist_ey < 100.0 * SCALE_FACTORS[kp2.octave() as usize] {
+                                continue
+                            }
+                        }
+
+                        // TODO (Stereo)
+                        // if(pKF1->mpCamera2 && pKF2->mpCamera2){
+                        //     if(bRight1 && bRight2){
+                        //         R12 = Rrr;
+                        //         t12 = trr;
+                        //         T12 = Trr;
+
+                        //         pCamera1 = pKF1->mpCamera2;
+                        //         pCamera2 = pKF2->mpCamera2;
+                        //     }
+                        //     else if(bRight1 && !bRight2){
+                        //         R12 = Rrl;
+                        //         t12 = trl;
+                        //         T12 = Trl;
+
+                        //         pCamera1 = pKF1->mpCamera2;
+                        //         pCamera2 = pKF2->mpCamera;
+                        //     }
+                        //     else if(!bRight1 && bRight2){
+                        //         R12 = Rlr;
+                        //         t12 = tlr;
+                        //         T12 = Tlr;
+
+                        //         pCamera1 = pKF1->mpCamera;
+                        //         pCamera2 = pKF2->mpCamera2;
+                        //     }
+                        //     else{
+                        //         R12 = Rll;
+                        //         t12 = tll;
+                        //         T12 = Tll;
+
+                        //         pCamera1 = pKF1->mpCamera;
+                        //         pCamera2 = pKF2->mpCamera;
+                        //     }
+                        // }
+
+                        let epipolar = CAMERA_MODULE.epipolar_constrain(&kp1, &kp2, &r12, &t12, LEVEL_SIGMA2[kp2.octave() as usize]);
+                        if course || epipolar {
+                            best_index = kf2_index as i32;
+                            best_dist = dist;
                         }
                     }
 
-                    // TODO (Stereo)
-                    // if(pKF1->mpCamera2 && pKF2->mpCamera2){
-                    //     if(bRight1 && bRight2){
-                    //         R12 = Rrr;
-                    //         t12 = trr;
-                    //         T12 = Trr;
+                    if best_index >= 0 {
+                        let (kp2, _) = kf_2.features.get_keypoint(best_index as usize);
+                        matches[kf1_index as usize] = Some(best_index as usize);
+                        matched_already.insert(best_index as u32);
+                        if should_check_orientation {
+                            check_orientation_1(
+                                &kp1,
+                                &kp2,
+                                &mut rot_hist, factor, kf1_index
+                            );
 
-                    //         pCamera1 = pKF1->mpCamera2;
-                    //         pCamera2 = pKF2->mpCamera2;
-                    //     }
-                    //     else if(bRight1 && !bRight2){
-                    //         R12 = Rrl;
-                    //         t12 = trl;
-                    //         T12 = Trl;
-
-                    //         pCamera1 = pKF1->mpCamera2;
-                    //         pCamera2 = pKF2->mpCamera;
-                    //     }
-                    //     else if(!bRight1 && bRight2){
-                    //         R12 = Rlr;
-                    //         t12 = tlr;
-                    //         T12 = Tlr;
-
-                    //         pCamera1 = pKF1->mpCamera;
-                    //         pCamera2 = pKF2->mpCamera2;
-                    //     }
-                    //     else{
-                    //         R12 = Rll;
-                    //         t12 = tll;
-                    //         T12 = Tll;
-
-                    //         pCamera1 = pKF1->mpCamera;
-                    //         pCamera2 = pKF2->mpCamera;
-                    //     }
-                    // }
-
-                    let epipolar = CAMERA_MODULE.epipolar_constrain(&kp1, &kp2, &r12, &t12, LEVEL_SIGMA2[kp2.octave() as usize]);
-                    if course || epipolar {
-                        best_index = kf2_index as i32;
-                        best_dist = dist;
-                    }
-                }
-
-                if best_index >= 0 {
-                    let (kp2, _) = kf_2.features.get_keypoint(best_index as usize);
-                    matches[kf1_index as usize] = Some(best_index as usize);
-                    matched_already.insert(best_index as u32);
-                    if should_check_orientation {
-                        check_orientation_1(
-                            &kp1,
-                            &kp2,
-                            &mut rot_hist, factor, kf1_index
-                        );
-
+                        }
                     }
                 }
             }
@@ -1292,26 +1414,35 @@ pub fn search_for_triangulation(
     return Ok(matched_pairs);
 }
 
-pub fn fuse_from_loop_closing(kf_id: &Id, scw: &Sim3, mappoints: &HashMap<usize, Id>, map: &MapLock, th: i32, nnratio: f32) ->  Result<HashMap<Id, Id>, Box<dyn std::error::Error>> {
+pub fn fuse_from_loop_closing(kf_id: &Id, scw: &Sim3, mappoints: &HashMap<usize, Id>, map: &MapLock, th: i32) ->  Result<HashMap<usize, Id>, Box<dyn std::error::Error>> {
     // int ORBmatcher::Fuse(KeyFrame *pKF, Sophus::Sim3f &Scw, const vector<MapPoint *> &vpPoints, float th, vector<MapPoint *> &vpReplacePoint)
 
     // Decompose Scw
-    let s_rcw = {
-        let rot_mat: Mat = (&scw.pose.get_rotation()).into();
-        DVMatrix::new(rot_mat)
-    };
-    let s_tcw = {
-        let trans_mat: Mat = (&scw.pose.get_translation()).into();
-        trans_mat
-    };
+    let tcw = Pose::new(*scw.pose.get_translation() , *scw.pose.get_rotation() * scw.scale);// * scw.scale);
+    let ow = tcw.inverse().get_translation();
 
-    let scw = (s_rcw.row(0).dot(& *s_rcw.row(0))? as f32).sqrt();
-    let rcw = s_rcw.divide_by_scalar(scw); // Should be == s_rCw / scw
+    let mut test_discard_already_found = 0;
+    let mut test_discard_depth = 0;
+    let mut test_discard_not_in_image = 0;
+    let mut test_discard_distance = 0;
+    let mut test_discard_viewing_angle = 0;
+    let mut test_discard_indices = 0;
+    let mut test_discard_levels = 0;
+    let mut final_dist_too_low = 0;
 
-    let tcw = DVMatrix::new(s_tcw).divide_by_scalar(scw); // Should be == scw_mat / scw
-    let ow = DVMatrix::new_expr(rcw.clone().t()?).neg() * &tcw;
+    let already_found: HashSet<Id> = map.read().keyframes.get(kf_id).unwrap().get_mp_matches().iter()
+        .filter(|item| item.is_some() )
+        .map(|item| item.unwrap().0)
+        .collect();
 
-    let mut replace_point = HashMap::<Id, Id>::new();
+    // println!("..fuse from loop closing: Already found {} mappoints", already_found.len());
+    // println!("..fuse from loop closing: mappoints to look at: {}", mappoints.len());
+
+
+    let mut replace_point = HashMap::new();
+    let mut num_mps_replaced = 0;
+    let mut already_replaced = HashSet::new();
+
     let observations_to_add = {
         let mut observations_to_add = vec![];
         let map_lock = map.read();
@@ -1325,48 +1456,49 @@ pub fn fuse_from_loop_closing(kf_id: &Id, scw: &Sim3, mappoints: &HashMap<usize,
             };
 
             // Discard already found
-            if current_kf.get_mp_match_index(&mp_id).is_some() {
+            if already_found.get(&mp_id).is_some() {
+                test_discard_already_found += 1;
                 continue;
             }
 
             // Get 3D Coords.
-            let p3dw: Mat = (&mappoint.position).into();
+            let p3dw = mappoint.position;
 
             // Transform into Camera Coords.
-            let p3dc = DVMatrix::new_expr_res(rcw.mat() * &p3dw + tcw.mat());
-
+            let p3dc = *tcw.get_rotation() * *p3dw + *tcw.get_translation();
+        
             // Depth must be positive
-            if p3dc.at(2) < 0.0 {
+            if p3dc[2] < 0.0 {
+                test_discard_depth += 1;
                 continue;
             }
 
             // Project into Image
-            let invz = 1.0 / p3dc.at(2);
-            let x = p3dc.at(0) * invz;
-            let y = p3dc.at(1) * invz;
-
-            let u = CAMERA_MODULE.fx * x + CAMERA_MODULE.cx;
-            let v = CAMERA_MODULE.fy * y + CAMERA_MODULE.cy;
+            let (u, v) = CAMERA_MODULE.project(DVVector3::new(p3dc));
 
             // Point must be inside the image
             if !current_kf.features.is_in_image(u, v) {
+                test_discard_not_in_image += 1;
                 continue;
             }
 
             // Depth must be inside the scale pyramid of the image
             let max_distance = mappoint.get_max_distance_invariance();
             let min_distance = mappoint.get_min_distance_invariance();
-            let po = DVMatrix::new_expr((p3dw - ow.mat()).into_result()?);
+            let po = *p3dw - *ow;
+            // let po = DVMatrix::new_expr((p3dw - ow.mat()).into_result()?);
             let dist_3d = po.norm();
 
             if dist_3d < min_distance || dist_3d > max_distance {
+                test_discard_distance += 1;
                 continue;
             }
 
             // Viewing angle must be less than 60 deg
-            let pn: Mat = (&mappoint.normal_vector).into();
+            let pn = mappoint.normal_vector;
 
-            if po.dot(&pn)? < 0.5 * dist_3d {
+            if po.dot(&pn) < 0.5 * dist_3d {
+                test_discard_viewing_angle += 1;
                 continue;
             }
 
@@ -1379,6 +1511,7 @@ pub fn fuse_from_loop_closing(kf_id: &Id, scw: &Sim3, mappoints: &HashMap<usize,
             let indices = current_kf.features.get_features_in_area(&u, &v, radius as f64, None);
 
             if indices.is_empty() {
+                test_discard_indices += 1;
                 continue;
             }
 
@@ -1392,6 +1525,7 @@ pub fn fuse_from_loop_closing(kf_id: &Id, scw: &Sim3, mappoints: &HashMap<usize,
                 let kp_level = kp.octave();
 
                 if kp_level < predicted_level - 1 || kp_level > predicted_level {
+                    test_discard_levels += 1;
                     continue;
                 }
 
@@ -1406,15 +1540,26 @@ pub fn fuse_from_loop_closing(kf_id: &Id, scw: &Sim3, mappoints: &HashMap<usize,
 
             // If there is already a MapPoint replace otherwise add new measurement
             if best_dist <= TH_LOW {
-                if current_kf.has_mp_match_at_index(&(best_idx as u32)){
-                    replace_point.insert(*mp_id, current_kf.get_mp_match(&(best_idx as u32)));
+                if let Some((mp_id, _is_outlier)) = current_kf.get_mp_match(&(best_idx as u32)) {
+                    if already_replaced.get(&mp_id).is_some() {
+                        continue;
+                    } else {
+                        already_replaced.insert(mp_id);
+                        replace_point.insert(*index, mp_id);
+                        num_mps_replaced += 1;
+                    }
                 } else {
                     observations_to_add.push((kf_id, mp_id, best_idx));
                 }
+            } else {
+                final_dist_too_low += 1;
             }
         }
         observations_to_add
     };
+
+    println!(".. replaced {}, added {}", num_mps_replaced, observations_to_add.len());
+    // println!("..info: {} {} {} {} {} {} {} {}", test_discard_already_found, test_discard_depth, test_discard_not_in_image, test_discard_distance, test_discard_viewing_angle, test_discard_indices, test_discard_levels, final_dist_too_low);
 
     let mut map_write_lock = map.write();
     for (kf_id, mp_id, idx) in observations_to_add {
@@ -1558,15 +1703,19 @@ pub fn fuse(kf_id: &Id, fuse_candidates: &Vec<Option<(Id, bool)>>, map: &MapLock
 
         // If there is already a MapPoint replace otherwise add new measurement
         if best_dist <= TH_LOW {
-            let has_mappoint_match = map.read().keyframes.get(kf_id).unwrap().has_mp_match_at_index(&(best_idx as u32));
-            if has_mappoint_match {
-                let (mp_in_kf_id, mp_in_kf_obs, mp_obs);
-                {
+            let prev_mappoint_match = {
+                let lock = map.read();
+                lock.keyframes.get(kf_id).unwrap().get_mp_match(&(best_idx as u32))
+            };
+
+            if let Some((mp_in_kf_id, _is_outlier)) = prev_mappoint_match {
+                let (mp_in_kf_obs, mp_obs) = {
                     let lock = map.read();
-                    mp_in_kf_id = lock.keyframes.get(kf_id).unwrap().get_mp_match(&(best_idx as u32));
-                    mp_in_kf_obs = lock.mappoints.get(&mp_in_kf_id).unwrap().get_observations().len();
-                    mp_obs = lock.mappoints.get(mp_id).unwrap().get_observations().len();
-                }
+                    let mp_in_kf_obs = lock.mappoints.get(&mp_in_kf_id).unwrap().get_observations().len();
+                    let mp_obs = lock.mappoints.get(&mp_id).unwrap().get_observations().len();
+                    (mp_in_kf_obs, mp_obs)
+                };
+
                 if mp_in_kf_obs > mp_obs {
                     map.write().replace_mappoint(*mp_id, mp_in_kf_id);
                 } else {
@@ -1648,11 +1797,13 @@ fn compute_three_maxima(histo : &Vec<Vec<u32>> , histo_length: i32) -> (i32, i32
 }
 
 fn lower_bound(vec1: &Vec<u32>, vec2: &Vec<u32>, i: usize, j: usize) -> usize {
-    let mut curr = i;
-    while vec1[curr] < vec2[j] {
-        curr += 1;
-    }
-    curr
+    vec1
+    .binary_search_by(|element| match element.cmp(&vec2[j]) {
+        // Since we try to find position of first element,
+        // we treat all equal values as greater to move left.
+        Ordering::Equal => Ordering::Greater,
+        ord => ord,
+    }).unwrap_err()
 }
 
 
@@ -1662,8 +1813,6 @@ pub fn descriptor_distance(desc1: &Mat, desc2: &Mat) -> i32 {
     //     a, b, opencv::core::NormTypes::NORM_HAMMING as i32, &Mat::default()
     // ).unwrap() as i32;
     // But much faster!!
-
-
     dvos3binding::ffi::descriptor_distance(
         &dvos3binding::ffi::WrapBindCVRawPtr { 
             raw_ptr: dvos3binding::BindCVRawPtr {

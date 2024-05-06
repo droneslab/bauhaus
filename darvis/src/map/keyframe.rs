@@ -110,6 +110,7 @@ impl KeyFrame {
         if self.parent.is_none() && !is_init_kf { 
             let new_parent = Some(self.connections.first_connected_kf());
             self.parent = new_parent;
+            println!("KF {} new parent {}", self.id, new_parent.unwrap());
             new_parent
         } else {
             None
@@ -120,8 +121,7 @@ impl KeyFrame {
 
     pub fn clone_matches(&self) -> MapPointMatches { self.mappoint_matches.clone() }
     pub fn get_mp_matches(&self) -> &Vec<Option<(i32, bool)>> { &self.mappoint_matches.matches }
-    pub fn get_mp_match(&self, index: &u32) -> Id { self.mappoint_matches.get(index) }
-    pub fn has_mp_match_at_index(&self, index: &u32) -> bool { self.mappoint_matches.has(index) }
+    pub fn get_mp_match(&self, index: &u32) -> Option<(Id, bool)> { self.mappoint_matches.get(*index as usize) }
     pub fn get_mp_match_index(&self, id: &Id) -> Option<usize> { 
         self.mappoint_matches.matches.iter().position(|item| item.is_some() && item.unwrap().0 == *id)
     }
@@ -219,11 +219,12 @@ impl MapPointMatches {
         }
     }
 
-    pub fn get(&self, index: &u32) -> Id {
-        self.matches[*index as usize].unwrap().0
+    pub fn len(&self) -> usize {
+        self.matches.len()
     }
-    pub fn has(&self, index: &u32) -> bool {
-        self.matches[*index as usize].is_some()
+
+    pub fn get(&self, index: usize) -> Option<(Id, bool)> {
+        self.matches[index]
     }
 
     pub fn add(&mut self, index: u32, mp_id: Id, is_outlier: bool) -> Option<Id> {

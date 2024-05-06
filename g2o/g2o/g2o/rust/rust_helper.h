@@ -61,7 +61,7 @@ namespace g2o {
         rust::Vec<int> remove_sim3_edges_with_chi2(float chi2_threshold);
 
         // optimization
-        void optimize(int iterations, bool online);
+        void optimize(int iterations, bool online, bool compute_active_errors);
         Pose recover_optimized_frame_pose(int vertex_id) const;
         Position recover_optimized_mappoint_pose(int vertex_id) const;
         RustSim3 recover_optimized_sim3(int vertex_id) const;

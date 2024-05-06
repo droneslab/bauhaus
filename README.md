@@ -111,11 +111,8 @@ cargo run [DATASET] config.yaml
 **Using the Visualizer**
 1. Download the [foxglove application](https://foxglove.dev/). This can be on any device (does not need to be the test device).
 2. Open foxglove, click on `layout` in the top right corner, then `import from file`. Load the file in `foxglove/foxglovelayout.json`.
-3. Make sure the `visualizer` actor in `config.yaml` is not commented out.
-4. Run the system. After the program is done, it will write the file `darvis/results/out.mcap`. 
-5. In foxglove, click `file > open local file` and load `darvis/results/out.mcap`.
-
-Currently there is no way to stream the visualization in real-time. To do that, you would need to use the [foxglove websocket](https://foxglove.dev/docs/studio/connection/custom#live-connection) but this requires compiling a custom server in C++, Python, or TypeScript. You should be able to do it with C++ with ffi bindings, but we have not implemented this (yet?).
+3. Make sure the `visualizer` actor in `config.yaml` is not commented out. In the actor settings, change the setting `stream" to either true or false (true will stream to a websocket, false will save to an mcap file for later replay).
+4. Run the system. If you are streaming, the foxglove application should update with the visualization in a second or two. If you are not streaming, the system will write the file `darvis/results/out.mcap` after execution is over. To open this file in foxglove, click `file > open local file`.
 
 For longer datasets, the mcap file size can get unreasonably large because it saves all the images. You can turn this off by setting the `image_draw_type` setting in the visualizer actor to `none`. The other valid options are `plain` (unmodified images), `features` (detected features), and `featuresandmatches` (current and previous image with feature matches highlighted).
 

@@ -26,6 +26,10 @@ impl System {
     pub fn find(&self, name: &str) -> &Sender {
         self.actors.get(name).expect(format!("Could not find actor {}", name).as_str())
     }
+    pub fn try_send(&self, actor_name: &str, message: MessageBox) -> Option<()> {
+        self.actors.get(actor_name)?.send(message).ok()
+    }
+
     pub fn send(&self, actor_name: &str, message: MessageBox) {
         self.find(actor_name).send(message).unwrap_or_else(|_| panic!("Could not send message to actor {}", actor_name));
     }

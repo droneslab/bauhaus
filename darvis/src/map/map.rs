@@ -94,6 +94,7 @@ impl Map {
         let full_mappoint = MapPoint::new(position, ref_kf_id, origin_map_id, self.last_mp_id);
         self.mappoints.insert(self.last_mp_id, full_mappoint);
 
+        // println!("Create MP {} with observations to {:?}", new_mp_id, observations_to_add);
         for (kf_id, _num_keypoints, index) in observations_to_add {
             if self.keyframes.get(&kf_id).is_none() {
                 // Stale reference to deleted keyframe
@@ -133,14 +134,15 @@ impl Map {
             let mp_matches = self.keyframes.get(&new_kf_id).unwrap().get_mp_matches().clone();
             // trace!("Create kf {} mp matches: {:?}", new_kf_id, mp_matches);
 
+            let mut total_matches = 0;
             for i in 0..mp_matches.len() {
-                if mp_matches[i].is_some() {
-                    let mp_id = self.keyframes.get(&new_kf_id).unwrap().get_mp_match(&(i as u32));
+                if let Some((mp_id, _is_outlier)) = self.keyframes.get(&new_kf_id).unwrap().get_mp_match(&(i as u32)) {
                     // Add observation for mp->kf
                     if let Some(mp) = self.mappoints.get_mut(&mp_id) {
                         mp.add_observation(&new_kf_id, num_keypoints, i as u32);
                         // trace!("Add observation for mp->kf: {} {} {}", mp_id, new_kf_id, i);
                         // self.add_observation(new_kf_id, mp_id, i as u32, false);
+                        total_matches += 1;
                     } else {
                         self.keyframes.get_mut(&new_kf_id).unwrap().mappoint_matches.delete_at_indices((i as i32, -1));
                         // trace!("Delete observation for kf->mp: {} {} {}", new_kf_id, mp_id, i);
@@ -148,10 +150,11 @@ impl Map {
                         // Mappoint was deleted by local mapping but not deleted here yet 
                         // because the kf was not in the map at the time.
                     }
-
                     self.update_mappoint(mp_id);
                 }
             }
+            println!("Insert new KF {}, with {} mappoint matches", new_kf_id, total_matches);
+
 
             // Update Connections
             self.update_connections(new_kf_id);
@@ -179,8 +182,6 @@ impl Map {
         if kf_id == self.initial_kf_id {
             return;
         }
-
-        info!("Discard keyframe {}", kf_id);
 
         let (connections1, matches1, parent1, mut children1);
         {
@@ -278,9 +279,11 @@ impl Map {
         //Increase counter for those keyframes
         let mut kf_counter = HashMap::<Id, i32>::new();
         let kf = self.keyframes.get_mut(&main_kf_id).unwrap();
+        let mut total_mps = 0;
         for item in kf.get_mp_matches() {
             if let Some((mp_id, _)) = item {
                 if let Some(mp) = self.mappoints.get(&mp_id) {
+                    total_mps += 1;
                     for kf_id in mp.get_observations().keys() {
                         if *kf_id != main_kf_id {
                             *kf_counter.entry(*kf_id).or_insert(0) += 1;
@@ -289,6 +292,8 @@ impl Map {
                 }
             }
         }
+        // println!("Update connections for kf {}, has {} total mappoint matches", main_kf_id, total_mps);
+        // println!("KF counter: {:?}", kf_counter);
 
         if kf_counter.is_empty() {
             error!("map::update_connections;kf counter is empty");
@@ -303,10 +308,13 @@ impl Map {
             kf_counter.insert(kf_max, count_max);
         }
 
+        let th = 15;
         for (kf_id, weight) in &kf_counter {
             self.keyframes.get_mut(&kf_id).unwrap().add_connection(main_kf_id, *weight);
             self.keyframes.get_mut(&main_kf_id).unwrap().add_connection(*kf_id, *weight);
         }
+        // println!("UpdateConnections, kf {}... {:?}", main_kf_id, kf_counter);
+
         let parent_kf_id = self.keyframes.get_mut(&main_kf_id).unwrap().add_all_connections(kf_counter, main_kf_id == self.initial_kf_id);
         if parent_kf_id.is_some() {
             parent_kf_id.map(|parent_kf| {
@@ -320,11 +328,6 @@ impl Map {
         self.mappoints.get_mut(&mp_id).unwrap().add_observation(&kf_id, num_keypoints, index);
 
         let old_mp_match = self.keyframes.get_mut(&kf_id).unwrap().mappoint_matches.add(index, mp_id, is_outlier);
-
-        if let Some(old_mp_id) = old_mp_match {
-            warn!("There should not be an old mp match, kf {}, new mp {}, old mp {}", kf_id, mp_id, old_mp_id);
-
-        }
     }
 
     pub fn delete_observation(&mut self, kf_id: Id, mp_id: Id) {
