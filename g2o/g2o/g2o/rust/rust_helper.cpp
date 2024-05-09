@@ -294,6 +294,8 @@ namespace g2o {
             vSim3->_focal_length2[1] = fy;
         }
         optimizer->addVertex(vSim3);
+
+        std::cout << "keyframe vertex " << vertex_id << " with estimate " << this->format_sim3(sim3) << std::endl;
     }
 
     Sim3 BridgeSparseOptimizer::format_sim3(RustSim3 sim3) const {
@@ -361,6 +363,8 @@ namespace g2o {
         e->setVertex(0, dynamic_cast<OptimizableGraph::Vertex*>(optimizer->vertex(vertex_id_j)));
         e->setMeasurement(this->format_sim3(observation));
         e->information() = matLambda;
+
+        std::cout << "Add edge " << vertex_id_i << "->" << vertex_id_j << " with observation: " << this->format_sim3(observation) << std::endl;
 
         optimizer->addEdge(e);
 

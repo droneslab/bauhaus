@@ -217,7 +217,7 @@ impl std::fmt::Debug for Pose {
 }
 
 
-#[derive(Copy, Debug)]
+#[derive(Copy)]
 pub struct Sim3 {
     pub pose: Pose,
     pub scale: f64,
@@ -271,6 +271,22 @@ impl Mul for Sim3 {
         }
     }
 }
+/* Pretty print for testing */
+impl std::fmt::Debug for Sim3 {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let rot = self.pose.get_quaternion();
+        let trans = self.pose.get_translation();
+
+        write!(
+            f,
+            "t[{:.5},{:.5},{:.5}] r[{:.4},{:.4},{:.4},{:.4}] s {:.3}",
+            trans[0], trans[1], trans[2],
+            rot[0], rot[1], rot[2], rot[3],
+            self.scale
+        )
+    }
+}
+
 impl Into<g2o::ffi::RustSim3> for Sim3 {
     fn into(self) -> g2o::ffi::RustSim3 {
         let pose: g2o::ffi::Pose = self.pose.into();

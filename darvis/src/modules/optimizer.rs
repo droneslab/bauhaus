@@ -880,11 +880,11 @@ pub fn optimize_essential_graph(
                 *kf_id == lock.initial_kf_id,
                 false,
             );
-            // println!("keyframe vertex {} with estimate {:?}", kf.id, estimate);
+            println!("keyframe vertex {} with estimate {:?}", kf.id, estimate);
         }
 
         // Set loop edges
-        let min_feat = 60;
+        let min_feat = 80;
         // print!("Loop edges #1: ");
         for (kf_id, connected_kfs) in &loop_connections {
             let kf = lock.keyframes.get(kf_id).unwrap();
@@ -905,6 +905,7 @@ pub fn optimize_essential_graph(
                     sji.into(),
                 );
                 // print!("{} -> {} , ", connected_kf_id, kf_id);
+                println!("(Rust) Add edge {}->{} with observation {:?}", connected_kf_id, kf_id, sji);
                 inserted_edges.insert((min(*kf_id, *connected_kf_id), max(*connected_kf_id, *kf_id)));
             }
         }
@@ -933,6 +934,7 @@ pub fn optimize_essential_graph(
                         sji.into(),
                     );
                     // print!("{} -> {}, ", parent_id, kf_id);
+                    println!("(Rust) Add edge {}->{} with observation {:?}", parent_id, kf_id, sji);
                 },
                 None => { error!("No parent kf for kf {}", kf_id);}
             };
@@ -954,6 +956,7 @@ pub fn optimize_essential_graph(
                         *kf_id,
                         sli.into(),
                     );
+                    println!("(Rust) Add edge {}->{} with observation {:?}", edge_kf_id, kf_id, sli);
                     // print!("{} -> {} (LOOP EDGE), ", edge_kf_id, kf_id);
                 }
             }
@@ -980,6 +983,7 @@ pub fn optimize_essential_graph(
                             *kf_id,
                             sni.into(),
                         );
+                        println!("(Rust) Add edge {}->{} with observation {:?}", covis_kf_id, kf_id, sni);
                         // print!("{} -> {}, ", covis_kf_id, kf_id);
                     }
                 }
