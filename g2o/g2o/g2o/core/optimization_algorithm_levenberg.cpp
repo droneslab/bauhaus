@@ -151,7 +151,7 @@ namespace g2o {
     if (qmax == _maxTrialsAfterFailure->value() || rho==0)
     {
       // cout << "qmax = " << qmax << "             rho = " << rho << endl;
-      std::cout << "failure ... maxtrials reached. qmax == " << qmax << ", rho == " << rho << std::endl;
+      std::cout << "terminate ... maxtrials reached. qmax == " << qmax << ", rho == " << rho << std::endl;
       return Terminate;
     }
 
