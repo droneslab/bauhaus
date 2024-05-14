@@ -421,7 +421,12 @@ namespace g2o {
         return format_sim3;
     }
 
+    void BridgeSparseOptimizer::save(rust::Str filename, int save_id) const
+    {   
+        bool is_saved = optimizer->save((std::to_string(save_id)+"_"+filename.data()).c_str()); 
 
+
+    }
     //** Optimization *//
     void BridgeSparseOptimizer::optimize(int iterations, bool online, bool compute_active_errors) {
         optimizer->initializeOptimization();

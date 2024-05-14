@@ -15,3 +15,5 @@ darvis/results/*
 foxglove/results/*
 darvis/autogen_*
 *.pyc
+*.g2o
+*.log

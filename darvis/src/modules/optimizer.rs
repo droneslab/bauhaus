@@ -995,7 +995,15 @@ pub fn optimize_essential_graph(
 
     // Optimize!
     println!("optimize essential");
+
+    optimizer.save("before_optimize_ess_darvis.g2o\0", curr_kf as i32);
+
     optimizer.pin_mut().optimize(20, false, true);
+
+    optimizer.save("after_optimize_ess_darvis.g2o\0",curr_kf as i32);
+
+
+
 
     let mut corrected_swc = HashMap::new();
     {
@@ -1167,7 +1175,13 @@ pub fn optimize_sim3(
 
     // Optimize!
     println!("optimize sim3");
+
+    optimizer.save("before_optimize_darvis_sim3.g2o\0",0);
+
     optimizer.pin_mut().optimize(5, false, false);
+
+
+    optimizer.save("after_optimize_darvis_sim3.g2o\0",1);
 
     // Check inliers
     let removed_edge_indexes = optimizer.pin_mut().remove_sim3_edges_with_chi2(th2 as f32);
