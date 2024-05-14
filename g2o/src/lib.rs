@@ -168,6 +168,12 @@ pub mod ffi {
             vertex: i32,
         ) -> RustSim3;
 
+        fn save(
+            self: &BridgeSparseOptimizer,
+            filename: &str, 
+            save_id: i32,
+        );
+
         // optimization within edge
         // Note: BridgeSparseOptimizer has vector of RustEdge types, call get_mut_edges to access
         // the vec and then iterate through it and call functions on each edge inside.

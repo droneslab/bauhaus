@@ -66,6 +66,8 @@ namespace g2o {
         Position recover_optimized_mappoint_pose(int vertex_id) const;
         RustSim3 recover_optimized_sim3(int vertex_id) const;
 
+        void save(rust::Str filename, int save_id) const;
+
         // Note: see explanation under get_mut_edges in lib.rs for why we do this
         std::vector<RustXYZEdge> xyz_edges;
         std::vector<RustXYZOnlyPoseEdge> xyz_onlypose_edges;

@@ -86,7 +86,7 @@ actors:
        settings:
           -
             name: stream # if true, stream to websocket. if false, save to mcap file
-            value: true
+            value: false
             type: bool
           - name: port # port used if streaming
             value: 8765
@@ -175,7 +175,7 @@ actors:
 
       -
        name: LOOP_CLOSING
-       tag: "orbslam2 loop closing"
+       tag: "orbslam3 loop closing"
        receiver_bound: 1
        settings:
           - 
