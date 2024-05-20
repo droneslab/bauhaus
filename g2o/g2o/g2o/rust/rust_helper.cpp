@@ -293,6 +293,17 @@ namespace g2o {
             vSim3->_focal_length2[0] = fx;
             vSim3->_focal_length2[1] = fy;
         }
+        else
+        {
+            vSim3->_principle_point1[0] = 0;
+            vSim3->_principle_point1[1] = 0;
+            vSim3->_focal_length1[0] = 0;
+            vSim3->_focal_length1[1] = 0;
+            vSim3->_principle_point2[0] = 0;
+            vSim3->_principle_point2[1] = 0;
+            vSim3->_focal_length2[0] = 0;
+            vSim3->_focal_length2[1] = 0; 
+        }
         optimizer->addVertex(vSim3);
     }
 
@@ -419,7 +430,12 @@ namespace g2o {
         return format_sim3;
     }
 
+    void BridgeSparseOptimizer::save(rust::Str filename, int save_id) const
+    {   
+        bool is_saved = optimizer->save((std::to_string(save_id)+"_"+filename.data()).c_str()); 
 
+
+    }
     //** Optimization *//
     void BridgeSparseOptimizer::optimize(int iterations, bool online, bool compute_active_errors) {
         optimizer->initializeOptimization();
