@@ -880,122 +880,115 @@ pub fn optimize_essential_graph(
                 *kf_id == lock.initial_kf_id,
                 false,
             );
-            println!("keyframe vertex {} with estimate {:?}", kf.id, estimate);
+            println!("Sofiya essential graph keyframe vertex {} with estimate {:?}", kf.id, estimate);
         }
 
         // Set loop edges
-        let min_feat = 80;
-        // print!("Loop edges #1: ");
-        for (kf_id, connected_kfs) in &loop_connections {
-            let kf = lock.keyframes.get(kf_id).unwrap();
-            let siw = v_scw.get(&kf_id).unwrap();
+        let min_feat = 70;
+        // println!("Min feat is {}!", min_feat);
+        // print!("Loop edges #1:");
+        for (kf_i_id, connected_kfs) in &loop_connections {
+            let kf_i = lock.keyframes.get(kf_i_id).unwrap();
+            let siw = v_scw.get(&kf_i_id).unwrap();
             let swi = siw.inverse();
 
-            for connected_kf_id in connected_kfs {
+            for kf_j in connected_kfs {
                 // println!("kf_id: {}, curr_kf: {}, connected_kf_id: {}, loop_kf: {}, weight: {}", kf_id, curr_kf, connected_kf_id, loop_kf, kf.get_connected_kf_weight(*connected_kf_id));
-                if (*kf_id != curr_kf || *connected_kf_id != loop_kf) && kf.get_connected_kf_weight(*connected_kf_id) < min_feat {
+                if (kf_i.id != curr_kf || *kf_j != loop_kf) && kf_i.get_connected_kf_weight(*kf_j) < min_feat {
+                    // print!("skip {}->{} ({})", kf_i_id, kf_j, kf_i.get_connected_kf_weight(*kf_j));
                     continue;
                 }
 
-                let sjw = v_scw.get(&connected_kf_id).unwrap();
+                let sjw = v_scw.get(&kf_j).unwrap();
                 let sji = *sjw * swi;
                 optimizer.pin_mut().add_one_sim3_edge(
-                    *connected_kf_id,
-                    *kf_id,
+                    *kf_i_id,
+                    *kf_j,
                     sji.into(),
                 );
-                // print!("{} -> {} , ", connected_kf_id, kf_id);
-                println!("(Rust) Add edge {}->{} with observation {:?}", connected_kf_id, kf_id, sji);
-                inserted_edges.insert((min(*kf_id, *connected_kf_id), max(*connected_kf_id, *kf_id)));
+                inserted_edges.insert((min(*kf_i_id, *kf_j), max(*kf_i_id, *kf_j)));
+                // print!("insert {}->{}, ", kf_i_id, kf_j);
             }
         }
         // println!();
 
         // Set normal edges
-        for (kf_id, kf) in &lock.keyframes {
-            // println!("Set normal edges for kf {}", kf_id);
-            let swi = match non_corrected_sim3.get(&kf_id) {
+        for (kf_i_id, kf_i) in &lock.keyframes {
+            let swi = match non_corrected_sim3.get(&kf_i_id) {
                 Some(sim3) => sim3.inverse(),
-                None => * v_scw.get(&kf_id).unwrap()
+                None => * v_scw.get(&kf_i_id).unwrap()
             };
 
             // Spanning tree edge
-            // print!("Span edges: ");
-            match kf.parent {
-                Some(parent_id) => {
-                    let sjw = match non_corrected_sim3.get(&parent_id) {
+            // print!("Span edges:");
+            match kf_i.parent {
+                Some(kf_j_id) => {
+                    let sjw = match non_corrected_sim3.get(&kf_j_id) {
                         Some(sim3) => sim3.clone(),
-                        None => * v_scw.get(&parent_id).unwrap()
+                        None => * v_scw.get(&kf_j_id).unwrap()
                     };
                     let sji = sjw * swi;
                     optimizer.pin_mut().add_one_sim3_edge(
-                        parent_id,
-                        *kf_id,
+                        *kf_i_id,
+                        kf_j_id,
                         sji.into(),
                     );
-                    // print!("{} -> {}, ", parent_id, kf_id);
-                    println!("(Rust) Add edge {}->{} with observation {:?}", parent_id, kf_id, sji);
+                    // println!("{}->{}, ", kf_i_id, kf_j_id);
                 },
-                None => { error!("No parent kf for kf {}", kf_id);}
+                None => { error!("No parent kf for kf {}", kf_i_id);}
             };
-            // println!();
-
 
             // Loop edges
-            // print!("Loop edges #2: ");
-            let loop_edges = kf.get_loop_edges();
+            let loop_edges = kf_i.get_loop_edges();
+            // print!("Loop edges #2:");
             for edge_kf_id in loop_edges {
-                if *edge_kf_id != *kf_id {
+                if *edge_kf_id != *kf_i_id {
                     let slw = match non_corrected_sim3.get(&edge_kf_id) {
                         Some(sim3) => sim3.clone(),
                         None => * v_scw.get(&edge_kf_id).unwrap()
                     };
                     let sli = slw * swi;
                     optimizer.pin_mut().add_one_sim3_edge(
+                        *kf_i_id,
                         *edge_kf_id,
-                        *kf_id,
                         sli.into(),
                     );
-                    println!("(Rust) Add edge {}->{} with observation {:?}", edge_kf_id, kf_id, sli);
-                    // print!("{} -> {} (LOOP EDGE), ", edge_kf_id, kf_id);
+                    // print!("{}->{}, ", kf_i_id, edge_kf_id);
                 }
             }
             // println!();
 
-
             // Covisibility graph edges
-            let parent_kf = kf.parent;
-            // print!("Covisible edges: ");
-            for covis_kf_id in kf.get_covisibles_by_weight(100) {
-                if (parent_kf != Some(covis_kf_id) && !kf.children.contains(&covis_kf_id)) && !loop_edges.contains(&covis_kf_id) {
-                    if covis_kf_id < *kf_id {
-                        if inserted_edges.contains(&(min(covis_kf_id, *kf_id), max(covis_kf_id, *kf_id))) {
+            let parent_kf = kf_i.parent;
+            // print!("Covisible edges:");
+            for kf_n in kf_i.get_covisibles_by_weight(min_feat) {
+                if parent_kf != Some(kf_n) && !kf_i.children.contains(&kf_n) {
+                    if kf_n < *kf_i_id {
+                        if inserted_edges.contains(&(min(*kf_i_id, kf_n), max(*kf_i_id, kf_n))) {
                             continue;
                         }
-                        let snw = match non_corrected_sim3.get(&covis_kf_id) {
+                        let snw = match non_corrected_sim3.get(&kf_n) {
                             Some(sim3) => sim3.clone(),
-                            None => * v_scw.get(&covis_kf_id).unwrap()
+                            None => * v_scw.get(&kf_n).unwrap()
                         };
                         let sni = snw * swi;
 
                         optimizer.pin_mut().add_one_sim3_edge(
-                            covis_kf_id,
-                            *kf_id,
+                            *kf_i_id,
+                            kf_n,
                             sni.into(),
                         );
-                        println!("(Rust) Add edge {}->{} with observation {:?}", covis_kf_id, kf_id, sni);
-                        // print!("{} -> {}, ", covis_kf_id, kf_id);
+                        // print!("{}->{}, ", kf_i_id, kf_n);
                     }
                 }
             }
             // println!();
-
         }
     }
 
     // Optimize!
     println!("optimize essential");
-    optimizer.pin_mut().optimize(20, false, true);
+    optimizer.pin_mut().optimize(20, false, false);
 
     let mut corrected_swc = HashMap::new();
     {
