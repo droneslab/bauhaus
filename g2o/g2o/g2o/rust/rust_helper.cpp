@@ -276,7 +276,7 @@ namespace g2o {
     void BridgeSparseOptimizer::add_vertex_sim3_expmap (
         int vertex_id, RustSim3 sim3, bool fix_scale, bool set_fixed, bool set_camera_params
     ) {
-        g2o::VertexSim3Expmap * vSim3 = new g2o::VertexSim3Expmap();    
+        g2o::VertexSim3Expmap * vSim3 = new g2o::VertexSim3Expmap();
         vSim3->setEstimate(this->format_sim3(sim3));
         vSim3->setId(vertex_id);
         vSim3->setFixed(set_fixed);
@@ -294,8 +294,6 @@ namespace g2o {
             vSim3->_focal_length2[1] = fy;
         }
         optimizer->addVertex(vSim3);
-
-        std::cout << "keyframe vertex " << vertex_id << " with estimate " << this->format_sim3(sim3) << std::endl;
     }
 
     Sim3 BridgeSparseOptimizer::format_sim3(RustSim3 sim3) const {
@@ -359,12 +357,12 @@ namespace g2o {
         const Eigen::Matrix<double,7,7> matLambda = Eigen::Matrix<double,7,7>::Identity();
 
         EdgeSim3* e = new EdgeSim3();
-        e->setVertex(1, dynamic_cast<OptimizableGraph::Vertex*>(optimizer->vertex(vertex_id_i)));
-        e->setVertex(0, dynamic_cast<OptimizableGraph::Vertex*>(optimizer->vertex(vertex_id_j)));
+        e->setVertex(0, dynamic_cast<OptimizableGraph::Vertex*>(optimizer->vertex(vertex_id_i)));
+        e->setVertex(1, dynamic_cast<OptimizableGraph::Vertex*>(optimizer->vertex(vertex_id_j)));
         e->setMeasurement(this->format_sim3(observation));
         e->information() = matLambda;
 
-        std::cout << "Add edge " << vertex_id_i << "->" << vertex_id_j << " with observation: " << this->format_sim3(observation) << std::endl;
+        // std::cout << "Sofiya essential graph Add edge " << vertex_id_i << "->" << vertex_id_j << " with observation: " << this->format_sim3(observation) << std::endl;
 
         optimizer->addEdge(e);
 
