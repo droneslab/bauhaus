@@ -293,6 +293,17 @@ namespace g2o {
             vSim3->_focal_length2[0] = fx;
             vSim3->_focal_length2[1] = fy;
         }
+        else
+        {
+            vSim3->_principle_point1[0] = 0;
+            vSim3->_principle_point1[1] = 0;
+            vSim3->_focal_length1[0] = 0;
+            vSim3->_focal_length1[1] = 0;
+            vSim3->_principle_point2[0] = 0;
+            vSim3->_principle_point2[1] = 0;
+            vSim3->_focal_length2[0] = 0;
+            vSim3->_focal_length2[1] = 0; 
+        }
         optimizer->addVertex(vSim3);
 
         std::cout << "keyframe vertex " << vertex_id << " with estimate " << this->format_sim3(sim3) << std::endl;
