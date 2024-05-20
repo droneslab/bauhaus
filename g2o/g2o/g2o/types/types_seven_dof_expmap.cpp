@@ -26,7 +26,22 @@
 
 #include "types_seven_dof_expmap.h"
 
+
+#include "../core/factory.h"
+#include "../stuff/macros.h"
+
 namespace g2o {
+
+  // G2O_USE_TYPE_GROUP(sba);
+  G2O_REGISTER_TYPE_GROUP(sim3);
+
+  G2O_REGISTER_TYPE(VERTEX_SIM3: EXPMAP, VertexSim3Expmap);
+  G2O_REGISTER_TYPE(EDGE_SIM3: EXPMAP, EdgeSim3);
+  G2O_REGISTER_TYPE(EDGE_PROJECT_SIM3_XYZ: EXPMAP, EdgeSim3ProjectXYZ);
+  G2O_REGISTER_TYPE(EDGE_PROJECT_INVERSE_SIM3_XYZ: EXPMAP, EdgeInverseSim3ProjectXYZ);
+  
+
+
 
   VertexSim3Expmap::VertexSim3Expmap() : BaseVertex<7, Sim3>()
   {
