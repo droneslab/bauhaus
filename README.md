@@ -363,6 +363,30 @@ Strings are formatted like: ``TODO (string)``
     - **note**
     - **paper note**
     - **testing**
+ 
+# 5. Link Time Optimization
+- **Detailed Information** 
+To get link time optimization performed on the binary created by rustc (the Rust compiler), it is necessary to use the same versions of LLVM/clang that the current Rust toolchain (in the rust toolchain file in Darvis) uses to compile the C++ code.
+If the Rust toolchain is updated to the latest stable/nightly offered by the Rust language maintainers, chances are that most Linux distributions would not have the correct versions of LLVM/clang. This is because the Rust toolchain is updated quite frequently.
+If the versions do not match, then lld (the linker) will not be able to link the code successfully at the final step. 
+
+Now this poses another problem, namely having multiple versions of clang. One that is installed from the repositories of the distribution and the one that we just compiled. The trick here is to simply build the compiler and not install it. The install operation
+normally represented by make install does not have to be run. If it were to be installed, there is a good chance that the operating system might break. The CMake files for compiling the C++ code all need to be modified to accomodate the use of a specific compiler.
+This is done using set(CMAKE_CXX_COMPILER "path/to/compiler").
+
+The linker, lld will also have to be compiled along with clang and llvm. The path to the linker must also be mentioned in the CMake file. This is done using The path to the linker must also be mentioned in the CMake file. This is done using add_link_options(-fuse-ld=/path/to/linker/ld.lld)
+Along with this, set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE) must also be specified in the CMake files to enable link time optimization. The version of CMake has to be 3.29 for this flag to work. Here we again arrive at the problem of packages in a distribution's repository lagging behind
+the package release. This will most likely mean that cmake would have to be compiled from source or the binary with the right version would have to be used. This has to be added to the path by modifying $PATH to accomodate the location where the cmake binary lives. Also one must pass the following RUSTFLAGS to cargo for enabling cross language link time optimization;RUSTFLAGS="-Clinker-plugin-lto -Clinker=clang -Clink-arg=-fuse-ld=lld" cargo build --release. 
+
+If running the binary on a standalone computer which is different from the computer that compiled the binary, the standalone computer will require a glibc that matches the version required by clang. If there is no match, the binary will not run. 
+To get the binary running, the right version of glibc's shared library (libc.so) has to be compiled from scratch and must be loaded using export LD_LIBRARY_PATH=/path/to/newly/built/libc.so. 
+The dynamic linker as well (ie something that looks like ld-linux-x86-64.so.2) in built glibc directory has to used on the binary. This is accomplished with patchelf, a tool that facilitates the use of a different dynamic linker apart from the one in the system's /usr. 
+The patchelf tool can be installed from the distribution's repos. For a Debian based system, this would be sudo apt-get install patchelf. 
+
+-**Specific Steps**
+
+
+
 
 
 design
