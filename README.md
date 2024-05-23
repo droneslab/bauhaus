@@ -395,7 +395,8 @@ The patchelf tool can be installed from the distribution's repos. For a Debian b
 2. Mention the correct compiler and linker path (path specification mentioned above) in all the CMakeLists.txt - These would be the ones corresponding to g2o,orb_slam3 and DBoW2.
 3. Build a version of cmake above 3.29 or get a copy of the binary from the following link - https://github.com/Kitware/CMake/releases
 4. Add the location of the cmake executable to the $PATH variable using export PATH. (To do this, use echo $PATH and add the location at the beginning using the syntax used in the $PATH variable).
-5. For compiling the project, invoke cargo as follows RUSTFLAGS="-Clinker-plugin-lto -Clinker=/path/to/clang -Clink-arg=-fuse-ld=lld" cargo build --release
+5. For compiling the project, invoke cargo as follows
+   ```RUSTFLAGS="-Clinker-plugin-lto -Clinker=/path/to/clang -Clink-arg=-fuse-ld=lld" cargo build --release```
 
 
 
