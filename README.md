@@ -378,19 +378,24 @@ Now this poses another problem, namely having multiple versions of clang. One th
 normally represented by make install does not have to be run. If it were to be installed, there is a good chance that the operating system might break. All the CMake files for compiling the C++ code need to be modified to accomodate the use of a specific compiler.
 This is done using set(CMAKE_CXX_COMPILER "path/to/compiler").
 
-The linker, lld will also have to be compiled along with clang and llvm. The path to the linker must also be mentioned in the CMake file. This is done using add_link_options(-fuse-ld=/path/to/linker/ld.lld)
-Along with this, set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE) must also be specified in the CMake files to enable link time optimization. The version of CMake has to be 3.29 for this flag to work. Here we again arrive at the problem of packages in a distribution's repository lagging behind
-the package release. This will most likely mean that cmake would have to be compiled from source or the binary with the right version would have to be used. This has to be added to the path by modifying $PATH to accomodate the location where the cmake binary lives (using export PATH). 
+The linker lld, will also have to be compiled along with clang and llvm. The path to the linker must also be mentioned in the CMake file. This is done using add_link_options(-fuse-ld=/path/to/linker/ld.lld)
+Along with this, set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE) must also be specified in the CMake files to enable link time optimization. The version of CMake has to be 3.29 or above for this flag to work. Here we again arrive at the problem of packages in a distribution's repository lagging behind
+the package development. This will most likely mean that cmake would have to be compiled from source or the binary with the right version would have to be used. This has to be added to the path by modifying $PATH to accomodate the location where the cmake binary lives (using export $PATH). 
 Also one must pass the following RUSTFLAGS to cargo for enabling cross language link time optimization;RUSTFLAGS="-Clinker-plugin-lto -Clinker=clang -Clink-arg=-fuse-ld=lld" cargo build --release. 
 
 If running the binary on a standalone computer which is different from the computer that compiled the binary, the standalone computer will require a glibc that matches the version required by clang. If there is no match, the binary will not run. 
 To get the binary running, the right version of glibc's shared library (libc.so) has to be compiled from scratch and must be loaded using export LD_LIBRARY_PATH=/path/to/newly/built/libc.so. 
-The dynamic linker as well (ie something that looks like ld-linux-x86-64.so.2) in built glibc directory has to used on the binary. This is accomplished with patchelf, a tool that facilitates the use of a different dynamic linker apart from the one in the system's /usr. 
+The dynamic linker as well (ie something that looks like ld-linux-x86-64.so.2) in built the glibc directory has to used on the binary. This is accomplished with patchelf, a tool that facilitates the use of a different dynamic linker apart from the one in the system's /usr. 
 The patchelf tool can be installed from the distribution's repos. For a Debian based system, this would be sudo apt-get install patchelf. 
 
 **Specific Steps**
 
-
+**Building Darvis with LTO**
+1. Build the corresponding llvm tools/clang from source. Detailed instructions are given at the following link - https://llvm.org/docs/CMake.html
+2. Mention the correct compiler and linker path (path specification mentioned above) in all the CMakeLists.txt - These would be the ones corresponding to g2o,orb_slam3 and DBoW2.
+3. Build a version of cmake above 3.29 or get a copy of the binary from the following link - https://github.com/Kitware/CMake/releases
+4. Add the location of the cmake executable to the $PATH variable using export PATH. (To do this, use echo $PATH and add the location at the beginning using the syntax used in the $PATH variable).
+5. For compiling the project, invoke cargo as follows RUSTFLAGS="-Clinker-plugin-lto -Clinker=/path/to/clang -Clink-arg=-fuse-ld=lld" cargo build --release
 
 
 
