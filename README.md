@@ -364,8 +364,9 @@ Strings are formatted like: ``TODO (string)``
     - **paper note**
     - **testing**
  
-# 5. Link Time Optimization
-- **Detailed Information** 
+### Link Time Optimization
+ **Detailed Information** 
+ 
 To get link time optimization performed on the binary created by rustc (the Rust compiler), it is necessary to use the same versions of LLVM/clang that the current Rust toolchain (in the rust toolchain file in Darvis) uses to compile the C++ code.
 If the Rust toolchain is updated to the latest stable/nightly offered by the Rust language maintainers, chances are that most Linux distributions would not have the correct versions of LLVM/clang. This is because the Rust toolchain is updated quite frequently.
 If the versions do not match, then lld (the linker) will not be able to link the code successfully at the final step. 
@@ -383,7 +384,7 @@ To get the binary running, the right version of glibc's shared library (libc.so)
 The dynamic linker as well (ie something that looks like ld-linux-x86-64.so.2) in built glibc directory has to used on the binary. This is accomplished with patchelf, a tool that facilitates the use of a different dynamic linker apart from the one in the system's /usr. 
 The patchelf tool can be installed from the distribution's repos. For a Debian based system, this would be sudo apt-get install patchelf. 
 
--**Specific Steps**
+**Specific Steps**
 
 
 
