@@ -363,6 +363,9 @@ Strings are formatted like: ``TODO (string)``
     - **note**
     - **paper note**
     - **testing**
+
+design
+timestamps
  
 ### Link Time Optimization
  **Detailed Information** 
@@ -390,5 +393,4 @@ The patchelf tool can be installed from the distribution's repos. For a Debian b
 
 
 
-design
-timestamps
+
