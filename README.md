@@ -375,7 +375,7 @@ If the Rust toolchain is updated to the latest stable/nightly offered by the Rus
 If the versions do not match, then **lld** (the linker) will not be able to link the code successfully at the final step. 
 
 Now this poses another problem, namely having multiple versions of clang. One that is installed from the repositories of the distribution and the one that we just compiled. The trick here is to simply build the compiler and not install it. The install operation
-normally represented by ```make install``` does not have to be run. If it were to be installed, there is a good chance that the operating system might break. All the ```CMakeList.txt``` files for compiling the C++ code need to be modified to accomodate the use of a specific compiler.
+normally represented by ```make install``` does not have to be run. If it were to be installed, there is a good chance that the operating system might break. All the ```CMakeLists.txt``` files for compiling the C++ code need to be modified to accomodate the use of a specific compiler.
 This is done using ```set(CMAKE_CXX_COMPILER "path/to/compiler")```.
 
 The linker lld, will also have to be compiled along with clang and llvm. The path to the linker must also be mentioned in the CMake file. This is done using ```add_link_options(-fuse-ld=/path/to/linker/ld.lld)```
@@ -391,7 +391,7 @@ The patchelf tool can be installed from the distribution's repos. For a Debian b
 **Building Darvis with LTO**
 1. Build the corresponding llvm tools/clang from source. Detailed instructions are given at the following link - https://llvm.org/docs/CMake.html
 2. The source files for the above are found here - https://github.com/llvm/llvm-project. Sometimes, volunteers may upload the binaries which may be used, however if no binaries exist, the above mentioned will have to be built from source.
-3. Specify the correct compiler and linker path (path specification mentioned above) in all the CMakeLists.txt - These would be the ones corresponding to g2o,orb_slam3 and DBoW2.
+3. Specify the correct compiler and linker path (path specification mentioned above) in all the ```CMakeLists.txt``` - These would be the ones corresponding to g2o,orb_slam3 and DBoW2.
 4. Build a version of cmake above 3.29 or get a copy of the binary from the following link - https://github.com/Kitware/CMake/releases
 5. Add the location of the cmake executable to the $PATH variable using ```export $PATH```. (To do this, use ```echo $PATH``` and add the location at the beginning using the syntax used in the ```$PATH``` variable).
 6. For compiling the project, invoke cargo as follows:
