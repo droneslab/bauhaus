@@ -375,7 +375,7 @@ If the Rust toolchain is updated to the latest stable/nightly offered by the Rus
 If the versions do not match, then **lld** (the linker) will not be able to link the code successfully at the final step. 
 
 Now this poses another problem, namely having multiple versions of clang. One that is installed from the repositories of the distribution and the one that we just compiled. The trick here is to simply build the compiler and not install it. The install operation
-normally represented by make install does not have to be run. If it were to be installed, there is a good chance that the operating system might break. All the CMake files for compiling the C++ code need to be modified to accomodate the use of a specific compiler.
+normally represented by ```make install``` does not have to be run. If it were to be installed, there is a good chance that the operating system might break. All the CMake files for compiling the C++ code need to be modified to accomodate the use of a specific compiler.
 This is done using ```set(CMAKE_CXX_COMPILER "path/to/compiler")```.
 
 The linker lld, will also have to be compiled along with clang and llvm. The path to the linker must also be mentioned in the CMake file. This is done using ```add_link_options(-fuse-ld=/path/to/linker/ld.lld)```
