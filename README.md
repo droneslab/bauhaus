@@ -367,7 +367,7 @@ Strings are formatted like: ``TODO (string)``
 design
 timestamps
  
-### Link Time Optimization
+# 5. Link Time Optimization
  **Detailed Information** 
  
 To get link time optimization performed on the binary created by rustc (the Rust compiler), it is necessary to use the same versions of LLVM/clang that the current Rust toolchain (in the rust toolchain file in Darvis) uses to compile the C++ code.
