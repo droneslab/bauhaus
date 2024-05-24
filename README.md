@@ -385,7 +385,7 @@ the package development. Passing the -flto flag in the build.rs file does not wo
 If running the binary on a standalone computer which is different from the computer that compiled the binary, the standalone computer will require a glibc that matches the version required by clang. If there is no match, the binary will not run. 
 To get the binary running, the right version of glibc's shared library (libc.so) has to be compiled from scratch and must be loaded using ```export LD_LIBRARY_PATH=/path/to/newly/built/libc.so```. 
 The dynamic linker as well (ie something that looks like ld-linux-x86-64.so.2) in built the glibc directory has to used on the binary. This is accomplished with **patchelf**, a tool that facilitates the use of a different dynamic linker apart from the one in the system's /usr. 
-The patchelf tool can be installed from the distribution's repos. For a Debian based system, this would be ```sudo apt-get install patchelf```. 
+The patchelf tool can be installed from the distribution's repos. For a Debian based system, this would be ```sudo apt-get install patchelf```. The executable for darvis would lie within /target/release, it should be called bindarvis. 
 
 **Specific Steps**
 
@@ -396,6 +396,15 @@ The patchelf tool can be installed from the distribution's repos. For a Debian b
 4. Add the location of the cmake executable to the $PATH variable using ```export $PATH```. (To do this, use ```echo $PATH``` and add the location at the beginning using the syntax used in the ```$PATH``` variable).
 5. For compiling the project, invoke cargo as follows:
    ```RUSTFLAGS="-Clinker-plugin-lto -Clinker=/path/to/clang -Clink-arg=-fuse-ld=lld" cargo build --release```
+
+**Running the Darvis binary on a non-development device**
+1. Get a copy of the glibc required by device from the following website - https://ftp.gnu.org/gnu/glibc/. This information (version) will be seen in the terminal if bindarvis is unable to execute.
+2. Compile glibc from source, the instructions are available at the following website - https://sourceware.org/glibc/wiki/Testing/Builds.
+3. Get the bindarvis executable to use the new dynamic linker that we just built using ```patchelf```.
+4. Install patchelf using ```sudo apt-get install patchelf``` for Debian based distros or ```sudo pacman -S patchelf``` for Arch based distros.
+5. Use the following command in the terminal - ```patchelf --set-interpreter /path/where/newly/compiled/ld-linux-x86-64.so/lives /path/of/darvis_executable(bindarvis)```.
+7. Add the directory containing libc.so to ```export LD_LIBRARY_PATH=/path/of/library/with/libc```, this would be where the glibc that we built from source exists.
+
 
 
 
