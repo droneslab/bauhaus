@@ -391,7 +391,7 @@ The patchelf tool can be installed from the distribution's repos. For a Debian b
 
 **Building Darvis with LTO**
 1. Build the corresponding llvm tools/clang from source. Detailed instructions are given at the following link - https://llvm.org/docs/CMake.html
-2. The source files for the above are found here - https://github.com/llvm/llvm-project. Sometimes, volunteers may upload the binaries which may be used, however if no binaries exist, the above mentioned will have to built from source.
+2. The source files for the above are found here - https://github.com/llvm/llvm-project. Sometimes, volunteers may upload the binaries which may be used, however if no binaries exist, the above mentioned will have to be built from source.
 3. Specify the correct compiler and linker path (path specification mentioned above) in all the CMakeLists.txt - These would be the ones corresponding to g2o,orb_slam3 and DBoW2.
 4. Build a version of cmake above 3.29 or get a copy of the binary from the following link - https://github.com/Kitware/CMake/releases
 5. Add the location of the cmake executable to the $PATH variable using ```export $PATH```. (To do this, use ```echo $PATH``` and add the location at the beginning using the syntax used in the ```$PATH``` variable).
