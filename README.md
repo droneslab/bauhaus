@@ -397,7 +397,7 @@ The patchelf tool can be installed from the distribution's repos. For a Debian b
 5. For compiling the project, invoke cargo as follows:
    ```RUSTFLAGS="-Clinker-plugin-lto -Clinker=/path/to/clang -Clink-arg=-fuse-ld=lld" cargo build --release```
 
-**Running the Darvis binary on a non-developmental device**
+**Running the Darvis binary on a non-developmental device** (if running it normally fails)
 1. Get a copy of the glibc required by device from the following website - https://ftp.gnu.org/gnu/glibc/. This information (version) will be seen in the terminal if bindarvis is unable to execute.
 2. Compile glibc from source, the instructions are available at the following website - https://sourceware.org/glibc/wiki/Testing/Builds.
 3. Get the bindarvis executable to use the new dynamic linker that we just built using ```patchelf```.
