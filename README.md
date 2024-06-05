@@ -380,6 +380,48 @@ Strings are formatted like: ``TODO (string)``
     - **paper note**
     - **testing**
 
-
 design
 timestamps
+ 
+# 5. Link Time Optimization
+ **Detailed Information** 
+ 
+To get link time optimization performed on the binary created by rustc (the Rust compiler), it is necessary to use the same versions of LLVM/clang that the current Rust toolchain (in the rust toolchain file in Darvis) uses to compile the C++ code.
+If the Rust toolchain is updated to the latest stable/nightly offered by the Rust language maintainers, chances are that most Linux distributions would not have the correct versions of LLVM/clang. This is because the Rust toolchain is updated quite frequently.
+If the versions do not match, then **lld** (the linker) will not be able to link the code successfully at the final step. 
+
+Now this poses another problem, namely having multiple versions of clang. One that is installed from the repositories of the distribution and the one that we just compiled. The trick here is to simply build the compiler and not install it. The install operation
+normally represented by ```make install``` does not have to be run. If it were to be installed, there is a good chance that the operating system might break. All the ```CMakeLists.txt``` files for compiling the C++ code need to be modified to accomodate the use of a specific compiler.
+This is done using ```set(CMAKE_CXX_COMPILER "path/to/compiler")```.
+
+The linker lld, will also have to be compiled along with clang and llvm. The path to the linker must also be mentioned in the CMake file. This is done using ```add_link_options(-fuse-ld=/path/to/linker/ld.lld)```
+Along with this, ```set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)``` must also be specified in the ```CMakeLists.txt``` files to enable link time optimization. The version of CMake has to be 3.29 or above for this flag to work. Here we again arrive at the problem of packages in a distribution's repository lagging behind the package development. This will most likely mean that cmake would have to be compiled from source or the binary with the right version would have to be used. This has to be added to the path by modifying ```$PATH``` to accomodate the location where the cmake binary lives (using ```export $PATH```). Also one must pass the following ```RUSTFLAGS``` to cargo for enabling cross language link time optimization - ```RUSTFLAGS="-Clinker-plugin-lto -Clinker=clang -Clink-arg=-fuse-ld=lld" cargo build --release```. Note - Passing the -flto flag in the build.rs file does not work. 
+
+If running the binary on a standalone computer which is different from the computer that compiled the binary, the standalone computer will require a glibc that matches the version required by clang. If there is no match, the binary will not run. 
+To get the binary running, the right version of glibc's shared library (libc.so) has to be compiled from scratch and must be loaded using ```export LD_LIBRARY_PATH=/path/to/newly/built/libc.so```. 
+The dynamic linker as well (ie something that looks like ld-linux-x86-64.so.2) in built the glibc directory has to used on the binary. This is accomplished with **patchelf**, a tool that facilitates the use of a different dynamic linker apart from the one in the system's /usr. 
+The patchelf tool can be installed from the distribution's repos. For a Debian based system, this would be ```sudo apt-get install patchelf```. The executable for darvis would lie within /target/release, it should be called bindarvis. 
+
+**Specific Steps**
+
+**Building Darvis with LTO**
+1. Build the corresponding llvm tools/clang from source. Detailed instructions are given at the following link - https://llvm.org/docs/CMake.html
+2. The source files for the above are found here - https://github.com/llvm/llvm-project. Sometimes, volunteers may upload the binaries which may be used, however if no binaries exist, the above mentioned will have to be built from source.
+3. Specify the correct compiler and linker path (path specification mentioned above) in all the ```CMakeLists.txt``` - These would be the ones corresponding to g2o,orb_slam3 and DBoW2.
+4. Build a version of cmake above 3.29 or get a copy of the binary from the following link - https://github.com/Kitware/CMake/releases
+5. Add the location of the cmake executable to the $PATH variable using ```export $PATH```. (To do this, use ```echo $PATH``` and add the location at the beginning using the syntax used in the ```$PATH``` variable).
+6. For compiling the project, invoke cargo as follows:
+   ```RUSTFLAGS="-Clinker-plugin-lto -Clinker=/path/to/clang -Clink-arg=-fuse-ld=lld" cargo build --release```
+
+**Executing the Darvis binary on a non-developmental device** **(if running it normally fails)**
+1. Get a copy of the glibc required by device from the following website - https://ftp.gnu.org/gnu/glibc/. This information (version) will be seen in the terminal if bindarvis is unable to execute.
+2. Compile glibc from source, the instructions are available at the following website - https://sourceware.org/glibc/wiki/Testing/Builds.
+3. Get the bindarvis executable to use the new dynamic linker that we just built using ```patchelf```.
+4. Install patchelf using ```sudo apt-get install patchelf``` for Debian based distros or ```sudo pacman -S patchelf``` for Arch based distros.
+5. Use the following command in the terminal - ```patchelf --set-interpreter /path/where/newly/compiled/ld-linux-x86-64.so/lives /path/of/darvis_executable(bindarvis)```.
+7. Add the directory containing libc.so to ```export LD_LIBRARY_PATH=/path/of/library/with/libc```, this would be where the glibc that we built from source exists.
+
+
+
+
+
