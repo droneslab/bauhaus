@@ -78,8 +78,8 @@ src/Converter.cc
 src/Converter.h
 src/GeometricTools.cc
 src/GeometricTools.h
-../target/cxxbridge/dvos3binding/src/lib.rs.cc
-../target/cxxbridge/dvos3binding/src/lib.rs.h
+../../darvis/target/cxxbridge/dvos3binding/src/lib.rs.cc
+../../darvis/target/cxxbridge/dvos3binding/src/lib.rs.h
 DBoW2/DBoW2/BowVector.h
 DBoW2/DBoW2/FORB.h 
 DBoW2/DBoW2/FClass.h       

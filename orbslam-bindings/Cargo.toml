@@ -10,7 +10,38 @@ path = "src/lib.rs"
 
 [dependencies]
 cxx = "1.0.108"
-opencv = "0.84.5"
+opencv = { version = "0.84.5", default-features = false, features = [
+    "clang-runtime",
+    "imgproc",
+    "imgcodecs",
+    "videoio",
+    "highgui",
+    "calib3d",
+   "features2d",
+    "objdetect",
+    "flann",
+    "photo",
+    "stitching",
+    "gapi",
+    "alphamat",
+    "aruco",
+    "bgsegm",
+    "ccalib",
+    "face",
+    "img_hash",
+    "line_descriptor",
+    "rapid",
+    "rgbd",
+    "stereo",
+    "surface_matching",
+    "tracking",
+    "videostab",
+    "xfeatures2d",
+    "ximgproc",
+    "xobjdetect",
+    "xphoto",
+ 
+] }
 
 [build-dependencies]
 cxx-build = "1.0.108"
