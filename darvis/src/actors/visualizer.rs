@@ -1,4 +1,4 @@
-use std::{borrow::Cow, collections::{BTreeMap, BTreeSet, HashMap, HashSet}, fs::{self, File}, io::BufWriter, sync::Arc};
+use std::{borrow::Cow, collections::{BTreeMap, BTreeSet, HashMap, HashSet}, fs::{self, File}, io::BufWriter, sync::Arc, time::Duration};
 use log::warn;
 use mcap::{Schema, Channel, records::MessageHeader, Writer};
 use opencv::prelude::{Mat, MatTraitConst, MatTraitConstManual};
@@ -15,7 +15,7 @@ use crate::{
     registered_actors::VISUALIZER, MapLock
 };
 
-use super::messages::{LoopClosureEssentialGraphMsg, LoopClosureMapPointFusionMsg};
+use super::messages::{LoopClosureEssentialGraphMsg, LoopClosureGBAMsg, LoopClosureMapPointFusionMsg};
 
 // Default visual stuff //
 // Trajectory and frame
@@ -43,6 +43,7 @@ pub const MAPPOINTS_CHANNEL: &str = "/mappoints";
 pub const LOOP_CLOSURE_CHANNEL: &str = "/loop_closure";
 pub const CONNECTED_KFS_CHANNEL: &str = "/connected_kfs";
 pub const MAP_INFO_CHANNEL: &str = "/map_info";
+pub const DEBUG_CHANNEL: &str = "/debug";
 
 pub struct DarvisVisualizer {
     system: System,
@@ -107,7 +108,8 @@ impl Actor for DarvisVisualizer {
             (MAPPOINTS_CHANNEL, "foxglove.SceneUpdate"),
             (LOOP_CLOSURE_CHANNEL, "foxglove.SceneUpdate"),
             (CONNECTED_KFS_CHANNEL, "foxglove.SceneUpdate"),
-            (MAP_INFO_CHANNEL, "foxglove.MapInfo")
+            (MAP_INFO_CHANNEL, "foxglove.MapInfo"),
+            (DEBUG_CHANNEL, "foxglove.SceneUpdate")
         ]);
 
         let mut writer = if SETTINGS.get::<bool>(VISUALIZER, "stream") {
@@ -147,6 +149,10 @@ impl Actor for DarvisVisualizer {
             } else if message.is::<LoopClosureMapPointFusionMsg>() {
                 let msg = message.downcast::<LoopClosureMapPointFusionMsg>().unwrap_or_else(|_| panic!("Could not downcast visualizer message!"));
                 actor.update_loop_closure_mappoint_fusion(&mut writer,*msg).await;
+            } else if message.is::<LoopClosureGBAMsg>() {
+                let msg = message.downcast::<LoopClosureGBAMsg>().unwrap_or_else(|_| panic!("Could not downcast visualizer message!"));
+                actor.debug_gba(&mut writer, msg.kf_id, msg.timestamp).await.expect("Visualizer could not draw mappoints!");
+
             } else if message.is::<LoopClosureEssentialGraphMsg>() {
                 // let msg = message.downcast::<LoopClosureEssentialGraphMsg>().unwrap_or_else(|_| panic!("Could not downcast visualizer message!"));
                 // actor.update_loop_closure_essential_graph(&mut writer,*msg).await;
@@ -163,9 +169,10 @@ impl Actor for DarvisVisualizer {
 }
 
 impl DarvisVisualizer {
-    async fn update_loop_closure_essential_graph(
+    async fn _update_loop_closure_essential_graph(
         &mut self, writer: &mut FoxGloveWriter, msg: LoopClosureEssentialGraphMsg
     ) -> Result<(), Box<dyn std::error::Error>> {
+        // This is for debugging
         self.clear_scene(writer, msg.timestamp, LOOP_CLOSURE_CHANNEL).await?;
         let mut entities = Vec::new();
         let lock = self.map.read();
@@ -195,6 +202,7 @@ impl DarvisVisualizer {
     async fn update_loop_closure_mappoint_fusion(
         &mut self, writer: &mut FoxGloveWriter, msg: LoopClosureMapPointFusionMsg
     ) -> Result<(), Box<dyn std::error::Error>> {
+        // This is for debugging
         self.clear_scene(writer, msg.timestamp, LOOP_CLOSURE_CHANNEL).await?;
         let mut entities = Vec::new();
         let lock = self.map.read();
@@ -248,6 +256,60 @@ impl DarvisVisualizer {
         };
 
         writer.write(LOOP_CLOSURE_CHANNEL, sceneupdate, msg.timestamp, 0).await?;
+        Ok(())
+    }
+
+    async fn debug_gba(&mut self, writer: &mut FoxGloveWriter, kf_id: Id, timestamp: Timestamp) -> Result<(), Box<dyn std::error::Error>> {
+        // This is for debugging
+        // Draws all mappoints in map (different color if they are matches), simplified version of draw_mappoints
+        // Highlights mappoint matches for given kf_id
+
+        self.clear_scene(writer, timestamp, DEBUG_CHANNEL).await?;
+
+        let mut entities = Vec::new();
+
+        println!("Drawing all mappoints");
+
+        let map = self.map.read();
+        let mut curr_mappoints = HashSet::new();
+        for (mappoint_id, mappoint) in &map.mappoints {
+            let pose = Pose::new_with_default_rot(mappoint.position);
+            curr_mappoints.insert(*mappoint_id);
+
+            let mp_sphere = {
+                if map.keyframes.get(&kf_id).unwrap().get_mp_match_index(mappoint_id).is_some() {
+                    self.create_sphere(&pose, MAPPOINT_MATCH_COLOR.clone(), MAPPOINT_SIZE.clone())
+                } else {
+                    self.create_sphere(&pose, MAPPOINT_COLOR.clone(), MAPPOINT_SIZE.clone())
+                }
+            };
+
+            let mp_entity = self.create_scene_entity(
+                timestamp, "world",
+                format!("mp {}", mappoint_id),
+                vec![],
+                vec![],
+                vec![mp_sphere]
+            );
+            entities.push(mp_entity);
+        }
+
+        println!("Done drawing mappoints");
+        // Delete mappoints that are no longer in the map but were previously drawn
+        let deleted_mappoints = self.previous_mappoints.difference(&curr_mappoints);
+
+        let deletions: Vec<SceneEntityDeletion> = deleted_mappoints.map(|id|
+            self.create_scene_entity_deletion(timestamp, format!("mp {}", id),
+        )).collect();
+        self.previous_mappoints = curr_mappoints;
+
+        let sceneupdate = SceneUpdate {
+            deletions,
+            entities
+        };
+
+        writer.write(DEBUG_CHANNEL, sceneupdate, timestamp, 0).await?;
+
         Ok(())
     }
 
@@ -338,7 +400,6 @@ impl DarvisVisualizer {
             child_frame_id: "camera".to_string(),
             translation: Some(Vector3{ x: trans[0], y: trans[1], z: trans[2] }),
             rotation: Some(Quaternion { x: rot[0], y: rot[1], z: rot[2], w: rot[3] }),
-            // rotation: Some(Quaternion { x: 0.0, y: 0.0, z: 0.0, w: 1.0 }),
 
         };
         writer.write(TRANSFORM_CHANNEL, transform, timestamp, 0).await.expect("Could not write transform");
@@ -371,10 +432,6 @@ impl DarvisVisualizer {
                     vec![]
                 )
             );
-
-            // if *id > 800 {
-            //     println!("Drawing keyframe {} with pose {:?}", id, map.keyframes.get(id).unwrap().pose);
-            // }
 
             entities.push(
                 self.create_scene_entity(
@@ -440,7 +497,10 @@ impl DarvisVisualizer {
     async fn draw_mappoints(&mut self, writer: &mut FoxGloveWriter, local_mappoints: &BTreeSet<Id>, mappoint_matches: &Vec<Option<(Id, bool)>>, timestamp: Timestamp) -> Result<(), Box<dyn std::error::Error>> {
         // Mappoints in map (different color if they are matches)
         // Should be overwritten when there is new info for a mappoint
-        // self.clear_scene(writer, timestamp, MAPPOINTS_CHANNEL).await?;
+
+        // I'm turning off the clear scene for now
+        // it seems like it has better performance but it flashes every time it clears the screen which is annoying
+        self.clear_scene(writer, timestamp, MAPPOINTS_CHANNEL).await?;
 
         let mut entities = Vec::new();
 
@@ -456,7 +516,7 @@ impl DarvisVisualizer {
                 if mappoint_match_ids.contains(&mappoint_id) {
                     // If mappoint is a match with the current frame
                     self.create_sphere(&pose, MAPPOINT_MATCH_COLOR.clone(), MAPPOINT_SIZE.clone())
-                } else if local_mappoints.contains(&mappoint_id) || SETTINGS.get::<bool>(VISUALIZER, "draw_local_mappoints") {
+                } else if local_mappoints.contains(&mappoint_id) && SETTINGS.get::<bool>(VISUALIZER, "draw_local_mappoints") {
                     // If mappoint is not a match, but tracking has it as a local mappoint
                     self.create_sphere(&pose, MAPPOINT_LOCAL_COLOR.clone(), MAPPOINT_SIZE.clone())
                 } else if SETTINGS.get::<bool>(VISUALIZER, "draw_all_mappoints") || !self.previous_mappoints.contains(&mappoint_id) {
@@ -658,9 +718,6 @@ impl DarvisVisualizer {
 }
 
 fn convert_timestamp(timestamp: Timestamp) -> (i64, i32) {
-    // Note: Can remove this later, putting this in here for now so foxglove can show the results a little slower. If removing, also modify write() function
-    // let timestamp = timestamp * 10.0; 
-
     let seconds = timestamp.floor();
     let nanos = (timestamp - seconds) * 1000000000.0;
     (seconds as i64, nanos as i32)
@@ -727,8 +784,6 @@ impl FoxGloveWriter {
         timestamp: Timestamp,
         sequence: u32,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        // Note: Can remove this later, putting this in here for now so foxglove can show the results a little slower
-        // let time_in_nsec = timestamp * 10000000000.0;
         let time_in_nsec = timestamp * 1000000000.0;
 
         match self {

@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use log::{info, warn, error, debug};
 use rustc_hash::FxHashMap;
 use core::{config::{SETTINGS, SYSTEM}, matrix::DVVector3, sensor::Sensor};
@@ -94,7 +94,6 @@ impl Map {
         let full_mappoint = MapPoint::new(position, ref_kf_id, origin_map_id, self.last_mp_id);
         self.mappoints.insert(self.last_mp_id, full_mappoint);
 
-        // println!("Create MP {} with observations to {:?}", new_mp_id, observations_to_add);
         for (kf_id, _num_keypoints, index) in observations_to_add {
             if self.keyframes.get(&kf_id).is_none() {
                 // Stale reference to deleted keyframe
@@ -132,20 +131,14 @@ impl Map {
             // split up the for loop into 2, one for the keyframe update and one for the mappoint update.
             // Possible that that is faster than cloning.
             let mp_matches = self.keyframes.get(&new_kf_id).unwrap().get_mp_matches().clone();
-            // trace!("Create kf {} mp matches: {:?}", new_kf_id, mp_matches);
 
-            let mut total_matches = 0;
             for i in 0..mp_matches.len() {
                 if let Some((mp_id, _is_outlier)) = self.keyframes.get(&new_kf_id).unwrap().get_mp_match(&(i as u32)) {
                     // Add observation for mp->kf
                     if let Some(mp) = self.mappoints.get_mut(&mp_id) {
                         mp.add_observation(&new_kf_id, num_keypoints, i as u32);
-                        // trace!("Add observation for mp->kf: {} {} {}", mp_id, new_kf_id, i);
-                        // self.add_observation(new_kf_id, mp_id, i as u32, false);
-                        total_matches += 1;
                     } else {
                         self.keyframes.get_mut(&new_kf_id).unwrap().mappoint_matches.delete_at_indices((i as i32, -1));
-                        // trace!("Delete observation for kf->mp: {} {} {}", new_kf_id, mp_id, i);
                         continue;
                         // Mappoint was deleted by local mapping but not deleted here yet 
                         // because the kf was not in the map at the time.
@@ -153,8 +146,6 @@ impl Map {
                     self.update_mappoint(mp_id);
                 }
             }
-            println!("Insert new KF {}, with {} mappoint matches", new_kf_id, total_matches);
-
 
             // Update Connections
             self.update_connections(new_kf_id);
@@ -171,8 +162,6 @@ impl Map {
                 let obs = mappoint.get_observations();
                 for (kf_id, indexes) in obs {
                     self.keyframes.get_mut(&kf_id).unwrap().mappoint_matches.delete_at_indices(*indexes);
-
-                    // trace!("Delete observation for kf->mp: {} {} {}", kf_id, id, indexes.0);
                 }
             });
     }
@@ -188,7 +177,7 @@ impl Map {
             // TODO (timing) ... map mutability
             // same as other issue in map.rs, to remove this clone we need to be able to iterate over an immutable ref to matches and children while mutating other keyframes inside the loop
             let kf = self.keyframes.get(&kf_id).unwrap();
-            
+
             if kf.dont_delete {
                 debug!("Loop closing working on keyframe, don't delete.");
                 return;
@@ -205,13 +194,14 @@ impl Map {
             self.keyframes.get_mut(&conn_kf).unwrap().delete_connection(kf_id);
         }
 
+        let mut test_just_mp_ids = Vec::new();
         for mp_match in &matches1 {
             if let Some((mp_id, _)) = mp_match {
                 let should_delete_mappoint = self.mappoints.get_mut(&mp_id).unwrap().delete_observation(&kf_id);
                 if should_delete_mappoint {
                     self.discard_mappoint(&mp_id);
-                    // debug!("Discarded mappoint: {}", mp_id);
                 }
+                test_just_mp_ids.push(mp_id);
             }
         }
 
@@ -264,13 +254,14 @@ impl Map {
         for child_id in children1 {
             self.keyframes.get_mut(&child_id).unwrap().parent = parent1;
             self.keyframes.get_mut(&parent1.unwrap()).expect(&format!("Could not get parent id {}", parent1.unwrap()).to_string()).children.insert(child_id);
-
         }
 
         if parent1.is_some() {
             self.keyframes.get_mut(&parent1.unwrap()).unwrap().children.remove(&kf_id);
         }
         self.keyframes.remove(&kf_id);
+
+        debug!("Discard keyframe {}", kf_id);
     }
 
     pub fn update_connections(&mut self, main_kf_id: Id) {
@@ -279,11 +270,9 @@ impl Map {
         //Increase counter for those keyframes
         let mut kf_counter = HashMap::<Id, i32>::new();
         let kf = self.keyframes.get_mut(&main_kf_id).unwrap();
-        let mut total_mps = 0;
         for item in kf.get_mp_matches() {
             if let Some((mp_id, _)) = item {
                 if let Some(mp) = self.mappoints.get(&mp_id) {
-                    total_mps += 1;
                     for kf_id in mp.get_observations().keys() {
                         if *kf_id != main_kf_id {
                             *kf_counter.entry(*kf_id).or_insert(0) += 1;
@@ -292,28 +281,25 @@ impl Map {
                 }
             }
         }
-        // println!("Update connections for kf {}, has {} total mappoint matches", main_kf_id, total_mps);
-        // println!("KF counter: {:?}", kf_counter);
 
         if kf_counter.is_empty() {
             error!("map::update_connections;kf counter is empty");
             return;
         }
 
+        let th = 15;
         let (&kf_max, &count_max) = kf_counter.iter().max_by_key(|entry | entry.1).unwrap();
-        kf_counter.retain( |&_, count| count > &mut 15 ); //If the counter is greater than threshold add connection
+        kf_counter.retain( |&_, count| *count > th ); //If the counter is greater than threshold add connection
 
         //In case no keyframe counter is over threshold add the one with maximum counter
         if kf_counter.is_empty() {
             kf_counter.insert(kf_max, count_max);
         }
 
-        let th = 15;
         for (kf_id, weight) in &kf_counter {
             self.keyframes.get_mut(&kf_id).unwrap().add_connection(main_kf_id, *weight);
             self.keyframes.get_mut(&main_kf_id).unwrap().add_connection(*kf_id, *weight);
         }
-        // println!("UpdateConnections, kf {}... {:?}", main_kf_id, kf_counter);
 
         let parent_kf_id = self.keyframes.get_mut(&main_kf_id).unwrap().add_all_connections(kf_counter, main_kf_id == self.initial_kf_id);
         if parent_kf_id.is_some() {
@@ -328,6 +314,12 @@ impl Map {
         self.mappoints.get_mut(&mp_id).unwrap().add_observation(&kf_id, num_keypoints, index);
 
         let old_mp_match = self.keyframes.get_mut(&kf_id).unwrap().mappoint_matches.add(index, mp_id, is_outlier);
+        match old_mp_match {
+            Some(old_mp_id) => {
+                self.mappoints.get_mut(&old_mp_id).unwrap().delete_observation(&kf_id);
+            },
+            None => {}
+        }
     }
 
     pub fn delete_observation(&mut self, kf_id: Id, mp_id: Id) {
@@ -342,6 +334,11 @@ impl Map {
         // void MapPoint::Replace(MapPoint* pMP)
 
         if mp_to_replace_id == mp_id {
+            return;
+        }
+
+        if self.mappoints.get(&mp_to_replace_id).is_none() {
+            // Same mappoint could have been replaced recently
             return;
         }
 
@@ -373,6 +370,7 @@ impl Map {
                             error!("KF ({})'s old MP match ({}) should be the same as the one that is replaced ({}).", kf_id, old_mp_id, mp_to_replace_id);
                         }
                     }
+                    // println!("Add observation to replaced mappoint for kf {}", kf_id);
                 }
                 if index_right != -1 {
                     // TODO (STEREO)
@@ -419,13 +417,15 @@ impl Map {
     }
 
     pub fn add_kf_loop_edges(&mut self, kf1_id: Id, kf2_id: Id) {
-        let kfs = self.keyframes.get_many_mut([&kf1_id, &kf2_id]).unwrap();
-        kfs[0].loop_edges.insert(kf2_id);
-        kfs[1].loop_edges.insert(kf1_id);
-        // todo (concurrency)
         {
-            kfs[0].dont_delete = true;
-            kfs[1].dont_delete = true;
+            let kf1 = self.keyframes.get_mut(&kf1_id).unwrap();
+            kf1.loop_edges.insert(kf2_id);
+            kf1.dont_delete = true;
+        }
+        {
+            let kf2 = self.keyframes.get_mut(&kf2_id).unwrap();
+            kf2.loop_edges.insert(kf1_id);
+            kf2.dont_delete = true;
         }
     }
 

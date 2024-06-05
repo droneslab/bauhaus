@@ -1,3 +1,5 @@
+// Loop closing implementation from orbslam2, not sure if it works correctly
+
 // use core::system::Actor;
 // use core::config::{SETTINGS, SYSTEM};
 // use core::sensor::Sensor;

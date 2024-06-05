@@ -54,16 +54,7 @@ impl<T> ReadWriteMap<T> {
     }
 
     pub fn write(&self) -> MappedRwLockWriteGuard<T> {
-        let now = Instant::now();
-        // let write = self.inner.write().unwrap();
-        let write = RwLockWriteGuard::map(self.inner.write(), |unlocked| unlocked);
-
-        let elapsed = now.elapsed().as_millis();
-        if elapsed > 5 {
-            // debug!("LOCKS...Write acquire: {} ms", elapsed);
-            // println!("Backtrace: {}", Backtrace::force_capture());
-        }
-        write
+        RwLockWriteGuard::map(self.inner.write(), |unlocked| unlocked)
     }
 
     pub fn read(&self) -> MappedRwLockReadGuard<T> {

@@ -54,12 +54,6 @@ impl Sim3Solver {
 
         let mut all_indices = vec![]; // mvAllIndices
         let mut indices1 = vec![]; // mvnIndices1
-        // let mut max_error1 = vec![None; total_indices_available]; // mvnMaxError1
-        // let mut max_error2 = vec![None; total_indices_available]; // mvnMaxError2
-        // let mut x_3d_c1 = vec![None; total_indices_available]; // mvX3Dc1
-        // let mut x_3d_c2 = vec![None; total_indices_available]; // mvX3Dc2
-        // let mut p1_im1 = vec![None; total_indices_available]; // mvP1im1
-        // let mut p2_im2 = vec![None; total_indices_available]; // mvP2im2
         let mut max_error1 = vec![]; // mvnMaxError1
         let mut max_error2 = vec![]; // mvnMaxError2
         let mut x_3d_c1 = vec![]; // mvX3Dc1
@@ -68,7 +62,6 @@ impl Sim3Solver {
         let mut p2_im2 = vec![]; // mvP2im2
 
         let mut i = 0;
-        // println!("sim3solver NEW: ");
         for (index, mp2_id) in matches {
             let mp1_id = match keyframe_mp1[*index as usize] {
                 Some((mp1_id, _)) => mp1_id,
@@ -95,25 +88,15 @@ impl Sim3Solver {
             // void Sim3Solver::FromCameraToImage(const vector<Eigen::Vector3f> &vP3Dc, vector<Eigen::Vector2f> &vP2D, GeometricCamera* pCamera)
 
             let x_3d_1w: Mat = (&map_lock.mappoints.get(&mp1_id).unwrap().position).into();
-            // println!("x_3d_1w: {:?}, ", x_3d_1w.data_typed::<f64>()?);
 
             let this_x3dc1 = res_to_mat(&kf1_rot * x_3d_1w + &kf1_trans).unwrap();
-            // println!("kf1_rot without into: {:?}", kf1.pose.get_rotation());
-            // println!("kf1_rot: {:?}, ", kf1_rot.data_typed::<f64>()?);
-            // println!("kf1_trans: {:?}, ", kf1_trans.data_typed::<f64>()?);
-            // println!("...this_x3dc1: {:?}, ", this_x3dc1.data_typed::<f64>()?);
 
             p1_im1.push(CAMERA_MODULE.project((&this_x3dc1).into()));
             x_3d_c1.push(this_x3dc1);
 
             let x_3d_2w: Mat = (&map_lock.mappoints.get(&mp2_id).unwrap().position).into();
-            // println!("x_3d_2w: {:?}, ", x_3d_2w.data_typed::<f64>()?);
 
             let this_x3dc2 = res_to_mat(&kf2_rot * x_3d_2w + &kf2_trans).unwrap();
-            // println!("kf2_rot: {:?}, ", kf2_rot.data_typed::<f64>()?);
-            // println!("kf2_trans: {:?}, ", kf2_trans.data_typed::<f64>()?);
-            // println!("...this_x3dc2: {:?}, ", this_x3dc2.data_typed::<f64>()?);
-            // println!("===");
 
             p2_im2.push(CAMERA_MODULE.project((&this_x3dc2).into()));
             x_3d_c2.push(this_x3dc2);
@@ -216,12 +199,9 @@ impl Sim3Solver {
 
                 available_indices[randi] = available_indices.pop().unwrap();
             }
-            
+
             self.compute_sim3(&p_3d_c1_i, &p_3d_c2_i)?;
-
             self.check_inliers()?;
-
-            // println!("Sim3 inliers: {}", self.current_estimation.inliers_count);
 
             if self.current_estimation.inliers_count > self.current_ransac_state.best_inliers_count {
                 self.current_ransac_state.best_inliers = self.current_estimation.inliers_i.clone();
@@ -275,10 +255,6 @@ impl Sim3Solver {
         // Horn 1987, Closed-form solution of absolute orientataion using unit quaternions
 
         // Step 1: Centroid and relative coordinates
-
-        // println!("ComputeSim3");
-        // println!("P1: {:?}", &p1.data_typed::<f64>()?);
-        // println!("P2: {:?}", &p2.data_typed::<f64>()?);
 
         // pr1 = Relative coordinates to centroid (set 1)
         // O1 = Centroid of P1
@@ -416,8 +392,6 @@ impl Sim3Solver {
             let err1 = dist1.dot(&dist1)?;
             let err2 = dist2.dot(&dist2)?;
 
-            // println!("Error: {} < {}, {} < {}", err1, self.max_error1[i], err2, self.max_error2[i]);
-
             if err1 < self.max_error1[i] && err2 < self.max_error2[i] {
                 self.current_estimation.inliers_i[i] = true;
                 self.current_estimation.inliers_count += 1;
@@ -451,9 +425,6 @@ impl Sim3Solver {
     }
 
     pub fn get_estimates(&mut self) -> Sim3 {
-        // println!("Sim3Solver rotation matrix, before: {:?}", self.current_ransac_state.best_rotation.data_typed::<f64>().unwrap());
-        // let rot: DVRotation = self.current_ransac_state.best_rotation.clone().into();
-        // println!("Sim3Solver rotation matrix, after: {:?}", rot);
         Sim3::new(
             (&self.current_ransac_state.best_translation.clone()).into(),
             self.current_ransac_state.best_rotation.clone().into(),

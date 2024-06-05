@@ -190,6 +190,22 @@ cargo flamegraph -o flamegraph.svg --root --release --ignore-status  -- ~/datase
     ```rust
     let _span = tracy_client::span!("search_for_triangulation");
     ```
+    You can either let the variable go out of scope, or purposefully drop it like this:
+    ```rust
+    drop(span);
+    ```
+- To add messages (shows up as a marker on the tracy log at the time the message was added):
+    ```rust
+    tracy_client::Client::running()
+        .expect("message! without a running Client")
+        .message("message text", 2);
+    ```
+    The 2nd argument to the message function is the callstack depth, [see the tracy-client documentation here](https://docs.rs/tracy-client/latest/tracy_client/struct.Client.html#method.message)
+- To plot custom information:
+    ```rust
+    tracy_client::plot!("LBA: MPs to Optimize", mps_to_optimize as f64);
+    ```
+
 
 **Run**
 - Two ways to run: showing the GUI while the program is running, or logging the output and viewing the results in the GUI afterward. Instructions below are for logging and viewing afterward, but if you want it in real-time you should be able to just run the ``Tracy-release`` command in step 3 instead of the ``capture-release`` command in step 1.

@@ -17,7 +17,6 @@ pub struct KeyFrameDatabase {
 impl KeyFrameDatabase {
     pub fn new() -> Self {
         let vocab_size = VOCABULARY.size();
-        // println!("Vocabulary size: {}", vocab_size);
         KeyFrameDatabase { 
             inverted_file: vec![vec![]; vocab_size]
         }
@@ -58,7 +57,6 @@ impl KeyFrameDatabase {
         let mut place_recognition_words = HashMap::new(); // mnPlaceRecognitionWords
 
         // Search all keyframes that share a word with current frame
-        print!("Detect loop candidates... kfs sharing words: ");
         for word in curr_kf.bow.as_ref().unwrap().bow_vec.get_all_word_ids() {
             for kf_i_id in &self.inverted_file[word as usize] {
                 let different_query = place_recognition_query.get(kf_i_id).is_some() && place_recognition_query[kf_i_id] != curr_kf_id;
@@ -69,13 +67,11 @@ impl KeyFrameDatabase {
                     if !connected_kfs.contains_key(&kf_i_id) {
                         place_recognition_query.insert(*kf_i_id, curr_kf_id);
                         kfs_sharing_words.push(*kf_i_id);
-                        print!("{} ({}), ", kf_i_id, map.keyframes.get(&kf_i_id).unwrap().frame_id);
                     }
                 }
                 *place_recognition_words.get_mut(kf_i_id).unwrap() += 1;
             }
         }
-        println!();
 
         if kfs_sharing_words.is_empty() {
             return (vec![], vec![]);
@@ -111,8 +107,6 @@ impl KeyFrameDatabase {
                 score_and_match.push((si, kf_i_id));
             }
         }
-        // println!();
-        debug!("Detect loop candidates... similarity scores: {:?}", score_and_match);
 
         if score_and_match.is_empty() {
             return (vec![], vec![]);
@@ -164,7 +158,6 @@ impl KeyFrameDatabase {
             i+= 1;
         }
 
-        println!("Keyframe DB, loop candidates: {:?}", loop_candidates);
         return (merge_candidates, loop_candidates);
     }
 
@@ -182,14 +175,10 @@ impl KeyFrameDatabase {
 
         // Search all keyframes that share a word with current keyframes
         // Discard keyframes connected to the query keyframe
-        // print!("Loop words...");
         for word in curr_kf.bow.as_ref().unwrap().bow_vec.get_all_word_ids() {
-            // print!("{}:  ", word);
-
             for kf_i_id in &self.inverted_file[word as usize] {
                 let different_loop_query = loop_query.get(kf_i_id).is_some() && loop_query[kf_i_id] != curr_kf_id;
                 let no_loop_query = loop_query.get(kf_i_id).is_none();
-                print!("{} ", kf_i_id);
 
                 if different_loop_query || no_loop_query {
                     loop_words.insert(*kf_i_id, 0);
@@ -200,12 +189,7 @@ impl KeyFrameDatabase {
                 }
                 *loop_words.get_mut(kf_i_id).unwrap() += 1;
             }
-            // print!(", ");
         }
-        // println!();
-
-        // debug!("Detect loop candidates... kfs sharing words: {:?}", kfs_sharing_words);
-        // debug!("Detect loop candidates... loop words: {:?}", loop_words);
 
         if kfs_sharing_words.is_empty() {
             return vec![];
@@ -229,25 +213,18 @@ impl KeyFrameDatabase {
         let min_common_words = (max_common_words as f32 * 0.8) as i32;
         let mut score_and_match = vec![];
 
-        // debug!("Detect loop candidates... max common words: {}, min common words: {}, max word kf id: {}", max_common_words, min_common_words, max_word_kf_id);
-
-        // print!("Similarity scores... ");
         // Compute similarity score. Retain the matches whose score is higher than minScore
         let mut loop_score = HashMap::new(); // mLoopScore
         for kf_i_id in &kfs_sharing_words {
-            let test = *kf_i_id > 75 && *kf_i_id < 80;
             if loop_words[&kf_i_id] > min_common_words  {
                 let kf_i = map.keyframes.get(&kf_i_id).unwrap();
                 let si = VOCABULARY.score(curr_kf, kf_i);
                 loop_score.insert(kf_i_id, si);
-                // print!("{}: {}, ", si, kf_i_id);
                 if si >= min_score {
                     score_and_match.push((si, kf_i_id));
                 }
             }
         }
-        // println!();
-        // debug!("Detect loop candidates... similarity scores: {:?}", score_and_match);
 
         if score_and_match.is_empty() {
             return vec![];
@@ -306,7 +283,6 @@ impl KeyFrameDatabase {
 
     pub fn _detect_relocalization_candidates(&self, _keyframe_id: Id) -> Vec<Id> {
         // std::vector<KeyFrame*> DetectRelocalizationCandidates(Frame* F, Map* pMap);
-
         todo!("Relocalization")
     }
 }

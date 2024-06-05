@@ -91,6 +91,12 @@ pub struct LoopClosureEssentialGraphMsg {
 }
 impl ActorMessage for LoopClosureEssentialGraphMsg {}
 
+pub struct LoopClosureGBAMsg {
+    pub kf_id: Id,
+    pub timestamp: Timestamp,
+}
+impl ActorMessage for LoopClosureGBAMsg {}
+
 //* VISUALIZER */
 pub struct VisFeaturesMsg {
     pub keypoints: DVVectorOfKeyPoint,

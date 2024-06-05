@@ -2,12 +2,9 @@ use std::{collections::{BTreeMap, BTreeSet, HashMap}, sync::atomic::Ordering, th
 use log::{warn, info, debug, error};
 use core::{config::*, sensor::{FrameSensor, ImuSensor, Sensor}, system::{Actor, Timestamp}};
 use crate::{
-    actors::messages::{TrajectoryMsg, VisTrajectoryMsg, TrackingStateMsg, FeatureMsg, InitKeyFrameMsg, LastKeyFrameUpdatedMsg, ShutdownMsg},
-    registered_actors::{LOCAL_MAPPING, TRACKING_BACKEND, SHUTDOWN_ACTOR, TRACKING_FRONTEND, VISUALIZER},
-    map::{
-        map::Id, frame::Frame, pose::Pose,
-    },
-    modules::{imu::ImuModule, optimizer::{self}, orbmatcher, map_initialization::Initialization, relocalization::Relocalization}, System, MapLock,
+    actors::{loop_closing::KeyFrameAndPose, messages::{FeatureMsg, InitKeyFrameMsg, LastKeyFrameUpdatedMsg, ShutdownMsg, TrackingStateMsg, TrajectoryMsg, VisTrajectoryMsg}}, map::{
+        frame::Frame, map::Id, pose::Pose
+    }, modules::{imu::ImuModule, map_initialization::Initialization, optimizer, orbmatcher, relocalization::Relocalization}, registered_actors::{LOCAL_MAPPING, SHUTDOWN_ACTOR, TRACKING_BACKEND, TRACKING_FRONTEND, VISUALIZER}, MapLock, System
 };
 
 use super::{messages::{IMUInitializedMsg, NewKeyFrameMsg}, local_mapping::LOCAL_MAPPING_IDLE};
@@ -412,22 +409,18 @@ impl TrackingBackend {
                 // implementation). The way we have it now, we are always one reference keyframe behind because local mapping
                 // will insert the kf in the middle of the tracking thread loop, and then tracking will only know about it in
                 // the next iteration.
-                // debug!("Ref kf current, pose: {:?}", current_frame.pose);
                 current_frame.pose.unwrap()
             } else {
                 let map = self.map.read();
                 let ref_kf = map.keyframes.get(&self.ref_kf_id.unwrap()).expect("Can't get ref kf from map");
-                // debug!("Ref kf {}, pose: {:?}", self.ref_kf_id.unwrap(), ref_kf.pose);
-
                 ref_kf.pose
             };
-
-            // info!("Frame {} pose: {:?}", current_frame.frame_id, current_frame.pose.unwrap());
-            // debug!("Frame {} rotation: {:?}", current_frame.frame_id, current_frame.pose.unwrap().get_rotation());
 
             current_frame.pose.unwrap() * ref_kf_pose.inverse()
         };
         self.trajectory_poses.push(relative_pose);
+
+        info!("Frame {} pose: {:?}", current_frame.frame_id, current_frame.pose.unwrap());
 
         self.system.send(
             SHUTDOWN_ACTOR, 
@@ -473,13 +466,11 @@ impl TrackingBackend {
         }
 
         current_frame.pose = Some(last_frame.pose.unwrap());
-        // debug!("Track Ref KF, set pose to: {:?}, {:?}", current_frame.pose.unwrap().get_translation(), current_frame.pose.unwrap().get_rotation());
 
         optimizer::optimize_pose(current_frame, &self.map);
 
         // Discard outliers
         let nmatches_map = self.discard_outliers(current_frame);
-        // debug!("Track reference keyframe, initial matches: {}, after outliers deleted: {}, ref kf id: {}", nmatches, nmatches_map, self.ref_kf_id.unwrap());
 
         match self.sensor.is_imu() {
             true => { return Ok(true); },
@@ -509,10 +500,6 @@ impl TrackingBackend {
             // self.imu.predict_state();
         } else {
             current_frame.pose = Some(self.imu.velocity.unwrap() * last_frame.pose.unwrap());
-            // debug!("Update current frame, set pose to: {:?}, {:?}", current_frame.pose.unwrap().get_translation(), current_frame.pose.unwrap().get_rotation());
-            // debug!("...velocity: {:?}, {:?}", self.imu.velocity.unwrap().get_translation(), self.imu.velocity.unwrap().get_rotation());
-            // debug!("...last frame tcw: {:?}, {:?}", last_frame.pose.unwrap().get_translation(), last_frame.pose.unwrap().get_rotation());
-
         }
 
         current_frame.mappoint_matches.clear();
@@ -533,9 +520,6 @@ impl TrackingBackend {
         )?;
         debug!("Tracking search by projection with previous frame: {} matches / {} mappoints in last frame. ({} total mappoints in map)", matches, last_frame.mappoint_matches.debug_count, self.map.read().mappoints.len());
 
-
-        // debug!("motion model initial matches {}", matches);
-
         // If few matches, uses a wider window search
         if matches < 20 {
             info!("tracking_backend::track_with_motion_model;not enough matches, wider window search");
@@ -549,9 +533,6 @@ impl TrackingBackend {
                 self.sensor
             )?;
             debug!("Tracking search by projection with previous frame: {} matches / {} mappoints in last frame. ({} total mappoints in map)", matches, last_frame.mappoint_matches.debug_count, self.map.read().mappoints.len());
-
-
-            // debug!("motion model matches with wider search {}", matches);
         }
 
         if matches < 20 {
@@ -571,7 +552,6 @@ impl TrackingBackend {
             // return nmatches>20;
         }
 
-        // debug!("motion model matches after outliers {}", nmatches_map);
         match self.sensor.is_imu() {
             true => { return Ok(true); },
             false => { return Ok(nmatches_map >= 10); }
@@ -587,13 +567,6 @@ impl TrackingBackend {
         let map_lock = self.map.read();
         let ref_kf_pose = map_lock.keyframes.get(&ref_kf_id).expect("Reference kf should be in map").pose;
         last_frame.pose = Some(*self.trajectory_poses.last().unwrap() * ref_kf_pose);
-        // debug!("pRef {} {:?}", ref_kf_id, ref_kf_pose);
-        // debug!("Tlr {:?}", *self.trajectory_poses.last().unwrap());
-
-        // debug!("Update last frame, set pose to: {:?}, {:?}", last_frame.pose.unwrap().get_translation(), last_frame.pose.unwrap().get_rotation());
-        // debug!("Last frame pose {:?}", last_frame.pose);
-        // debug!("...ref kf pose: {:?}, {:?}", ref_kf_pose.get_translation(), ref_kf_pose.get_rotation());
-        // debug!("...last trajectory pose: {:?}, {:?}", self.trajectory_poses.last().unwrap().get_translation(), self.trajectory_poses.last().unwrap().get_rotation());
 
         if self.sensor.is_mono() || self.frames_since_last_kf == 0 {
             return;
@@ -675,8 +648,6 @@ impl TrackingBackend {
             Err(e) => warn!("Error in search_local_points: {}", e)
         }
 
-        // debug!("Local keyframes: {}, local points: {}", self.local_keyframes.len(), self.local_mappoints.len());
-
         if !self.imu.is_initialized || (current_frame.frame_id <= self.relocalization.last_reloc_frame_id + (self.frames_to_reset_imu as i32)) {
             optimizer::optimize_pose(current_frame, &self.map);
         } else if !self.map_updated {
@@ -714,8 +685,6 @@ impl TrackingBackend {
                 }
             }
         }
-
-        // debug!("Matches in track local map: {}, outliers: {}", self.matches_inliers, num_outliers);
 
         // Decide if the tracking was succesful
         // More restrictive if there was a relocalization recently
@@ -756,7 +725,7 @@ impl TrackingBackend {
         // TODO (IMU) ... Check below should be !self.imu.is_initialized || current_frame.frame_id < self.relocalization.last_reloc_frame_id + 2
         if current_frame.frame_id < self.relocalization.last_reloc_frame_id + 2 {
             for i in 0..current_frame.mappoint_matches.len() {
-                if let Some((mp_id, is_outlier)) = current_frame.mappoint_matches.get(i as usize) {
+                if let Some((mp_id, _is_outlier)) = current_frame.mappoint_matches.get(i as usize) {
                     if let Some(mp) = lock.mappoints.get(&mp_id) {
                         for kf_id in mp.get_observations().keys() {
                             *kf_counter.entry(*kf_id).or_insert(0) += 1;
@@ -835,7 +804,6 @@ impl TrackingBackend {
             i += 1;
         }
         self.local_keyframes = local_kf_vec.iter().map(|x| *x).collect();
-        // debug!("update_local_keyframes: {:?}", self.local_keyframes.len());
 
         // Add 10 last temporal KFs (mainly for IMU)
         if self.sensor.is_imu() && self.local_keyframes.len() < 80 {
@@ -847,7 +815,6 @@ impl TrackingBackend {
         if max_kf_id != 0 {
             current_frame.ref_kf_id = Some(max_kf_id);
             self.ref_kf_id = Some(max_kf_id);
-            // println!("Sofiya: ref kf id set to {}", max_kf_id);
         }
         None
     }
@@ -879,8 +846,6 @@ impl TrackingBackend {
         for kf_id in kfs_to_remove {
             self.local_keyframes.remove(&kf_id);
         }
-
-        // debug!("self.local_mappoints: {:?}, self.local_keyframes: {:?}", self.local_mappoints.len(), self.local_keyframes.len());
     }
 
     fn search_local_points(&mut self, current_frame: &mut Frame) -> Result<(), Box<dyn std::error::Error>> {
@@ -977,7 +942,6 @@ impl TrackingBackend {
             debug!("Tracking search local points: {} matches / {} local points. ({} total mappoints in map)", matches, self.local_mappoints.len(), self.map.read().mappoints.len());
 
         }
-        // debug!("search local points matches {:?}", matches);
 
         Ok(())
     }
@@ -1084,6 +1048,10 @@ impl TrackingBackend {
 
         self.last_kf_timestamp = Some(new_kf.timestamp);
 
+        tracy_client::Client::running()
+        .expect("message! without a running Client")
+        .message("create new keyframe", 2);
+
         // KeyFrame created here and inserted into map
         self.system.send(
             LOCAL_MAPPING,
@@ -1133,8 +1101,6 @@ impl TrackingBackend {
             Sensor(FrameSensor::Rgbd, ImuSensor::None) => { if num_kfs < 2 { 0.4 } else { 0.75 } }
         };
 
-        // debug!("tracked mps {}, {} < {} * {} = {}", self.ref_kf_id.unwrap(), self.matches_inliers, tracked_mappoints, th_ref_ratio, (self.matches_inliers as f32) < tracked_mappoints * th_ref_ratio);
-
         // Condition 1a: More than "MaxFrames" have passed from last keyframe insertion
         let c1a = self.frames_since_last_kf >= (self.max_frames_to_insert_kf as i32);
         // Condition 1b: More than "MinFrames" have passed and Local Mapping is idle
@@ -1167,18 +1133,19 @@ impl TrackingBackend {
         let c4 = ((self.matches_inliers < 75 && self.matches_inliers > 15) || recently_lost) && sensor_is_imumono;
 
         // Note: removed code here about checking for idle local mapping and/or interrupting bundle adjustment
-
         let create_new_kf =  ((c1a||c1b||c1c) && c2)||c3 ||c4;
+
+        tracy_client::Client::running()
+            .expect("message! without a running Client")
+            .message(format!("need new kf: {} {}", create_new_kf, LOCAL_MAPPING_IDLE.load(Ordering::SeqCst)).as_str(), 2);
+
         if LOCAL_MAPPING_IDLE.load(Ordering::SeqCst) && create_new_kf {
             self.frames_since_last_kf = 0;
-            // debug!("Need new kf decision ({}): {} {} {}", ((c1a||c1b||c1c) && c2), self.matches_inliers, tracked_mappoints, th_ref_ratio);
             return true;
         } else {
             self.frames_since_last_kf += 1;
-            // debug!("Need new kf decision ({}) busy: {} {} {}", ((c1a||c1b||c1c) && c2), self.matches_inliers, tracked_mappoints, th_ref_ratio);
             return false;
         }
-        
     }
 
     //* Helper functions */

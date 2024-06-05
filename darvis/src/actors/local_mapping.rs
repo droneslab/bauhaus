@@ -91,6 +91,10 @@ impl Actor for LocalMapping {
                 actor.local_mapping();
             } else if message.is::<NewKeyFrameMsg>() {
                 if LOCAL_MAPPING_PAUSE_SWITCH.load(std::sync::atomic::Ordering::SeqCst) {
+                    LOCAL_MAPPING_IDLE.store(true, std::sync::atomic::Ordering::SeqCst);
+                    tracy_client::Client::running()
+                        .expect("message! without a running Client")
+                        .message("local mapping received paused, set idle", 2);
                     continue;
                 }
 
@@ -118,6 +122,10 @@ impl Actor for LocalMapping {
                 warn!("Local Mapping received unknown message type!");
             }
             LOCAL_MAPPING_IDLE.store(true, std::sync::atomic::Ordering::SeqCst);
+            tracy_client::Client::running()
+                .expect("message! without a running Client")
+                .message("local mapping regular idle", 2);
+
         }
     }
 }
@@ -185,8 +193,6 @@ impl LocalMapping {
             }
         }
 
-        // debug!("Local mapping optimization for KF {}. Optimized pose: {:?}", self.current_keyframe_id, self.map.read().keyframes.get(&self.current_keyframe_id).unwrap().pose);
-
         // Initialize IMU
         if self.sensor.is_imu() && !self.imu.is_initialized {
             self.imu.initialize();
@@ -244,12 +250,6 @@ impl LocalMapping {
         tracy_client::plot!("MAP INFO: KeyFrames", self.map.read().keyframes.len() as f64);
         tracy_client::plot!("MAP INFO: MapPoints", self.map.read().mappoints.len() as f64);
 
-        // print!("KF matches after local mapping:");
-        // for (kf_id, kf) in &self.map.read().keyframes {
-        //     print!("{}: {}, ", kf_id, kf.get_mp_matches().iter().filter(|item| item.is_some()).count());
-        // }
-        // println!();
-
         self.system.try_send(LOOP_CLOSING, Box::new(KeyFrameIdMsg{ kf_id: self.current_keyframe_id }));
     }
 
@@ -267,12 +267,6 @@ impl LocalMapping {
         let mut erased_from_recently_added = 0;
         let mut deleted = HashSet::new();
 
-        // print!("KF matches before mappoint culling:");
-        // for (kf_id, kf) in &self.map.read().keyframes {
-        //     print!("{}: {}, ", kf_id, kf.get_mp_matches().iter().filter(|item| item.is_some()).count());
-        // }
-        // println!();
-        
         self.recently_added_mappoints.retain(|&mp_id| {
             let mut lock = self.map.write();
             if let Some(mappoint) = lock.mappoints.get(&mp_id) {
@@ -299,13 +293,6 @@ impl LocalMapping {
                 false
             }
         });
-        // println!("Mappoint culling... discard for found ratio: {}, discard for observations: {}", discard_for_found_ratio, discard_for_observations);
-
-        // print!("KF matches after mappoint culling:");
-        // for (kf_id, kf) in &self.map.read().keyframes {
-        //     print!("{}: {}, ", kf_id, kf.get_mp_matches().iter().filter(|item| item.is_some()).count());
-        // }
-        // println!();
 
         return discard_for_observations + discard_for_found_ratio;
     }
@@ -698,6 +685,7 @@ impl LocalMapping {
         // A keyframe is considered redundant if the 90% of the MapPoints it sees, are seen
         // in at least other 3 keyframes (in the same or finer scale)
         // We only consider close stereo points
+
         let _span = tracy_client::span!("keyframe_culling");
 
         //TODO (mvp)... I think we don't need this because the covisibility keyframes struct organizes itself but double check
@@ -833,6 +821,7 @@ impl LocalMapping {
                         false => {
                             to_delete.push(kf_id);
                             self.discarded_kfs.insert(kf_id);
+                            println!("DELETE KF {} with redundant matches {} (> {}), total matches {}", kf_id, num_redundant_obs, redundant_th * (num_mps as f64), num_mps);
                         }
                     }
                 }

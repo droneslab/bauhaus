@@ -110,7 +110,6 @@ impl KeyFrame {
         if self.parent.is_none() && !is_init_kf { 
             let new_parent = Some(self.connections.first_connected_kf());
             self.parent = new_parent;
-            println!("KF {} new parent {}", self.id, new_parent.unwrap());
             new_parent
         } else {
             None
@@ -125,6 +124,7 @@ impl KeyFrame {
     pub fn get_mp_match_index(&self, id: &Id) -> Option<usize> { 
         self.mappoint_matches.matches.iter().position(|item| item.is_some() && item.unwrap().0 == *id)
     }
+    pub fn mp_match_len(&self) -> usize { self.mappoint_matches.matches.iter().filter(|m| m.is_some()).count() }
 
     pub fn get_tracked_mappoints(&self, map: &Map, min_observations: u32) -> i32 { self.mappoint_matches.tracked_mappoints(map, min_observations) }
     pub fn debug_get_mps_count(&self) -> i32 { self.mappoint_matches.debug_count }

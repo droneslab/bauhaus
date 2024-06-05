@@ -1,5 +1,6 @@
 use std::ops::{Mul, Deref};
 use core::matrix::{DVMatrix3, DVVector3};
+use nalgebra::{Quaternion, UnitQuaternion};
 use num_traits::abs;
 use serde::{Deserialize, Serialize};
 
@@ -122,7 +123,14 @@ impl From<Pose> for nalgebra::Matrix3x4<f64> {
         matrix
     }
 }
-
+impl Into<Sim3> for Pose {
+    fn into(self) -> Sim3 {
+        Sim3 {
+            pose: self,
+            scale: 1.0
+        }
+    }
+}
 //* bindings with g2o */
 impl From<Pose> for g2o::ffi::Pose {
     fn from(pose: Pose) -> Self { 
@@ -235,6 +243,33 @@ impl Sim3 {
             scale
         }
     }
+    pub fn new_scaled_rotation(&self) -> Self {
+        // In ORB_SLAM3, see Sophus::Sim3f Converter::toSophus(const g2o::Sim3& S) in Converter.cc
+        // Sophus::RxSO3d scales the rotation quaternion by the square root of the scale...
+        // From sophus rxso3.hpp:
+            // Constructor from scale factor and rotation matrix ``R``.
+            //
+            // Precondition: Rotation matrix ``R`` must to be orthogonal with determinant
+            //               of 1 and ``scale`` must not be close to zero.
+            //
+            // SOPHUS_FUNC RxSO3(Scalar const& scale, Transformation const& R)
+            //     : quaternion_(R) {
+            // SOPHUS_ENSURE(scale >= Constants<Scalar>::epsilon(),
+            //                 "Scale factor must be greater-equal epsilon.");
+            // using std::sqrt;
+            // quaternion_.coeffs() *= sqrt(scale);
+            // }
+        let new_rot = *self.pose.get_rotation() * f64::sqrt(self.scale);
+        let new_pose = Pose::new(
+            *self.pose.get_translation(), new_rot
+        );
+
+        Sim3{
+            pose: new_pose,
+            scale: self.scale
+        }
+    }
+
     pub fn identity() -> Sim3 {
         Sim3 {
             pose: Pose::identity(),
@@ -242,10 +277,22 @@ impl Sim3 {
         }
     }
     pub fn inverse(&self) -> Sim3 {
-        let inv_pose = self.pose.inverse();
+        // From g2o, see:
+            // Sim3 inverse() const
+            // {
+            //   return Sim3(r.conjugate(), r.conjugate()*((-1./s)*t), 1./s);
+            // }
+        let rot_conjugated: UnitQuaternion<f64> = self.pose.get_quaternion().conjugate();
+        let trans = rot_conjugated * ((-1.0 / self.scale) * *self.pose.get_translation());
+
+        let pose = nalgebra::IsometryMatrix3::from_parts(
+            nalgebra::Translation3::from(trans),
+            rot_conjugated.to_rotation_matrix()
+        );
+
         Sim3 {
-            pose: inv_pose,
-            scale: self.scale // todo (loop closing) is this right or should it be 1/ self.scale?
+            pose: Pose(pose),
+            scale: 1.0 / self.scale
         }
     }
     pub fn map(&self, other: &DVVector3<f64>) -> DVVector3<f64> {
@@ -263,14 +310,31 @@ impl Clone for Sim3 {
 impl Mul for Sim3 {
     type Output = Sim3;
 
-    fn mul(self, _other: Sim3) -> Sim3 {
-        // todo (loop closing) is this the right way to multiply a sim3?
+    fn mul(self, other: Sim3) -> Sim3 {
+        let r = *self.pose.get_rotation();
+        let t = *self.pose.get_translation();
+        let s = self.scale;
+        let o_r = *other.pose.get_rotation();
+        let o_t = *other.pose.get_translation();
+        let o_s = other.scale;
         Sim3 {
-            pose: self.pose * _other.pose,
-            scale: self.scale * _other.scale
+            pose: Pose::new(
+                s * (r * o_t) + t,
+                r * o_r,
+            ),
+            scale: s * o_s
         }
     }
 }
+impl Into<Pose> for Sim3 {
+    fn into(self) -> Pose {
+        Pose::new(
+            *self.pose.get_translation() / self.scale,
+            *self.pose.get_rotation()
+        )
+    }
+}
+
 /* Pretty print for testing */
 impl std::fmt::Debug for Sim3 {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
