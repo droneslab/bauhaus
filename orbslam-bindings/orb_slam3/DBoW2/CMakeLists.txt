@@ -1,15 +1,17 @@
 cmake_minimum_required(VERSION 2.8)
+
+cmake_policy(SET CMP0069 NEW) 
+set(CMAKE_POLICY_DEFAULT_CMP0069 NEW)
+
 project(DBoW2)
 
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()
 
-# Sofiya: Removed -march=native, based on https://github.com/raulmur/ORB_SLAM2/issues/341 
-# Sofiya: Added -flto=thin to enable link time optimization with Rust: https://doc.rust-lang.org/rustc/linker-plugin-lto.html#toolchain-compatibility
-
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS}  -Wall  -flto=thin")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall  -flto=thin")
+set(CMAKE_CXX_COMPILER "/home/darvis/Downloads/llvm_build/bin/clang")
+add_link_options(-fuse-ld=/home/darvis/Downloads/llvm_build/bin/ld.lld)
+set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
 
 set(HDRS_DBOW2
   DBoW2/BowVector.h

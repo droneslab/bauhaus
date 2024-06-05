@@ -1,4 +1,8 @@
 cmake_minimum_required (VERSION 3.0)
+
+cmake_policy(SET CMP0069 NEW) 
+set(CMAKE_POLICY_DEFAULT_CMP0069 NEW)
+
 project(orb_slam3)
 
 IF(NOT CMAKE_BUILD_TYPE)
@@ -10,14 +14,11 @@ MESSAGE("Build type: " ${CMAKE_BUILD_TYPE})
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -g") # -std=c++17
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -g")
 
-# Sofiya: Removed -march=native, based on https://github.com/raulmur/ORB_SLAM2/issues/341 
-# Sofiya: Added -flto=thin to enable link time optimization with Rust: https://doc.rust-lang.org/rustc/linker-plugin-lto.html#toolchain-compatibility
-set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -flto=thin")
-set(CMAKE_CXX_FLAGS_RELEASE"${CMAKE_CXX_FLAGS_RELEASE} -flto=thin ")
+set(CMAKE_CXX_COMPILER "/home/darvis/Downloads/llvm_build/bin/clang")
+add_link_options(-fuse-ld=/home/darvis/Downloads/llvm_build/bin/ld.lld)
+set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
 
-set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_EXTENSIONS OFF)
-add_definitions(-DCOMPILEDWITHC11)
 
 LIST(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake_modules)
 

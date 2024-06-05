@@ -1,4 +1,8 @@
 cmake_minimum_required (VERSION 3.0)
+
+cmake_policy(SET CMP0069 NEW) 
+set(CMAKE_POLICY_DEFAULT_CMP0069 NEW)
+
 SET(CMAKE_LEGACY_CYGWIN_WIN32 0)
 
 PROJECT(g2o)
@@ -17,6 +21,10 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 MESSAGE(STATUS "BUILD TYPE:" ${CMAKE_BUILD_TYPE})
+
+set(CMAKE_CXX_COMPILER "/home/darvis/Downloads/llvm_build/bin/clang")
+add_link_options(-fuse-ld=/home/darvis/Downloads/llvm_build/bin/ld.lld)
+set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
 
 SET (G2O_LIB_TYPE STATIC)
 
@@ -57,13 +65,6 @@ IF(OPENMP_FOUND AND G2O_USE_OPENMP)
   SET(g2o_CXX_FLAGS "${g2o_CXX_FLAGS} -DEIGEN_DONT_PARALLELIZE ${OpenMP_CXX_FLAGS}")
   MESSAGE(STATUS "Compiling with OpenMP support")
 ENDIF(OPENMP_FOUND AND G2O_USE_OPENMP)
-
-# Compiler specific options for gcc
-# Sofiya: Removed -march=native, based on https://github.com/raulmur/ORB_SLAM2/issues/341 
-# Sofiya: Removed -O3, set cmake build type to be debug or release in build.rs instead
-# Sofiya: Added -flto=thin to enable link time optimization with Rust: https://doc.rust-lang.org/rustc/linker-plugin-lto.html#toolchain-compatibility
-SET(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -flto=thin")
-SET(CMAKE_C_FLAGS_RELEASE  "${CMAKE_C_FLAGS_RELEASE} -flto=thin") 
 
 # activate warnings !!!
 SET(g2o_C_FLAGS "${g2o_C_FLAGS} -Wall -W")
