@@ -1,4 +1,8 @@
 cmake_minimum_required (VERSION 3.0)
+
+cmake_policy(SET CMP0069 NEW) 
+set(CMAKE_POLICY_DEFAULT_CMP0069 NEW)
+
 SET(CMAKE_LEGACY_CYGWIN_WIN32 0)
 
 PROJECT(g2o)
@@ -17,6 +21,11 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 MESSAGE(STATUS "BUILD TYPE:" ${CMAKE_BUILD_TYPE})
+
+
+set(CMAKE_CXX_COMPILER "/home/darvis/Downloads/llvm_build/bin/clang")
+add_link_options(-fuse-ld=/home/darvis/Downloads/llvm_build/bin/ld.lld)
+set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
 
 SET (G2O_LIB_TYPE STATIC)
 
@@ -204,7 +213,7 @@ g2o/stuff/property.h
 
 # rust bindings
 g2o/rust/rust_helper.cpp
-../target/cxxbridge/g2o/src/lib.rs.cc
+../../darvis/target/cxxbridge/g2o/src/lib.rs.cc
 )
 
 include_directories(../target/cxxbridge)

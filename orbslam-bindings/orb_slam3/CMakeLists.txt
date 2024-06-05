@@ -1,4 +1,8 @@
 cmake_minimum_required (VERSION 3.0)
+
+cmake_policy(SET CMP0069 NEW) 
+set(CMAKE_POLICY_DEFAULT_CMP0069 NEW)
+
 project(orb_slam3)
 
 IF(NOT CMAKE_BUILD_TYPE)
@@ -14,9 +18,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -g")
 set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE}")
 set(CMAKE_CXX_FLAGS_RELEASE"${CMAKE_CXX_FLAGS_RELEASE}")
 
-set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_EXTENSIONS OFF)
-add_definitions(-DCOMPILEDWITHC11)
 
 LIST(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake_modules)
 
@@ -32,6 +34,10 @@ if(MSVC90)
   message(STATUS "Disabling memory alignment for MSVC8")
 endif(MSVC90)
 
+
+set(CMAKE_CXX_COMPILER "/home/darvis/Downloads/llvm_build/bin/clang")
+add_link_options(-fuse-ld=/home/darvis/Downloads/llvm_build/bin/ld.lld)
+set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
 
 MESSAGE("OPENCV VERSION:")
 MESSAGE(${OpenCV_VERSION})
@@ -78,8 +84,8 @@ src/Converter.cc
 src/Converter.h
 src/GeometricTools.cc
 src/GeometricTools.h
-../target/cxxbridge/dvos3binding/src/lib.rs.cc
-../target/cxxbridge/dvos3binding/src/lib.rs.h
+../../darvis/target/cxxbridge/dvos3binding/src/lib.rs.cc
+../../darvis/target/cxxbridge/dvos3binding/src/lib.rs.h
 DBoW2/DBoW2/BowVector.h
 DBoW2/DBoW2/FORB.h 
 DBoW2/DBoW2/FClass.h       

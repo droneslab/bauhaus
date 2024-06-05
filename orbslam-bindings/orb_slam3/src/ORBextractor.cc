@@ -61,7 +61,7 @@
 
 #include "ORBextractor.h"
 
-#include "../../../target/cxxbridge/dvos3binding/src/lib.rs.h"
+#include "../../../darvis/target/cxxbridge/dvos3binding/src/lib.rs.h"
 
 using namespace cv;
 using namespace std;
