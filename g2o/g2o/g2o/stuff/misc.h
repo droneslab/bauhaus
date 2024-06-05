@@ -46,6 +46,13 @@
 namespace g2o {
 
 /**
+ * converts a number constant to a double constant at compile time
+ * to avoid having to cast everything to avoid warnings.
+ **/
+inline constexpr double cst(long double v) { return (double)v; }
+
+
+/**
  * return the square value
  */
 template <typename T>

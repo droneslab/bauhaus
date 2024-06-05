@@ -40,7 +40,6 @@ pub struct MapPoint { // Full map item inserted into the map with the following 
     // todo (design, variable locations) can we avoid having these in here and keep it thread local instead?
     pub ba_global_for_kf: Id, // mnBAGlobalForKF
     pub gba_pose: Option<DVTranslation>, // mTcwGBA
-    pub corrected_reference: Option<(Id, i32)>, // (mnCorrectedByKF, mCorrectedReference)
 
     // Variables in ORBSLAM, DON'T Set these!!
     // mnFirstFrame ... literally never used meaningfully
@@ -69,7 +68,6 @@ impl MapPoint {
             gba_pose: None,
             num_obs: 0,
             ba_global_for_kf: 0,
-            corrected_reference: None
         }
     }
 
@@ -346,7 +344,6 @@ impl Clone for MapPoint {
             sensor: self.sensor.clone(),
             gba_pose: self.gba_pose.clone(),
             ba_global_for_kf: self.ba_global_for_kf,
-            corrected_reference: self.corrected_reference
         }
     }
 }

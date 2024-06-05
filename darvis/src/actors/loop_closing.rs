@@ -1,14 +1,14 @@
 use core::system::Actor;
 use core::config::{SETTINGS, SYSTEM};
 use core::sensor::{FrameSensor, ImuSensor, Sensor};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::Duration;
-use log::{debug, info, trace, warn};
+use log::{debug, error, info, trace, warn};
 use opencv::core::KeyPointTraitConst;
 use crate::actors::local_mapping::LOCAL_MAPPING_IDLE;
-use crate::actors::messages::{KeyFrameIdMsg, LoopClosureEssentialGraphMsg, LoopClosureMapPointFusionMsg};
+use crate::actors::messages::{KeyFrameIdMsg, LoopClosureGBAMsg};
 use crate::map::pose::{DVTranslation, Pose, Sim3};
 use crate::modules::sim3solver::Sim3Solver;
 use crate::modules::{optimizer, orbmatcher};
@@ -23,7 +23,7 @@ use super::messages::{IMUInitializedMsg, ShutdownMsg};
 pub type KeyFrameAndPose = HashMap<Id, Sim3>;
 
 pub static GBA_KILL_SWITCH: AtomicBool = AtomicBool::new(false); // mbStopGBA
-static GBA_IDLE: AtomicBool = AtomicBool::new(false); // mbRunningGBA
+static GBA_IDLE: AtomicBool = AtomicBool::new(true); // mbRunningGBA
 
 pub struct LoopClosing {
     system: System,
@@ -33,9 +33,9 @@ pub struct LoopClosing {
     _imu: Option<ImuModule>,
 
     // Loop detector variables
-    loop_mappoints: HashMap<usize, Id>, // mvpLoopMapPoints
-    loop_mps: HashMap<usize, Id>, // mvpLoopMPs
-    current_matched_points: HashMap<usize, Id>, // mvpLoopMatchedMPs
+    loop_mappoints: Vec<Id>, // mvpLoopMapPoints
+    loop_mps: Vec<Id>, // mvpLoopMPs
+    current_matched_points: Vec<Option<Id>>, // mvpLoopMatchedMPs
     loop_slw: Sim3, // mg2oLoopSlw
     loop_matched_kf: Id, // mpLoopMatchedKF
 
@@ -48,9 +48,6 @@ pub struct LoopClosing {
     num_not_found: i32, // mnLoopNumNotFound
     last_current_kf: Id, // mpLoopLastCurrentKF
     last_corrected_loop_kf_id: Id, // mLastLoopKFid
-
-    // Global BA
-    full_ba_idx: i32, // mnFullBAIdx
 }
 
 impl Actor for LoopClosing {
@@ -63,17 +60,16 @@ impl Actor for LoopClosing {
             map,
             _imu: None, // TODO (IMU): ImuModule::new(None, None, sensor, false, false),
             sensor: SETTINGS.get(SYSTEM, "sensor"),
-            full_ba_idx: 0,
             last_corrected_loop_kf_id: -1,
-            current_matched_points: HashMap::new(),
-            loop_mappoints: HashMap::new(),
+            current_matched_points: Vec::new(),
+            loop_mappoints: Vec::new(),
             loop_matched_kf: -1,
             // scw: Sim3::identity(),
             num_coincidences: 0,
             loop_slw: Sim3::identity(),
             last_current_kf: -1,
             num_not_found: 0,
-            loop_mps: HashMap::new(),
+            loop_mps: Vec::new(),
         }
     }
 
@@ -136,7 +132,7 @@ impl LoopClosing {
                 }
 
                 match (loop_kf, scw) {
-                    (Some(loop_kf), Some(scw)) => {
+                    (Some(loop_kf), Some(_scw)) => {
                         info!("KF {}: Loop detected!", current_kf_id);
 
                         match self.sensor.is_imu() {
@@ -149,7 +145,6 @@ impl LoopClosing {
 
                         self.loop_mappoints = self.loop_mps.clone(); // mvpLoopMapPoints = mvpLoopMPs;
 
-                        // println!("Doing correct loop with self.slw: {:?} scale {:?}", self.loop_slw.pose, self.loop_slw.scale);
                         match self.correct_loop(current_kf_id, loop_kf, self.loop_slw) {
                             Ok(_) => {},
                             Err(e) => {
@@ -198,15 +193,12 @@ impl LoopClosing {
         let mut loop_detected_in_kf = false; // bLoopDetectedInKF
         let mut loop_detected = false;
         if self.num_coincidences > 0 {
-            // println!("Loop detection step 1: num coincidences > 0...");
             // Find from the last KF candidates
             let mut scw = {
                 let tcl = self.map.read().keyframes.get(&current_kf_id).unwrap().pose * self.map.read().keyframes.get(&self.last_current_kf).unwrap().pose.inverse();
-                let tcl_as_sim3 = Sim3::new(tcl.get_translation(), tcl.get_rotation(), 1.0);
+                let tcl_as_sim3: Sim3 = tcl.into();
                 tcl_as_sim3 * self.loop_slw
             };
-            // println!("scw when loop num coincidences > 0: rot {:?} trans {:?} scale {:?}", scw.pose.get_rotation(), scw.pose.get_translation(), scw.scale);
-            // println!("current kf id: {}, last current kf: {}", current_kf_id, self.last_current_kf);
 
             match self.detect_and_reffine_sim3_from_last_kf(current_kf_id, self.loop_matched_kf, &mut scw)? {
                 Some((scw, current_matched_points)) => {
@@ -249,22 +241,14 @@ impl LoopClosing {
 
         // Extract candidates from the bag of words
         let (merge_bow_cand, loop_bow_cand) = match !merge_detected || !loop_detected_in_kf {
-            true => {
-                // Search in BoW
-                self.map.read().detect_top_n_loop_candidates(current_kf_id, 3)
-            },
-            false => (Vec::new(), Vec::new())
+            // Search in BoW
+            true => self.map.read().detect_top_n_loop_candidates(current_kf_id, 3),            false => (Vec::new(), Vec::new())
         };
 
         // Check the BoW candidates if the geometric candidate list is empty
         // Loop candidates
         (loop_kf, scw) = match !loop_detected_in_kf && !loop_bow_cand.is_empty() {
-            true => {
-                    self.detect_common_regions_from_bow(
-                        current_kf_id, 
-                    &loop_bow_cand,
-                )?
-            },
+            true => self.detect_common_regions_from_bow(current_kf_id,  &loop_bow_cand,)?,
             false => (None, None)
         };
 
@@ -284,11 +268,11 @@ impl LoopClosing {
         return Ok((None, None, None));
     }
 
-    fn detect_and_reffine_sim3_from_last_kf(&mut self, current_kf_id: Id, loop_kf: Id, scw: &mut Sim3) -> Result<Option<(Sim3, HashMap<usize, i32>)>, Box<dyn std::error::Error>> {
+    fn detect_and_reffine_sim3_from_last_kf(&mut self, current_kf_id: Id, loop_kf: Id, scw: &mut Sim3) -> Result<Option<(Sim3, Vec<Option<i32>>)>, Box<dyn std::error::Error>> {
         // bool LoopClosing::DetectAndReffineSim3FromLastKF(KeyFrame* pCurrentKF, KeyFrame* pMatchedKF, g2o::Sim3 &gScw, int &nNumProjMatches, std::vector<MapPoint*> &vpMPs, std::vector<MapPoint*> &vpMatchedMPs)
         let _span = tracy_client::span!("detect_and_reffine_sim3_from_last_kf");
 
-        let mut matched_mappoints = HashMap::new();
+        let mut matched_mappoints = Vec::new();
         let num_proj_matches = find_matches_by_projection(&self.map, current_kf_id, scw, loop_kf, &mut self.loop_mps, &mut matched_mappoints)?;
 
         if num_proj_matches >= 30 {
@@ -319,11 +303,11 @@ impl LoopClosing {
         return Ok(None);
     }
 
-    fn detect_common_regions_from_last_kf(&mut self, current_kf_id: Id, scw: &mut Sim3, loop_kf: Id, mappoints: &mut HashMap<usize, Id>) -> Result<(bool, i32), Box<dyn std::error::Error>>{
+    fn detect_common_regions_from_last_kf(&mut self, current_kf_id: Id, scw: &mut Sim3, loop_kf: Id, mappoints: &mut Vec<Id>) -> Result<(bool, i32), Box<dyn std::error::Error>>{
         // bool LoopClosing::DetectCommonRegionsFromLastKF(KeyFrame* pCurrentKF, KeyFrame* pMatchedKF, g2o::Sim3 &gScw, int &nNumProjMatches, std::vector<MapPoint*> &vpMPs, std::vector<MapPoint*> &vpMatchedMPs)
         let _span = tracy_client::span!("detect_common_regions_from_last_kf");
 
-        let mut matched_mappoints = HashMap::new();
+        let mut matched_mappoints = Vec::new();
         let num_proj_matches = find_matches_by_projection(&self.map, current_kf_id, scw, loop_kf, mappoints, &mut matched_mappoints)?;
         if num_proj_matches >= 30 {
             return Ok((true, num_proj_matches));
@@ -349,15 +333,14 @@ impl LoopClosing {
         let mut num_best_matches_reproj = 0; // nBestMatchesReproj
         let mut best_num_coincidences = 0; // nBestNumCoincidences
         let mut best_scw = Sim3::identity(); // g2oBestScw
-        let mut best_mappoints: HashMap<usize, Id> = HashMap::new(); // vpBestMapPoints
-        let mut best_matched_mappoints: HashMap<usize, Id> = HashMap::new(); // vpBestMatchedMapPoints
+        let mut best_mappoints: Vec<Id> = Vec::new(); // vpBestMapPoints
+        let mut best_matched_mappoints: Vec<Option<Id>> = Vec::new(); // vpBestMatchedMapPoints
 
         let num_candidates = bow_cands.len(); // nNumCandidates
         let mut vn_stage = vec![0; num_candidates]; // vnStage
         let mut vn_matches_stage = vec![0; num_candidates]; // vnMatchesStage
 
-        // println!("BEGIN DetectCommonRegionsFromBoW");
-        // println!("..Bow candidates: {:?}", bow_cands);
+        let num_curr_kf_matches = self.map.read().keyframes.get(&current_kf_id).unwrap().get_mp_matches().len(); 
 
         let mut index = 0;
         for kf_i_id in bow_cands {
@@ -426,8 +409,6 @@ impl LoopClosing {
             }
 
             if num_bow_matches >= bow_matches_threshold {
-                // println!("... Num bow matches check passed with {} matches. Creating sim3 solve with kf {}", num_bow_matches, most_bow_matches_kf);
-
                 // Geometric validation
                 let fixed_scale = match self.sensor {
                     Sensor(FrameSensor::Mono, ImuSensor::Some) => {
@@ -446,6 +427,7 @@ impl LoopClosing {
                     fixed_scale,
                     keyframe_matched_mp
                 )?;
+                solver.set_ransac_parameters(0.99, bow_inliers_threshold, 300);
 
                 let mut no_more = false;
                 let mut sim3_result = None;
@@ -454,56 +436,39 @@ impl LoopClosing {
                 }
 
                 match sim3_result {
-                    Some((_inliers, num_inliers)) => {
-                        // println!("...Sim3 solver check passed with {} geometrical inliers among {} BoW matches", num_inliers, bow_inliers_threshold);
-
+                    Some((_inliers, _num_inliers)) => {
                         // Match by reprojection
                         cov_kf.clear();
                         cov_kf = self.map.read().keyframes.get(&most_bow_matches_kf).unwrap().get_covisibility_keyframes(num_covisibles);
                         cov_kf.push(*most_bow_matches_kf);
 
-                        // println!("...There are {} near KFs", cov_kf.len());
-
-                        let mut candidates = HashMap::new(); // vpMapPoints
+                        let mut candidates = Vec::new(); // vpMapPoints
                         let mut sp_map_points = HashSet::new(); // spMapPoints
-                        let mut kfs_for_candidates = HashMap::new(); // vpKeyFrames
+                        let mut kfs_for_candidates = Vec::new(); // vpKeyFrames
                         for kf_id in cov_kf {
                             let read = self.map.read();
                             let mp_matches = read.keyframes.get(&kf_id).unwrap().get_mp_matches();
-                            let mut added = 0;
-                            let mut total = 0;
                             for index in 0..mp_matches.len() {
                                 if let Some((mp_id, _)) = mp_matches[index] {
-                                    total += 1;
                                     if !sp_map_points.contains(&mp_id) {
-                                        added += 1;
                                         sp_map_points.insert(mp_id);
-                                        candidates.insert(index, mp_id);
-                                        kfs_for_candidates.insert(index, kf_id);
+                                        candidates.push(mp_id);
+                                        kfs_for_candidates.push(kf_id);
                                     }
                                 }
                             }
-                            // println!("..to candidate mappoints, added {} mappoints from kf {}. kf has total matches {}", added, kf_id, total);
                         }
-                        // println!("...Candidate mappoints: {}", candidates.len());
 
-                        let mut sim3 = solver.get_estimates(); // gScm
-                        let smw = Sim3 {
-                            pose: self.map.read().keyframes.get(&most_bow_matches_kf).unwrap().pose,
-                            scale: 1.0
-                        }; // gSmwco
-                        let scw = sim3 * smw; // gScw // Similarity matrix of current from the world position
-                        // println!("sim3: rot {:?} trans {:?} scale {:?}", sim3.pose.get_rotation(), sim3.pose.get_translation(), sim3.scale);
-                        // println!("smw: rot {:?} trans {:?}", smw.pose.get_rotation(), smw.pose.get_translation());
-                        // println!("result scw: rot {:?} trans {:?}", scw.pose.get_rotation(), scw.pose.get_translation());
+                        let mut scm = solver.get_estimates(); // gScm
+                        let smw = self.map.read().keyframes.get(&most_bow_matches_kf).unwrap().pose.into(); // gSmw
+                        let scw = scm * smw; // gScw // Similarity matrix of current from the world position
 
-                        let mut matched_mps = HashMap::new(); // vpMatchedMP
-                        let (num_proj_matches, matched_kfs) = orbmatcher::search_by_projection_for_loop_detection1(
+                        let mut matched_mps = vec![None; num_curr_kf_matches]; // vpMatchedMP
+                        let (num_proj_matches, _matched_kfs) = orbmatcher::search_by_projection_for_loop_detection1(
                             &self.map, &current_kf_id, &scw, 
                             &candidates, &kfs_for_candidates, &mut matched_mps,
                             8, 1.5
                         )?;
-                        println!("... first search by projection ... {} matches", num_proj_matches);
 
                         if num_proj_matches >= proj_matches_threshold {
                             // Optimize Sim3 transformation with every matches
@@ -517,30 +482,20 @@ impl LoopClosing {
                             };
 
 
-                            // println!("!!! mappoints after search by projection: {:?}", matched_mps.len());
-                            // println!("..sim3 before optimization: {:?}", sim3);
                             let num_opt_matches = optimizer::optimize_sim3(
-                                &self.map, current_kf_id, *kf_i_id, &mut matched_mps, &mut sim3, 10, fixed_scale
+                                &self.map, current_kf_id, *kf_i_id, &mut matched_mps, &mut scm, 10, fixed_scale
                             );
-                            // println!("..sim3 after optimization: {:?}", sim3);
-
-                            println!("... matches based on sim3 optimization ... {} matches", num_opt_matches);
 
                             if num_opt_matches >= sim3_inliers_threshold {
-                                let smw = Sim3 {
-                                    pose: self.map.read().keyframes.get(&most_bow_matches_kf).unwrap().pose,
-                                    scale: 1.0
-                                }; // gSmw
-                                let scw = sim3 * smw; // gScw // Similarity matrix of current from the world position
+                                let smw = self.map.read().keyframes.get(&most_bow_matches_kf).unwrap().pose.into(); // gSmw
+                                let scw = scm * smw; // gScw // Similarity matrix of current from the world position
 
-                                let mut matched_mps = HashMap::new(); // vpMatchedMP
+                                let mut matched_mps = vec![None; num_curr_kf_matches]; // vpMatchedMP
                                 let num_proj_opt_matches = orbmatcher::search_by_projection_for_loop_detection2(
                                     &self.map, &current_kf_id, &scw, 
                                     &candidates, &mut matched_mps,
                                     5, 1.0
                                 )?;
-                                println!("... second search by projection ... {} matches", num_proj_opt_matches);
-                                // println!("!!! mappoints after search by projection #2: {:?}", matched_mps.len());
 
                                 if num_proj_opt_matches >= num_proj_opt_matches_threshold {
                                     let mut max_x = -1.0;
@@ -550,22 +505,24 @@ impl LoopClosing {
                                     let current_cov_kfs = {
                                         let read = self.map.read();
                                         let kf_i = read.keyframes.get(&kf_i_id).unwrap();
-                                        for (_, mp_i_id) in &matched_mps {
-                                            if let Some(mp_i) = read.mappoints.get(&mp_i_id) {
-                                                let (index_left, _index_right) = mp_i.get_index_in_keyframe(*kf_i_id);
-                                                if index_left >= 0 {
-                                                    let kp = kf_i.features.get_keypoint(index_left as usize).0.pt();
-                                                    if kp.x < min_x {
-                                                        min_x = kp.x;
-                                                    }
-                                                    if kp.x > max_x {
-                                                        max_x = kp.x;
-                                                    }
-                                                    if kp.y < min_y {
-                                                        min_y = kp.y;
-                                                    }
-                                                    if kp.y > max_y {
-                                                        max_y = kp.y;
+                                        for matched_mp in &matched_mps {
+                                            if let Some(mp_i_id) = matched_mp {
+                                                if let Some(mp_i) = read.mappoints.get(&mp_i_id) {
+                                                    let (index_left, _index_right) = mp_i.get_index_in_keyframe(*kf_i_id);
+                                                    if index_left >= 0 {
+                                                        let kp = kf_i.features.get_keypoint(index_left as usize).0.pt();
+                                                        if kp.x < min_x {
+                                                            min_x = kp.x;
+                                                        }
+                                                        if kp.x > max_x {
+                                                            max_x = kp.x;
+                                                        }
+                                                        if kp.y < min_y {
+                                                            min_y = kp.y;
+                                                        }
+                                                        if kp.y > max_y {
+                                                            max_y = kp.y;
+                                                        }
                                                     }
                                                 }
                                             }
@@ -589,22 +546,9 @@ impl LoopClosing {
                                             sjc * scw
                                         }; // gSjw
 
-                                        // println!("gscw: {:?} scale {:?}", scw.pose, scw.scale);
-                                        // println!("result sjw... rot: {:?}, trans: {:?}, scale {:?}", sjw.pose.get_rotation(), sjw.pose.get_translation(), sjw.scale);
-
-                                        // bool bValid = DetectCommonRegionsFromLastKF(pKFj,pMostBoWMatchesKF, gSjw,numProjMatches_j, vpMapPoints, vpMatchedMPs_j);
-
-                                        // println!("...DetectCommonRegionsFromLastKF...");
-                                        // println!(".....sjw rotation: {:?}", sjw.pose.get_rotation());
-                                        // println!(".....sjw translation: {:?}", sjw.pose.get_translation());
-
-                                        let (valid, num_proj_matches_j) = self.detect_common_regions_from_last_kf(current_kf_id, &mut sjw, *most_bow_matches_kf, &mut candidates)?;
-                                        // println!("... detect common regions from last kf .. valid? {}, num matches: {}", valid, num_proj_matches_j);
-
+                                        let (valid, _num_proj_matches_j) = self.detect_common_regions_from_last_kf(current_kf_id, &mut sjw, *most_bow_matches_kf, &mut candidates)?;
 
                                         if valid {
-                                            // let tc_cj = current_kf.pose * kf_j.pose.inverse();
-                                            // let vector_dist = tc_cj.get_translation();
                                             num_kfs += 1;
                                         }
                                         j += 1;
@@ -615,7 +559,6 @@ impl LoopClosing {
                                         vn_matches_stage[index] = num_kfs;
                                     }
 
-                                    // println!("num_best_matches_reproj: {}, num_proj_opt_matches: {}", num_best_matches_reproj, num_proj_opt_matches);
                                     if num_best_matches_reproj < num_proj_opt_matches {
                                         num_best_matches_reproj = num_proj_opt_matches;
                                         best_num_coincidences = num_kfs;
@@ -645,10 +588,6 @@ impl LoopClosing {
 
             println!("...finally: best kf is {} with {} matches. Num coincidences: {}", best_matched_kf, num_best_matches_reproj, self.num_coincidences);
 
-            // println!("!!! self.loop_mps in detect_common_regions_from_bow: {:?}", self.loop_mps.len());
-            // println!("!!! mappoints in detect_common_regions_from_bow: {:?}", self.current_matched_points.len());
-
-
             if self.num_coincidences >= 3 {
                 return Ok((Some(best_matched_kf), Some(best_scw)))
             } else {
@@ -669,36 +608,18 @@ impl LoopClosing {
     }
 
 
-    //////////////////////////* everything below here should be ok 
-    fn correct_loop(&mut self, current_kf_id: Id, loop_kf: Id, scw: Sim3) -> Result<(), Box<dyn std::error::Error>> {
+    fn correct_loop(&mut self, current_kf_id: Id, loop_kf: Id, loop_scw: Sim3) -> Result<(), Box<dyn std::error::Error>> {
         let _span = tracy_client::span!("correct_loop");
 
-        // Note: there's some really gross stuff in here to deal with mutable and immutable references to the map
+        println!("CORRECT LOOP, Sim3: {:?}", loop_scw);
 
-        // Send a stop signal to Local Mapping
-        // Avoid new keyframes are inserted while correcting the loop
-
-        {
-            // TODO (design, concurency) local mapping request stop
-            LOCAL_MAPPING_PAUSE_SWITCH.store(true, Ordering::SeqCst);
-
-            // If a Global Bundle Adjustment is running, abort it
-            if !GBA_IDLE.load(Ordering::SeqCst) {
-                self.full_ba_idx += 1;
-                GBA_KILL_SWITCH.store(true, Ordering::SeqCst);
-            }
-
-            // Wait until Local Mapping has effectively stopped
-            while !LOCAL_MAPPING_IDLE.load(Ordering::SeqCst) {
-                thread::sleep(Duration::from_millis(500));
-            }
-        }
+        set_switches(Switches::CorrectLoopBeginning);
 
         // Ensure current keyframe is updated
         self.map.write().update_connections(current_kf_id);
 
         // Retrive keyframes connected to the current keyframe and compute corrected Sim3 pose by propagation
-        let (current_connected_kfs, mut corrected_sim3, mut non_corrected_sim3) = {
+        let (current_connected_kfs, mut corrected_sim3, mut non_corrected_sim3, twc) = {
             let lock = self.map.read();
             let current_kf = lock.keyframes.get(&current_kf_id).unwrap();
 
@@ -706,53 +627,52 @@ impl LoopClosing {
             current_connected_kfs.push(current_kf_id);
 
             let mut corrected_sim3 = KeyFrameAndPose::new();
-            corrected_sim3.insert(current_kf_id, scw);
+            corrected_sim3.insert(current_kf_id, loop_scw);
 
             let mut non_corrected_sim3 = KeyFrameAndPose::new();
-            let old_pose = current_kf.pose;
-            non_corrected_sim3.insert(current_kf_id, Sim3::new_from_pose(old_pose, 1.0));
+            non_corrected_sim3.insert(current_kf_id, current_kf.pose.into());
 
-            (current_connected_kfs, corrected_sim3, non_corrected_sim3)
+            let twc = current_kf.pose.inverse();
+
+            (current_connected_kfs, corrected_sim3, non_corrected_sim3, twc)
         };
 
-        let current_timestamp = self.map.read().keyframes.get(&current_kf_id).unwrap().timestamp;
-
+        let mut corrected_mp_references = HashMap::<Id, Id>::new(); // mnCorrectedReference in mappoints
         {
             let mut lock = self.map.write();
-            let twc = lock.keyframes.get(&current_kf_id).unwrap().pose.inverse();
+
+            // Update keyframe pose with corrected Sim3. First transform Sim3 to SE3 (scale translation)
+            let current_kf = lock.keyframes.get_mut(&current_kf_id).unwrap();
+            current_kf.pose = loop_scw.into();
+            println!("Corrected current kf {} (frame {}): {:?}", current_kf.id, current_kf.frame_id, current_kf.pose);
 
             for connected_kf_id in &current_connected_kfs {
                 let connected_kf = lock.keyframes.get_mut(connected_kf_id).unwrap();
-                let pose = connected_kf.pose;
+                let tiw = connected_kf.pose;
 
                 if connected_kf_id != &current_kf_id {
-                    let tic = pose * twc;
-                    let ric = tic.get_rotation();
-                    let tic = tic.get_translation();
-                    let g2o_sic = Sim3 { 
-                        pose: Pose::new(*tic, *ric), 
-                        scale: 1.0
-                    };
-                    let g2o_corrected_siw = g2o_sic * scw;
+                    let tic = tiw * twc;
+                    let sic: Sim3 = tic.into();
+
+                    let corrected_siw = sic * loop_scw;
                     //Pose corrected with the Sim3 of the loop closure
-                    corrected_sim3.insert(*connected_kf_id, g2o_corrected_siw);
+                    corrected_sim3.insert(*connected_kf_id, corrected_siw);
 
                     // Update keyframe pose with corrected Sim3. First transform Sim3 to SE3 (scale translation)
-                    connected_kf.pose = Pose::new(*g2o_corrected_siw.pose.get_translation(), *g2o_corrected_siw.pose.get_rotation());
+                    connected_kf.pose = corrected_siw.into();
 
                     // Pose without correction
-                    let g2o_siw = Sim3 {
-                        pose: pose.clone(),
-                        scale: 1.0
-                    };
-                    non_corrected_sim3.insert(*connected_kf_id, g2o_siw);
+                    let original_siw: Sim3 = tiw.into();
+                    non_corrected_sim3.insert(*connected_kf_id, original_siw);
                     println!("...corrected pose for kf {} (frame {}): {:?}", connected_kf_id, connected_kf.frame_id, connected_kf.pose);
+
+                    println!("(original) KF {} now has {} matches", connected_kf_id, lock.keyframes.get(&connected_kf_id).unwrap().mp_match_len());
+
                 }
             }
 
             // Correct all MapPoints observed by current keyframe and neighbors, so that they align with the other side of the loop
             let mut corrected_by_kf = HashMap::<Id, Id>::new(); // mnCorrectedByKF
-            let mut corrected_mp_references = HashMap::<Id, Id>::new(); // mnCorrectedReference in mappoints
             for (kf_id, g2o_corrected_siw) in &corrected_sim3 {
                 let g2o_corrected_swi = g2o_corrected_siw.inverse();
                 let g2o_siw = non_corrected_sim3.get(kf_id).unwrap();
@@ -785,62 +705,58 @@ impl LoopClosing {
                     };
                     if norm_and_depth.is_some() {
                         lock.mappoints.get_mut(mp_id).unwrap().update_norm_and_depth(norm_and_depth.unwrap());
+                    } else {
+                        error!("Mappoint {} has empty observations", mp_id);
                     }
                 }
 
                 // Make sure connections are updated
                 lock.update_connections(*kf_id);
-                // Update keyframe pose with corrected Sim3. First transform Sim3 to SE3 (scale translation)
-                // let new_t = *g2o_corrected_siw.pose.get_translation() * (1.0 / g2o_corrected_siw.scale); //[R t/s;0 1]
-                // {
-                    // let mut map = self.map.write();
-                    // let keyframe = map.keyframes.get_mut(kf_id).unwrap();
-                    // keyframe.pose = Pose::new(new_t, *g2o_corrected_siw.pose.get_rotation());
-
-                    // Make sure connections are updated
-                    // map.update_connections(*kf_id);
-                // }
             }
-
-            println!("current matched points {:?}", self.current_matched_points.len());
 
             // Start Loop Fusion
             // Update matched map points and replace if duplicated
             let mut num_replaced = 0;
             let mut num_added = 0;
-            for (index, loop_mp_id) in &self.current_matched_points {
-                let curr_kf = lock.keyframes.get(&current_kf_id).unwrap();
-                if let Some((mp_id, is_outlier)) = curr_kf.get_mp_match(&(*index as u32)) {
-                    if let Some((curr_mp_id, _is_outlier)) = curr_kf.get_mp_match(&(*index as u32)) {
-                        lock.replace_mappoint(curr_mp_id, *loop_mp_id);
-                        num_replaced += 1;
-                    }
-                } else {
-                    num_added += 1;
-                    lock.add_observation(current_kf_id, *loop_mp_id, *index as u32, false);
-                    let best_descriptor = lock.mappoints.get(&loop_mp_id)
-                        .and_then(|mp| mp.compute_distinctive_descriptors(&lock)).unwrap();
-                    lock.mappoints.get_mut(&loop_mp_id)
-                        .map(|mp| mp.update_distinctive_descriptors(best_descriptor));
+            for i in 0..self.current_matched_points.len() {
+                if let Some(loop_mp_id) = self.current_matched_points[i] {
+                    let curr_kf = lock.keyframes.get(&current_kf_id).unwrap();
+                    match lock.mappoints.get(&loop_mp_id) {
+                        None => {
+                            if let Some((curr_mp_id, _is_outlier)) = curr_kf.get_mp_match(&(i as u32)) {
+                                lock.replace_mappoint(curr_mp_id, loop_mp_id);
+                                num_replaced += 1;
+                            } else {
+                                num_added += 1;
+                                lock.add_observation(current_kf_id, loop_mp_id, i as u32, false);
+                                let best_descriptor = lock.mappoints.get(&loop_mp_id)
+                                    .and_then(|mp| mp.compute_distinctive_descriptors(&lock)).unwrap();
+                                lock.mappoints.get_mut(&loop_mp_id)
+                                    .map(|mp| mp.update_distinctive_descriptors(best_descriptor));
+                            }
+                        },
+                        Some(_) => ()
+                    };
                 }
             }
             println!("Loop fusion, mappoints replaced {}, added {}", num_replaced, num_added);
         }
 
+        for (kf_id, _) in &corrected_sim3 {
+            println!("(loop fusion) KF {} now has {} matches", kf_id, self.map.read().keyframes.get(&kf_id).unwrap().mp_match_len());
+        }
+
+        // This is for testing the outcome of essential graph optimization
         // self.system.send(
         //     VISUALIZER, 
         //     Box::new(
         //         LoopClosureMapPointFusionMsg {
-        //             mappoint_matches: self.current_matched_points.iter().map(|(_index, mp_id)| *mp_id).collect(),
-        //             loop_mappoints: self.loop_mappoints.iter().map(|(_index, mp_id)| *mp_id).collect(),
+        //             mappoint_matches: self.current_matched_points.iter().filter(|m| m.is_some()).map(|m| m.unwrap()).collect(),
+        //             loop_mappoints: self.loop_mappoints.clone(),
         //             keyframes_affected: corrected_sim3.keys().cloned().collect(),
-        //             timestamp: current_timestamp
+        //             timestamp: self.map.read().keyframes.get(&current_kf_id).unwrap().timestamp
         //         }
         // ));
-
-        // todo sofiya ... fuses way too few mappoints (usually 0 for most kfs)
-        // this causes update_connections to not have as many connections
-        // which causes the essential graph optimization not to go far enough back
 
         // Project MapPoints observed in the neighborhood of the loop keyframe
         // into the current keyframe and neighbors using corrected poses.
@@ -848,7 +764,7 @@ impl LoopClosing {
         self.search_and_fuse(&corrected_sim3)?;
 
         // After the MapPoint fusion, new links in the covisibility graph will appear attaching both sides of the loop
-        let mut loop_connections: HashMap::<Id, HashSet<Id>> = HashMap::new();
+        let mut loop_connections: BTreeMap::<Id, HashSet<Id>> = BTreeMap::new();
         let mut test_unique_kfs: HashSet<Id> = HashSet::new();
 
         for kf_id in &current_connected_kfs {
@@ -865,18 +781,19 @@ impl LoopClosing {
             for neighbor_id in previous_neighbors {
                 loop_connections.get_mut(kf_id).unwrap().remove(&neighbor_id);
             }
+
             for neighbor_id in &current_connected_kfs {
                 loop_connections.get_mut(kf_id).unwrap().remove(neighbor_id);
             }
-
-            // println!("..Loop connections after: {:?}", loop_connections.get(kf_id).unwrap());
         }
 
+        // This is for debugging essential graph optimization
         // self.system.send(
         //     VISUALIZER, 
         //     Box::new(
         //         LoopClosureEssentialGraphMsg {
         //             relevant_keyframes: test_unique_kfs,
+        //             mappoints: 
         //             timestamp: current_timestamp
         //         }
         // ));
@@ -885,6 +802,7 @@ impl LoopClosing {
         optimizer::optimize_essential_graph(
             &self.map, loop_kf, current_kf_id,
             loop_connections, &non_corrected_sim3, &corrected_sim3, 
+            corrected_mp_references,
             !self.sensor.is_mono()
         );
 
@@ -894,11 +812,20 @@ impl LoopClosing {
         // Launch a new thread to perform Global Bundle Adjustment
         let mut map_copy = self.map.clone();
         let current_kf_id = current_kf_id;
+
+        // This is for debugging GBA optimization
+        // self.system.send(
+        //     VISUALIZER, 
+        //     Box::new(
+        //         LoopClosureGBAMsg { 
+        //             kf_id: current_kf_id,
+        //             timestamp: self.map.read().keyframes.get(&current_kf_id).unwrap().timestamp
+        //         }
+        // ));
+
         thread::spawn(move || {
             run_gba(&mut map_copy, current_kf_id);
         });
-
-        LOCAL_MAPPING_PAUSE_SWITCH.store(false, Ordering::SeqCst);
 
         self.last_corrected_loop_kf_id = current_kf_id;
 
@@ -912,13 +839,19 @@ impl LoopClosing {
             let replace_points = orbmatcher::fuse_from_loop_closing(
                 &kf_id, &g2o_scw, &self.loop_mappoints, &self.map, 4
             )?;
+            let mut num_fused = 0;
 
-            // println!("Search and fuse, for KF {}, fused {} mappoints", kf_id, replace_points.len());
-            for (index, mp_to_replace) in replace_points {
-                let replace_with = self.loop_mappoints.get(&index).unwrap();
-                // println!("Replace {} with {}", mp_to_replace, replace_with);
-                self.map.write().replace_mappoint(mp_to_replace, *replace_with);
+            for i in 0..replace_points.len() {
+                if let Some(mp_to_replace) = replace_points[i] {
+                    let replace_with = self.loop_mappoints[i];
+                    self.map.write().replace_mappoint(mp_to_replace, replace_with);
+                    num_fused += 1;
+                }
             }
+            println!("Search and fuse, for KF {}, fused {} mappoints. total candidates: {}", kf_id, num_fused, self.loop_mappoints.len());
+
+            println!("(search and fuse) KF {} now has {} matches", kf_id, self.map.read().keyframes.get(&kf_id).unwrap().mp_match_len());
+
         }
         Ok(())
     }
@@ -932,12 +865,7 @@ fn run_gba(map: &mut MapLock, loop_kf: Id) {
     let _span = tracy_client::span!("run_gba_in_thread");
     info!("Starting Global Bundle Adjustment");
 
-    // TODO (design, concurrency) mbStopGBA called from within loop closing
-    if GBA_KILL_SWITCH.load(Ordering::SeqCst) {
-        return;
-    }
-
-    GBA_IDLE.store(false, Ordering::SeqCst);
+    set_switches(Switches::GbaBeginning);
 
     optimizer::global_bundle_adjustment(map, 10, false, loop_kf);
 
@@ -949,14 +877,11 @@ fn run_gba(map: &mut MapLock, loop_kf: Id) {
     debug!("Global bundle adjustment finished. Updating map...");
 
     if GBA_KILL_SWITCH.load(Ordering::SeqCst) {
+        set_switches(Switches::GbaDone);
         return;
     }
 
-    LOCAL_MAPPING_PAUSE_SWITCH.store(true, Ordering::SeqCst);
-    // Wait until Local Mapping has effectively stopped
-    while !LOCAL_MAPPING_IDLE.load(Ordering::SeqCst) {
-        thread::sleep(Duration::from_millis(1000));
-    }
+    set_switches(Switches::PostGBAUpdate);
 
     {
         let mut lock = map.write();
@@ -964,17 +889,22 @@ fn run_gba(map: &mut MapLock, loop_kf: Id) {
         let mut kfs_to_check = vec![lock.initial_kf_id];
         let mut i = 0;
         let mut tcw_bef_gba: HashMap<Id, Pose> = HashMap::new();
+        println!("Loop kf is {}", loop_kf);
         while i < kfs_to_check.len() {
             let curr_kf_id = kfs_to_check[i];
             let children = lock.keyframes.get(& curr_kf_id).unwrap().children.clone();
 
+            let (curr_kf_pose_inverse, curr_kf_gba_pose) = {
+                let curr_kf = lock.keyframes.get(&curr_kf_id).unwrap();
+                (curr_kf.pose.inverse(), curr_kf.gba_pose.clone())
+            };
+
             for child_id in & children {
-                let kfs = lock.keyframes.get_many_mut([&curr_kf_id, child_id]).unwrap();
-                if !kfs[0].ba_global_for_kf != loop_kf {
-                    let tchildc = kfs[0].pose * kfs[1].pose;
-                    kfs[1].gba_pose = Some(tchildc * kfs[0].gba_pose.unwrap());
-                    kfs[1].ba_global_for_kf = loop_kf;
-                    // debug!("Set gba pose: {} {:?}", kfs[1].id, kfs[1].gba_pose);
+                let child = lock.keyframes.get_mut(child_id).unwrap();
+                if child.ba_global_for_kf != loop_kf {
+                    let tchildc = child.pose * curr_kf_pose_inverse;
+                    child.gba_pose = Some(tchildc * curr_kf_gba_pose.unwrap());
+                    child.ba_global_for_kf = loop_kf;
                 }
                 kfs_to_check.push(*child_id);
             }
@@ -982,8 +912,7 @@ fn run_gba(map: &mut MapLock, loop_kf: Id) {
             let kf = lock.keyframes.get_mut(&curr_kf_id).unwrap();
             tcw_bef_gba.insert(curr_kf_id, kf.pose);
             kf.pose = kf.gba_pose.unwrap().clone();
-            // debug!("Set gba pose: {} {:?}", kf.id, kf.gba_pose);
-
+            // println!("Update kf {} with pose {:?}", curr_kf_id, kf.pose);
             i += 1;
         }
 
@@ -1003,9 +932,11 @@ fn run_gba(map: &mut MapLock, loop_kf: Id) {
                     }
 
                     // Map to non-corrected camera
-                    let rcw = tcw_bef_gba.get(&mp.ref_kf_id).unwrap().get_rotation();
-                    let tcw = tcw_bef_gba.get(&mp.ref_kf_id).unwrap().get_translation();
+                    let tcw_bef_gba_for_ref_kf = tcw_bef_gba.get(&mp.ref_kf_id).unwrap();
+                    let rcw = tcw_bef_gba_for_ref_kf.get_rotation();
+                    let tcw = tcw_bef_gba_for_ref_kf.get_translation();
                     let xc = *rcw * *mp.position + *tcw;
+
 
                     // Backproject using corrected camera
                     let twc = kf.pose.inverse();
@@ -1024,16 +955,62 @@ fn run_gba(map: &mut MapLock, loop_kf: Id) {
         }
     }
 
-    GBA_IDLE.store(true, Ordering::SeqCst);
-    GBA_KILL_SWITCH.store(false, Ordering::SeqCst);
-    // Loop closed. Release local mapping.
-    LOCAL_MAPPING_PAUSE_SWITCH.store(false, Ordering::SeqCst);
+    set_switches(Switches::GbaDone);
 
     info!("Map updated!");
 }
 
+enum Switches {
+    CorrectLoopBeginning,
+    GbaBeginning,
+    PostGBAUpdate,
+    GbaDone,
+}
 
-fn find_matches_by_projection(map: & MapLock, current_kf_id: Id, scw: &mut Sim3, loop_kf: Id, mappoints: &mut HashMap<usize, Id>, matched_mappoints: &mut HashMap<usize, i32>) -> Result<i32, Box<dyn std::error::Error>> {
+fn set_switches(switches: Switches) {
+    match switches {
+        Switches::CorrectLoopBeginning => {
+            // Avoid new keyframes are inserted while correcting the loop
+            LOCAL_MAPPING_PAUSE_SWITCH.store(true, Ordering::SeqCst);
+
+            // If a Global Bundle Adjustment is running, abort it
+            if !GBA_IDLE.load(Ordering::SeqCst) {
+                GBA_KILL_SWITCH.store(true, Ordering::SeqCst);
+            }
+
+            // Wait until Local Mapping has effectively stopped
+            while !LOCAL_MAPPING_IDLE.load(Ordering::SeqCst) {
+                thread::sleep(Duration::from_millis(1));
+            }
+        },
+        Switches::GbaBeginning => {
+            // GBA is not idle
+            GBA_IDLE.store(false, Ordering::SeqCst);
+            // Reset kill switch so future loops of LC can set it if they need to
+            GBA_KILL_SWITCH.store(false, Ordering::SeqCst);
+            // Local mapping ok to run during GBA optimization
+            LOCAL_MAPPING_PAUSE_SWITCH.store(false, Ordering::SeqCst);
+        },
+        Switches::PostGBAUpdate => {
+            // Stop local mapping while updating the map with results of GBA optimization
+            LOCAL_MAPPING_PAUSE_SWITCH.store(true, Ordering::SeqCst);
+
+            while !LOCAL_MAPPING_IDLE.load(Ordering::SeqCst) {
+                thread::sleep(Duration::from_millis(1));
+            }
+        },
+        Switches::GbaDone => {
+            // GBA is not running, so reset GBA switches
+            GBA_IDLE.store(true, Ordering::SeqCst);
+            GBA_KILL_SWITCH.store(false, Ordering::SeqCst);
+            // Release local mapping
+            LOCAL_MAPPING_PAUSE_SWITCH.store(false, Ordering::SeqCst);
+        },
+
+    }
+}
+
+fn find_matches_by_projection(map: & MapLock, current_kf_id: Id, scw: &mut Sim3, loop_kf: Id, mappoints: &mut Vec<Id>, matched_mappoints: &mut Vec<Option<i32>>) -> Result<i32, Box<dyn std::error::Error>> {
     // int LoopClosing::FindMatchesByProjection(KeyFrame* pCurrentKF, KeyFrame* pMatchedKFw, g2o::Sim3 &g2oScw, set<MapPoint*> &spMatchedMPinOrigin, vector<MapPoint*> &vpMapPoints, vector<MapPoint*> &vpMatchedMapPoints)
     let _span = tracy_client::span!("find_matches_by_projection");
 
@@ -1064,6 +1041,7 @@ fn find_matches_by_projection(map: & MapLock, current_kf_id: Id, scw: &mut Sim3,
     let mut sp_map_points = HashSet::new();
     mappoints.clear(); // vpMapPoints
     matched_mappoints.clear(); // vpMatchedMapPoints
+    matched_mappoints.resize_with(map.read().keyframes.get(&current_kf_id).unwrap().get_mp_matches().len(), || None);
 
     for keyframe in cov_kf_matched {
         let read = map.read();
@@ -1073,7 +1051,7 @@ fn find_matches_by_projection(map: & MapLock, current_kf_id: Id, scw: &mut Sim3,
             if let Some((mp, _)) = mp_matches.get(index).unwrap() {
                 if !sp_map_points.contains(mp) {
                     sp_map_points.insert(*mp);
-                    mappoints.insert(index, *mp);
+                    mappoints.push(*mp);
                 }
             }
         }

@@ -1,7 +1,5 @@
 use core::{config::{SETTINGS, SYSTEM}, matrix::{DVMatrix, DVVector3, DVVectorOfKeyPoint}, sensor::{FrameSensor, Sensor}, system::Timestamp};
 
-use nalgebra::Translation;
-
 use crate::{actors::tracking_backend::TrackedMapPointData, modules::{bow::BoW, imu::{IMUBias, IMUPreIntegrated}}, registered_actors::{CAMERA_MODULE, VOCABULARY}};
 
 use super::{features::Features, keyframe::MapPointMatches, map::{Id, Map}, mappoint::MapPoint, pose::{DVTranslation, Pose}};
@@ -59,16 +57,6 @@ pub fn new(
     }
 
     pub fn new_clone(frame: &Frame) -> Frame {
-        // let bow = match &frame.bow {
-        //     Some(bow) => Some(bow.clone()),
-        //     None => {
-        //         println!("Compute bow in clone! frame id: {}", frame.frame_id);
-        //         let mut bow = BoW::new();
-        //         VOCABULARY.transform(&frame.features.descriptors, &mut bow);
-        //         Some(bow)
-        //     }
-        // };
-
         Frame {
             timestamp: frame.timestamp,
             frame_id: frame.frame_id,

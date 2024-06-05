@@ -36,6 +36,7 @@
 #include "sparse_optimizer.h"
 #include "solver.h"
 #include "batch_stats.h"
+#include "../stuff/misc.h"
 using namespace std;
 
 namespace g2o {
@@ -83,6 +84,7 @@ namespace g2o {
     double tempChi=currentChi;
 
     double iniChi = currentChi;
+    // std::cout << "Initial chi: " << iniChi << std::endl;
 
     _solver->buildSystem();
     if (globalStats) {
@@ -127,11 +129,13 @@ namespace g2o {
         tempChi=std::numeric_limits<double>::max();
 
       rho = (currentChi-tempChi);
+    // Sofiya, from old g2o code:
       double scale = computeScale();
       scale += 1e-3; // make sure it's non-zero :)
-      rho /=  scale;
+    //   double scale = ok2 ? computeScale() + cst(1e-3) : 1; // make sure it's non-zero :)
+    //   rho /=  scale;
 
-      if (rho>0 && g2o_isfinite(tempChi)){ // last step was good
+      if (rho>0 && g2o_isfinite(tempChi) ){ // last step was good // Sofiya: add  && ok2
         double alpha = 1.-pow((2*rho-1),3);
         // crop lambda between minimum and maximum factors
         alpha = (std::min)(alpha, _goodStepUpperScale);
@@ -150,8 +154,6 @@ namespace g2o {
 
     if (qmax == _maxTrialsAfterFailure->value() || rho==0)
     {
-      // cout << "qmax = " << qmax << "             rho = " << rho << endl;
-      std::cout << "terminate ... maxtrials reached. qmax == " << qmax << ", rho == " << rho << std::endl;
       return Terminate;
     }
 
@@ -163,7 +165,6 @@ namespace g2o {
 
     if(_nBad>=3)
     {
-        std::cout << "failure ... nBad >= 3" << std::endl;
         return Terminate;
     }
 
@@ -203,6 +204,7 @@ namespace g2o {
   void OptimizationAlgorithmLevenberg::setUserLambdaInit(double lambda)
   {
     _userLambdaInit->setValue(lambda);
+    // std::cout << "Lambda set to: " << lambda << std::endl;
   }
 
   void OptimizationAlgorithmLevenberg::printVerbose(std::ostream& os) const

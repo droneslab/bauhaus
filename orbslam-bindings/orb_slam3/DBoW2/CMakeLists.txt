@@ -6,10 +6,8 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 # Sofiya: Removed -march=native, based on https://github.com/raulmur/ORB_SLAM2/issues/341 
-# Sofiya: Added -flto=thin to enable link time optimization with Rust: https://doc.rust-lang.org/rustc/linker-plugin-lto.html#toolchain-compatibility
-
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS}  -Wall  -flto=thin")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall  -flto=thin")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS}  -Wall ")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall ")
 
 set(HDRS_DBOW2
   DBoW2/BowVector.h

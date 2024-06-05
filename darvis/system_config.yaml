@@ -13,7 +13,7 @@ system:
       first_actor_name: TRACKING_FRONTEND # Name of actor to kick off pipeline
 
       # FPS
-      fps: 8.0
+      fps: 10.0
       use_timestamps_file: false # Instead of running at a fixed fps, use timestamps from the dataset
 
       # RESULTS
@@ -22,7 +22,7 @@ system:
 
       # DEBUGGING
       log_level: debug # options are [trace, debug, info, warn, error]
-      check_deadlocks: true # Spawns a new thread to check for deadlocks every 2 secs, but slows stuff down.
+      check_deadlocks: false # Spawns a new thread to check for deadlocks every 2 secs, but slows stuff down.
       # To enable profiling, set features = ["enable"] for tracy-client in Cargo.toml
       # To turn on visualizer, uncomment visualizer actor below
 
@@ -99,9 +99,9 @@ actors:
             value: false
             type: bool
           - name: draw_local_mappoints # Whether to draw local mappoints (not tracked, but in local map based on local keyframes)
-            value: false
+            value: true
             type: bool
-          - name: draw_connected_kfs # You can set this to be true but it doesn't look good. Need to figure out some nicer way to distribute the points so it's actually readable
+          - name: draw_connected_kfs # Works but doesn't look good. Need to figure out some nicer way to distribute the points so it's actually readable
             value: false
             type: bool
           - name: draw_only_trajectory

@@ -150,12 +150,8 @@ public:
       Vector7d res;
       double sigma = std::log(s);
 
-      
-
-   
       Vector3d omega;
       Vector3d upsilon;
-
 
       Matrix3d R = r.toRotationMatrix();
       double d =  0.5*(R(0,0)+R(1,1)+R(2,2)-1);
@@ -191,7 +187,6 @@ public:
         C=(s-1)/sigma;
         if (d>1-eps)
         {
-
           double sigma2 = sigma*sigma;
           omega=0.5*deltaR(R);
           Omega = skew(omega);
@@ -216,7 +211,6 @@ public:
 
       upsilon = W.lu().solve(t);
 
-
       for (int i=0; i<3; i++)
         res[i] = omega[i];
 
@@ -225,8 +219,22 @@ public:
 
       res[6] = sigma;
 
+    //   if (g2o_isnan(res[0])) {
+    //     std::cout << "has nan..." << std::endl;
+    //     // std::cout << "has nan... sigma = " << sigma << std::endl;
+    //     // std::cout << "upsilon = " << upsilon.transpose() << std::endl;
+    //     // std::cout << "W = " << W << std::endl;
+    //     // std::cout << "sigma = " << sigma << std::endl;
+    //     // std::cout << "s = " << s << std::endl;
+
+    //     exit(1);
+
+    //     // I is fine
+    //     // A, B, C, Omega all nan
+
+    //   }
+
       return res;
-      
     }
 
 

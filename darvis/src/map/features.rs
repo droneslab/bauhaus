@@ -19,7 +19,6 @@ use crate::{
     map::map::Id,
 };
 
-use std::cmp::{max, min};
 
 #[derive(Clone, Debug, Default)]
 enum KeyPoints {
@@ -116,7 +115,6 @@ impl Features {
                 ];
 
                 // keypoints for point2f
-                
 
                 // Reshape points
                 let mut mat = Mat::from_slice_2d(&points.iter().map(|p| vec![p.x, p.y]).collect::<Vec<_>>()).unwrap();
@@ -135,7 +133,7 @@ impl Features {
                     &Mat::eye(3, 3, opencv::core::CV_32F)?,
                     &CAMERA_MODULE.k_matrix.mat(),
                 )?;
-                let mut undistorted_points = undistorted_points.reshape(1, 0).unwrap();
+                let undistorted_points = undistorted_points.reshape(1, 0).unwrap();
 
                 // Get the min and max values
                 let mn_min_x = min_float(

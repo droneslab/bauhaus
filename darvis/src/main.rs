@@ -1,7 +1,3 @@
-#![feature(map_many_mut)]
-#![feature(hash_extract_if)]
-#![feature(extract_if)]
-
 use std::{fs::{OpenOptions, File}, path::Path, env, time::{self, Duration}, io::{self, BufRead}, thread};
 use map::map::Map;
 use fern::colors::{ColoredLevelConfig, Color};
@@ -11,7 +7,7 @@ use spin_sleep::LoopHelper;
 #[macro_use] extern crate lazy_static;
 
 use core::{*, config::*, system::System, read_only_lock::ReadWriteMap};
-use crate::{actors::messages::{ShutdownMsg, ImageMsg}, modules::image};
+use crate::{actors::messages::{ImageMsg, ShutdownMsg}, modules::{image, optimizer}};
 use crate::map::map::Id;
 
 mod actors;
@@ -167,7 +163,7 @@ fn read_timestamps_file_kitti(time_stamp_dir: &String) -> Vec<f64> {
 }
 
 fn read_timestamps_file_euroc(time_stamp_dir: &String) -> Vec<f64> {
-    println!("Reading timestamps file {}", time_stamp_dir.clone());
+    info!("Reading timestamps file {}", time_stamp_dir.clone());
     let file = File::open(time_stamp_dir.clone() + "/data.csv")
         .expect("Could not open timestamps file");
 
@@ -178,7 +174,7 @@ fn read_timestamps_file_euroc(time_stamp_dir: &String) -> Vec<f64> {
 }
 
 fn read_timestamps_file_tum(time_stamp_dir: &String) -> Vec<f64> {
-    println!("Reading timestamps file {}", time_stamp_dir.clone());
+    info!("Reading timestamps file {}", time_stamp_dir.clone());
     let file = File::open(time_stamp_dir.clone() + "/rgb.txt")
         .expect("Could not open timestamps file");
 

@@ -32,7 +32,7 @@ namespace g2o {
             BlockSolver_6_3* solver_ptr = new BlockSolver_6_3(linearSolver);
             OptimizationAlgorithmLevenberg* solver = new OptimizationAlgorithmLevenberg(solver_ptr);
             optimizer->setAlgorithm(solver);
-            optimizer->setVerbose(false);
+            optimizer->setVerbose(true);
 
             optimizer_type = 1;
         } else if (opt_type == 2) {
@@ -64,7 +64,7 @@ namespace g2o {
             g2o::BlockSolver_7_3 * solver_ptr= new g2o::BlockSolver_7_3(linearSolver);
 
             g2o::OptimizationAlgorithmLevenberg* solver = new g2o::OptimizationAlgorithmLevenberg(solver_ptr);
-            optimizer->setVerbose(true);
+            optimizer->setVerbose(false);
             solver->setUserLambdaInit(1e-16);
             optimizer->setAlgorithm(solver);
 

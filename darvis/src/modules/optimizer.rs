@@ -1,11 +1,11 @@
 extern crate g2o;
 
-use std::{cmp::{max, min}, collections::{HashMap, HashSet}};
+use std::{cmp::{max, min}, collections::{BTreeMap, HashMap, HashSet}, fs::File, io::{self, BufRead}, path::Path};
 use core::{
     config::{SETTINGS, SYSTEM}, sensor::{Sensor, FrameSensor}
 };
-use log::{error, info, warn};
-use nalgebra::Matrix3;
+use log::{debug, error, info, warn};
+use nalgebra::{Matrix3, Rotation3, UnitQuaternion, Vector3};
 use opencv::prelude::KeyPointTraitConst;
 use crate::{
     actors::loop_closing::{KeyFrameAndPose, GBA_KILL_SWITCH}, map::{frame::Frame, map::Id, pose::{DVTranslation, Pose, Sim3}}, registered_actors::{CAMERA, FEATURE_DETECTION}, MapLock
@@ -82,7 +82,6 @@ pub fn optimize_pose(
     let mut mp_indexes = vec![];
 
     {
-        // print!("PoseOptimization mappoint data");
         // Take lock to construct factor graph
         let map_read_lock = map.read();
         for i in 0..frame.mappoint_matches.len() {
@@ -150,8 +149,7 @@ pub fn optimize_pose(
             0, 
             (*frame.pose.as_ref().unwrap()).into()
         );
-        
-        println!("optimize pose");
+
         optimizer.pin_mut().optimize(iterations[iteration], false, false);
 
         num_bad = 0;
@@ -278,6 +276,8 @@ pub fn global_bundle_adjustment(map: &mut MapLock, iterations: i32, robust: bool
     //     optimizer.enable_stop_flag();
     // }
 
+    println!("Loop kf is {}", loop_kf);
+
     let (kf_vertex_ids, mp_vertex_ids) = {
         let lock = map.read();
 
@@ -292,6 +292,7 @@ pub fn global_bundle_adjustment(map: &mut MapLock, iterations: i32, robust: bool
             );
             kf_vertex_ids.insert(*kf_id, id_count);
             id_count += 1;
+            println!("ADD KF {} with pose {:?}", kf.id, kf.pose);
         }
 
         let mut mp_vertex_ids = HashMap::new();
@@ -305,6 +306,7 @@ pub fn global_bundle_adjustment(map: &mut MapLock, iterations: i32, robust: bool
                 false, true
             );
             mp_vertex_ids.insert(*mp_id, id_count);
+            println!("ADD MAPPOINT {} with pose {:?}", mp_id, mappoint.position);
 
             let mut n_edges = 0;
 
@@ -332,6 +334,7 @@ pub fn global_bundle_adjustment(map: &mut MapLock, iterations: i32, robust: bool
                                     *TH_HUBER_2D
                                 )
                             );
+                            println!("ADD EDGE KF {} <-> MP {}", kf_id, mp_id);
                         }
                     }
                 };
@@ -352,33 +355,33 @@ pub fn global_bundle_adjustment(map: &mut MapLock, iterations: i32, robust: bool
             id_count += 1;
         }
 
-        // Optimize!
-        println!("optimize gba");
-        let span = tracy_client::span!("global_bundle_adjustment::optimize");
-        optimizer.pin_mut().optimize(iterations, false, false);
-        drop(span);
         (kf_vertex_ids, mp_vertex_ids)
     };
 
-    println!("Gba optimization done");
+    // Optimize!
+    {
+        let _ = tracy_client::span!("global_bundle_adjustment::optimize");
+        optimizer.pin_mut().optimize(iterations, false, false);
+    }
 
     {
         let mut lock = map.write();
         let initial_kf_id = lock.initial_kf_id;
         for (kf_id, vertex_id) in kf_vertex_ids {
             if let Some(kf) = lock.keyframes.get_mut(&kf_id) {
-                let pose = optimizer.recover_optimized_frame_pose(vertex_id);
+                let pose: Pose = optimizer.recover_optimized_frame_pose(vertex_id).into();
 
                 if loop_kf == initial_kf_id {
                     kf.pose = pose.into();
                 } else {
-                    // debug!("Set gba pose: {} {:?}", kf_id, pose);
-                    kf.gba_pose = Some(pose.into());
+                    println!("GBA: Set kf {} pose: {:?}. Old pose: {:?}", kf.id, pose, kf.pose);
+                    kf.gba_pose = Some(pose);
                     kf.ba_global_for_kf = loop_kf;
                 }
             } else {
                 // Possible that map actor deleted mappoint after local BA has finished but before
                 // this message is processed
+                println!("GBA: KF {} is deleted?", kf_id);
                 continue;
             }
         }
@@ -396,8 +399,6 @@ pub fn global_bundle_adjustment(map: &mut MapLock, iterations: i32, robust: bool
                     );
                     let pos = DVTranslation::new(translation.vector);
 
-                    // new_mp_poses.insert(mp_id, DVTranslation::new(translation.vector));
-
                     if loop_kf == initial_kf_id {
                         mp.position = pos;
                         let norm_and_depth = lock.mappoints.get(&mp_id).unwrap().get_norm_and_depth(&lock);
@@ -413,8 +414,6 @@ pub fn global_bundle_adjustment(map: &mut MapLock, iterations: i32, robust: bool
             };
         }
     }
-
-    // BundleAdjustmentResult::new(optimizer, kf_vertex_ids, mp_vertex_ids, vec![], vec![])
 }
 
 pub fn local_bundle_adjustment(
@@ -496,17 +495,21 @@ pub fn local_bundle_adjustment(
         for mp_id in &local_mappoints {
             let mp = lock.mappoints.get(&mp_id).unwrap();
             for (kf_id, (_left_index, _right_index)) in mp.get_observations() {
-                let kf = lock.keyframes.get(&kf_id).unwrap();
-                let local_ba = match local_ba_for_kf.get(kf_id) {
-                    Some(local_ba) => *local_ba != keyframe_id,
-                    None => true
+                match lock.keyframes.get(&kf_id) {
+                    Some(kf) => {
+                        let local_ba = match local_ba_for_kf.get(kf_id) {
+                            Some(local_ba) => *local_ba != keyframe_id,
+                            None => true
+                        };
+                        if local_ba && !ba_fixed_for_kf.contains(kf_id) {
+                            ba_fixed_for_kf.insert(kf_id);
+                            if kf.origin_map_id == current_map_id {
+                                fixed_cameras.push(*kf_id);
+                            }
+                        }
+                    },
+                    None => {} // KF could have been deleted during optimization, ok to ignore
                 };
-                if local_ba && !ba_fixed_for_kf.contains(kf_id) {
-                    ba_fixed_for_kf.insert(kf_id);
-                    if kf.origin_map_id == current_map_id {
-                        fixed_cameras.push(*kf_id);
-                    }
-                }
             }
         }
         if fixed_cameras.len() + num_fixed_kf == 0 {
@@ -533,30 +536,39 @@ pub fn local_bundle_adjustment(
         // Set Local KeyFrame vertices
         let mut max_kf_id = 0;
         for kf_id in &local_keyframes {
-            let kf = lock.keyframes.get(kf_id).unwrap();
-            let set_fixed = *kf_id == lock.initial_kf_id;
-            optimizer.pin_mut().add_frame_vertex(kf.id, (kf.pose).into(), set_fixed);
-            kf_vertex_ids.insert(*kf_id, kf.id);
-            if kf.id > max_kf_id {
-                max_kf_id = kf.id;
-            }
-            if set_fixed {
-                fixed_kfs += 1;
-            } else {
-                kfs_to_optimize += 1;
-            }
+            match lock.keyframes.get(&kf_id) {
+                Some(kf) => {
+                    let set_fixed = *kf_id == lock.initial_kf_id;
+                    optimizer.pin_mut().add_frame_vertex(kf.id, (kf.pose).into(), set_fixed);
+                    kf_vertex_ids.insert(*kf_id, kf.id);
+                    if kf.id > max_kf_id {
+                        max_kf_id = kf.id;
+                    }
+                    if set_fixed {
+                        fixed_kfs += 1;
+                    } else {
+                        kfs_to_optimize += 1;
+                    }
+                },
+                None => {} // KF could have been deleted during optimization, ok to ignore
+            };
         }
 
         // Set Fixed KeyFrame vertices
         for kf_id in &fixed_cameras {
-            let kf = lock.keyframes.get(kf_id).unwrap();
-            optimizer.pin_mut().add_frame_vertex(kf.id, (kf.pose).into(), true);
-            kf_vertex_ids.insert(*kf_id, kf.id);
-            if kf.id > max_kf_id {
-                max_kf_id = kf.id;
-            }
-            fixed_kfs += 1;
+            match lock.keyframes.get(&kf_id) {
+                Some(kf) => {
+                    optimizer.pin_mut().add_frame_vertex(kf.id, (kf.pose).into(), true);
+                    kf_vertex_ids.insert(*kf_id, kf.id);
+                    if kf.id > max_kf_id {
+                        max_kf_id = kf.id;
+                    }
+                    fixed_kfs += 1;
+                },
+                None => {} // KF could have been deleted during optimization, ok to ignore
+            };
         }
+
 
         drop(span);
         let _span = tracy_client::span!("local_bundle_adjustment:add_mp_vertices");
@@ -696,7 +708,6 @@ pub fn local_bundle_adjustment(
     // Optimize
     {
         let _span = tracy_client::span!("local_bundle_adjustment::optimize");
-        println!("optimize lba");
         optimizer.pin_mut().optimize(10, false, false);
     }
 
@@ -789,28 +800,18 @@ pub fn local_bundle_adjustment(
                 position.translation[2] as f64
             );
             let mut lock = map.write();
-            if loop_kf == lock.initial_kf_id {
-                match lock.mappoints.get_mut(&mp_id) {
-                    // Possible that map actor deleted mappoint after local BA has finished but before
-                    // this message is processed
-                    Some(mp) => {
-                            mp.position = DVTranslation::new(translation.vector);
-                            let norm_and_depth = lock.mappoints.get(&mp_id).unwrap().get_norm_and_depth(&lock);
-                            if norm_and_depth.is_some() {
-                                lock.mappoints.get_mut(&mp_id).unwrap().update_norm_and_depth(norm_and_depth.unwrap());
-                            }
-                    },
-                    None => continue,
-                };
-            } else {
-                match lock.mappoints.get_mut(&mp_id) {
-                    Some(mp) => {
-                        mp.gba_pose = Some(DVTranslation::new(translation.vector));
-                        mp.ba_global_for_kf = loop_kf;
-                    },
-                    None => continue
-                };
-            }
+            match lock.mappoints.get_mut(&mp_id) {
+                // Possible that map actor deleted mappoint after local BA has finished but before
+                // this message is processed
+                Some(mp) => {
+                        mp.position = DVTranslation::new(translation.vector);
+                        let norm_and_depth = lock.mappoints.get(&mp_id).unwrap().get_norm_and_depth(&lock);
+                        if norm_and_depth.is_some() {
+                            lock.mappoints.get_mut(&mp_id).unwrap().update_norm_and_depth(norm_and_depth.unwrap());
+                        }
+                },
+                None => continue,
+            };
         }
     }
 }
@@ -833,14 +834,16 @@ pub fn _optimize_essential_graph_4dof() {
 
 pub fn optimize_essential_graph(
     map: &MapLock, loop_kf: Id, curr_kf: Id,
-    loop_connections: HashMap<Id, HashSet<Id>>,
+    loop_connections: BTreeMap<Id, HashSet<Id>>,
     non_corrected_sim3: &KeyFrameAndPose, corrected_sim3: &KeyFrameAndPose,
+    corrected_mp_references: HashMap::<Id, Id>,
     fix_scale: bool
 ) {
     // void Optimizer::OptimizeEssentialGraph(Map* pMap, KeyFrame* pLoopKF, KeyFrame* pCurKF,
     //                                        const LoopClosing::KeyFrameAndPose &NonCorrectedSim3,
     //                                        const LoopClosing::KeyFrameAndPose &CorrectedSim3,
     //                                        const map<KeyFrame *, set<KeyFrame *> > &LoopConnections, const bool &bFixScale)
+    let _span = tracy_client::span!("optimize_essential");
 
     let camera_param = [
         SETTINGS.get::<f64>(CAMERA, "fx"),
@@ -854,24 +857,17 @@ pub fn optimize_essential_graph(
 
     let mut inserted_edges = HashSet::new(); // sInsertedEdges
     {
+        let mut edges_per_vertex = HashMap::new(); // for testing
+
         // Set KeyFrame vertices
         let lock = map.read();
         for (kf_id, kf) in &lock.keyframes {
             let estimate = match corrected_sim3.get(kf_id) {
-                Some(sim3) => { 
-                    Sim3 {
-                        pose: Pose::new(*sim3.pose.get_translation() * sim3.scale, *sim3.pose.get_rotation()),
-                        scale: sim3.scale
-                    }
-                },
-                None => {
-                    Sim3 {
-                        pose: kf.pose,
-                        scale: 1.0
-                    }
-                }
+                Some(sim3) => *sim3,
+                None => kf.pose.into()
             };
             v_scw.insert(*kf_id, estimate);
+            edges_per_vertex.insert(*kf_id, [0, 0, 0, 0]);
 
             optimizer.pin_mut().add_vertex_sim3_expmap(
                 *kf_id,
@@ -880,22 +876,18 @@ pub fn optimize_essential_graph(
                 *kf_id == lock.initial_kf_id,
                 false,
             );
-            println!("Sofiya essential graph keyframe vertex {} with estimate {:?}", kf.id, estimate);
         }
 
         // Set loop edges
-        let min_feat = 70;
-        // println!("Min feat is {}!", min_feat);
-        // print!("Loop edges #1:");
+        let min_feat = 100;
         for (kf_i_id, connected_kfs) in &loop_connections {
-            let kf_i = lock.keyframes.get(kf_i_id).unwrap();
+            // let connected_kfs = loop_connections.get(&kf_i_id).unwrap();
+            let kf_i = lock.keyframes.get(&kf_i_id).unwrap();
             let siw = v_scw.get(&kf_i_id).unwrap();
             let swi = siw.inverse();
 
             for kf_j in connected_kfs {
-                // println!("kf_id: {}, curr_kf: {}, connected_kf_id: {}, loop_kf: {}, weight: {}", kf_id, curr_kf, connected_kf_id, loop_kf, kf.get_connected_kf_weight(*connected_kf_id));
                 if (kf_i.id != curr_kf || *kf_j != loop_kf) && kf_i.get_connected_kf_weight(*kf_j) < min_feat {
-                    // print!("skip {}->{} ({})", kf_i_id, kf_j, kf_i.get_connected_kf_weight(*kf_j));
                     continue;
                 }
 
@@ -906,21 +898,19 @@ pub fn optimize_essential_graph(
                     *kf_j,
                     sji.into(),
                 );
-                inserted_edges.insert((min(*kf_i_id, *kf_j), max(*kf_i_id, *kf_j)));
-                // print!("insert {}->{}, ", kf_i_id, kf_j);
+                inserted_edges.insert((min(kf_i_id, kf_j), max(kf_i_id, kf_j)));
+                edges_per_vertex.entry(*kf_i_id).and_modify(|e| e[0] += 1);
             }
         }
-        // println!();
 
         // Set normal edges
-        for (kf_i_id, kf_i) in &lock.keyframes {
+        for (kf_i_id, kf_i) in lock.keyframes.iter() {
             let swi = match non_corrected_sim3.get(&kf_i_id) {
                 Some(sim3) => sim3.inverse(),
-                None => * v_scw.get(&kf_i_id).unwrap()
+                None => v_scw.get(&kf_i_id).unwrap().inverse()
             };
 
             // Spanning tree edge
-            // print!("Span edges:");
             match kf_i.parent {
                 Some(kf_j_id) => {
                     let sjw = match non_corrected_sim3.get(&kf_j_id) {
@@ -933,16 +923,20 @@ pub fn optimize_essential_graph(
                         kf_j_id,
                         sji.into(),
                     );
-                    // println!("{}->{}, ", kf_i_id, kf_j_id);
+                    edges_per_vertex.entry(*kf_i_id).and_modify(|e| e[1] += 1);
                 },
-                None => { error!("No parent kf for kf {}", kf_i_id);}
+                None => { 
+                    if kf_i.id != lock.initial_kf_id {
+                        error!("No parent kf for kf {}", kf_i_id);
+                    }
+                }
             };
 
             // Loop edges
             let loop_edges = kf_i.get_loop_edges();
             // print!("Loop edges #2:");
             for edge_kf_id in loop_edges {
-                if *edge_kf_id != *kf_i_id {
+                if *edge_kf_id < *kf_i_id {
                     let slw = match non_corrected_sim3.get(&edge_kf_id) {
                         Some(sim3) => sim3.clone(),
                         None => * v_scw.get(&edge_kf_id).unwrap()
@@ -953,20 +947,20 @@ pub fn optimize_essential_graph(
                         *edge_kf_id,
                         sli.into(),
                     );
-                    // print!("{}->{}, ", kf_i_id, edge_kf_id);
+                    edges_per_vertex.entry(*kf_i_id).and_modify(|e| e[2] += 1);
                 }
             }
-            // println!();
 
             // Covisibility graph edges
             let parent_kf = kf_i.parent;
             // print!("Covisible edges:");
-            for kf_n in kf_i.get_covisibles_by_weight(min_feat) {
+            for kf_n in kf_i.get_covisibles_by_weight(100) {
                 if parent_kf != Some(kf_n) && !kf_i.children.contains(&kf_n) {
                     if kf_n < *kf_i_id {
-                        if inserted_edges.contains(&(min(*kf_i_id, kf_n), max(*kf_i_id, kf_n))) {
+                        if inserted_edges.contains(&(min(kf_i_id, &kf_n), max(kf_i_id, &kf_n))) {
                             continue;
                         }
+
                         let snw = match non_corrected_sim3.get(&kf_n) {
                             Some(sim3) => sim3.clone(),
                             None => * v_scw.get(&kf_n).unwrap()
@@ -978,61 +972,45 @@ pub fn optimize_essential_graph(
                             kf_n,
                             sni.into(),
                         );
-                        // print!("{}->{}, ", kf_i_id, kf_n);
+                        edges_per_vertex.entry(*kf_i_id).and_modify(|e| e[3] += 1);
                     }
                 }
             }
-            // println!();
         }
+
     }
 
     // Optimize!
-    println!("optimize essential");
-    optimizer.save("before_optimize_ess_darvis.g2o\0", curr_kf as i32);
-
     optimizer.pin_mut().optimize(20, false, true);
 
-    optimizer.save("after_optimize_ess_darvis.g2o\0",curr_kf as i32);
-
-
-
+    // For debugging ... prints the .g2o file
+    // optimizer.save("after_optimize_ess_darvis.g2o\0",curr_kf as i32);
 
     let mut corrected_swc = HashMap::new();
     {
         // SE3 Pose Recovering. Sim3:[sR t;0 1] -> SE3:[R t/s;0 1]
         let mut lock = map.write();
         for kf in lock.keyframes.values_mut() {
-            let sim3: Sim3 = optimizer.recover_optimized_sim3(kf.id).into();
-            corrected_swc.insert(kf.id, sim3.inverse());
+            let corrected_siw: Sim3 = optimizer.recover_optimized_sim3(kf.id).into();
+            corrected_swc.insert(kf.id, corrected_siw.inverse());
 
-            let trans = *sim3.pose.get_translation() * (1.0 / sim3.scale); //[R t/s;0 1]
-            let new_pose = Pose::new(trans, *sim3.pose.get_rotation());
+            let tiw: Pose = corrected_siw.into(); //[R t/s;0 1]
 
-            kf.pose = new_pose;
-            println!("Optimize essential graph, for kf {} : {:?}", kf.id, new_pose);
-            println!("Unscaled sim3 is: {:?}", sim3);
+            kf.pose = tiw;
         }
     }
 
     {
         // Correct points. Transform to "non-optimized" reference keyframe pose and transform back with optimized pose
         let mp_ids = map.read().mappoints.keys().cloned().collect::<Vec<Id>>();
+
+        let mps_corrected_by: HashMap<Id, i32> = HashMap::new(); // mnCorrectedByKF
+
         for mp_id in mp_ids {
-            let idr =  {
-                let lock = map.read();
-                let mp = lock.mappoints.get(&mp_id).unwrap();
-                match mp.corrected_reference {
-                    Some((kf_id, corrected_reference)) => {
-                        if kf_id == curr_kf {
-                            corrected_reference
-                        } else {
-                            mp.ref_kf_id
-                        }
-                    },
-                    None => {
-                        mp.ref_kf_id
-                    }
-                }
+            let idr = if mps_corrected_by.contains_key(&mp_id) && *mps_corrected_by.get(&mp_id).unwrap() == curr_kf {
+                *corrected_mp_references.get(&mp_id).unwrap()
+            } else {
+                map.read().mappoints.get(&mp_id).unwrap().ref_kf_id
             };
 
             let srw = v_scw.get(&idr).unwrap();
@@ -1056,7 +1034,7 @@ pub fn optimize_essential_graph(
 }
 
 pub fn optimize_sim3(
-    map: &MapLock, kf1_id: Id, kf2_id: Id, matched_mps: &mut HashMap<usize, Id>,
+    map: &MapLock, kf1_id: Id, kf2_id: Id, matched_mps: &mut Vec<Option<Id>>,
     sim3: &mut Sim3, th2: i32, fix_scale: bool
 ) -> i32 {
     // From ORBSLAM2:
@@ -1105,8 +1083,13 @@ pub fn optimize_sim3(
             kf1.get_mp_matches()
         };
 
-        for (i, mp2_id) in matched_mps.iter() {
-            let mp1 = match mappoints1[*i] {
+        for i in 0..matched_mps.len() {
+            if matched_mps[i].is_none() {
+                continue;
+            }
+            let mp2_id = matched_mps[i].unwrap();
+
+            let mp1 = match mappoints1[i] {
                 Some((id, _)) => {
                     match lock.mappoints.get(&id) {
                         Some(mp) => mp,
@@ -1149,7 +1132,7 @@ pub fn optimize_sim3(
             // Set edge x1 = S12*X2
             let huber_delta = (th2 as f32).sqrt();
             let kf1 = lock.keyframes.get(&kf1_id).unwrap();
-            let (kp1, _) = kf1.features.get_keypoint(*i);
+            let (kp1, _) = kf1.features.get_keypoint(i);
 
             // Set edge x2 = S21*X1
             let kf2 = lock.keyframes.get(&kf2_id).unwrap();
@@ -1161,26 +1144,22 @@ pub fn optimize_sim3(
                 huber_delta
             );
 
-            edge_indexes.push(*i);
+            edge_indexes.push(i);
         }
     }
 
     // Optimize!
-    println!("optimize sim3");
 
-    optimizer.save("before_optimize_darvis_sim3.g2o\0",0);
-
+    // optimizer.save("before_optimize_darvis_sim3.g2o\0",0);
     optimizer.pin_mut().optimize(5, false, false);
-
-
-    optimizer.save("after_optimize_darvis_sim3.g2o\0",1);
+    // optimizer.save("after_optimize_darvis_sim3.g2o\0",1);
 
     // Check inliers
     let removed_edge_indexes = optimizer.pin_mut().remove_sim3_edges_with_chi2(th2 as f32);
     let num_bad = removed_edge_indexes.len();
     for i in removed_edge_indexes {
         let index = edge_indexes[i as usize];
-        matched_mps.remove(&index);
+        matched_mps[index] = None;
     }
 
     let more_iterations = match num_bad > 0 {
@@ -1192,7 +1171,6 @@ pub fn optimize_sim3(
     }
 
     // Optimize again only with inliers
-    println!("optimize sim3");
     optimizer.pin_mut().optimize(more_iterations, false, false);
 
     let mut n_in = 0;
@@ -1204,7 +1182,7 @@ pub fn optimize_sim3(
 
         if edge.edge1.chi2() > th2 as f64 && edge.edge2.chi2() > th2 as f64 {
             let index = edge_indexes[i as usize];
-            matched_mps.remove(&index);
+            matched_mps[index] = None;
         } else {
             n_in += 1;
         }

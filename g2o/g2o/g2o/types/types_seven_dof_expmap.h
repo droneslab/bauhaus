@@ -110,6 +110,12 @@ namespace g2o {
 
       Sim3 C(_measurement);
       Sim3 error_=C*v1->estimate()*v2->estimate().inverse();
+        //     std::cout << "Edge " << v1->id() << " -> " << v2->id() << std::endl;
+        // std::cout << "v1 estimate: " << v1->estimate() << std::endl;
+        // std::cout << "v2 estimate: " << v2->estimate() << std::endl;
+        // std::cout << "v2 estimate inverse: " << v2->estimate().inverse() << std::endl;
+        // std::cout << "C: " << C << std::endl;
+        // std::cout << "error: " << error_ << std::endl;
       _error = error_.log();
     }
 

@@ -63,7 +63,7 @@ pub mod ffi {
         fn add_vertex_sim3_expmap(
             self: Pin<&mut BridgeSparseOptimizer>,
             vertex_id: i32,
-            pose: RustSim3,
+            sim3: RustSim3,
             fix_scale: bool,
             set_fixed: bool,
             set_camera_params: bool

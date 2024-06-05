@@ -26,7 +26,6 @@ mod sim3solver_tests {
         let map = * sim3.map(&vector);
 
         let expected_map = nalgebra::Vector3::new(-0.734815, -0.101746, 1.45556);
-        println!("map: {:?}", map);
         assert_eq!(map, expected_map);
     }
 

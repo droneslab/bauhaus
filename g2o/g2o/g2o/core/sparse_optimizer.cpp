@@ -83,7 +83,7 @@ namespace g2o{
       e->computeError();
     }
 
-#  ifndef NDEBUG
+// #  ifndef NDEBUG
     for (int k = 0; k < static_cast<int>(_activeEdges.size()); ++k) {
       OptimizableGraph::Edge* e = _activeEdges[k];
       bool hasNan = arrayHasNaN(e->errorData(), e->dimension());
@@ -91,7 +91,7 @@ namespace g2o{
         cerr << "computeActiveErrors(): found NaN in error for edge " << e->id() << endl;
       }
     }
-#  endif
+// #  endif
 
   }
 
@@ -413,10 +413,6 @@ void SparseOptimizer::printStats() {
       double ts = get_monotonic_time();
       result = _algorithm->solve(i, online);
       ok = ( result == OptimizationAlgorithm::OK );
-
-      if (iterations == 20) {
-        std::cout << "SOFIYA... OK ? " << ok << ", force stop flag? " << terminate() << std::endl;
-      }
 
       bool errorComputed = false;
       if (_computeBatchStatistics) {
