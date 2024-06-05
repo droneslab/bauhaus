@@ -47,7 +47,39 @@ tokio = "1.36.0"
 base64 = "0.21.7"
 
 #cc = { version = "1.0.79", features = ["parallel"] }
-opencv = "0.84.5"
+opencv = { version = "0.84.5", default-features = false, features = [
+    "clang-runtime",
+    "imgproc",
+    "imgcodecs",
+    "videoio",
+    "highgui",
+    "calib3d",
+    "features2d",
+    "objdetect",
+    "flann",
+    "photo",
+    "stitching",
+    "gapi",
+    "alphamat",
+    "aruco",
+    "bgsegm",
+    "ccalib",
+    "face",
+    "img_hash",
+    "line_descriptor",
+    "rapid",
+    "rgbd",
+    "stereo",
+    "surface_matching",
+    "tracking",
+    "videostab",
+    "xfeatures2d",
+    "ximgproc",
+    "xobjdetect",
+    "xphoto",
+ 
+] }
+
 nalgebra = {version = "0.32.3", features = ["serde-serialize"]}
 cv-convert = {version = '0.25.0', default_features = false, features = ['opencv_0-84','nalgebra_0-32']}
 cxx = "1.0"
