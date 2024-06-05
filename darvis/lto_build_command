@@ -1,0 +1,1 @@
+RUSTFLAGS="-Clinker-plugin-lto -Clinker=/home/darvis/Downloads/llvm_build/bin/clang -Clink-arg=-fuse-ld=lld" cargo build --release
