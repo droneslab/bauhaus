@@ -4,7 +4,7 @@ use core::{config::*, sensor::{FrameSensor, ImuSensor, Sensor}, system::{Actor, 
 use crate::{
     actors::{loop_closing::KeyFrameAndPose, messages::{FeatureMsg, InitKeyFrameMsg, LastKeyFrameUpdatedMsg, ShutdownMsg, TrackingStateMsg, TrajectoryMsg, VisTrajectoryMsg}}, map::{
         frame::Frame, map::Id, pose::Pose
-    }, modules::{imu::ImuModule, map_initialization::Initialization, optimizer, orbmatcher, relocalization::Relocalization}, registered_actors::{LOCAL_MAPPING, SHUTDOWN_ACTOR, TRACKING_BACKEND, TRACKING_FRONTEND, VISUALIZER}, MapLock, System
+    }, modules::{imu::ImuModule, map_initialization::Initialization, optimizer, orbmatcher, relocalization::Relocalization}, registered_actors::{LOCAL_MAPPING, SHUTDOWN_ACTOR, TRACKING_BACKEND, TRACKING_FRONTEND, VISUALIZER}, MapLock, System, MAP_INITIALIZED
 };
 
 use super::{messages::{IMUInitializedMsg, NewKeyFrameMsg}, local_mapping::LOCAL_MAPPING_IDLE};
@@ -231,6 +231,8 @@ impl TrackingBackend {
                                 }
                             };
                     }
+
+                    MAP_INITIALIZED.store(true, Ordering::SeqCst);
 
                     // Let tracking frontend know the map is initialized
                     self.system.send(TRACKING_FRONTEND, Box::new(
