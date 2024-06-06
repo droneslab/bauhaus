@@ -1,0 +1,1 @@
+RUSTFLAGS="-Clinker-plugin-lto -Clinker=/home/f1tenth/Downloads/clang+llvm-18.1.2-aarch64-linux-gnu/bin/clang -Clink-arg=-fuse-ld=lld" cargo build --release
