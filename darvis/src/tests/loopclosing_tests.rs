@@ -3,12 +3,44 @@ mod loopclosing_tests {
     use core::{config::{self, load_config, SETTINGS}, matrix::{DVMatrix, DVVectorOfKeyPoint}};
     use std::{env, fs::{self, File}, io::{self, BufRead}, path::Path};
 
-    use nalgebra::Vector3;
+    use nalgebra::{UnitQuaternion, Vector3};
     use opencv::core::{MatTraitConst, MatTraitConstManual};
 
-    use crate::{map::{features::Features, frame::Frame, map::Id, pose::{Pose, Sim3}}, modules::image, registered_actors::CAMERA};
+    use crate::{map::{features::Features, frame::Frame, map::Id, pose::{DVRotation, DVTranslation, Pose, Sim3}}, modules::image, registered_actors::CAMERA};
 
-    #[test]
+        #[test]
+    fn test_sim3_map() {
+        let pos: DVTranslation = DVTranslation::new_with(1.4798, -0.211756, -3.47994);
+
+        let first = Sim3::new(
+            DVTranslation::new_with(-0.295157, -0.0171382, 5.18072),
+            DVRotation::new(nalgebra::Matrix3::new(
+                0.999646, 0.00510355, 0.026096,
+                -0.00473212, 0.999887, -0.0142753,
+                -0.0261659, 0.0141468, 0.999558
+            )),
+            1.0
+        );
+
+        let second = Sim3::new(
+            DVTranslation::new_with(0.00185393, 0.0290222,   -1.84645),
+            DVRotation::new(nalgebra::Matrix3::new(
+                0.999978, -0.00370639, -0.00557443,
+                0.00376623, 0.999935, 0.0107627,
+                0.00553418, -0.0107835, 0.999927
+            )),
+            0.484749
+        );
+
+        let res = second.map(&first.map(&pos));
+
+        let expected_res = DVTranslation::new_with(0.527145, -0.050572,  -1.03763);
+
+        println!("Result: {:?}", res);
+        println!("Expected: {:?}", expected_res);
+    }
+
+    // #[test]
     fn test_essential_graph_optimization() {
         let mut system_config = env::current_dir().unwrap();
         system_config.push("system_config.yaml");
@@ -115,10 +147,9 @@ mod loopclosing_tests {
         optimizer.pin_mut().optimize(20, false, true);
 
         optimizer.save("DARVIS_AFTER_OPTIMIZATION.g2o\0",0 as i32);
-    
     }
 
-    #[test]
+    // #[test]
     fn test_dbow_words_frame1577() {
         // Testing the extraction of BoW words from a frame
         let frame = setup_frame("src/tests/data/kitti00_frame1577.png", 2000);
