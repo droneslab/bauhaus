@@ -59,8 +59,8 @@ pub fn spawn_actor(
         str if str == "visualizer".to_string() => {
             crate::actors::visualizer::DarvisVisualizer::spawn(system, map.expect("Visualizer needs the map!"))
         },
-        str if str == "flow tracking".to_string() => {
-            crate::actors::tracking_optical_flow::TrackingOpticalFlow::spawn(actor_channels, map.expect("Tracking needs the map!"))
+        str if str == "optical flow tracking".to_string() => {
+            crate::actors::tracking_optical_flow::TrackingOpticalFlow::spawn(system, map.expect("Tracking needs the map!"))
         },
         str if str == SHUTDOWN_ACTOR.to_string() => {
             crate::actors::shutdown::ShutdownActor::spawn(system, ())
