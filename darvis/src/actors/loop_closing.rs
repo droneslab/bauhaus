@@ -893,7 +893,7 @@ fn run_gba(map: &mut MapLock, loop_kf: Id) {
                     let tchildc = child.pose * curr_kf_pose_inverse;
                     child.gba_pose = Some(tchildc * curr_kf_gba_pose.unwrap());
                     child.ba_global_for_kf = loop_kf;
-                    println!("Update child kf {} with pose {:?}", child_id, child.gba_pose.unwrap());
+                    println!("Add pose for child kf {}", child_id);
                 }
                 kfs_to_check.push(*child_id);
             }

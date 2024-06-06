@@ -128,7 +128,7 @@ impl LoopManager {
             img_dir = dataset_dir.clone() + "/image_0";
             timestamps = Self::read_timestamps_file_kitti(&dataset_dir);
         } else if dataset == "euroc" {
-            img_dir = dataset_dir.clone() + "/data";
+            img_dir = dataset_dir.clone() + "/mav0/cam0/data";
             timestamps = Self::read_timestamps_file_euroc(&dataset_dir);
         } else if dataset == "tum" {
             img_dir = dataset_dir.clone() + "/rgb";
@@ -155,10 +155,10 @@ impl LoopManager {
 
     fn read_timestamps_file_euroc(time_stamp_dir: &String) -> Vec<f64> {
         info!("Reading timestamps file {}", time_stamp_dir.clone());
-        let file = File::open(time_stamp_dir.clone() + "/data.csv")
+        let file = File::open(time_stamp_dir.clone() + "/mav0/cam0/data.csv")
             .expect("Could not open timestamps file");
         io::BufReader::new(file).lines().skip(1)
-            .map(|x| x.unwrap().split(',').next().unwrap().parse::<f64>().unwrap())
+            .map(|x| x.unwrap().split(',').next().unwrap().parse::<f64>().unwrap() / 1000000000000000000.0)
             .collect::<Vec<f64>>()
     }
 
@@ -201,9 +201,10 @@ impl Iterator for LoopManager {
         self.loop_helper.loop_sleep(); 
 
         self.current_index = self.current_index + 1;
-        let timestamp = self.timestamps[self.current_index as usize] * 1000000000.0;
+        let timestamp = self.timestamps[self.current_index as usize];
         let image = self.image_paths[self.current_index as usize].clone();
 
+        println!("Timestamp: {:?}", timestamp);
         // Start next loop
         self.loop_helper.loop_start(); 
 
