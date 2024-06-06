@@ -14,7 +14,6 @@ system:
 
       # FPS
       fps: 10.0
-      use_timestamps_file: false # Instead of running at a fixed fps, use timestamps from the dataset
 
       # RESULTS
       results_folder: "results"

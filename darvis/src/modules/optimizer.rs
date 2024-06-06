@@ -292,7 +292,7 @@ pub fn global_bundle_adjustment(map: &mut MapLock, iterations: i32, robust: bool
             );
             kf_vertex_ids.insert(*kf_id, id_count);
             id_count += 1;
-            println!("ADD KF {} with pose {:?}", kf.id, kf.pose);
+            // println!("ADD KF {} with pose {:?}", kf.id, kf.pose);
         }
 
         let mut mp_vertex_ids = HashMap::new();
@@ -306,7 +306,7 @@ pub fn global_bundle_adjustment(map: &mut MapLock, iterations: i32, robust: bool
                 false, true
             );
             mp_vertex_ids.insert(*mp_id, id_count);
-            println!("ADD MAPPOINT {} with pose {:?}", mp_id, mappoint.position);
+            // println!("ADD MAPPOINT {} with pose {:?}", mp_id, mappoint.position);
 
             let mut n_edges = 0;
 
@@ -334,7 +334,7 @@ pub fn global_bundle_adjustment(map: &mut MapLock, iterations: i32, robust: bool
                                     *TH_HUBER_2D
                                 )
                             );
-                            println!("ADD EDGE KF {} <-> MP {}", kf_id, mp_id);
+                            // println!("ADD EDGE KF {} <-> MP {}", kf_id, mp_id);
                         }
                     }
                 };
@@ -374,7 +374,7 @@ pub fn global_bundle_adjustment(map: &mut MapLock, iterations: i32, robust: bool
                 if loop_kf == initial_kf_id {
                     kf.pose = pose.into();
                 } else {
-                    println!("GBA: Set kf {} pose: {:?}. Old pose: {:?}", kf.id, pose, kf.pose);
+                    // println!("GBA: Set kf {} pose: {:?}. Old pose: {:?}", kf.id, pose, kf.pose);
                     kf.gba_pose = Some(pose);
                     kf.ba_global_for_kf = loop_kf;
                 }
