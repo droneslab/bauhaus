@@ -10,7 +10,7 @@ path = "src/lib.rs"
 
 [dependencies]
 cxx = "1.0.108"
-opencv = "0.84.5"
+opencv = "0.85.2"
 
 [build-dependencies]
 cxx-build = "1.0.108"

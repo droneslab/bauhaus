@@ -47,9 +47,9 @@ tokio = "1.36.0"
 base64 = "0.21.7"
 
 #cc = { version = "1.0.79", features = ["parallel"] }
-opencv = "0.84.5"
+opencv = "0.85.2"
 nalgebra = {version = "0.32.3", features = ["serde-serialize"]}
-cv-convert = {version = '0.25.0', default_features = false, features = ['opencv_0-84','nalgebra_0-32']}
+cv-convert = {version = '0.25.0', default_features = false, features = ['opencv_0-85','nalgebra_0-32']}
 cxx = "1.0"
 
 yaml-rust = "*"
@@ -65,7 +65,8 @@ error-chain = "*"
 spin_sleep = "*"
 crossbeam-channel = "0.5.8"
 nohash-hasher = "0.2.0"
-
+#fasthash = "0.3"
+ahash = "0.8.7"
 
 fern = {version = "*", features = ["colored"] }
 log = "*"
