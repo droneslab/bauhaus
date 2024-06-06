@@ -133,7 +133,7 @@ impl LoopClosing {
 
                 match (loop_kf, scw) {
                     (Some(loop_kf), Some(_scw)) => {
-                        info!("KF {}: Loop detected!", current_kf_id);
+                        info!("KF {}: Loop detected! with KF {}", current_kf_id, loop_kf);
 
                         match self.sensor.is_imu() {
                             true => {
@@ -389,7 +389,7 @@ impl LoopClosing {
                         true,
                         0.9
                     )?;
-                    println!("...Matches between {} (frame {}) and {} (frame {}): {}", current_kf_id, read.keyframes.get(&current_kf_id).unwrap().frame_id, cov_kf[j], read.keyframes.get(&cov_kf[j]).unwrap().frame_id, matches.len());
+                    // println!("...Matches between {} (frame {}) and {} (frame {}): {}", current_kf_id, read.keyframes.get(&current_kf_id).unwrap().frame_id, cov_kf[j], read.keyframes.get(&cov_kf[j]).unwrap().frame_id, matches.len());
                     if matches.len() > most_bow_num_matches {
                         most_bow_num_matches = matches.len();
                     }
@@ -586,8 +586,6 @@ impl LoopClosing {
             self.loop_matched_kf = best_matched_kf; // pMatchedKF2 = pBestMatchedKF;
             self.loop_slw = best_scw; // g2oScw = g2oBestScw;
 
-            println!("...finally: best kf is {} with {} matches. Num coincidences: {}", best_matched_kf, num_best_matches_reproj, self.num_coincidences);
-
             if self.num_coincidences >= 3 {
                 return Ok((Some(best_matched_kf), Some(best_scw)))
             } else {
@@ -644,7 +642,7 @@ impl LoopClosing {
             // Update keyframe pose with corrected Sim3. First transform Sim3 to SE3 (scale translation)
             let current_kf = lock.keyframes.get_mut(&current_kf_id).unwrap();
             current_kf.pose = loop_scw.into();
-            println!("Corrected current kf {} (frame {}): {:?}", current_kf.id, current_kf.frame_id, current_kf.pose);
+            // println!("Corrected current kf {} (frame {}): {:?}", current_kf.id, current_kf.frame_id, current_kf.pose);
 
             for connected_kf_id in &current_connected_kfs {
                 let connected_kf = lock.keyframes.get_mut(connected_kf_id).unwrap();
@@ -664,10 +662,7 @@ impl LoopClosing {
                     // Pose without correction
                     let original_siw: Sim3 = tiw.into();
                     non_corrected_sim3.insert(*connected_kf_id, original_siw);
-                    println!("...corrected pose for kf {} (frame {}): {:?}", connected_kf_id, connected_kf.frame_id, connected_kf.pose);
-
-                    println!("(original) KF {} now has {} matches", connected_kf_id, lock.keyframes.get(&connected_kf_id).unwrap().mp_match_len());
-
+                    // println!("...corrected pose for kf {} (frame {}): {:?}", connected_kf_id, connected_kf.frame_id, connected_kf.pose);
                 }
             }
 
@@ -680,12 +675,13 @@ impl LoopClosing {
                     let connected_kf = lock.keyframes.get(kf_id).unwrap();
                     connected_kf.get_mp_matches().clone()
                 };
+                let mut count = 0;
                 for i in 0..mappoints.len() {
                     let mp_id = match mappoints.get(i).unwrap() {
                         Some((id, _)) => id,
                         None => continue
                     };
-                    if corrected_by_kf.contains_key(mp_id) && corrected_by_kf.get(mp_id).unwrap() == kf_id {
+                    if corrected_by_kf.contains_key(mp_id) && *corrected_by_kf.get(mp_id).unwrap() == current_kf_id {
                         continue;
                     }
 
@@ -694,7 +690,7 @@ impl LoopClosing {
                         let mp = lock.mappoints.get_mut(mp_id).unwrap();
                         let corrected_p3d_w = g2o_corrected_swi.map(&g2o_siw.map(&mp.position));
                         mp.position = corrected_p3d_w;
-                        corrected_by_kf.insert(*mp_id, *kf_id);
+                        corrected_by_kf.insert(*mp_id, current_kf_id);
                     }
 
                     corrected_mp_references.insert(*mp_id, *kf_id);
@@ -708,6 +704,7 @@ impl LoopClosing {
                     } else {
                         error!("Mappoint {} has empty observations", mp_id);
                     }
+                    count += 1;
                 }
 
                 // Make sure connections are updated
@@ -740,10 +737,6 @@ impl LoopClosing {
                 }
             }
             println!("Loop fusion, mappoints replaced {}, added {}", num_replaced, num_added);
-        }
-
-        for (kf_id, _) in &corrected_sim3 {
-            println!("(loop fusion) KF {} now has {} matches", kf_id, self.map.read().keyframes.get(&kf_id).unwrap().mp_match_len());
         }
 
         // This is for testing the outcome of essential graph optimization
@@ -848,15 +841,10 @@ impl LoopClosing {
                     num_fused += 1;
                 }
             }
-            println!("Search and fuse, for KF {}, fused {} mappoints. total candidates: {}", kf_id, num_fused, self.loop_mappoints.len());
-
-            println!("(search and fuse) KF {} now has {} matches", kf_id, self.map.read().keyframes.get(&kf_id).unwrap().mp_match_len());
-
+            debug!("Search and fuse, for KF {}, fused {} mappoints. total candidates: {}", kf_id, num_fused, self.loop_mappoints.len());
         }
         Ok(())
     }
-
-
 }
 
 
@@ -905,6 +893,7 @@ fn run_gba(map: &mut MapLock, loop_kf: Id) {
                     let tchildc = child.pose * curr_kf_pose_inverse;
                     child.gba_pose = Some(tchildc * curr_kf_gba_pose.unwrap());
                     child.ba_global_for_kf = loop_kf;
+                    println!("Add pose for child kf {}", child_id);
                 }
                 kfs_to_check.push(*child_id);
             }
@@ -912,7 +901,7 @@ fn run_gba(map: &mut MapLock, loop_kf: Id) {
             let kf = lock.keyframes.get_mut(&curr_kf_id).unwrap();
             tcw_bef_gba.insert(curr_kf_id, kf.pose);
             kf.pose = kf.gba_pose.unwrap().clone();
-            // println!("Update kf {} with pose {:?}", curr_kf_id, kf.pose);
+            println!("Update kf {} with pose {:?}", curr_kf_id, kf.pose);
             i += 1;
         }
 
@@ -925,9 +914,9 @@ fn run_gba(map: &mut MapLock, loop_kf: Id) {
                     mps_to_update.insert(*id, mp.gba_pose.unwrap());
                 } else {
                     // Update according to the correction of its reference keyframe
-                    let kf = lock.keyframes.get(&mp.ref_kf_id).unwrap();
+                    let ref_kf = lock.keyframes.get(&mp.ref_kf_id).unwrap();
 
-                    if kf.ba_global_for_kf != loop_kf {
+                    if ref_kf.ba_global_for_kf != loop_kf {
                         continue;
                     }
 
@@ -939,7 +928,7 @@ fn run_gba(map: &mut MapLock, loop_kf: Id) {
 
 
                     // Backproject using corrected camera
-                    let twc = kf.pose.inverse();
+                    let twc = ref_kf.pose.inverse();
                     let rwc = twc.get_rotation();
                     let twc = twc.get_translation();
 
