@@ -567,7 +567,7 @@ impl TrackingBackend {
         // Update pose according to reference keyframe
         let ref_kf_id = last_frame.ref_kf_id.unwrap();
         let map_lock = self.map.read();
-        let ref_kf_pose = map_lock.keyframes.get(&ref_kf_id).expect("Reference kf should be in map").pose;
+        let ref_kf_pose = map_lock.keyframes.get(&ref_kf_id).expect(format!("Reference kf {} should be in map", ref_kf_id).as_str()).pose;
         last_frame.pose = Some(*self.trajectory_poses.last().unwrap() * ref_kf_pose);
 
         if self.sensor.is_mono() || self.frames_since_last_kf == 0 {

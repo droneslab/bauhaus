@@ -642,7 +642,7 @@ impl LoopClosing {
             // Update keyframe pose with corrected Sim3. First transform Sim3 to SE3 (scale translation)
             let current_kf = lock.keyframes.get_mut(&current_kf_id).unwrap();
             current_kf.pose = loop_scw.into();
-            // println!("Corrected current kf {} (frame {}): {:?}", current_kf.id, current_kf.frame_id, current_kf.pose);
+            println!("Corrected current kf {} (frame {}): {:?}", current_kf.id, current_kf.frame_id, current_kf.pose);
 
             for connected_kf_id in &current_connected_kfs {
                 let connected_kf = lock.keyframes.get_mut(connected_kf_id).unwrap();
@@ -662,7 +662,7 @@ impl LoopClosing {
                     // Pose without correction
                     let original_siw: Sim3 = tiw.into();
                     non_corrected_sim3.insert(*connected_kf_id, original_siw);
-                    // println!("...corrected pose for kf {} (frame {}): {:?}", connected_kf_id, connected_kf.frame_id, connected_kf.pose);
+                    println!("...corrected pose for kf {} (frame {}): {:?}", connected_kf_id, connected_kf.frame_id, connected_kf.pose);
                 }
             }
 
