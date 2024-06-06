@@ -1,4 +1,4 @@
-use std::{env, fs::{File, OpenOptions}, io::{self, BufRead}, path::Path, thread, time::{self, Duration, SystemTime}};
+use std::{env, fs::{File, OpenOptions}, io::{self, BufRead}, path::Path, sync::atomic::AtomicBool, thread::{self, sleep}, time::{self, Duration, SystemTime}};
 use map::map::Map;
 use fern::colors::{ColoredLevelConfig, Color};
 use glob::glob;
@@ -17,8 +17,6 @@ mod map;
 mod modules;
 mod tests;
 
-use std::path::PathBuf;
-
 pub type MapLock = ReadWriteMap<Map>;
 // pub type MapLock = Arc<Mutex<Map>>; // Replace above line with this if you want to switch all locks to mutexes
 
@@ -28,6 +26,7 @@ pub type MapLock = ReadWriteMap<Map>;
 // static GLOBAL: ProfiledAllocator<std::alloc::System> =
 //     ProfiledAllocator::new(std::alloc::System, 100);
 
+pub static MAP_INITIALIZED: AtomicBool = AtomicBool::new(false); // Hack to wait processing frames until map has initialized
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
@@ -84,7 +83,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Process images
     let loop_manager = LoopManager::new(dataset_name, dataset_dir);
+    let mut sent_map_init = false;
     for (image_path, timestamp, frame_id) in loop_manager.into_iter() {
+        if sent_map_init && !MAP_INITIALIZED.load(std::sync::atomic::Ordering::SeqCst) {
+            sleep(Duration::from_millis(500));
+        }
+
         if *shutdown_flag.lock().unwrap() { break; }
         tracy_client::frame_mark();
 
@@ -97,6 +101,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 frame_id
             }
         ))?;
+
+        if frame_id > 2 && !sent_map_init {
+            sent_map_init = true;
+        }
     }
 
     debug!("Done with dataset! Shutting down.");
@@ -185,7 +193,7 @@ impl Iterator for LoopManager {
     type Item = (String, f64, u32);
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.current_index as usize == self.image_paths.len() {
+        if self.current_index as usize == self.image_paths.len() - 1{
             return None;
         }
 
@@ -226,7 +234,7 @@ fn setup_logger(level: &str) -> Result<(), fern::InitError> {
 
     let terminal_output = fern::Dispatch::new()
         .level(log_level) // Turns off all logging for external crates, some can be very noisy
-        .level_for("foxglove", log::LevelFilter::Warn)
+        .level_for("foxglove_ws", log::LevelFilter::Warn)
         .format(move |out, message, record| {
             out.finish(format_args!(
                 "{color_line}[{time} {target}:{line_num} {level}{color_line}] {message}\x1B[0m",
