@@ -1,4 +1,4 @@
-use std::{fs::{OpenOptions, File}, path::Path, env, time::{self, Duration}, io::{self, BufRead}, thread};
+use std::{env, fs::{File, OpenOptions}, io::{self, BufRead}, path::Path, thread, time::{self, Duration, SystemTime}};
 use map::map::Map;
 use fern::colors::{ColoredLevelConfig, Color};
 use glob::glob;
@@ -31,15 +31,18 @@ pub type MapLock = ReadWriteMap<Map>;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
-    if args.len() < 3 {
+    if args.len() < 4 {
         panic!("
             [ERROR] Invalid number of input parameters.
-            Usage: cargo run -- [PATH_TO_DATA_DIRECTORY] [PATH_TO_SYSTEM_CONFIG_FILE] [PATH_TO_DATASET/CAMERA_CONFIG_FILE]
+            Usage: cargo run -- [PATH_TO_DATA_DIRECTORY] [PATH_TO_SYSTEM_CONFIG_FILE] [PATH_TO_DATASET/CAMERA_CONFIG_FILE] [DATASET_NAME]
         ");
     }
-    let img_dir = args[1].to_owned();
+    let dataset_dir = args[1].to_owned();
     let system_config_file = args[2].to_owned();
     let dataset_config_file = args[3].to_owned();
+    let dataset_name = args[4].to_owned();
+
+    info!("Using dataset {:?}", dataset_name);
 
     // Load config, including custom settings and actor information
     let (actor_info, module_info, log_level) = load_config(&system_config_file, &dataset_config_file).expect("Could not load config");
@@ -54,35 +57,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (shutdown_flag, first_actor_tx, shutdown_tx, shutdown_join) = spawn::launch_system(actor_info, module_info, first_actor_name)?;
 
     info!("System ready to receive messages!");
-
-    let dataset_name = SETTINGS.get::<String>("CAMERA", "dataset");
-
-    info!("Dataset name: {}", dataset_name);
-    let (timestamps, images_path) = if dataset_name == "KITTI" {
-        let image_name = "image_0";
-
-        let mut path = PathBuf::from(img_dir.clone());
-        path.push(image_name);
-        (read_timestamps_file_kitti(&img_dir), path.to_str().unwrap().to_string())
-    } else if dataset_name == "EUROC" {
-        let image_name = "data";
-
-        let mut path = PathBuf::from(img_dir.clone());
-        path.push(image_name);
-
-        (read_timestamps_file_euroc(&img_dir), path.to_str().unwrap().to_string())
-    } else if dataset_name == "TUM" {
-        let image_name = "rgb";
-
-        let mut path = PathBuf::from(img_dir.clone());
-        path.push(image_name);
-
-        (read_timestamps_file_tum(&img_dir), path.to_str().unwrap().to_string())
-    }  else {
-        panic!("Invalid dataset name");
-    };
-
-    let mut loop_sleep = LoopSleep::new(&timestamps);
 
     if SETTINGS.get::<bool>(SYSTEM, "check_deadlocks") {
         // This slows stuff down, so only enable this if you really need to.
@@ -107,29 +81,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         } );
     }
 
+
     // Process images
-    // let now = SystemTime::now();
-    let mut i = 0;
-    for path in &generate_image_paths(images_path){ //img_dir + "/image_0/") {
+    let loop_manager = LoopManager::new(dataset_name, dataset_dir);
+    for (image_path, timestamp, frame_id) in loop_manager.into_iter() {
         if *shutdown_flag.lock().unwrap() { break; }
-        loop_sleep.start();
         tracy_client::frame_mark();
 
-        let image = image::read_image_file(&path.to_string());
+        let image = image::read_image_file(&image_path);
 
         first_actor_tx.send(Box::new(
             ImageMsg{
                 image,
-                timestamp: timestamps[i],
-                frame_id: i as u32
+                timestamp,
+                frame_id
             }
         ))?;
-
-        i += 1;
-        // TODO (timestamps) ... if use_timestamps_file is true, we should sleep for the difference between now
-        // and the next timestamp. Right now we are just sleeping so we keep at the target frame rate.
-        loop_sleep.sleep();
     }
+
     debug!("Done with dataset! Shutting down.");
     shutdown_tx.send(Box::new(ShutdownMsg{}))?;
     shutdown_join.join().expect("Waiting for shutdown thread");
@@ -137,107 +106,100 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn generate_image_paths(img_dir: String) -> Vec<String> {
-    let mut glob_str = img_dir.to_owned();
-    glob_str.push_str("/*.png");
-    let mut img_paths = Vec::new();
-
-    for entry in glob(&glob_str).expect("Failed to read glob pattern") {
-        match entry {
-            Ok(path) => match path.to_str() {
-                Some(path_str) => img_paths.push(path_str.to_owned()),
-                None => panic!("Invalid path found!"),
-            },
-            Err(e) => panic!("{:?}", e),
-        }
-    }
-    img_paths
+struct LoopManager {
+    loop_helper: LoopHelper,
+    image_paths: Vec<String>,
+    timestamps: Vec<f64>,
+    current_index: u32,
 }
 
-fn read_timestamps_file_kitti(time_stamp_dir: &String) -> Vec<f64> {
-    let file = File::open(time_stamp_dir.clone() + "/times.txt")
-        .expect("Could not open timestamps file");
-    io::BufReader::new(file).lines()
-        .map(|x| x.unwrap().parse::<f64>().unwrap())
-        .collect::<Vec<f64>>()
-}
-
-fn read_timestamps_file_euroc(time_stamp_dir: &String) -> Vec<f64> {
-    info!("Reading timestamps file {}", time_stamp_dir.clone());
-    let file = File::open(time_stamp_dir.clone() + "/data.csv")
-        .expect("Could not open timestamps file");
-
-    // timestamps
-    io::BufReader::new(file).lines().skip(1)
-        .map(|x| x.unwrap().split(',').next().unwrap().parse::<f64>().unwrap())
-        .collect::<Vec<f64>>()
-}
-
-fn read_timestamps_file_tum(time_stamp_dir: &String) -> Vec<f64> {
-    info!("Reading timestamps file {}", time_stamp_dir.clone());
-    let file = File::open(time_stamp_dir.clone() + "/rgb.txt")
-        .expect("Could not open timestamps file");
-
-    // timestamps
-    io::BufReader::new(file).lines().skip(3)
-        .map(|x| x.unwrap().split(' ').next().unwrap().parse::<f64>().unwrap())
-        .collect::<Vec<f64>>()
-}
-
-
-enum LoopType {
-    Fps(LoopHelper),
-    Timestamps(Vec<f64>, i32, time::Instant),
-}
-
-struct LoopSleep {
-    loop_type: LoopType
-}
-impl LoopSleep {
-    pub fn new(timestamps: &Vec<f64>) -> Self {
-        let loop_type = match SETTINGS.get::<bool>(SYSTEM, "use_timestamps_file") {
-            true => {
-                // Use dataset timestamps file to run loop
-                // let timestamps = read_timestamps_file(img_dir);
-                LoopType::Timestamps(timestamps.clone(), -1, time::Instant::now())
-            },
-            false => {
-                // Run loop at fps rate
-                LoopType::Fps(
-                    LoopHelper::builder()
-                        .build_with_target_rate(SETTINGS.get::<f64>(SYSTEM, "fps"))
-                )
-            }
+impl LoopManager {
+    pub fn new(dataset: String, dataset_dir: String) -> Self {
+        let (timestamps, img_dir);
+        if dataset == "kitti" {
+            img_dir = dataset_dir.clone() + "/image_0";
+            timestamps = Self::read_timestamps_file_kitti(&dataset_dir);
+        } else if dataset == "euroc" {
+            img_dir = dataset_dir.clone() + "/data";
+            timestamps = Self::read_timestamps_file_euroc(&dataset_dir);
+        } else if dataset == "tum" {
+            img_dir = dataset_dir.clone() + "/rgb";
+            timestamps = Self::read_timestamps_file_tum(&dataset_dir);
+        }  else {
+            panic!("Invalid dataset name");
         };
-        LoopSleep { loop_type }
-    }
 
-    pub fn start(&mut self) {
-        match &mut self.loop_type {
-            LoopType::Timestamps(_timestamps, ref mut _current_index, ref mut _now) => {
-                todo!("timestamps: Compile error with using timestamps file");
-                // now = &mut time::Instant::now();
-                // current_index = &mut (*current_index + 1);
-            },
-            LoopType::Fps(ref mut loop_helper) => {
-                let _delta = loop_helper.loop_start(); 
-            },
+        LoopManager { 
+            loop_helper: LoopHelper::builder().build_with_target_rate(SETTINGS.get::<f64>(SYSTEM, "fps")),
+            image_paths: Self::generate_image_paths(img_dir),
+            timestamps,
+            current_index: 0
         }
     }
 
-    pub fn sleep(&mut self) {
-        match &mut self.loop_type {
-            LoopType::Timestamps(timestamps, current_index, now) => {
-                if *current_index == (timestamps.len() - 1) as i32 {
-                    return;
-                }
-                let next_timestamp = timestamps[(*current_index + 1) as usize];
-                thread::sleep(Duration::from_secs_f64(next_timestamp - now.elapsed().as_secs_f64()));
-            },
-            LoopType::Fps(ref mut loop_helper) => {
-                loop_helper.loop_sleep(); 
+    fn read_timestamps_file_kitti(time_stamp_dir: &String) -> Vec<f64> {
+        let file = File::open(time_stamp_dir.clone() + "/times.txt")
+            .expect("Could not open timestamps file");
+        io::BufReader::new(file).lines()
+            .map(|x| x.unwrap().parse::<f64>().unwrap())
+            .collect::<Vec<f64>>()
+    }
+
+    fn read_timestamps_file_euroc(time_stamp_dir: &String) -> Vec<f64> {
+        info!("Reading timestamps file {}", time_stamp_dir.clone());
+        let file = File::open(time_stamp_dir.clone() + "/data.csv")
+            .expect("Could not open timestamps file");
+        io::BufReader::new(file).lines().skip(1)
+            .map(|x| x.unwrap().split(',').next().unwrap().parse::<f64>().unwrap())
+            .collect::<Vec<f64>>()
+    }
+
+    fn read_timestamps_file_tum(time_stamp_dir: &String) -> Vec<f64> {
+        info!("Reading timestamps file {}", time_stamp_dir.clone());
+        let file = File::open(time_stamp_dir.clone() + "/rgb.txt")
+            .expect("Could not open timestamps file");
+        io::BufReader::new(file).lines().skip(3)
+            .map(|x| x.unwrap().split(' ').next().unwrap().parse::<f64>().unwrap())
+            .collect::<Vec<f64>>()
+    }
+
+    fn generate_image_paths(img_dir: String) -> Vec<String> {
+        let mut glob_str = img_dir.to_owned();
+        glob_str.push_str("/*.png");
+        let mut image_paths = Vec::new();
+
+        for entry in glob(&glob_str).expect("Failed to read glob pattern") {
+            match entry {
+                Ok(path) => match path.to_str() {
+                    Some(path_str) => image_paths.push(path_str.to_owned()),
+                    None => panic!("Invalid path found!"),
+                },
+                Err(e) => panic!("{:?}", e),
             }
         }
+        image_paths
+    }
+}
+
+impl Iterator for LoopManager {
+    type Item = (String, f64, u32);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.current_index as usize == self.image_paths.len() {
+            return None;
+        }
+
+        // First, sleep until the next timestamp
+        self.loop_helper.loop_sleep(); 
+
+        self.current_index = self.current_index + 1;
+        let timestamp = self.timestamps[self.current_index as usize] * 1000000000.0;
+        let image = self.image_paths[self.current_index as usize].clone();
+
+        // Start next loop
+        self.loop_helper.loop_start(); 
+
+        Some((image, timestamp, self.current_index))
     }
 }
 
