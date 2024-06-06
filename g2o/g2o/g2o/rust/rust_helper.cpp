@@ -32,7 +32,7 @@ namespace g2o {
             BlockSolver_6_3* solver_ptr = new BlockSolver_6_3(linearSolver);
             OptimizationAlgorithmLevenberg* solver = new OptimizationAlgorithmLevenberg(solver_ptr);
             optimizer->setAlgorithm(solver);
-            optimizer->setVerbose(true);
+            optimizer->setVerbose(false);
 
             optimizer_type = 1;
         } else if (opt_type == 2) {
