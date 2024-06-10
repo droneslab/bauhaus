@@ -78,9 +78,12 @@ pub fn optimize_pose(
 
     optimizer.pin_mut().add_frame_vertex(0, (*frame.pose.as_ref().unwrap()).into(), false);
 
+    println!("Add frame vertex 0 with pose {:?}", frame.pose.as_ref().unwrap());
+
     let mut initial_correspondences = 0;
     let mut mp_indexes = vec![];
 
+    let mut total_edges = 0;
     {
         // Take lock to construct factor graph
         let map_read_lock = map.read();
@@ -125,6 +128,7 @@ pub fn optimize_pose(
                             *TH_HUBER_MONO
                         );
                         mp_indexes.push(i as u32);
+                        total_edges += 1;
                     }
                 };
 
@@ -132,6 +136,8 @@ pub fn optimize_pose(
             }
         }
     }
+    println!("Total edges: {}", total_edges);
+
 
     if initial_correspondences < 3 {
         return None;
@@ -255,7 +261,7 @@ pub fn optimize_pose(
     let pose = optimizer.recover_optimized_frame_pose(0);
     frame.pose = Some(pose.into());
 
-    // debug!("Set outliers in pose optimization: {}. Optimized pose: {:?}", num_bad, frame.pose.as_ref().unwrap());
+    debug!("Set outliers in pose optimization: {}. Optimized pose: {:?}", num_bad, frame.pose.as_ref().unwrap());
 
     // Return number of inliers
     return Some(initial_correspondences - num_bad);

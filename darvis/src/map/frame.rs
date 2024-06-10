@@ -29,7 +29,7 @@ pub struct Frame {
     // mnTrackReferenceForFrame ... used in tracking to decide whether to add a kf/mp into tracking's local map. redundant and easy to mess up/get out of sync. Search for this globally to see an example of how to avoid using it.
 }
 impl Frame {
-pub fn new(
+    pub fn new(
         frame_id: Id, keypoints_vec: DVVectorOfKeyPoint, descriptors_vec: DVMatrix,
         im_width: u32, im_height: u32,
         timestamp: Timestamp

@@ -1,21 +1,15 @@
 extern crate g2o;
-use cxx::UniquePtr;
 use log::{warn, info};
-use std::{fmt, fmt::Debug};
 use opencv::{prelude::*, types::VectorOfKeyPoint,};
 
 use core::{
     config::*, matrix::*, sensor::{FrameSensor, ImuSensor, Sensor}, system::{Actor, Timestamp}
 };
 use crate::{
-    registered_actors::{FEATURE_DETECTION, CAMERA, VISUALIZER},
     actors::{
-        messages::{ShutdownMsg, ImagePathMsg, ImageMsg, TrackingStateMsg, FeatureMsg, VisFeaturesMsg},
+        messages::{FeatureMsg, ImageMsg, ImagePathMsg, ShutdownMsg, TrackingStateMsg, VisFeaturesMsg},
         tracking_backend::TrackingState,
-    },
-    modules::image,
-    System,
-    map::map::Id,
+    }, map::map::Id, modules::{image, orbextractor::DVORBextractor}, registered_actors::{FEATURE_DETECTION, VISUALIZER}, System
 };
 
 
@@ -150,7 +144,6 @@ impl TrackingFrontEnd {
         let mut descriptors: dvos3binding::ffi::WrapBindCVMat = (&DVMatrix::default()).into();
         let mut keypoints: dvos3binding::ffi::WrapBindCVKeyPoints = DVVectorOfKeyPoint::empty().into();
 
-        // TODO (timing) ... this takes ~70 ms which is way high compared to ORB-SLAM3. I think this is because the rust and C++ bindings are not getting optimized together.
         match self.sensor {
             Sensor(FrameSensor::Mono, ImuSensor::None) => {
                 if !self.map_initialized || (self.last_id - self.init_id < self.max_frames) {
@@ -169,7 +162,7 @@ impl TrackingFrontEnd {
             FrameSensor::Stereo => todo!("Stereo"), //Also call extractor_right, see Tracking::GrabImageStereo,
             _ => {}
         }
-        
+
         (keypoints.kp_ptr.kp_ptr, descriptors.mat_ptr.mat_ptr)
     }
 
@@ -196,38 +189,5 @@ impl TrackingFrontEnd {
             image,
             timestamp,
         }));
-    }
-}
-
-
-pub struct DVORBextractor {
-    pub extractor: UniquePtr<dvos3binding::ffi::ORBextractor>,
-    pub max_features: i32
-}
-impl DVORBextractor {
-    pub fn new(max_features: i32) -> Self {
-        DVORBextractor{
-            max_features,
-            extractor: dvos3binding::ffi::new_orb_extractor(
-                max_features,
-                SETTINGS.get::<f64>(FEATURE_DETECTION, "scale_factor") as f32,
-                SETTINGS.get::<i32>(FEATURE_DETECTION, "n_levels"),
-                SETTINGS.get::<i32>(FEATURE_DETECTION, "ini_th_fast"),
-                SETTINGS.get::<i32>(FEATURE_DETECTION, "min_th_fast"),
-                SETTINGS.get::<i32>(CAMERA, "stereo_overlapping_begin"),
-                SETTINGS.get::<i32>(CAMERA, "stereo_overlapping_end")
-            )
-        }
-    }
-}
-impl Clone for DVORBextractor {
-    fn clone(&self) -> Self {
-        DVORBextractor::new(self.max_features)
-    }
-}
-impl Debug for DVORBextractor {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("DVORBextractor")
-         .finish()
     }
 }
