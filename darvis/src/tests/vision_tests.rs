@@ -4,7 +4,7 @@ mod vision_tests {
     use dvos3binding::ffi::WrapBindCVMat;
     use opencv::{imgcodecs, prelude::{MatTraitConst, KeyPointTraitConst}, core::{CV_8U, CV_8UC1}};
 
-    use crate::{actors::tracking_frontend::DVORBextractor, map::{features::Features, pose::Pose}, modules::{bow::BoW, geometric_tools}, registered_actors::VOCABULARY};
+    use crate::{map::{features::Features, pose::Pose}, modules::{bow::BoW, geometric_tools, orbextractor::DVORBextractor}, registered_actors::VOCABULARY};
     use std::{fs, env};
 
     use super::*;

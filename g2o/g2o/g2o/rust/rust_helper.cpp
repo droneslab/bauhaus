@@ -52,7 +52,7 @@ namespace g2o {
             BlockSolverX * solver_ptr = new BlockSolverX(linearSolver);
 
             g2o::OptimizationAlgorithmLevenberg* solver = new g2o::OptimizationAlgorithmLevenberg(solver_ptr);
-            optimizer->setVerbose(false);
+            optimizer->setVerbose(true);
             optimizer->setAlgorithm(solver);
 
             optimizer_type = 3;
