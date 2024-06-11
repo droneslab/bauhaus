@@ -11,3 +11,6 @@ pub mod image;
 pub mod sim3solver;
 pub mod bow;
 pub mod orbextractor;
+pub mod opencv_extractor;
+
+pub mod module;

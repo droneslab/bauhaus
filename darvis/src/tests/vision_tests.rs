@@ -4,8 +4,10 @@ mod vision_tests {
     use dvos3binding::ffi::WrapBindCVMat;
     use opencv::{imgcodecs, prelude::{MatTraitConst, KeyPointTraitConst}, core::{CV_8U, CV_8UC1}};
 
-    use crate::{map::{features::Features, pose::Pose}, modules::{bow::BoW, geometric_tools, orbextractor::DVORBextractor}, registered_actors::VOCABULARY};
+    use crate::{map::{features::Features, pose::Pose}, modules::{bow::DVBoW, geometric_tools, orbextractor::DVORBextractor}, registered_actors::VOCABULARY};
     use std::{fs, env};
+    use crate::modules::module::VocabularyModule;
+    use crate::modules::module::FeatureExtractionModule;
 
     use super::*;
 
@@ -23,7 +25,7 @@ mod vision_tests {
         ).expect("Could not load config");
 
         let (image, image_cols, image_rows) = read_image("src/tests/data/kitti00_frame0.png");
-        let (keypoints, descriptors) = extract_features(&image, 2000*5);
+        let (keypoints, descriptors) = extract_features(image, 2000*5);
         let (features, bow) = compute_bow(keypoints, descriptors, image_cols as u32, image_rows as u32);
 
         // Test features
@@ -45,37 +47,35 @@ mod vision_tests {
     }
 
 
-    fn read_image(image_path: &str) -> (WrapBindCVMat, i32, i32){
+    fn read_image(image_path: &str) -> (opencv::core::Mat, i32, i32){
         let image = imgcodecs::imread(&image_path, imgcodecs::IMREAD_GRAYSCALE).unwrap();
         let cols = image.cols();
         let rows = image.rows();
         (
-           (&DVMatrix::new(image)).into(),
+           image,
             cols,
             rows
         )
     }
 
-    fn extract_features(image: &WrapBindCVMat, max_features: i32) -> (DVVectorOfKeyPoint, DVMatrix) {
+    fn extract_features(image: opencv::core::Mat, max_features: i32) -> (DVVectorOfKeyPoint, DVMatrix) {
         let mut orb_extractor = DVORBextractor::new(max_features);
-        let mut descriptors: dvos3binding::ffi::WrapBindCVMat = (&DVMatrix::default()).into();
-        let mut keypoints: dvos3binding::ffi::WrapBindCVKeyPoints = DVVectorOfKeyPoint::empty().into();
-        orb_extractor.extractor.pin_mut().extract(image, &mut keypoints, &mut descriptors);
+        let (keypoints, descriptors) = orb_extractor.extract(image).unwrap();
         (
-            DVVectorOfKeyPoint::new(keypoints.kp_ptr.kp_ptr),
-            DVMatrix::new(descriptors.mat_ptr.mat_ptr)
+            DVVectorOfKeyPoint::new(keypoints),
+            DVMatrix::new(descriptors)
         )
     }
 
-    fn compute_bow(keypoints: DVVectorOfKeyPoint, descriptors: DVMatrix, image_cols: u32, image_rows: u32) -> (Features, BoW) {
+    fn compute_bow(keypoints: DVVectorOfKeyPoint, descriptors: DVMatrix, image_cols: u32, image_rows: u32) -> (Features, DVBoW) {
         let sensor = Sensor(FrameSensor::Mono, ImuSensor::None);
         let features = Features::new(keypoints, descriptors, image_cols, image_rows, sensor).unwrap();
-        let mut bow = BoW::new();
+        let mut bow = DVBoW::new();
         VOCABULARY.transform(&features.descriptors, &mut bow);
         (features, bow)
     }
 
-    fn format_features(bow: &BoW) -> String {
+    fn format_features(bow: &DVBoW) -> String {
         let mut real_features = vec![];
         for node_id in bow.feat_vec.get_all_nodes() {
             let index = bow.feat_vec.get_feat_from_node(node_id);

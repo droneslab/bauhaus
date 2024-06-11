@@ -6,9 +6,12 @@ use std::{cmp::{max, min}, collections::HashMap};
 use log::warn;
 use opencv::{core::{no_array, norm, MatExprResult, Range, Scalar, CV_64F, NORM_L2}, hub_prelude::{KeyPointTraitConst, MatExprTraitConst, MatTraitConst}};
 use rand::Rng;
+use crate::modules::module::CameraModule;
 
 use crate::{map::{map::Id, pose::{DVRotation, Sim3}}, modules::optimizer::LEVEL_SIGMA2, registered_actors::CAMERA_MODULE, MapLock};
 use opencv::prelude::*;
+
+use super::module::Sim3SolverModule;
 
 pub struct Sim3Solver {
     n: usize, // N, total mappoints that could have matches
@@ -33,6 +36,9 @@ pub struct Sim3Solver {
     ransac_max_its: i32, // mRansacMaxIts
 
     fix_scale: bool,
+}
+impl Sim3SolverModule for Sim3Solver {
+
 }
 
 impl Sim3Solver {

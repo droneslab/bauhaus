@@ -1,15 +1,31 @@
-use core::config::SETTINGS;
+use core::{config::SETTINGS, matrix::{DVMatrix, DVVectorOfKeyPoint}};
 use std::{fmt, fmt::Debug};
 
 use cxx::UniquePtr;
 
 use crate::registered_actors::{CAMERA, FEATURE_DETECTION};
 
+use super::module::FeatureExtractionModule;
+
 
 pub struct DVORBextractor {
-    pub extractor: UniquePtr<dvos3binding::ffi::ORBextractor>,
+    extractor: UniquePtr<dvos3binding::ffi::ORBextractor>,
     pub max_features: i32
 }
+impl FeatureExtractionModule for DVORBextractor {
+    type Image = opencv::core::Mat;
+
+    fn extract(&mut self, image: Self::Image) -> Result<(opencv::types::VectorOfKeyPoint, opencv::core::Mat), Box<dyn std::error::Error>> {
+        let image_dv: dvos3binding::ffi::WrapBindCVMat = (&DVMatrix::new(image)).into();
+        let mut descriptors: dvos3binding::ffi::WrapBindCVMat = (&DVMatrix::default()).into();
+        let mut keypoints: dvos3binding::ffi::WrapBindCVKeyPoints = DVVectorOfKeyPoint::empty().into();
+
+        self.extractor.pin_mut().extract(&image_dv, &mut keypoints, &mut descriptors);
+
+        Ok((keypoints.kp_ptr.kp_ptr, descriptors.mat_ptr.mat_ptr))
+    }
+}
+
 impl DVORBextractor {
     pub fn new(max_features: i32) -> Self {
         DVORBextractor{

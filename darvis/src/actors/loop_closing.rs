@@ -15,7 +15,7 @@ use crate::modules::{optimizer, orbmatcher};
 use crate::registered_actors::VISUALIZER;
 use crate::{System, MapLock};
 use crate::map::map::Id;
-use crate::modules::imu::ImuModule;
+use crate::modules::imu::DVImu;
 
 use super::local_mapping::LOCAL_MAPPING_PAUSE_SWITCH;
 use super::messages::{IMUInitializedMsg, ShutdownMsg};
@@ -30,7 +30,7 @@ pub struct LoopClosing {
     sensor: Sensor,
 
     map: MapLock,
-    _imu: Option<ImuModule>,
+    _imu: Option<DVImu>,
 
     // Loop detector variables
     loop_mappoints: Vec<Id>, // mvpLoopMapPoints

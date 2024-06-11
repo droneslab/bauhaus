@@ -11,6 +11,8 @@ use crate::{
         tracking_backend::TrackingState,
     }, map::map::Id, modules::{image, orbextractor::DVORBextractor}, registered_actors::{FEATURE_DETECTION, VISUALIZER}, System
 };
+use crate::modules::module::FeatureExtractionModule;
+
 
 
 pub struct TrackingFrontEnd {
@@ -140,30 +142,26 @@ impl TrackingFrontEnd {
     fn extract_features(&mut self, image: opencv::core::Mat) -> (VectorOfKeyPoint, Mat) {
         let _span = tracy_client::span!("extract_features");
 
-        let image_dv: dvos3binding::ffi::WrapBindCVMat = (&DVMatrix::new(image)).into();
-        let mut descriptors: dvos3binding::ffi::WrapBindCVMat = (&DVMatrix::default()).into();
-        let mut keypoints: dvos3binding::ffi::WrapBindCVKeyPoints = DVVectorOfKeyPoint::empty().into();
-
-        match self.sensor {
+        let (keypoints, descriptors) = match self.sensor {
             Sensor(FrameSensor::Mono, ImuSensor::None) => {
                 if !self.map_initialized || (self.last_id - self.init_id < self.max_frames) {
-                    self.orb_extractor_ini.as_mut().unwrap().extractor.pin_mut().extract(&image_dv, &mut keypoints, &mut descriptors);
+                    self.orb_extractor_ini.as_mut().unwrap().extract(image).unwrap()
                 } else {
-                    self.orb_extractor_left.extractor.pin_mut().extract(&image_dv, &mut keypoints, &mut descriptors);
+                    self.orb_extractor_left.extract(image).unwrap()
                 }
             },
             _ => { 
                 // See GrabImageMonocular, GrabImageStereo, GrabImageRGBD in Tracking.cc
                 todo!("IMU, Stereo, RGBD")
             }
-        }
+        };
 
         match self.sensor.frame() {
             FrameSensor::Stereo => todo!("Stereo"), //Also call extractor_right, see Tracking::GrabImageStereo,
             _ => {}
         }
 
-        (keypoints.kp_ptr.kp_ptr, descriptors.mat_ptr.mat_ptr)
+        (keypoints, descriptors)
     }
 
     fn send_to_backend(&self, keypoints: VectorOfKeyPoint, descriptors: Mat, image_width: u32, image_height: u32, timestamp: Timestamp, frame_id: u32) {

@@ -1,8 +1,9 @@
 use std::{collections::{HashMap, HashSet}, cmp::min};
 use core::{config::{ SETTINGS, SYSTEM}, matrix::DVVector3, sensor::Sensor, system::Timestamp};
 use log::{error, debug, warn};
-use crate::{map::{map::Id, pose::Pose},modules::{bow::BoW, imu::*}, registered_actors::VOCABULARY};
+use crate::{map::{map::Id, pose::Pose},modules::{bow::DVBoW, imu::*}, registered_actors::VOCABULARY};
 use super::{features::Features, frame::Frame, map::{Map, MapItems}, mappoint::MapPoint,};
+use crate::modules::module::VocabularyModule;
 
 #[derive(Debug, Clone)]
 pub struct KeyFrame {
@@ -22,7 +23,7 @@ pub struct KeyFrame {
 
     // Vision //
     pub features: Features, // KeyPoints, stereo coordinate and descriptors (all associated by an index)
-    pub bow: Option<BoW>,
+    pub bow: Option<DVBoW>,
 
     // IMU //
     // Preintegrated IMU measurements from previous keyframe
@@ -59,7 +60,7 @@ impl KeyFrame {
         let bow = match frame.bow {
             Some(bow) => Some(bow),
             None => {
-                let mut bow = BoW::new();
+                let mut bow = DVBoW::new();
                 VOCABULARY.transform(&frame.features.descriptors, &mut bow);
                 Some(bow)
             }

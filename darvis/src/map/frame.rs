@@ -1,8 +1,10 @@
 use core::{config::{SETTINGS, SYSTEM}, matrix::{DVMatrix, DVVector3, DVVectorOfKeyPoint}, sensor::{FrameSensor, Sensor}, system::Timestamp};
+use crate::modules::module::VocabularyModule;
 
-use crate::{actors::tracking_backend::TrackedMapPointData, modules::{bow::BoW, imu::{IMUBias, IMUPreIntegrated}}, registered_actors::{CAMERA_MODULE, VOCABULARY}};
+use crate::{actors::tracking_backend::TrackedMapPointData, modules::{bow::DVBoW, imu::{IMUBias, IMUPreIntegrated}}, registered_actors::{CAMERA_MODULE, VOCABULARY}};
 
 use super::{features::Features, keyframe::MapPointMatches, map::{Id, Map}, mappoint::MapPoint, pose::{DVTranslation, Pose}};
+use crate::modules::module::CameraModule;
 
 
 #[derive(Debug, Clone)]
@@ -16,7 +18,7 @@ pub struct Frame {
 
     // Vision //
     pub features: Features, // KeyPoints, stereo coordinate and descriptors (all associated by an index)
-    pub bow: Option<BoW>,
+    pub bow: Option<DVBoW>,
 
     // IMU //
     // Preintegrated IMU measurements from previous keyframe
@@ -73,7 +75,7 @@ impl Frame {
 
     pub fn compute_bow(&mut self) {
         if self.bow.is_none() {
-            self.bow = Some(BoW::new());
+            self.bow = Some(DVBoW::new());
             VOCABULARY.transform(&self.features.descriptors, &mut self.bow.as_mut().unwrap());
         }
     }

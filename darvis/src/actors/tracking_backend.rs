@@ -4,11 +4,12 @@ use core::{config::*, sensor::{FrameSensor, ImuSensor, Sensor}, system::{Actor, 
 use crate::{
     actors::{loop_closing::KeyFrameAndPose, messages::{FeatureMsg, InitKeyFrameMsg, LastKeyFrameUpdatedMsg, ShutdownMsg, TrackingStateMsg, TrajectoryMsg, VisTrajectoryMsg}}, map::{
         frame::Frame, map::Id, pose::Pose
-    }, modules::{imu::ImuModule, map_initialization::Initialization, optimizer, orbmatcher, relocalization::Relocalization}, registered_actors::{LOCAL_MAPPING, SHUTDOWN_ACTOR, TRACKING_BACKEND, TRACKING_FRONTEND, VISUALIZER}, MapLock, System, MAP_INITIALIZED
+    }, modules::{imu::DVImu, map_initialization::DVInitialization, optimizer, orbmatcher, relocalization::DVRelocalization}, registered_actors::{LOCAL_MAPPING, SHUTDOWN_ACTOR, TRACKING_BACKEND, TRACKING_FRONTEND, VISUALIZER}, MapLock, System, MAP_INITIALIZED
 };
-
+use crate::modules::module::ImuModule;
 use super::{messages::{IMUInitializedMsg, NewKeyFrameMsg}, local_mapping::LOCAL_MAPPING_IDLE};
-
+use crate::modules::module::MapInitializationModule;
+use crate::modules::module::RelocalizationModule;
 
 pub struct TrackingBackend {
     system: System,
@@ -16,7 +17,7 @@ pub struct TrackingBackend {
 
     // Map
     map: MapLock,
-    initialization: Option<Initialization>, // data sent to map actor to initialize new map
+    initialization: Option<DVInitialization>, // data sent to map actor to initialize new map
 
     // KeyFrames
     ref_kf_id: Option<Id>,
@@ -35,10 +36,10 @@ pub struct TrackingBackend {
     non_tracked_mappoints: HashMap<Id, i32>, // just for testing
 
     // IMU 
-    imu: ImuModule,
+    imu: DVImu,
 
     // Relocalization
-    relocalization: Relocalization,
+    relocalization: DVRelocalization,
 
     // Idk where to put these
     map_updated : bool,  // TODO (design, variable locations) I'm not sure we want to use this
@@ -64,7 +65,7 @@ impl Actor for TrackingBackend {
             system,
             map,
             sensor,
-            initialization: Some(Initialization::new()),
+            initialization: Some(DVInitialization::new()),
             localization_only_mode: SETTINGS.get::<bool>(SYSTEM, "localization_only_mode"),
             frames_to_reset_imu: SETTINGS.get::<i32>(TRACKING_BACKEND, "frames_to_reset_IMU") as u32,
             insert_kfs_when_lost: SETTINGS.get::<bool>(TRACKING_BACKEND, "insert_KFs_when_lost"),
@@ -82,8 +83,8 @@ impl Actor for TrackingBackend {
             kf_track_reference_for_frame: HashMap::new(),
             mp_track_reference_for_frame: HashMap::new(),
             last_frame_seen: HashMap::new(),
-            imu: ImuModule::new(None, None, sensor, false, false),
-            relocalization: Relocalization{last_reloc_frame_id: 0, timestamp_lost: None},
+            imu: DVImu::new(None, None, sensor, false, false),
+            relocalization: DVRelocalization{last_reloc_frame_id: 0, timestamp_lost: None},
             map_updated: false,
             trajectory_poses: Vec::new(),
             non_tracked_mappoints: HashMap::new(),
@@ -189,7 +190,7 @@ impl TrackingBackend {
             },
             (false, TrackingState::NotInitialized) => {
                 if self.initialization.is_none() {
-                    self.initialization = Some(Initialization::new());
+                    self.initialization = Some(DVInitialization::new());
                 }
                 let init_success = self.initialization.as_mut().unwrap().try_initialize(&current_frame)?;
                 if init_success {
