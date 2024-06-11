@@ -2,7 +2,7 @@ use std::{collections::HashMap, sync::{Arc, Mutex}, thread::{self, JoinHandle}};
 use crossbeam_channel::unbounded;
 
 use core::{
-    config::{ActorConf, ModuleConf}, read_only_lock::ReadWriteMap, system::{Receiver, Sender, System} 
+    config::{ActorConf, ModuleConf}, read_only_lock::ReadWriteMap, system::{Module, Receiver, Sender, System} 
 };
 use log::{info, warn};
 
@@ -15,7 +15,7 @@ use crate::modules::module::VocabularyModule;
 // Initialize actor system using config file.
 // Returns mutex to shutdown flag and transmitters for first actor and shutdown actor.
 // You probably don't want to change this code.
-pub fn launch_system(actor_config: Vec<ActorConf>, _module_config: Vec<ModuleConf>, first_actor_name: String) 
+pub fn launch_system(actor_config: Vec<ActorConf>, module_config: Vec<ModuleConf>, first_actor_name: String) 
     -> Result<(Arc<std::sync::Mutex<bool>>, Sender, Sender, JoinHandle<()>), Box<dyn std::error::Error>> 
 {
     // * SET UP CHANNELS *//
@@ -26,6 +26,10 @@ pub fn launch_system(actor_config: Vec<ActorConf>, _module_config: Vec<ModuleCon
         let (tx, rx) = unbounded(); // Note: bounded channels block on send if channel is full, so use unbounded and handle drops in receive()
         transmitters.insert(actor_conf.name.clone(), tx);
         receivers.push((actor_conf.name.clone(), actor_conf.tag.clone(), actor_conf.receiver_bound.clone(), rx));
+    }
+
+    for module_conf in &module_config {
+        info!("Using module '{}' as {}", module_conf.tag, module_conf.name);
     }
 
     // Create transmitters/receivers for darvis system actors
@@ -56,10 +60,10 @@ pub fn launch_system(actor_config: Vec<ActorConf>, _module_config: Vec<ModuleCon
     Ok((shutdown_flag, first_actor_tx, shutdown_actor_tx, shutdown_join))
 }
 
-
 fn spawn_actor(
-    actor_tag: String, actor_name: String, transmitters: &HashMap<String, Sender>, receiver: Receiver,
-    receiver_bound: Option<usize>, writeable_map: Option<&MapLock>
+    actor_tag: String, actor_name: String, 
+    transmitters: &HashMap<String, Sender>, receiver: Receiver, receiver_bound: Option<usize>, 
+    writeable_map: Option<&MapLock>
 ) {
     info!("Spawning actor '{}' with name {}", &actor_tag, &actor_name);
 

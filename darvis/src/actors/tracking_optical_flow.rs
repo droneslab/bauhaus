@@ -54,9 +54,9 @@ pub struct TrackingOpticalFlow {
     sensor: Sensor,
 
     /// Frontend
-    orb_extractor_left: DVORBextractor,
-    orb_extractor_right: Option<DVORBextractor>,
-    orb_extractor_ini: Option<DVORBextractor>,
+    orb_extractor_left: Box<dyn FeatureExtractionModule>,
+    _orb_extractor_right: Option<Box<dyn FeatureExtractionModule>>,
+    orb_extractor_ini: Option<Box<dyn FeatureExtractionModule>>,
     init_id: Id,
 
     /// Backend
@@ -107,20 +107,20 @@ impl Actor for TrackingOpticalFlow {
     type MapRef = MapLock;
 
     fn new_actorstate(system: System, map: Self::MapRef) -> TrackingOpticalFlow {
-        let max_features = SETTINGS.get::<i32>(FEATURE_DETECTION, "max_features");
         let sensor = SETTINGS.get::<Sensor>(SYSTEM, "sensor");
-        let orb_extractor_right = match sensor.frame() {
-            FrameSensor::Stereo => Some(DVORBextractor::new(max_features)),
+        let _orb_extractor_right: Option<Box<dyn FeatureExtractionModule>> = match sensor.frame() {
+            FrameSensor::Stereo => Some(Box::new(DVORBextractor::new(false))),
             FrameSensor::Mono | FrameSensor::Rgbd => None,
         };
-        let orb_extractor_ini = match sensor.is_mono() {
-            true => Some(DVORBextractor::new(max_features*5)),
+        let orb_extractor_ini: Option<Box<dyn FeatureExtractionModule>> = match sensor.is_mono() {
+            true => Some(Box::new(DVORBextractor::new(true))), // sofiya orbslam2 loop closing
             false => None
         };
+
         TrackingOpticalFlow {
             system,
-            orb_extractor_left: DVORBextractor::new(max_features),
-            orb_extractor_right,
+            orb_extractor_left: Box::new(DVORBextractor::new(false)),
+            _orb_extractor_right,
             orb_extractor_ini,
             map_initialized: false,
             init_id: 0,

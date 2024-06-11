@@ -1,3 +1,5 @@
+use core::system::Module;
+
 /// *** Traits for modules. *** //
 
 
@@ -48,10 +50,9 @@ pub trait ImuModule {
 }
 
 pub trait FeatureExtractionModule {
-    type Image;
-
-    fn extract(&mut self, image: Self::Image) -> Result<(opencv::types::VectorOfKeyPoint, opencv::core::Mat), Box<dyn std::error::Error>>;
+    fn extract(&mut self, image: opencv::core::Mat) -> Result<(opencv::types::VectorOfKeyPoint, opencv::core::Mat), Box<dyn std::error::Error>>;
 }
+impl Module for dyn FeatureExtractionModule { }
 
 pub trait FeatureMatchingModule {
     type Descriptor;
