@@ -13,6 +13,7 @@ use crate::map::pose::{DVTranslation, Pose, Sim3};
 use crate::modules::optimizer::LEVEL_SIGMA2;
 use crate::registered_actors::{CAMERA, CAMERA_MODULE, FEATURE_DETECTION, MATCHER};
 use crate::map::{map::Id, keyframe::KeyFrame, frame::Frame};
+use crate::modules::module::CameraModule;
 
 use super::optimizer::INV_LEVEL_SIGMA2;
 
@@ -37,6 +38,8 @@ lazy_static! {
     };
 }
 
+
+
 pub fn search_for_initialization(
     f1: &Frame,
     f2: &Frame,
@@ -60,7 +63,6 @@ pub fn search_for_initialization(
             continue;
         }
 
-        // Pranay : could be a bug ?? get_features_in_area
         let v_indices2 = f2.features.get_features_in_area(
             &(vb_prev_matched.get(i1).unwrap().x as f64),
             &(vb_prev_matched.get(i1).unwrap().y as f64),

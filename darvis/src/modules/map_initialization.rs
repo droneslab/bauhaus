@@ -11,12 +11,13 @@ use crate::map::{frame::Frame, pose::Pose};
 use crate::modules::optimizer;
 use crate::registered_actors::CAMERA_MODULE;
 use crate::MapLock;
-
+use crate::modules::module::CameraModule;
+use super::module::MapInitializationModule;
 use super::orbmatcher;
 
 
 #[derive(Debug, Clone, Default)]
-pub struct Initialization {
+pub struct DVInitialization {
     // Monocular
     pub mp_matches: Vec<i32>,// ini_matches .. mvIniMatches;
     pub prev_matched: DVVectorOfPoint2f,// std::vector<cv::Point2f> mvbPrevMatched;
@@ -27,24 +28,12 @@ pub struct Initialization {
     pub current_frame: Option<Frame>,
     sensor: Sensor,
 }
+impl MapInitializationModule for DVInitialization {
+    type Frame = Frame;
+    type Map = MapLock;
+    type InitializationResult = Option<(Pose, i32, i32, BTreeSet<Id>, Timestamp)>;
 
-impl Initialization {
-    pub fn new() -> Self {
-        let sensor: Sensor = SETTINGS.get(SYSTEM, "sensor");
-
-        Self {
-            mp_matches: Vec::new(),
-            prev_matched: DVVectorOfPoint2f::empty(),
-            p3d: DVVectorOfPoint3f::empty(),
-            ready_to_initialize: false,
-            initial_frame: None,
-            last_frame: None,
-            current_frame: None,
-            sensor
-        }
-    }
-
-    pub fn try_initialize(&mut self, current_frame: &Frame) -> Result<bool, Box<dyn std::error::Error>> {
+    fn try_initialize(&mut self, current_frame: &Frame) -> Result<bool, Box<dyn std::error::Error>> {
         // Only set once at beginning
         if self.initial_frame.is_none() {
             self.initial_frame = Some(current_frame.clone());
@@ -60,6 +49,30 @@ impl Initialization {
         match self.sensor.frame() {
             FrameSensor::Mono => self.monocular_initialization(),
             _ => self.stereo_initialization()
+        }
+    }
+
+    fn create_initial_map(&mut self, map: &mut Self::Map) -> Option<(Pose, i32, i32, BTreeSet<Id>, Timestamp)> {
+        match self.sensor.frame() {
+            FrameSensor::Mono => self.create_initial_map_monocular(map),
+            _ => self.create_initial_map_stereo()
+        }
+    }
+}
+
+impl DVInitialization {
+    pub fn new() -> Self {
+        let sensor: Sensor = SETTINGS.get(SYSTEM, "sensor");
+
+        Self {
+            mp_matches: Vec::new(),
+            prev_matched: DVVectorOfPoint2f::empty(),
+            p3d: DVVectorOfPoint3f::empty(),
+            ready_to_initialize: false,
+            initial_frame: None,
+            last_frame: None,
+            current_frame: None,
+            sensor
         }
     }
 
@@ -112,7 +125,7 @@ impl Initialization {
                 return Ok(false);
             };
 
-            if let Some((tcw, v_p3d, vb_triangulated)) = CAMERA_MODULE.reconstruct_with_two_views(
+            if let Some((tcw, v_p3d, vb_triangulated)) = CAMERA_MODULE.two_view_reconstruction(
                 initial_frame.features.get_all_keypoints(),
                 current_frame.features.get_all_keypoints(),
                 & self.mp_matches,
@@ -288,6 +301,10 @@ impl Initialization {
 
 
         Some((curr_kf_pose, curr_kf_id, initial_kf_id, relevant_mappoints, curr_kf_timestamp))
-
     }
+
+    pub fn create_initial_map_stereo(&mut self) -> Option<(Pose, i32, i32, BTreeSet<Id>, Timestamp)> {
+        todo!("Stereo: create_initial_map_stereo");
+    }
+    
 }

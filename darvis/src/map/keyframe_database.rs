@@ -5,6 +5,7 @@ use std::collections::{HashSet, HashMap};
 use log::debug;
 
 use crate::{map::{keyframe::KeyFrame, map::Id}, registered_actors::VOCABULARY};
+use crate::modules::module::VocabularyModule;
 
 use super::map::Map;
 

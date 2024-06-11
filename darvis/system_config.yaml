@@ -167,11 +167,11 @@ actors:
             type: i32
           - 
             name: min_frames_to_insert_kf
-            value: 0
+            value: 3
             type: i32
           -
             name: max_frames_to_insert_kf
-            value: 10
+            value: 5
             type: i32
 
       -

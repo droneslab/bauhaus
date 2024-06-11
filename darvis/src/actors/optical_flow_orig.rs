@@ -11,11 +11,12 @@ use crate::{
     actors::{
         messages::{IMUInitializedMsg, ImageMsg, LastKeyFrameUpdatedMsg, ShutdownMsg, VisFeaturesMsg},
         tracking_backend::TrackingState,
-    }, map::{features::Features, frame::Frame, map::Id, pose::Pose}, modules::{image, imu::ImuModule, map_initialization::Initialization, optimizer, orbmatcher, relocalization::Relocalization}, registered_actors::{CAMERA, CAMERA_MODULE, FEATURE_DETECTION, LOCAL_MAPPING, SHUTDOWN_ACTOR, TRACKING_BACKEND, TRACKING_FRONTEND, VISUALIZER}, MapLock, MAP_INITIALIZED
+    }, map::{features::Features, frame::Frame, map::Id, pose::Pose}, modules::{image, imu::DVImu, map_initialization::DVInitialization, optimizer, orbmatcher, relocalization::DVRelocalization}, registered_actors::{CAMERA, CAMERA_MODULE, FEATURE_DETECTION, LOCAL_MAPPING, SHUTDOWN_ACTOR, TRACKING_BACKEND, TRACKING_FRONTEND, VISUALIZER}, MapLock, MAP_INITIALIZED
 };
-
+use crate::modules::module::ImuModule;
 use super::{local_mapping::LOCAL_MAPPING_IDLE, messages::{ImagePathMsg, InitKeyFrameMsg, NewKeyFrameMsg, TrackingStateMsg, TrajectoryMsg, VisTrajectoryMsg}, tracking_backend::TrackedMapPointData};
-
+use crate::modules::module::MapInitializationModule;
+use crate::modules::module::RelocalizationModule;
 
 pub struct TrackingOpticalFlow {
     system: System,
@@ -44,9 +45,9 @@ pub struct TrackingOpticalFlow {
     mp_track_reference_for_frame: HashMap::<Id, Id>,  // mnTrackReferenceForFrame, member variable in Mappoint
     last_frame_seen: HashMap::<Id, Id>, // mnLastFrameSeen, member variable in Mappoint
     // IMU 
-    imu: ImuModule,
+    imu: DVImu,
     // Relocalization
-    relocalization: Relocalization,
+    relocalization: DVRelocalization,
     // Poses in trajectory
     trajectory_poses: Vec<Pose>, //mlRelativeFramePoses
 
@@ -54,7 +55,7 @@ pub struct TrackingOpticalFlow {
     map_initialized: bool,
     map_updated : bool,  // TODO (mvp) I'm not sure we want to use this
     map: MapLock,
-    initialization: Option<Initialization>, // data sent to map actor to initialize new map
+    initialization: Option<DVInitialization>, // data sent to map actor to initialize new map
 
     /// Global defaults
     localization_only_mode: bool,
@@ -92,7 +93,7 @@ impl Actor for TrackingOpticalFlow {
             init_id: 0,
             sensor,
             map,
-            initialization: Some(Initialization::new()),
+            initialization: Some(DVInitialization::new()),
             localization_only_mode: SETTINGS.get::<bool>(SYSTEM, "localization_only_mode"),
             frames_to_reset_imu: SETTINGS.get::<i32>(TRACKING_BACKEND, "frames_to_reset_IMU") as u32,
             insert_kfs_when_lost: SETTINGS.get::<bool>(TRACKING_BACKEND, "insert_KFs_when_lost"),
@@ -110,8 +111,8 @@ impl Actor for TrackingOpticalFlow {
             kf_track_reference_for_frame: HashMap::new(),
             mp_track_reference_for_frame: HashMap::new(),
             last_frame_seen: HashMap::new(),
-            imu: ImuModule::new(None, None, sensor, false, false),
-            relocalization: Relocalization{last_reloc_frame_id: 0, timestamp_lost: None},
+            imu: DVImu::new(None, None, sensor, false, false),
+            relocalization: DVRelocalization{last_reloc_frame_id: 0, timestamp_lost: None},
             map_updated: false,
             trajectory_poses: Vec::new(),
             min_num_features: SETTINGS.get::<i32>(TRACKING_BACKEND, "min_num_features")  as u32,
@@ -616,7 +617,7 @@ impl TrackingOpticalFlow {
             },
             (false, TrackingState::NotInitialized) => {
                 if self.initialization.is_none() {
-                    self.initialization = Some(Initialization::new());
+                    self.initialization = Some(DVInitialization::new());
                 }
                 let init_success = self.initialization.as_mut().unwrap().try_initialize(&current_frame)?;
                 if init_success {

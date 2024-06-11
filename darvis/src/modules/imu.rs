@@ -3,42 +3,31 @@ use serde::{Deserialize, Serialize};
 
 use crate::map::pose::Pose;
 
+use super::module::ImuModule;
+
 #[derive(Debug, Clone)]
-pub struct ImuModule {
+pub struct DVImu {
     pub velocity: Option<Pose>,
     pub is_initialized: bool, // isImuInitialized(), set true by local mapper
     pub imu_ba2: bool, // mbIMU_BA2
     _last_bias: Option<IMUBias>,
     sensor: Sensor
 }
-
-impl ImuModule {
-    pub fn new(velocity: Option<Pose>, last_bias: Option<IMUBias>, sensor: Sensor, is_initialized: bool, imu_ba2: bool) -> Self {
-        Self {
-            velocity,
-            _last_bias: last_bias,
-            sensor,
-            is_initialized,
-            imu_ba2
-        }
-    }
-    pub fn ready(&self) -> bool {
+impl ImuModule for DVImu {
+    fn ready(&self) -> bool {
         self.sensor.is_imu() && !self.velocity.is_none() && self.is_initialized
     }
 
-    pub fn predict_state(&self) -> bool {
-        self.check_imu_sensor();
+    fn predict_state(&self) -> bool {
         todo!("IMU: PredictStateIMU");
     }
 
-    pub fn preintegrate(&self) {
+    fn preintegrate(&self) {
         // void Tracking::PreintegrateIMU()
-        self.check_imu_sensor();
         todo!("IMU: PreintegrateIMU");
     }
 
-    pub fn initialize(&self) {
-        self.check_imu_sensor();
+    fn initialize(&self) {
         //void LocalMapping::InitializeIMU(float priorG, float priorA, bool bFIBA)
         let (_prior_g, _prior_a, _fiba) = match self.sensor.frame() {
             FrameSensor::Mono => (1e2, 1e10, true),
@@ -46,10 +35,16 @@ impl ImuModule {
         };
         todo!("IMU: initialize");
     }
+}
 
-    fn check_imu_sensor(&self) {
-        if matches!(self.sensor.imu(), ImuSensor::None) {
-            panic!("{}", "Should not use IMU module if IMU sensor is not set".to_string());
+impl DVImu {
+    pub fn new(velocity: Option<Pose>, last_bias: Option<IMUBias>, sensor: Sensor, is_initialized: bool, imu_ba2: bool) -> Self {
+        Self {
+            velocity,
+            _last_bias: last_bias,
+            sensor,
+            is_initialized,
+            imu_ba2
         }
     }
 }

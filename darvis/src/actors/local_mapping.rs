@@ -17,11 +17,12 @@ use crate::{System, MapLock};
 use crate::actors::messages::LastKeyFrameUpdatedMsg;
 use crate::modules::optimizer::{local_bundle_adjustment, LEVEL_SIGMA2};
 use crate::{
-    modules::{orbmatcher, imu::ImuModule, orbmatcher::SCALE_FACTORS, geometric_tools},
+    modules::{orbmatcher, imu::DVImu, orbmatcher::SCALE_FACTORS, geometric_tools},
     registered_actors::{FEATURE_DETECTION, LOOP_CLOSING, MATCHER, CAMERA},
     Id,
 };
-
+use crate::modules::module::CameraModule;
+use crate::modules::module::ImuModule;
 use super::messages::{ShutdownMsg, InitKeyFrameMsg, KeyFrameIdMsg, Reset, NewKeyFrameMsg};
 
 // TODO (design, variable locations): It would be nice for this to be a member of LocalMapping instead of floating around in the global namespace, but we can't do that easily because then Tracking would need a reference to the localmapping object.
@@ -41,7 +42,7 @@ pub struct LocalMapping {
     discarded_kfs: HashSet<Id>,  // TODO (design) ... kf culling and rates
 
     // Modules
-    imu: ImuModule,
+    imu: DVImu,
 
 }
 
@@ -57,7 +58,7 @@ impl Actor for LocalMapping {
             sensor,
             current_keyframe_id: -1,
             recently_added_mappoints: HashSet::new(),
-            imu: ImuModule::new(None, None, sensor, false, false),
+            imu: DVImu::new(None, None, sensor, false, false),
             discarded_kfs: HashSet::new(),
         }
     }

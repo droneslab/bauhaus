@@ -9,6 +9,7 @@ use log::{info, warn};
 use crate::{
     actors::messages::ShutdownMsg, map::map::Map, registered_actors::{self, SHUTDOWN_ACTOR, VOCABULARY}, MapLock
 };
+use crate::modules::module::VocabularyModule;
 
 
 // Initialize actor system using config file.

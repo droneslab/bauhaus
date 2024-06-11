@@ -1,7 +1,8 @@
 use core::{config::{SETTINGS, SYSTEM}, system::{Actor, System}};
 use log::error;
 
-use crate::{modules::{bow::DVVocabulary, camera::{Camera, CameraType}}, MapLock};
+use crate::{modules::{bow::DVVocabulary, camera::{DVCamera, CameraType}}, MapLock};
+use crate::modules::module::VocabularyModule;
 
 // USER-DEFINED ACTORS: add a string to name your actor here
 // These are the names that actors in the system use to find/communicate with each other
@@ -24,8 +25,8 @@ pub static FEATURES: &str = "FEATURES";
 pub static SHUTDOWN_ACTOR: &str = "SHUTDOWN";
 
 lazy_static! {
-    pub static ref CAMERA_MODULE: Camera = {
-        Camera::new(CameraType::Pinhole).unwrap()
+    pub static ref CAMERA_MODULE: DVCamera = {
+        DVCamera::new(CameraType::Pinhole).unwrap()
     };
     pub static ref VOCABULARY: DVVocabulary = {
         let filename = SETTINGS.get::<String>(SYSTEM, "vocabulary_file");
