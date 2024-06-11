@@ -1,4 +1,4 @@
-use core::{config::SETTINGS, matrix::{DVMatrix, DVVectorOfKeyPoint}};
+use core::{config::SETTINGS, matrix::{DVMatrix, DVVectorOfKeyPoint}, system::Module};
 use std::{fmt, fmt::Debug};
 
 use cxx::UniquePtr;
@@ -11,12 +11,11 @@ use super::module::FeatureExtractionModule;
 
 pub struct DVOpenCVExtractor {
     extractor: opencv::core::Ptr<opencv::features2d::ORB>,
-    pub max_features: i32
+    is_ini: bool,
 }
+impl Module for DVOpenCVExtractor { }
 impl FeatureExtractionModule for DVOpenCVExtractor {
-    type Image = opencv::core::Mat;
-
-    fn extract(&mut self, image: Self::Image) -> Result<(opencv::types::VectorOfKeyPoint, opencv::core::Mat), Box<dyn std::error::Error>> {
+    fn extract(&mut self, image: opencv::core::Mat) -> Result<(opencv::types::VectorOfKeyPoint, opencv::core::Mat), Box<dyn std::error::Error>> {
         let mut descriptors = opencv::core::Mat::default();
         let mut keypoints= opencv::types::VectorOfKeyPoint::new();
 
@@ -28,11 +27,19 @@ impl FeatureExtractionModule for DVOpenCVExtractor {
 }
 
 impl DVOpenCVExtractor {
-    pub fn new(max_features: i32) -> Self {
+    pub fn new(is_ini: bool) -> Self {
+        let max_features = match is_ini {
+            true => SETTINGS.get::<i32>(FEATURE_DETECTION, "max_features") * 5,
+            false => SETTINGS.get::<i32>(FEATURE_DETECTION, "max_features")
+        };
+        let fast_threshold = match is_ini {
+            true => SETTINGS.get::<i32>(FEATURE_DETECTION, "ini_th_fast"),
+            false => SETTINGS.get::<i32>(FEATURE_DETECTION, "min_th_fast")
+        };
         DVOpenCVExtractor{
-            max_features,
+            is_ini,
             extractor: opencv::features2d::ORB::create(
-                2000,
+                max_features,
                 SETTINGS.get::<f64>(FEATURE_DETECTION, "scale_factor") as f32,
                 SETTINGS.get::<i32>(FEATURE_DETECTION, "n_levels"),
                 31,
@@ -40,14 +47,14 @@ impl DVOpenCVExtractor {
                 2,
                 opencv::features2d::ORB_ScoreType::HARRIS_SCORE,
                 31,
-                20
+                fast_threshold
             ).unwrap()
         }
     }
 }
 impl Clone for DVOpenCVExtractor {
     fn clone(&self) -> Self {
-        DVOpenCVExtractor::new(self.max_features)
+        DVOpenCVExtractor::new(self.is_ini)
     }
 }
 impl Debug for DVOpenCVExtractor {

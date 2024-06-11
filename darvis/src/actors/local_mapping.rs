@@ -110,7 +110,7 @@ impl Actor for LocalMapping {
                 let kf_id = actor.map.write().insert_keyframe_to_map(msg.keyframe, false);
 
                 // Send the new keyframe ID directly back to the sender so they can use the ID 
-                actor.system.find(TRACKING_BACKEND).send(Box::new(InitKeyFrameMsg{kf_id})).unwrap();
+                actor.system.find_actor(TRACKING_BACKEND).send(Box::new(InitKeyFrameMsg{kf_id})).unwrap();
 
                 debug!("Local mapping working on kf {}", kf_id);
                 actor.current_keyframe_id = kf_id;
@@ -149,7 +149,7 @@ impl LocalMapping {
 
         // Triangulate new MapPoints
         let mps_created = self.create_new_mappoints();
-        self.system.find(TRACKING_BACKEND).send(Box::new(
+        self.system.find_actor(TRACKING_BACKEND).send(Box::new(
             LastKeyFrameUpdatedMsg{}
         )).unwrap();
 

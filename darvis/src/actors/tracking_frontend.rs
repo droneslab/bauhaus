@@ -9,7 +9,7 @@ use crate::{
     actors::{
         messages::{FeatureMsg, ImageMsg, ImagePathMsg, ShutdownMsg, TrackingStateMsg, VisFeaturesMsg},
         tracking_backend::TrackingState,
-    }, map::map::Id, modules::{image, orbextractor::DVORBextractor}, registered_actors::{FEATURE_DETECTION, VISUALIZER}, System
+    }, map::map::Id, modules::{image, orbextractor::DVORBextractor}, registered_actors::{new_feature_extraction_module, FEATURE_DETECTION, VISUALIZER}, System
 };
 use crate::modules::module::FeatureExtractionModule;
 
@@ -17,9 +17,9 @@ use crate::modules::module::FeatureExtractionModule;
 
 pub struct TrackingFrontEnd {
     system: System,
-    orb_extractor_left: DVORBextractor,
-    _orb_extractor_right: Option<DVORBextractor>,
-    orb_extractor_ini: Option<DVORBextractor>,
+    orb_extractor_left: Box<dyn FeatureExtractionModule>,
+    _orb_extractor_right: Option<Box<dyn FeatureExtractionModule>>,
+    orb_extractor_ini: Option<Box<dyn FeatureExtractionModule>>,
     map_initialized: bool,
     last_id: Id,
     init_id: Id,
@@ -31,19 +31,20 @@ impl Actor for TrackingFrontEnd {
     type MapRef = ();
 
     fn new_actorstate(system: System, _map: Self::MapRef) -> TrackingFrontEnd {
-        let max_features = SETTINGS.get::<i32>(FEATURE_DETECTION, "max_features");
         let sensor = SETTINGS.get::<Sensor>(SYSTEM, "sensor");
+
         let _orb_extractor_right = match sensor.frame() {
-            FrameSensor::Stereo => Some(DVORBextractor::new(max_features)),
+            FrameSensor::Stereo => Some(new_feature_extraction_module(false)),
             FrameSensor::Mono | FrameSensor::Rgbd => None,
         };
         let orb_extractor_ini = match sensor.is_mono() {
-            true => Some(DVORBextractor::new(max_features*5)), // sofiya orbslam2 loop closing
+            true => Some(new_feature_extraction_module(true)),
             false => None
         };
+
         TrackingFrontEnd {
             system,
-            orb_extractor_left: DVORBextractor::new(max_features),
+            orb_extractor_left: new_feature_extraction_module(false),
             _orb_extractor_right,
             orb_extractor_ini,
             map_initialized: false,
@@ -168,7 +169,7 @@ impl TrackingFrontEnd {
         // Send features to backend
         // Note: Run-time errors ... actor lookup is runtime error
         // Note: not currently sending image to backend
-        let backend = self.system.find("TRACKING_BACKEND");
+        let backend = self.system.find_actor("TRACKING_BACKEND");
 
         backend.send(Box::new(FeatureMsg{
             keypoints: DVVectorOfKeyPoint::new(keypoints),

@@ -10,7 +10,7 @@ system:
       vocabulary_file: "../Vocabulary/ORBvoc.txt"
       framesensor: Mono
       imusensor: None
-      first_actor_name: TRACKING_BACKEND # Name of actor to kick off pipeline
+      first_actor_name: TRACKING_FRONTEND # Name of actor to kick off pipeline
 
       # FPS
       fps: 10.0
@@ -26,9 +26,33 @@ system:
       # To turn on visualizer, uncomment visualizer actor below
 
 modules:
+      # - 
+        # name: FEATURE_DETECTION
+        # tag: "orbslam feature detection"
+        # settings:
+        #   - 
+        #     name: max_features
+        #     value: 2000
+        #     type: i32
+        #   - 
+        #     name: scale_factor
+        #     value: 1.2
+        #     type: f64
+        #   - 
+        #     name: n_levels
+        #     value: 8
+        #     type: i32
+        #   - 
+        #     name: ini_th_fast
+        #     value: 20
+        #     type: i32
+        #   - 
+        #     name: min_th_fast
+        #     value: 7
+        #     type: i32
       - 
         name: FEATURE_DETECTION
-        tag: "feature detection"
+        tag: "opencv feature detection"
         settings:
           - 
             name: max_features
@@ -107,46 +131,16 @@ actors:
             value: false
             type: bool
 
-      # -
-      #  name: TRACKING_FRONTEND
-      #  tag: "orbslam tracking frontend"
-      #  receiver_bound: 10
-      #  settings:
-      #     -
-
-      # -
-      #  name: TRACKING_BACKEND
-      #  tag: "orbslam tracking backend"
-      #  receiver_bound: 10
-      #  settings:
-      #     - 
-      #       name: recently_lost_cutoff
-      #       value: 5
-      #       type: i32
-      #     - 
-      #       name: frames_to_reset_IMU
-      #       value: 30
-      #       type: i32
-      #     - 
-      #       name: insert_KFs_when_lost
-      #       value: true
-      #       type: bool
-      #     - 
-      #       name: min_num_features
-      #       value: 2000
-      #       type: i32
-      #     - 
-      #       name: min_frames_to_insert_kf
-      #       value: 0
-      #       type: i32
-      #     -
-      #       name: max_frames_to_insert_kf
-      #       value: 10
-      #       type: i32
+      -
+       name: TRACKING_FRONTEND
+       tag: "orbslam tracking frontend"
+       receiver_bound: 10
+       settings:
+          -
 
       -
        name: TRACKING_BACKEND
-       tag: "optical flow tracking"
+       tag: "orbslam tracking backend"
        receiver_bound: 10
        settings:
           - 
@@ -167,22 +161,42 @@ actors:
             type: i32
           - 
             name: min_frames_to_insert_kf
-            value: 3
+            value: 0
             type: i32
           -
             name: max_frames_to_insert_kf
-            value: 5
+            value: 10
             type: i32
 
-      -
-       name: LOOP_CLOSING
-       tag: "orbslam3 loop closing"
-       receiver_bound: -1
-       settings:
-          - 
-            name: covisibility_consistency_threshold
-            value: 3
-            type: i32
+      # -
+      #  name: TRACKING_BACKEND
+      #  tag: "optical flow tracking"
+      #  receiver_bound: 10
+      #  settings:
+      #     - 
+      #       name: recently_lost_cutoff
+      #       value: 5
+      #       type: i32
+      #     - 
+      #       name: frames_to_reset_IMU
+      #       value: 30
+      #       type: i32
+      #     - 
+      #       name: insert_KFs_when_lost
+      #       value: true
+      #       type: bool
+      #     - 
+      #       name: min_num_features
+      #       value: 2000
+      #       type: i32
+      #     - 
+      #       name: min_frames_to_insert_kf
+      #       value: 3
+      #       type: i32
+      #     -
+      #       name: max_frames_to_insert_kf
+      #       value: 5
+      #       type: i32
 
       -
        name: LOCAL_MAPPING
@@ -200,4 +214,14 @@ actors:
           - 
             name: min_num_features
             value: 2000
+            type: i32
+
+      -
+       name: LOOP_CLOSING
+       tag: "orbslam3 loop closing"
+       receiver_bound: -1
+       settings:
+          - 
+            name: covisibility_consistency_threshold
+            value: 3
             type: i32
