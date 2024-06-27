@@ -4,7 +4,7 @@ use core::{config::*, sensor::{FrameSensor, ImuSensor, Sensor}, system::{Actor, 
 use crate::{
     actors::{loop_closing::KeyFrameAndPose, messages::{FeatureMsg, InitKeyFrameMsg, LastKeyFrameUpdatedMsg, ShutdownMsg, TrackingStateMsg, TrajectoryMsg, VisTrajectoryMsg}}, map::{
         frame::Frame, map::Id, pose::Pose
-    }, modules::{imu::DVImu, map_initialization::DVInitialization, optimizer, orbmatcher, relocalization::DVRelocalization}, registered_actors::{LOCAL_MAPPING, SHUTDOWN_ACTOR, TRACKING_BACKEND, TRACKING_FRONTEND, VISUALIZER}, MapLock, System, MAP_INITIALIZED
+    }, modules::{imu::DVImu, map_initialization::DVInitialization, module::FeatureMatchingModule, optimizer, orbmatcher, relocalization::DVRelocalization}, registered_actors::{self, FEATURE_MATCHING_MODULE, LOCAL_MAPPING, SHUTDOWN_ACTOR, TRACKING_BACKEND, TRACKING_FRONTEND, VISUALIZER}, MapLock, System, MAP_INITIALIZED
 };
 use crate::modules::module::ImuModule;
 use super::{messages::{IMUInitializedMsg, NewKeyFrameMsg}, local_mapping::LOCAL_MAPPING_IDLE};
@@ -35,10 +35,8 @@ pub struct TrackingBackend {
     last_frame_seen: HashMap::<Id, Id>, // mnLastFrameSeen, member variable in Mappoint
     non_tracked_mappoints: HashMap<Id, i32>, // just for testing
 
-    // IMU 
+    // Modules 
     imu: DVImu,
-
-    // Relocalization
     relocalization: DVRelocalization,
 
     // Idk where to put these
@@ -119,6 +117,7 @@ impl Actor for TrackingBackend {
                     msg.descriptors,
                     msg.image_width,
                     msg.image_height,
+                    None,
                     msg.timestamp
                 ).expect("Could not create frame!");
                 match actor.track(&mut current_frame, &mut last_frame) {
@@ -199,7 +198,7 @@ impl TrackingBackend {
                     {
                         // TODO (stereo) - Add option to make the map monocular or stereo
                         (ini_kf_id, curr_kf_id) = match self.initialization.as_mut().unwrap().create_initial_map_monocular(&mut self.map) {
-                                Some((curr_kf_pose, curr_kf_id, ini_kf_id, local_mappoints, curr_kf_timestamp)) => {
+                                Some((curr_kf_pose, curr_kf_id, ini_kf_id, local_mappoints, curr_kf_timestamp, _inverse_scene_median_depth)) => {
                                     // Map needs to be initialized before tracking can begin. Received from map actor
                                     self.frames_since_last_kf = 0;
                                     self.local_keyframes.insert(curr_kf_id);
@@ -458,8 +457,8 @@ impl TrackingBackend {
             self.ref_kf_id = Some(map_read_lock.last_kf_id);
             let ref_kf = map_read_lock.keyframes.get(&self.ref_kf_id.unwrap()).unwrap();
 
-            nmatches = orbmatcher::search_by_bow_f(ref_kf, current_frame, true, 0.7)?;
-            debug!("Tracking search by bow: {} matches / {} matches in keyframe {}. ({} total mappoints in map)", nmatches, ref_kf.get_mp_matches().iter().filter(|item| item.is_some()).count(), ref_kf.id, map_read_lock.mappoints.len());
+            nmatches = FEATURE_MATCHING_MODULE.search_by_bow_f(ref_kf, current_frame, true, 0.7)?;
+            // debug!("Tracking search by bow: {} matches / {} matches in keyframe {}. ({} total mappoints in map)", nmatches, ref_kf.get_mp_matches().iter().filter(|item| item.is_some()).count(), ref_kf.id, map_read_lock.mappoints.len());
 
         }
 
@@ -469,6 +468,7 @@ impl TrackingBackend {
         }
 
         current_frame.pose = Some(last_frame.pose.unwrap());
+        println!("Track reference keyframe, set current frame pose to last frame pose: {:?}", last_frame.pose.unwrap());
 
         optimizer::optimize_pose(current_frame, &self.map);
 
@@ -503,6 +503,8 @@ impl TrackingBackend {
             // self.imu.predict_state();
         } else {
             current_frame.pose = Some(self.imu.velocity.unwrap() * last_frame.pose.unwrap());
+            println!("Track motion model, set current frame pose to last frame pose * imu velocity: {:?}", current_frame.pose.unwrap());
+
         }
 
         current_frame.mappoint_matches.clear();
@@ -513,7 +515,7 @@ impl TrackingBackend {
             _ => 7
         };
 
-        let mut matches = orbmatcher::search_by_projection_with_threshold(
+        let mut matches = FEATURE_MATCHING_MODULE.search_by_projection_with_threshold(
             current_frame,
             last_frame,
             th,
@@ -521,13 +523,13 @@ impl TrackingBackend {
             &self.map,
             self.sensor
         )?;
-        debug!("Tracking search by projection with previous frame: {} matches / {} mappoints in last frame. ({} total mappoints in map)", matches, last_frame.mappoint_matches.debug_count, self.map.read().mappoints.len());
+        // debug!("Tracking search by projection with previous frame: {} matches / {} mappoints in last frame. ({} total mappoints in map)", matches, last_frame.mappoint_matches.debug_count, self.map.read().mappoints.len());
 
         // If few matches, uses a wider window search
         if matches < 20 {
             info!("tracking_backend::track_with_motion_model;not enough matches, wider window search");
             current_frame.mappoint_matches.clear();
-            matches = orbmatcher::search_by_projection_with_threshold(
+            matches = FEATURE_MATCHING_MODULE.search_by_projection_with_threshold(
                 current_frame,
                 last_frame,
                 2 * th,
@@ -535,7 +537,7 @@ impl TrackingBackend {
                 &self.map,
                 self.sensor
             )?;
-            debug!("Tracking search by projection with previous frame: {} matches / {} mappoints in last frame. ({} total mappoints in map)", matches, last_frame.mappoint_matches.debug_count, self.map.read().mappoints.len());
+            // debug!("Tracking search by projection with previous frame: {} matches / {} mappoints in last frame. ({} total mappoints in map)", matches, last_frame.mappoint_matches.debug_count, self.map.read().mappoints.len());
         }
 
         if matches < 20 {
@@ -569,7 +571,7 @@ impl TrackingBackend {
         let ref_kf_id = last_frame.ref_kf_id.unwrap();
         let map_lock = self.map.read();
         let ref_kf_pose = map_lock.keyframes.get(&ref_kf_id).expect(format!("Reference kf {} should be in map", ref_kf_id).as_str()).pose;
-        last_frame.pose = Some(*self.trajectory_poses.last().unwrap() * ref_kf_pose);
+        last_frame.pose = Some(*self.trajectory_poses.last().unwrap() * ref_kf_pose); // Grant (!!)
 
         if self.sensor.is_mono() || self.frames_since_last_kf == 0 {
             return;
@@ -845,6 +847,8 @@ impl TrackingBackend {
             }
         }
 
+        println!("Local keyframes: {}", self.local_keyframes.len());
+
         // KF could have been deleted since construction of local_keyframes
         for kf_id in kfs_to_remove {
             self.local_keyframes.remove(&kf_id);
@@ -874,6 +878,9 @@ impl TrackingBackend {
                 }
             }
         }
+
+                println!("Local mappoints: {}", self.local_mappoints.len());
+                println!("Track in view: {}", self.track_in_view.len());
 
         // Project points in frame and check its visibility
         let mut to_match = 0;
@@ -934,7 +941,7 @@ impl TrackingBackend {
                 _ => {}
             }
 
-            let (non_tracked_points, matches) = orbmatcher::search_by_projection(
+            let (non_tracked_points, matches) = FEATURE_MATCHING_MODULE.search_by_projection(
                 current_frame,
                 &mut self.local_mappoints,
                 th, 0.8,
@@ -942,8 +949,7 @@ impl TrackingBackend {
                 &self.map, self.sensor
             )?;
             self.non_tracked_mappoints = non_tracked_points;
-            debug!("Tracking search local points: {} matches / {} local points. ({} total mappoints in map)", matches, self.local_mappoints.len(), self.map.read().mappoints.len());
-
+            // debug!("Tracking search local points: {} matches / {} local points. ({} total mappoints in map)", matches, self.local_mappoints.len(), self.map.read().mappoints.len());
         }
 
         Ok(())

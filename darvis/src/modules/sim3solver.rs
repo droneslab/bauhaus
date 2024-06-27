@@ -11,8 +11,6 @@ use crate::modules::module::CameraModule;
 use crate::{map::{map::Id, pose::{DVRotation, Sim3}}, modules::optimizer::LEVEL_SIGMA2, registered_actors::CAMERA_MODULE, MapLock};
 use opencv::prelude::*;
 
-use super::module::Sim3SolverModule;
-
 pub struct Sim3Solver {
     n: usize, // N, total mappoints that could have matches
     n1: usize, // mN1, total mappoints that could have matches
@@ -37,10 +35,6 @@ pub struct Sim3Solver {
 
     fix_scale: bool,
 }
-impl Sim3SolverModule for Sim3Solver {
-
-}
-
 impl Sim3Solver {
     pub fn new(
         map: &MapLock,

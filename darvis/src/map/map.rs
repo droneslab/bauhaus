@@ -442,4 +442,8 @@ impl Map {
     pub fn detect_loop_candidates_above_min_score(&self, kf_id: Id, min_score: f32) -> Vec<Id> {
         self.keyframe_database.detect_candidates_above_score(&self, &kf_id, min_score)
     }
+
+    pub fn  detect_relocalization_candidates(&self, frame: &Frame) -> Vec<Id> {
+        self.keyframe_database.detect_relocalization_candidates(&self, frame)
+    }
 }

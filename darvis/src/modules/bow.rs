@@ -6,6 +6,14 @@ use crate::modules::module::VocabularyModule;
 
 use crate::map::keyframe::KeyFrame;
 
+use super::module::BoWModule;
+
+pub struct OpenCVVisionImpl { }
+impl OpenCVVisionImpl {
+    pub fn new() -> Self {
+        Self { }
+    }
+}
 
 pub struct DVVocabulary {
     vocabulary: UniquePtr<dvos3binding::ffi::ORBVocabulary>,
@@ -14,7 +22,6 @@ pub struct DVVocabulary {
 impl VocabularyModule for DVVocabulary {
     type BoWModule = DVBoW;
     type Descriptors = DVMatrix;
-    type ItemToScore = KeyFrame;
 
     fn access(&self) {}
     fn load(filename: String) -> Self {
@@ -43,15 +50,26 @@ impl VocabularyModule for DVVocabulary {
         );
     }
 
-    fn score(&self, kf1: &KeyFrame, kf2: &KeyFrame) -> f32 {
-        self.vocabulary.score(&kf1.bow.as_ref().unwrap().bow_vec, &kf2.bow.as_ref().unwrap().bow_vec)
+    fn score(&self, bow1: &DVBoW, bow2: &DVBoW) -> f32 {
+        self.vocabulary.score(&bow1.bow_vec, &bow2.bow_vec)
     }
 }
 
 
 pub struct DVBoW {
-    pub bow_vec: UniquePtr<dvos3binding::ffi::BowVector>, // mBowVec
-    pub feat_vec: UniquePtr<dvos3binding::ffi::FeatureVector>, // mFeatVec
+    bow_vec: UniquePtr<dvos3binding::ffi::BowVector>, // mBowVec
+    feat_vec: UniquePtr<dvos3binding::ffi::FeatureVector>, // mFeatVec
+}
+impl BoWModule for DVBoW {
+    type BoWVector = dvos3binding::ffi::BowVector;
+    type FeatureVector = dvos3binding::ffi::FeatureVector;
+
+    fn get_bow_vec(&self) -> &Self::BoWVector {
+        &self.bow_vec
+    }
+    fn get_feat_vec(&self) -> &Self::FeatureVector {
+        &self.feat_vec
+    }
 }
 impl DVBoW {
     pub fn new() -> Self {
@@ -66,6 +84,7 @@ impl DVBoW {
             feat_vec: self.feat_vec.clone(),
         }
     }
+
 }
 
 

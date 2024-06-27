@@ -1,7 +1,8 @@
 use std::{collections::{HashMap, HashSet}, cmp::min};
 use core::{config::{ SETTINGS, SYSTEM}, matrix::DVVector3, sensor::Sensor, system::Timestamp};
 use log::{error, debug, warn};
-use crate::{map::{map::Id, pose::Pose},modules::{bow::DVBoW, imu::*}, registered_actors::VOCABULARY};
+use opencv::core::{KeyPoint, Mat};
+use crate::{map::{map::Id, pose::Pose},modules::{bow::DVBoW, imu::*}, registered_actors::VOCABULARY_MODULE, MapLock};
 use super::{features::Features, frame::Frame, map::{Map, MapItems}, mappoint::MapPoint,};
 use crate::modules::module::VocabularyModule;
 
@@ -61,7 +62,7 @@ impl KeyFrame {
             Some(bow) => Some(bow),
             None => {
                 let mut bow = DVBoW::new();
-                VOCABULARY.transform(&frame.features.descriptors, &mut bow);
+                VOCABULARY_MODULE.transform(&frame.features.descriptors, &mut bow);
                 Some(bow)
             }
         };
@@ -168,6 +169,7 @@ impl KeyFrame {
         depths.sort_by(|a, b| a.total_cmp(&b));
         depths[(depths.len()-1) / q as usize]
     }
+
     pub fn get_right_pose(&self) -> Pose {
         todo!("Stereo");
         // Sophus::SE3<float> KeyFrame::GetRightPose() {
@@ -201,7 +203,6 @@ impl KeyFrame {
         // Connected/covisible keyframes sorted by weight
         &self.connections.map_connected_keyframes
     }
-
 }
 
 

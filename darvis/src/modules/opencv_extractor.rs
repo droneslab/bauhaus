@@ -6,7 +6,7 @@ use opencv::features2d::Feature2DTrait;
 
 use crate::registered_actors::{CAMERA, FEATURE_DETECTION};
 
-use super::module::FeatureExtractionModule;
+use super::module::{FeatureExtractionModule};
 
 
 pub struct DVOpenCVExtractor {
@@ -15,14 +15,14 @@ pub struct DVOpenCVExtractor {
 }
 impl Module for DVOpenCVExtractor { }
 impl FeatureExtractionModule for DVOpenCVExtractor {
-    fn extract(&mut self, image: opencv::core::Mat) -> Result<(opencv::types::VectorOfKeyPoint, opencv::core::Mat), Box<dyn std::error::Error>> {
+    fn extract(&mut self, image: DVMatrix) -> Result<(DVVectorOfKeyPoint, DVMatrix), Box<dyn std::error::Error>> {
         let mut descriptors = opencv::core::Mat::default();
         let mut keypoints= opencv::types::VectorOfKeyPoint::new();
 
-        self.extractor.detect(& image, &mut  keypoints, & opencv::core::no_array())?;
-        self.extractor.compute(& image, &mut keypoints, &mut descriptors)?;
+        self.extractor.detect(& *image, &mut  keypoints, & opencv::core::no_array())?;
+        self.extractor.compute(& *image, &mut keypoints, &mut descriptors)?;
 
-        Ok((keypoints, descriptors))
+        Ok((DVVectorOfKeyPoint::new(keypoints), DVMatrix::new(descriptors)))
     }
 }
 
