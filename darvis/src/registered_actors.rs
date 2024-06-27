@@ -1,8 +1,8 @@
 use core::{config::{SETTINGS, SYSTEM}, system::{Actor, Module, System}};
 use log::error;
 
-use crate::{modules::{bow::DVVocabulary, camera::{CameraType, DVCamera}, module::{FeatureExtractionModule, FeatureMatchingModule, FullMapOptimizationModule, LocalMapOptimizationModule, LoopDetectionModule}, orbmatcher::ORBMatcherTrait}, MapLock};
-use crate::modules::module::VocabularyModule;
+use crate::{modules::{bow::Vocabulary, camera::{CameraType, Camera}, module_definitions::{FeatureExtractionModule, FeatureMatchingModule, FullMapOptimizationModule, LocalMapOptimizationModule, LoopDetectionModule}, orbslam_matcher::ORBMatcherTrait}, MapLock};
+use crate::modules::module_definitions::VocabularyModule;
 
 // USER-DEFINED ACTORS: add a string to name your actor here
 // These are the names that actors in the system use to find/communicate with each other
@@ -29,18 +29,18 @@ pub static SHUTDOWN_ACTOR: &str = "SHUTDOWN";
 
 // Modules without internal state ... can have one global instance since we don't have to worry about sharing data between threads
 lazy_static! {
-    pub static ref CAMERA_MODULE: DVCamera = {
-        DVCamera::new(CameraType::Pinhole).unwrap()
+    pub static ref CAMERA_MODULE: Camera = {
+        Camera::new(CameraType::Pinhole).unwrap()
     };
-    pub static ref VOCABULARY_MODULE: DVVocabulary = {
+    pub static ref VOCABULARY_MODULE: Vocabulary = {
         let filename = SETTINGS.get::<String>(SYSTEM, "vocabulary_file");
-        DVVocabulary::load(filename)
+        Vocabulary::load(filename)
     };
     pub static ref FEATURE_MATCHING_MODULE: Box<dyn ORBMatcherTrait> = {
         let module_tag = SETTINGS.get::<String>(FEATURE_MATCHER, "module_tag");
         match module_tag.as_ref() {
             str if str == "orbslam feature matching".to_string() => {
-                Box::new(crate::modules::orbmatcher::ORBMatcher::new() )
+                Box::new(crate::modules::orbslam_matcher::ORBMatcher::new() )
             },
             _ => {
                 error!("Module not implemented: {}", module_tag);
@@ -118,10 +118,10 @@ pub fn new_feature_extraction_module(is_ini: bool) -> Box<dyn FeatureExtractionM
     let module_tag = SETTINGS.get::<String>(FEATURE_DETECTION, "module_tag");
     match module_tag.as_ref() {
         str if str == "orbslam feature detection".to_string() => {
-            Box::new(crate::modules::orbslam_extractor::DVORBextractor::new(is_ini))
+            Box::new(crate::modules::orbslam_extractor::ORBExtractor::new(is_ini))
         },
         str if str == "opencv feature detection".to_string() => {
-            Box::new(crate::modules::opencv_extractor::DVOpenCVExtractor::new(is_ini))
+            Box::new(crate::modules::opencv_extractor::OpenCVExtractor::new(is_ini))
         },
         _ => {
             error!("Module not implemented: {}", module_tag);
@@ -134,7 +134,7 @@ pub fn new_loop_detection_module() -> Box<dyn LoopDetectionModule> {
     let module_tag = SETTINGS.get::<String>(LOOP_DETECTION, "module_tag");
     match module_tag.as_ref() {
         str if str == "orbslam3 loop detection".to_string() => {
-            Box::new(crate::modules::loop_detection::ORBSLAM3LoopDetection::new() )
+            Box::new(crate::modules::orbslam3_loop_detection::ORBSLAM3LoopDetection::new() )
         },
         _ => {
             error!("Module not implemented: {}", module_tag);

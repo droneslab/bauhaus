@@ -4,12 +4,12 @@ use core::{config::*, sensor::{FrameSensor, ImuSensor, Sensor}, system::{Actor, 
 use crate::{
     actors::{loop_closing::KeyFrameAndPose, messages::{FeatureMsg, InitKeyFrameMsg, LastKeyFrameUpdatedMsg, ShutdownMsg, TrackingStateMsg, TrajectoryMsg, VisTrajectoryMsg}}, map::{
         frame::Frame, map::Id, pose::Pose
-    }, modules::{imu::DVImu, map_initialization::DVInitialization, module::FeatureMatchingModule, optimizer, orbmatcher, relocalization::DVRelocalization}, registered_actors::{self, FEATURE_MATCHING_MODULE, LOCAL_MAPPING, SHUTDOWN_ACTOR, TRACKING_BACKEND, TRACKING_FRONTEND, VISUALIZER}, MapLock, System, MAP_INITIALIZED
+    }, modules::{imu::IMU, map_initialization::MapInitialization, module_definitions::FeatureMatchingModule, optimizer, orbslam_matcher, relocalization::Relocalization}, registered_actors::{self, FEATURE_MATCHING_MODULE, LOCAL_MAPPING, SHUTDOWN_ACTOR, TRACKING_BACKEND, TRACKING_FRONTEND, VISUALIZER}, MapLock, System, MAP_INITIALIZED
 };
-use crate::modules::module::ImuModule;
+use crate::modules::module_definitions::ImuModule;
 use super::{messages::{IMUInitializedMsg, NewKeyFrameMsg}, local_mapping::LOCAL_MAPPING_IDLE};
-use crate::modules::module::MapInitializationModule;
-use crate::modules::module::RelocalizationModule;
+use crate::modules::module_definitions::MapInitializationModule;
+use crate::modules::module_definitions::RelocalizationModule;
 
 pub struct TrackingBackend {
     system: System,
@@ -17,7 +17,7 @@ pub struct TrackingBackend {
 
     // Map
     map: MapLock,
-    initialization: Option<DVInitialization>, // data sent to map actor to initialize new map
+    initialization: Option<MapInitialization>, // data sent to map actor to initialize new map
 
     // KeyFrames
     ref_kf_id: Option<Id>,
@@ -36,8 +36,8 @@ pub struct TrackingBackend {
     non_tracked_mappoints: HashMap<Id, i32>, // just for testing
 
     // Modules 
-    imu: DVImu,
-    relocalization: DVRelocalization,
+    imu: IMU,
+    relocalization: Relocalization,
 
     // Idk where to put these
     map_updated : bool,  // TODO (design, variable locations) I'm not sure we want to use this
@@ -63,7 +63,7 @@ impl Actor for TrackingBackend {
             system,
             map,
             sensor,
-            initialization: Some(DVInitialization::new()),
+            initialization: Some(MapInitialization::new()),
             localization_only_mode: SETTINGS.get::<bool>(SYSTEM, "localization_only_mode"),
             frames_to_reset_imu: SETTINGS.get::<i32>(TRACKING_BACKEND, "frames_to_reset_IMU") as u32,
             insert_kfs_when_lost: SETTINGS.get::<bool>(TRACKING_BACKEND, "insert_KFs_when_lost"),
@@ -81,8 +81,8 @@ impl Actor for TrackingBackend {
             kf_track_reference_for_frame: HashMap::new(),
             mp_track_reference_for_frame: HashMap::new(),
             last_frame_seen: HashMap::new(),
-            imu: DVImu::new(None, None, sensor, false, false),
-            relocalization: DVRelocalization{last_reloc_frame_id: 0, timestamp_lost: None},
+            imu: IMU::new(None, None, sensor, false, false),
+            relocalization: Relocalization{last_reloc_frame_id: 0, timestamp_lost: None},
             map_updated: false,
             trajectory_poses: Vec::new(),
             non_tracked_mappoints: HashMap::new(),
@@ -189,7 +189,7 @@ impl TrackingBackend {
             },
             (false, TrackingState::NotInitialized) => {
                 if self.initialization.is_none() {
-                    self.initialization = Some(DVInitialization::new());
+                    self.initialization = Some(MapInitialization::new());
                 }
                 let init_success = self.initialization.as_mut().unwrap().try_initialize(&current_frame)?;
                 if init_success {
@@ -457,7 +457,7 @@ impl TrackingBackend {
             self.ref_kf_id = Some(map_read_lock.last_kf_id);
             let ref_kf = map_read_lock.keyframes.get(&self.ref_kf_id.unwrap()).unwrap();
 
-            nmatches = FEATURE_MATCHING_MODULE.search_by_bow_f(ref_kf, current_frame, true, 0.7)?;
+            nmatches = FEATURE_MATCHING_MODULE.search_by_bow_with_frame(ref_kf, current_frame, true, 0.7)?;
             // debug!("Tracking search by bow: {} matches / {} matches in keyframe {}. ({} total mappoints in map)", nmatches, ref_kf.get_mp_matches().iter().filter(|item| item.is_some()).count(), ref_kf.id, map_read_lock.mappoints.len());
 
         }

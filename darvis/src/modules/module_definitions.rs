@@ -84,7 +84,6 @@ impl Debug for dyn FeatureExtractionModule {
 
 // Generic trait
 pub trait FeatureMatchingModule: Downcast {
-    fn search_for_initialization(&self, f1: &Frame, f2: &Frame, vb_prev_matched: &mut DVVectorOfPoint2f, window_size: i32) -> (i32, Vec<i32>);
     fn search_by_projection(
         &self, 
         frame: &mut Frame, mappoints: &mut BTreeSet<Id>, th: i32, ratio: f64,
@@ -104,7 +103,6 @@ pub trait FeatureMatchingModule: Downcast {
         _track_in_view: &HashMap<Id, TrackedMapPointData>, _track_in_view_right: &HashMap<Id, TrackedMapPointData>,
         _map: &MapLock, _sensor: Sensor
     ) -> Result<i32, Box<dyn std::error::Error>>;
-    fn search_by_sim3(&self, map: &MapLock, kf1_id: Id, kf2_id: Id, matches: &mut HashMap<usize, i32>, sim3: &Sim3, th: f32) -> i32 ;
     fn search_by_projection_for_loop_detection1(
         &self, 
         map: &MapLock, kf_id: &Id, scw: &Sim3, 
@@ -120,24 +118,6 @@ pub trait FeatureMatchingModule: Downcast {
         matches: &mut Vec<Option<Id>>,
         threshold: i32, hamming_ratio: f64
     ) -> Result<i32, Box<dyn std::error::Error>>;
-    fn search_by_bow_f(
-        &self, 
-        kf: &KeyFrame, frame: &mut Frame,
-        should_check_orientation: bool, ratio: f64
-    ) -> Result<u32, Box<dyn std::error::Error>>;
-    fn search_by_bow_kf(
-        &self, 
-        kf_1 : &KeyFrame, kf_2 : &KeyFrame, should_check_orientation: bool, 
-        ratio: f64
-    ) -> Result<HashMap<u32, Id>, Box<dyn std::error::Error>>;
-    fn search_for_triangulation(
-        &self, 
-        kf_1 : &KeyFrame, kf_2 : &KeyFrame,
-        should_check_orientation: bool, _only_stereo: bool, course: bool,
-        sensor: Sensor
-    ) -> Result<Vec<(usize, usize)>, Box<dyn std::error::Error>> ;
-    fn fuse_from_loop_closing(&self,  kf_id: &Id, scw: &Sim3, mappoints: &Vec<Id>, map: &MapLock, th: i32) ->  Result<Vec<Option<Id>>, Box<dyn std::error::Error>>;
-    fn fuse(&self,  kf_id: &Id, fuse_candidates: &Vec<Option<(Id, bool)>>, map: &MapLock, th: f32, is_right: bool);
 }
 impl Debug for dyn FeatureMatchingModule {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -145,6 +125,40 @@ impl Debug for dyn FeatureMatchingModule {
     }
 }
 
+pub trait SearchForTriangulationTrait {
+    fn search_for_triangulation(
+        &self, 
+        kf_1 : &KeyFrame, kf_2 : &KeyFrame,
+        should_check_orientation: bool, _only_stereo: bool, course: bool,
+        sensor: Sensor
+    ) -> Result<Vec<(usize, usize)>, Box<dyn std::error::Error>> ;
+}
+pub trait SearchBySim3Trait {
+    fn search_by_sim3(&self, map: &MapLock, kf1_id: Id, kf2_id: Id, matches: &mut HashMap<usize, i32>, sim3: &Sim3, th: f32) -> i32 ;
+}
+
+pub trait FuseTrait {
+    fn fuse_from_loop_closing(&self,  kf_id: &Id, scw: &Sim3, mappoints: &Vec<Id>, map: &MapLock, th: i32) ->  Result<Vec<Option<Id>>, Box<dyn std::error::Error>>;
+    fn fuse(&self,  kf_id: &Id, fuse_candidates: &Vec<Option<(Id, bool)>>, map: &MapLock, th: f32, is_right: bool);
+}
+
+pub trait SearchByBoWTrait {
+    fn search_by_bow_with_frame(
+        &self, 
+        kf: &KeyFrame, frame: &mut Frame,
+        should_check_orientation: bool, ratio: f64
+    ) -> Result<u32, Box<dyn std::error::Error>>;
+    fn search_by_bow_with_keyframe(
+        &self, 
+        kf_1 : &KeyFrame, kf_2 : &KeyFrame, should_check_orientation: bool, 
+        ratio: f64
+    ) -> Result<HashMap<u32, Id>, Box<dyn std::error::Error>>;
+}
+
+pub trait SearchForInitializationTrait {
+    fn search_for_initialization(&self, f1: &Frame, f2: &Frame, vb_prev_matched: &mut DVVectorOfPoint2f, window_size: i32) -> (i32, Vec<i32>);
+
+}
 pub trait DescriptorDistanceTrait {
     fn descriptor_distance(&self, desc1: &opencv::core::Mat, desc2: &opencv::core::Mat) -> i32;
 }

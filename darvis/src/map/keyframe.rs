@@ -4,7 +4,7 @@ use log::{error, debug, warn};
 use opencv::core::{KeyPoint, Mat};
 use crate::{map::{map::Id, pose::Pose},modules::{bow::DVBoW, imu::*}, registered_actors::VOCABULARY_MODULE, MapLock};
 use super::{features::Features, frame::Frame, map::{Map, MapItems}, mappoint::MapPoint,};
-use crate::modules::module::VocabularyModule;
+use crate::modules::module_definitions::VocabularyModule;
 
 #[derive(Debug, Clone)]
 pub struct KeyFrame {
@@ -138,7 +138,7 @@ impl KeyFrame {
     }
 
     pub fn get_right_camera_center(&self) -> DVVector3<f64> {
-        todo!("IMU");
+        todo!("Stereo");
         // NOt sure what mTlr is, it comes from the settings but might get updated somewhere.
         //    return (mTwc * mTlr).translation();
         // this needs to be generic on sensor, so it can't be called if the sensor doesn't have a right camera

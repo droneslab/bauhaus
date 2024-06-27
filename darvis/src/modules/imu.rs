@@ -3,17 +3,17 @@ use serde::{Deserialize, Serialize};
 
 use crate::map::pose::Pose;
 
-use super::module::ImuModule;
+use super::module_definitions::ImuModule;
 
 #[derive(Debug, Clone)]
-pub struct DVImu {
+pub struct IMU {
     pub velocity: Option<Pose>,
     pub is_initialized: bool, // isImuInitialized(), set true by local mapper
     pub imu_ba2: bool, // mbIMU_BA2
     _last_bias: Option<IMUBias>,
     sensor: Sensor
 }
-impl ImuModule for DVImu {
+impl ImuModule for IMU {
     fn ready(&self) -> bool {
         self.sensor.is_imu() && !self.velocity.is_none() && self.is_initialized
     }
@@ -37,7 +37,7 @@ impl ImuModule for DVImu {
     }
 }
 
-impl DVImu {
+impl IMU {
     pub fn new(velocity: Option<Pose>, last_bias: Option<IMUBias>, sensor: Sensor, is_initialized: bool, imu_ba2: bool) -> Self {
         Self {
             velocity,

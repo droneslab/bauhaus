@@ -5,15 +5,15 @@ use cxx::UniquePtr;
 
 use crate::registered_actors::{CAMERA, FEATURE_DETECTION};
 
-use super::module::FeatureExtractionModule;
+use super::module_definitions::FeatureExtractionModule;
 
 
-pub struct DVORBextractor {
+pub struct ORBExtractor {
     extractor: UniquePtr<dvos3binding::ffi::ORBextractor>,
     is_ini: bool
 }
-impl Module for DVORBextractor { }
-impl FeatureExtractionModule for DVORBextractor {
+impl Module for ORBExtractor { }
+impl FeatureExtractionModule for ORBExtractor {
     fn extract(&mut self, image: DVMatrix) -> Result<(DVVectorOfKeyPoint, DVMatrix), Box<dyn std::error::Error>> {
         let image_dv: dvos3binding::ffi::WrapBindCVMat = (&image).into();
         let mut descriptors: dvos3binding::ffi::WrapBindCVMat = (&DVMatrix::default()).into();
@@ -25,7 +25,7 @@ impl FeatureExtractionModule for DVORBextractor {
     }
 }
 
-impl DVORBextractor {
+impl ORBExtractor {
     pub fn new(is_ini: bool) -> Self {
         let max_features = match is_ini {
             true => {
@@ -34,7 +34,7 @@ impl DVORBextractor {
             },
             false => SETTINGS.get::<i32>(FEATURE_DETECTION, "max_features")
         };
-        DVORBextractor{
+        ORBExtractor{
             is_ini,
             extractor: dvos3binding::ffi::new_orb_extractor(
                 max_features,
@@ -48,12 +48,12 @@ impl DVORBextractor {
         }
     }
 }
-impl Clone for DVORBextractor {
+impl Clone for ORBExtractor {
     fn clone(&self) -> Self {
-        DVORBextractor::new(self.is_ini)
+        ORBExtractor::new(self.is_ini)
     }
 }
-impl Debug for DVORBextractor {
+impl Debug for ORBExtractor {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("DVORBextractor")
          .finish()

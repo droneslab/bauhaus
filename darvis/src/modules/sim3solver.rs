@@ -6,7 +6,7 @@ use std::{cmp::{max, min}, collections::HashMap};
 use log::warn;
 use opencv::{core::{no_array, norm, MatExprResult, Range, Scalar, CV_64F, NORM_L2}, hub_prelude::{KeyPointTraitConst, MatExprTraitConst, MatTraitConst}};
 use rand::Rng;
-use crate::modules::module::CameraModule;
+use crate::modules::module_definitions::CameraModule;
 
 use crate::{map::{map::Id, pose::{DVRotation, Sim3}}, modules::optimizer::LEVEL_SIGMA2, registered_actors::CAMERA_MODULE, MapLock};
 use opencv::prelude::*;

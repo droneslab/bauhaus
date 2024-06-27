@@ -4,7 +4,7 @@ use crate::{
     map::{pose::Pose, keyframe::KeyFrame},
     matrix::DVVectorOfKeyPoint, registered_actors::CAMERA
 };
-use crate::modules::module::CameraModule;
+use crate::modules::module_definitions::CameraModule;
 
 
 #[derive(Debug, Clone, Default)]
@@ -13,7 +13,7 @@ pub enum CameraType {
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct DVCamera {
+pub struct Camera {
     pub camera_type: CameraType,
 
     // Three diff ways of representing K...
@@ -31,7 +31,7 @@ pub struct DVCamera {
     pub dist_coef: Option<Vec<f32>>, //mDistCoef
 }
 
-impl CameraModule for DVCamera {
+impl CameraModule for Camera {
     type Keys = DVVectorOfKeyPoint;
     type Pose = Pose;
     type ResultPoints = DVVectorOfPoint3f;
@@ -158,8 +158,8 @@ impl CameraModule for DVCamera {
 
 }
 
-impl DVCamera {
-    pub fn new(camera_type: CameraType) -> Result<DVCamera, Box<dyn std::error::Error>> {
+impl Camera {
+    pub fn new(camera_type: CameraType) -> Result<Camera, Box<dyn std::error::Error>> {
         // Implementation only for PinholeCamera, see:
         // - void Tracking::newParameterLoader
         // - GeometricCamera* Atlas::AddCamera(GeometricCamera* pCam)
@@ -204,7 +204,7 @@ impl DVCamera {
         let th_depth= SETTINGS.get::<i32>(CAMERA, "thdepth");
         let stereo_baseline = stereo_baseline_times_fx / fx;
 
-        Ok(DVCamera {
+        Ok(Camera {
             camera_type,
             k_matrix: DVMatrix::new(k),
             k_matrix_nalgebra,

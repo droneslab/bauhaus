@@ -10,11 +10,11 @@ use crate::{
     actors::{
         messages::{IMUInitializedMsg, ImageMsg, LastKeyFrameUpdatedMsg, ShutdownMsg, VisFeaturesMsg},
         tracking_backend::TrackingState,
-    }, map::{frame::Frame, keyframe::{KeyFrame, MapPointMatches}, map::Id, pose::Pose}, modules::{image, imu::DVImu, map_initialization::DVInitialization, module::{FeatureExtractionModule, FeatureMatchingModule}, optimizer, orbmatcher, orbslam_extractor::DVORBextractor, relocalization::DVRelocalization}, registered_actors::{self, CAMERA_MODULE, FEATURE_MATCHING_MODULE, LOCAL_MAPPING, SHUTDOWN_ACTOR, TRACKING_BACKEND, VISUALIZER}, MapLock, MAP_INITIALIZED
+    }, map::{frame::Frame, keyframe::{KeyFrame, MapPointMatches}, map::Id, pose::Pose}, modules::{image, imu::IMU, map_initialization::MapInitialization, module_definitions::{FeatureExtractionModule, FeatureMatchingModule}, optimizer, orbslam_matcher, orbslam_extractor::ORBExtractor, relocalization::Relocalization}, registered_actors::{self, CAMERA_MODULE, FEATURE_MATCHING_MODULE, LOCAL_MAPPING, SHUTDOWN_ACTOR, TRACKING_BACKEND, VISUALIZER}, MapLock, MAP_INITIALIZED
 };
 
 use super::{local_mapping::LOCAL_MAPPING_IDLE, messages::{ImagePathMsg, InitKeyFrameMsg, NewKeyFrameMsg, TrajectoryMsg, VisTrajectoryMsg}, tracking_backend::TrackedMapPointData};
-use crate::modules::module::MapInitializationModule;
+use crate::modules::module_definitions::MapInitializationModule;
 
 pub struct TrackingOpticalFlow {
     system: System,
@@ -34,8 +34,8 @@ pub struct TrackingOpticalFlow {
     last_kf_timestamp: Option<Timestamp>,
 
     // Modules 
-    imu: DVImu,
-    relocalization: DVRelocalization,
+    imu: IMU,
+    relocalization: Relocalization,
 
     // Poses in trajectory
     trajectory_poses: Vec<Pose>, //mlRelativeFramePoses
@@ -43,7 +43,7 @@ pub struct TrackingOpticalFlow {
     /// References to map
     map_initialized: bool,
     map: MapLock,
-    initialization: Option<DVInitialization>, // data sent to map actor to initialize new map
+    initialization: Option<MapInitialization>, // data sent to map actor to initialize new map
     map_scale: f64,
 
     // Local data used for different stages of tracking
@@ -75,24 +75,24 @@ impl Actor for TrackingOpticalFlow {
     fn new_actorstate(system: System, map: Self::MapRef) -> TrackingOpticalFlow {
         let sensor = SETTINGS.get::<Sensor>(SYSTEM, "sensor");
         let _orb_extractor_right: Option<Box<dyn FeatureExtractionModule>> = match sensor.frame() {
-            FrameSensor::Stereo => Some(Box::new(DVORBextractor::new(false))),
+            FrameSensor::Stereo => Some(Box::new(ORBExtractor::new(false))),
             FrameSensor::Mono | FrameSensor::Rgbd => None,
         };
         let orb_extractor_ini: Option<Box<dyn FeatureExtractionModule>> = match sensor.is_mono() {
-            true => Some(Box::new(DVORBextractor::new(true))), // sofiya orbslam2 loop closing
+            true => Some(Box::new(ORBExtractor::new(true))), // sofiya orbslam2 loop closing
             false => None
         };
 
         TrackingOpticalFlow {
             system,
-            orb_extractor_left: Box::new(DVORBextractor::new(false)),
+            orb_extractor_left: Box::new(ORBExtractor::new(false)),
             _orb_extractor_right,
             orb_extractor_ini,
             map_initialized: false,
             init_id: 0,
             sensor,
             map,
-            initialization: Some(DVInitialization::new()),
+            initialization: Some(MapInitialization::new()),
             map_scale: 1.0,
             localization_only_mode: SETTINGS.get::<bool>(SYSTEM, "localization_only_mode"),
             max_frames_to_insert_kf: SETTINGS.get::<i32>(TRACKING_BACKEND, "max_frames_to_insert_kf"),
@@ -101,8 +101,8 @@ impl Actor for TrackingOpticalFlow {
             ref_kf_id: None,
             frames_since_last_kf: 0,
             last_kf_timestamp: None,
-            imu: DVImu::new(None, None, sensor, false, false),
-            relocalization: DVRelocalization{last_reloc_frame_id: 0, timestamp_lost: None},
+            imu: IMU::new(None, None, sensor, false, false),
+            relocalization: Relocalization{last_reloc_frame_id: 0, timestamp_lost: None},
             trajectory_poses: Vec::new(),
             min_num_features: SETTINGS.get::<i32>(TRACKING_BACKEND, "min_num_features")  as u32,
             matches_inliers: 0,
@@ -208,7 +208,7 @@ impl TrackingOpticalFlow {
             ).expect("Could not create frame!");
 
             if self.initialization.is_none() {
-                self.initialization = Some(DVInitialization::new());
+                self.initialization = Some(MapInitialization::new());
             }
             let init_success = self.initialization.as_mut().unwrap().try_initialize(&current_frame)?;
             if init_success {
@@ -398,7 +398,7 @@ impl TrackingOpticalFlow {
             // println!("mono extractor");
             self.orb_extractor_left.extract(DVMatrix::new(image)).unwrap()
         } else {
-            todo!("IMU, Stereo, RGBD")
+            todo!("Stereo, RGBD")
         };
         (keypoints, descriptors)
     }
@@ -593,7 +593,7 @@ impl TrackingOpticalFlow {
             self.ref_kf_id = Some(map_read_lock.last_kf_id);
             let ref_kf = map_read_lock.keyframes.get(&self.ref_kf_id.unwrap()).unwrap();
 
-            nmatches = FEATURE_MATCHING_MODULE.search_by_bow_f(ref_kf, current_frame, true, 0.7)?;
+            nmatches = FEATURE_MATCHING_MODULE.search_by_bow_with_frame(ref_kf, current_frame, true, 0.7)?;
             debug!("Tracking search by bow: {} matches / {} matches in keyframe {}. ({} total mappoints in map)", nmatches, ref_kf.get_mp_matches().iter().filter(|item| item.is_some()).count(), ref_kf.id, map_read_lock.mappoints.len());
         }
 

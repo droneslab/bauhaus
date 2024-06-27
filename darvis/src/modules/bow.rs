@@ -2,11 +2,11 @@ use std::fmt;
 use cxx::{UniquePtr, let_cxx_string};
 use log::info;
 use core::{matrix::DVMatrix,};
-use crate::modules::module::VocabularyModule;
+use crate::modules::module_definitions::VocabularyModule;
 
 use crate::map::keyframe::KeyFrame;
 
-use super::module::BoWModule;
+use super::module_definitions::BoWModule;
 
 pub struct OpenCVVisionImpl { }
 impl OpenCVVisionImpl {
@@ -15,11 +15,11 @@ impl OpenCVVisionImpl {
     }
 }
 
-pub struct DVVocabulary {
+pub struct Vocabulary {
     vocabulary: UniquePtr<dvos3binding::ffi::ORBVocabulary>,
     filename: String,
 }
-impl VocabularyModule for DVVocabulary {
+impl VocabularyModule for Vocabulary {
     type BoWModule = DVBoW;
     type Descriptors = DVMatrix;
 
@@ -90,12 +90,12 @@ impl DVBoW {
 
 // Note: need to implement functions that would typically be derived
 // because we can't derive them for a UniquePtr
-impl Clone for DVVocabulary {
-    fn clone(&self) -> DVVocabulary {
-        DVVocabulary::load(self.filename.clone())
+impl Clone for Vocabulary {
+    fn clone(&self) -> Vocabulary {
+        Vocabulary::load(self.filename.clone())
     }
 }
-impl fmt::Debug for DVVocabulary {
+impl fmt::Debug for Vocabulary {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("DVVocabulary")
          .field("filename", &self.filename)

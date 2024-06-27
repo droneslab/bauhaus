@@ -7,7 +7,7 @@ use opencv::core::KeyPointTraitConst;
 
 use crate::{map::{map::Id, pose::{DVTranslation, Pose}}, modules::optimizer::INV_LEVEL_SIGMA2, registered_actors::CAMERA, MapLock};
 
-use super::module::FullMapOptimizationModule;
+use super::module_definitions::FullMapOptimizationModule;
 
 pub struct GlobalBundleAdjustment { }
 impl FullMapOptimizationModule for GlobalBundleAdjustment {

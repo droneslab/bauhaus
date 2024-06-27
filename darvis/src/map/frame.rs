@@ -1,12 +1,12 @@
 use core::{config::{SETTINGS, SYSTEM}, matrix::{DVMatrix, DVVector3, DVVectorOfKeyPoint}, sensor::{FrameSensor, Sensor}, system::Timestamp};
 use opencv::core::{KeyPoint, Mat};
 
-use crate::modules::module::VocabularyModule;
+use crate::modules::module_definitions::VocabularyModule;
 
 use crate::{actors::tracking_backend::TrackedMapPointData, modules::{bow::DVBoW, imu::{IMUBias, IMUPreIntegrated}}, registered_actors::{CAMERA_MODULE, VOCABULARY_MODULE}};
 
 use super::{features::Features, keyframe::MapPointMatches, map::{Id, Map}, mappoint::MapPoint, pose::{DVTranslation, Pose}};
-use crate::modules::module::CameraModule;
+use crate::modules::module_definitions::CameraModule;
 
 
 #[derive(Debug, Clone)]

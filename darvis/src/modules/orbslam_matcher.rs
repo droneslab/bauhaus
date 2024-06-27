@@ -14,9 +14,9 @@ use crate::map::pose::{DVTranslation, Pose, Sim3};
 use crate::modules::optimizer::LEVEL_SIGMA2;
 use crate::registered_actors::{CAMERA, CAMERA_MODULE, FEATURE_DETECTION, FEATURE_MATCHER};
 use crate::map::{map::Id, keyframe::KeyFrame, frame::Frame};
-use crate::modules::module::CameraModule;
+use crate::modules::module_definitions::CameraModule;
 
-use super::module::{BoWModule, DescriptorDistanceTrait, FeatureMatchingModule};
+use super::module_definitions::{BoWModule, DescriptorDistanceTrait, FeatureMatchingModule, FuseTrait, SearchByBoWTrait, SearchBySim3Trait, SearchForInitializationTrait, SearchForTriangulationTrait};
 use super::optimizer::INV_LEVEL_SIGMA2;
 
 
@@ -39,7 +39,7 @@ lazy_static! {
 
 
 // ORBMatcherTrait is a supertrait that implements the following other traits:
-pub trait ORBMatcherTrait: FeatureMatchingModule + DescriptorDistanceTrait + std::fmt::Debug + Send + Sync {}
+pub trait ORBMatcherTrait: FeatureMatchingModule + SearchForInitializationTrait + SearchByBoWTrait + DescriptorDistanceTrait + FuseTrait + SearchBySim3Trait + SearchForTriangulationTrait + std::fmt::Debug + Send + Sync {}
 
 #[derive(Debug)]
 pub struct ORBMatcher {
@@ -162,8 +162,211 @@ impl DescriptorDistanceTrait for ORBMatcher {
     }
 }
 
+impl SearchByBoWTrait for ORBMatcher {
+    fn search_by_bow_with_frame(
+        &self, 
+        kf: &KeyFrame, frame: &mut Frame,
+        should_check_orientation: bool, ratio: f64
+    ) -> Result<u32, Box<dyn std::error::Error>> {
+        // int SearchByBoW(KeyFrame *pKF, Frame &F, std::vector<MapPoint*> &vpMapPointMatches);
+        frame.mappoint_matches.clear();
+        let mut matches = HashMap::<u32, Id>::new();
 
-impl FeatureMatchingModule for ORBMatcher {
+        let factor = 1.0 / (self.histo_length as f32);
+        let mut rot_hist = self.construct_rotation_histogram();
+
+        let kf_featvec = kf.bow.as_ref().unwrap().get_feat_vec().get_all_nodes();
+        let frame_featvec = frame.bow.as_ref().unwrap().get_feat_vec().get_all_nodes();
+        let mut i = 0;
+        let mut j = 0;
+
+        while i < kf_featvec.len() && j < frame_featvec.len() {
+            let kf_node_id = kf_featvec[i];
+            let frame_node_id = frame_featvec[j];
+            if kf_node_id == frame_node_id {
+                let kf_indices_size = kf.bow.as_ref().unwrap().get_feat_vec().vec_size(kf_node_id);
+
+                for index_kf in 0..kf_indices_size {
+                    let real_idx_kf = kf.bow.as_ref().unwrap().get_feat_vec().vec_get(kf_node_id, index_kf);
+
+                    if let Some((mp_id, _is_outlier)) = kf.get_mp_match(&real_idx_kf) {
+                        let mut best_dist1 = 256;
+                        let mut best_dist2 = 256;
+                        let mut best_idx: i32 = -1;
+                        let descriptors_kf = kf.features.descriptors.row(real_idx_kf);
+
+                        let frame_indices_size = frame.bow.as_ref().unwrap().get_feat_vec().vec_size(frame_node_id);
+
+                        for index_frame in 0..frame_indices_size {
+                            let real_idx_frame = frame.bow.as_ref().unwrap().get_feat_vec().vec_get(frame_node_id, index_frame);
+
+                            if matches.contains_key(&real_idx_frame) {
+                                continue;
+                            }
+
+                            let descriptors_f = frame.features.descriptors.row(real_idx_frame);
+
+                            let dist = self.descriptor_distance(&descriptors_kf, &descriptors_f);
+
+                            if dist < best_dist1 {
+                                best_dist2 = best_dist1;
+                                best_dist1 = dist;
+                                best_idx = real_idx_frame as i32;
+                            } else if dist < best_dist2 {
+                                best_dist2 = dist;
+                            }
+
+                        }
+
+                        if best_dist1 <= self.low_threshold {
+                            if (best_dist1 as f64) < ratio * (best_dist2 as f64) {
+                                matches.insert(best_idx as u32, mp_id);
+
+                                if should_check_orientation {
+                                    self.check_orientation_1(
+                                        &kf.features.get_keypoint(real_idx_kf as usize).0,
+                                        &frame.features.get_keypoint(best_idx as usize).0,
+                                        &mut rot_hist, factor, best_idx as u32
+                                    );
+                                };
+                            }
+                        }
+                    }
+                }
+                i += 1;
+                j += 1;
+            } else if kf_node_id < frame_node_id {
+                i = self.lower_bound(&kf_featvec, &frame_featvec, i, j);
+            } else {
+                j = self.lower_bound(&frame_featvec, &kf_featvec, j, i);
+            }
+        }
+        
+        if should_check_orientation {
+            let (ind_1, ind_2, ind_3) = self.compute_three_maxima(&rot_hist);
+            for i in 0..self.histo_length {
+                if i == ind_1 || i == ind_2 || i == ind_3 {
+                    continue;
+                }
+                for j in 0..rot_hist[i as usize].len() {
+                    let key = rot_hist[i as usize][j];
+                    if matches.contains_key(&key) {
+                        matches.remove(&key);
+                    }
+                }
+            }
+        }
+
+
+        for (index, mp_id) in &matches {
+            frame.mappoint_matches.add(*index, *mp_id, false);
+        }
+
+        return Ok(matches.len() as u32);
+    }
+
+    fn search_by_bow_with_keyframe(
+        &self, 
+        kf_1 : &KeyFrame, kf_2 : &KeyFrame, should_check_orientation: bool, 
+        ratio: f64
+    ) -> Result<HashMap<u32, Id>, Box<dyn std::error::Error>> {
+        // int SearchByBoW(KeyFrame *pKF1, KeyFrame* pKF2, std::vector<MapPoint*> &vpMatches12);
+        let mut matches = HashMap::<u32, Id>::new(); // vpMatches12
+        let mut matched_already_in_kf2 = HashSet::<Id>::new(); // vbMatched2
+
+        let factor = 1.0 / (self.histo_length as f32);
+        let mut rot_hist = self.construct_rotation_histogram();
+
+        let kf_1_featvec = kf_1.bow.as_ref().unwrap().get_feat_vec().get_all_nodes();
+        let kf_2_featvec = kf_2.bow.as_ref().unwrap().get_feat_vec().get_all_nodes();
+        let mut i = 0;
+        let mut j = 0;
+
+        while i < kf_1_featvec.len() && j < kf_2_featvec.len() {
+            let kf_1_node_id = kf_1_featvec[i];
+            let kf_2_node_id = kf_2_featvec[j];
+            if kf_1_node_id == kf_2_node_id {
+                let kf_1_indices_size = kf_1.bow.as_ref().unwrap().get_feat_vec().vec_size(kf_1_node_id);
+
+                for index_kf1 in 0..kf_1_indices_size {
+                    let real_idx_kf1 = kf_1.bow.as_ref().unwrap().get_feat_vec().vec_get(kf_1_node_id, index_kf1);
+
+                    if let Some((mp_id, is_outlier)) = kf_1.get_mp_match(&real_idx_kf1) {
+                        let mut best_dist1 = 256;
+                        let mut best_dist2 = 256;
+                        let mut best_idx2: i32 = -1;
+                        let descriptors_kf_1 = kf_1.features.descriptors.row(real_idx_kf1);
+
+                        let kf_2_indices_size = kf_2.bow.as_ref().unwrap().get_feat_vec().vec_size(kf_2_node_id);
+
+                        for index_kf2 in 0..kf_2_indices_size {
+                            let real_idx_kf2 = kf_2.bow.as_ref().unwrap().get_feat_vec().vec_get(kf_2_node_id, index_kf2);
+
+                            if matched_already_in_kf2.contains(&(real_idx_kf2 as i32))
+                                || kf_2.get_mp_match(&real_idx_kf2).is_none() {
+                                continue;
+                            }
+
+                            let descriptors_kf_2 = kf_2.features.descriptors.row(real_idx_kf2);
+
+                            let dist = self.descriptor_distance(&descriptors_kf_1, &descriptors_kf_2);
+
+                            if dist < best_dist1 {
+                                best_dist2 = best_dist1;
+                                best_dist1 = dist;
+                                best_idx2 = real_idx_kf2 as i32;
+                            } else if dist < best_dist2 {
+                                best_dist2 = dist;
+                            }
+                        }
+
+                        if best_dist1 <= self.low_threshold {
+                            if (best_dist1 as f64) < ratio * (best_dist2 as f64) {
+                                matches.insert(real_idx_kf1 as u32, kf_2.get_mp_match(&(best_idx2 as u32)).unwrap().0);
+                                matched_already_in_kf2.insert(best_idx2 as i32);
+
+                                if should_check_orientation {
+                                    self.check_orientation_1(
+                                        &kf_1.features.get_keypoint(real_idx_kf1 as usize).0,
+                                        &kf_2.features.get_keypoint(best_idx2 as usize).0,
+                                        &mut rot_hist, factor, real_idx_kf1 as u32
+                                    );
+                                };
+                            }
+                        }
+                    }
+                }
+
+                i += 1;
+                j += 1;
+            } else if kf_1_node_id < kf_2_node_id {
+                i = self.lower_bound(&kf_1_featvec, &kf_2_featvec, i, j);
+            } else {
+                j = self.lower_bound(&kf_2_featvec, &kf_1_featvec, j, i);
+            }
+        }
+
+        if should_check_orientation {
+            let (ind_1, ind_2, ind_3) = self.compute_three_maxima(&rot_hist);
+            for i in 0..self.histo_length {
+                if i == ind_1 || i == ind_2 || i == ind_3 {
+                    continue;
+                }
+                for j in 0..rot_hist[i as usize].len() {
+                    let key = rot_hist[i as usize][j];
+                    if matches.contains_key(&key) {
+                        matches.remove(&key);
+                    }
+                }
+            }
+        };
+
+        return Ok(matches);
+    }
+
+}
+
+impl SearchForInitializationTrait for ORBMatcher {
     fn search_for_initialization(
         &self, 
         f1: &Frame,
@@ -260,7 +463,9 @@ impl FeatureMatchingModule for ORBMatcher {
 
         (n_matches, vn_matches12)
     }
+}
 
+impl FeatureMatchingModule for ORBMatcher {
     fn search_by_projection(
         &self, 
         frame: &mut Frame, mappoints: &mut BTreeSet<Id>, th: i32, ratio: f64,
@@ -620,230 +825,6 @@ impl FeatureMatchingModule for ORBMatcher {
         todo!("Relocalization");
     }
 
-    fn search_by_sim3(&self,  map: &MapLock, kf1_id: Id, kf2_id: Id, matches: &mut HashMap<usize, i32>, sim3: &Sim3, th: f32) -> i32 {
-        // From ORB-SLAM2:
-        // int ORBmatcher::SearchBySim3(KeyFrame *pKF1, KeyFrame *pKF2, vector<MapPoint*> &vpMatches12,
-        //                          const float &s12, const cv::Mat &R12, const cv::Mat &t12, const float th)
-
-        let lock = map.read();
-
-        // Camera 1 from world
-        let kf1 = lock.keyframes.get(&kf1_id).unwrap();
-        let r1w = kf1.pose.get_rotation();
-        let t1w = kf1.pose.get_translation();
-
-        // Camera 2 from world
-        let kf2 = lock.keyframes.get(&kf2_id).unwrap();
-        let r2w = kf2.pose.get_rotation();
-        let tw2 = kf2.pose.get_translation();
-
-        //Transformation between cameras
-        let s12 = sim3.scale;
-        let r12 = sim3.pose.get_rotation();
-        let t12 = sim3.pose.get_translation();
-        let s_r_12 = s12 * *r12;
-        let s_r_21 = (1.0 / s12) * r12.transpose();
-        let t21 = -s_r_21 * *t12;
-
-        let mappoints1 = kf1.get_mp_matches();
-        let mappoints2 =  kf2.get_mp_matches();
-        let n1 = mappoints1.len();
-        let n2 = mappoints2.len();
-
-        let mut already_matched1 = vec![false; n1];
-        let mut already_matched2 = vec![false; n2];
-
-        for i in 0..n1 {
-            let mp_id = matches.get(&i);
-            if let Some(mp) = mp_id {
-                already_matched1[i] = true;
-                let mp = lock.mappoints.get(&mp).unwrap();
-                let (left_idx2, _right_idx2) = mp.get_index_in_keyframe(kf2_id);
-                if left_idx2 != -1 && left_idx2 < n2 as i32 {
-                    already_matched2[left_idx2 as usize] = true;
-                }
-            }
-        }
-
-        let mut match1 = vec![-1; n1];
-        let mut match2 = vec![-1; n2];
-
-        // Transform from KF1 to KF2 and search
-        for i in 0..n1 {
-            let mp_id = match mappoints1[i] {
-                Some((mp_id, _)) => mp_id,
-                None => continue
-            };
-            let mp = match lock.mappoints.get(&mp_id) {
-                Some(mp) => mp,
-                None => continue
-            };
-
-            if already_matched1[i] {
-                continue;
-            }
-            
-            let p_3d_w = mp.position;
-            let p_3d_c1 = (*r1w) * (*p_3d_w) + (*t1w);
-            let p_3d_c2 = s_r_21 * p_3d_c1 + t21;
-
-            // Depth must be positive
-            if p_3d_c2[2] < 0.0 {
-                continue;
-            }
-
-            let invz = 1.0 / p_3d_c2[2];
-            let x = p_3d_c2[0] * invz;
-            let y = p_3d_c2[1] * invz;
-            
-            let u = CAMERA_MODULE.fx * x + CAMERA_MODULE.cx;
-            let v = CAMERA_MODULE.fy * y + CAMERA_MODULE.cy;
-
-            // Point must be inside the image
-            if !kf2.features.is_in_image(u, v) {
-                continue;
-            }
-            let max_distance = mp.get_max_distance_invariance();
-            let min_distance = mp.get_min_distance_invariance();
-            let dist_3d = p_3d_c2.norm();
-
-            // Depth must be inside the scale invariance region
-            if dist_3d < min_distance || dist_3d > max_distance {
-                continue;
-            }
-
-            // Compute predicted octave
-            let n_predicted_level = mp.predict_scale(&dist_3d);
-
-            // Search in a radius
-            let radius = th * SCALE_FACTORS[n_predicted_level as usize];
-
-            let indices = kf2.features.get_features_in_area(
-                &u, &v, radius as f64, None
-            );
-            if indices.is_empty() {
-                continue;
-            }
-
-            // Match to the most similar keypoint in the radius
-            let d_mp = &mp.best_descriptor;
-
-            let mut best_dist = std::i32::MAX;
-            let mut best_idx = -1;
-
-            for idx in indices {
-                let (kp, _) = kf2.features.get_keypoint(idx as usize);
-                if kp.octave() < n_predicted_level - 1 || kp.octave() > n_predicted_level {
-                    continue;
-                }
-                let descriptors_kf = kf2.features.descriptors.row(idx);
-                let dist = self.descriptor_distance(&d_mp, &descriptors_kf);
-                if dist < best_dist {
-                    best_dist = dist;
-                    best_idx = idx as i32;
-                }
-            }
-
-            if best_dist <= self.high_threshold {
-                match1[i] = best_idx;
-            }
-        }
-
-        // Transform from KF2 to KF2 and search
-        for i in 0..n2 {
-            let mp_id = match mappoints2[i] {
-                Some((mp, _)) => mp,
-                None => continue
-            };
-            if already_matched2[i] {
-                continue;
-            }
-            let mp = match lock.mappoints.get(&mp_id) {
-                Some(mp) => mp,
-                None => continue
-            };
-
-            let p_3d_w = mp.position;
-            let p_3d_c2 = (*r2w) * (*p_3d_w) + (*tw2);
-            let p_3d_c1 = s_r_12 * p_3d_c2 + *t12;
-
-            // Depth must be positive
-            if p_3d_c1[2] < 0.0 {
-                continue;
-            }
-            
-            let invz = 1.0 / p_3d_c1[2];
-            let x = p_3d_c1[0] * invz;
-            let y = p_3d_c1[1] * invz;
-
-            let u = CAMERA_MODULE.fx * x + CAMERA_MODULE.cx;
-            let v = CAMERA_MODULE.fy * y + CAMERA_MODULE.cy;
-
-            // Point must be inside the image
-            if !kf1.features.is_in_image(u, v) {
-                continue;
-            }
-
-            let max_distance = mp.get_max_distance_invariance();
-            let min_distance = mp.get_min_distance_invariance();
-            let dist_3d = p_3d_c1.norm();
-
-            // Depth must be inside the scale pyramid of the image
-            if dist_3d < min_distance || dist_3d > max_distance {
-                continue;
-            }
-            
-            // Compute predicted octave
-            let n_predicted_level = mp.predict_scale(&dist_3d);
-
-            // Search in a radius of 2.5*sigma(ScaleLevel)
-            let radius = th * SCALE_FACTORS[n_predicted_level as usize];
-            
-            let indices = kf1.features.get_features_in_area(
-                &u, &v, radius as f64, None
-            );
-            if indices.is_empty() {
-                continue;
-            }
-        
-            // Match to the most similar keypoint in the radius
-            let d_mp = &mp.best_descriptor;
-
-            let mut best_dist = std::i32::MAX;
-            let mut best_idx = -1;
-            for idx in indices {
-                let kp = kf1.features.get_keypoint(idx as usize).0;
-                if kp.octave() < n_predicted_level - 1 || kp.octave() > n_predicted_level {
-                    continue;
-                }
-                let descriptors_kf = kf1.features.descriptors.row(idx);
-                let dist = self.descriptor_distance(&d_mp, &descriptors_kf);
-                if dist < best_dist {
-                    best_dist = dist;
-                    best_idx = idx as i32;
-                }
-            }
-            if best_dist <= self.high_threshold {
-                match2[i] = best_idx;
-            }
-        }
-
-        // Check agreement
-        let mut found = 0;
-        for i in 0..n1 {
-            let idx2 = match1[i];
-            if idx2 >= 0 {
-                let idx1 = match2[idx2 as usize];
-                if idx1 == i as i32 {
-                    matches.insert(i, mappoints2[idx2 as usize].unwrap().0);
-                    found += 1;
-                }
-            }
-        }
-        return found;
-
-    }
-
     fn search_by_projection_for_loop_detection1(
         &self, 
         map: &MapLock, kf_id: &Id, scw: &Sim3, 
@@ -1106,207 +1087,9 @@ impl FeatureMatchingModule for ORBMatcher {
 
     }
 
-    fn search_by_bow_f(
-        &self, 
-        kf: &KeyFrame, frame: &mut Frame,
-        should_check_orientation: bool, ratio: f64
-    ) -> Result<u32, Box<dyn std::error::Error>> {
-        // int SearchByBoW(KeyFrame *pKF, Frame &F, std::vector<MapPoint*> &vpMapPointMatches);
-        frame.mappoint_matches.clear();
-        let mut matches = HashMap::<u32, Id>::new();
+}
 
-        let factor = 1.0 / (self.histo_length as f32);
-        let mut rot_hist = self.construct_rotation_histogram();
-
-        let kf_featvec = kf.bow.as_ref().unwrap().get_feat_vec().get_all_nodes();
-        let frame_featvec = frame.bow.as_ref().unwrap().get_feat_vec().get_all_nodes();
-        let mut i = 0;
-        let mut j = 0;
-
-        while i < kf_featvec.len() && j < frame_featvec.len() {
-            let kf_node_id = kf_featvec[i];
-            let frame_node_id = frame_featvec[j];
-            if kf_node_id == frame_node_id {
-                let kf_indices_size = kf.bow.as_ref().unwrap().get_feat_vec().vec_size(kf_node_id);
-
-                for index_kf in 0..kf_indices_size {
-                    let real_idx_kf = kf.bow.as_ref().unwrap().get_feat_vec().vec_get(kf_node_id, index_kf);
-
-                    if let Some((mp_id, _is_outlier)) = kf.get_mp_match(&real_idx_kf) {
-                        let mut best_dist1 = 256;
-                        let mut best_dist2 = 256;
-                        let mut best_idx: i32 = -1;
-                        let descriptors_kf = kf.features.descriptors.row(real_idx_kf);
-
-                        let frame_indices_size = frame.bow.as_ref().unwrap().get_feat_vec().vec_size(frame_node_id);
-
-                        for index_frame in 0..frame_indices_size {
-                            let real_idx_frame = frame.bow.as_ref().unwrap().get_feat_vec().vec_get(frame_node_id, index_frame);
-
-                            if matches.contains_key(&real_idx_frame) {
-                                continue;
-                            }
-
-                            let descriptors_f = frame.features.descriptors.row(real_idx_frame);
-
-                            let dist = self.descriptor_distance(&descriptors_kf, &descriptors_f);
-
-                            if dist < best_dist1 {
-                                best_dist2 = best_dist1;
-                                best_dist1 = dist;
-                                best_idx = real_idx_frame as i32;
-                            } else if dist < best_dist2 {
-                                best_dist2 = dist;
-                            }
-
-                        }
-
-                        if best_dist1 <= self.low_threshold {
-                            if (best_dist1 as f64) < ratio * (best_dist2 as f64) {
-                                matches.insert(best_idx as u32, mp_id);
-
-                                if should_check_orientation {
-                                    self.check_orientation_1(
-                                        &kf.features.get_keypoint(real_idx_kf as usize).0,
-                                        &frame.features.get_keypoint(best_idx as usize).0,
-                                        &mut rot_hist, factor, best_idx as u32
-                                    );
-                                };
-                            }
-                        }
-                    }
-                }
-                i += 1;
-                j += 1;
-            } else if kf_node_id < frame_node_id {
-                i = self.lower_bound(&kf_featvec, &frame_featvec, i, j);
-            } else {
-                j = self.lower_bound(&frame_featvec, &kf_featvec, j, i);
-            }
-        }
-        
-        if should_check_orientation {
-            let (ind_1, ind_2, ind_3) = self.compute_three_maxima(&rot_hist);
-            for i in 0..self.histo_length {
-                if i == ind_1 || i == ind_2 || i == ind_3 {
-                    continue;
-                }
-                for j in 0..rot_hist[i as usize].len() {
-                    let key = rot_hist[i as usize][j];
-                    if matches.contains_key(&key) {
-                        matches.remove(&key);
-                    }
-                }
-            }
-        }
-
-
-        for (index, mp_id) in &matches {
-            frame.mappoint_matches.add(*index, *mp_id, false);
-        }
-
-        return Ok(matches.len() as u32);
-    }
-
-    fn search_by_bow_kf(
-        &self, 
-        kf_1 : &KeyFrame, kf_2 : &KeyFrame, should_check_orientation: bool, 
-        ratio: f64
-    ) -> Result<HashMap<u32, Id>, Box<dyn std::error::Error>> {
-        // int SearchByBoW(KeyFrame *pKF1, KeyFrame* pKF2, std::vector<MapPoint*> &vpMatches12);
-        let mut matches = HashMap::<u32, Id>::new(); // vpMatches12
-        let mut matched_already_in_kf2 = HashSet::<Id>::new(); // vbMatched2
-
-        let factor = 1.0 / (self.histo_length as f32);
-        let mut rot_hist = self.construct_rotation_histogram();
-
-        let kf_1_featvec = kf_1.bow.as_ref().unwrap().get_feat_vec().get_all_nodes();
-        let kf_2_featvec = kf_2.bow.as_ref().unwrap().get_feat_vec().get_all_nodes();
-        let mut i = 0;
-        let mut j = 0;
-
-        while i < kf_1_featvec.len() && j < kf_2_featvec.len() {
-            let kf_1_node_id = kf_1_featvec[i];
-            let kf_2_node_id = kf_2_featvec[j];
-            if kf_1_node_id == kf_2_node_id {
-                let kf_1_indices_size = kf_1.bow.as_ref().unwrap().get_feat_vec().vec_size(kf_1_node_id);
-
-                for index_kf1 in 0..kf_1_indices_size {
-                    let real_idx_kf1 = kf_1.bow.as_ref().unwrap().get_feat_vec().vec_get(kf_1_node_id, index_kf1);
-
-                    if let Some((mp_id, is_outlier)) = kf_1.get_mp_match(&real_idx_kf1) {
-                        let mut best_dist1 = 256;
-                        let mut best_dist2 = 256;
-                        let mut best_idx2: i32 = -1;
-                        let descriptors_kf_1 = kf_1.features.descriptors.row(real_idx_kf1);
-
-                        let kf_2_indices_size = kf_2.bow.as_ref().unwrap().get_feat_vec().vec_size(kf_2_node_id);
-
-                        for index_kf2 in 0..kf_2_indices_size {
-                            let real_idx_kf2 = kf_2.bow.as_ref().unwrap().get_feat_vec().vec_get(kf_2_node_id, index_kf2);
-
-                            if matched_already_in_kf2.contains(&(real_idx_kf2 as i32))
-                                || kf_2.get_mp_match(&real_idx_kf2).is_none() {
-                                continue;
-                            }
-
-                            let descriptors_kf_2 = kf_2.features.descriptors.row(real_idx_kf2);
-
-                            let dist = self.descriptor_distance(&descriptors_kf_1, &descriptors_kf_2);
-
-                            if dist < best_dist1 {
-                                best_dist2 = best_dist1;
-                                best_dist1 = dist;
-                                best_idx2 = real_idx_kf2 as i32;
-                            } else if dist < best_dist2 {
-                                best_dist2 = dist;
-                            }
-                        }
-
-                        if best_dist1 <= self.low_threshold {
-                            if (best_dist1 as f64) < ratio * (best_dist2 as f64) {
-                                matches.insert(real_idx_kf1 as u32, kf_2.get_mp_match(&(best_idx2 as u32)).unwrap().0);
-                                matched_already_in_kf2.insert(best_idx2 as i32);
-
-                                if should_check_orientation {
-                                    self.check_orientation_1(
-                                        &kf_1.features.get_keypoint(real_idx_kf1 as usize).0,
-                                        &kf_2.features.get_keypoint(best_idx2 as usize).0,
-                                        &mut rot_hist, factor, real_idx_kf1 as u32
-                                    );
-                                };
-                            }
-                        }
-                    }
-                }
-
-                i += 1;
-                j += 1;
-            } else if kf_1_node_id < kf_2_node_id {
-                i = self.lower_bound(&kf_1_featvec, &kf_2_featvec, i, j);
-            } else {
-                j = self.lower_bound(&kf_2_featvec, &kf_1_featvec, j, i);
-            }
-        }
-
-        if should_check_orientation {
-            let (ind_1, ind_2, ind_3) = self.compute_three_maxima(&rot_hist);
-            for i in 0..self.histo_length {
-                if i == ind_1 || i == ind_2 || i == ind_3 {
-                    continue;
-                }
-                for j in 0..rot_hist[i as usize].len() {
-                    let key = rot_hist[i as usize][j];
-                    if matches.contains_key(&key) {
-                        matches.remove(&key);
-                    }
-                }
-            }
-        };
-
-        return Ok(matches);
-    }
-
+impl SearchForTriangulationTrait for ORBMatcher {
     fn search_for_triangulation(
         &self, 
         kf_1 : &KeyFrame, kf_2 : &KeyFrame,
@@ -1528,7 +1311,8 @@ impl FeatureMatchingModule for ORBMatcher {
 
         return Ok(matched_pairs);
     }
-
+}
+impl FuseTrait for ORBMatcher {
     fn fuse_from_loop_closing(&self,  kf_id: &Id, scw: &Sim3, mappoints: &Vec<Id>, map: &MapLock, th: i32) ->  Result<Vec<Option<Id>>, Box<dyn std::error::Error>> {
         // int ORBmatcher::Fuse(KeyFrame *pKF, Sophus::Sim3f &Scw, const vector<MapPoint *> &vpPoints, float th, vector<MapPoint *> &vpReplacePoint)
 
@@ -1812,5 +1596,232 @@ impl FeatureMatchingModule for ORBMatcher {
                 }
             }
         }
+    }
+
+}
+
+impl SearchBySim3Trait for ORBMatcher {
+    fn search_by_sim3(&self,  map: &MapLock, kf1_id: Id, kf2_id: Id, matches: &mut HashMap<usize, i32>, sim3: &Sim3, th: f32) -> i32 {
+        // From ORB-SLAM2:
+        // int ORBmatcher::SearchBySim3(KeyFrame *pKF1, KeyFrame *pKF2, vector<MapPoint*> &vpMatches12,
+        //                          const float &s12, const cv::Mat &R12, const cv::Mat &t12, const float th)
+
+        let lock = map.read();
+
+        // Camera 1 from world
+        let kf1 = lock.keyframes.get(&kf1_id).unwrap();
+        let r1w = kf1.pose.get_rotation();
+        let t1w = kf1.pose.get_translation();
+
+        // Camera 2 from world
+        let kf2 = lock.keyframes.get(&kf2_id).unwrap();
+        let r2w = kf2.pose.get_rotation();
+        let tw2 = kf2.pose.get_translation();
+
+        //Transformation between cameras
+        let s12 = sim3.scale;
+        let r12 = sim3.pose.get_rotation();
+        let t12 = sim3.pose.get_translation();
+        let s_r_12 = s12 * *r12;
+        let s_r_21 = (1.0 / s12) * r12.transpose();
+        let t21 = -s_r_21 * *t12;
+
+        let mappoints1 = kf1.get_mp_matches();
+        let mappoints2 =  kf2.get_mp_matches();
+        let n1 = mappoints1.len();
+        let n2 = mappoints2.len();
+
+        let mut already_matched1 = vec![false; n1];
+        let mut already_matched2 = vec![false; n2];
+
+        for i in 0..n1 {
+            let mp_id = matches.get(&i);
+            if let Some(mp) = mp_id {
+                already_matched1[i] = true;
+                let mp = lock.mappoints.get(&mp).unwrap();
+                let (left_idx2, _right_idx2) = mp.get_index_in_keyframe(kf2_id);
+                if left_idx2 != -1 && left_idx2 < n2 as i32 {
+                    already_matched2[left_idx2 as usize] = true;
+                }
+            }
+        }
+
+        let mut match1 = vec![-1; n1];
+        let mut match2 = vec![-1; n2];
+
+        // Transform from KF1 to KF2 and search
+        for i in 0..n1 {
+            let mp_id = match mappoints1[i] {
+                Some((mp_id, _)) => mp_id,
+                None => continue
+            };
+            let mp = match lock.mappoints.get(&mp_id) {
+                Some(mp) => mp,
+                None => continue
+            };
+
+            if already_matched1[i] {
+                continue;
+            }
+            
+            let p_3d_w = mp.position;
+            let p_3d_c1 = (*r1w) * (*p_3d_w) + (*t1w);
+            let p_3d_c2 = s_r_21 * p_3d_c1 + t21;
+
+            // Depth must be positive
+            if p_3d_c2[2] < 0.0 {
+                continue;
+            }
+
+            let invz = 1.0 / p_3d_c2[2];
+            let x = p_3d_c2[0] * invz;
+            let y = p_3d_c2[1] * invz;
+            
+            let u = CAMERA_MODULE.fx * x + CAMERA_MODULE.cx;
+            let v = CAMERA_MODULE.fy * y + CAMERA_MODULE.cy;
+
+            // Point must be inside the image
+            if !kf2.features.is_in_image(u, v) {
+                continue;
+            }
+            let max_distance = mp.get_max_distance_invariance();
+            let min_distance = mp.get_min_distance_invariance();
+            let dist_3d = p_3d_c2.norm();
+
+            // Depth must be inside the scale invariance region
+            if dist_3d < min_distance || dist_3d > max_distance {
+                continue;
+            }
+
+            // Compute predicted octave
+            let n_predicted_level = mp.predict_scale(&dist_3d);
+
+            // Search in a radius
+            let radius = th * SCALE_FACTORS[n_predicted_level as usize];
+
+            let indices = kf2.features.get_features_in_area(
+                &u, &v, radius as f64, None
+            );
+            if indices.is_empty() {
+                continue;
+            }
+
+            // Match to the most similar keypoint in the radius
+            let d_mp = &mp.best_descriptor;
+
+            let mut best_dist = std::i32::MAX;
+            let mut best_idx = -1;
+
+            for idx in indices {
+                let (kp, _) = kf2.features.get_keypoint(idx as usize);
+                if kp.octave() < n_predicted_level - 1 || kp.octave() > n_predicted_level {
+                    continue;
+                }
+                let descriptors_kf = kf2.features.descriptors.row(idx);
+                let dist = self.descriptor_distance(&d_mp, &descriptors_kf);
+                if dist < best_dist {
+                    best_dist = dist;
+                    best_idx = idx as i32;
+                }
+            }
+
+            if best_dist <= self.high_threshold {
+                match1[i] = best_idx;
+            }
+        }
+
+        // Transform from KF2 to KF2 and search
+        for i in 0..n2 {
+            let mp_id = match mappoints2[i] {
+                Some((mp, _)) => mp,
+                None => continue
+            };
+            if already_matched2[i] {
+                continue;
+            }
+            let mp = match lock.mappoints.get(&mp_id) {
+                Some(mp) => mp,
+                None => continue
+            };
+
+            let p_3d_w = mp.position;
+            let p_3d_c2 = (*r2w) * (*p_3d_w) + (*tw2);
+            let p_3d_c1 = s_r_12 * p_3d_c2 + *t12;
+
+            // Depth must be positive
+            if p_3d_c1[2] < 0.0 {
+                continue;
+            }
+            
+            let invz = 1.0 / p_3d_c1[2];
+            let x = p_3d_c1[0] * invz;
+            let y = p_3d_c1[1] * invz;
+
+            let u = CAMERA_MODULE.fx * x + CAMERA_MODULE.cx;
+            let v = CAMERA_MODULE.fy * y + CAMERA_MODULE.cy;
+
+            // Point must be inside the image
+            if !kf1.features.is_in_image(u, v) {
+                continue;
+            }
+
+            let max_distance = mp.get_max_distance_invariance();
+            let min_distance = mp.get_min_distance_invariance();
+            let dist_3d = p_3d_c1.norm();
+
+            // Depth must be inside the scale pyramid of the image
+            if dist_3d < min_distance || dist_3d > max_distance {
+                continue;
+            }
+            
+            // Compute predicted octave
+            let n_predicted_level = mp.predict_scale(&dist_3d);
+
+            // Search in a radius of 2.5*sigma(ScaleLevel)
+            let radius = th * SCALE_FACTORS[n_predicted_level as usize];
+            
+            let indices = kf1.features.get_features_in_area(
+                &u, &v, radius as f64, None
+            );
+            if indices.is_empty() {
+                continue;
+            }
+        
+            // Match to the most similar keypoint in the radius
+            let d_mp = &mp.best_descriptor;
+
+            let mut best_dist = std::i32::MAX;
+            let mut best_idx = -1;
+            for idx in indices {
+                let kp = kf1.features.get_keypoint(idx as usize).0;
+                if kp.octave() < n_predicted_level - 1 || kp.octave() > n_predicted_level {
+                    continue;
+                }
+                let descriptors_kf = kf1.features.descriptors.row(idx);
+                let dist = self.descriptor_distance(&d_mp, &descriptors_kf);
+                if dist < best_dist {
+                    best_dist = dist;
+                    best_idx = idx as i32;
+                }
+            }
+            if best_dist <= self.high_threshold {
+                match2[i] = best_idx;
+            }
+        }
+
+        // Check agreement
+        let mut found = 0;
+        for i in 0..n1 {
+            let idx2 = match1[i];
+            if idx2 >= 0 {
+                let idx1 = match2[idx2 as usize];
+                if idx1 == i as i32 {
+                    matches.insert(i, mappoints2[idx2 as usize].unwrap().0);
+                    found += 1;
+                }
+            }
+        }
+        return found;
+
     }
 }

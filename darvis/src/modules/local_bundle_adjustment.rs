@@ -7,7 +7,7 @@ use opencv::core::KeyPointTraitConst;
 
 use crate::{actors::loop_closing::GBA_KILL_SWITCH, map::{map::Id, pose::{DVTranslation, Pose}}, modules::optimizer::INV_LEVEL_SIGMA2, registered_actors::CAMERA, MapLock};
 
-use super::module::LocalMapOptimizationModule;
+use super::module_definitions::LocalMapOptimizationModule;
 
 pub struct LocalBundleAdjustment { }
 impl LocalMapOptimizationModule for LocalBundleAdjustment {
