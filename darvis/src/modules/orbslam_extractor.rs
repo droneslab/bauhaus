@@ -14,14 +14,14 @@ pub struct DVORBextractor {
 }
 impl Module for DVORBextractor { }
 impl FeatureExtractionModule for DVORBextractor {
-    fn extract(&mut self, image: opencv::core::Mat) -> Result<(opencv::types::VectorOfKeyPoint, opencv::core::Mat), Box<dyn std::error::Error>> {
-        let image_dv: dvos3binding::ffi::WrapBindCVMat = (&DVMatrix::new(image)).into();
+    fn extract(&mut self, image: DVMatrix) -> Result<(DVVectorOfKeyPoint, DVMatrix), Box<dyn std::error::Error>> {
+        let image_dv: dvos3binding::ffi::WrapBindCVMat = (&image).into();
         let mut descriptors: dvos3binding::ffi::WrapBindCVMat = (&DVMatrix::default()).into();
         let mut keypoints: dvos3binding::ffi::WrapBindCVKeyPoints = DVVectorOfKeyPoint::empty().into();
 
         self.extractor.pin_mut().extract(&image_dv, &mut keypoints, &mut descriptors);
 
-        Ok((keypoints.kp_ptr.kp_ptr, descriptors.mat_ptr.mat_ptr))
+        Ok((DVVectorOfKeyPoint::new(keypoints.kp_ptr.kp_ptr), DVMatrix::new(descriptors.mat_ptr.mat_ptr)))
     }
 }
 

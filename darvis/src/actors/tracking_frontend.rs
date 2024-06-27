@@ -9,9 +9,8 @@ use crate::{
     actors::{
         messages::{FeatureMsg, ImageMsg, ImagePathMsg, ShutdownMsg, TrackingStateMsg, VisFeaturesMsg},
         tracking_backend::TrackingState,
-    }, map::map::Id, modules::{image, orbextractor::DVORBextractor}, registered_actors::{new_feature_extraction_module, FEATURE_DETECTION, VISUALIZER}, System
+    }, map::map::Id, modules::{image, module::FeatureExtractionModule, orbslam_extractor::DVORBextractor}, registered_actors::{new_feature_extraction_module, FEATURE_DETECTION, VISUALIZER}, System
 };
-use crate::modules::module::FeatureExtractionModule;
 
 
 
@@ -140,15 +139,15 @@ impl Actor for TrackingFrontEnd {
 }
 
 impl TrackingFrontEnd {
-    fn extract_features(&mut self, image: opencv::core::Mat) -> (VectorOfKeyPoint, Mat) {
+    fn extract_features(&mut self, image: opencv::core::Mat) -> (DVVectorOfKeyPoint, DVMatrix) {
         let _span = tracy_client::span!("extract_features");
 
         let (keypoints, descriptors) = match self.sensor {
             Sensor(FrameSensor::Mono, ImuSensor::None) => {
                 if !self.map_initialized || (self.last_id - self.init_id < self.max_frames) {
-                    self.orb_extractor_ini.as_mut().unwrap().extract(image).unwrap()
+                    self.orb_extractor_ini.as_mut().unwrap().extract(DVMatrix::new(image)).unwrap()
                 } else {
-                    self.orb_extractor_left.extract(image).unwrap()
+                    self.orb_extractor_left.extract(DVMatrix::new(image)).unwrap()
                 }
             },
             _ => { 
@@ -165,15 +164,15 @@ impl TrackingFrontEnd {
         (keypoints, descriptors)
     }
 
-    fn send_to_backend(&self, keypoints: VectorOfKeyPoint, descriptors: Mat, image_width: u32, image_height: u32, timestamp: Timestamp, frame_id: u32) {
+    fn send_to_backend(&self, keypoints: DVVectorOfKeyPoint, descriptors: DVMatrix, image_width: u32, image_height: u32, timestamp: Timestamp, frame_id: u32) {
         // Send features to backend
         // Note: Run-time errors ... actor lookup is runtime error
         // Note: not currently sending image to backend
         let backend = self.system.find_actor("TRACKING_BACKEND");
 
         backend.send(Box::new(FeatureMsg{
-            keypoints: DVVectorOfKeyPoint::new(keypoints),
-            descriptors: DVMatrix::new(descriptors),
+            keypoints: keypoints,
+            descriptors: descriptors,
             image_width,
             image_height,
             timestamp,
@@ -181,10 +180,10 @@ impl TrackingFrontEnd {
         })).unwrap();
     }
 
-    fn send_to_visualizer(&mut self, keypoints: VectorOfKeyPoint, image: Mat, timestamp: Timestamp) {
+    fn send_to_visualizer(&mut self, keypoints: DVVectorOfKeyPoint, image: Mat, timestamp: Timestamp) {
         // Send image and features to visualizer
         self.system.send(VISUALIZER, Box::new(VisFeaturesMsg {
-            keypoints: DVVectorOfKeyPoint::new(keypoints),
+            keypoints: keypoints,
             image,
             timestamp,
         }));

@@ -9,14 +9,12 @@ use opencv::prelude::KeyPointTraitConst;
 use crate::map::map::Id;
 use crate::map::{frame::Frame, pose::Pose};
 use crate::modules::optimizer;
-use crate::registered_actors::CAMERA_MODULE;
+use crate::registered_actors::{self, CAMERA_MODULE, FEATURE_MATCHING_MODULE, FULL_MAP_OPTIMIZATION_MODULE};
 use crate::MapLock;
 use crate::modules::module::CameraModule;
-use super::module::MapInitializationModule;
-use super::orbmatcher;
+use super::module::{FeatureMatchingModule, MapInitializationModule};
 
 
-#[derive(Debug, Clone, Default)]
 pub struct DVInitialization {
     // Monocular
     pub mp_matches: Vec<i32>,// ini_matches .. mvIniMatches;
@@ -31,7 +29,7 @@ pub struct DVInitialization {
 impl MapInitializationModule for DVInitialization {
     type Frame = Frame;
     type Map = MapLock;
-    type InitializationResult = Option<(Pose, i32, i32, BTreeSet<Id>, Timestamp)>;
+    type InitializationResult = Option<(Pose, i32, i32, BTreeSet<Id>, Timestamp, f64)>;
 
     fn try_initialize(&mut self, current_frame: &Frame) -> Result<bool, Box<dyn std::error::Error>> {
         // Only set once at beginning
@@ -52,7 +50,7 @@ impl MapInitializationModule for DVInitialization {
         }
     }
 
-    fn create_initial_map(&mut self, map: &mut Self::Map) -> Option<(Pose, i32, i32, BTreeSet<Id>, Timestamp)> {
+    fn create_initial_map(&mut self, map: &mut Self::Map) -> Self::InitializationResult {
         match self.sensor.frame() {
             FrameSensor::Mono => self.create_initial_map_monocular(map),
             _ => self.create_initial_map_stereo()
@@ -111,7 +109,7 @@ impl DVInitialization {
             }
 
             // Find correspondences
-            let (mut num_matches, mp_matches) = orbmatcher::search_for_initialization(
+            let (mut num_matches, mp_matches) = FEATURE_MATCHING_MODULE.search_for_initialization(
                 &initial_frame, 
                 &current_frame,
                 &mut self.prev_matched,
@@ -156,7 +154,7 @@ impl DVInitialization {
 
     pub fn create_initial_map_monocular(
         &mut self, map: &mut MapLock
-    ) -> Option<(Pose, i32, i32, BTreeSet<Id>, Timestamp)> {
+    ) -> Option<(Pose, i32, i32, BTreeSet<Id>, Timestamp, f64)> {
         // TODO (design, rust issues) - we have to do some pretty gross things with calling functions in this section
         // so that we can have multiple references to parts of the map. This should get cleaned up, but I'm not sure how.
 
@@ -220,7 +218,7 @@ impl DVInitialization {
         };
 
         // Bundle Adjustment
-        optimizer::global_bundle_adjustment(map, 20, true, 0);
+        FULL_MAP_OPTIMIZATION_MODULE.optimize(map, 20, true, 0);
 
         let median_depth = {
             let lock = map.read();
@@ -300,10 +298,10 @@ impl DVInitialization {
         };
 
 
-        Some((curr_kf_pose, curr_kf_id, initial_kf_id, relevant_mappoints, curr_kf_timestamp))
+        Some((curr_kf_pose, curr_kf_id, initial_kf_id, relevant_mappoints, curr_kf_timestamp, inverse_median_depth))
     }
 
-    pub fn create_initial_map_stereo(&mut self) -> Option<(Pose, i32, i32, BTreeSet<Id>, Timestamp)> {
+    pub fn create_initial_map_stereo(&mut self) -> Option<(Pose, i32, i32, BTreeSet<Id>, Timestamp, f64)> {
         todo!("Stereo: create_initial_map_stereo");
     }
     

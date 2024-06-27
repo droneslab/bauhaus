@@ -37,9 +37,9 @@ impl CameraModule for DVCamera {
     type ResultPoints = DVVectorOfPoint3f;
     type ResultTriangulated = Vec<bool>;
     type KeyPoint = opencv::core::KeyPoint;
-    type Matrix3 = DVMatrix3<f64>;
-    type Vector3 = DVVector3<f64>;
     type KeyFrame = KeyFrame;
+    type Point = opencv::core::Point2f;
+    type Matches = Vec<i32>;
 
     fn two_view_reconstruction(
         & self, 

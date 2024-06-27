@@ -7,7 +7,7 @@ use core::{
 use log::{info, warn};
 
 use crate::{
-    actors::messages::ShutdownMsg, map::map::Map, registered_actors::{self, SHUTDOWN_ACTOR, VOCABULARY}, MapLock
+    actors::messages::ShutdownMsg, map::map::Map, registered_actors::{self, SHUTDOWN_ACTOR, VOCABULARY_MODULE}, MapLock
 };
 use crate::modules::module::VocabularyModule;
 
@@ -42,7 +42,7 @@ pub fn launch_system(actor_config: Vec<ActorConf>, module_config: Vec<ModuleConf
     let writeable_map = ReadWriteMap::<Map>::new(Map::new()); // Arc::new(parking_lot::Mutex::new(Map::new()))
 
     // * LOAD VOCABULARY *//
-    VOCABULARY.access();
+    VOCABULARY_MODULE.access();
 
     // * SPAWN USER-DEFINED ACTORS *//
     for (actor_name, actor_tag, receiver_bound, receiver) in receivers {
@@ -85,7 +85,6 @@ fn spawn_actor(
     thread::spawn(move || { 
         registered_actors::spawn_actor(actor_tag, system, map_clone);
     } );
-
 }
 
 

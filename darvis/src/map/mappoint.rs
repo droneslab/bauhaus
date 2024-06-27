@@ -2,7 +2,7 @@ use std::{backtrace::Backtrace, collections::BTreeMap, fmt::Debug, sync::atomic:
 use core::{matrix::DVMatrix, config::{SETTINGS, SYSTEM}, sensor::{Sensor, FrameSensor}};
 use log::{error, warn};
 extern crate nalgebra as na;
-use crate::{matrix::DVVector3, modules::orbmatcher::{SCALE_FACTORS, descriptor_distance}, registered_actors::FEATURE_DETECTION};
+use crate::{matrix::DVVector3, modules::{module::FeatureMatchingModule, orbmatcher::{ORBMatcherTrait, SCALE_FACTORS}}, registered_actors::{self, FEATURE_DETECTION, FEATURE_MATCHING_MODULE}};
 use super::{map::{Id, Map}, keyframe::KeyFrame, pose::DVTranslation};
 
 #[derive(Debug)]
@@ -148,7 +148,7 @@ impl MapPoint {
             distances[i][i] = 0;
 
             for j in i+1..descriptors.len() {
-                let dist_ij = descriptor_distance(&descriptors[i], &descriptors[j]);
+                let dist_ij = FEATURE_MATCHING_MODULE.descriptor_distance(&descriptors[i], &descriptors[j]);
 
                 distances[i][j] = dist_ij;
                 distances[j][i] = dist_ij;

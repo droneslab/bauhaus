@@ -4,7 +4,7 @@ mod vision_tests {
     use dvos3binding::ffi::WrapBindCVMat;
     use opencv::{imgcodecs, prelude::{MatTraitConst, KeyPointTraitConst}, core::{CV_8U, CV_8UC1}};
 
-    use crate::{map::{features::Features, pose::Pose}, modules::{bow::DVBoW, geometric_tools, orbextractor::DVORBextractor}, registered_actors::VOCABULARY};
+    use crate::{map::{features::Features, pose::Pose}, modules::{bow::DVBoW, geometric_tools, orbextractor::DVORBextractor}, registered_actors::VOCABULARY_MODULE};
     use std::{fs, env};
     use crate::modules::module::VocabularyModule;
     use crate::modules::module::FeatureExtractionModule;
@@ -71,7 +71,7 @@ mod vision_tests {
         let sensor = Sensor(FrameSensor::Mono, ImuSensor::None);
         let features = Features::new(keypoints, descriptors, image_cols, image_rows, sensor).unwrap();
         let mut bow = DVBoW::new();
-        VOCABULARY.transform(&features.descriptors, &mut bow);
+        VOCABULARY_MODULE.transform(&features.descriptors, &mut bow);
         (features, bow)
     }
 
