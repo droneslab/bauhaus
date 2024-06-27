@@ -10,14 +10,14 @@ use opencv::core::KeyPointTraitConst;
 use crate::actors::local_mapping::LOCAL_MAPPING_IDLE;
 use crate::actors::messages::{KeyFrameIdMsg, LoopClosureGBAMsg};
 use crate::map::pose::{DVTranslation, Pose, Sim3};
-use crate::modules::module::{FeatureMatchingModule, LoopDetectionModule};
-use crate::modules::orbmatcher::ORBMatcherTrait;
+use crate::modules::module_definitions::{FeatureMatchingModule, LoopDetectionModule};
+use crate::modules::orbslam_matcher::ORBMatcherTrait;
 use crate::modules::sim3solver::Sim3Solver;
-use crate::modules::{optimizer, orbmatcher};
+use crate::modules::{optimizer};
 use crate::registered_actors::{self, FEATURE_MATCHING_MODULE, FULL_MAP_OPTIMIZATION_MODULE, VISUALIZER};
 use crate::{System, MapLock};
 use crate::map::map::Id;
-use crate::modules::imu::DVImu;
+use crate::modules::imu::IMU;
 
 use super::local_mapping::LOCAL_MAPPING_PAUSE_SWITCH;
 use super::messages::{IMUInitializedMsg, ShutdownMsg};
@@ -34,7 +34,7 @@ pub struct LoopClosing {
     map: MapLock,
 
     // Modules
-    _imu: Option<DVImu>,
+    _imu: Option<IMU>,
     loop_detection: Box<dyn LoopDetectionModule>,
 }
 

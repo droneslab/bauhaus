@@ -1,16 +1,16 @@
 use derivative::Derivative;
 use core::{config::{SETTINGS, SYSTEM}, system::Timestamp};
-use crate::{map::{frame::Frame, map::{Id, Map}}, modules::orbmatcher};
+use crate::{map::{frame::Frame, map::{Id, Map}}, modules::orbslam_matcher};
 
-use super::module::RelocalizationModule;
+use super::module_definitions::RelocalizationModule;
 
 #[derive(Debug, Clone, Derivative)]
 #[derivative(Default)]
-pub struct DVRelocalization {
+pub struct Relocalization {
     pub last_reloc_frame_id: Id,
     pub timestamp_lost: Option<Timestamp>,
 }
-impl RelocalizationModule for DVRelocalization {
+impl RelocalizationModule for Relocalization {
     type Frame = Frame;
     type Timestamp = Timestamp;
     type Map = Map;
@@ -50,7 +50,7 @@ impl RelocalizationModule for DVRelocalization {
     }
 }
 
-impl DVRelocalization {
+impl Relocalization {
     pub fn past_cutoff(&self, current_frame: &Frame) -> bool {
         self.sec_since_lost(current_frame) > SETTINGS.get::<i32>(SYSTEM, "recently_lost_cutoff") as f64
     }

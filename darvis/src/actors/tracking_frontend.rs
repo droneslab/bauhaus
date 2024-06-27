@@ -9,7 +9,7 @@ use crate::{
     actors::{
         messages::{FeatureMsg, ImageMsg, ImagePathMsg, ShutdownMsg, TrackingStateMsg, VisFeaturesMsg},
         tracking_backend::TrackingState,
-    }, map::map::Id, modules::{image, module::FeatureExtractionModule, orbslam_extractor::DVORBextractor}, registered_actors::{new_feature_extraction_module, FEATURE_DETECTION, VISUALIZER}, System
+    }, map::map::Id, modules::{image, module_definitions::FeatureExtractionModule, orbslam_extractor::ORBExtractor}, registered_actors::{new_feature_extraction_module, FEATURE_DETECTION, VISUALIZER}, System
 };
 
 

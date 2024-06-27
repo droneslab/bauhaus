@@ -6,15 +6,15 @@ use opencv::features2d::Feature2DTrait;
 
 use crate::registered_actors::{CAMERA, FEATURE_DETECTION};
 
-use super::module::{FeatureExtractionModule};
+use super::module_definitions::{FeatureExtractionModule};
 
 
-pub struct DVOpenCVExtractor {
+pub struct OpenCVExtractor {
     extractor: opencv::core::Ptr<opencv::features2d::ORB>,
     is_ini: bool,
 }
-impl Module for DVOpenCVExtractor { }
-impl FeatureExtractionModule for DVOpenCVExtractor {
+impl Module for OpenCVExtractor { }
+impl FeatureExtractionModule for OpenCVExtractor {
     fn extract(&mut self, image: DVMatrix) -> Result<(DVVectorOfKeyPoint, DVMatrix), Box<dyn std::error::Error>> {
         let mut descriptors = opencv::core::Mat::default();
         let mut keypoints= opencv::types::VectorOfKeyPoint::new();
@@ -26,7 +26,7 @@ impl FeatureExtractionModule for DVOpenCVExtractor {
     }
 }
 
-impl DVOpenCVExtractor {
+impl OpenCVExtractor {
     pub fn new(is_ini: bool) -> Self {
         let max_features = match is_ini {
             true => SETTINGS.get::<i32>(FEATURE_DETECTION, "max_features") * 5,
@@ -36,7 +36,7 @@ impl DVOpenCVExtractor {
             true => SETTINGS.get::<i32>(FEATURE_DETECTION, "ini_th_fast"),
             false => SETTINGS.get::<i32>(FEATURE_DETECTION, "min_th_fast")
         };
-        DVOpenCVExtractor{
+        OpenCVExtractor{
             is_ini,
             extractor: opencv::features2d::ORB::create(
                 max_features,
@@ -52,12 +52,12 @@ impl DVOpenCVExtractor {
         }
     }
 }
-impl Clone for DVOpenCVExtractor {
+impl Clone for OpenCVExtractor {
     fn clone(&self) -> Self {
-        DVOpenCVExtractor::new(self.is_ini)
+        OpenCVExtractor::new(self.is_ini)
     }
 }
-impl Debug for DVOpenCVExtractor {
+impl Debug for OpenCVExtractor {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("DVOpenCVExtractor")
          .finish()

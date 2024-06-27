@@ -4,8 +4,8 @@ use std::collections::{HashSet, HashMap};
 
 use log::debug;
 
-use crate::{map::{keyframe::KeyFrame, map::Id}, modules::module::BoWModule, registered_actors::VOCABULARY_MODULE};
-use crate::modules::module::VocabularyModule;
+use crate::{map::{keyframe::KeyFrame, map::Id}, modules::module_definitions::BoWModule, registered_actors::VOCABULARY_MODULE};
+use crate::modules::module_definitions::VocabularyModule;
 
 use super::{frame::Frame, map::Map};
 

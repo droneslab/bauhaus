@@ -11,11 +11,11 @@ use crate::map::{frame::Frame, pose::Pose};
 use crate::modules::optimizer;
 use crate::registered_actors::{self, CAMERA_MODULE, FEATURE_MATCHING_MODULE, FULL_MAP_OPTIMIZATION_MODULE};
 use crate::MapLock;
-use crate::modules::module::CameraModule;
-use super::module::{FeatureMatchingModule, MapInitializationModule};
+use crate::modules::module_definitions::CameraModule;
+use super::module_definitions::{FeatureMatchingModule, MapInitializationModule};
 
 
-pub struct DVInitialization {
+pub struct MapInitialization {
     // Monocular
     pub mp_matches: Vec<i32>,// ini_matches .. mvIniMatches;
     pub prev_matched: DVVectorOfPoint2f,// std::vector<cv::Point2f> mvbPrevMatched;
@@ -26,7 +26,7 @@ pub struct DVInitialization {
     pub current_frame: Option<Frame>,
     sensor: Sensor,
 }
-impl MapInitializationModule for DVInitialization {
+impl MapInitializationModule for MapInitialization {
     type Frame = Frame;
     type Map = MapLock;
     type InitializationResult = Option<(Pose, i32, i32, BTreeSet<Id>, Timestamp, f64)>;
@@ -58,7 +58,7 @@ impl MapInitializationModule for DVInitialization {
     }
 }
 
-impl DVInitialization {
+impl MapInitialization {
     pub fn new() -> Self {
         let sensor: Sensor = SETTINGS.get(SYSTEM, "sensor");
 

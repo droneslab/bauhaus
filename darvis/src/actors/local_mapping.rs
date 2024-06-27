@@ -12,18 +12,18 @@ use core::{
 };
 use log::{debug, warn, info};
 use opencv::prelude::KeyPointTraitConst;
-use crate::modules::orbmatcher::ORBMatcherTrait;
+use crate::modules::orbslam_matcher::ORBMatcherTrait;
 use crate::registered_actors::{self, CAMERA_MODULE, FEATURE_MATCHER, FEATURE_MATCHING_MODULE, LOCAL_MAP_OPTIMIZATION_MODULE, TRACKING_BACKEND};
 use crate::{System, MapLock};
 use crate::actors::messages::LastKeyFrameUpdatedMsg;
 use crate::modules::optimizer::{LEVEL_SIGMA2};
 use crate::{
-    modules::{orbmatcher, imu::DVImu, orbmatcher::SCALE_FACTORS, geometric_tools},
+    modules::{imu::IMU, orbslam_matcher::SCALE_FACTORS, geometric_tools},
     registered_actors::{FEATURE_DETECTION, LOOP_CLOSING, CAMERA},
     Id,
 };
-use crate::modules::module::{CameraModule, FeatureMatchingModule, LocalMapOptimizationModule};
-use crate::modules::module::ImuModule;
+use crate::modules::module_definitions::{CameraModule, FeatureMatchingModule, LocalMapOptimizationModule};
+use crate::modules::module_definitions::ImuModule;
 use super::messages::{ShutdownMsg, InitKeyFrameMsg, KeyFrameIdMsg, Reset, NewKeyFrameMsg};
 
 // TODO (design, variable locations): It would be nice for this to be a member of LocalMapping instead of floating around in the global namespace, but we can't do that easily because then Tracking would need a reference to the localmapping object.
@@ -43,7 +43,7 @@ pub struct LocalMapping {
     discarded_kfs: HashSet<Id>,  // TODO (design) ... kf culling and rates
 
     // Modules
-    imu: DVImu,
+    imu: IMU,
 }
 
 impl Actor for LocalMapping {
@@ -58,7 +58,7 @@ impl Actor for LocalMapping {
             sensor,
             current_keyframe_id: -1,
             recently_added_mappoints: HashSet::new(),
-            imu: DVImu::new(None, None, sensor, false, false),
+            imu: IMU::new(None, None, sensor, false, false),
             discarded_kfs: HashSet::new(),
         }
     }

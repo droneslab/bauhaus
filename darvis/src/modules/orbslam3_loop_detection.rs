@@ -6,7 +6,7 @@ use opencv::core::KeyPointTraitConst;
 
 use crate::{map::{map::Id, pose::Sim3}, registered_actors::{self, FEATURE_MATCHING_MODULE}, MapLock};
 
-use super::{module::LoopDetectionModule, optimizer, orbmatcher::ORBMatcherTrait, sim3solver::Sim3Solver};
+use super::{module_definitions::LoopDetectionModule, optimizer, orbslam_matcher::ORBMatcherTrait, sim3solver::Sim3Solver};
 
 pub struct ORBSLAM3LoopDetection {
     num_coincidences: i32,
@@ -195,7 +195,7 @@ impl ORBSLAM3LoopDetection {
                 let read = map.read();
                 let curr_kf = read.keyframes.get(&current_kf_id).unwrap();
                 for j in 0..cov_kf.len() {
-                    let matches = FEATURE_MATCHING_MODULE.search_by_bow_kf(
+                    let matches = FEATURE_MATCHING_MODULE.search_by_bow_with_keyframe(
                         curr_kf,
                         read.keyframes.get(&cov_kf[j]).unwrap(),
                         true,
