@@ -100,13 +100,16 @@ cd ORB_SLAM3
 RELEASE mode (slow building, fast execution). This is probably what you want to use
 ```bash
 cargo build --release
-cargo run --release [DATASET] config.yaml
+cargo run --release [PATH TO DATASET SEQUENCE] [PATH TO SYSTEM CONFIG FILE] [PATH TO DATASET CONFIG FILE] [DATASET NAME]
+For example: cargo run --release  ~/euroc/MH_01_easy/ system_config.yaml config_datasets/EUROC.yaml euroc
 ```
 DEBUG mode (fast building, slow execution)
 ```bash
 cargo build
-cargo run [DATASET] config.yaml
+cargo run [PATH TO DATASET] [PATH TO SYSTEM CONFIG FILE] [PATH TO DATASET CONFIG FILE] [DATASET NAME]
 ```
+
+Current supported datasets are tum, euroc, and kitti. We have dataset configuration files for these datasets in the `darvis/config_datasets` folder.
 
 **Using the Visualizer**
 1. Download the [foxglove application](https://foxglove.dev/). This can be on any device (does not need to be the test device).
