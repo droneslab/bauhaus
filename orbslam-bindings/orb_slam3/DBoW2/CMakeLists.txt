@@ -5,6 +5,10 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()
 
+set(CMAKE_CXX_COMPILER "/home/darvis/Downloads/llvm_build/bin/clang")
+add_link_options(-fuse-ld=/home/darvis/Downloads/llvm_build/bin/ld.lld)
+set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
+
 # Sofiya: Removed -march=native, based on https://github.com/raulmur/ORB_SLAM2/issues/341 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS}  -Wall ")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall ")
