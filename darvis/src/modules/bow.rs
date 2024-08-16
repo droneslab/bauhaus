@@ -1,18 +1,30 @@
 use std::fmt;
 use cxx::{UniquePtr, let_cxx_string};
 use log::info;
-use core::matrix::DVMatrix;
+use core::{matrix::DVMatrix,};
+use crate::modules::module_definitions::VocabularyModule;
 
 use crate::map::keyframe::KeyFrame;
 
+use super::module_definitions::BoWModule;
 
-pub struct DVVocabulary {
+pub struct OpenCVVisionImpl { }
+impl OpenCVVisionImpl {
+    pub fn new() -> Self {
+        Self { }
+    }
+}
+
+pub struct Vocabulary {
     vocabulary: UniquePtr<dvos3binding::ffi::ORBVocabulary>,
     filename: String,
 }
-impl DVVocabulary {
-    pub fn access(&self) {}
-    pub fn load(filename: String) -> Self {
+impl VocabularyModule for Vocabulary {
+    type BoWModule = DVBoW;
+    type Descriptors = DVMatrix;
+
+    fn access(&self) {}
+    fn load(filename: String) -> Self {
         let_cxx_string!(file = filename.clone());
         info!("Loading vocabulary...");
 
@@ -23,11 +35,11 @@ impl DVVocabulary {
 
         return vocab;
     }
-    pub fn size(&self) -> usize {
+    fn size(&self) -> usize {
         self.vocabulary.size()
     }
 
-    pub fn transform(&self, descriptors: &DVMatrix, bow: & mut BoW) {
+    fn transform(&self, descriptors: &DVMatrix, bow: & mut DVBoW) {
         let descriptors2: dvos3binding::ffi::WrapBindCVMat = descriptors.into();
 
         self.vocabulary.transform(
@@ -38,17 +50,28 @@ impl DVVocabulary {
         );
     }
 
-    pub fn score(&self, kf1: &KeyFrame, kf2: &KeyFrame) -> f32 {
-        self.vocabulary.score(&kf1.bow.as_ref().unwrap().bow_vec, &kf2.bow.as_ref().unwrap().bow_vec)
+    fn score(&self, bow1: &DVBoW, bow2: &DVBoW) -> f32 {
+        self.vocabulary.score(&bow1.bow_vec, &bow2.bow_vec)
     }
 }
 
 
-pub struct BoW {
-    pub bow_vec: UniquePtr<dvos3binding::ffi::BowVector>, // mBowVec
-    pub feat_vec: UniquePtr<dvos3binding::ffi::FeatureVector>, // mFeatVec
+pub struct DVBoW {
+    bow_vec: UniquePtr<dvos3binding::ffi::BowVector>, // mBowVec
+    feat_vec: UniquePtr<dvos3binding::ffi::FeatureVector>, // mFeatVec
 }
-impl BoW {
+impl BoWModule for DVBoW {
+    type BoWVector = dvos3binding::ffi::BowVector;
+    type FeatureVector = dvos3binding::ffi::FeatureVector;
+
+    fn get_bow_vec(&self) -> &Self::BoWVector {
+        &self.bow_vec
+    }
+    fn get_feat_vec(&self) -> &Self::FeatureVector {
+        &self.feat_vec
+    }
+}
+impl DVBoW {
     pub fn new() -> Self {
         Self {
             bow_vec: dvos3binding::ffi::new_bow_vec(),
@@ -61,35 +84,36 @@ impl BoW {
             feat_vec: self.feat_vec.clone(),
         }
     }
+
 }
 
 
 // Note: need to implement functions that would typically be derived
 // because we can't derive them for a UniquePtr
-impl Clone for DVVocabulary {
-    fn clone(&self) -> DVVocabulary {
-        DVVocabulary::load(self.filename.clone())
+impl Clone for Vocabulary {
+    fn clone(&self) -> Vocabulary {
+        Vocabulary::load(self.filename.clone())
     }
 }
-impl fmt::Debug for DVVocabulary {
+impl fmt::Debug for Vocabulary {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("DVVocabulary")
          .field("filename", &self.filename)
          .finish()
     }
 }
-impl Clone for BoW {
-    fn clone(&self) -> BoW {
+impl Clone for DVBoW {
+    fn clone(&self) -> DVBoW {
         self.clone()
     }
 }
-impl fmt::Debug for BoW {
+impl fmt::Debug for DVBoW {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("BoW").finish()
     }
 }
-impl Default for BoW {
+impl Default for DVBoW {
     fn default() -> Self { 
-        BoW::new()
+        DVBoW::new()
     }
 }

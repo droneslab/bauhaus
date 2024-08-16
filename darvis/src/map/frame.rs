@@ -1,8 +1,12 @@
 use core::{config::{SETTINGS, SYSTEM}, matrix::{DVMatrix, DVVector3, DVVectorOfKeyPoint}, sensor::{FrameSensor, Sensor}, system::Timestamp};
+use opencv::core::{KeyPoint, Mat};
 
-use crate::{actors::tracking_backend::TrackedMapPointData, modules::{bow::BoW, imu::{IMUBias, IMUPreIntegrated}}, registered_actors::{CAMERA_MODULE, VOCABULARY}};
+use crate::modules::module_definitions::VocabularyModule;
+
+use crate::{actors::tracking_backend::TrackedMapPointData, modules::{bow::DVBoW, imu::{IMUBias, IMUPreIntegrated}}, registered_actors::{CAMERA_MODULE, VOCABULARY_MODULE}};
 
 use super::{features::Features, keyframe::MapPointMatches, map::{Id, Map}, mappoint::MapPoint, pose::{DVTranslation, Pose}};
+use crate::modules::module_definitions::CameraModule;
 
 
 #[derive(Debug, Clone)]
@@ -10,13 +14,15 @@ pub struct Frame {
     pub frame_id: Id,
     pub timestamp: Timestamp,
 
+    pub image: Option<opencv::core::Mat>,
+
     pub pose: Option<Pose>,
     pub mappoint_matches: MapPointMatches, // mvpmappoints , mvbOutlier
     pub ref_kf_id: Option<Id>, //mpReferenceKF
 
     // Vision //
     pub features: Features, // KeyPoints, stereo coordinate and descriptors (all associated by an index)
-    pub bow: Option<BoW>,
+    pub bow: Option<DVBoW>,
 
     // IMU //
     // Preintegrated IMU measurements from previous keyframe
@@ -29,9 +35,9 @@ pub struct Frame {
     // mnTrackReferenceForFrame ... used in tracking to decide whether to add a kf/mp into tracking's local map. redundant and easy to mess up/get out of sync. Search for this globally to see an example of how to avoid using it.
 }
 impl Frame {
-pub fn new(
+    pub fn new(
         frame_id: Id, keypoints_vec: DVVectorOfKeyPoint, descriptors_vec: DVMatrix,
-        im_width: u32, im_height: u32,
+        im_width: u32, im_height: u32, image: Option<opencv::core::Mat>,
         timestamp: Timestamp
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let sensor = SETTINGS.get::<Sensor>(SYSTEM, "sensor");
@@ -47,6 +53,7 @@ pub fn new(
             features,
             imu_bias,
             sensor,
+            image,
             bow: None,
             mappoint_matches: MapPointMatches::new(num_keypoints),
             imu_preintegrated: None,
@@ -68,14 +75,23 @@ pub fn new(
             bow: frame.bow.clone(),
             ref_kf_id: frame.ref_kf_id,
             sensor: frame.sensor,
+            image: frame.image.clone(),
         }
     }
 
     pub fn compute_bow(&mut self) {
         if self.bow.is_none() {
-            self.bow = Some(BoW::new());
-            VOCABULARY.transform(&self.features.descriptors, &mut self.bow.as_mut().unwrap());
+            self.bow = Some(DVBoW::new());
+            VOCABULARY_MODULE.transform(&self.features.descriptors, &mut self.bow.as_mut().unwrap());
         }
+    }
+
+    pub fn replace_features(&mut self, keypoints: DVVectorOfKeyPoint, descriptors: DVMatrix) -> Result<(), Box<dyn std::error::Error>> {
+        self.features = Features::new(keypoints, descriptors, self.features.image_width, self.features.image_height, self.sensor)?;
+        self.mappoint_matches = MapPointMatches::new(self.features.num_keypoints as usize); // Mappoint match length needs to match keypoints length
+        println!("mappoint match length: {}", self.mappoint_matches.len());
+
+        Ok(())
     }
 
     pub fn get_camera_center(&self) -> Option<DVTranslation> {

@@ -7,13 +7,13 @@ master:
 
 system:
       localization_only_mode: false
-      vocabulary_file: "/home/darvis/Downloads/ORBSLAM3/darvis-orbslam3-master/Vocabulary/ORBvoc.txt"
+      vocabulary_file: "../Vocabulary/ORBvoc.txt"
       framesensor: Mono
       imusensor: None
       first_actor_name: TRACKING_FRONTEND # Name of actor to kick off pipeline
 
       # FPS
-      fps: 8.0
+      fps: 10.0
 
       # RESULTS
       results_folder: "results"
@@ -21,7 +21,7 @@ system:
 
       # DEBUGGING
       log_level: debug # options are [trace, debug, info, warn, error]
-      check_deadlocks: true # Spawns a new thread to check for deadlocks every 2 secs, but slows stuff down.
+      check_deadlocks: false # Spawns a new thread to check for deadlocks every 2 secs, but slows stuff down.
       # To enable profiling, set features = ["enable"] for tracy-client in Cargo.toml
       # To turn on visualizer, uncomment visualizer actor below
 
@@ -52,26 +52,13 @@ modules:
             type: i32
 
       -
-        name: FEATURE_MATCHER
-        tag: "orbslam feature matching"
+        name: MATCHER
+        tag: "matcher"
         settings:
           - 
             name: far_points_threshold
             value: 20.0
             type: f64
-          - 
-            name: high_threshold
-            value: 100
-            type: i32
-          - 
-            name: low_threshold
-            value: 50
-            type: i32
-          - 
-            name: histo_length
-            value: 30
-            type: i32
-
       -
         name: FEATURES
         tag: "features"
@@ -84,23 +71,6 @@ modules:
             name: frame_grid_cols
             value: 64
             type: i32
-
-      - 
-        name: LOOP_DETECTION
-        tag: "orbslam3 loop detection"
-        settings:
-          - 
-
-      - 
-        name: LOCAL_MAP_OPTIMIZATION
-        tag: "bundle adjustment"
-        settings:
-          - 
-      - 
-        name: FULL_MAP_OPTIMIZATION
-        tag: "bundle adjustment"
-        settings:
-          - 
 
 
 actors:
@@ -173,24 +143,6 @@ actors:
             name: max_frames_to_insert_kf
             value: 10
             type: i32
-
-      # -
-      #  name: TRACKING_BACKEND
-      #  tag: "optical flow tracking"
-      #  receiver_bound: 10
-      #  settings:
-      #     - 
-      #       name: min_num_features
-      #       value: 1500
-      #       type: i32
-      #     - 
-      #       name: min_frames_to_insert_kf
-      #       value: 0
-      #       type: i32
-      #     -
-      #       name: max_frames_to_insert_kf
-      #       value: 10
-      #       type: i32
 
       -
        name: LOCAL_MAPPING

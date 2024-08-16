@@ -372,7 +372,7 @@ impl DarvisVisualizer {
     async fn draw_trajectory(&mut self, writer: &mut FoxGloveWriter, frame_pose: Pose, timestamp: Timestamp) -> Result<(), Box<dyn std::error::Error>> {
         // debug!("Drawing trajectory at timestamp {} with pose {:?}", timestamp, frame_pose.inverse());
 
-        // self.clear_scene(timestamp, self.trajectory_channel)?;
+        self.clear_scene(writer, timestamp, TRAJECTORY_CHANNEL).await.expect("Could not clear scene");
 
         let mut entities = vec![];
         let inverse_frame_pose = frame_pose.inverse();

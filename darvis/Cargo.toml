@@ -16,7 +16,7 @@ path = "src/core/lib.rs"
 [profile.release]
 debug = true
 #codegen-units = 1
-lto = "fat"
+#lto = "fat"
 
 [rust]
 debuginfo-level = 1
@@ -81,7 +81,7 @@ opencv = { version = "0.84.5", default-features = false, features = [
 ] }
 
 nalgebra = {version = "0.32.3", features = ["serde-serialize"]}
-cv-convert = {version = '0.25.0', default_features = false, features = ['opencv_0-84','nalgebra_0-32']}
+cv-convert = {version = '0.25.0', default_features = false, features = ['opencv_0-85','nalgebra_0-32']}
 cxx = "1.0"
 
 yaml-rust = "*"
@@ -97,7 +97,8 @@ error-chain = "*"
 spin_sleep = "*"
 crossbeam-channel = "0.5.8"
 nohash-hasher = "0.2.0"
-
+#fasthash = "0.3"
+ahash = "0.8.7"
 
 fern = {version = "*", features = ["colored"] }
 log = "*"
@@ -106,3 +107,5 @@ logging_timer = "1.1.0"
 tracy-client = {version = "0.16.0", features = ["enable"] }
 tracy-client-sys = {version = "0.21.0"}
 ordered-map = "0.4.2"
+
+dynamize = "0.3.5"

@@ -37,7 +37,7 @@ endif(MSVC90)
 
 set(CMAKE_CXX_COMPILER "/home/darvis/Downloads/llvm_build/bin/clang")
 add_link_options(-fuse-ld=/home/darvis/Downloads/llvm_build/bin/ld.lld)
-set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
+#set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
 
 MESSAGE("OPENCV VERSION:")
 MESSAGE(${OpenCV_VERSION})

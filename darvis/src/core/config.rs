@@ -238,6 +238,9 @@ fn load_system_settings(system_fn: &String) -> (Vec<ActorConf>, Vec<ModuleConf>,
             name: get_val(h, "name").as_str().unwrap().to_string(),
             tag: get_val(h, "tag").as_str().unwrap().to_string(),
         };
+
+        SETTINGS.insert(&m_conf.name, "module_tag", m_conf.tag.clone());
+
         add_settings(get_val(h, "settings").as_vec().unwrap(), &m_conf.name);
         module_info.push(m_conf);
     }
