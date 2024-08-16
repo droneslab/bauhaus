@@ -204,7 +204,7 @@ g2o/stuff/property.h
 
 # rust bindings
 g2o/rust/rust_helper.cpp
-../target/cxxbridge/g2o/src/lib.rs.cc
+/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/cxxbridge/g2o/src/lib.rs.cc
 )
 
 include_directories(../target/cxxbridge)
