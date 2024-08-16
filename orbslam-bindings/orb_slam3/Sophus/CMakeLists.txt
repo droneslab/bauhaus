@@ -28,9 +28,6 @@ ELSEIF(CMAKE_CXX_COMPILER_ID MATCHES "^MSVC$")
    ADD_DEFINITIONS("-D _USE_MATH_DEFINES /bigobj /wd4305 /wd4244 /MP")
 ENDIF()
 
-
-set(CMAKE_CXX_COMPILER "/home/darvis/Downloads/llvm_build/bin/clang")
-add_link_options(-fuse-ld=/home/darvis/Downloads/llvm_build/bin/ld.lld)
 #set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
 
 # Add local path for finding packages, set the local version first
