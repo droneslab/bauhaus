@@ -1,7 +1,8 @@
-use core::{config::{SETTINGS, SYSTEM}, system::{Actor, System}};
+use core::{config::{SETTINGS, SYSTEM}, system::{Actor, Module, System}};
 use log::error;
 
-use crate::{modules::{bow::DVVocabulary, camera::{Camera, CameraType}}, MapLock};
+use crate::{modules::{bow::Vocabulary, camera::{CameraType, Camera}, module_definitions::{FeatureExtractionModule, FeatureMatchingModule, FullMapOptimizationModule, LocalMapOptimizationModule, LoopDetectionModule}, orbslam_matcher::ORBMatcherTrait}, MapLock};
+use crate::modules::module_definitions::VocabularyModule;
 
 // USER-DEFINED ACTORS: add a string to name your actor here
 // These are the names that actors in the system use to find/communicate with each other
@@ -16,22 +17,63 @@ pub static VISUALIZER: &str = "VISUALIZER";
 
 // USER-DEFINED MODULES: add a string to name your module here
 pub static FEATURE_DETECTION: &str = "FEATURE_DETECTION";
+pub static FEATURE_MATCHER: &str = "FEATURE_MATCHER";
 pub static CAMERA: &str = "CAMERA";
-pub static MATCHER: &str = "MATCHER";
 pub static FEATURES: &str = "FEATURES";
+pub static LOOP_DETECTION: &str = "LOOP_DETECTION";
+pub static LOCAL_MAP_OPTIMIZATION: &str = "LOCAL_MAP_OPTIMIZATION";
+pub static FULL_MAP_OPTIMIZATION: &str = "FULL_MAP_OPTIMIZATION";
 
 // DARVIS SYSTEM ACTORS
 pub static SHUTDOWN_ACTOR: &str = "SHUTDOWN";
 
+// Modules without internal state ... can have one global instance since we don't have to worry about sharing data between threads
 lazy_static! {
     pub static ref CAMERA_MODULE: Camera = {
         Camera::new(CameraType::Pinhole).unwrap()
     };
-    pub static ref VOCABULARY: DVVocabulary = {
+    pub static ref VOCABULARY_MODULE: Vocabulary = {
         let filename = SETTINGS.get::<String>(SYSTEM, "vocabulary_file");
-        DVVocabulary::load(filename)
+        Vocabulary::load(filename)
+    };
+    pub static ref FEATURE_MATCHING_MODULE: Box<dyn ORBMatcherTrait> = {
+        let module_tag = SETTINGS.get::<String>(FEATURE_MATCHER, "module_tag");
+        match module_tag.as_ref() {
+            str if str == "orbslam feature matching".to_string() => {
+                Box::new(crate::modules::orbslam_matcher::ORBMatcher::new() )
+            },
+            _ => {
+                error!("Module not implemented: {}", module_tag);
+                panic!();
+            },
+        }    
+    };
+    pub static ref FULL_MAP_OPTIMIZATION_MODULE: Box<dyn FullMapOptimizationModule + Send + Sync> = {
+        let module_tag = SETTINGS.get::<String>(FULL_MAP_OPTIMIZATION, "module_tag");
+        match module_tag.as_ref() {
+            str if str == "bundle adjustment".to_string() => {
+                Box::new(crate::modules::global_bundle_adjustment::GlobalBundleAdjustment { } )
+            },
+            _ => {
+                error!("Module not implemented: {}", module_tag);
+                panic!();
+            },
+        }
+    };
+    pub static ref LOCAL_MAP_OPTIMIZATION_MODULE: Box<dyn LocalMapOptimizationModule + Send + Sync> = {
+        let module_tag = SETTINGS.get::<String>(LOCAL_MAP_OPTIMIZATION, "module_tag");
+        match module_tag.as_ref() {
+            str if str == "bundle adjustment".to_string() => {
+                Box::new(crate::modules::local_bundle_adjustment::LocalBundleAdjustment { } )
+            },
+            _ => {
+                error!("Module not implemented: {}", module_tag);
+                panic!();
+            },
+        }
     };
 }
+
 
 
 pub fn spawn_actor(
@@ -59,6 +101,9 @@ pub fn spawn_actor(
         str if str == "visualizer".to_string() => {
             crate::actors::visualizer::DarvisVisualizer::spawn(system, map.expect("Visualizer needs the map!"))
         },
+        str if str == "optical flow tracking".to_string() => {
+            crate::actors::tracking_optical_flow::TrackingOpticalFlow::spawn(system, map.expect("Tracking needs the map!"))
+        },
         str if str == SHUTDOWN_ACTOR.to_string() => {
             crate::actors::shutdown::ShutdownActor::spawn(system, ())
         },
@@ -67,3 +112,34 @@ pub fn spawn_actor(
         },
     };
 }
+
+// MODULES with internal state
+pub fn new_feature_extraction_module(is_ini: bool) -> Box<dyn FeatureExtractionModule> {
+    let module_tag = SETTINGS.get::<String>(FEATURE_DETECTION, "module_tag");
+    match module_tag.as_ref() {
+        str if str == "orbslam feature detection".to_string() => {
+            Box::new(crate::modules::orbslam_extractor::ORBExtractor::new(is_ini))
+        },
+        str if str == "opencv feature detection".to_string() => {
+            Box::new(crate::modules::opencv_extractor::OpenCVExtractor::new(is_ini))
+        },
+        _ => {
+            error!("Module not implemented: {}", module_tag);
+            panic!();
+        },
+    }
+}
+
+pub fn new_loop_detection_module() -> Box<dyn LoopDetectionModule> {
+    let module_tag = SETTINGS.get::<String>(LOOP_DETECTION, "module_tag");
+    match module_tag.as_ref() {
+        str if str == "orbslam3 loop detection".to_string() => {
+            Box::new(crate::modules::orbslam3_loop_detection::ORBSLAM3LoopDetection::new() )
+        },
+        _ => {
+            error!("Module not implemented: {}", module_tag);
+            panic!();
+        },
+    }
+}
+

@@ -198,10 +198,16 @@ impl From<dvos3binding::ffi::Pose> for Pose {
         );
 
         // Surely this can't be the best way to do this?
+        // let matrix3 = nalgebra::Matrix3::<f64>::new(
+        //     pose.rotation[0][0].into(), pose.rotation[1][0].into(), pose.rotation[2][0].into(),
+        //     pose.rotation[0][1].into(), pose.rotation[1][1].into(), pose.rotation[2][1].into(),
+        //     pose.rotation[0][2].into(), pose.rotation[1][2].into(), pose.rotation[2][2].into()
+        // );
+
         let matrix3 = nalgebra::Matrix3::<f64>::new(
-            pose.rotation[0][0].into(), pose.rotation[1][0].into(), pose.rotation[2][0].into(),
-            pose.rotation[0][1].into(), pose.rotation[1][1].into(), pose.rotation[2][1].into(),
-            pose.rotation[0][2].into(), pose.rotation[1][2].into(), pose.rotation[2][2].into()
+            pose.rotation[0][0].into(), pose.rotation[0][1].into(), pose.rotation[0][2].into(),
+            pose.rotation[1][0].into(), pose.rotation[1][1].into(), pose.rotation[1][2].into(),
+            pose.rotation[2][0].into(), pose.rotation[2][1].into(), pose.rotation[2][2].into()
         );
         let rotation3 = nalgebra::Rotation3::from_matrix_unchecked(matrix3);
         Pose ( nalgebra::IsometryMatrix3::from_parts(translation, rotation3) )

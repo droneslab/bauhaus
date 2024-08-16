@@ -1,6 +1,5 @@
 // Base data structures to be used across the framwork.
 pub mod system;
-pub mod module;
 // Logic to get/set global configuration parameters
 // and load data from config file.
 pub mod config;

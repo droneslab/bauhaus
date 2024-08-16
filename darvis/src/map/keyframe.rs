@@ -1,8 +1,10 @@
 use std::{collections::{HashMap, HashSet}, cmp::min};
 use core::{config::{ SETTINGS, SYSTEM}, matrix::DVVector3, sensor::Sensor, system::Timestamp};
 use log::{error, debug, warn};
-use crate::{map::{map::Id, pose::Pose},modules::{bow::BoW, imu::*}, registered_actors::VOCABULARY};
+use opencv::core::{KeyPoint, Mat};
+use crate::{map::{map::Id, pose::Pose},modules::{bow::DVBoW, imu::*}, registered_actors::VOCABULARY_MODULE, MapLock};
 use super::{features::Features, frame::Frame, map::{Map, MapItems}, mappoint::MapPoint,};
+use crate::modules::module_definitions::VocabularyModule;
 
 #[derive(Debug, Clone)]
 pub struct KeyFrame {
@@ -22,7 +24,7 @@ pub struct KeyFrame {
 
     // Vision //
     pub features: Features, // KeyPoints, stereo coordinate and descriptors (all associated by an index)
-    pub bow: Option<BoW>,
+    pub bow: Option<DVBoW>,
 
     // IMU //
     // Preintegrated IMU measurements from previous keyframe
@@ -59,8 +61,8 @@ impl KeyFrame {
         let bow = match frame.bow {
             Some(bow) => Some(bow),
             None => {
-                let mut bow = BoW::new();
-                VOCABULARY.transform(&frame.features.descriptors, &mut bow);
+                let mut bow = DVBoW::new();
+                VOCABULARY_MODULE.transform(&frame.features.descriptors, &mut bow);
                 Some(bow)
             }
         };
@@ -136,7 +138,7 @@ impl KeyFrame {
     }
 
     pub fn get_right_camera_center(&self) -> DVVector3<f64> {
-        todo!("IMU");
+        todo!("Stereo");
         // NOt sure what mTlr is, it comes from the settings but might get updated somewhere.
         //    return (mTwc * mTlr).translation();
         // this needs to be generic on sensor, so it can't be called if the sensor doesn't have a right camera
@@ -167,6 +169,7 @@ impl KeyFrame {
         depths.sort_by(|a, b| a.total_cmp(&b));
         depths[(depths.len()-1) / q as usize]
     }
+
     pub fn get_right_pose(&self) -> Pose {
         todo!("Stereo");
         // Sophus::SE3<float> KeyFrame::GetRightPose() {
@@ -200,7 +203,6 @@ impl KeyFrame {
         // Connected/covisible keyframes sorted by weight
         &self.connections.map_connected_keyframes
     }
-
 }
 
 

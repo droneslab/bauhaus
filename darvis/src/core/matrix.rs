@@ -23,7 +23,7 @@
 // rather than make copies.
 
 use std::{fmt::Debug, convert::TryInto, ops::Index};
-use std::ops::Deref;
+use std::ops::{Deref, DerefMut};
 use opencv::platform_types::size_t;
 use serde::{Deserialize, Serialize};
 
@@ -208,6 +208,12 @@ impl Deref for DVVectorOfKeyPoint {
         &self.0
     }
 }
+impl DerefMut for DVVectorOfKeyPoint {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
 // From implementations to make it easier to pass this into opencv functions
 impl From<DVVectorOfKeyPoint> for opencv::types::VectorOfKeyPoint {
     fn from(vec: DVVectorOfKeyPoint) -> opencv::types::VectorOfKeyPoint { vec.0 }

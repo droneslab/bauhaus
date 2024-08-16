@@ -19,6 +19,8 @@ use crate::{
     map::map::Id,
 };
 
+use super::keyframe::MapPointMatches;
+
 
 #[derive(Clone, Debug, Default)]
 enum KeyPoints {
@@ -46,6 +48,9 @@ pub struct Features {
     pub num_keypoints: u32, // N
     keypoints: KeyPoints,
     pub descriptors: DVMatrix, // mDescriptors
+
+    pub image_width: u32,
+    pub image_height: u32,
 
     // Keypoints are assigned to cells in a grid to reduce matching complexity when projecting MapPoints.
     grid_element_width_inv: f64,
@@ -152,14 +157,13 @@ impl Features {
                     *undistorted_points.at_2d::<f32>(2, 1).unwrap(),
                     *undistorted_points.at_2d::<f32>(3, 1).unwrap(),
                 );
-                
+
                 let mn_max_x_f64 = mn_max_x as f64;
                 let mn_max_y_f64 = mn_max_y as f64;
                 let mn_min_x_f64 = mn_min_x as f64;
                 let mn_min_y_f64 = mn_min_y as f64;
 
                 (mn_min_x_f64, mn_max_x_f64, mn_min_y_f64, mn_max_y_f64)
-            
             },
             None => {
                 (0.0 as f64 , im_width as f64, 0.0 as f64, im_height as f64)
@@ -203,6 +207,8 @@ impl Features {
                     max_y,
                     frame_grid_cols,
                     frame_grid_rows,
+                    image_width: im_width,
+                    image_height: im_height
                 };
 
                 Ok(features)
@@ -253,6 +259,32 @@ impl Features {
         }
     }
 
+    pub fn replace_keypoints_and_descriptors(&mut self, keypoints: opencv::types::VectorOfKeyPoint, descriptors: Mat) {
+        match &self.keypoints {
+            KeyPoints::Mono{..} => {
+                self.num_keypoints = keypoints.len() as u32;
+                self.keypoints = KeyPoints::Mono { keypoints_un: DVVectorOfKeyPoint::new(keypoints) };
+                self.descriptors = DVMatrix::new(descriptors);
+            },
+            KeyPoints::Rgbd{ ..} => todo!("RGBD"),
+            KeyPoints::Stereo{  ..} => todo!("Stereo"), 
+            KeyPoints::Empty => panic!("Keypoints should not be empty")
+        };
+    }
+
+    pub fn remove_keypoint_and_descriptor(&mut self, index: usize) -> Result<(), Box<dyn std::error::Error>> {
+        match self.keypoints {
+            KeyPoints::Mono{ref mut keypoints_un, ..} => {
+                keypoints_un.remove(index)?;
+                self.num_keypoints -= 1;
+                Ok(())
+            },
+            KeyPoints::Rgbd{ ..} => todo!("RGBD"),
+            KeyPoints::Stereo{  ..} => todo!("Stereo"), 
+            KeyPoints::Empty => panic!("Keypoints should not be empty")
+        }
+    }
+
     pub fn get_mv_depth(&self, i: usize) -> Option<f32> {
         match &self.keypoints {
             KeyPoints::Mono{..}  => None,
@@ -299,6 +331,10 @@ impl Features {
             },
             KeyPoints::Empty => panic!("Keypoints should not be empty")
         }
+    }
+
+    fn assign_features_to_grid() {
+
     }
 
     fn undistort_keypoints(keypoints: &DVVectorOfKeyPoint) -> Result<DVVectorOfKeyPoint, Box<dyn std::error::Error>> {
@@ -366,6 +402,7 @@ impl Features {
 
         let check_levels = levels.is_some() && (levels.unwrap().0>0 || levels.unwrap().1>=0);
 
+        // println!("Get features in area... min cell x: {}, max cell x: {}, min cell y: {}, max cell y: {}", min_cell_x, max_cell_x, min_cell_y, max_cell_y);
         for ix in min_cell_x..max_cell_x + 1 {
             for iy in min_cell_y..max_cell_y + 1 {
                 let v_cell  =&self.grid[ix as usize][iy as usize];

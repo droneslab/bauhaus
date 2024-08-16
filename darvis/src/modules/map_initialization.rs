@@ -9,14 +9,13 @@ use opencv::prelude::KeyPointTraitConst;
 use crate::map::map::Id;
 use crate::map::{frame::Frame, pose::Pose};
 use crate::modules::optimizer;
-use crate::registered_actors::CAMERA_MODULE;
+use crate::registered_actors::{self, CAMERA_MODULE, FEATURE_MATCHING_MODULE, FULL_MAP_OPTIMIZATION_MODULE};
 use crate::MapLock;
+use crate::modules::module_definitions::CameraModule;
+use super::module_definitions::{FeatureMatchingModule, MapInitializationModule};
 
-use super::orbmatcher;
 
-
-#[derive(Debug, Clone, Default)]
-pub struct Initialization {
+pub struct MapInitialization {
     // Monocular
     pub mp_matches: Vec<i32>,// ini_matches .. mvIniMatches;
     pub prev_matched: DVVectorOfPoint2f,// std::vector<cv::Point2f> mvbPrevMatched;
@@ -27,24 +26,12 @@ pub struct Initialization {
     pub current_frame: Option<Frame>,
     sensor: Sensor,
 }
+impl MapInitializationModule for MapInitialization {
+    type Frame = Frame;
+    type Map = MapLock;
+    type InitializationResult = Option<(Pose, i32, i32, BTreeSet<Id>, Timestamp, f64)>;
 
-impl Initialization {
-    pub fn new() -> Self {
-        let sensor: Sensor = SETTINGS.get(SYSTEM, "sensor");
-
-        Self {
-            mp_matches: Vec::new(),
-            prev_matched: DVVectorOfPoint2f::empty(),
-            p3d: DVVectorOfPoint3f::empty(),
-            ready_to_initialize: false,
-            initial_frame: None,
-            last_frame: None,
-            current_frame: None,
-            sensor
-        }
-    }
-
-    pub fn try_initialize(&mut self, current_frame: &Frame) -> Result<bool, Box<dyn std::error::Error>> {
+    fn try_initialize(&mut self, current_frame: &Frame) -> Result<bool, Box<dyn std::error::Error>> {
         // Only set once at beginning
         if self.initial_frame.is_none() {
             self.initial_frame = Some(current_frame.clone());
@@ -60,6 +47,30 @@ impl Initialization {
         match self.sensor.frame() {
             FrameSensor::Mono => self.monocular_initialization(),
             _ => self.stereo_initialization()
+        }
+    }
+
+    fn create_initial_map(&mut self, map: &mut Self::Map) -> Self::InitializationResult {
+        match self.sensor.frame() {
+            FrameSensor::Mono => self.create_initial_map_monocular(map),
+            _ => self.create_initial_map_stereo()
+        }
+    }
+}
+
+impl MapInitialization {
+    pub fn new() -> Self {
+        let sensor: Sensor = SETTINGS.get(SYSTEM, "sensor");
+
+        Self {
+            mp_matches: Vec::new(),
+            prev_matched: DVVectorOfPoint2f::empty(),
+            p3d: DVVectorOfPoint3f::empty(),
+            ready_to_initialize: false,
+            initial_frame: None,
+            last_frame: None,
+            current_frame: None,
+            sensor
         }
     }
 
@@ -98,7 +109,7 @@ impl Initialization {
             }
 
             // Find correspondences
-            let (mut num_matches, mp_matches) = orbmatcher::search_for_initialization(
+            let (mut num_matches, mp_matches) = FEATURE_MATCHING_MODULE.search_for_initialization(
                 &initial_frame, 
                 &current_frame,
                 &mut self.prev_matched,
@@ -112,7 +123,7 @@ impl Initialization {
                 return Ok(false);
             };
 
-            if let Some((tcw, v_p3d, vb_triangulated)) = CAMERA_MODULE.reconstruct_with_two_views(
+            if let Some((tcw, v_p3d, vb_triangulated)) = CAMERA_MODULE.two_view_reconstruction(
                 initial_frame.features.get_all_keypoints(),
                 current_frame.features.get_all_keypoints(),
                 & self.mp_matches,
@@ -143,7 +154,7 @@ impl Initialization {
 
     pub fn create_initial_map_monocular(
         &mut self, map: &mut MapLock
-    ) -> Option<(Pose, i32, i32, BTreeSet<Id>, Timestamp)> {
+    ) -> Option<(Pose, i32, i32, BTreeSet<Id>, Timestamp, f64)> {
         // TODO (design, rust issues) - we have to do some pretty gross things with calling functions in this section
         // so that we can have multiple references to parts of the map. This should get cleaned up, but I'm not sure how.
 
@@ -207,7 +218,7 @@ impl Initialization {
         };
 
         // Bundle Adjustment
-        optimizer::global_bundle_adjustment(map, 20, true, 0);
+        FULL_MAP_OPTIMIZATION_MODULE.optimize(map, 20, true, 0);
 
         let median_depth = {
             let lock = map.read();
@@ -287,7 +298,11 @@ impl Initialization {
         };
 
 
-        Some((curr_kf_pose, curr_kf_id, initial_kf_id, relevant_mappoints, curr_kf_timestamp))
-
+        Some((curr_kf_pose, curr_kf_id, initial_kf_id, relevant_mappoints, curr_kf_timestamp, inverse_median_depth))
     }
+
+    pub fn create_initial_map_stereo(&mut self) -> Option<(Pose, i32, i32, BTreeSet<Id>, Timestamp, f64)> {
+        todo!("Stereo: create_initial_map_stereo");
+    }
+    
 }

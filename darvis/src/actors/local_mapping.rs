@@ -12,16 +12,18 @@ use core::{
 };
 use log::{debug, warn, info};
 use opencv::prelude::KeyPointTraitConst;
-use crate::registered_actors::{CAMERA_MODULE, TRACKING_BACKEND};
+use crate::modules::orbslam_matcher::ORBMatcherTrait;
+use crate::registered_actors::{self, CAMERA_MODULE, FEATURE_MATCHER, FEATURE_MATCHING_MODULE, LOCAL_MAP_OPTIMIZATION_MODULE, TRACKING_BACKEND};
 use crate::{System, MapLock};
 use crate::actors::messages::LastKeyFrameUpdatedMsg;
-use crate::modules::optimizer::{local_bundle_adjustment, LEVEL_SIGMA2};
+use crate::modules::optimizer::{LEVEL_SIGMA2};
 use crate::{
-    modules::{orbmatcher, imu::ImuModule, orbmatcher::SCALE_FACTORS, geometric_tools},
-    registered_actors::{FEATURE_DETECTION, LOOP_CLOSING, MATCHER, CAMERA},
+    modules::{imu::IMU, orbslam_matcher::SCALE_FACTORS, geometric_tools},
+    registered_actors::{FEATURE_DETECTION, LOOP_CLOSING, CAMERA},
     Id,
 };
-
+use crate::modules::module_definitions::{CameraModule, FeatureMatchingModule, LocalMapOptimizationModule};
+use crate::modules::module_definitions::ImuModule;
 use super::messages::{ShutdownMsg, InitKeyFrameMsg, KeyFrameIdMsg, Reset, NewKeyFrameMsg};
 
 // TODO (design, variable locations): It would be nice for this to be a member of LocalMapping instead of floating around in the global namespace, but we can't do that easily because then Tracking would need a reference to the localmapping object.
@@ -41,8 +43,7 @@ pub struct LocalMapping {
     discarded_kfs: HashSet<Id>,  // TODO (design) ... kf culling and rates
 
     // Modules
-    imu: ImuModule,
-
+    imu: IMU,
 }
 
 impl Actor for LocalMapping {
@@ -57,7 +58,7 @@ impl Actor for LocalMapping {
             sensor,
             current_keyframe_id: -1,
             recently_added_mappoints: HashSet::new(),
-            imu: ImuModule::new(None, None, sensor, false, false),
+            imu: IMU::new(None, None, sensor, false, false),
             discarded_kfs: HashSet::new(),
         }
     }
@@ -109,7 +110,7 @@ impl Actor for LocalMapping {
                 let kf_id = actor.map.write().insert_keyframe_to_map(msg.keyframe, false);
 
                 // Send the new keyframe ID directly back to the sender so they can use the ID 
-                actor.system.find(TRACKING_BACKEND).send(Box::new(InitKeyFrameMsg{kf_id})).unwrap();
+                actor.system.find_actor(TRACKING_BACKEND).send(Box::new(InitKeyFrameMsg{kf_id})).unwrap();
 
                 debug!("Local mapping working on kf {}", kf_id);
                 actor.current_keyframe_id = kf_id;
@@ -148,7 +149,7 @@ impl LocalMapping {
 
         // Triangulate new MapPoints
         let mps_created = self.create_new_mappoints();
-        self.system.find(TRACKING_BACKEND).send(Box::new(
+        self.system.find_actor(TRACKING_BACKEND).send(Box::new(
             LastKeyFrameUpdatedMsg{}
         )).unwrap();
 
@@ -188,7 +189,7 @@ impl LocalMapping {
                     // Optimizer::LocalInertialBA(mpCurrentKeyFrame, &mbAbortBA, mpCurrentKeyFrame->GetMap(),num_FixedKF_BA,num_OptKF_BA,num_MPs_BA,num_edges_BA, bLarge, !mpCurrentKeyFrame->GetMap()->GetIniertialBA2());
                 },
                 false => {
-                    local_bundle_adjustment(&self.map, self.current_keyframe_id, 0);
+                    LOCAL_MAP_OPTIMIZATION_MODULE.optimize(&self.map, self.current_keyframe_id);
                 }
             }
         }
@@ -306,7 +307,7 @@ impl LocalMapping {
             false => 10
         };
         let ratio_factor = 1.5 * SETTINGS.get::<f64>(FEATURE_DETECTION, "scale_factor");
-        let fpt = SETTINGS.get::<f64>(MATCHER, "far_points_threshold");
+        let fpt = SETTINGS.get::<f64>(FEATURE_MATCHER, "far_points_threshold");
         let far_points_th = if fpt == 0.0 { INFINITY } else { fpt };
 
         let (neighbor_kfs, mut pose1, translation1, rotation1, rotation_transpose1, mut ow1);
@@ -374,7 +375,7 @@ impl LocalMapping {
             {
                 let lock = self.map.read();
 
-                matches = match orbmatcher::search_for_triangulation(
+                matches = match FEATURE_MATCHING_MODULE.search_for_triangulation(
                     lock.keyframes.get(&self.current_keyframe_id).unwrap(),
                     lock.keyframes.get(&neighbor_id).unwrap(),
                     false, false, course,
@@ -625,9 +626,9 @@ impl LocalMapping {
 
         // Search matches by projection from current KF in target KFs
         for kf_id in &target_kfs {
-            orbmatcher::fuse(kf_id, &mappoint_matches, &self.map, 3.0, false);
+            FEATURE_MATCHING_MODULE.fuse(kf_id, &mappoint_matches, &self.map, 3.0, false);
             match self.sensor.frame() {
-                FrameSensor::Stereo => orbmatcher::fuse(kf_id, &mappoint_matches, &self.map, 3.0, true),
+                FrameSensor::Stereo => FEATURE_MATCHING_MODULE.fuse(kf_id, &mappoint_matches, &self.map, 3.0, true),
                 _ => {}
             }
 
@@ -659,9 +660,9 @@ impl LocalMapping {
                 }
             }
         }
-        orbmatcher::fuse(&self.current_keyframe_id, &fuse_candidates_vec,  &self.map, 3.0, false);
+        FEATURE_MATCHING_MODULE.fuse(&self.current_keyframe_id, &fuse_candidates_vec,  &self.map, 3.0, false);
         match self.sensor.frame() {
-            FrameSensor::Stereo => orbmatcher::fuse(&self.current_keyframe_id, &fuse_candidates_vec, &self.map, 3.0, true),
+            FrameSensor::Stereo => FEATURE_MATCHING_MODULE.fuse(&self.current_keyframe_id, &fuse_candidates_vec, &self.map, 3.0, true),
             _ => {}
         }
 
@@ -821,7 +822,6 @@ impl LocalMapping {
                         false => {
                             to_delete.push(kf_id);
                             self.discarded_kfs.insert(kf_id);
-                            println!("DELETE KF {} with redundant matches {} (> {}), total matches {}", kf_id, num_redundant_obs, redundant_th * (num_mps as f64), num_mps);
                         }
                     }
                 }

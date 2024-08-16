@@ -1,29 +1,24 @@
 extern crate g2o;
-use cxx::UniquePtr;
 use log::{warn, info};
-use std::{fmt, fmt::Debug};
 use opencv::{prelude::*, types::VectorOfKeyPoint,};
 
 use core::{
     config::*, matrix::*, sensor::{FrameSensor, ImuSensor, Sensor}, system::{Actor, Timestamp}
 };
 use crate::{
-    registered_actors::{FEATURE_DETECTION, CAMERA, VISUALIZER},
     actors::{
-        messages::{ShutdownMsg, ImagePathMsg, ImageMsg, TrackingStateMsg, FeatureMsg, VisFeaturesMsg},
+        messages::{FeatureMsg, ImageMsg, ImagePathMsg, ShutdownMsg, TrackingStateMsg, VisFeaturesMsg},
         tracking_backend::TrackingState,
-    },
-    modules::image,
-    System,
-    map::map::Id,
+    }, map::map::Id, modules::{image, module_definitions::FeatureExtractionModule, orbslam_extractor::ORBExtractor}, registered_actors::{new_feature_extraction_module, FEATURE_DETECTION, VISUALIZER}, System
 };
+
 
 
 pub struct TrackingFrontEnd {
     system: System,
-    orb_extractor_left: DVORBextractor,
-    _orb_extractor_right: Option<DVORBextractor>,
-    orb_extractor_ini: Option<DVORBextractor>,
+    orb_extractor_left: Box<dyn FeatureExtractionModule>,
+    _orb_extractor_right: Option<Box<dyn FeatureExtractionModule>>,
+    orb_extractor_ini: Option<Box<dyn FeatureExtractionModule>>,
     map_initialized: bool,
     last_id: Id,
     init_id: Id,
@@ -35,19 +30,20 @@ impl Actor for TrackingFrontEnd {
     type MapRef = ();
 
     fn new_actorstate(system: System, _map: Self::MapRef) -> TrackingFrontEnd {
-        let max_features = SETTINGS.get::<i32>(FEATURE_DETECTION, "max_features");
         let sensor = SETTINGS.get::<Sensor>(SYSTEM, "sensor");
+
         let _orb_extractor_right = match sensor.frame() {
-            FrameSensor::Stereo => Some(DVORBextractor::new(max_features)),
+            FrameSensor::Stereo => Some(new_feature_extraction_module(false)),
             FrameSensor::Mono | FrameSensor::Rgbd => None,
         };
         let orb_extractor_ini = match sensor.is_mono() {
-            true => Some(DVORBextractor::new(max_features*5)), // sofiya orbslam2 loop closing
+            true => Some(new_feature_extraction_module(true)),
             false => None
         };
+
         TrackingFrontEnd {
             system,
-            orb_extractor_left: DVORBextractor::new(max_features),
+            orb_extractor_left: new_feature_extraction_module(false),
             _orb_extractor_right,
             orb_extractor_ini,
             map_initialized: false,
@@ -143,45 +139,40 @@ impl Actor for TrackingFrontEnd {
 }
 
 impl TrackingFrontEnd {
-    fn extract_features(&mut self, image: opencv::core::Mat) -> (VectorOfKeyPoint, Mat) {
+    fn extract_features(&mut self, image: opencv::core::Mat) -> (DVVectorOfKeyPoint, DVMatrix) {
         let _span = tracy_client::span!("extract_features");
 
-        let image_dv: dvos3binding::ffi::WrapBindCVMat = (&DVMatrix::new(image)).into();
-        let mut descriptors: dvos3binding::ffi::WrapBindCVMat = (&DVMatrix::default()).into();
-        let mut keypoints: dvos3binding::ffi::WrapBindCVKeyPoints = DVVectorOfKeyPoint::empty().into();
-
-        // TODO (timing) ... this takes ~70 ms which is way high compared to ORB-SLAM3. I think this is because the rust and C++ bindings are not getting optimized together.
-        match self.sensor {
+        let (keypoints, descriptors) = match self.sensor {
             Sensor(FrameSensor::Mono, ImuSensor::None) => {
                 if !self.map_initialized || (self.last_id - self.init_id < self.max_frames) {
-                    self.orb_extractor_ini.as_mut().unwrap().extractor.pin_mut().extract(&image_dv, &mut keypoints, &mut descriptors);
+                    self.orb_extractor_ini.as_mut().unwrap().extract(DVMatrix::new(image)).unwrap()
                 } else {
-                    self.orb_extractor_left.extractor.pin_mut().extract(&image_dv, &mut keypoints, &mut descriptors);
+                    self.orb_extractor_left.extract(DVMatrix::new(image)).unwrap()
                 }
             },
             _ => { 
                 // See GrabImageMonocular, GrabImageStereo, GrabImageRGBD in Tracking.cc
                 todo!("IMU, Stereo, RGBD")
             }
-        }
+        };
 
         match self.sensor.frame() {
             FrameSensor::Stereo => todo!("Stereo"), //Also call extractor_right, see Tracking::GrabImageStereo,
             _ => {}
         }
-        
-        (keypoints.kp_ptr.kp_ptr, descriptors.mat_ptr.mat_ptr)
+
+        (keypoints, descriptors)
     }
 
-    fn send_to_backend(&self, keypoints: VectorOfKeyPoint, descriptors: Mat, image_width: u32, image_height: u32, timestamp: Timestamp, frame_id: u32) {
+    fn send_to_backend(&self, keypoints: DVVectorOfKeyPoint, descriptors: DVMatrix, image_width: u32, image_height: u32, timestamp: Timestamp, frame_id: u32) {
         // Send features to backend
         // Note: Run-time errors ... actor lookup is runtime error
         // Note: not currently sending image to backend
-        let backend = self.system.find("TRACKING_BACKEND");
+        let backend = self.system.find_actor("TRACKING_BACKEND");
 
         backend.send(Box::new(FeatureMsg{
-            keypoints: DVVectorOfKeyPoint::new(keypoints),
-            descriptors: DVMatrix::new(descriptors),
+            keypoints: keypoints,
+            descriptors: descriptors,
             image_width,
             image_height,
             timestamp,
@@ -189,45 +180,12 @@ impl TrackingFrontEnd {
         })).unwrap();
     }
 
-    fn send_to_visualizer(&mut self, keypoints: VectorOfKeyPoint, image: Mat, timestamp: Timestamp) {
+    fn send_to_visualizer(&mut self, keypoints: DVVectorOfKeyPoint, image: Mat, timestamp: Timestamp) {
         // Send image and features to visualizer
         self.system.send(VISUALIZER, Box::new(VisFeaturesMsg {
-            keypoints: DVVectorOfKeyPoint::new(keypoints),
+            keypoints: keypoints,
             image,
             timestamp,
         }));
-    }
-}
-
-
-pub struct DVORBextractor {
-    pub extractor: UniquePtr<dvos3binding::ffi::ORBextractor>,
-    pub max_features: i32
-}
-impl DVORBextractor {
-    pub fn new(max_features: i32) -> Self {
-        DVORBextractor{
-            max_features,
-            extractor: dvos3binding::ffi::new_orb_extractor(
-                max_features,
-                SETTINGS.get::<f64>(FEATURE_DETECTION, "scale_factor") as f32,
-                SETTINGS.get::<i32>(FEATURE_DETECTION, "n_levels"),
-                SETTINGS.get::<i32>(FEATURE_DETECTION, "ini_th_fast"),
-                SETTINGS.get::<i32>(FEATURE_DETECTION, "min_th_fast"),
-                SETTINGS.get::<i32>(CAMERA, "stereo_overlapping_begin"),
-                SETTINGS.get::<i32>(CAMERA, "stereo_overlapping_end")
-            )
-        }
-    }
-}
-impl Clone for DVORBextractor {
-    fn clone(&self) -> Self {
-        DVORBextractor::new(self.max_features)
-    }
-}
-impl Debug for DVORBextractor {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("DVORBextractor")
-         .finish()
     }
 }

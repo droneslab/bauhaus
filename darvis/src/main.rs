@@ -102,7 +102,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         ))?;
 
-        if frame_id > 2 && !sent_map_init {
+        if frame_id > 5 && !sent_map_init {
             sent_map_init = true;
         }
     }
@@ -204,7 +204,6 @@ impl Iterator for LoopManager {
         let timestamp = self.timestamps[self.current_index as usize];
         let image = self.image_paths[self.current_index as usize].clone();
 
-        println!("Timestamp: {:?}", timestamp);
         // Start next loop
         self.loop_helper.loop_start(); 
 
