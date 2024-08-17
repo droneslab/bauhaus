@@ -1,1 +1,0 @@
-./target/release/bindarvis ../../../DataSets/kitti/00/ system_config.yaml config_datasets/KITTI00-02.yaml kitti
