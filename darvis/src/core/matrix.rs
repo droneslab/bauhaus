@@ -178,6 +178,11 @@ impl<T: opencv::prelude::DataType> From<&DVMatrix4<T>> for DVMatrix {
         )
     }
 }
+impl<T: nalgebra::ComplexField> From<[T; 3]> for DVVector3<T> {
+    fn from(vec: [T; 3]) -> DVVector3<T> { 
+        DVVector3::new(nalgebra::Vector3::<T>::new(vec[0].clone(), vec[1].clone(), vec[2].clone()))
+    }
+}
 
 #[derive(Clone, Debug, Default)]
 pub struct DVVectorOfKeyPoint ( opencv::types::VectorOfKeyPoint );
@@ -304,6 +309,7 @@ impl DVVectorOfPoint2f {
     pub fn new(vec: opencv::types::VectorOfPoint2f) -> Self {
         Self ( vec ) 
     }
+    pub fn len(&self) -> i32 { self.0.len() as i32 }
     pub fn clone(&self) -> Self {
         Self ( self.0.clone() )
     }
@@ -459,7 +465,7 @@ impl<T: Debug + Clone + nalgebra::Scalar + num_traits::identities::Zero + num_tr
     pub fn new(vec: nalgebra::Matrix3<T>) -> Self {
         DVMatrix3 ( vec )
     }
-    pub fn zeros<T2: Debug + Clone + nalgebra::Scalar + num_traits::identities::Zero>() -> Self {
+    pub fn zeros() -> Self {
         DVMatrix3::new(nalgebra::Matrix3::<T>::zeros())
     }
     pub fn identity() -> Self { 
@@ -502,6 +508,25 @@ impl From<opencv::core::Mat> for DVMatrix3<f64> {
         ))
     }
 }
+impl<T: nalgebra::ComplexField> From<[[T; 3]; 3]> for DVMatrix3<T> {
+    fn from(mat: [[T; 3]; 3]) -> DVMatrix3<T> { 
+        DVMatrix3::new(nalgebra::Matrix3::<T>::new(
+            mat[0][0].clone(), mat[0][1].clone(), mat[0][2].clone(),
+            mat[1][0].clone(), mat[1][1].clone(), mat[1][2].clone(),
+            mat[2][0].clone(), mat[2][1].clone(), mat[2][2].clone()
+        ))
+    }
+}
+impl<T: nalgebra::ComplexField> From<&mut DVMatrix3<T>> for [[T; 3]; 3] {
+    fn from(mat: &mut DVMatrix3<T>) -> [[T; 3]; 3] { 
+        [
+            [mat[(0,0)].clone(), mat[(0,1)].clone(), mat[(0,2)].clone()],
+            [mat[(1,0)].clone(), mat[(1,1)].clone(), mat[(1,2)].clone()],
+            [mat[(2,0)].clone(), mat[(2,1)].clone(), mat[(2,2)].clone()]
+        ]
+    }
+}
+
 // Two index implementations, one for matrix3[(x,y)] and one for [(x)]
 impl<T> Index<(usize, usize)> for DVMatrix3<T> {
     type Output = T;
@@ -531,6 +556,9 @@ impl<T: Debug + Clone + nalgebra::Scalar + num_traits::identities::Zero + num_tr
     }
     pub fn identity() -> Self { 
         DVMatrix4::new(nalgebra::Matrix4::<T>::identity())
+    }
+    pub fn inverse(&self) -> Self {
+        DVMatrix4::new(self.0.clone().try_inverse().unwrap())
     }
 
     pub fn is_zero(&self) -> bool { self.0 == nalgebra::Matrix4::<T>::zeros() }

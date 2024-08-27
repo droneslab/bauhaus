@@ -2,19 +2,23 @@ extern crate g2o;
 
 use std::{cmp::{max, min}, collections::{BTreeMap, HashMap, HashSet}, fs::File, io::{self, BufRead}, path::Path};
 use core::{
-    config::{SETTINGS, SYSTEM}, sensor::{Sensor, FrameSensor}
+    config::{SETTINGS, SYSTEM}, matrix::{DVMatrix3, DVVector3}, sensor::{FrameSensor, Sensor}
 };
+use cxx::UniquePtr;
+use g2o::ffi::BridgeSparseOptimizer;
 use log::{debug, error, info, warn};
 use nalgebra::{Matrix3, Rotation3, UnitQuaternion, Vector3};
 use opencv::prelude::KeyPointTraitConst;
 use crate::{
-    actors::loop_closing::{KeyFrameAndPose, GBA_KILL_SWITCH}, map::{frame::Frame, map::Id, pose::{DVTranslation, Pose, Sim3}}, registered_actors::{CAMERA, FEATURE_DETECTION}, MapLock
+    actors::loop_closing::{KeyFrameAndPose, GBA_KILL_SWITCH}, map::{frame::Frame, keyframe::KeyFrame, map::Id, pose::{DVTranslation, Pose, Sim3}}, registered_actors::{CAMERA, CAMERA_MODULE, FEATURE_DETECTION}, MapLock
 };
 
+use super::imu::{ImuBias, ImuCalib, ImuPreIntegrated};
+
 lazy_static! {
-    static ref TH_HUBER_MONO: f32 = (5.991 as f32).sqrt();
-    static ref TH_HUBER_2D: f32 = (5.99 as f32).sqrt();
-    static ref TH_HUBER_3D: f32 = (7.815 as f32).sqrt();
+    pub static ref TH_HUBER_MONO: f32 = (5.991 as f32).sqrt();
+    pub static ref TH_HUBER_2D: f32 = (5.99 as f32).sqrt();
+    pub static ref TH_HUBER_3D: f32 = (7.815 as f32).sqrt();
 
     // Note: Does not change, so can have multiple copies of this.
     // ORBSLAM3 duplicates this var at every frame and keyframe,
@@ -45,8 +49,6 @@ lazy_static! {
     };
 }
 
-// int Optimizer::PoseInertialOptimizationLastFrame(Frame *pFrame, bool bRecInit)
-// but bRecInit is always set to false
 pub fn pose_inertial_optimization_last_frame(
     _frame: &mut Frame, _map: &MapLock
 ) {
@@ -59,6 +61,348 @@ pub fn pose_inertial_optimization_last_keyframe(_frame: &mut Frame) -> i32 {
     todo!("IMU... pose_inertial_optimization_last_keyframe");
     // int Optimizer::PoseInertialOptimizationLastKeyFrame(Frame *pFrame, bool bRecInit)
     // but bRecInit is always set to false
+}
+
+pub fn inertial_optimization_initialization(
+    map: &MapLock, rwg: &mut DVMatrix3<f64>, scale: &mut f64, 
+    bg: &mut DVVector3<f64>, ba: &mut DVVector3<f64>, is_mono: bool, cov_inertial: &nalgebra::SMatrix::<f64, 9, 9>,
+    fixed_velocity: bool, b_gauss: bool, prior_g: f64, prior_a: f64,
+) {
+    // void Optimizer::InertialOptimization(Map *pMap, Eigen::Matrix3d &Rwg, double &scale, Eigen::Vector3d &bg, Eigen::Vector3d &ba, bool bMono, Eigen::MatrixXd  &covInertial, bool bFixedVel, bool bGauss, float priorG, float priorA)
+
+
+    println!("Inertial optimization initialization values...");
+    println!("rwg: {:?}", rwg);
+    println!("scale: {:?}", scale);
+    println!("bg: {:?}", bg);
+    println!("ba: {:?}", ba);
+    println!("is_mono: {:?}", is_mono);
+    println!("cov_inertial: {:?}", cov_inertial);
+    println!("fixed_velocity: {:?}", fixed_velocity);
+    println!("b_gauss: {:?}", b_gauss);
+    println!("prior_g: {:?}", prior_g);
+    println!("prior_a: {:?}", prior_a);
+    
+    let its = 200;
+    let max_kf_id = * map.read().keyframes
+        .iter()
+        .max_by(|a, b| a.1.id.cmp(&b.1.id))
+        .map(|(k, _v)| k).unwrap();
+
+    // Setup optimizer
+    // ... Note... pretty sure camera params aren't necessary for this optimization but throwing them in here anyway just in case
+    let fx= SETTINGS.get::<f64>(CAMERA, "fx");
+    let fy= SETTINGS.get::<f64>(CAMERA, "fy");
+    let cx= SETTINGS.get::<f64>(CAMERA, "cx");
+    let cy= SETTINGS.get::<f64>(CAMERA, "cy");
+    let camera_param = [fx, fy, cx,cy];
+
+    let mut optimizer = if prior_g != 0.0 {
+        g2o::ffi::new_sparse_optimizer(5, camera_param, 1e3)
+    } else {
+        g2o::ffi::new_sparse_optimizer(5, camera_param, 0.0)
+    };
+
+    {
+        let lock = map.read();
+
+        // Set KeyFrame vertices (fixed poses and optimizable velocities)
+        for (kf_id, kf) in &lock.keyframes {
+            add_vertex_pose(&mut optimizer, kf, true);
+
+            let velocity = match kf.imu_data.velocity {
+                Some(v) => v,
+                None => {
+                    DVVector3::new_with(0.0, 0.0, 0.0)
+                }
+            };
+
+            if fixed_velocity {
+                optimizer.pin_mut().add_vertex_velocity(
+                    max_kf_id + kf_id + 1,
+                    true,
+                    velocity.into()
+                );
+            } else {
+                optimizer.pin_mut().add_vertex_velocity(
+                    max_kf_id + kf_id + 1,
+                    false,
+                    velocity.into()
+                );
+            }
+        }
+
+        // Biases
+        let first_kf = lock.keyframes.first_key_value().unwrap().1;
+        let gyro_bias = first_kf.imu_data.imu_bias.get_gyro_bias();
+        let vertex_gyro_bias_id = max_kf_id * 2 + 2;
+        if fixed_velocity {
+            optimizer.pin_mut().add_vertex_gyro_bias(
+                vertex_gyro_bias_id,
+                true,
+                gyro_bias.into()
+            );
+        } else {
+            optimizer.pin_mut().add_vertex_gyro_bias(
+                vertex_gyro_bias_id,
+                false,
+                gyro_bias.into()
+            );
+        }
+
+        let first_kf = lock.keyframes.first_key_value().unwrap().1;
+        let acc_bias = first_kf.imu_data.imu_bias.get_acc_bias();
+        let vertex_acc_bias_id = max_kf_id * 2 + 3;
+        if fixed_velocity {
+            optimizer.pin_mut().add_vertex_acc_bias(
+                vertex_acc_bias_id,
+                true,
+                acc_bias.into()
+            );
+        } else {
+            optimizer.pin_mut().add_vertex_acc_bias(
+                vertex_acc_bias_id,
+                false,
+                acc_bias.into()
+            );
+        }
+
+        // prior acc bias
+        optimizer.pin_mut().add_edge_prior_for_imu(
+            vertex_acc_bias_id,
+            vertex_gyro_bias_id,
+            [0.0, 0.0, 0.0],
+            prior_a,
+            prior_g
+        );
+    
+        optimizer.pin_mut().add_gravity_and_scale_vertex(
+            max_kf_id * 2 + 4,
+            false,
+            rwg.into(),
+            max_kf_id * 2 + 5,
+            !is_mono,  // Fixed for stereo case
+            *scale,
+        );
+    }
+
+    {
+        // Graph edges
+        // IMU links with gravity and scale
+        let mut new_imu_preintegrated_for_kfs: HashMap<Id, ImuPreIntegrated> = HashMap::new();
+        for (kf_id, keyframe) in & map.read().keyframes {
+            if *kf_id > max_kf_id ||
+                keyframe.prev_kf_id.is_none() ||
+                keyframe.imu_data.imu_preintegrated.is_none() ||
+                keyframe.prev_kf_id.unwrap() > max_kf_id 
+            {
+                continue;
+            }
+
+            let mut imu_preintegrated = keyframe.imu_data.imu_preintegrated.as_ref().unwrap().clone();
+            let prev_kf_id = keyframe.prev_kf_id.unwrap();
+
+            imu_preintegrated.set_new_bias(map.read().keyframes.get(&prev_kf_id).unwrap().imu_data.imu_bias);
+
+            optimizer.pin_mut().add_graph_edges_inertial(
+                prev_kf_id,
+                max_kf_id + prev_kf_id + 1,
+                *kf_id,
+                max_kf_id + prev_kf_id + 1,
+                max_kf_id * 2 + 2,
+                max_kf_id * 2 + 3,
+                max_kf_id * 2 + 4,
+                max_kf_id * 2 + 5,
+                (& imu_preintegrated).into(),
+                false,
+                1.0
+            );
+            new_imu_preintegrated_for_kfs.insert(*kf_id, imu_preintegrated);
+        }
+        for (kf_id, new_imu_preintegrated) in new_imu_preintegrated_for_kfs {
+            let mut lock = map.write();
+            lock.keyframes.get_mut(&kf_id).unwrap().imu_data.imu_preintegrated = Some(new_imu_preintegrated);
+        }
+    }
+
+    // Compute error for different scales
+    optimizer.pin_mut().optimize(its, false, false);
+
+    // scale = VS->estimate();
+
+    // Recover optimized data
+    // Biases
+    let estimate = optimizer.recover_optimized_inertial(
+        max_kf_id * 2 + 2,
+        max_kf_id * 2 + 3,
+        max_kf_id * 2 + 5,
+        max_kf_id * 2 + 4,
+    );
+
+    let vb = estimate.vb;
+    *bg = estimate.bg.into();
+    *ba = estimate.ba.into();
+    *scale = estimate.scale;
+    *rwg = estimate.rwg.into();
+
+    let b = ImuBias {
+        bax: vb[3],
+        bay: vb[4],
+        baz: vb[5],
+        bwx: vb[0],
+        bwy: vb[1],
+        bwz: vb[2],
+    };
+
+    // VG = static_cast<VertexGyroBias*>(optimizer.vertex(maxKFid*2+2));
+    // VA = static_cast<VertexAccBias*>(optimizer.vertex(maxKFid*2+3));
+    // Vector6d vb;
+    // vb << VG->estimate(), VA->estimate();
+    // bg << VG->estimate();
+    // ba << VA->estimate();
+    // scale = VS->estimate();
+    // IMU::Bias b (vb[3],vb[4],vb[5],vb[0],vb[1],vb[2]);
+    // Rwg = VGDir->estimate().Rwg;
+
+    //Keyframes velocities and biases
+    let mut lock = map.write();
+    for (kf_id, kf) in &mut lock.keyframes {
+        if *kf_id > max_kf_id {
+            continue;
+        }
+
+        let velocity = optimizer.recover_optimized_vertex_velocity(max_kf_id + kf_id + 1);
+        println!("Inertial optimization init, set kf velocity {} {:?}", kf_id, velocity);
+        kf.imu_data.velocity = Some(velocity.into());
+
+        if (* kf.imu_data.imu_bias.get_gyro_bias() - ** bg).norm() > 0.01 {
+            kf.imu_data.set_new_bias(b);
+            if let Some(imu_preintegrated) = kf.imu_data.imu_preintegrated.as_mut() {
+                imu_preintegrated.reintegrate();
+            }
+        } else {
+            kf.imu_data.set_new_bias(b);
+        }
+    }
+}
+
+pub fn inertial_optimization_scale_refinement(map: &MapLock, rwg: &mut nalgebra::Matrix3<f64>, scale: &mut f64) {
+    // void Optimizer::InertialOptimization(Map *pMap, Eigen::Matrix3d &Rwg, double &scale)
+    let max_kf_id = * map.read().keyframes
+        .iter()
+        .max_by(|a, b| a.1.id.cmp(&b.1.id))
+        .map(|(k, _v)| k).unwrap();
+
+    let its = 10;
+    // Setup optimizer
+    // ... Note... pretty sure camera params aren't necessary for this optimization but throwing them in here anyway just in case
+    let fx= SETTINGS.get::<f64>(CAMERA, "fx");
+    let fy= SETTINGS.get::<f64>(CAMERA, "fy");
+    let cx= SETTINGS.get::<f64>(CAMERA, "cx");
+    let cy= SETTINGS.get::<f64>(CAMERA, "cy");
+    let camera_param = [fx, fy, cx,cy];
+
+    let mut optimizer = g2o::ffi::new_sparse_optimizer(6, camera_param, 1e3);
+
+    {
+        let lock = map.read();
+
+        // Set KeyFrame vertices (all variables are fixed)
+        for (kf_id, kf) in &lock.keyframes {
+            add_vertex_pose(&mut optimizer, kf, true);
+
+            debug!("kf.imu_data.velocity {:?}", kf.imu_data.velocity);
+            optimizer.pin_mut().add_vertex_velocity(
+                max_kf_id + kf_id + 1,
+                true,
+                kf.imu_data.velocity.unwrap().into()
+            );
+
+            // Vertex of fixed biases
+            let first_kf = lock.keyframes.first_key_value().unwrap().1;
+            let gyro_bias = first_kf.imu_data.imu_bias.get_gyro_bias();
+            optimizer.pin_mut().add_vertex_gyro_bias(
+                2 * (max_kf_id + 1) + kf_id,
+                true,
+                gyro_bias.into()
+            );
+
+            optimizer.pin_mut().add_vertex_acc_bias(
+                3 * (max_kf_id + 1) + kf_id,
+                true,
+                first_kf.imu_data.imu_bias.get_acc_bias().into()
+            );
+        }
+
+        // Gravity and scale
+        optimizer.pin_mut().add_gravity_and_scale_vertex(
+            4 * (max_kf_id + 1),
+            false,
+            (nalgebra::Matrix3::<f64>::identity()).into(),
+            4 * (max_kf_id + 1) + 1,
+            false,
+            * scale,
+        );
+    }
+
+    {
+        // Graph edges
+        // IMU links with gravity and scale
+        let mut new_imu_preintegrated_for_kfs: HashMap<Id, ImuPreIntegrated> = HashMap::new();
+        for (kf_id, keyframe) in & map.read().keyframes {
+            if *kf_id > max_kf_id ||
+                keyframe.prev_kf_id.is_none() ||
+                keyframe.imu_data.imu_preintegrated.is_none() ||
+                keyframe.prev_kf_id.unwrap() > max_kf_id 
+            {
+                continue;
+            }
+
+            let mut imu_preintegrated = keyframe.imu_data.imu_preintegrated.as_ref().unwrap().clone();
+            let prev_kf_id = keyframe.prev_kf_id.unwrap();
+
+            imu_preintegrated.set_new_bias(map.read().keyframes.get(&prev_kf_id).unwrap().imu_data.imu_bias);
+
+            optimizer.pin_mut().add_graph_edges_inertial(
+                prev_kf_id,
+                max_kf_id + 1 + prev_kf_id,
+                *kf_id,
+                max_kf_id + 1 + prev_kf_id,
+                2 * (max_kf_id + 1) + prev_kf_id,
+                3 * (max_kf_id + 1) + prev_kf_id,
+                4 * (max_kf_id + 1),
+                4 * (max_kf_id + 1) + 1,
+                (& imu_preintegrated).into(),
+                true,
+                1.0
+            );
+            new_imu_preintegrated_for_kfs.insert(*kf_id, imu_preintegrated);
+        }
+        for (kf_id, new_imu_preintegrated) in new_imu_preintegrated_for_kfs {
+            let mut lock = map.write();
+            lock.keyframes.get_mut(&kf_id).unwrap().imu_data.imu_preintegrated = Some(new_imu_preintegrated);
+        }
+    }
+    // Compute error for different scales
+    optimizer.pin_mut().optimize(its, false, false);
+
+    // Recover optimized data
+    let estimate = optimizer.recover_optimized_inertial(
+        -1, // this doesn't matter this time
+        -1, // this doesn't matter this time
+        4 * (max_kf_id + 1) + 1,
+        4 * (max_kf_id + 1),
+    );
+
+    *scale = estimate.scale;
+    *rwg = estimate.rwg.into();
+
+}
+
+pub fn local_inertial_ba() {
+    // void Optimizer::LocalInertialBA(KeyFrame *pKF, bool *pbStopFlag, Map *pMap, int& num_fixedKF, int& num_OptKF, int& num_MPs, int& num_edges, bool bLarge, bool bRecInit)
+    todo!("IMU... used by local mapping");
+    
 }
 
 pub fn optimize_pose(
@@ -74,9 +418,9 @@ pub fn optimize_pose(
     let cy= SETTINGS.get::<f64>(CAMERA, "cy");
     let camera_param = [fx, fy, cx,cy];
 
-    let mut optimizer = g2o::ffi::new_sparse_optimizer(2, camera_param);
+    let mut optimizer = g2o::ffi::new_sparse_optimizer(2, camera_param, 0.0);
 
-    optimizer.pin_mut().add_frame_vertex(0, (*frame.pose.as_ref().unwrap()).into(), false);
+    optimizer.pin_mut().add_vertex_se3_expmap(0, (*frame.pose.as_ref().unwrap()).into(), false);
 
     let mut initial_correspondences = 0;
     let mut mp_indexes = vec![];
@@ -117,7 +461,7 @@ pub fn optimize_pose(
                     _ => {
                         // Mono observations
                         frame.mappoint_matches.set_outlier(i as usize, false);
-                        optimizer.pin_mut().add_edge_monocular_unary(
+                        optimizer.pin_mut().add_edge_se3_project_xyz_monocular_unary(
                             true, 0, keypoint.octave(), keypoint.pt().x, keypoint.pt().y,
                             INV_LEVEL_SIGMA2[keypoint.octave() as usize],
                             (position).into(),
@@ -297,7 +641,7 @@ pub fn optimize_essential_graph(
         SETTINGS.get::<f64>(CAMERA, "cx"),
         SETTINGS.get::<f64>(CAMERA, "cy")
     ];
-    let mut optimizer = g2o::ffi::new_sparse_optimizer(4, camera_param);
+    let mut optimizer = g2o::ffi::new_sparse_optimizer(4, camera_param, 1e-16);
 
     let mut v_scw: HashMap<Id, Sim3> = HashMap::new(); // vScw
 
@@ -473,10 +817,10 @@ pub fn optimize_essential_graph(
             if norm_and_depth.is_some() {
                 map.write().mappoints.get_mut(&mp_id).unwrap().update_norm_and_depth(norm_and_depth.unwrap());
             }
-
         }
-
     }
+
+    map.write().map_change_index += 1;
 }
 
 pub fn optimize_sim3(
@@ -488,6 +832,7 @@ pub fn optimize_sim3(
     //                             g2o::Sim3 &g2oS12, const float th2, const bool bFixScale)
     // but bAllPoints is always set to true
     // returns vpMatches1, mAcumHessian
+    let _span = tracy_client::span!("optimize_sim3");
 
     let camera_param = [
         SETTINGS.get::<f64>(CAMERA, "fx"),
@@ -495,7 +840,7 @@ pub fn optimize_sim3(
         SETTINGS.get::<f64>(CAMERA, "cx"),
         SETTINGS.get::<f64>(CAMERA, "cy")
     ];
-    let mut optimizer = g2o::ffi::new_sparse_optimizer(3, camera_param);
+    let mut optimizer = g2o::ffi::new_sparse_optimizer(3, camera_param, 1e16);
 
     // Camera poses
     let (kf1_rot, kf1_trans, kf2_rot, kf2_trans) = { // R1w, t1w, R2w, t2w
@@ -639,4 +984,31 @@ pub fn optimize_sim3(
     let optimized_sim3: Sim3 = optimizer.recover_optimized_sim3(0).into();
     *sim3 = optimized_sim3;
     return n_in;
+}
+
+pub fn add_vertex_pose(optimizer: &mut UniquePtr<BridgeSparseOptimizer>, kf: &KeyFrame, fixed: bool) {
+    // Helper function to call add_vertex_pose because the arguments are pretty gross
+    // Maybe this should be in g2o crate instead of here? But I'm pretty sure g2o crate doesn't know about keyframes at all
+
+    let imu_calib = ImuCalib::new();
+
+    let rot = kf.pose.get_quaternion();
+    let imu_rot = nalgebra::geometry::UnitQuaternion::from_rotation_matrix(
+        & nalgebra::Rotation3::from_matrix(& *kf.get_imu_rotation())
+    ); // lol whateverrr
+    let tcb_rot = imu_calib.tcb.get_quaternion();
+
+    optimizer.pin_mut().add_vertex_pose(
+        kf.id,
+        fixed,
+        1, // TODO (Stereo... num cams shouldn't be 1)
+        kf.get_imu_position().into(), // imu position
+        [imu_rot.w, imu_rot.i, imu_rot.j, imu_rot.k], // imu rotation
+        kf.pose.get_translation().into(), // translation
+        [rot.w, rot.i, rot.j, rot.k], // rotation
+        imu_calib.tcb.translation.into(), //tcb translation
+        [tcb_rot.w, tcb_rot.i, tcb_rot.j, tcb_rot.k], // tcb rotation
+        imu_calib.tbc.translation.into(), // tbc translation
+        CAMERA_MODULE.stereo_baseline as f32
+    );
 }

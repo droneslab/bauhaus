@@ -484,7 +484,6 @@ impl FeatureMatchingModule for ORBMatcher {
         let map = map.read();
         let mut local_mps_to_remove = vec![];
 
-        println!("Inside search by projection, mappoints: {}", mappoints.len());
         let mut indices_empty = 0;
         let mut level = 0;
         let mut level2 = 0;
@@ -667,7 +666,7 @@ impl FeatureMatchingModule for ORBMatcher {
                 // }
             }
         }
-            println!("Indices empty: {}, level1: {}, level2: {}, track_in_view_c: {}", indices_empty, level, level2, track_in_view_c);
+            // println!("Indices empty: {}, level1: {}, level2: {}, track_in_view_c: {}", indices_empty, level, level2, track_in_view_c);
 
         mappoints.retain(|mp_id| !local_mps_to_remove.contains(&mp_id));
         return Ok((non_tracked_points, num_matches));

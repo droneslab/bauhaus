@@ -11,15 +11,19 @@
 #include "../types/types_seven_dof_expmap.h"
 #include "../../../target/cxxbridge/g2o/src/lib.rs.h"
 #include "../core/hyper_graph.h"
+#include "../orbslam_types/Pinhole.h"
+#include "../types/G2oTypes.h"
+
 
 namespace g2o {
-    std::unique_ptr<BridgeSparseOptimizer> new_sparse_optimizer(int opt_type, std::array<double,4> camera_param) {
-        BridgeSparseOptimizer * optimizer = new BridgeSparseOptimizer(opt_type, camera_param);
+    std::unique_ptr<BridgeSparseOptimizer> new_sparse_optimizer(int opt_type, std::array<double,4> camera_param, float lambda_init) {
+        // Note: send 0 as lambda_init if you don't want to set a specific one
+        BridgeSparseOptimizer * optimizer = new BridgeSparseOptimizer(opt_type, camera_param, lambda_init);
         unique_ptr<BridgeSparseOptimizer> ptr(optimizer);
         return ptr;
     }
 
-    BridgeSparseOptimizer::BridgeSparseOptimizer(int opt_type, std::array<double,4> camera_param) {
+    BridgeSparseOptimizer::BridgeSparseOptimizer(int opt_type, std::array<double,4> camera_param, float lambda_init) {
         this->xyz_edges = std::vector<RustXYZEdge>();
         this->xyz_onlypose_edges = std::vector<RustXYZOnlyPoseEdge>();
         this->sim3_projxyz_edges = std::vector<RustSim3ProjectXYZEdge>();
@@ -34,6 +38,10 @@ namespace g2o {
             optimizer->setAlgorithm(solver);
             optimizer->setVerbose(false);
 
+            if (lambda_init > 0) {
+                solver->setUserLambdaInit(lambda_init);
+            }
+
             optimizer_type = 1;
         } else if (opt_type == 2) {
             // For PoseOptimization
@@ -44,6 +52,10 @@ namespace g2o {
             g2o::OptimizationAlgorithmLevenberg* solver = new g2o::OptimizationAlgorithmLevenberg(solver_ptr);
             optimizer->setAlgorithm(solver);
 
+            if (lambda_init > 0) {
+                solver->setUserLambdaInit(lambda_init);
+            }
+
             optimizer_type = 2;
         } else if (opt_type == 3) {
             // For OptimizeSim3
@@ -52,8 +64,12 @@ namespace g2o {
             BlockSolverX * solver_ptr = new BlockSolverX(linearSolver);
 
             g2o::OptimizationAlgorithmLevenberg* solver = new g2o::OptimizationAlgorithmLevenberg(solver_ptr);
-            optimizer->setVerbose(true);
+            optimizer->setVerbose(false);
             optimizer->setAlgorithm(solver);
+
+            if (lambda_init > 0) {
+                solver->setUserLambdaInit(lambda_init);
+            }
 
             optimizer_type = 3;
         } else if (opt_type == 4) {
@@ -65,10 +81,37 @@ namespace g2o {
 
             g2o::OptimizationAlgorithmLevenberg* solver = new g2o::OptimizationAlgorithmLevenberg(solver_ptr);
             optimizer->setVerbose(false);
-            solver->setUserLambdaInit(1e-16);
             optimizer->setAlgorithm(solver);
 
+            if (lambda_init > 0) {
+                solver->setUserLambdaInit(lambda_init);
+            }
+
             optimizer_type = 4;
+        } else if (opt_type == 5) {
+            optimizer = new SparseOptimizer();
+            g2o::BlockSolverX::LinearSolverType * linearSolver = new g2o::LinearSolverEigen<g2o::BlockSolverX::PoseMatrixType>();
+
+            g2o::BlockSolverX * solver_ptr = new g2o::BlockSolverX(linearSolver);
+
+            g2o::OptimizationAlgorithmLevenberg* solver = new g2o::OptimizationAlgorithmLevenberg(solver_ptr);
+
+            if (lambda_init > 0) {
+                solver->setUserLambdaInit(lambda_init);
+            }
+
+            optimizer->setAlgorithm(solver);
+            optimizer_type = 5;
+        } else if (opt_type == 6) {
+            optimizer = new SparseOptimizer();
+            g2o::BlockSolverX::LinearSolverType * linearSolver = new g2o::LinearSolverEigen<g2o::BlockSolverX::PoseMatrixType>();
+
+            g2o::BlockSolverX * solver_ptr = new g2o::BlockSolverX(linearSolver);
+
+            g2o::OptimizationAlgorithmGaussNewton* solver = new g2o::OptimizationAlgorithmGaussNewton(solver_ptr);
+
+            optimizer->setAlgorithm(solver);
+            optimizer_type = 6;
         } else {
             // For Optimizer::PoseInertialOptimizationLastFrame, Optimizer::PoseInertialOptimizationLastKeyFrame,
             optimizer = new SparseOptimizer();
@@ -79,7 +122,7 @@ namespace g2o {
             optimizer->setVerbose(false);
             optimizer->setAlgorithm(solver);
 
-            optimizer_type = 4;
+            optimizer_type = 7;
         }
 
         thHuberMono = sqrt(5.991);
@@ -114,7 +157,7 @@ namespace g2o {
         optimizer->removeVertex(optimizer->vertex(vertex_id));
     }
 
-    void BridgeSparseOptimizer::add_frame_vertex (
+    void BridgeSparseOptimizer::add_vertex_se3_expmap (
         int vertex_id,  Pose pose, bool set_fixed
     ) {
         if (optimizer_type == 1 || optimizer_type == 2) {
@@ -125,30 +168,107 @@ namespace g2o {
             vSE3->setFixed(set_fixed);
             optimizer->addVertex(vSE3);
         } else if (optimizer_type == 3 || optimizer_type == 4) {
-            std::cout << "WARNING: Use add_frame_vertex_sim3 instead of add_frame_vertex for OptimizeEssentialGraph or OptimizeSim3" << std::endl;
+            std::cout << "WARNING: Use add_vertex_sim3_expmap instead of add_vertex_se3_expmap for OptimizeEssentialGraph or OptimizeSim3" << std::endl;
         } else {
-            // For Optimizer::PoseInertialOptimizationLastFrame and Optimizer::PoseInertialOptimizationLastKeyFrame
-            // TODO (IMU)
-            // Following variables rely on types/G2oTypes and types/ImuTypes, from ORBSLAM3
-            // but those have dependency on Frame and KeyFrame. Need to go through and figure out how to
-            // remove the dependency by just passing minimal info instead of the whole object.
-            // VertexPose* VP = new VertexPose(pFrame);
-            // VP->setId(0);
-            // VP->setFixed(false);
-            // optimizer.addVertex(VP);
-            // VertexVelocity* VV = new VertexVelocity(pFrame);
-            // VV->setId(1);
-            // VV->setFixed(false);
-            // optimizer->addVertex(VV);
-            // VertexGyroBias* VG = new VertexGyroBias(pFrame);
-            // VG->setId(2);
-            // VG->setFixed(false);
-            // optimizer->addVertex(VG);
-            // VertexAccBias* VA = new VertexAccBias(pFrame);
-            // VA->setId(3);
-            // VA->setFixed(false);
-            // optimizer->addVertex(VA);
+            std::cout << "Error!! For inertial optimizations, call ``add_vertex_pose`` instead of ``add_vertex_se3_expmap`" << std::endl;
         }
+    }
+
+    void BridgeSparseOptimizer::add_vertex_pose (
+        int vertex_id, bool set_fixed,
+        int num_cams, 
+        array<double, 3> imu_position, array<double, 4> imu_rotation,
+        array<double, 3> translation, array<double, 4> rotation,
+        array<double, 3> tcb_translation, array<double, 4> tcb_rotation,
+        array<double, 3> tbc_translation,
+        float bf
+    ) {
+        // Used by inertial optimizations
+
+        vector<float> camera_calib{fx,fy,cx,cy};
+        ORB_SLAM3::Pinhole * camera = new ORB_SLAM3::Pinhole(camera_calib);
+
+        Eigen::Vector3d imu_position2(imu_position.data());
+        Eigen::Matrix3d imu_rotation2 = Eigen::Quaterniond(imu_rotation.data()).toRotationMatrix();
+        Eigen::Vector3d translation2(translation.data());
+        Eigen::Matrix3d rotation2 = Eigen::Quaterniond(rotation.data()).toRotationMatrix();
+        Eigen::Vector3d tcb_translation2(tcb_translation.data());
+        Eigen::Matrix3d tcb_rotation2 = Eigen::Quaterniond(tcb_rotation.data()).toRotationMatrix();
+        Eigen::Vector3d tbc_translation2(tbc_translation.data());
+
+
+        g2o::VertexPose* VP = new g2o::VertexPose(
+            1, camera,
+            imu_position2, imu_rotation2,
+            translation2, rotation2,
+            tcb_translation2, tcb_rotation2,
+            tbc_translation2,
+            bf
+        );
+
+        VP->setId(vertex_id);
+        VP->setFixed(set_fixed);
+        optimizer->addVertex(VP);
+
+        std::cout << "(pose) add vertex " << vertex_id << std::endl;
+    }
+
+    void BridgeSparseOptimizer::add_vertex_velocity(
+        int vertex_id, bool set_fixed,
+        array<double, 3> velocity
+    ) {
+        Eigen::Vector3d vel(velocity.data());
+        g2o::VertexVelocity* VV = new g2o::VertexVelocity(vel);
+        VV->setId(vertex_id);
+        VV->setFixed(set_fixed);
+        optimizer->addVertex(VV);
+        std::cout << "(vel) add vertex " << vertex_id << std::endl;
+    }
+
+    void BridgeSparseOptimizer::add_vertex_gyro_bias(
+        int vertex_id, bool set_fixed,
+        array<double, 3> gyro_bias
+    ) {
+        Eigen::Vector3d bias(gyro_bias.data());
+        g2o::VertexGyroBias* VG = new g2o::VertexGyroBias(bias);
+        VG->setId(vertex_id);
+        VG->setFixed(set_fixed);
+        optimizer->addVertex(VG);
+        std::cout << "(gyro) add vertex " << vertex_id << std::endl;
+    }
+
+    void BridgeSparseOptimizer::add_vertex_acc_bias(
+        int vertex_id, bool set_fixed,
+        array<double, 3> acc_bias
+    ) {
+        Eigen::Vector3d bias(acc_bias.data());
+        g2o::VertexAccBias* VA = new g2o::VertexAccBias(bias);
+        VA->setId(vertex_id);
+        VA->setFixed(set_fixed);
+        optimizer->addVertex(VA);
+        std::cout << "(acc) add vertex " << vertex_id << std::endl;
+    }
+
+    void BridgeSparseOptimizer::add_gravity_and_scale_vertex(
+        int vertex_id1, bool set_fixed1, array<array<double, 3>, 3> rwg,
+        int vertex_id2, bool set_fixed2, double scale
+    ) {
+        Eigen::Matrix3d rwg_eig;
+        rwg_eig << rwg[0][0], rwg[0][1], rwg[0][2],
+                   rwg[1][0], rwg[1][1], rwg[1][2],
+                   rwg[2][0], rwg[2][1], rwg[2][2];
+        g2o::VertexGDir* VGDir = new g2o::VertexGDir(rwg_eig);
+        VGDir->setId(vertex_id1);
+        VGDir->setFixed(set_fixed1);
+        optimizer->addVertex(VGDir);
+
+        g2o::VertexScale* VS = new g2o::VertexScale(scale);
+        VS->setId(vertex_id2);
+        VS->setFixed(set_fixed2);
+        optimizer->addVertex(VS);
+        std::cout << "(gravity) add vertex " << vertex_id1 << std::endl;
+        std::cout << "(scale) add vertex " << vertex_id2 << std::endl;
+
     }
 
     void BridgeSparseOptimizer::add_mappoint_vertex(
@@ -192,8 +312,11 @@ namespace g2o {
     std::vector<RustSim3ProjectXYZEdge>& BridgeSparseOptimizer::get_mut_sim3_edges() {
         return this->sim3_projxyz_edges;
     }
+    // std::vector<RustEdgeMono>& BridgeSparseOptimizer::get_mut_mono_edges() {
+    //     return this->mono_edges;
+    // }
 
-    void BridgeSparseOptimizer::add_edge_monocular_unary(
+    void BridgeSparseOptimizer::add_edge_se3_project_xyz_monocular_unary(
         bool robust_kernel, int vertex_id,
         int keypoint_octave, float keypoint_pt_x, float keypoint_pt_y, float inv_sigma2,
         array<double, 3> mp_world_position,
@@ -234,7 +357,7 @@ namespace g2o {
         this->xyz_onlypose_edges.emplace(this->xyz_onlypose_edges.end(), std::move(rust_edge));
     }
 
-    void BridgeSparseOptimizer::add_edge_monocular_binary(
+    void BridgeSparseOptimizer::add_edge_se3_project_xyz_monocular_binary(
         bool robust_kernel, int vertex1, int vertex2, int mp_id,
         float keypoint_pt_x, float keypoint_pt_y, float inv_sigma2,
         float huber_delta
@@ -270,6 +393,159 @@ namespace g2o {
         rust_edge.mappoint_id = mp_id;
         this->xyz_edges.emplace(this->xyz_edges.end(), std::move(rust_edge));
     }
+
+    void BridgeSparseOptimizer::add_edge_mono_binary(
+        bool robust_kernel, int vertex1, int vertex2, int mp_id,
+        float keypoint_pt_x, float keypoint_pt_y, float inv_sigma2,
+        float huber_delta
+    ) {
+        Eigen::Matrix<double,2,1> obs;
+        obs << keypoint_pt_x, keypoint_pt_y;
+
+        g2o::EdgeMono * edge = new g2o::EdgeMono(0);
+        edge->setVertex(0, dynamic_cast<OptimizableGraph::Vertex*>(optimizer->vertex(vertex1)));
+        edge->setVertex(1, dynamic_cast<OptimizableGraph::Vertex*>(optimizer->vertex(vertex2)));
+        edge->setMeasurement(obs);
+        edge->setInformation(Eigen::Matrix2d::Identity()*inv_sigma2);
+
+        if (robust_kernel) {
+            RobustKernelHuber * rk = new RobustKernelHuber();
+            edge->setRobustKernel(rk);
+            rk->setDelta(huber_delta);
+        }
+
+        auto success = optimizer->addEdge(edge);
+        if (!success) {
+            std::cout << "Optimizer failed to add edge!!" << std::endl;
+        }
+        // // Note: see explanation under get_mut_edges in lib.rs for why we do this
+        // unique_ptr<EdgeMono> ptr_edge(edge);
+        // RustEdgeMono rust_edge;
+        // rust_edge.inner = std::move(ptr_edge);
+        // rust_edge.mappoint_id = mp_id;
+        // this->mono_edges.emplace(this->mono_edges.end(), std::move(rust_edge));
+    }
+
+
+    void BridgeSparseOptimizer::add_edge_prior_for_imu(
+        int vertex_id1, int vertex_id2,
+        array<double, 3> bprior,
+        double priorA, double priorG
+    ) {
+        Eigen::Vector3d bprior_eig(bprior.data());
+        g2o::EdgePriorAcc* epa = new g2o::EdgePriorAcc(bprior_eig);
+        epa->setVertex(0, dynamic_cast<OptimizableGraph::Vertex*>(optimizer->vertex(vertex_id1)));
+        double infoPriorA = priorA;
+        epa->setInformation(infoPriorA*Eigen::Matrix3d::Identity());
+        optimizer->addEdge(epa);
+        g2o::EdgePriorGyro* epg = new g2o::EdgePriorGyro(bprior_eig);
+        epg->setVertex(0, dynamic_cast<OptimizableGraph::Vertex*>(optimizer->vertex(vertex_id2)));
+        double infoPriorG = priorG;
+        epg->setInformation(infoPriorG*Eigen::Matrix3d::Identity());
+        optimizer->addEdge(epg);
+    }
+
+    void BridgeSparseOptimizer::add_graph_edges_inertial(
+        int vertex_P1_id, int vertex_V1_id,
+        int vertex_G_id, int vertex_A_id, int vertex_P2_id,
+        int vertex_V2_id, int vertex_GDir_id, int vertex_S_id,
+        RustImuPreintegrated imu_preintegrated,
+        bool set_robust_kernel, float delta
+    ) {
+        g2o::IMU::Preintegrated* pre_ = new g2o::IMU::Preintegrated(& imu_preintegrated);
+        g2o::EdgeInertialGS* ei = new g2o::EdgeInertialGS(pre_);
+        ei->setVertex(0,dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer->vertex(vertex_P1_id)));
+        ei->setVertex(1,dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer->vertex(vertex_V1_id)));
+        ei->setVertex(2,dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer->vertex(vertex_G_id)));
+        ei->setVertex(3,dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer->vertex(vertex_A_id)));
+        ei->setVertex(4,dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer->vertex(vertex_P2_id)));
+        ei->setVertex(5,dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer->vertex(vertex_V2_id)));
+
+        if (vertex_GDir_id != -1) {
+            ei->setVertex(6,dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer->vertex(vertex_GDir_id)));
+            std::cout << "(special gdir) edge " << ei->id() << " added vertex " << vertex_GDir_id << "..." << (optimizer->vertex(vertex_GDir_id) == NULL) << std::endl;
+
+        }
+        if (vertex_S_id != -1) {
+            ei->setVertex(7,dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer->vertex(vertex_S_id)));
+            std::cout << "(special s) edge " << ei->id() << " added vertex " << vertex_S_id << "..." << (optimizer->vertex(vertex_S_id) == NULL) << std::endl;
+
+        }
+
+        if (set_robust_kernel) {
+            g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
+            ei->setRobustKernel(rk);
+            rk->setDelta(delta);
+        }
+        ei->setId(optimizer->edges().size());
+        std::cout << "THIS WAS EDGE " << ei->id() << std::endl;
+
+        std::cout << "edge " << ei->id() << " added vertex " << vertex_P1_id << "..." << (optimizer->vertex(vertex_P1_id) == NULL) << std::endl;
+        std::cout << "edge " << ei->id() << " added vertex " << vertex_V1_id << "..." << (optimizer->vertex(vertex_V1_id) == NULL) << std::endl;
+        std::cout << "edge " << ei->id() << " added vertex " << vertex_G_id << "..." << (optimizer->vertex(vertex_G_id) == NULL) << std::endl;
+        std::cout << "edge " << ei->id() << " added vertex " << vertex_A_id << "..." << (optimizer->vertex(vertex_A_id) == NULL) << std::endl;
+        std::cout << "edge " << ei->id() << " added vertex " << vertex_P2_id << "..." << (optimizer->vertex(vertex_P2_id) == NULL) << std::endl;
+        std::cout << "edge " << ei->id() << " added vertex " << vertex_V2_id << "..." << (optimizer->vertex(vertex_V2_id) == NULL) << std::endl;
+
+        optimizer->addEdge(ei);
+
+    }
+
+    // void BridgeSparseOptimizer::add_graph_edges_gyro_and_acc(
+    //     int 
+    //     RustImuPreintegrated imu_preintegrated,
+    // ) {
+    //     g2o::IMU::Preintegrated* pre_ = new g2o::IMU::Preintegrated(& imu_preintegrated);
+
+    //     EdgeGyroRW* egr= new EdgeGyroRW();
+    //     egr->setVertex(0,vertex_G_id);
+    //     egr->setVertex(1,vertex_GDir_id);
+    //     Eigen::Matrix3d InfoG = pre_->C.block<3,3>(9,9).cast<double>().inverse();
+    //     egr->setInformation(InfoG);
+    //     egr->computeError();
+    //     optimizer.addEdge(egr);
+
+    //     EdgeAccRW* ear = new EdgeAccRW();
+    //     ear->setVertex(0,vertex_A_id);
+    //     ear->setVertex(1,vertex_S_id);
+    //     Eigen::Matrix3d InfoA = pre_->C.block<3,3>(12,12).cast<double>().inverse();
+    //     ear->setInformation(InfoA);
+    //     ear->computeError();
+    //     optimizer.addEdge(ear);
+    // }
+
+    void BridgeSparseOptimizer::add_edge_gyro_and_acc(
+        int vertex1_id, int vertex2_id,
+        int vertex3_id, int vertex4_id,
+        RustImuPreintegrated imu_preintegrated
+    ) {
+        g2o::IMU::Preintegrated* pre_ = new g2o::IMU::Preintegrated(& imu_preintegrated);
+
+        EdgeGyroRW* egr= new EdgeGyroRW();
+        egr->setVertex(0, optimizer->vertex(vertex1_id));
+        egr->setVertex(1, optimizer->vertex(vertex2_id));
+        Eigen::Matrix3d InfoG = pre_->C.block<3,3>(9,9).cast<double>().inverse();
+        egr->setInformation(InfoG);
+        egr->computeError();
+        optimizer->addEdge(egr);
+
+        EdgeAccRW* ear = new EdgeAccRW();
+        ear->setVertex(0, optimizer->vertex(vertex3_id));
+        ear->setVertex(1, optimizer->vertex(vertex4_id));
+        Eigen::Matrix3d InfoA = pre_->C.block<3,3>(12,12).cast<double>().inverse();
+        ear->setInformation(InfoA);
+        ear->computeError();
+        optimizer->addEdge(ear);
+
+        std::cout << "(gyro) edge  added vertex " << vertex1_id << "..." << (optimizer->vertex(vertex1_id) == NULL) << std::endl;
+        std::cout << "(gyro) edge  added vertex " << vertex2_id << "..." << (optimizer->vertex(vertex2_id) == NULL) << std::endl;
+
+        std::cout << "(acc) edge  added vertex " << vertex3_id << "..." << (optimizer->vertex(vertex3_id) == NULL) << std::endl;
+        std::cout << "(acc) edge  added vertex " << vertex4_id << "..." << (optimizer->vertex(vertex4_id) == NULL) << std::endl;
+
+
+    }
+
 
     // ** SIM3 ** //
     // Functions similar to those above, just specific to sim3 optimization. Keeping them all in one place.
@@ -493,6 +769,55 @@ namespace g2o {
         return position;
     }
 
+    InertialEstimate BridgeSparseOptimizer::recover_optimized_inertial(int vg, int va, int vs, int vgdir) const {
+        // Sometimes we don't care about getting the values associated with a subset of these, so in those cases we pass -1
+
+        Vector6d vb;
+        Eigen::Vector3d bg;
+        Eigen::Vector3d ba;
+        if (vg != -1 && va != -1) {
+            g2o::VertexGyroBias* VG = static_cast<g2o::VertexGyroBias*>(optimizer->vertex(vg));
+            g2o::VertexAccBias* VA = static_cast<g2o::VertexAccBias*>(optimizer->vertex(va));
+            ba << VA->estimate();
+            vb << VG->estimate(), VA->estimate();
+            bg << VG->estimate();
+        } else {
+            vb << 0, 0, 0, 0, 0, 0;
+            bg << 0, 0, 0;
+        }
+
+        double scale;
+        Eigen::Matrix3d Rwg;
+        if (vs != -1 && vgdir != -1) {
+            g2o::VertexScale* VS = static_cast<g2o::VertexScale*>(optimizer->vertex(vs));
+            g2o::VertexGDir* VGDir = static_cast<g2o::VertexGDir*>(optimizer->vertex(vgdir));
+            scale = VS->estimate();
+            Rwg = VGDir->estimate().Rwg;
+        } else {
+            scale = 0.0;
+            Rwg = Eigen::Matrix3d::Identity();
+        }
+
+
+        InertialEstimate estimate;
+        estimate.vb = {vb[0], vb[1], vb[2], vb[3], vb[4], vb[5]};
+        estimate.bg = {bg[0], bg[1], bg[2]};
+        estimate.ba = {ba[0], ba[1], ba[2]};
+        estimate.scale = scale;
+        estimate.rwg = {
+            Rwg(0,0), Rwg(0,1), Rwg(0,2),
+            Rwg(1,0), Rwg(1,1), Rwg(1,2),
+            Rwg(2,0), Rwg(2,1), Rwg(2,2)
+        };
+        return estimate;
+    }
+
+    array<double, 3> BridgeSparseOptimizer::recover_optimized_vertex_velocity(int vertex_id) const {
+        g2o::VertexVelocity* VV = static_cast<g2o::VertexVelocity*>(optimizer->vertex(vertex_id));
+        Eigen::Vector3d Vw = VV->estimate();
+        return {Vw[0], Vw[1], Vw[2]};
+    }
+
     BridgeSparseOptimizer::~BridgeSparseOptimizer() {
         // Drop pointers to edges, these are already deleted when the optimizer is deleted
         for(auto it = xyz_onlypose_edges.begin(); it != xyz_onlypose_edges.end(); it++) {
@@ -508,10 +833,16 @@ namespace g2o {
         for(auto it = sim3_edges.begin(); it != sim3_edges.end(); it++) {
             it->edge.release();
         }
+        // for(auto it = mono_edges.begin(); it != mono_edges.end(); it++) {
+        //     it->edge.release();
+        // }
+        
         xyz_onlypose_edges.clear();
         xyz_edges.clear();
         sim3_projxyz_edges.clear();
         sim3_edges.clear();
+        // mono_edges.clear();
+        
         delete optimizer;
     }
 

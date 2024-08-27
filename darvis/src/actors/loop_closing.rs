@@ -8,9 +8,9 @@ use std::time::Duration;
 use log::{debug, error, info, trace, warn};
 use opencv::core::KeyPointTraitConst;
 use crate::actors::local_mapping::LOCAL_MAPPING_IDLE;
-use crate::actors::messages::{KeyFrameIdMsg, LoopClosureGBAMsg};
+use crate::actors::messages::{KeyFrameIdMsg, LoopClosureGBAMsg, UpdateFrameIMUMsg};
 use crate::map::pose::{DVTranslation, Pose, Sim3};
-use crate::modules::module_definitions::{FeatureMatchingModule, LoopDetectionModule};
+use crate::modules::module_definitions::{FeatureMatchingModule, ImuModule, LoopDetectionModule};
 use crate::modules::orbslam_matcher::ORBMatcherTrait;
 use crate::modules::sim3solver::Sim3Solver;
 use crate::modules::{optimizer};
@@ -20,7 +20,7 @@ use crate::map::map::Id;
 use crate::modules::imu::IMU;
 
 use super::local_mapping::LOCAL_MAPPING_PAUSE_SWITCH;
-use super::messages::{IMUInitializedMsg, ShutdownMsg};
+use super::messages::{ShutdownMsg};
 
 pub type KeyFrameAndPose = HashMap<Id, Sim3>;
 
@@ -34,7 +34,7 @@ pub struct LoopClosing {
     map: MapLock,
 
     // Modules
-    _imu: Option<IMU>,
+    imu: Option<IMU>,
     loop_detection: Box<dyn LoopDetectionModule>,
 }
 
@@ -42,11 +42,15 @@ impl Actor for LoopClosing {
     type MapRef = MapLock;
 
     fn new_actorstate(system: System, map: Self::MapRef) -> LoopClosing {
+        let imu = match SETTINGS.get::<Sensor>(SYSTEM, "sensor").imu() {
+            ImuSensor::Some => Some(IMU::new()),
+            _ => None
+        };
 
         LoopClosing {
             system,
             map,
-            _imu: None, // TODO (IMU): ImuModule::new(None, None, sensor, false, false),
+            imu,
             sensor: SETTINGS.get(SYSTEM, "sensor"),
             loop_detection: registered_actors::new_loop_detection_module(),
         }
@@ -85,7 +89,8 @@ impl Actor for LoopClosing {
                         warn!("Loop closing failed: {}", e);
                     }
                 }
-            } else if message.is::<IMUInitializedMsg>() {
+            } else if message.is::<UpdateFrameIMUMsg>() {
+                // Does this even need to happen?
                 todo!("IMU: Process message from local mapping");
             } else if message.is::<ShutdownMsg>() {
                 break 'outer;
@@ -253,6 +258,7 @@ impl LoopClosing {
                 // Make sure connections are updated
                 lock.update_connections(*kf_id);
             }
+            self.map.write().map_change_index += 1;
 
             // Start Loop Fusion
             // Update matched map points and replace if duplicated
@@ -434,6 +440,15 @@ fn run_gba(map: &mut MapLock, loop_kf: Id) {
                     child.gba_pose = Some(tchildc * curr_kf_gba_pose.unwrap());
                     child.ba_global_for_kf = loop_kf;
                     println!("Add pose for child kf {}", child_id);
+
+                    todo!("SOFIYA mVwbGBA");
+                        //                     Sophus::SO3f Rcor = pChild->mTcwGBA.so3().inverse() * pChild->GetPose().so3();
+                        // if(pChild->isVelocitySet()){
+                        //     pChild->mVwbGBA = Rcor * pChild->GetVelocity();
+                        // }
+                        // else
+                        //     Verbose::PrintMess("Child velocity empty!! ", Verbose::VERBOSITY_NORMAL);
+
                 }
                 kfs_to_check.push(*child_id);
             }
@@ -443,6 +458,20 @@ fn run_gba(map: &mut MapLock, loop_kf: Id) {
             kf.pose = kf.gba_pose.unwrap().clone();
             println!("Update kf {} with pose {:?}", curr_kf_id, kf.pose);
             i += 1;
+
+            todo!("SOFIYA mVwbGBA");
+                //             if(pKF->bImu)
+                // {
+                //     //cout << "-------Update inertial values" << endl;
+                //     pKF->mVwbBefGBA = pKF->GetVelocity();
+                //     //if (pKF->mVwbGBA.empty())
+                //     //    Verbose::PrintMess("pKF->mVwbGBA is empty", Verbose::VERBOSITY_NORMAL);
+
+                //     //assert(!pKF->mVwbGBA.empty());
+                //     pKF->SetVelocity(pKF->mVwbGBA);
+                //     pKF->SetNewBias(pKF->mBiasGBA);                    
+                // }
+
         }
 
         // Correct MapPoints
@@ -483,6 +512,8 @@ fn run_gba(map: &mut MapLock, loop_kf: Id) {
             lock.mappoints.get_mut(&mp_id).unwrap().position = gba_pose;
         }
     }
+
+    map.write().map_change_index += 1;
 
     set_switches(Switches::GbaDone);
 

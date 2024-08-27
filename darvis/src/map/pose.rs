@@ -31,6 +31,13 @@ impl Pose {
         Pose ( nalgebra::IsometryMatrix3::from_parts(translation,rotation3) )
     }
 
+    pub fn new_with_default_trans(rotation: nalgebra::Matrix3<f64>) -> Pose {
+        let translation = nalgebra::Translation3::new(0.0, 0.0, 0.0);
+        let rot = nalgebra::Rotation3::from_matrix(&rotation);
+        Pose ( nalgebra::IsometryMatrix3::from_parts(translation,rot) )
+    }
+
+
     pub fn identity() -> Pose {
         let translation = nalgebra::Translation3::new(0.0, 0.0, 0.0);
         let rotation3 = nalgebra::Rotation3::identity();

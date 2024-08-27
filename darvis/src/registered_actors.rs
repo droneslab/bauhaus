@@ -1,7 +1,9 @@
 use core::{config::{SETTINGS, SYSTEM}, system::{Actor, Module, System}};
+use std::sync::{Arc, Mutex};
 use log::error;
+use parking_lot::RwLock;
 
-use crate::{modules::{bow::Vocabulary, camera::{CameraType, Camera}, module_definitions::{FeatureExtractionModule, FeatureMatchingModule, FullMapOptimizationModule, LocalMapOptimizationModule, LoopDetectionModule}, orbslam_matcher::ORBMatcherTrait}, MapLock};
+use crate::{modules::{bow::Vocabulary, camera::{Camera, CameraType}, imu::IMU, module_definitions::{FeatureExtractionModule, FeatureMatchingModule, FullMapOptimizationModule, ImuModule, LocalMapOptimizationModule, LoopDetectionModule}, orbslam_matcher::ORBMatcherTrait}, MapLock};
 use crate::modules::module_definitions::VocabularyModule;
 
 // USER-DEFINED ACTORS: add a string to name your actor here
@@ -23,6 +25,7 @@ pub static FEATURES: &str = "FEATURES";
 pub static LOOP_DETECTION: &str = "LOOP_DETECTION";
 pub static LOCAL_MAP_OPTIMIZATION: &str = "LOCAL_MAP_OPTIMIZATION";
 pub static FULL_MAP_OPTIMIZATION: &str = "FULL_MAP_OPTIMIZATION";
+pub static IMU: &str = "IMU";
 
 // DARVIS SYSTEM ACTORS
 pub static SHUTDOWN_ACTOR: &str = "SHUTDOWN";
@@ -72,6 +75,10 @@ lazy_static! {
             },
         }
     };
+    pub static ref IMU_MODULE: Arc<RwLock<IMU>> = {
+        Arc::new(RwLock::new(IMU::new()))
+    };
+
 }
 
 

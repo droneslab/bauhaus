@@ -22,6 +22,7 @@
 #include "../core/base_vertex.h"
 #include "../core/base_binary_edge.h"
 #include "../types/types_sba.h"
+#include "../types/ImuTypes.h"
 #include "../core/base_multi_edge.h"
 #include "../core/base_unary_edge.h"
 
@@ -31,19 +32,12 @@
 #include <Eigen/Geometry>
 #include <Eigen/Dense>
 
-// #include"Converter.h"
+#include"../orbslam_types/Converter.h"
 #include <math.h>
+#include "../orbslam_types/Pinhole.h"
 
-namespace ORB_SLAM3
+namespace g2o
 {
-
-class KeyFrame {
-
-};
-class Frame {
-
-};
-class GeometricCamera;
 
 typedef Eigen::Matrix<double, 6, 1> Vector6d;
 typedef Eigen::Matrix<double, 9, 1> Vector9d;
@@ -71,51 +65,62 @@ Eigen::Matrix<T,3,3> NormalizeRotation(const Eigen::Matrix<T,3,3> &R) {
     return svd.matrixU() * svd.matrixV().transpose();
 }
 
-// TODO (IMU)
-// class ImuCamPose
-// {
-// public:
-//     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-//     ImuCamPose(){}
-//     ImuCamPose(KeyFrame* pKF);
-//     ImuCamPose(Frame* pF);
-//     ImuCamPose(Eigen::Matrix3d &_Rwc, Eigen::Vector3d &_twc, KeyFrame* pKF);
+class ImuCamPose
+{
+public:
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+    ImuCamPose(){}
+    ImuCamPose(
+        int num_cams, ORB_SLAM3::Pinhole * camera, 
+        Eigen::Vector3d imu_position, Eigen::Matrix3d imu_rotation, 
+        Eigen::Vector3d translation, Eigen::Matrix3d rotation,
+        Eigen::Vector3d tcb_translation, Eigen::Matrix3d tcb_rotation,
+        Eigen::Vector3d tbc_translation,
+        float bf
+    );
+    ImuCamPose(
+        ORB_SLAM3::Pinhole * camera, 
+        Eigen::Matrix3d &_Rwc, Eigen::Vector3d &_twc,
+        Eigen::Vector3d tcb_translation, Eigen::Matrix3d tcb_rotation,
+        Eigen::Vector3d tbc_translation,
+        float bf
+    );
 
-//     void SetParam(const std::vector<Eigen::Matrix3d> &_Rcw, const std::vector<Eigen::Vector3d> &_tcw, const std::vector<Eigen::Matrix3d> &_Rbc,
-//                   const std::vector<Eigen::Vector3d> &_tbc, const double &_bf);
+    void SetParam(const std::vector<Eigen::Matrix3d> &_Rcw, const std::vector<Eigen::Vector3d> &_tcw, const std::vector<Eigen::Matrix3d> &_Rbc,
+                  const std::vector<Eigen::Vector3d> &_tbc, const double &_bf);
 
-//     void Update(const double *pu); // update in the imu reference
-//     void UpdateW(const double *pu); // update in the world reference
-//     Eigen::Vector2d Project(const Eigen::Vector3d &Xw, int cam_idx=0) const; // Mono
-//     Eigen::Vector3d ProjectStereo(const Eigen::Vector3d &Xw, int cam_idx=0) const; // Stereo
-//     bool isDepthPositive(const Eigen::Vector3d &Xw, int cam_idx=0) const;
+    void Update(const double *pu); // update in the imu reference
+    void UpdateW(const double *pu); // update in the world reference
+    Eigen::Vector2d Project(const Eigen::Vector3d &Xw, int cam_idx=0) const; // Mono
+    Eigen::Vector3d ProjectStereo(const Eigen::Vector3d &Xw, int cam_idx=0) const; // Stereo
+    bool isDepthPositive(const Eigen::Vector3d &Xw, int cam_idx=0) const;
 
-// public:
-//     // For IMU
-//     Eigen::Matrix3d Rwb;
-//     Eigen::Vector3d twb;
+public:
+    // For IMU
+    Eigen::Matrix3d Rwb;
+    Eigen::Vector3d twb;
 
-//     // For set of cameras
-//     std::vector<Eigen::Matrix3d> Rcw;
-//     std::vector<Eigen::Vector3d> tcw;
-//     std::vector<Eigen::Matrix3d> Rcb, Rbc;
-//     std::vector<Eigen::Vector3d> tcb, tbc;
-//     double bf;
-//     std::vector<GeometricCamera*> pCamera;
+    // For set of cameras
+    std::vector<Eigen::Matrix3d> Rcw;
+    std::vector<Eigen::Vector3d> tcw;
+    std::vector<Eigen::Matrix3d> Rcb, Rbc;
+    std::vector<Eigen::Vector3d> tcb, tbc;
+    double bf;
+    std::vector<ORB_SLAM3::Pinhole*> pCamera;
 
-//     // For posegraph 4DoF
-//     Eigen::Matrix3d Rwb0;
-//     Eigen::Matrix3d DR;
+    // For posegraph 4DoF
+    Eigen::Matrix3d Rwb0;
+    Eigen::Matrix3d DR;
 
-//     int its;
-// };
+    int its;
+};
 
 class InvDepthPoint
 {
 public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     InvDepthPoint(){}
-    InvDepthPoint(double _rho, double _u, double _v, KeyFrame* pHostKF);
+    InvDepthPoint(double _rho, double _u, double _v, double fx, double fy, double cx, double cy, double bf);
 
     void Update(const double *pu);
 
@@ -133,13 +138,16 @@ class VertexPose : public g2o::BaseVertex<6,ImuCamPose>
 public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     VertexPose(){}
-    VertexPose(KeyFrame* pKF){
-        setEstimate(ImuCamPose(pKF));
+    VertexPose(
+        int num_cams, ORB_SLAM3::Pinhole * camera, 
+        Eigen::Vector3d imu_position, Eigen::Matrix3d imu_rotation, 
+        Eigen::Vector3d translation, Eigen::Matrix3d rotation,
+        Eigen::Vector3d tcb_translation, Eigen::Matrix3d tcb_rotation,
+        Eigen::Vector3d tbc_translation,
+        float bf
+    ){
+        setEstimate(ImuCamPose(num_cams, camera, imu_position, imu_rotation, translation, rotation, tcb_translation, tcb_rotation, tbc_translation, bf));
     }
-    VertexPose(Frame* pF){
-        setEstimate(ImuCamPose(pF));
-    }
-
 
     virtual bool read(std::istream& is);
     virtual bool write(std::ostream& os) const;
@@ -159,16 +167,26 @@ class VertexPose4DoF : public g2o::BaseVertex<4,ImuCamPose>
 public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     VertexPose4DoF(){}
-    VertexPose4DoF(KeyFrame* pKF){
-        setEstimate(ImuCamPose(pKF));
+    VertexPose4DoF(
+        int num_cams, ORB_SLAM3::Pinhole * camera,   // TODO (camera types) ... this should be GeometricCamera, but then you get the error ‘camera’ has incomplete type
+        Eigen::Vector3d imu_position, Eigen::Matrix3d imu_rotation, 
+        Eigen::Vector3d translation, Eigen::Matrix3d rotation,
+        Eigen::Vector3d tcb_translation, Eigen::Matrix3d tcb_rotation,
+        Eigen::Vector3d tbc_translation,
+        float bf
+    ){
+        setEstimate(ImuCamPose(num_cams, camera, imu_position, imu_rotation, translation, rotation, tcb_translation, tcb_rotation, tbc_translation, bf));
     }
-    VertexPose4DoF(Frame* pF){
-        setEstimate(ImuCamPose(pF));
+    VertexPose4DoF(
+        ORB_SLAM3::Pinhole * camera,   // TODO (camera types) ... this should be GeometricCamera, but then you get the error ‘camera’ has incomplete type
+        Eigen::Matrix3d &_Rwc, Eigen::Vector3d &_twc,
+        Eigen::Vector3d tcb_translation, Eigen::Matrix3d tcb_rotation,
+        Eigen::Vector3d tbc_translation,
+        float bf
+    ){
+        setEstimate(ImuCamPose(camera, _Rwc, _twc, tcb_translation, tcb_rotation, tbc_translation, bf));
     }
-    VertexPose4DoF(Eigen::Matrix3d &_Rwc, Eigen::Vector3d &_twc, KeyFrame* pKF){
 
-        setEstimate(ImuCamPose(_Rwc, _twc, pKF));
-    }
 
     virtual bool read(std::istream& is){return false;}
     virtual bool write(std::ostream& os) const{return false;}
@@ -194,8 +212,7 @@ class VertexVelocity : public g2o::BaseVertex<3,Eigen::Vector3d>
 public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     VertexVelocity(){}
-    VertexVelocity(KeyFrame* pKF);
-    VertexVelocity(Frame* pF);
+    VertexVelocity(Eigen::Vector3d velocity);
 
     virtual bool read(std::istream& is){return false;}
     virtual bool write(std::ostream& os) const{return false;}
@@ -215,8 +232,7 @@ class VertexGyroBias : public g2o::BaseVertex<3,Eigen::Vector3d>
 public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     VertexGyroBias(){}
-    VertexGyroBias(KeyFrame* pKF);
-    VertexGyroBias(Frame* pF);
+    VertexGyroBias(Eigen::Vector3d gyro_bias);
 
     virtual bool read(std::istream& is){return false;}
     virtual bool write(std::ostream& os) const{return false;}
@@ -237,8 +253,7 @@ class VertexAccBias : public g2o::BaseVertex<3,Eigen::Vector3d>
 public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     VertexAccBias(){}
-    VertexAccBias(KeyFrame* pKF);
-    VertexAccBias(Frame* pF);
+    VertexAccBias(Eigen::Vector3d acc_bias);
 
     virtual bool read(std::istream& is){return false;}
     virtual bool write(std::ostream& os) const{return false;}
@@ -324,8 +339,8 @@ class VertexInvDepth : public g2o::BaseVertex<1,InvDepthPoint>
 public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     VertexInvDepth(){}
-    VertexInvDepth(double invDepth, double u, double v, KeyFrame* pHostKF){
-        setEstimate(InvDepthPoint(invDepth, u, v, pHostKF));
+    VertexInvDepth(double invDepth, double u, double v, double fx, double fy, double cx, double cy, double bf){
+        setEstimate(InvDepthPoint(invDepth, u, v, fx, fy, cx, cy, bf));
     }
 
     virtual bool read(std::istream& is){return false;}
@@ -498,8 +513,7 @@ class EdgeInertial : public g2o::BaseMultiEdge<9,Vector9d>
 public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-    // TODO (IMU) 
-    // EdgeInertial(IMU::Preintegrated* pInt);
+    EdgeInertial(IMU::Preintegrated* pInt);
 
     virtual bool read(std::istream& is){return false;}
     virtual bool write(std::ostream& os) const{return false;}
@@ -772,7 +786,7 @@ class EdgePriorAcc : public g2o::BaseUnaryEdge<3,Eigen::Vector3d,VertexAccBias>
 public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-    EdgePriorAcc(const Eigen::Vector3f &bprior_):bprior(bprior_.cast<double>()){}
+    EdgePriorAcc(const Eigen::Vector3d &bprior_):bprior(bprior_.cast<double>()){}
 
     virtual bool read(std::istream& is){return false;}
     virtual bool write(std::ostream& os) const{return false;}
@@ -796,7 +810,7 @@ class EdgePriorGyro : public g2o::BaseUnaryEdge<3,Eigen::Vector3d,VertexGyroBias
 public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-    EdgePriorGyro(const Eigen::Vector3f &bprior_):bprior(bprior_.cast<double>()){}
+    EdgePriorGyro(const Eigen::Vector3d &bprior_):bprior(bprior_.cast<double>()){}
 
     virtual bool read(std::istream& is){return false;}
     virtual bool write(std::ostream& os) const{return false;}
@@ -844,6 +858,6 @@ public:
     Eigen::Vector3d dtij;
 };
 
-} //namespace ORB_SLAM2
+} //namespace g2o
 
 #endif // G2OTYPES_H
