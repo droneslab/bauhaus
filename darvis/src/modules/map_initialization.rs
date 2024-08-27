@@ -25,7 +25,7 @@ pub struct MapInitialization {
     pub initial_frame: Option<Frame>,
     pub last_frame: Option<Frame>,
     pub current_frame: Option<Frame>,
-    pub imu_preintegrated_from_last_kf: ImuPreIntegrated, // mpImuPreintegratedFromLastKF
+    pub imu_preintegrated_from_last_kf: Option<ImuPreIntegrated>, // mpImuPreintegratedFromLastKF
     sensor: Sensor,
 }
 impl MapInitializationModule for MapInitialization {
@@ -51,6 +51,10 @@ impl MapInitializationModule for MapInitialization {
 impl MapInitialization {
     pub fn new() -> Self {
         let sensor: Sensor = SETTINGS.get(SYSTEM, "sensor");
+        let imu_preintegrated_from_last_kf = match sensor.is_imu() {
+            true => Some(ImuPreIntegrated::new(ImuBias::new())),
+            false => None
+        };
 
         Self {
             mp_matches: Vec::new(),
@@ -60,7 +64,7 @@ impl MapInitialization {
             initial_frame: None,
             last_frame: None,
             current_frame: None,
-            imu_preintegrated_from_last_kf: ImuPreIntegrated::new(ImuBias::new()),
+            imu_preintegrated_from_last_kf,
             sensor
         }
     }
@@ -80,8 +84,11 @@ impl MapInitialization {
 
             self.initial_frame = Some(current_frame.clone());
             self.last_frame = Some(current_frame.clone());
-            self.imu_preintegrated_from_last_kf = ImuPreIntegrated::new(ImuBias::new());
-            self.current_frame.as_mut().unwrap().imu_data.imu_preintegrated = Some(self.imu_preintegrated_from_last_kf.clone());
+
+            if self.sensor.is_imu() {
+                self.imu_preintegrated_from_last_kf = Some(ImuPreIntegrated::new(ImuBias::new()));
+                self.current_frame.as_mut().unwrap().imu_data.imu_preintegrated = self.imu_preintegrated_from_last_kf.clone();
+            }
 
             println!("Mono initialization... current frame {:?}, initial frame {:?}, last frame {:?}", self.current_frame.as_ref().unwrap().frame_id, self.initial_frame.as_ref().unwrap().frame_id, self.last_frame.as_ref().unwrap().frame_id);
 
@@ -250,8 +257,8 @@ impl MapInitialization {
                 {
                     let curr_kf = lock.keyframes.get_mut(&curr_kf_id)?;
                     curr_kf.prev_kf_id = Some(initial_kf_id);
-                    curr_kf.imu_data.imu_preintegrated = Some(self.imu_preintegrated_from_last_kf.clone());
-                    self.imu_preintegrated_from_last_kf = ImuPreIntegrated::new(curr_kf.imu_data.imu_preintegrated.as_ref().unwrap().get_updated_bias());
+                    curr_kf.imu_data.imu_preintegrated = self.imu_preintegrated_from_last_kf.clone();
+                    self.imu_preintegrated_from_last_kf = Some(ImuPreIntegrated::new(curr_kf.imu_data.imu_preintegrated.as_ref().unwrap().get_updated_bias()));
                 }
                 {
                     let ini_kf = lock.keyframes.get_mut(&initial_kf_id)?;
