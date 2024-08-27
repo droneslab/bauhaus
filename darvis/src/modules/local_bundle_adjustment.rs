@@ -26,7 +26,11 @@ impl LocalMapOptimizationModule for LocalBundleAdjustment {
         let cx= SETTINGS.get::<f64>(CAMERA, "cx");
         let cy= SETTINGS.get::<f64>(CAMERA, "cy");
         let camera_param = [fx, fy, cx,cy];
-        let mut optimizer = g2o::ffi::new_sparse_optimizer(1, camera_param);
+
+        let mut optimizer = match sensor.is_imu() {
+            true => g2o::ffi::new_sparse_optimizer(1, camera_param, 100.0),
+            false => g2o::ffi::new_sparse_optimizer(1, camera_param, 0.0),
+        };
 
         let mut mp_vertex_ids = HashMap::new();
         let mut edges_kf_body = Vec::<Id>::new(); // vpEdgeKFBody
@@ -42,7 +46,7 @@ impl LocalMapOptimizationModule for LocalBundleAdjustment {
             // Construct factor graph with read lock, but don't have to have lock to optimize.
             let lock = map.read();
 
-            let span = tracy_client::span!("local_bundle_adjustment:construct_keyframes");
+            let _span = tracy_client::span!("local_bundle_adjustment:construct_factor_graph");
             // Local KeyFrames: First Breath Search from Current Keyframe
             let keyframe = lock.keyframes.get(&keyframe_id).unwrap();
             let mut local_keyframes = vec![keyframe.id];
@@ -112,30 +116,17 @@ impl LocalMapOptimizationModule for LocalBundleAdjustment {
                 warn!("LM_LBA: There are 0 fixed KF in the optimizations, LBA aborted");
             }
 
-            drop(span);
-
-            match sensor.is_imu() {
-                true => {
-                    todo!("IMU");
-                    // Need to put this in the C++ constructor for BridgeSparseOptimizer::BridgeSparseOptimizer
-                    // if (pMap->IsInertial())
-                    //     solver->setUserLambdaInit(100.0);
-                },
-                false => {}
-            }
-
             // TODO (concurrency): mbAbortBA 
             // if(pbStopFlag)
             //     optimizer.setForceStopFlag(pbStopFlag);
 
-            let span = tracy_client::span!("local_bundle_adjustment:add_kf_vertices");
             // Set Local KeyFrame vertices
             let mut max_kf_id = 0;
             for kf_id in &local_keyframes {
                 match lock.keyframes.get(&kf_id) {
                     Some(kf) => {
                         let set_fixed = *kf_id == lock.initial_kf_id;
-                        optimizer.pin_mut().add_frame_vertex(kf.id, (kf.pose).into(), set_fixed);
+                        optimizer.pin_mut().add_vertex_se3_expmap(kf.id, (kf.pose).into(), set_fixed);
                         kf_vertex_ids.insert(*kf_id, kf.id);
                         if kf.id > max_kf_id {
                             max_kf_id = kf.id;
@@ -154,7 +145,7 @@ impl LocalMapOptimizationModule for LocalBundleAdjustment {
             for kf_id in &fixed_cameras {
                 match lock.keyframes.get(&kf_id) {
                     Some(kf) => {
-                        optimizer.pin_mut().add_frame_vertex(kf.id, (kf.pose).into(), true);
+                        optimizer.pin_mut().add_vertex_se3_expmap(kf.id, (kf.pose).into(), true);
                         kf_vertex_ids.insert(*kf_id, kf.id);
                         if kf.id > max_kf_id {
                             max_kf_id = kf.id;
@@ -165,9 +156,6 @@ impl LocalMapOptimizationModule for LocalBundleAdjustment {
                 };
             }
 
-
-            drop(span);
-            let _span = tracy_client::span!("local_bundle_adjustment:add_mp_vertices");
 
             // Set MapPoint vertices
             for mp_id in &local_mappoints {
@@ -274,7 +262,7 @@ impl LocalMapOptimizationModule for LocalBundleAdjustment {
 
                                 let th_huber_mono: f32 = (5.991 as f32).sqrt();
 
-                                optimizer.pin_mut().add_edge_monocular_binary(
+                                optimizer.pin_mut().add_edge_se3_project_xyz_monocular_binary(
                                     true, vertex_id, kf.id,
                                     mp.id,
                                     kp_un.pt().x, kp_un.pt().y,
@@ -309,10 +297,11 @@ impl LocalMapOptimizationModule for LocalBundleAdjustment {
             optimizer.pin_mut().optimize(10, false, false);
         }
 
-        // Check inlier observations
-        let mut mps_to_discard = Vec::new(); // vToErase
         {
-            let _span = tracy_client::span!("local_bundle_adjustment::check_inliers");
+            let _span = tracy_client::span!("local_bundle_adjustment::post_process");
+
+            // Check inlier observations
+            let mut mps_to_discard = Vec::new(); // vToErase
             let mut i = 0;
             for edge in optimizer.pin_mut().get_mut_xyz_edges().iter() {
                 if edge.inner.chi2() > 5.991 || !edge.inner.is_depth_positive() {
@@ -320,45 +309,42 @@ impl LocalMapOptimizationModule for LocalBundleAdjustment {
                 }
                 i += 1;
             }
-        }
 
 
-        if matches!(sensor.frame(), FrameSensor::Stereo) {
-            todo!("Stereo");
-            // For the below vectors, will need to make vector in g2o bindings similar to
-            // xyz_onlypose_edges and iterate over it like get_mut_xyz_onlypose_edges above
+            if matches!(sensor.frame(), FrameSensor::Stereo) {
+                todo!("Stereo");
+                // For the below vectors, will need to make vector in g2o bindings similar to
+                // xyz_onlypose_edges and iterate over it like get_mut_xyz_onlypose_edges above
 
-            // for (_mp_id, _edge) in all_edges_body {
-                // ORB_SLAM3::EdgeSE3ProjectXYZToBody* e = vpEdgesBody[i];
-                // MapPoint* pMP = vpMapPointEdgeBody[i];
+                // for (_mp_id, _edge) in all_edges_body {
+                    // ORB_SLAM3::EdgeSE3ProjectXYZToBody* e = vpEdgesBody[i];
+                    // MapPoint* pMP = vpMapPointEdgeBody[i];
 
-                // if(pMP->isBad())
-                //     continue;
+                    // if(pMP->isBad())
+                    //     continue;
 
-                // if(e->chi2()>5.991 || !e->isDepthPositive())
-                // {
-                //     KeyFrame* pKFi = vpEdgeKFBody[i];
-                //     vToErase.push_back(make_pair(pKFi,pMP));
+                    // if(e->chi2()>5.991 || !e->isDepthPositive())
+                    // {
+                    //     KeyFrame* pKFi = vpEdgeKFBody[i];
+                    //     vToErase.push_back(make_pair(pKFi,pMP));
+                    // }
                 // }
-            // }
 
-            // for (_mp_id, _edge) in all_edges_stereo {
-                // g2o::EdgeStereoSE3ProjectXYZ* e = vpEdgesStereo[i];
-                // MapPoint* pMP = vpMapPointEdgeStereo[i];
+                // for (_mp_id, _edge) in all_edges_stereo {
+                    // g2o::EdgeStereoSE3ProjectXYZ* e = vpEdgesStereo[i];
+                    // MapPoint* pMP = vpMapPointEdgeStereo[i];
 
-                // if(pMP->isBad())
-                //     continue;
+                    // if(pMP->isBad())
+                    //     continue;
 
-                // if(e->chi2()>7.815 || !e->isDepthPositive())
-                // {
-                //     KeyFrame* pKFi = vpEdgeKFStereo[i];
-                //     vToErase.push_back(make_pair(pKFi,pMP));
+                    // if(e->chi2()>7.815 || !e->isDepthPositive())
+                    // {
+                    //     KeyFrame* pKFi = vpEdgeKFStereo[i];
+                    //     vToErase.push_back(make_pair(pKFi,pMP));
+                    // }
                 // }
-            // }
-        }
+            }
 
-        {
-            let _span = tracy_client::span!("local_bundle_adjustment::discard");
             for (kf_id, mp_id) in mps_to_discard {
                 if map.read().mappoints.get(&mp_id).is_none() {
                     // Mappoint may have been deleted in call to delete_observation, if not enough matches
@@ -366,11 +352,8 @@ impl LocalMapOptimizationModule for LocalBundleAdjustment {
                 }
                 map.write().delete_observation(kf_id, mp_id);
             }
-        }
 
-        // Recover optimized data
-        {
-            let _span = tracy_client::span!("local_bundle_adjustment::recover");
+            // Recover optimized data
             for (kf_id, vertex_id) in kf_vertex_ids {
                 let pose = optimizer.recover_optimized_frame_pose(vertex_id);
                 let mut lock = map.write();
@@ -412,5 +395,7 @@ impl LocalMapOptimizationModule for LocalBundleAdjustment {
                 };
             }
         }
+
+        map.write().map_change_index += 1;
     }
 }

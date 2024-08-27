@@ -59,7 +59,6 @@ impl<T> ReadWriteMap<T> {
 
     pub fn read(&self) -> MappedRwLockReadGuard<T> {
         RwLockReadGuard::map(self.inner.read(), |unlocked| unlocked)
-
     }
 
     pub fn create_read_only(&self) -> ReadOnlyMap<T> {

@@ -5,23 +5,28 @@ use core::{
     matrix::{ DVMatrix, DVVectorOfKeyPoint}, system::{ActorMessage, Timestamp},
 };
 use crate::{
-    map::{pose::Pose, map::Id, frame::Frame},
-    actors::tracking_backend::TrackingState
+    actors::tracking_backend::TrackingState, map::{frame::Frame, map::Id, pose::Pose}, modules::imu::{ImuBias, ImuMeasurements}
 };
+
+pub struct Reset {}
+impl ActorMessage for Reset {}
 
 // * TRACKING FRONTEND **//
 pub struct ImagePathMsg{ 
     pub image_path: String,
+    pub imu_measurements: ImuMeasurements,
     pub timestamp: Timestamp,
     pub frame_id: u32
 }
 impl ActorMessage for ImagePathMsg {}
 pub struct ImageMsg{ 
     pub image: Mat, 
+    pub imu_measurements: ImuMeasurements,
     pub timestamp: Timestamp, 
     pub frame_id: u32
 }
 impl ActorMessage for ImageMsg {}
+
 pub struct TrackingStateMsg{
     pub state: TrackingState, 
     pub init_id: Id
@@ -34,6 +39,7 @@ pub struct FeatureMsg {
     pub descriptors: DVMatrix, 
     pub image_width: u32, 
     pub image_height: u32, 
+    pub imu_measurements: ImuMeasurements,
     pub timestamp: Timestamp, 
     pub frame_id: Id
 }
@@ -56,18 +62,18 @@ impl ActorMessage for InitKeyFrameMsg {}
 pub struct LastKeyFrameUpdatedMsg {}
 impl ActorMessage for LastKeyFrameUpdatedMsg {}
 
-pub struct Reset {}
-impl ActorMessage for Reset {}
-
 // * LOCAL MAPPING */
-pub struct IMUInitializedMsg {
-    _imu_initialized: bool,
-    _imu_ba2: bool
+pub struct UpdateFrameIMUMsg {
+    pub scale: f64,
+    pub imu_bias: ImuBias,
+    pub current_kf_id: Id,
+    pub imu_initialized: bool,
 }
-impl ActorMessage for IMUInitializedMsg {}
+impl ActorMessage for UpdateFrameIMUMsg {}
 
 pub struct NewKeyFrameMsg {
     pub keyframe: Frame,
+    pub tracking_state: TrackingState,
 }
 impl ActorMessage for NewKeyFrameMsg {}
 

@@ -51,13 +51,14 @@ impl ORBSLAM3LoopDetection {
                 *scw * twm_as_sim3
             };
 
-            let fixed_scale = match self.sensor {
-                Sensor(FrameSensor::Mono, ImuSensor::Some) => {
-                    todo!("IMU");
-                    // if !pCurrentKF->GetMap()->GetIniertialBA2()) { return false }
-                },
-                _ => false
-            };
+            let mut fixed_scale = ! matches!(self.sensor, Sensor(FrameSensor::Mono, ImuSensor::None));
+            if matches!(self.sensor, Sensor(FrameSensor::Mono, ImuSensor::Some)) {
+                if !map.read().imu_ba2 {
+                    fixed_scale = false;
+                }
+            }
+            println!("Fixed scale is {}", fixed_scale);
+
             let num_opt_matches = optimizer::optimize_sim3(
                 &map, current_kf_id, loop_kf, &mut matched_mappoints, &mut scm, 10, fixed_scale
             );
@@ -127,7 +128,7 @@ impl ORBSLAM3LoopDetection {
         return Ok(num_matches);
     }
 
-        fn detect_common_regions_from_bow(&mut self, map: &MapLock, current_kf_id: Id, bow_cands: &Vec<Id>) -> Result<(Option<Id>, Option<Sim3>), Box<dyn std::error::Error>> {
+    fn detect_common_regions_from_bow(&mut self, map: &MapLock, current_kf_id: Id, bow_cands: &Vec<Id>) -> Result<(Option<Id>, Option<Sim3>), Box<dyn std::error::Error>> {
         // bool LoopClosing::DetectCommonRegionsFromBoW(std::vector<KeyFrame*> &vpBowCand, KeyFrame* &pMatchedKF2, KeyFrame* &pLastCurrentKF, g2o::Sim3 &g2oScw, int &nNumCoincidences, std::vector<MapPoint*> &vpMPs, std::vector<MapPoint*> &vpMatchedMPs)
         let _span = tracy_client::span!("detect_common_regions_from_bow");
 
@@ -222,14 +223,13 @@ impl ORBSLAM3LoopDetection {
 
             if num_bow_matches >= bow_matches_threshold {
                 // Geometric validation
-                let fixed_scale = match self.sensor {
-                    Sensor(FrameSensor::Mono, ImuSensor::Some) => {
-                        todo!("IMU");
-                        // return !pCurrentKF->GetMap()->GetIniertialBA2();
-                    },
-                    Sensor(FrameSensor::Mono, ImuSensor::None) => false,
-                    _ => true
-                };
+                let mut fixed_scale = ! matches!(self.sensor, Sensor(FrameSensor::Mono, ImuSensor::None));
+                if matches!(self.sensor, Sensor(FrameSensor::Mono, ImuSensor::Some)) {
+                    if !map.read().imu_ba2 {
+                        fixed_scale = false;
+                    }
+                }
+                println!("Fixed scale is {}", fixed_scale);
 
                 let mut solver = Sim3Solver::new(
                     &map,
@@ -285,13 +285,13 @@ impl ORBSLAM3LoopDetection {
                         if num_proj_matches >= proj_matches_threshold {
                             // Optimize Sim3 transformation with every matches
 
-                            let fixed_scale = match self.sensor {
-                                Sensor(FrameSensor::Mono, ImuSensor::Some) => {
-                                    todo!("IMU");
-                                    // if !pCurrentKF->GetMap()->GetIniertialBA2()) { return false }
-                                },
-                                _ => false
-                            };
+                            let mut fixed_scale = ! matches!(self.sensor, Sensor(FrameSensor::Mono, ImuSensor::None));
+                            if matches!(self.sensor, Sensor(FrameSensor::Mono, ImuSensor::Some)) {
+                                if !map.read().imu_ba2 {
+                                    fixed_scale = false;
+                                }
+                            }
+                            println!("Fixed scale is {}", fixed_scale);
 
 
                             let num_opt_matches = optimizer::optimize_sim3(

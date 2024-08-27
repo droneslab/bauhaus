@@ -40,9 +40,42 @@ pub mod ffi {
     struct RustSim3Edge {
         edge: UniquePtr<EdgeSim3>,
     }
+    // struct RustEdgeMono {
+    //     edge: UniquePtr<EdgeMono>,
+    // }
+    // Imu...
+    struct RustImuBias {
+        b_acc_x: f32,
+        b_acc_y: f32,
+        b_acc_z: f32,
+        b_ang_vel_x: f32,
+        b_ang_vel_y: f32,
+        b_ang_vel_z: f32,
+    }
+    struct RustImuPreintegrated {
+        jrg: [[f32; 3]; 3],
+        jvg: [[f32; 3]; 3],
+        jpg: [[f32; 3]; 3],
+        jva: [[f32; 3]; 3],
+        jpa: [[f32; 3]; 3],
+
+        dv: [f32; 3],
+        db: [f32; 6],
+        // c: [[f32; 15]; 15],
+        bias: RustImuBias,
+        t: f64,
+    }
+    struct InertialEstimate {
+        vb: [f64; 6],
+        bg: [f64; 3],
+        ba: [f64; 3],
+        scale: f64,
+        rwg: [[f64; 3]; 3],
+    }
 
     unsafe extern "C++" {
         include!("rust_helper.h");
+        // include!("G2oTypes.h");
 
         // Opaque types which both languages can pass around
         // but only C++ can see the fields.
@@ -54,8 +87,9 @@ pub mod ffi {
         type EdgeSim3ProjectXYZ;
         type EdgeInverseSim3ProjectXYZ;
         type EdgeSim3;
+        // type EdgeMono;
 
-        fn new_sparse_optimizer(opt_type: i32, camera_param: [f64;4]) -> UniquePtr<BridgeSparseOptimizer>;
+        fn new_sparse_optimizer(opt_type: i32, camera_param: [f64;4], lambda_init: f32) -> UniquePtr<BridgeSparseOptimizer>;
         // fn set_stop_flag(self: Pin<&mut BridgeSparseOptimizer>, should_stop: bool);
         // fn enable_stop_flag(self: Pin<&mut BridgeSparseOptimizer>);
 
@@ -68,12 +102,68 @@ pub mod ffi {
             set_fixed: bool,
             set_camera_params: bool
         );
-        fn add_frame_vertex(
+        fn add_vertex_se3_expmap(
             self: Pin<&mut BridgeSparseOptimizer>,
             vertex_id: i32,
             pose: Pose,
             set_fixed: bool
         );
+        fn add_vertex_pose(
+            self: Pin<&mut BridgeSparseOptimizer>,
+            vertex_id: i32,
+            set_fixed: bool,
+            num_cams: i32,
+            imu_position: [f64; 3],
+            imu_rotation: [f64; 4],
+            translation: [f64; 3],
+            rotation: [f64; 4],
+            tcb_translation: [f64; 3],
+            tcb_rotation: [f64; 4],
+            tbc_translation: [f64; 3],
+            bf: f32,
+        );
+        fn add_vertex_velocity(
+            self: Pin<&mut BridgeSparseOptimizer>,
+            vertex_id: i32,
+            set_fixed: bool,
+            velocity: [f64; 3],
+        );
+        fn add_vertex_gyro_bias(
+            self: Pin<&mut BridgeSparseOptimizer>,
+            vertex_id: i32,
+            set_fixed: bool,
+            gyro_bias: [f64; 3],
+        );
+        fn add_vertex_acc_bias(
+            self: Pin<&mut BridgeSparseOptimizer>,
+            vertex_id: i32,
+            set_fixed: bool,
+            acc_bias: [f64; 3],
+        );
+        fn add_gravity_and_scale_vertex(
+            self: Pin<&mut BridgeSparseOptimizer>,
+            vertex_id1: i32,
+            set_fixed1: bool,
+            rwg: [[f64; 3]; 3],
+            vertex_id2: i32,
+            set_fixed2: bool,
+            scale: f64,
+        );
+        fn add_graph_edges_inertial(
+            self: Pin<&mut BridgeSparseOptimizer>,
+            vertex_p1_id: i32,
+            vertex_v1_id: i32,
+            vertex_g_id: i32,
+            vertex_a_id: i32,
+            vertex_p2_id: i32,
+            vertex_v2_id: i32,
+            vertex_gdir_id: i32,
+            vertex_s_id: i32,
+            imu_preintegrated: RustImuPreintegrated,
+            set_robust_kernel: bool,
+            delta: f32
+        );
+
         fn add_mappoint_vertex(
             self: Pin<&mut BridgeSparseOptimizer>,
             vertex_id: i32,
@@ -105,7 +195,7 @@ pub mod ffi {
             vertex_id_j: i32,
             observation: RustSim3,
         );
-        fn add_edge_monocular_unary(
+        fn add_edge_se3_project_xyz_monocular_unary(
             self: Pin<&mut BridgeSparseOptimizer>,
             robust_kernel: bool,
             vertex_id: i32,
@@ -117,7 +207,7 @@ pub mod ffi {
             mappoint_id: i32,
             huber_delta: f32
         );
-        fn add_edge_monocular_binary(
+        fn add_edge_se3_project_xyz_monocular_binary(
             self: Pin<&mut BridgeSparseOptimizer>,
             robust_kernel: bool,
             vertex_id_1: i32,
@@ -128,6 +218,36 @@ pub mod ffi {
             inv_sigma2: f32,
             huber_delta: f32
         );
+
+        fn add_edge_mono_binary(
+            self: Pin<&mut BridgeSparseOptimizer>,
+            robust_kernel: bool,
+            vertex_id_1: i32,
+            vertex_id_2: i32,
+            mp_id: i32,
+            keypoint_pt_x: f32,
+            keypoint_pt_y: f32,
+            inv_sigma2: f32,
+            huber_delta: f32
+        );
+        fn add_edge_prior_for_imu(
+            self: Pin<&mut BridgeSparseOptimizer>,
+            vertex_id1: i32,
+            vertex_id2: i32,
+            bprior: [f64; 3],
+            prior_a: f64,
+            prior_g: f64
+        );
+        fn add_edge_gyro_and_acc(
+            self: Pin<&mut BridgeSparseOptimizer>,
+            vertex1_id: i32,
+            vertex2_id: i32,
+            vertex3_id: i32,
+            vertex4_id: i32,
+            imu_preintegrated: RustImuPreintegrated,
+        );
+
+
         // fn set_edge_worldpos(
         //     self: &BridgeSparseOptimizer,
         //     mp_world_index: i32,
@@ -167,6 +287,17 @@ pub mod ffi {
             self: &BridgeSparseOptimizer,
             vertex: i32,
         ) -> RustSim3;
+        fn recover_optimized_inertial(
+            self: &BridgeSparseOptimizer,
+            vg: i32,
+            va: i32,
+            vs: i32,
+            vgdir: i32,
+        ) -> InertialEstimate;
+        fn recover_optimized_vertex_velocity(
+            self: &BridgeSparseOptimizer,
+            vertex_id: i32,
+        ) -> [f64; 3];
 
         fn save(
             self: &BridgeSparseOptimizer,
@@ -187,6 +318,8 @@ pub mod ffi {
         fn get_mut_xyz_edges(self: Pin<&mut BridgeSparseOptimizer>) -> Pin<&mut CxxVector<RustXYZEdge>>;
         fn get_mut_xyz_onlypose_edges(self: Pin<&mut BridgeSparseOptimizer>) -> Pin<&mut CxxVector<RustXYZOnlyPoseEdge>>;
         fn get_mut_sim3_edges(self: Pin<&mut BridgeSparseOptimizer>) -> Pin<&mut CxxVector<RustSim3ProjectXYZEdge>>;
+        // fn get_mut_mono_edges(self: Pin<&mut BridgeSparseOptimizer>) -> Pin<&mut CxxVector<RustEdgeMono>>;
+
         #[rust_name = "set_level"]
         fn setLevel(
             self: Pin<&mut EdgeSE3ProjectXYZOnlyPose>,

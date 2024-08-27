@@ -3,13 +3,15 @@ use log::{info, warn, error, debug};
 use rustc_hash::FxHashMap;
 use core::{config::{SETTINGS, SYSTEM}, matrix::DVVector3, sensor::Sensor};
 use crate::map::{keyframe::*, mappoint::*};
+use std::ops::MulAssign;
 
-use super::{frame::Frame, keyframe_database::KeyFrameDatabase};
+use super::{frame::Frame, keyframe_database::KeyFrameDatabase, pose::{DVTranslation, Pose}};
 
 pub type Id = i32;
 // pub type MapItems<T> = HashMap<Id, T>;
 // pub type MapItems<T> = HashMap<Id, T, BuildHasherDefault<SeaHasher>>; // faster performance with seahasher
-pub type MapItems<T> = FxHashMap<Id, T>;
+// FxHashMap
+pub type MapItems<T> = BTreeMap<Id, T>;
 
 #[derive(Debug, Clone)]
 pub struct Map {
@@ -27,7 +29,11 @@ pub struct Map {
     // MapPoints
     last_mp_id: Id,
 
+    pub imu_initialized: bool, // mbImuInitialized
+    pub imu_ba2: bool, // mbIMU_BA2 
+    pub map_change_index: i32, // mnMapChange
     _sensor: Sensor,
+
     // Following are in orbslam3, not sure if we need:
     // mvpKeyFrameOrigins: Vec<KeyFrame>
     // mvBackupKeyFrameOriginsId: Vec<: u32>
@@ -37,8 +43,6 @@ pub struct Map {
     // Following are in orbslam3, probably don't need
     // mbFail: bool
     // nNextId: : u32
-    // mbImuInitialized: bool
-    // mnMapChange: bool
     // mnMapChangeNotified: bool
     // mnBigChangeIdx: i32
 }
@@ -51,9 +55,12 @@ impl Map {
             last_kf_id: -1,
             last_mp_id: -1,
             initial_kf_id: -1,
+            imu_ba2: false,
             keyframes: MapItems::<KeyFrame>::default(),
             mappoints: MapItems::<MapPoint>::default(),
             keyframe_database: KeyFrameDatabase::new(),
+            imu_initialized: false,
+            map_change_index: 0,
         }
     }
 
@@ -150,6 +157,11 @@ impl Map {
             self.update_connections(new_kf_id);
         }
         info!("Created keyframe {}", new_kf_id);
+
+        if self.last_kf_id - 1 > 0 {
+            self.keyframes.get_mut(&new_kf_id).unwrap().prev_kf_id = Some(self.last_kf_id - 1);
+            self.keyframes.get_mut(&(self.last_kf_id - 1)).unwrap().next_kf_id = Some(new_kf_id);
+        }
 
         new_kf_id
     }
@@ -446,4 +458,41 @@ impl Map {
     pub fn  detect_relocalization_candidates(&self, frame: &Frame) -> Vec<Id> {
         self.keyframe_database.detect_relocalization_candidates(&self, frame)
     }
+
+
+    pub fn apply_scaled_rotation(&mut self, t: &Pose, s: f64, b_scaled_vel: bool) {
+        // void Map::ApplyScaledRotation(const Sophus::SE3f &T, const float s, const bool bScaledVel)
+
+        // Body position (IMU) of first keyframe is fixed to (0,0,0)
+        for keyframe in self.keyframes.values_mut() {
+            let mut twc = keyframe.pose.inverse().clone();
+            let twc_trans = twc.get_translation();
+            twc.set_translation(nalgebra::Vector3::new(twc_trans[0] * s, twc_trans[1] * s, twc_trans[2] * s)); // just scaling translation by s
+            let tyc = *t * twc;
+            let tcy = tyc.inverse();
+            keyframe.pose = tcy;
+            let vw = keyframe.imu_data.velocity.unwrap();
+            if !b_scaled_vel {
+                keyframe.imu_data.velocity = Some(DVVector3::new(*t.get_rotation() * *vw));
+            } else {
+                keyframe.imu_data.velocity = Some(DVVector3::new(*t.get_rotation() * *vw * s));
+            }
+            println!("Apply scaled rotation, set kf velocity {} {:?}", keyframe.id, keyframe.imu_data.velocity);
+        }
+        self.map_change_index += 1;
+    }
+
+    pub fn reset_active_map(&mut self) {
+        // Clear BoW database
+        self.keyframe_database.clear();
+
+        // Clear map (this erases mappoints and keyframes)
+        self.keyframes.clear();
+        self.mappoints.clear();
+        self.last_kf_id = self.initial_kf_id - 1;
+        self.last_mp_id = -1;
+        self.imu_initialized = false;
+        self.imu_ba2 = false;
+    }
+
 }
