@@ -230,7 +230,9 @@ impl TrackingOpticalFlow {
                             self.ref_kf_id = Some(curr_kf_id);
                             self.last_kf_timestamp = Some(curr_kf_timestamp);
                             self.map_scale = map_scale;
-                            self.imu.as_mut().unwrap().imu_preintegrated_from_last_kf = self.initialization.as_ref().unwrap().imu_preintegrated_from_last_kf.clone();
+                            if self.sensor.is_imu() {
+                                self.imu.as_mut().unwrap().imu_preintegrated_from_last_kf = self.initialization.as_ref().unwrap().imu_preintegrated_from_last_kf.as_ref().unwrap().clone();
+                            }
 
                             {
                                 // Set current frame's updated info from map initialization

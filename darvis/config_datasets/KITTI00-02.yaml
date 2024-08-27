@@ -25,3 +25,18 @@ height: 376
 
 stereo_overlapping_begin: 0
 stereo_overlapping_end: 1000
+
+################ THIS ISN'T EVEN FOR KITTI JUST PUTTING IT IN HERE FOR NOW SO IT COMPILES ################
+# Transformation from camera to body-frame (imu)
+imu__T_b_c1_row1: [0.0148655429818, -0.999880929698, 0.00414029679422, -0.0216401454975]
+imu__T_b_c1_row2: [0.999557249008, 0.0149672133247, 0.025715529948, -0.064676986768]
+imu__T_b_c1_row3: [-0.0257744366974, 0.00375618835797, 0.999660727178, 0.00981073058949]
+imu__T_b_c1_row4: [0.0, 0.0, 0.0, 1.0]
+
+# IMU noise
+imu__noise_gyro: 1.7e-4 #1.6968e-04
+imu__noise_acc: 2.0000e-3 #2.0e-3
+imu__gyro_walk: 1.9393e-05 
+imu__acc_walk: 3.0000e-03 # 3e-03
+imu__frequency: 200.0
+
