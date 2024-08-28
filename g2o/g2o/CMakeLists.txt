@@ -22,7 +22,7 @@ endif()
 
 MESSAGE(STATUS "BUILD TYPE:" ${CMAKE_BUILD_TYPE})
 
-
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_CXX_COMPILER "/home/darvis/Downloads/llvm_build/bin/clang")
 add_link_options(-fuse-ld=/home/darvis/Downloads/llvm_build/bin/ld.lld)
 set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)

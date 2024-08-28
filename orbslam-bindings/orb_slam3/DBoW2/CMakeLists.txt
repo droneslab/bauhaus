@@ -8,6 +8,7 @@ endif()
 set(CMAKE_CXX_COMPILER "/home/darvis/Downloads/llvm_build/bin/clang")
 add_link_options(-fuse-ld=/home/darvis/Downloads/llvm_build/bin/ld.lld)
 set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 # Sofiya: Removed -march=native, based on https://github.com/raulmur/ORB_SLAM2/issues/341 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS}  -Wall ")

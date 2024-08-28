@@ -29,6 +29,7 @@ ELSEIF(CMAKE_CXX_COMPILER_ID MATCHES "^MSVC$")
 ENDIF()
 
 
+./orbslam-bindings/orb_slam3/DBoW2/CMakeLists.txt
 set(CMAKE_CXX_COMPILER "/home/darvis/Downloads/llvm_build/bin/clang")
 add_link_options(-fuse-ld=/home/darvis/Downloads/llvm_build/bin/ld.lld)
 set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)

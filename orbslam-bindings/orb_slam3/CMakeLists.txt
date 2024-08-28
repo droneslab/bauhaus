@@ -34,6 +34,8 @@ if(MSVC90)
   message(STATUS "Disabling memory alignment for MSVC8")
 endif(MSVC90)
 
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
 
 set(CMAKE_CXX_COMPILER "/home/darvis/Downloads/llvm_build/bin/clang")
 add_link_options(-fuse-ld=/home/darvis/Downloads/llvm_build/bin/ld.lld)
