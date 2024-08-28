@@ -12,6 +12,7 @@ use crate::modules::optimizer;
 use crate::registered_actors::{self, CAMERA_MODULE, FEATURE_MATCHING_MODULE, FULL_MAP_OPTIMIZATION_MODULE};
 use crate::MapLock;
 use crate::modules::module_definitions::CameraModule;
+use super::imu::{ImuBias, ImuPreIntegrated};
 use super::module_definitions::{FeatureMatchingModule, MapInitializationModule};
 
 
@@ -24,6 +25,7 @@ pub struct MapInitialization {
     pub initial_frame: Option<Frame>,
     pub last_frame: Option<Frame>,
     pub current_frame: Option<Frame>,
+    pub imu_preintegrated_from_last_kf: ImuPreIntegrated, // mpImuPreintegratedFromLastKF
     sensor: Sensor,
 }
 impl MapInitializationModule for MapInitialization {
@@ -32,20 +34,8 @@ impl MapInitializationModule for MapInitialization {
     type InitializationResult = Option<(Pose, i32, i32, BTreeSet<Id>, Timestamp, f64)>;
 
     fn try_initialize(&mut self, current_frame: &Frame) -> Result<bool, Box<dyn std::error::Error>> {
-        // Only set once at beginning
-        if self.initial_frame.is_none() {
-            self.initial_frame = Some(current_frame.clone());
-        }
-        // If we never did initialization (ie, only 1 frame passed): initial, current, and last frame will all be set to the 1st frame.
-        // If we've done the first step of initialization, update last frame and current frame.
-        self.last_frame = match &self.current_frame {
-            Some(frame) => Some(frame.clone()),
-            None => Some(current_frame.clone())
-        };
-        self.current_frame = Some(current_frame.clone());
-
         match self.sensor.frame() {
-            FrameSensor::Mono => self.monocular_initialization(),
+            FrameSensor::Mono => self.monocular_initialization(current_frame),
             _ => self.stereo_initialization()
         }
     }
@@ -70,47 +60,44 @@ impl MapInitialization {
             initial_frame: None,
             last_frame: None,
             current_frame: None,
+            imu_preintegrated_from_last_kf: ImuPreIntegrated::new(ImuBias::new()),
             sensor
         }
     }
 
-    fn monocular_initialization(&mut self) -> Result<bool, Box<dyn std::error::Error>> {
+    fn monocular_initialization(&mut self, current_frame: &Frame) -> Result<bool, Box<dyn std::error::Error>> {
         // Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Tracking.cc#L2448
+
+        self.current_frame = Some(current_frame.clone());
         let current_frame = self.current_frame.as_ref().unwrap();
-        let initial_frame = self.initial_frame.as_ref().unwrap();
-        let last_frame = self.last_frame.as_ref().unwrap();
 
         if !self.ready_to_initialize && current_frame.features.num_keypoints > 100 {
             // Set Reference Frame
+            self.prev_matched.clear();
             for i in 0..current_frame.features.num_keypoints as usize {
                 self.prev_matched.push(current_frame.features.get_keypoint(i).0.pt().clone());
             }
 
-            match self.sensor.imu() {
-                ImuSensor::Some => {
-                    todo!("IMU");
-                    //Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/4452a3c4ab75b1cde34e5505a36ec3f9edcdc4c4/src/Tracking.cc#L2467
+            self.initial_frame = Some(current_frame.clone());
+            self.last_frame = Some(current_frame.clone());
+            self.imu_preintegrated_from_last_kf = ImuPreIntegrated::new(ImuBias::new());
+            self.current_frame.as_mut().unwrap().imu_data.imu_preintegrated = Some(self.imu_preintegrated_from_last_kf.clone());
 
-                    // if(mpImuPreintegratedFromLastKF)
-                    // {
-                    //     delete mpImuPreintegratedFromLastKF;
-                    // }
-                    // mpImuPreintegratedFromLastKF = new IMU::Preintegrated(IMU::Bias(),*mpImuCalib);
-                    // self.current_frame.mpImuPreintegrated = mpImuPreintegratedFromLastKF;
-                },
-                _ => {}
-            }
+            println!("Mono initialization... current frame {:?}, initial frame {:?}, last frame {:?}", self.current_frame.as_ref().unwrap().frame_id, self.initial_frame.as_ref().unwrap().frame_id, self.last_frame.as_ref().unwrap().frame_id);
+
             self.ready_to_initialize = true;
+            println!("Set ready to initialize");
             return Ok(false);
         } else {
-            if current_frame.features.num_keypoints <=100 || matches!(self.sensor.imu(), ImuSensor::Some) && last_frame.timestamp - initial_frame.timestamp > 1.0 {
+            if current_frame.features.num_keypoints <=100 || self.sensor.is_imu() && (self.last_frame.as_ref().unwrap().timestamp - self.initial_frame.as_ref().unwrap().timestamp) * 1e9 > 1.0 {
+                println!("QUIT: Timestamp too high?");
                 self.ready_to_initialize = false;
                 return Ok(false);
             }
 
             // Find correspondences
             let (mut num_matches, mp_matches) = FEATURE_MATCHING_MODULE.search_for_initialization(
-                &initial_frame, 
+                &self.initial_frame.as_ref().unwrap(), 
                 &current_frame,
                 &mut self.prev_matched,
                 100
@@ -119,12 +106,13 @@ impl MapInitialization {
 
             // Check if there are enough correspondences
             if num_matches < 100 {
+                println!("QUIT: Matches too low... {} matches, {} prev_matched, initial frame id {}, current frame id {}", num_matches, self.prev_matched.len(), self.initial_frame.as_ref().unwrap().frame_id, current_frame.frame_id);
                 self.ready_to_initialize = false;
                 return Ok(false);
             };
 
             if let Some((tcw, v_p3d, vb_triangulated)) = CAMERA_MODULE.two_view_reconstruction(
-                initial_frame.features.get_all_keypoints(),
+                self.initial_frame.as_ref().unwrap().features.get_all_keypoints(),
                 current_frame.features.get_all_keypoints(),
                 & self.mp_matches,
             ) {
@@ -160,11 +148,6 @@ impl MapInitialization {
 
         let (curr_kf_id, initial_kf_id) = {
             let mut lock = map.write();
-
-            match self.sensor {
-                Sensor(FrameSensor::Mono, ImuSensor::Some) => todo!("IMU"), // pKFini->mpImuPreintegrated = (IMU::Preintegrated*)(NULL);
-                _ => {}
-            }
 
             if lock.last_kf_id == 0 {
                 lock.initial_kf_id = lock.last_kf_id + 1;
@@ -263,12 +246,17 @@ impl MapInitialization {
 
         match self.sensor {
             Sensor(FrameSensor::Mono, ImuSensor::Some) => {
-                todo!("IMU");
-            //     pKFcur->mPrevKF = pKFini;
-            //     pKFini->mNextKF = pKFcur;
-            //     pKFcur->mpImuPreintegrated = mpImuPreintegratedFromLastKF;
-
-            //     mpImuPreintegratedFromLastKF = new IMU::Preintegrated(pKFcur->mpImuPreintegrated->GetUpdatedBias(),pKFcur->mImuCalib);
+                let mut lock = map.write();
+                {
+                    let curr_kf = lock.keyframes.get_mut(&curr_kf_id)?;
+                    curr_kf.prev_kf_id = Some(initial_kf_id);
+                    curr_kf.imu_data.imu_preintegrated = Some(self.imu_preintegrated_from_last_kf.clone());
+                    self.imu_preintegrated_from_last_kf = ImuPreIntegrated::new(curr_kf.imu_data.imu_preintegrated.as_ref().unwrap().get_updated_bias());
+                }
+                {
+                    let ini_kf = lock.keyframes.get_mut(&initial_kf_id)?;
+                    ini_kf.next_kf_id = Some(curr_kf_id);
+                }
             },
             _ => {}
         };

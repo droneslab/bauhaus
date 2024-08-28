@@ -89,6 +89,25 @@ fn max_float(a: f32, b: f32) -> f32 {
 }
 
 impl Features {
+    pub fn empty() -> Self{
+        Features {
+            num_keypoints: 0,
+            keypoints: KeyPoints::Empty,
+            descriptors: DVMatrix::empty(),
+            image_width: 0,
+            image_height: 0,
+            grid_element_width_inv: 0.0,
+            grid_element_height_inv: 0.0,
+            grid: vec![],
+            min_x: 0.0,
+            max_x: 0.0,
+            min_y: 0.0,
+            max_y: 0.0,
+            frame_grid_cols: 0,
+            frame_grid_rows: 0
+        }
+    }
+
     pub fn new(
         keypoints: DVVectorOfKeyPoint,
         descriptors: DVMatrix,
@@ -175,7 +194,6 @@ impl Features {
             FrameSensor::Mono => {
                 let keypoints_un = Self::undistort_keypoints(&keypoints)?;
                 let num_keypoints = keypoints.len() as u32;
-
                 // assign features to grid
                 let grid_element_width_inv =  frame_grid_cols as f64/(max_x - min_x) as f64;
                 let grid_element_height_inv = frame_grid_rows as f64/(max_y - min_y) as f64;

@@ -83,7 +83,7 @@ namespace g2o{
       e->computeError();
     }
 
-// #  ifndef NDEBUG
+#  ifndef NDEBUG
     for (int k = 0; k < static_cast<int>(_activeEdges.size()); ++k) {
       OptimizableGraph::Edge* e = _activeEdges[k];
       bool hasNan = arrayHasNaN(e->errorData(), e->dimension());
@@ -91,7 +91,7 @@ namespace g2o{
         cerr << "computeActiveErrors(): found NaN in error for edge " << e->id() << endl;
       }
     }
-// #  endif
+#  endif
 
   }
 

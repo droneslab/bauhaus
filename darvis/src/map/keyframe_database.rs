@@ -42,7 +42,7 @@ impl KeyFrameDatabase {
         }
     }
 
-    pub fn _clear(&mut self) {
+    pub fn clear(&mut self) {
         self.inverted_file.clear();
         self.inverted_file.resize(VOCABULARY_MODULE.size(), Vec::new());
     }

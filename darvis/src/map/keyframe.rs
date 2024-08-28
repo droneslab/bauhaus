@@ -1,5 +1,5 @@
 use std::{collections::{HashMap, HashSet}, cmp::min};
-use core::{config::{ SETTINGS, SYSTEM}, matrix::DVVector3, sensor::Sensor, system::Timestamp};
+use core::{config::{ SETTINGS, SYSTEM}, matrix::{DVMatrix, DVMatrix3, DVVector3}, sensor::Sensor, system::Timestamp};
 use log::{error, debug, warn};
 use opencv::core::{KeyPoint, Mat};
 use crate::{map::{map::Id, pose::Pose},modules::{bow::DVBoW, imu::*}, registered_actors::VOCABULARY_MODULE, MapLock};
@@ -21,6 +21,8 @@ pub struct KeyFrame {
     pub parent: Option<Id>,
     pub children: HashSet<Id>,
     pub(super) loop_edges: HashSet<Id>, // mvpLoopEdges
+    pub prev_kf_id: Option<Id>, // mpPrevKF
+    pub next_kf_id: Option<Id>, // mpNextKF
 
     // Vision //
     pub features: Features, // KeyPoints, stereo coordinate and descriptors (all associated by an index)
@@ -28,31 +30,21 @@ pub struct KeyFrame {
 
     // IMU //
     // Preintegrated IMU measurements from previous keyframe
-    pub imu_bias: Option<IMUBias>,
-    pub imu_preintegrated: Option<IMUPreIntegrated>,
+    pub imu_data: ImuDataFrame,
     pub sensor: Sensor,
 
     // todo (design, fine-grained locking) I would like to get rid of this but until we have fine-grained locking this is the only way to prevent deletion without taking the entire map
     pub dont_delete: bool, // mbNotErase
 
     // todo (design, variable locations) loop closing can we avoid having this in the kf?
+    //... possibly not, used by imu initialization (local mapping) as well
     pub ba_global_for_kf: Id, // mnBAGlobalForKF
     pub gba_pose: Option<Pose>, // mTcwGBA 
+    pub vwb_gba: Option<DVVector3<f64>>, // mVwbGBA
+    pub bias_gba: Option<ImuBias>, // mBiasGBA
 
     // DON'T SET THESE! Either never used, or moved into actor implementation
     // mbCurrentPlaceRecognition
-
-    // I think we can clean this up and get rid of these
-    // Variables used by KF database
-    // pub loop_query: u64, //mnLoopQuery
-    // pub loop_words: i32, //mnLoopWords
-    // pub reloc_query: u64, //mnRelocQuery
-    // pub reloc_words: i32, //mnRelocWords
-    // pub merge_query: u64, //mnMergeQuery
-    // pub merge_words: i32, //mnMergeWords
-    // pub place_recognition_query: u64, //mnPlaceRecognitionQuery
-    // pub place_recognition_words: i32, //mnPlaceRecognitionWords
-    // pub place_recognition_score: f32, //mPlaceRecognitionScore
     // // Variables used by loop closing
     // pub mnBAGlobalForKF: u64,
 }
@@ -75,8 +67,6 @@ impl KeyFrame {
             gba_pose: None,
             features: frame.features,
             bow,
-            imu_bias: frame.imu_bias,
-            imu_preintegrated: frame.imu_preintegrated,
             id,
             origin_map_id,
             connections: ConnectedKeyFrames::new(),
@@ -87,6 +77,11 @@ impl KeyFrame {
             loop_edges: HashSet::new(),
             dont_delete: false,
             ba_global_for_kf: -1,
+            prev_kf_id: None,
+            next_kf_id: None,
+            imu_data: frame.imu_data,
+            bias_gba: None,
+            vwb_gba: None,
         }
     }
 
@@ -179,6 +174,7 @@ impl KeyFrame {
         // }
     }
 
+    // * CONNECTED KEYFRAMES *//
     pub fn get_covisibility_keyframes(&self, num: i32) -> Vec<Id> {
         // vector<KeyFrame*> KeyFrame::GetVectorCovisibleKeyFrames(), KeyFrame::GetBestCovisibilityKeyFrames
         // To get all connections, pass in i32::MAX as `num`
@@ -202,6 +198,24 @@ impl KeyFrame {
         // set<KeyFrame*> KeyFrame::GetConnectedKeyFrames()
         // Connected/covisible keyframes sorted by weight
         &self.connections.map_connected_keyframes
+    }
+
+    // *IMU *//
+    pub fn get_imu_rotation(&self) -> DVMatrix3<f64> {
+        // Eigen::Matrix3f KeyFrame::GetImuRotation()
+        // Note: in Orbslam this is: (mTwc * mImuCalib.mTcb).rotationMatrix();
+        // and mTwc is inverse of the pose
+        (self.pose.inverse() * ImuCalib::new().tcb).get_rotation()
+    }
+
+    pub fn get_imu_position(&self) -> DVVector3<f64> {
+        // Eigen::Vector3f KeyFrame::GetImuPosition()
+        // Note: in Orbslam this returns mOwb, where mOwb is set to:
+        //    mRwc * mImuCalib.mTcb.translation() + mTwc.translation()
+        // every time the pose is updated
+        DVVector3::new(
+            *self.pose.get_rotation() * *ImuCalib::new().tcb.get_translation() + *self.pose.inverse().get_translation()
+        )
     }
 }
 

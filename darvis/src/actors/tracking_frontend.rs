@@ -9,7 +9,7 @@ use crate::{
     actors::{
         messages::{FeatureMsg, ImageMsg, ImagePathMsg, ShutdownMsg, TrackingStateMsg, VisFeaturesMsg},
         tracking_backend::TrackingState,
-    }, map::map::Id, modules::{image, module_definitions::FeatureExtractionModule, orbslam_extractor::ORBExtractor}, registered_actors::{new_feature_extraction_module, FEATURE_DETECTION, VISUALIZER}, System
+    }, map::map::Id, modules::{image, imu::ImuMeasurements, module_definitions::FeatureExtractionModule, orbslam_extractor::ORBExtractor}, registered_actors::{new_feature_extraction_module, FEATURE_DETECTION, VISUALIZER}, System
 };
 
 
@@ -88,7 +88,7 @@ impl Actor for TrackingFrontEnd {
                         (keypoints, descriptors)
                     }
                 };
-                actor.send_to_backend(keypoints, descriptors, image_cols, image_rows, msg.timestamp, msg.frame_id);
+                actor.send_to_backend(keypoints, descriptors, image_cols, image_rows, msg.imu_measurements, msg.timestamp, msg.frame_id);
 
                 actor.last_id += 1;
             } else if message.is::<ImageMsg>() {
@@ -117,7 +117,7 @@ impl Actor for TrackingFrontEnd {
                 };
 
 
-                actor.send_to_backend(keypoints, descriptors, image_cols, image_rows, msg.timestamp, msg.frame_id);
+                actor.send_to_backend(keypoints, descriptors, image_cols, image_rows, msg.imu_measurements, msg.timestamp, msg.frame_id);
                 actor.last_id += 1;
             } else if message.is::<TrackingStateMsg>() {
                 let msg = message.downcast::<TrackingStateMsg>().unwrap_or_else(|_| panic!("Could not downcast tracking frontend message!"));
@@ -143,7 +143,7 @@ impl TrackingFrontEnd {
         let _span = tracy_client::span!("extract_features");
 
         let (keypoints, descriptors) = match self.sensor {
-            Sensor(FrameSensor::Mono, ImuSensor::None) => {
+            Sensor(FrameSensor::Mono, _) => {
                 if !self.map_initialized || (self.last_id - self.init_id < self.max_frames) {
                     self.orb_extractor_ini.as_mut().unwrap().extract(DVMatrix::new(image)).unwrap()
                 } else {
@@ -152,7 +152,7 @@ impl TrackingFrontEnd {
             },
             _ => { 
                 // See GrabImageMonocular, GrabImageStereo, GrabImageRGBD in Tracking.cc
-                todo!("IMU, Stereo, RGBD")
+                todo!("Stereo, RGBD")
             }
         };
 
@@ -164,15 +164,16 @@ impl TrackingFrontEnd {
         (keypoints, descriptors)
     }
 
-    fn send_to_backend(&self, keypoints: DVVectorOfKeyPoint, descriptors: DVMatrix, image_width: u32, image_height: u32, timestamp: Timestamp, frame_id: u32) {
+    fn send_to_backend(&self, keypoints: DVVectorOfKeyPoint, descriptors: DVMatrix, image_width: u32, image_height: u32, imu_measurements: ImuMeasurements, timestamp: Timestamp, frame_id: u32) {
         // Send features to backend
         // Note: Run-time errors ... actor lookup is runtime error
         // Note: not currently sending image to backend
         let backend = self.system.find_actor("TRACKING_BACKEND");
 
         backend.send(Box::new(FeatureMsg{
-            keypoints: keypoints,
-            descriptors: descriptors,
+            keypoints,
+            descriptors,
+            imu_measurements,
             image_width,
             image_height,
             timestamp,

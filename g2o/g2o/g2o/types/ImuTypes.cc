@@ -17,13 +17,13 @@
 */
 
 #include "ImuTypes.h"
-#include "Converter.h"
+#include "../orbslam_types/Converter.h"
 
-#include "GeometricTools.h"
+#include "../orbslam_types/GeometricTools.h"
 
 #include<iostream>
 
-namespace ORB_SLAM3
+namespace g2o
 {
 
 namespace IMU
@@ -111,6 +111,7 @@ Preintegrated::Preintegrated(const Bias &b_, const Calib &calib)
     Initialize(b_);
 }
 
+
 // Copy constructor
 Preintegrated::Preintegrated(Preintegrated* pImuPre): dT(pImuPre->dT),C(pImuPre->C), Info(pImuPre->Info),
      Nga(pImuPre->Nga), NgaWalk(pImuPre->NgaWalk), b(pImuPre->b), dR(pImuPre->dR), dV(pImuPre->dV),
@@ -118,6 +119,40 @@ Preintegrated::Preintegrated(Preintegrated* pImuPre): dT(pImuPre->dT),C(pImuPre-
     avgA(pImuPre->avgA), avgW(pImuPre->avgW), bu(pImuPre->bu), db(pImuPre->db), mvMeasurements(pImuPre->mvMeasurements)
 {
 
+}
+
+// Sofiya... create C++ Preintegrated type from data from rust
+Preintegrated::Preintegrated(g2o::RustImuPreintegrated * pre): dT(pre->t)
+{
+    // Sofiya... not setting all the variables, just the ones we need for the g2o optimization, because I don't want to figure it out
+    // These are used by the EdgeInertialGS object (G2oTypes.cc), in calls to:
+    // GetDeltaRotation, GetDeltaVelocity, GetDeltaPosition, GetDeltaBias
+    // on the mpInt object
+    b = IMU::Bias(pre->bias.b_acc_x, pre->bias.b_acc_y, pre->bias.b_acc_z, pre->bias.b_ang_vel_x, pre->bias.b_ang_vel_y, pre->bias.b_ang_vel_z);
+
+    // Nga = calib.Cov;
+    // NgaWalk = calib.CovWalk;
+    Initialize(b);
+
+    JRg << pre->jrg[0][0], pre->jrg[0][1], pre->jrg[0][2],
+        pre->jrg[1][0], pre->jrg[1][1], pre->jrg[1][2],
+        pre->jrg[2][0], pre->jrg[2][1], pre->jrg[2][2];
+    // std::cout << "Jrg is: " << JRg << std::endl;
+    JPg << pre->jpg[0][0], pre->jpg[0][1], pre->jpg[0][2],
+        pre->jpg[1][0], pre->jpg[1][1], pre->jpg[1][2],
+        pre->jpg[2][0], pre->jpg[2][1], pre->jpg[2][2];
+    JPa << pre->jpa[0][0], pre->jpa[0][1], pre->jpa[0][2],
+        pre->jpa[1][0], pre->jpa[1][1], pre->jpa[1][2],
+        pre->jpa[2][0], pre->jpa[2][1], pre->jpa[2][2];
+    JVg << pre->jvg[0][0], pre->jvg[0][1], pre->jvg[0][2],
+        pre->jvg[1][0], pre->jvg[1][1], pre->jvg[1][2],
+        pre->jvg[2][0], pre->jvg[2][1], pre->jvg[2][2];
+    JVa << pre->jva[0][0], pre->jva[0][1], pre->jva[0][2],
+        pre->jva[1][0], pre->jva[1][1], pre->jva[1][2],
+        pre->jva[2][0], pre->jva[2][1], pre->jva[2][2];
+
+    dV = Eigen::Vector3f(pre->dv.data());
+    db = Eigen::Matrix<float,6,1>(pre->db.data());
 }
 
 void Preintegrated::CopyFrom(Preintegrated* pImuPre)
@@ -167,7 +202,6 @@ void Preintegrated::Initialize(const Bias &b_)
 
 void Preintegrated::Reintegrate()
 {
-    std::unique_lock<std::mutex> lock(mMutex);
     const std::vector<integrable> aux = mvMeasurements;
     Initialize(bu);
     for(size_t i=0;i<aux.size();i++)
@@ -239,8 +273,6 @@ void Preintegrated::MergePrevious(Preintegrated* pPrev)
     if (pPrev==this)
         return;
 
-    std::unique_lock<std::mutex> lock1(mMutex);
-    std::unique_lock<std::mutex> lock2(pPrev->mMutex);
     Bias bav;
     bav.bwx = bu.bwx;
     bav.bwy = bu.bwy;
@@ -262,7 +294,6 @@ void Preintegrated::MergePrevious(Preintegrated* pPrev)
 
 void Preintegrated::SetNewBias(const Bias &bu_)
 {
-    std::unique_lock<std::mutex> lock(mMutex);
     bu = bu_;
 
     db(0) = bu_.bwx-b.bwx;
@@ -275,22 +306,25 @@ void Preintegrated::SetNewBias(const Bias &bu_)
 
 IMU::Bias Preintegrated::GetDeltaBias(const Bias &b_)
 {
-    std::unique_lock<std::mutex> lock(mMutex);
     return IMU::Bias(b_.bax-b.bax,b_.bay-b.bay,b_.baz-b.baz,b_.bwx-b.bwx,b_.bwy-b.bwy,b_.bwz-b.bwz);
 }
 
 
 Eigen::Matrix3f Preintegrated::GetDeltaRotation(const Bias &b_)
 {
-    std::unique_lock<std::mutex> lock(mMutex);
     Eigen::Vector3f dbg;
     dbg << b_.bwx-b.bwx,b_.bwy-b.bwy,b_.bwz-b.bwz;
+    if(dbg.array().isNaN()[0]){
+        dbg = Eigen::Vector3f(0,0,0);
+    }
+
+    std::cout << "GetDeltaRotation... JRg is: " << JRg << std::endl;
+    std::cout << "GetDeltaRotation... dbg is: " << dbg << std::endl;
     return NormalizeRotation(dR * Sophus::SO3f::exp(JRg * dbg).matrix());
 }
 
 Eigen::Vector3f Preintegrated::GetDeltaVelocity(const Bias &b_)
 {
-    std::unique_lock<std::mutex> lock(mMutex);
     Eigen::Vector3f dbg, dba;
     dbg << b_.bwx-b.bwx,b_.bwy-b.bwy,b_.bwz-b.bwz;
     dba << b_.bax-b.bax,b_.bay-b.bay,b_.baz-b.baz;
@@ -299,7 +333,6 @@ Eigen::Vector3f Preintegrated::GetDeltaVelocity(const Bias &b_)
 
 Eigen::Vector3f Preintegrated::GetDeltaPosition(const Bias &b_)
 {
-    std::unique_lock<std::mutex> lock(mMutex);
     Eigen::Vector3f dbg, dba;
     dbg << b_.bwx-b.bwx,b_.bwy-b.bwy,b_.bwz-b.bwz;
     dba << b_.bax-b.bax,b_.bay-b.bay,b_.baz-b.baz;
@@ -308,53 +341,44 @@ Eigen::Vector3f Preintegrated::GetDeltaPosition(const Bias &b_)
 
 Eigen::Matrix3f Preintegrated::GetUpdatedDeltaRotation()
 {
-    std::unique_lock<std::mutex> lock(mMutex);
     return NormalizeRotation(dR * Sophus::SO3f::exp(JRg*db.head(3)).matrix());
 }
 
 Eigen::Vector3f Preintegrated::GetUpdatedDeltaVelocity()
 {
-    std::unique_lock<std::mutex> lock(mMutex);
     return dV + JVg * db.head(3) + JVa * db.tail(3);
 }
 
 Eigen::Vector3f Preintegrated::GetUpdatedDeltaPosition()
 {
-    std::unique_lock<std::mutex> lock(mMutex);
     return dP + JPg*db.head(3) + JPa*db.tail(3);
 }
 
 Eigen::Matrix3f Preintegrated::GetOriginalDeltaRotation() {
-    std::unique_lock<std::mutex> lock(mMutex);
     return dR;
 }
 
 Eigen::Vector3f Preintegrated::GetOriginalDeltaVelocity() {
-    std::unique_lock<std::mutex> lock(mMutex);
     return dV;
 }
 
 Eigen::Vector3f Preintegrated::GetOriginalDeltaPosition()
 {
-    std::unique_lock<std::mutex> lock(mMutex);
     return dP;
 }
 
 Bias Preintegrated::GetOriginalBias()
 {
-    std::unique_lock<std::mutex> lock(mMutex);
     return b;
 }
 
 Bias Preintegrated::GetUpdatedBias()
 {
-    std::unique_lock<std::mutex> lock(mMutex);
     return bu;
 }
 
 Eigen::Matrix<float,6,1> Preintegrated::GetDeltaBias()
 {
-    std::unique_lock<std::mutex> lock(mMutex);
     return db;
 }
 

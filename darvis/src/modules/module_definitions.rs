@@ -1,9 +1,11 @@
-use core::{matrix::{DVMatrix, DVMatrix3, DVVector3, DVVectorOfKeyPoint, DVVectorOfPoint2f}, sensor::Sensor, system::Module};
+use core::{matrix::{DVMatrix, DVMatrix3, DVVector3, DVVectorOfKeyPoint, DVVectorOfPoint2f}, sensor::Sensor, system::{Module, Sender}};
 use std::{collections::{BTreeSet, HashMap}, fmt::Debug};
 
 use downcast_rs::{impl_downcast, Downcast};
 
-use crate::{actors::tracking_backend::TrackedMapPointData, map::{frame::Frame, keyframe::KeyFrame, map::Id, pose::Sim3}, MapLock};
+use crate::{actors::tracking_backend::TrackedMapPointData, map::{frame::Frame, keyframe::KeyFrame, map::{Id, Map}, pose::Sim3}, MapLock};
+
+use super::imu::ImuMeasurements;
 
 /// *** Traits for modules. *** //
 
@@ -60,11 +62,12 @@ pub trait BoWModule {
 
 
 /// *** IMU *** //
-pub trait ImuModule {
-    fn ready(&self) -> bool;
-    fn predict_state(&self) -> bool;
-    fn preintegrate(&self);
-    fn initialize(&self);
+pub trait ImuModule: Send + Sync {
+    fn ready(&self, map: &MapLock) -> bool;
+    fn predict_state_last_keyframe(&self, map: &MapLock, current_frame: &mut Frame, last_keyframe_id: Id) -> Option<bool>;
+    fn predict_state_last_frame(&self, current_frame: &mut Frame, last_frame: &mut Frame) -> Option<bool>;
+    fn preintegrate(&mut self, map: &MapLock, measurements: &mut ImuMeasurements, current_frame: &mut Frame, previous_frame: &mut Frame) -> bool;
+    fn initialize(&self, map: &mut MapLock, current_keyframe_id: Id, prior_g: f64, prior_a: f64, fiba: bool, tracking_backend: Option<&Sender>);
 }
 
 /// *** Feature Extraction *** //
@@ -83,7 +86,7 @@ impl Debug for dyn FeatureExtractionModule {
 /// *** Feature Matching. This consists of several traits, which are combined into a supertrait. See ORBMatcherTrait for an example. *** //
 
 // Generic trait
-pub trait FeatureMatchingModule: Downcast {
+pub trait FeatureMatchingModule {
     fn search_by_projection(
         &self, 
         frame: &mut Frame, mappoints: &mut BTreeSet<Id>, th: i32, ratio: f64,

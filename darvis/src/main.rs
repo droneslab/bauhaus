@@ -1,8 +1,11 @@
-use std::{env, fs::{File, OpenOptions}, io::{self, BufRead}, path::Path, sync::atomic::AtomicBool, thread::{self, sleep}, time::{self, Duration, SystemTime}};
+use std::{collections::VecDeque, env, fs::{File, OpenOptions}, io::{self, BufRead}, path::Path, sync::atomic::AtomicBool, thread::{self, sleep}, time::{self, Duration, SystemTime}};
 use map::map::Map;
 use fern::colors::{ColoredLevelConfig, Color};
 use glob::glob;
-use log::{debug, info};
+use log::{debug, info, warn};
+use modules::imu::{ImuMeasurements, ImuPoint};
+use sensor::Sensor;
+use opencv::core::Point3f;
 use spin_sleep::LoopHelper;
 #[macro_use] extern crate lazy_static;
 
@@ -84,7 +87,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Process images
     let loop_manager = LoopManager::new(dataset_name, dataset_dir);
     let mut sent_map_init = false;
-    for (image_path, timestamp, frame_id) in loop_manager.into_iter() {
+    for (image_path, imu_measurements, timestamp, frame_id) in loop_manager.into_iter() {
         if sent_map_init && !MAP_INITIALIZED.load(std::sync::atomic::Ordering::SeqCst) {
             sleep(Duration::from_millis(500));
         }
@@ -98,6 +101,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             ImageMsg{
                 image,
                 timestamp,
+                imu_measurements,
                 frame_id
             }
         ))?;
@@ -114,11 +118,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+struct ImuData {
+    acceleration: Vec<Point3f>,
+    gyro: Vec<Point3f>,
+    timestamps: Vec<f64>,
+    first_imu_idx: usize,
+}
+
 struct LoopManager {
     loop_helper: LoopHelper,
     image_paths: Vec<String>,
     timestamps: Vec<f64>,
     current_index: u32,
+    imu: Option<ImuData>,
 }
 
 impl LoopManager {
@@ -133,16 +145,74 @@ impl LoopManager {
         } else if dataset == "tum" {
             img_dir = dataset_dir.clone() + "/rgb";
             timestamps = Self::read_timestamps_file_tum(&dataset_dir);
+        } else if dataset == "tum-vi" {
+            img_dir = dataset_dir.clone() + "/mav0/cam0/data";
+            timestamps = Self::read_timestamps_file_tum(&dataset_dir);
         }  else {
             panic!("Invalid dataset name");
+        };
+
+        let imu = {
+            if dataset == "kitti" {
+                warn!("KITTI dataset does not have IMU data.");
+                None
+            } else if dataset == "euroc" {
+                let imu_file = dataset_dir.clone() + "/mav0/imu0/data.csv";
+                Some(Self::read_imu_file(imu_file, &timestamps).expect("Could not read IMU file!"))
+            } else if dataset == "tum-vi" {
+                let imu_file = dataset_dir.clone() + "/mav0/imu0/data.csv";
+                Some(Self::read_imu_file(imu_file, &timestamps).expect("Could not read IMU file!"))
+            } else {
+                panic!("Invalid dataset name");
+            }
         };
 
         LoopManager { 
             loop_helper: LoopHelper::builder().build_with_target_rate(SETTINGS.get::<f64>(SYSTEM, "fps")),
             image_paths: Self::generate_image_paths(img_dir),
             timestamps,
+            imu,
             current_index: 0
         }
+    }
+
+    fn read_imu_file(filename: String, camera_timestamps: &Vec<f64>) -> Result<ImuData, Box<dyn std::error::Error>>{
+        let file = File::open(filename)?;
+        let mut rdr = csv::Reader::from_reader(file);
+        let mut imu_data = ImuData {
+            acceleration: Vec::new(),
+            gyro: Vec::new(),
+            timestamps: Vec::new(),
+            first_imu_idx: 0,
+        };
+
+        for result in rdr.records() {
+            let record = result?;
+
+            imu_data.gyro.push(Point3f::new(
+                record[1].parse::<f32>().unwrap(),
+                record[2].parse::<f32>().unwrap(),
+                record[3].parse::<f32>().unwrap()
+            ));
+
+            imu_data.acceleration.push(Point3f::new(
+                record[4].parse::<f32>().unwrap(),
+                record[5].parse::<f32>().unwrap(),
+                record[6].parse::<f32>().unwrap()
+            ));
+
+            imu_data.timestamps.push(record[0].parse::<f64>().unwrap() / 1000000000000000000.0);
+        }
+
+        // Find first imu to be considered, supposing imu measurements start first
+        let mut index = 0;
+        let first_timestamp_in_camera = camera_timestamps[0];
+        while imu_data.timestamps[index] <= first_timestamp_in_camera {
+            index += 1;
+        }
+        imu_data.first_imu_idx = index - 1;
+
+        Ok(imu_data)
     }
 
     fn read_timestamps_file_kitti(time_stamp_dir: &String) -> Vec<f64> {
@@ -190,7 +260,7 @@ impl LoopManager {
 }
 
 impl Iterator for LoopManager {
-    type Item = (String, f64, u32);
+    type Item = (String, ImuMeasurements, f64, u32);
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.current_index as usize == self.image_paths.len() - 1{
@@ -200,14 +270,35 @@ impl Iterator for LoopManager {
         // First, sleep until the next timestamp
         self.loop_helper.loop_sleep(); 
 
-        self.current_index = self.current_index + 1;
         let timestamp = self.timestamps[self.current_index as usize];
         let image = self.image_paths[self.current_index as usize].clone();
 
+        let mut imu_measurements = VecDeque::new();
+        if let Some(imu) = &mut self.imu {
+            // Load imu measurements from previous frame
+            while imu.timestamps[imu.first_imu_idx] <= timestamp {
+                imu_measurements.push_back(ImuPoint{
+                    acc: nalgebra::Vector3::new(
+                        imu.acceleration[imu.first_imu_idx].x as f64,
+                        imu.acceleration[imu.first_imu_idx].y as f64,
+                        imu.acceleration[imu.first_imu_idx].z as f64
+                    ),
+                    ang_vel: nalgebra::Vector3::new(
+                        imu.gyro[imu.first_imu_idx].x as f64,
+                        imu.gyro[imu.first_imu_idx].y as f64,
+                        imu.gyro[imu.first_imu_idx].z as f64
+                    ),
+                    timestamp: imu.timestamps[imu.first_imu_idx]
+                });
+                imu.first_imu_idx += 1;
+            }
+        };
+
         // Start next loop
         self.loop_helper.loop_start(); 
+        self.current_index = self.current_index + 1;
 
-        Some((image, timestamp, self.current_index))
+        Some((image, imu_measurements, timestamp, self.current_index))
     }
 }
 

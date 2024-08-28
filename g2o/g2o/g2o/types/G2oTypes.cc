@@ -19,22 +19,23 @@
 #include "G2oTypes.h"
 #include "ImuTypes.h"
 // #include "Converter.h"
-namespace ORB_SLAM3
+namespace g2o
 {
 
-ImuCamPose::ImuCamPose(KeyFrame *pKF):its(0)
+ImuCamPose::ImuCamPose(
+    int num_cams, ORB_SLAM3::Pinhole * camera,  // TODO (camera types) ... this should be GeometricCamera, but then you get the error ‘camera’ has incomplete type
+    Eigen::Vector3d imu_position, Eigen::Matrix3d imu_rotation, 
+    Eigen::Vector3d translation, Eigen::Matrix3d rotation,
+    Eigen::Vector3d tcb_translation, Eigen::Matrix3d tcb_rotation,
+    Eigen::Vector3d tbc_translation,
+    float bf
+):its(0), bf(bf)
 {
     // Load IMU pose
-    twb = pKF->GetImuPosition().cast<double>();
-    Rwb = pKF->GetImuRotation().cast<double>();
+    twb = imu_position.cast<double>();
+    Rwb = imu_rotation.cast<double>();
 
     // Load camera poses
-    int num_cams;
-    if(pKF->mpCamera2)
-        num_cams=2;
-    else
-        num_cams=1;
-
     tcw.resize(num_cams);
     Rcw.resize(num_cams);
     tcb.resize(num_cams);
@@ -44,25 +45,25 @@ ImuCamPose::ImuCamPose(KeyFrame *pKF):its(0)
     pCamera.resize(num_cams);
 
     // Left camera
-    tcw[0] = pKF->GetTranslation().cast<double>();
-    Rcw[0] = pKF->GetRotation().cast<double>();
-    tcb[0] = pKF->mImuCalib.mTcb.translation().cast<double>();
-    Rcb[0] = pKF->mImuCalib.mTcb.rotationMatrix().cast<double>();
+    tcw[0] = translation.cast<double>();
+    Rcw[0] = rotation.cast<double>();
+    tcb[0] = tcb_translation.cast<double>();
+    Rcb[0] = tcb_rotation.cast<double>();
     Rbc[0] = Rcb[0].transpose();
-    tbc[0] = pKF->mImuCalib.mTbc.translation().cast<double>();
-    pCamera[0] = pKF->mpCamera;
-    bf = pKF->mbf;
+    tbc[0] = tbc_translation.cast<double>();
+    pCamera[0] = camera;
 
     if(num_cams>1)
     {
-        Eigen::Matrix4d Trl = pKF->GetRelativePoseTrl().matrix().cast<double>();
-        Rcw[1] = Trl.block<3,3>(0,0) * Rcw[0];
-        tcw[1] = Trl.block<3,3>(0,0) * tcw[0] + Trl.block<3,1>(0,3);
-        tcb[1] = Trl.block<3,3>(0,0) * tcb[0] + Trl.block<3,1>(0,3);
-        Rcb[1] = Trl.block<3,3>(0,0) * Rcb[0];
-        Rbc[1] = Rcb[1].transpose();
-        tbc[1] = -Rbc[1] * tcb[1];
-        pCamera[1] = pKF->mpCamera2;
+        // TODO (Stereo) ... pass in vector of GeometricCameras instead of single camera
+        // Eigen::Matrix4d Trl = pKF->GetRelativePoseTrl().matrix().cast<double>();
+        // Rcw[1] = Trl.block<3,3>(0,0) * Rcw[0];
+        // tcw[1] = Trl.block<3,3>(0,0) * tcw[0] + Trl.block<3,1>(0,3);
+        // tcb[1] = Trl.block<3,3>(0,0) * tcb[0] + Trl.block<3,1>(0,3);
+        // Rcb[1] = Trl.block<3,3>(0,0) * Rcb[0];
+        // Rbc[1] = Rcb[1].transpose();
+        // tbc[1] = -Rbc[1] * tcb[1];
+        // pCamera[1] = pKF->mpCamera2;
     }
 
     // For posegraph 4DoF
@@ -70,55 +71,14 @@ ImuCamPose::ImuCamPose(KeyFrame *pKF):its(0)
     DR.setIdentity();
 }
 
-ImuCamPose::ImuCamPose(Frame *pF):its(0)
-{
-    // Load IMU pose
-    twb = pF->GetImuPosition().cast<double>();
-    Rwb = pF->GetImuRotation().cast<double>();
 
-    // Load camera poses
-    int num_cams;
-    if(pF->mpCamera2)
-        num_cams=2;
-    else
-        num_cams=1;
-
-    tcw.resize(num_cams);
-    Rcw.resize(num_cams);
-    tcb.resize(num_cams);
-    Rcb.resize(num_cams);
-    Rbc.resize(num_cams);
-    tbc.resize(num_cams);
-    pCamera.resize(num_cams);
-
-    // Left camera
-    tcw[0] = pF->GetPose().translation().cast<double>();
-    Rcw[0] = pF->GetPose().rotationMatrix().cast<double>();
-    tcb[0] = pF->mImuCalib.mTcb.translation().cast<double>();
-    Rcb[0] = pF->mImuCalib.mTcb.rotationMatrix().cast<double>();
-    Rbc[0] = Rcb[0].transpose();
-    tbc[0] = pF->mImuCalib.mTbc.translation().cast<double>();
-    pCamera[0] = pF->mpCamera;
-    bf = pF->mbf;
-
-    if(num_cams>1)
-    {
-        Eigen::Matrix4d Trl = pF->GetRelativePoseTrl().matrix().cast<double>();
-        Rcw[1] = Trl.block<3,3>(0,0) * Rcw[0];
-        tcw[1] = Trl.block<3,3>(0,0) * tcw[0] + Trl.block<3,1>(0,3);
-        tcb[1] = Trl.block<3,3>(0,0) * tcb[0] + Trl.block<3,1>(0,3);
-        Rcb[1] = Trl.block<3,3>(0,0) * Rcb[0];
-        Rbc[1] = Rcb[1].transpose();
-        tbc[1] = -Rbc[1] * tcb[1];
-        pCamera[1] = pF->mpCamera2;
-    }
-
-    // For posegraph 4DoF
-    Rwb0 = Rwb;
-    DR.setIdentity();
-}
-
-ImuCamPose::ImuCamPose(Eigen::Matrix3d &_Rwc, Eigen::Vector3d &_twc, KeyFrame* pKF): its(0)
+ImuCamPose::ImuCamPose(
+    ORB_SLAM3::Pinhole * camera,   // TODO (camera types) ... this should be GeometricCamera, but then you get the error ‘camera’ has incomplete type
+    Eigen::Matrix3d &_Rwc, Eigen::Vector3d &_twc,
+    Eigen::Vector3d tcb_translation, Eigen::Matrix3d tcb_rotation,
+    Eigen::Vector3d tbc_translation,
+    float bf
+): its(0), bf(bf)
 {
     // This is only for posegrpah, we do not care about multicamera
     tcw.resize(1);
@@ -129,16 +89,15 @@ ImuCamPose::ImuCamPose(Eigen::Matrix3d &_Rwc, Eigen::Vector3d &_twc, KeyFrame* p
     tbc.resize(1);
     pCamera.resize(1);
 
-    tcb[0] = pKF->mImuCalib.mTcb.translation().cast<double>();
-    Rcb[0] = pKF->mImuCalib.mTcb.rotationMatrix().cast<double>();
+    tcb[0] = tcb_translation.cast<double>();
+    Rcb[0] = tcb_rotation.cast<double>();
     Rbc[0] = Rcb[0].transpose();
-    tbc[0] = pKF->mImuCalib.mTbc.translation().cast<double>();
+    tbc[0] = tbc_translation.cast<double>();
     twb = _Rwc * tcb[0] + _twc;
     Rwb = _Rwc * Rcb[0];
     Rcw[0] = _Rwc.transpose();
     tcw[0] = -Rcw[0] * _twc;
-    pCamera[0] = pKF->mpCamera;
-    bf = pKF->mbf;
+    pCamera[0] = camera;
 
     // For posegraph 4DoF
     Rwb0 = Rwb;
@@ -255,8 +214,8 @@ void ImuCamPose::UpdateW(const double *pu)
     }
 }
 
-InvDepthPoint::InvDepthPoint(double _rho, double _u, double _v, KeyFrame* pHostKF): u(_u), v(_v), rho(_rho),
-    fx(pHostKF->fx), fy(pHostKF->fy), cx(pHostKF->cx), cy(pHostKF->cy), bf(pHostKF->mbf)
+InvDepthPoint::InvDepthPoint(double _rho, double _u, double _v, double fx, double fy, double cx, double cy, double bf): u(_u), v(_v), rho(_rho),
+    fx(fx), fy(fy), cx(cx), cy(cy), bf(bf)
 {
 }
 
@@ -453,39 +412,27 @@ void EdgeStereoOnlyPose::linearizeOplus()
     _jacobianOplusXi = proj_jac * Rcb * SE3deriv;
 }
 
-VertexVelocity::VertexVelocity(KeyFrame* pKF)
+VertexVelocity::VertexVelocity(Eigen::Vector3d velocity)
 {
-    setEstimate(pKF->GetVelocity().cast<double>());
+    setEstimate(velocity.cast<double>());
+    std::cout << "set vertexvelocity estimate to " << velocity << std::endl;
 }
 
-VertexVelocity::VertexVelocity(Frame* pF)
+
+VertexGyroBias::VertexGyroBias(Eigen::Vector3d gyro_bias)
 {
-    setEstimate(pF->GetVelocity().cast<double>());
+    setEstimate(gyro_bias.cast<double>());
+    std::cout << "set vertexgyrobias estimate to " << gyro_bias << std::endl;
+
 }
 
-VertexGyroBias::VertexGyroBias(KeyFrame *pKF)
+
+VertexAccBias::VertexAccBias(Eigen::Vector3d acc_bias)
 {
-    setEstimate(pKF->GetGyroBias().cast<double>());
+    setEstimate(acc_bias.cast<double>());
+    std::cout << "set VertexAccBias estimate to " << acc_bias << std::endl;
 }
 
-VertexGyroBias::VertexGyroBias(Frame *pF)
-{
-    Eigen::Vector3d bg;
-    bg << pF->mImuBias.bwx, pF->mImuBias.bwy,pF->mImuBias.bwz;
-    setEstimate(bg);
-}
-
-VertexAccBias::VertexAccBias(KeyFrame *pKF)
-{
-    setEstimate(pKF->GetAccBias().cast<double>());
-}
-
-VertexAccBias::VertexAccBias(Frame *pF)
-{
-    Eigen::Vector3d ba;
-    ba << pF->mImuBias.bax, pF->mImuBias.bay,pF->mImuBias.baz;
-    setEstimate(ba);
-}
 
 
 
@@ -626,6 +573,8 @@ void EdgeInertialGS::computeError()
     const IMU::Bias b(VA->estimate()[0],VA->estimate()[1],VA->estimate()[2],VG->estimate()[0],VG->estimate()[1],VG->estimate()[2]);
     g = VGDir->estimate().Rwg*gI;
     const double s = VS->estimate();
+
+    std::cout << "bias: " << b << std::endl;
     const Eigen::Matrix3d dR = mpInt->GetDeltaRotation(b).cast<double>();
     const Eigen::Vector3d dV = mpInt->GetDeltaVelocity(b).cast<double>();
     const Eigen::Vector3d dP = mpInt->GetDeltaPosition(b).cast<double>();
@@ -662,6 +611,7 @@ void EdgeInertialGS::linearizeOplus()
     Gm(1,0) = IMU::GRAVITY_VALUE;
     const double s = VS->estimate();
     const Eigen::MatrixXd dGdTheta = Rwg*Gm;
+
     const Eigen::Matrix3d dR = mpInt->GetDeltaRotation(b).cast<double>();
     const Eigen::Matrix3d eR = dR.transpose()*Rbw1*Rwb2;
     const Eigen::Vector3d er = LogSO3(eR);

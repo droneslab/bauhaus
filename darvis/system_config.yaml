@@ -7,13 +7,13 @@ master:
 
 system:
       localization_only_mode: false
-      vocabulary_file: "../Vocabulary/ORBvoc.txt"
+      vocabulary_file: "/home/darvis/Downloads/OS3_Git_Latest/darvis-orbslam3/Vocabulary/ORBvoc.txt"
       framesensor: Mono
-      imusensor: None
+      imusensor: None # options are [None, Some]
       first_actor_name: TRACKING_FRONTEND # Name of actor to kick off pipeline
 
       # FPS
-      fps: 8.0
+      fps: 10.0
 
       # RESULTS
       results_folder: "results"
@@ -26,9 +26,18 @@ system:
       # To turn on visualizer, uncomment visualizer actor below
 
 modules:
+      # - 
+      #   name: IMU
+      #   tag: "imu"
+      #   settings:
+      #     -
+      #       name: tbc
+      #       value: "data/imu/imu.txt"
+      #       type: string
+
       - 
         name: FEATURE_DETECTION
-        tag: "orbslam feature detection" # "opencv feature detection"
+        tag: "orbslam feature detection" # options: ["opencv feature detection", "orbslam feature detection"]
         settings:
           - 
             name: max_features
@@ -89,18 +98,18 @@ modules:
         name: LOOP_DETECTION
         tag: "orbslam3 loop detection"
         settings:
-          - 
+          - null
 
       - 
         name: LOCAL_MAP_OPTIMIZATION
         tag: "bundle adjustment"
         settings:
-          - 
+          - null
       - 
         name: FULL_MAP_OPTIMIZATION
         tag: "bundle adjustment"
         settings:
-          - 
+          - null
 
 
 actors:
@@ -138,70 +147,52 @@ actors:
             type: bool
 
       -
-       name: TRACKING_FRONTEND
-       tag: "orbslam tracking frontend"
-       receiver_bound: 10
-       settings:
-          -
+        name: TRACKING_FRONTEND
+        tag: "orbslam tracking frontend"
+        receiver_bound: 10
+        settings:
+           - null
 
       -
-       name: TRACKING_BACKEND
-       tag: "orbslam tracking backend"
-       receiver_bound: 10
-       settings:
-          - 
-            name: recently_lost_cutoff
-            value: 5
-            type: i32
-          - 
-            name: frames_to_reset_IMU
-            value: 30
-            type: i32
-          - 
-            name: insert_KFs_when_lost
-            value: true
-            type: bool
-          - 
-            name: min_num_features
-            value: 2000
-            type: i32
-          - 
-            name: min_frames_to_insert_kf
-            value: 0
-            type: i32
-          -
-            name: max_frames_to_insert_kf
-            value: 10
-            type: i32
-
-      # -
-      #  name: TRACKING_BACKEND
-      #  tag: "optical flow tracking"
-      #  receiver_bound: 10
-      #  settings:
-      #     - 
-      #       name: min_num_features
-      #       value: 1500
-      #       type: i32
-      #     - 
-      #       name: min_frames_to_insert_kf
-      #       value: 0
-      #       type: i32
-      #     -
-      #       name: max_frames_to_insert_kf
-      #       value: 10
-      #       type: i32
+        name: TRACKING_BACKEND
+        tag: "orbslam tracking backend"
+        receiver_bound: 10
+        settings:
+           - 
+             name: recently_lost_cutoff
+             value: 5
+             type: i32
+           - 
+             name: frames_to_reset_IMU
+             value: 30
+             type: i32
+           - 
+             name: insert_KFs_when_lost
+             value: true
+             type: bool
+           - 
+             name: min_num_features
+             value: 2000
+             type: i32
+           - 
+             name: min_frames_to_insert_kf
+             value: 0
+             type: i32
+           -
+             name: max_frames_to_insert_kf
+             value: 10
+             type: i32
 
       -
        name: LOCAL_MAPPING
        tag: "orbslam local mapping"
        receiver_bound: 3
        settings:
-          - 
+          - null
 
       -
        name: LOOP_CLOSING
        tag: "orbslam3 loop closing"
        receiver_bound: -1
        settings:
-          - 
+          - null

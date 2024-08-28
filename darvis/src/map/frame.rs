@@ -1,9 +1,9 @@
-use core::{config::{SETTINGS, SYSTEM}, matrix::{DVMatrix, DVVector3, DVVectorOfKeyPoint}, sensor::{FrameSensor, Sensor}, system::Timestamp};
+use core::{config::{SETTINGS, SYSTEM}, matrix::{DVMatrix, DVMatrix3, DVVector3, DVVectorOfKeyPoint}, sensor::{FrameSensor, ImuSensor, Sensor}, system::Timestamp};
 use opencv::core::{KeyPoint, Mat};
 
-use crate::modules::module_definitions::VocabularyModule;
+use crate::modules::{imu::{ImuCalib, ImuDataFrame}, module_definitions::VocabularyModule};
 
-use crate::{actors::tracking_backend::TrackedMapPointData, modules::{bow::DVBoW, imu::{IMUBias, IMUPreIntegrated}}, registered_actors::{CAMERA_MODULE, VOCABULARY_MODULE}};
+use crate::{actors::tracking_backend::TrackedMapPointData, modules::{bow::DVBoW, imu::{ImuBias, ImuPreIntegrated}}, registered_actors::{CAMERA_MODULE, VOCABULARY_MODULE}};
 
 use super::{features::Features, keyframe::MapPointMatches, map::{Id, Map}, mappoint::MapPoint, pose::{DVTranslation, Pose}};
 use crate::modules::module_definitions::CameraModule;
@@ -25,9 +25,8 @@ pub struct Frame {
     pub bow: Option<DVBoW>,
 
     // IMU //
-    // Preintegrated IMU measurements from previous keyframe
-    pub(super) imu_bias: Option<IMUBias>,
-    pub(super) imu_preintegrated: Option<IMUPreIntegrated>,
+    // Imu preintegration from last keyframe
+    pub imu_data: ImuDataFrame,
  
     sensor: Sensor,
 
@@ -41,22 +40,45 @@ impl Frame {
         timestamp: Timestamp
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let sensor = SETTINGS.get::<Sensor>(SYSTEM, "sensor");
-        let imu_bias = match sensor.is_imu() {
-            true => todo!("IMU"),
-            false => None
-        };
         let features = Features::new(keypoints_vec, descriptors_vec, im_width, im_height, sensor)?;
         let num_keypoints = features.num_keypoints as usize;
+        let imu_bias = Some(ImuBias::new());
         let frame = Self {
             frame_id,
             timestamp,
             features,
-            imu_bias,
             sensor,
             image,
             bow: None,
             mappoint_matches: MapPointMatches::new(num_keypoints),
-            imu_preintegrated: None,
+            imu_data: ImuDataFrame::new(),
+            pose: None,
+            ref_kf_id: None,
+        };
+        Ok(frame)
+    }
+
+    pub fn new_no_features(
+        frame_id: Id, 
+        image: Option<opencv::core::Mat>,
+        timestamp: Timestamp
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        let sensor = SETTINGS.get::<Sensor>(SYSTEM, "sensor");
+        let features = Features::empty();
+        let num_keypoints = features.num_keypoints as usize;
+        let imu_bias = match sensor.imu() {
+            ImuSensor::Some => Some(ImuBias::new()),
+            _ => None
+        };
+        let frame = Self {
+            frame_id,
+            timestamp,
+            features,
+            sensor,
+            image,
+            bow: None,
+            mappoint_matches: MapPointMatches::new(num_keypoints),
+            imu_data: ImuDataFrame::new(),
             pose: None,
             ref_kf_id: None,
         };
@@ -70,12 +92,11 @@ impl Frame {
             mappoint_matches: frame.mappoint_matches.clone(),
             pose: frame.pose,
             features: frame.features.clone(),
-            imu_bias: frame.imu_bias,
-            imu_preintegrated: frame.imu_preintegrated,
             bow: frame.bow.clone(),
             ref_kf_id: frame.ref_kf_id,
             sensor: frame.sensor,
             image: frame.image.clone(),
+            imu_data: frame.imu_data.clone(),
         }
     }
 
@@ -89,8 +110,6 @@ impl Frame {
     pub fn replace_features(&mut self, keypoints: DVVectorOfKeyPoint, descriptors: DVMatrix) -> Result<(), Box<dyn std::error::Error>> {
         self.features = Features::new(keypoints, descriptors, self.features.image_width, self.features.image_height, self.sensor)?;
         self.mappoint_matches = MapPointMatches::new(self.features.num_keypoints as usize); // Mappoint match length needs to match keypoints length
-        println!("mappoint match length: {}", self.mappoint_matches.len());
-
         Ok(())
     }
 
@@ -215,4 +234,31 @@ impl Frame {
             }
         }
     }
+
+    // *IMU *//
+    pub fn get_imu_rotation(&self) -> DVMatrix3<f64> {
+        // Eigen::Matrix3f KeyFrame::GetImuRotation()
+        // Note: in Orbslam this is: (mTwc * mImuCalib.mTcb).rotationMatrix();
+        // and mTwc is inverse of the pose
+        (self.pose.expect("Should have pose by now").inverse() * ImuCalib::new().tcb).get_rotation()
+    }
+
+    pub fn get_imu_position(&self) -> DVVector3<f64> {
+        // Eigen::Matrix<float,3,1> Frame::GetImuPosition() const {
+        // Note: in Orbslam this is: 
+        // mRwc * mImuCalib.mTcb.translation() + mOw;
+        // where mOw = twc (inverse of pose translation)
+
+        DVVector3::new(
+            *self.pose.unwrap().get_rotation() * *ImuCalib::new().tcb.get_translation() + *self.pose.unwrap().inverse().get_translation()
+        )
+    }
+
+    pub fn set_imu_pose_velocity(&mut self, rwb: nalgebra::Matrix3<f64>, twb: nalgebra::Vector3<f64>, vwb: nalgebra::Vector3<f64>) {
+        // void Frame::SetImuPoseVelocity(const Eigen::Matrix3f &Rwb, const Eigen::Vector3f &twb, const Eigen::Vector3f &Vwb)
+        self.imu_data.velocity = Some(DVVector3::new(vwb));
+        let new_pose = Pose::new(twb, rwb).inverse(); // Tbw
+        self.pose = Some(ImuCalib::new().tcb * new_pose);
+    }
+
 }

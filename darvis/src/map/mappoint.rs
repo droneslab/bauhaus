@@ -38,6 +38,7 @@ pub struct MapPoint { // Full map item inserted into the map with the following 
 
     // Used by loop closing
     // todo (design, variable locations) can we avoid having these in here and keep it thread local instead?
+    //... possibly not, used by imu initialization (local mapping) as well
     pub ba_global_for_kf: Id, // mnBAGlobalForKF
     pub gba_pose: Option<DVTranslation>, // mTcwGBA
 
