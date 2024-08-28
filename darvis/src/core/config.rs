@@ -13,6 +13,7 @@ use std::{collections::HashMap, sync::RwLock};
 use lazy_static::*;
 use linked_hash_map::LinkedHashMap;
 use log::info;
+use opencv::core::MatTraitConst;
 
 use std::fs::File;
 use std::io::Read;
@@ -20,7 +21,7 @@ extern crate yaml_rust;
 use yaml_rust::yaml;
 use yaml_rust::yaml::Yaml;
 
-use crate::sensor::{Sensor, FrameSensor, ImuSensor};
+use crate::{matrix::DVMatrix4, sensor::{FrameSensor, ImuSensor, Sensor}};
 
 pub static SYSTEM: &str = "SYSTEM"; 
 
@@ -46,7 +47,7 @@ impl Settings {
         let boxed_value = unlocked_params.get(&key).unwrap();
         return self.get_value_from_box(boxed_value);
     }
-    pub fn insert<T: std::fmt::Display>(&self, namespace: &str, key_param: &str, value: T)
+    pub fn insert<T: std::fmt::Debug>(&self, namespace: &str, key_param: &str, value: T)
     where Self: OverloadedSetting<T> {
         let key = format!("{}_{}", namespace, key_param);
         let value = self.make_box_from_value(value);
@@ -65,7 +66,8 @@ impl OverloadedSetting<String> for Settings {
             bool_field: None,
             float_field: None,
             int_field: None,
-            sensor_field: None
+            sensor_field: None,
+            matrix_field: None
         };
     }
 }
@@ -80,7 +82,8 @@ impl OverloadedSetting<bool> for Settings {
             bool_field: Some(value),
             float_field: None,
             int_field: None,
-            sensor_field: None
+            sensor_field: None,
+            matrix_field: None
         };
     }
 }
@@ -95,7 +98,8 @@ impl OverloadedSetting<f64> for Settings {
             bool_field: None,
             float_field: Some(value),
             int_field: None,
-            sensor_field: None
+            sensor_field: None,
+            matrix_field: None
         };
     }
 }
@@ -110,10 +114,28 @@ impl OverloadedSetting<i32> for Settings {
             bool_field: None,
             float_field: None,
             int_field: Some(value),
-            sensor_field: None
+            sensor_field: None,
+            matrix_field: None
         };
     }
 }
+
+impl OverloadedSetting<DVMatrix4<f64>> for Settings {
+    fn get_value_from_box(&self, boxed_value : &SettingBox) -> DVMatrix4<f64> {
+        return boxed_value.matrix_field.as_ref().unwrap().clone(); // TODO Can we get rid of this clone?
+    }
+    fn make_box_from_value(&self, value: DVMatrix4<f64>) -> SettingBox  {
+        return SettingBox {
+            string_field: None,
+            bool_field: None,
+            float_field: None,
+            int_field: None,
+            sensor_field: None,
+            matrix_field: Some(value),
+        };
+    }
+}
+
 
 impl OverloadedSetting<Sensor> for Settings {
     fn get_value_from_box(&self, boxed_value : &SettingBox) -> Sensor {
@@ -125,7 +147,8 @@ impl OverloadedSetting<Sensor> for Settings {
             bool_field: None,
             float_field: None,
             int_field: None,
-            sensor_field: Some(value)
+            sensor_field: Some(value),
+            matrix_field: None
         };
     }
 }
@@ -140,7 +163,8 @@ pub struct SettingBox {
     bool_field: Option<bool>,
     float_field: Option<f64>,
     int_field: Option<i32>,
-    sensor_field: Option<Sensor>
+    sensor_field: Option<Sensor>,
+    matrix_field: Option<DVMatrix4<f64>>
 }
 
 
@@ -238,6 +262,9 @@ fn load_system_settings(system_fn: &String) -> (Vec<ActorConf>, Vec<ModuleConf>,
             name: get_val(h, "name").as_str().unwrap().to_string(),
             tag: get_val(h, "tag").as_str().unwrap().to_string(),
         };
+
+        SETTINGS.insert(&m_conf.name, "module_tag", m_conf.tag.clone());
+
         add_settings(get_val(h, "settings").as_vec().unwrap(), &m_conf.name);
         module_info.push(m_conf);
     }
@@ -269,6 +296,14 @@ fn load_camera_settings(camera_fn: &String, module_info: &mut Vec<ModuleConf>) {
     add_setting_f64("CAMERA", "k3", &yaml_document["k3"]);
     add_setting_f64("CAMERA", "stereo_baseline_times_fx", &yaml_document["stereo_baseline_times_fx"]);
     add_setting_i32("CAMERA", "thdepth", &yaml_document["thdepth"]);
+
+    // Not all datasets have imu information
+    add_setting_f64("IMU", "noise_gyro", &yaml_document["imu__noise_gyro"]);
+    add_setting_f64("IMU", "noise_acc", &yaml_document["imu__noise_acc"]);
+    add_setting_f64("IMU", "gyro_walk", &yaml_document["imu__gyro_walk"]);
+    add_setting_f64("IMU", "acc_walk", &yaml_document["imu__acc_walk"]);
+    add_setting_f64("IMU", "frequency", &yaml_document["imu__frequency"]);
+    add_setting_imu_matrix("IMU", "T_b_c1", vec![&yaml_document["imu__T_b_c1_row1"],&yaml_document["imu__T_b_c1_row2"],&yaml_document["imu__T_b_c1_row3"],&yaml_document["imu__T_b_c1_row4"]]);
 
     // Add dataset name
     add_setting_string("CAMERA", "dataset", &yaml_document["dataset"]);
@@ -321,7 +356,23 @@ fn add_setting_string(namespace: &str, key: &str, value: &Yaml) {
     SETTINGS.insert(&namespace, &key, val.clone());
     info!("\t {} {} = {}", namespace, key, val);
 }
+fn add_setting_imu_matrix(namespace: &str, key: &str, matrix_rows: Vec<&Yaml>) {
+    // TODO... this is so hacky ... doesn't accept different-sized matrixes than 4x4
 
+    let mut array = [[0f64; 4]; 4];
+    for row in 0..4 {
+        let curr_matrix_row = matrix_rows[row].as_vec().unwrap();
+        for col in 0..4 {
+            array[row][col] = curr_matrix_row[col].as_f64().unwrap();
+        }
+    }
+
+    // let mat = opencv::core::Mat::from_slice_2d(& array).expect("Failed to create matrix");
+    let mat = nalgebra::Matrix4::from(array);
+    let matrix: DVMatrix4<f64> = DVMatrix4::<f64>::new(mat);
+
+    SETTINGS.insert(&namespace, &key, matrix);
+}
 fn get_val<'a>(hashmap: &'a LinkedHashMap<Yaml, Yaml>, string: &str) -> &'a Yaml {
     &hashmap[&Yaml::String(string.to_string())]
 }

@@ -31,6 +31,13 @@ impl Pose {
         Pose ( nalgebra::IsometryMatrix3::from_parts(translation,rotation3) )
     }
 
+    pub fn new_with_default_trans(rotation: nalgebra::Matrix3<f64>) -> Pose {
+        let translation = nalgebra::Translation3::new(0.0, 0.0, 0.0);
+        let rot = nalgebra::Rotation3::from_matrix(&rotation);
+        Pose ( nalgebra::IsometryMatrix3::from_parts(translation,rot) )
+    }
+
+
     pub fn identity() -> Pose {
         let translation = nalgebra::Translation3::new(0.0, 0.0, 0.0);
         let rotation3 = nalgebra::Rotation3::identity();
@@ -198,10 +205,16 @@ impl From<dvos3binding::ffi::Pose> for Pose {
         );
 
         // Surely this can't be the best way to do this?
+        // let matrix3 = nalgebra::Matrix3::<f64>::new(
+        //     pose.rotation[0][0].into(), pose.rotation[1][0].into(), pose.rotation[2][0].into(),
+        //     pose.rotation[0][1].into(), pose.rotation[1][1].into(), pose.rotation[2][1].into(),
+        //     pose.rotation[0][2].into(), pose.rotation[1][2].into(), pose.rotation[2][2].into()
+        // );
+
         let matrix3 = nalgebra::Matrix3::<f64>::new(
-            pose.rotation[0][0].into(), pose.rotation[1][0].into(), pose.rotation[2][0].into(),
-            pose.rotation[0][1].into(), pose.rotation[1][1].into(), pose.rotation[2][1].into(),
-            pose.rotation[0][2].into(), pose.rotation[1][2].into(), pose.rotation[2][2].into()
+            pose.rotation[0][0].into(), pose.rotation[0][1].into(), pose.rotation[0][2].into(),
+            pose.rotation[1][0].into(), pose.rotation[1][1].into(), pose.rotation[1][2].into(),
+            pose.rotation[2][0].into(), pose.rotation[2][1].into(), pose.rotation[2][2].into()
         );
         let rotation3 = nalgebra::Rotation3::from_matrix_unchecked(matrix3);
         Pose ( nalgebra::IsometryMatrix3::from_parts(translation, rotation3) )

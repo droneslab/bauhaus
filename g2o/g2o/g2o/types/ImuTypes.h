@@ -26,15 +26,16 @@
 #include <Eigen/Core>
 #include <Eigen/Geometry>
 #include <Eigen/Dense>
-// #include <sophus/se3.hpp>
+#include <../Sophus/sophus/se3.hpp>
 #include <mutex>
+#include "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/cxxbridge/g2o/src/lib.rs.h"
 
 // #include "SerializationUtils.h"
 
 #include <boost/serialization/serialization.hpp>
 #include <boost/serialization/vector.hpp>
 
-namespace ORB_SLAM3
+namespace g2o
 {
 
 namespace IMU
@@ -170,6 +171,7 @@ class Preintegrated
 
 public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+    Preintegrated(g2o::RustImuPreintegrated * pre);
     Preintegrated(const Bias &b_, const Calib &calib);
     Preintegrated(Preintegrated* pImuPre);
     Preintegrated() {}

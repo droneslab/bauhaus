@@ -2,7 +2,7 @@ use std::{backtrace::Backtrace, collections::BTreeMap, fmt::Debug, sync::atomic:
 use core::{matrix::DVMatrix, config::{SETTINGS, SYSTEM}, sensor::{Sensor, FrameSensor}};
 use log::{error, warn};
 extern crate nalgebra as na;
-use crate::{matrix::DVVector3, modules::orbmatcher::{SCALE_FACTORS, descriptor_distance}, registered_actors::FEATURE_DETECTION};
+use crate::{matrix::DVVector3, modules::{module_definitions::FeatureMatchingModule, orbslam_matcher::{ORBMatcherTrait, SCALE_FACTORS}}, registered_actors::{self, FEATURE_DETECTION, FEATURE_MATCHING_MODULE}};
 use super::{map::{Id, Map}, keyframe::KeyFrame, pose::DVTranslation};
 
 #[derive(Debug)]
@@ -38,6 +38,7 @@ pub struct MapPoint { // Full map item inserted into the map with the following 
 
     // Used by loop closing
     // todo (design, variable locations) can we avoid having these in here and keep it thread local instead?
+    //... possibly not, used by imu initialization (local mapping) as well
     pub ba_global_for_kf: Id, // mnBAGlobalForKF
     pub gba_pose: Option<DVTranslation>, // mTcwGBA
 
@@ -148,7 +149,7 @@ impl MapPoint {
             distances[i][i] = 0;
 
             for j in i+1..descriptors.len() {
-                let dist_ij = descriptor_distance(&descriptors[i], &descriptors[j]);
+                let dist_ij = FEATURE_MATCHING_MODULE.descriptor_distance(&descriptors[i], &descriptors[j]);
 
                 distances[i][j] = dist_ij;
                 distances[j][i] = dist_ij;

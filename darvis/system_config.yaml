@@ -7,9 +7,9 @@ master:
 
 system:
       localization_only_mode: false
-      vocabulary_file: "/home/darvis/Downloads/ORB_SLAM3/Vocabulary/ORBvoc.txt"
+      vocabulary_file: "/home/darvis/Downloads/OS3_Git_Latest/darvis-orbslam3/Vocabulary/ORBvoc.txt"
       framesensor: Mono
-      imusensor: None
+      imusensor: None # options are [None, Some]
       first_actor_name: TRACKING_FRONTEND # Name of actor to kick off pipeline
 
       # FPS
@@ -21,14 +21,23 @@ system:
 
       # DEBUGGING
       log_level: debug # options are [trace, debug, info, warn, error]
-      check_deadlocks: false # Spawns a new thread to check for deadlocks every 2 secs, but slows stuff down.
+      check_deadlocks: true # Spawns a new thread to check for deadlocks every 2 secs, but slows stuff down.
       # To enable profiling, set features = ["enable"] for tracy-client in Cargo.toml
       # To turn on visualizer, uncomment visualizer actor below
 
 modules:
+      # - 
+      #   name: IMU
+      #   tag: "imu"
+      #   settings:
+      #     -
+      #       name: tbc
+      #       value: "data/imu/imu.txt"
+      #       type: string
+
       - 
         name: FEATURE_DETECTION
-        tag: "feature detection"
+        tag: "orbslam feature detection" # options: ["opencv feature detection", "orbslam feature detection"]
         settings:
           - 
             name: max_features
@@ -52,13 +61,26 @@ modules:
             type: i32
 
       -
-        name: MATCHER
-        tag: "matcher"
+        name: FEATURE_MATCHER
+        tag: "orbslam feature matching"
         settings:
           - 
             name: far_points_threshold
             value: 20.0
             type: f64
+          - 
+            name: high_threshold
+            value: 100
+            type: i32
+          - 
+            name: low_threshold
+            value: 50
+            type: i32
+          - 
+            name: histo_length
+            value: 30
+            type: i32
+
       -
         name: FEATURES
         tag: "features"
@@ -71,6 +93,23 @@ modules:
             name: frame_grid_cols
             value: 64
             type: i32
+
+      - 
+        name: LOOP_DETECTION
+        tag: "orbslam3 loop detection"
+        settings:
+          - null
+
+      - 
+        name: LOCAL_MAP_OPTIMIZATION
+        tag: "bundle adjustment"
+        settings:
+          - null
+      - 
+        name: FULL_MAP_OPTIMIZATION
+        tag: "bundle adjustment"
+        settings:
+          - null
 
 
 actors:
@@ -108,72 +147,52 @@ actors:
             type: bool
 
       -
-       name: TRACKING_FRONTEND
-       tag: "orbslam tracking frontend"
-       receiver_bound: 10
-       settings:
-          -
+        name: TRACKING_FRONTEND
+        tag: "orbslam tracking frontend"
+        receiver_bound: 10
+        settings:
+           - null
 
       -
-       name: TRACKING_BACKEND
-       tag: "orbslam tracking backend"
-       receiver_bound: 10
-       possible_paths:
-                     -
-                      from: tracking_frontend
-                      to: localmapping
-                      input: keypoints, descriptors
-                      output: newkeyframe
+        name: TRACKING_BACKEND
+        tag: "orbslam tracking backend"
+        receiver_bound: 10
+        settings:
+           - 
+             name: recently_lost_cutoff
+             value: 5
+             type: i32
+           - 
+             name: frames_to_reset_IMU
+             value: 30
+             type: i32
+           - 
+             name: insert_KFs_when_lost
+             value: true
+             type: bool
+           - 
+             name: min_num_features
+             value: 2000
+             type: i32
+           - 
+             name: min_frames_to_insert_kf
+             value: 0
+             type: i32
+           -
+             name: max_frames_to_insert_kf
+             value: 10
+             type: i32
+
+      -
+       name: LOCAL_MAPPING
+       tag: "orbslam local mapping"
+       receiver_bound: 3
        settings:
-          - 
-            name: recently_lost_cutoff
-            value: 5
-            type: i32
-          - 
-            name: frames_to_reset_IMU
-            value: 30
-            type: i32
-          - 
-            name: insert_KFs_when_lost
-            value: true
-            type: bool
-          - 
-            name: min_num_features
-            value: 2000
-            type: i32
-          - 
-            name: min_frames_to_insert_kf
-            value: 0
-            type: i32
-          -
-            name: max_frames_to_insert_kf
-            value: 10
-            type: i32
+          - null
 
       -
        name: LOOP_CLOSING
        tag: "orbslam3 loop closing"
        receiver_bound: -1
        settings:
-          - 
-            name: covisibility_consistency_threshold
-            value: 3
-            type: i32
-    
-      -
-       name: LOCAL_MAPPING
-       tag: "orbslam local mapping"
-       receiver_bound: 3
-       settings:
-          - 
-            name: recently_lost_cutoff
-            value: 5
-            type: i32
-          - 
-            name: insert_KFs_when_lost
-            value: true
-            type: bool
-          - 
-            name: min_num_features
-            value: 2000
-            type: i32
+          - null
