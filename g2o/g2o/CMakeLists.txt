@@ -112,6 +112,7 @@ ${g2o_SOURCE_DIR}/core
 ${g2o_SOURCE_DIR}/types
 ${g2o_SOURCE_DIR}/stuff 
 ${g2o_SOURCE_DIR}/rust
+${g2o_SOURCE_DIR}/Sophus
 )
 
 # Include the subdirectories
@@ -203,12 +204,20 @@ g2o/stuff/string_tools.cpp
 g2o/stuff/property.cpp       
 g2o/stuff/property.h       
 
-# orbslam g2o modifications
-# TODO (IMU)... uncomment these
-# g2o/types/G2oTypes.h
-# g2o/types/G2oTypes.cc
-# g2o/types/ImuTypes.h
-# g2o/types/ImuTypes.cc
+# Note: all these are needed for IMU
+g2o/types/G2oTypes.h
+g2o/types/G2oTypes.cc
+g2o/types/ImuTypes.h
+g2o/types/ImuTypes.cc
+g2o/orbslam_types/GeometricTools.h
+g2o/orbslam_types/GeometricTools.cc
+g2o/orbslam_types/Converter.h
+g2o/orbslam_types/Converter.cc
+g2o/orbslam_types/GeometricCamera.h
+g2o/orbslam_types/Pinhole.h
+g2o/orbslam_types/Pinhole.cc
+# g2o/orbslam_types/TwoViewReconstruction.h
+# g2o/orbslam_types/TwoViewReconstruction.cc
 
 # rust bindings
 g2o/rust/rust_helper.cpp

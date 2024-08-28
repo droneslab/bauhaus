@@ -2,19 +2,20 @@ use std::{collections::HashMap, sync::{Arc, Mutex}, thread::{self, JoinHandle}};
 use crossbeam_channel::unbounded;
 
 use core::{
-    config::{ActorConf, ModuleConf}, read_only_lock::ReadWriteMap, system::{Receiver, Sender, System} 
+    config::{ActorConf, ModuleConf}, read_only_lock::ReadWriteMap, system::{Module, Receiver, Sender, System} 
 };
 use log::{info, warn};
 
 use crate::{
-    actors::messages::ShutdownMsg, map::map::Map, registered_actors::{self, SHUTDOWN_ACTOR, VOCABULARY}, MapLock
+    actors::messages::ShutdownMsg, map::map::Map, registered_actors::{self, SHUTDOWN_ACTOR, VOCABULARY_MODULE}, MapLock
 };
+use crate::modules::module_definitions::VocabularyModule;
 
 
 // Initialize actor system using config file.
 // Returns mutex to shutdown flag and transmitters for first actor and shutdown actor.
 // You probably don't want to change this code.
-pub fn launch_system(actor_config: Vec<ActorConf>, _module_config: Vec<ModuleConf>, first_actor_name: String) 
+pub fn launch_system(actor_config: Vec<ActorConf>, module_config: Vec<ModuleConf>, first_actor_name: String) 
     -> Result<(Arc<std::sync::Mutex<bool>>, Sender, Sender, JoinHandle<()>), Box<dyn std::error::Error>> 
 {
     // * SET UP CHANNELS *//
@@ -27,6 +28,10 @@ pub fn launch_system(actor_config: Vec<ActorConf>, _module_config: Vec<ModuleCon
         receivers.push((actor_conf.name.clone(), actor_conf.tag.clone(), actor_conf.receiver_bound.clone(), rx));
     }
 
+    for module_conf in &module_config {
+        info!("Using module '{}' as {}", module_conf.tag, module_conf.name);
+    }
+
     // Create transmitters/receivers for darvis system actors
     // Don't add receivers to the receivers vec because they need to be spawned separately.
     // User-defined actors still need the transmitters to these actors.
@@ -37,7 +42,7 @@ pub fn launch_system(actor_config: Vec<ActorConf>, _module_config: Vec<ModuleCon
     let writeable_map = ReadWriteMap::<Map>::new(Map::new()); // Arc::new(parking_lot::Mutex::new(Map::new()))
 
     // * LOAD VOCABULARY *//
-    VOCABULARY.access();
+    VOCABULARY_MODULE.access();
 
     // * SPAWN USER-DEFINED ACTORS *//
     for (actor_name, actor_tag, receiver_bound, receiver) in receivers {
@@ -55,10 +60,10 @@ pub fn launch_system(actor_config: Vec<ActorConf>, _module_config: Vec<ModuleCon
     Ok((shutdown_flag, first_actor_tx, shutdown_actor_tx, shutdown_join))
 }
 
-
 fn spawn_actor(
-    actor_tag: String, actor_name: String, transmitters: &HashMap<String, Sender>, receiver: Receiver,
-    receiver_bound: Option<usize>, writeable_map: Option<&MapLock>
+    actor_tag: String, actor_name: String, 
+    transmitters: &HashMap<String, Sender>, receiver: Receiver, receiver_bound: Option<usize>, 
+    writeable_map: Option<&MapLock>
 ) {
     info!("Spawning actor '{}' with name {}", &actor_tag, &actor_name);
 
@@ -80,7 +85,6 @@ fn spawn_actor(
     thread::spawn(move || { 
         registered_actors::spawn_actor(actor_tag, system, map_clone);
     } );
-
 }
 
 
