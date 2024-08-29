@@ -15,8 +15,6 @@ set(CMAKE_CXX_STANDARD 11)
 # Set compiler specific settings (FixMe: Should not cmake do this for us automatically?)
 # Sofiya: Added -flto=thin to enable link time optimization with Rust: https://doc.rust-lang.org/rustc/linker-plugin-lto.html#toolchain-compatibility
 IF("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
-   SET(CMAKE_CXX_FLAGS_DEBUG  "-O0 -g  -flto=thin")
-   SET(CMAKE_CXX_FLAGS_RELEASE "-O3  -flto=thin")
    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Werror -Wextra  -Wno-deprecated-register -Qunused-arguments -fcolor-diagnostics")
 ELSEIF("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
    SET(CMAKE_CXX_FLAGS_DEBUG  "-O0 -g")
