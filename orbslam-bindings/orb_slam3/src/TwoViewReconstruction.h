@@ -26,7 +26,7 @@
 #include <sophus/se3.hpp>
 
 #include <opencv2/core/types.hpp>
-#include "rust/cxx.h"
+#include "/home/f1tenth/Downloads/Darvis_Git_Latest/darvis/darvis/target/cxxbridge/rust/cxx.h"
 
 namespace orb_slam3
 {
