@@ -91,7 +91,6 @@ namespace g2o {
             RustImuPreintegrated imu_preintegrated
         );
 
-        void _add_edge_stereo() const;
         int num_edges() const;
         rust::Vec<int> remove_sim3_edges_with_chi2(float chi2_threshold);
 
