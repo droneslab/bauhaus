@@ -261,7 +261,6 @@ pub mod ffi {
         //     mp_world_position: [f64; 3]
         // );
 
-        fn _add_edge_stereo(self: &BridgeSparseOptimizer);
         fn num_edges(self: &BridgeSparseOptimizer) -> i32;
         fn remove_sim3_edges_with_chi2(
             self: Pin<&mut BridgeSparseOptimizer>,
