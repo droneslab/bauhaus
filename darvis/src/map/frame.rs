@@ -1,4 +1,5 @@
 use core::{config::{SETTINGS, SYSTEM}, matrix::{DVMatrix, DVMatrix3, DVVector3, DVVectorOfKeyPoint}, sensor::{FrameSensor, ImuSensor, Sensor}, system::Timestamp};
+use log::debug;
 use opencv::core::{KeyPoint, Mat};
 
 use crate::modules::{imu::{ImuCalib, ImuDataFrame}, module_definitions::VocabularyModule};
@@ -37,12 +38,12 @@ impl Frame {
     pub fn new(
         frame_id: Id, keypoints_vec: DVVectorOfKeyPoint, descriptors_vec: DVMatrix,
         im_width: u32, im_height: u32, image: Option<opencv::core::Mat>,
+        prev_frame: Option<& Frame>,
         timestamp: Timestamp
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let sensor = SETTINGS.get::<Sensor>(SYSTEM, "sensor");
         let features = Features::new(keypoints_vec, descriptors_vec, im_width, im_height, sensor)?;
         let num_keypoints = features.num_keypoints as usize;
-        let imu_bias = Some(ImuBias::new());
         let frame = Self {
             frame_id,
             timestamp,
@@ -51,7 +52,7 @@ impl Frame {
             image,
             bow: None,
             mappoint_matches: MapPointMatches::new(num_keypoints),
-            imu_data: ImuDataFrame::new(),
+            imu_data: ImuDataFrame::new(prev_frame),
             pose: None,
             ref_kf_id: None,
         };
@@ -61,7 +62,8 @@ impl Frame {
     pub fn new_no_features(
         frame_id: Id, 
         image: Option<opencv::core::Mat>,
-        timestamp: Timestamp
+        timestamp: Timestamp,
+        prev_frame: Option<& Frame>
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let sensor = SETTINGS.get::<Sensor>(SYSTEM, "sensor");
         let features = Features::empty();
@@ -78,7 +80,7 @@ impl Frame {
             image,
             bow: None,
             mappoint_matches: MapPointMatches::new(num_keypoints),
-            imu_data: ImuDataFrame::new(),
+            imu_data: ImuDataFrame::new(prev_frame),
             pose: None,
             ref_kf_id: None,
         };
@@ -199,7 +201,7 @@ impl Frame {
         let pose = self.pose.unwrap();
         let ref_kf_id = self.ref_kf_id.unwrap();
         let ref_kf = map.keyframes.get(&ref_kf_id).expect("Can't get ref kf from map");
-        let ref_kf_pose = ref_kf.pose;
+        let ref_kf_pose = ref_kf.get_pose();
         pose * ref_kf_pose.inverse()
     }
 
@@ -254,10 +256,11 @@ impl Frame {
         )
     }
 
-    pub fn set_imu_pose_velocity(&mut self, rwb: nalgebra::Matrix3<f64>, twb: nalgebra::Vector3<f64>, vwb: nalgebra::Vector3<f64>) {
+    pub fn set_imu_pose_velocity(&mut self, new_pose: Pose, vwb: nalgebra::Vector3<f64>) {
         // void Frame::SetImuPoseVelocity(const Eigen::Matrix3f &Rwb, const Eigen::Vector3f &twb, const Eigen::Vector3f &Vwb)
+        debug!("SET VELOCITY: {:?} ", vwb);
         self.imu_data.velocity = Some(DVVector3::new(vwb));
-        let new_pose = Pose::new(twb, rwb).inverse(); // Tbw
+        let new_pose = new_pose.inverse(); // Tbw
         self.pose = Some(ImuCalib::new().tcb * new_pose);
     }
 

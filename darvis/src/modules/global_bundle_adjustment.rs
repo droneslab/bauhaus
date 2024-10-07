@@ -33,9 +33,9 @@ impl FullMapOptimizationModule for GlobalBundleAdjustment {
             let mut kf_vertex_ids = HashMap::new();
             let mut id_count = 0;
             for (kf_id, kf) in &lock.keyframes {
-                optimizer.pin_mut().add_vertex_se3_expmap(
+                optimizer.pin_mut().add_vertex_se3expmap(
                     id_count,
-                    (kf.pose).into(),
+                    (kf.get_pose()).into(),
                     *kf_id == lock.initial_kf_id
                 );
                 kf_vertex_ids.insert(*kf_id, id_count);
@@ -48,7 +48,7 @@ impl FullMapOptimizationModule for GlobalBundleAdjustment {
             // Set MapPoint vertices
             let mut _edges = Vec::new();
             for (mp_id, mappoint) in &lock.mappoints {
-                optimizer.pin_mut().add_mappoint_vertex(
+                optimizer.pin_mut().add_vertex_sbapointxyz(
                     id_count,
                     Pose::new(*mappoint.position, Matrix3::identity()).into(), // create pose out of translation only
                     false, true
@@ -120,7 +120,7 @@ impl FullMapOptimizationModule for GlobalBundleAdjustment {
                     let pose: Pose = optimizer.recover_optimized_frame_pose(vertex_id).into();
 
                     if loop_kf == initial_kf_id {
-                        kf.pose = pose.into();
+                        kf.set_pose(pose.into());
                     } else {
                         // println!("GBA: Set kf {} pose: {:?}. Old pose: {:?}", kf.id, pose, kf.pose);
                         kf.gba_pose = Some(pose);
@@ -170,7 +170,6 @@ pub fn full_inertial_ba(
     init: bool, prior_g: f64, prior_a: f64, 
     ) {
     // void static FullInertialBA(Map *pMap, int its, const bool bFixLocal=false, const unsigned long nLoopKF=0, bool *pbStopFlag=NULL, bool bInit=false, float priorG = 1e2, float priorA=1e6, Eigen::VectorXd *vSingVal = NULL, bool *bHess=NULL);
-
     let max_kf_id = * map.read().keyframes
         .iter()
         .max_by(|a, b| a.1.id.cmp(&b.1.id))
@@ -205,24 +204,26 @@ pub fn full_inertial_ba(
             false
         };
 
-        optimizer::add_vertex_pose(&mut optimizer, kf, fixed);
+        optimizer::add_vertex_pose_keyframe(&mut optimizer, kf, fixed, kf.id);
         kf_vertex_fixed.insert(*kf_id, fixed);
 
+        println!("add vertex pose {}", kf.id);
+
         if kf.imu_data.is_imu_initialized {
-            debug!("kf.imu_data.velocity {:?}", kf.imu_data.velocity);
             optimizer.pin_mut().add_vertex_velocity(
                 max_kf_id + 3 * kf.id + 1,
                 fixed,
                 kf.imu_data.velocity.unwrap().into()
             );
+            println!("add vertex velocity {}", max_kf_id + 3 * kf.id + 1);
 
             if !init {
-                optimizer.pin_mut().add_vertex_gyro_bias(
+                optimizer.pin_mut().add_vertex_gyrobias(
                     max_kf_id + 3 * kf.id + 2,
                     fixed,
                     kf.imu_data.imu_bias.get_gyro_bias().into()
                 );
-                optimizer.pin_mut().add_vertex_acc_bias(
+                optimizer.pin_mut().add_vertex_accbias(
                     max_kf_id + 3 * kf.id + 3,
                     fixed,
                     kf.imu_data.imu_bias.get_acc_bias().into()
@@ -234,19 +235,19 @@ pub fn full_inertial_ba(
     }
 
     if init {
-        debug!("SOFIYA!!!! Full inertial BA, pIncKF is {}", inc_kf);
         let lock = map.read();
         let kf = lock.keyframes.get(&inc_kf).unwrap();
-        optimizer.pin_mut().add_vertex_gyro_bias(
+        optimizer.pin_mut().add_vertex_gyrobias(
             4 * max_kf_id + 2,
             false,
             kf.imu_data.imu_bias.get_gyro_bias().into()
         );
-        optimizer.pin_mut().add_vertex_acc_bias(
+        optimizer.pin_mut().add_vertex_accbias(
             4 * max_kf_id + 3,
             false,
             kf.imu_data.imu_bias.get_acc_bias().into()
         );
+        println!("add vertex gyro and acc {} {}", 4 * max_kf_id + 2, 4 * max_kf_id + 3);
     }
 
     if fix_local {
@@ -271,10 +272,6 @@ pub fn full_inertial_ba(
         let mut imu_preintegrated = kf.imu_data.imu_preintegrated.as_ref().unwrap().clone();
         let prev_kf_id = kf.prev_kf_id.unwrap();
 
-        println!("Prev kf is {}", prev_kf_id);
-        println!("Prev kf imu initialized: {}", map.read().keyframes.get(&prev_kf_id).unwrap().imu_data.is_imu_initialized);
-
-
         imu_preintegrated.set_new_bias(map.read().keyframes.get(&prev_kf_id).unwrap().imu_data.imu_bias);
 
         let vp1_id = prev_kf_id;
@@ -295,18 +292,16 @@ pub fn full_inertial_ba(
         let vp2_id = kf.id;
         let vv2_id = max_kf_id + 3 * kf.id + 1;
 
-        println!("vv1_id is {}... max_kf_id {}, prev_kf_id {}", vv1_id, max_kf_id, prev_kf_id);
-        optimizer.pin_mut().add_graph_edges_inertial(
+        // println!("(all of them) {} {} {} {} {} {} ", vp1_id, vv1_id, vg1_id, va1_id, vp2_id, vv2_id);
+        optimizer.pin_mut().add_edge_inertial(
             vp1_id,
             vv1_id,
             vg1_id,
             va1_id,
             vp2_id,
             vv2_id,
-            -1,
-            -1,
             (& imu_preintegrated).into(),
-            false,
+            true,
             16.92
         );
 
@@ -320,6 +315,7 @@ pub fn full_inertial_ba(
 
     }
     for (id, preintegrated) in new_imu_preintegrated_for_kfs {
+        debug!("SET KF {} IMU PREINTEGRATED", id);
         map.write().keyframes.get_mut(&id).unwrap().imu_data.imu_preintegrated = Some(preintegrated);
     }
 
@@ -344,7 +340,7 @@ pub fn full_inertial_ba(
     let mut _edges = Vec::new();
     for (mp_id, mp) in & map.read().mappoints {
         let id = mp_id + ini_mp_id + 1;
-        optimizer.pin_mut().add_mappoint_vertex(
+        optimizer.pin_mut().add_vertex_sbapointxyz(
             id,
             Pose::new(* mp.position, Matrix3::identity()).into(),
             false, // todo should this be false? not specified 
@@ -457,7 +453,7 @@ pub fn full_inertial_ba(
             let pose: Pose = optimizer.recover_optimized_frame_pose(*kf_id).into();
 
             if loop_id == 0 {
-                kf.pose = pose.into();
+                kf.set_pose(pose.into());
             } else {
                 // println!("GBA: Set kf {} pose: {:?}. Old pose: {:?}", kf.id, pose, kf.pose);
                 kf.gba_pose = Some(pose);
@@ -468,7 +464,7 @@ pub fn full_inertial_ba(
                 let vertex_velocity = optimizer.recover_optimized_vertex_velocity(max_kf_id + 3 * kf.id + 1);
 
                 if loop_id == 0 {
-                    println!("FUll inertial ba, set kf velocity {} {:?}", kf.id, vertex_velocity);
+                    debug!("SET VELOCITY: {:?} ", vertex_velocity);
                     kf.imu_data.velocity = Some(vertex_velocity.into());
                 } else {
                     kf.vwb_gba = Some(vertex_velocity.into());

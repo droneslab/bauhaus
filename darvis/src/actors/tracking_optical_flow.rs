@@ -79,7 +79,7 @@ impl Actor for TrackingOpticalFlow {
             FrameSensor::Mono | FrameSensor::Rgbd => None,
         };
         let orb_extractor_ini: Option<Box<dyn FeatureExtractionModule>> = match sensor.is_mono() {
-            true => Some(Box::new(ORBExtractor::new(true))), // sofiya orbslam2 loop closing
+            true => Some(Box::new(ORBExtractor::new(true))),
             false => None
         };
         // let imu = match sensor.imu() {
@@ -210,7 +210,8 @@ impl TrackingOpticalFlow {
                 curr_img.cols() as u32,
                 curr_img.rows() as u32,
                 Some(curr_img.clone()),
-                timestamp
+                last_frame.as_ref(),
+                timestamp,
             ).expect("Could not create frame!");
 
             if self.initialization.is_none() {
@@ -220,7 +221,7 @@ impl TrackingOpticalFlow {
             if init_success {
                 let (ini_kf_id, curr_kf_id);
                 {
-                    (ini_kf_id, curr_kf_id) = match self.initialization.as_mut().unwrap().create_initial_map_monocular(&mut self.map) {
+                    (ini_kf_id, curr_kf_id) = match self.initialization.as_mut().unwrap().create_initial_map_monocular(&mut self.map,  & self.imu.as_ref().unwrap().imu_preintegrated_from_last_kf) {
                         Some((curr_kf_pose, curr_kf_id, ini_kf_id, local_mappoints, curr_kf_timestamp, map_scale)) => {
                             // Map needs to be initialized before tracking can begin. Received from map actor
                             self.frames_since_last_kf = 0;
@@ -231,7 +232,7 @@ impl TrackingOpticalFlow {
                             self.last_kf_timestamp = Some(curr_kf_timestamp);
                             self.map_scale = map_scale;
                             if self.sensor.is_imu() {
-                                self.imu.as_mut().unwrap().imu_preintegrated_from_last_kf = self.initialization.as_ref().unwrap().imu_preintegrated_from_last_kf.as_ref().unwrap().clone();
+                                self.imu.as_mut().unwrap().imu_preintegrated_from_last_kf = ImuPreIntegrated::new(self.map.read().keyframes.get(& curr_kf_id).unwrap().imu_data.imu_preintegrated.as_ref().unwrap().get_updated_bias());
                             }
 
                             {
@@ -245,7 +246,7 @@ impl TrackingOpticalFlow {
                             // Log initial pose in shutdown actor
                             self.system.send(SHUTDOWN_ACTOR, 
                             Box::new(TrajectoryMsg{
-                                    pose: self.map.read().keyframes.get(&ini_kf_id).unwrap().pose,
+                                    pose: self.map.read().keyframes.get(&ini_kf_id).unwrap().get_pose(),
                                     ref_kf_id: ini_kf_id,
                                     timestamp: self.map.read().keyframes.get(&ini_kf_id).unwrap().timestamp
                                 })
@@ -283,7 +284,8 @@ impl TrackingOpticalFlow {
             current_frame = Frame::new_no_features(
                 *curr_frame_id, 
                 Some(curr_img.clone()),
-                timestamp
+                timestamp,
+                Some(& last_frame)
             ).expect("Could not create frame!");
 
             let status = self.get_feature_tracks(last_frame, &mut current_frame)?;
@@ -365,7 +367,7 @@ impl TrackingOpticalFlow {
                         println!("Tracking, set current frame bias to last KF ({}) bias {}", ref_kf.frame_id, ref_kf.imu_data.imu_bias);
                     }
                 }
-                self.imu.as_mut().unwrap().preintegrate(&mut self.map, &mut imu_measurements, &mut current_frame, last_frame);
+                self.imu.as_mut().unwrap().preintegrate(&mut imu_measurements, &mut current_frame, last_frame, self.map.read().last_kf_id);
             }
 
 
@@ -550,7 +552,7 @@ impl TrackingOpticalFlow {
                 current_frame.pose.unwrap()
             } else if last_frame.pose.is_none() {
                 // This condition should only happen for the first frame after initialization
-                self.map.read().keyframes.get(&self.ref_kf_id.unwrap()).expect("Can't get ref kf from map").pose.inverse()
+                self.map.read().keyframes.get(&self.ref_kf_id.unwrap()).expect("Can't get ref kf from map").get_pose().inverse()
             } else {
                 last_frame.pose.unwrap()
             };
@@ -985,7 +987,12 @@ impl TrackingOpticalFlow {
         // KeyFrame created here and inserted into map
         self.system.send(
             LOCAL_MAPPING,
-            Box::new( NewKeyFrameMsg{  keyframe: current_frame.clone(), tracking_state: self.state } )
+            Box::new( NewKeyFrameMsg{
+                keyframe: current_frame.clone(),
+                tracking_state: self.state,
+                matches_in_tracking: self.matches_inliers,
+                tracked_mappoint_depths: todo!("Keep track of mappoint depths!")
+            } )
         );
 
         Ok(())

@@ -74,6 +74,8 @@ impl ActorMessage for UpdateFrameIMUMsg {}
 pub struct NewKeyFrameMsg {
     pub keyframe: Frame,
     pub tracking_state: TrackingState,
+    pub matches_in_tracking: i32,
+    pub tracked_mappoint_depths: HashMap<Id, f64>
 }
 impl ActorMessage for NewKeyFrameMsg {}
 

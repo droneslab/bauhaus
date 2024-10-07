@@ -10,7 +10,7 @@ use crate::modules::module_definitions::VocabularyModule;
 pub struct KeyFrame {
     pub id: Id,
     pub timestamp: Timestamp,
-    pub pose: Pose,
+    pose: Pose,
     pub frame_id: i32,
 
     // Map connections
@@ -31,6 +31,7 @@ pub struct KeyFrame {
     // IMU //
     // Preintegrated IMU measurements from previous keyframe
     pub imu_data: ImuDataFrame,
+    pub imu_position: Option<DVVector3<f64>>, // mOwb
     pub sensor: Sensor,
 
     // todo (design, fine-grained locking) I would like to get rid of this but until we have fine-grained locking this is the only way to prevent deletion without taking the entire map
@@ -39,9 +40,11 @@ pub struct KeyFrame {
     // todo (design, variable locations) loop closing can we avoid having this in the kf?
     //... possibly not, used by imu initialization (local mapping) as well
     pub ba_global_for_kf: Id, // mnBAGlobalForKF
+    pub tcw_bef_gba: Option<Pose>, // mTcwBefGBA
     pub gba_pose: Option<Pose>, // mTcwGBA 
-    pub vwb_gba: Option<DVVector3<f64>>, // mVwbGBA
     pub bias_gba: Option<ImuBias>, // mBiasGBA
+    pub vwb_gba: Option<DVVector3<f64>>, // mVwbGBA
+    pub vwb_bef_gba: Option<DVVector3<f64>>, // mVwbBefGBA
 
     // DON'T SET THESE! Either never used, or moved into actor implementation
     // mbCurrentPlaceRecognition
@@ -49,7 +52,7 @@ pub struct KeyFrame {
     // pub mnBAGlobalForKF: u64,
 }
 impl KeyFrame {
-    pub(super) fn new(frame: Frame, origin_map_id: Id, id: Id) -> Self {
+    pub fn new(frame: Frame, origin_map_id: Id, id: Id) -> Self {
         let bow = match frame.bow {
             Some(bow) => Some(bow),
             None => {
@@ -59,7 +62,7 @@ impl KeyFrame {
             }
         };
 
-        Self {
+        let mut kf = Self {
             timestamp: frame.timestamp,
             frame_id: frame.frame_id,
             mappoint_matches: frame.mappoint_matches,
@@ -82,7 +85,13 @@ impl KeyFrame {
             imu_data: frame.imu_data,
             bias_gba: None,
             vwb_gba: None,
-        }
+            imu_position: None,
+            vwb_bef_gba: None,
+            tcw_bef_gba: None,
+        };
+
+        kf.set_pose(frame.pose.expect("Frame should have pose by now"));
+        kf
     }
 
     pub fn print_mappoints(&self) {
@@ -100,6 +109,17 @@ impl KeyFrame {
     // I'm trying to keep as much data public as possible unless updating it requires a complicated function that needs to be called each time.
     // In that case we'd rather call these specific functions each time so the data doesn't get updated incorrectly.
     // This is why connections and mappoint matches are private with getters and setters. But I don't like how this looks, either.
+    pub fn get_pose(&self) -> Pose { self.pose }
+    pub fn set_pose(&mut self, new_pose: Pose) {
+        self.pose = new_pose;
+        let pose_inverse = self.pose.inverse();
+        self.imu_position = Some(
+            DVVector3::new(
+                *pose_inverse.get_rotation() * *ImuCalib::new().tcb.get_translation() + *pose_inverse.get_translation()
+            )
+        );
+   }
+
     pub fn get_connected_kf_weight(&self, kf_id: Id) -> i32{ self.connections.get_weight(&kf_id) }
     pub fn add_connection(&mut self, kf_id: Id, weight: i32) { self.connections.add(&kf_id, weight); }
     pub fn add_all_connections(&mut self, new_connections: HashMap::<Id, i32>, is_init_kf: bool) -> Option<Id> { 
@@ -207,16 +227,11 @@ impl KeyFrame {
         // and mTwc is inverse of the pose
         (self.pose.inverse() * ImuCalib::new().tcb).get_rotation()
     }
-
     pub fn get_imu_position(&self) -> DVVector3<f64> {
         // Eigen::Vector3f KeyFrame::GetImuPosition()
-        // Note: in Orbslam this returns mOwb, where mOwb is set to:
-        //    mRwc * mImuCalib.mTcb.translation() + mTwc.translation()
-        // every time the pose is updated
-        DVVector3::new(
-            *self.pose.get_rotation() * *ImuCalib::new().tcb.get_translation() + *self.pose.inverse().get_translation()
-        )
+        self.imu_position.expect("IMU position not set")
     }
+
 }
 
 

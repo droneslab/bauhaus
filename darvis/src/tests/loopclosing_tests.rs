@@ -95,7 +95,7 @@
 //                         }
 //                     };
 
-//                     optimizer.pin_mut().add_vertex_sim3_expmap(
+//                     optimizer.pin_mut().add_vertex_sim3expmap(
 //                         kf_id,
 //                         estimate.into(),
 //                         false,

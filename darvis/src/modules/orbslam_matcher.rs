@@ -1103,8 +1103,8 @@ impl SearchForTriangulationTrait for ORBMatcher {
 
         //Compute epipole in second image
         let cw = *kf_1.get_camera_center(); //Cw
-        let r2w = *kf_2.pose.get_rotation(); //R2w
-        let t2w = *kf_2.pose.get_translation(); //t2w
+        let r2w = *kf_2.get_pose().get_rotation(); //R2w
+        let t2w = *kf_2.get_pose().get_translation(); //t2w
         let c2 = r2w * cw + t2w; //C2
 
         let ep = CAMERA_MODULE.project(DVVector3::new(c2));
@@ -1121,7 +1121,7 @@ impl SearchForTriangulationTrait for ORBMatcher {
                 // Eigen::Matrix3f Rll = Tll.rotationMatrix(), Rlr  = Tlr.rotationMatrix(), Rrl  = Trl.rotationMatrix(), Rrr  = Trr.rotationMatrix();
                 // Eigen::Vector3f tll = Tll.translation(), tlr = Tlr.translation(), trl = Trl.translation(), trr = Trr.translation();
         } else {
-            let pose12 = kf_1.pose * kf_2.pose.inverse(); // T12 ... which is different than t12
+            let pose12 = kf_1.get_pose() * kf_2.get_pose().inverse(); // T12 ... which is different than t12
             r12 = pose12.get_rotation();
             t12 = pose12.get_translation();
         }
@@ -1452,7 +1452,7 @@ impl FuseTrait for ORBMatcher {
                     // pCamera = pKF->mpCamera2;
                 },
                 false => {
-                    (keyframe.pose.get_translation(), keyframe.pose.get_rotation(), keyframe.get_camera_center(), CAMERA)
+                    (keyframe.get_pose().get_translation(), keyframe.get_pose().get_rotation(), keyframe.get_camera_center(), CAMERA)
                 }
             };
         }
@@ -1609,13 +1609,13 @@ impl SearchBySim3Trait for ORBMatcher {
 
         // Camera 1 from world
         let kf1 = lock.keyframes.get(&kf1_id).unwrap();
-        let r1w = kf1.pose.get_rotation();
-        let t1w = kf1.pose.get_translation();
+        let r1w = kf1.get_pose().get_rotation();
+        let t1w = kf1.get_pose().get_translation();
 
         // Camera 2 from world
         let kf2 = lock.keyframes.get(&kf2_id).unwrap();
-        let r2w = kf2.pose.get_rotation();
-        let tw2 = kf2.pose.get_translation();
+        let r2w = kf2.get_pose().get_rotation();
+        let tw2 = kf2.get_pose().get_translation();
 
         //Transformation between cameras
         let s12 = sim3.scale;

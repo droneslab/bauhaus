@@ -179,7 +179,7 @@ impl DarvisVisualizer {
 
         for kf_id in &msg.relevant_keyframes {
             let kf = lock.keyframes.get(kf_id).unwrap();
-            let pose = kf.pose.inverse();
+            let pose = kf.get_pose().inverse();
             let kf_entity = self.create_scene_entity(
                 msg.timestamp, "world",
                 format!("kf {}", kf_id),
@@ -239,7 +239,7 @@ impl DarvisVisualizer {
 
         for kf_id in &msg.keyframes_affected {
             let kf = lock.keyframes.get(kf_id).unwrap();
-            let pose = kf.pose.inverse();
+            let pose = kf.get_pose().inverse();
             let kf_entity = self.create_scene_entity(
                 msg.timestamp, "world",
                 format!("kf {}", kf_id),
@@ -413,7 +413,7 @@ impl DarvisVisualizer {
         let mut prev_pose: Point3 = Pose::default().into();
         let mut prev_id = 0;
         for id in sorted_kfs {
-            let curr_pose = map.keyframes.get(id).unwrap().pose.inverse();
+            let curr_pose = map.keyframes.get(id).unwrap().get_pose().inverse();
 
             if curr_pose == inverse_frame_pose {
                 // Skip over drawing a kf if it was created at this frame, 
@@ -570,14 +570,14 @@ impl DarvisVisualizer {
         let map = self.map.read();
         for kf_id in map.keyframes.keys() {
             let kf = map.keyframes.get(&kf_id).unwrap();
-            let pose = kf.pose.inverse();
+            let pose = kf.get_pose().inverse();
 
             let mut spheres = Vec::new();
             let mut lines = Vec::new();
 
             for connected_kf_id in &kf.get_covisibility_keyframes(i32::MAX) {
                 let connected_kf = map.keyframes.get(connected_kf_id).unwrap();
-                let connected_pose = connected_kf.pose.inverse();
+                let connected_pose = connected_kf.get_pose().inverse();
                 let points = vec![pose.into(), connected_pose.into()];
                 lines.push(self.create_line(points, TRAJECTORY_COLOR.clone()));
                 spheres.push(self.create_sphere(&connected_pose, KEYFRAME_COLOR.clone(), MAPPOINT_SIZE.clone()));

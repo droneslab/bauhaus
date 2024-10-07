@@ -294,8 +294,19 @@ fn load_camera_settings(camera_fn: &String, module_info: &mut Vec<ModuleConf>) {
     add_setting_f64("CAMERA", "p1", &yaml_document["p1"]);
     add_setting_f64("CAMERA", "p2", &yaml_document["p2"]);
     add_setting_f64("CAMERA", "k3", &yaml_document["k3"]);
-    add_setting_f64("CAMERA", "stereo_baseline_times_fx", &yaml_document["stereo_baseline_times_fx"]);
-    add_setting_i32("CAMERA", "thdepth", &yaml_document["thdepth"]);
+    match SETTINGS.get::<Sensor>(SYSTEM, "sensor") {
+        Sensor(FrameSensor::Stereo, _) | Sensor(FrameSensor::Rgbd, _) => {
+            add_setting_f64("CAMERA", "stereo_baseline_times_fx", &yaml_document["stereo_baseline_times_fx"]);
+            add_setting_i32("CAMERA", "thdepth", &yaml_document["thdepth"]);
+        },
+        Sensor(FrameSensor::Mono, _) => {
+            SETTINGS.insert(&"CAMERA", &"stereo_baseline_times_fx", 0.0);
+            info!("\t {} {} = {}", "CAMERA", "stereo_baseline_times_fx", 0.0);
+            SETTINGS.insert(&"CAMERA", &"thdepth", 0);
+            info!("\t {} {} = {}", "CAMERA", "thdepth", 0);
+
+        }
+    }
 
     // Not all datasets have imu information, but that only matters if imu is used
     // match SETTINGS.get::<Sensor>(SYSTEM, "sensor").imu() {

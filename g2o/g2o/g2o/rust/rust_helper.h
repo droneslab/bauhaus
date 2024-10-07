@@ -1,3 +1,5 @@
+#ifndef RUSTHELPER_H
+#define RUSTHELPER_H
 
 #include "../core/sparse_optimizer.h"
 #include "../core/block_solver.h"
@@ -8,23 +10,29 @@
 #include "../types/types_six_dof_expmap.h"
 #include "../types/types_seven_dof_expmap.h"
 #include "../types/sim3.h"
+#include "../types/G2oTypes.h"
+
 #include "rust/cxx.h"
 
 #define EIGEN_DONT_VECTORIZE
 #define EIGEN_DISABLE_UNALIGNED_ARRAY_ASSERT
 
+
 namespace g2o {
+    // struct EdgeMono;
     // using Edge = OptimizableGraph::Edge;
     struct Pose;
     struct Position;
     struct RustSim3;
     struct RustXYZEdge;
-    // struct RustEdgeMono;
+    struct RustEdgeMono;
     struct RustXYZOnlyPoseEdge;
     struct RustSim3ProjectXYZEdge;
     struct RustSim3Edge;
     struct RustImuPreintegrated;
     struct InertialEstimate;
+    struct RustEdgeMonoOnlyPose;
+    struct RustEdgeInertial;
 
     class BridgeSparseOptimizer {
     public:
@@ -34,8 +42,9 @@ namespace g2o {
         // vertices
         bool has_vertex(int id) const;
         void remove_vertex(int vertex_id);
-        void add_vertex_sim3_expmap(int vertex_id, RustSim3 sim3, bool fix_scale, bool set_fixed, bool set_camera_params);
-        void add_vertex_se3_expmap(int vertex_id, Pose pose, bool set_fixed);
+        void add_vertex_sim3expmap(int vertex_id, RustSim3 sim3, bool fix_scale, bool set_fixed, bool set_camera_params);
+        void add_vertex_se3expmap(int vertex_id, Pose pose, bool set_fixed);
+        void update_estimate_vertex_se3xpmap(int vertex_id, Pose pose);
         void add_vertex_pose(int vertex_id, bool set_fixed, int num_cams, 
             array<double, 3> imu_position, array<double, 4> imu_rotation,
             array<double, 3> translation, array<double, 4> rotation,
@@ -44,15 +53,16 @@ namespace g2o {
             float bf
         );
         void add_vertex_velocity(int vertex_id, bool set_fixed, array<double, 3> velocity);
-        void add_vertex_gyro_bias(int vertex_id, bool set_fixed, array<double, 3> gyro_bias);
-        void add_vertex_acc_bias(int vertex_id, bool set_fixed, array<double, 3> acc_bias);
-        void add_mappoint_vertex(int vertex_id,  Pose pose, bool set_fixed, bool set_marginalized);
-        void set_vertex_estimate(int vertex_id, Pose pose);
-        void add_gravity_and_scale_vertex(
-            int vertex_id1, bool set_fixed1, array<array<double, 3>, 3> rwg,
-            int vertex_id2, bool set_fixed2, double scale
+        void add_vertex_gyrobias(int vertex_id, bool set_fixed, array<double, 3> gyro_bias);
+        void add_vertex_accbias(int vertex_id, bool set_fixed, array<double, 3> acc_bias);
+        void add_vertex_sbapointxyz(int vertex_id,  Pose pose, bool set_fixed, bool set_marginalized);
+        void add_vertex_gdir(
+            int vertex_id, bool set_fixed, array<array<double, 3>, 3> rwg
         );
-
+        void add_vertex_scale(
+            int vertex_id, bool set_fixed, double scale
+        );
+        
         // edges
         void add_both_sim_edges(
             int vertex_id1, float kp_pt_x_1, float kp_pt_y_1, float inv_sigma1,
@@ -77,12 +87,35 @@ namespace g2o {
             float keypoint_pt_x, float keypoint_pt_y, float inv_sigma2,
             float huber_delta
         );
+        void add_edge_mono_only_pose(
+            bool robust_kernel, 
+            int vertex, int mp_id,
+            array<double, 3> mp_world_position,
+            float keypoint_pt_x, float keypoint_pt_y,
+            float inv_sigma2, float huber_delta
+        );
+
         void add_edge_prior_for_imu(int vertex_id1, int vertex_id2, array<double, 3> bprior, double priorA, double priorG);
-        void add_graph_edges_inertial(
+        void add_edge_inertial_gs(
             int vertex_P1_id, int vertex_V1_id,
             int vertex_G_id, int vertex_A_id, int vertex_P2_id,
             int vertex_V2_id, int vertex_GDir_id, int vertex_S_id,
             RustImuPreintegrated imu_preintegrated,
+            bool set_robust_kernel, float delta,
+            bool set_information, float information_weight
+        );
+        void add_edge_inertial(
+            int vertex_P1_id, int vertex_V1_id,
+            int vertex_G_id, int vertex_A_id, int vertex_P2_id,
+            int vertex_V2_id,
+            RustImuPreintegrated imu_preintegrated,
+            bool set_robust_kernel, float delta
+        );
+        void add_edge_prior_pose_imu(
+            int vertex_id1, int vertex_id2, int vertex_id3, int vertex_id4,
+            array<array<double, 3>, 3> Rwb, array<double, 3> twb, array<double, 3> vwb,
+            array<double, 3> bg, array<double, 3> ba,
+            array<array<double, 15>, 15> H,
             bool set_robust_kernel, float delta
         );
         void add_edge_gyro_and_acc(
@@ -98,10 +131,20 @@ namespace g2o {
         // optimization
         void optimize(int iterations, bool online, bool compute_active_errors);
         Pose recover_optimized_frame_pose(int vertex_id) const;
+        Pose recover_optimized_vertex_pose(int vertex_id) const;
         Position recover_optimized_mappoint_pose(int vertex_id) const;
         RustSim3 recover_optimized_sim3(int vertex_id) const;
         InertialEstimate recover_optimized_inertial(int vg, int va, int vs, int vgdir) const;
         array<double, 3> recover_optimized_vertex_velocity(int vertex_id) const;
+
+        array<array<double, 24>, 24> get_hessian_from_edge_inertial(int edge_idx) const;
+        array<array<double, 9>, 9> get_hessian2_from_edge_inertial(int edge_idx) const;
+        array<array<double, 6>, 6> get_hessian_from_edge_gyro() const;
+        array<array<double, 3>, 3> get_hessian2_from_edge_gyro() const;
+        array<array<double, 6>, 6> get_hessian_from_edge_acc() const;
+        array<array<double, 3>, 3> get_hessian2_from_edge_acc() const;
+        array<array<double, 15>, 15> get_hessian_from_edge_prior() const;
+
         void save(rust::Str filename, int save_id) const;
 
         // Note: see explanation under get_mut_edges in lib.rs for why we do this
@@ -109,11 +152,17 @@ namespace g2o {
         std::vector<RustXYZOnlyPoseEdge> xyz_onlypose_edges;
         std::vector<RustSim3ProjectXYZEdge> sim3_projxyz_edges;
         std::vector<RustSim3Edge> sim3_edges;
-        // std::vector<RustEdgeMono> mono_edges;
+        std::vector<RustEdgeMono> mono_edges;
+        std::vector<RustEdgeMonoOnlyPose> mono_onlypose_edges;
+        std::vector<RustEdgeInertial> inertial_edges;
+        EdgeGyroRW* gyro_edge;
+        EdgeAccRW* acc_edge;
+        EdgePriorPoseImu* edge_prior_pose_imu;
         std::vector<RustXYZEdge>& get_mut_xyz_edges();
         std::vector<RustXYZOnlyPoseEdge>& get_mut_xyz_onlypose_edges();
         std::vector<RustSim3ProjectXYZEdge>& get_mut_sim3_edges();
-        // std::vector<RustEdgeMono>& get_mut_mono_edges();
+        std::vector<RustEdgeMono>& get_mut_mono_edges();
+        std::vector<RustEdgeMonoOnlyPose>& get_mut_mono_onlypose_edges();
 
         // void enable_stop_flag();
         // void set_stop_flag(bool should_stop);
@@ -144,3 +193,5 @@ namespace g2o {
     // Note: send 0 as lambda_init if you don't want to set a specific one
     std::unique_ptr<BridgeSparseOptimizer> new_sparse_optimizer(int opt_type, std::array<double,4> camera_param, float lambda_init);
 } // end namespace
+
+#endif

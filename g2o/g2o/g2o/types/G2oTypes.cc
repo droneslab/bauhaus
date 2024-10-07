@@ -19,6 +19,8 @@
 #include "G2oTypes.h"
 #include "ImuTypes.h"
 // #include "Converter.h"
+#include "../core/robust_kernel_impl.h"
+
 namespace g2o
 {
 
@@ -69,6 +71,17 @@ ImuCamPose::ImuCamPose(
     // For posegraph 4DoF
     Rwb0 = Rwb;
     DR.setIdentity();
+
+    // std::cout << "IMUCAMPOSE... twb: " << twb << std::endl;
+    // std::cout << "IMUCAMPOSE... Rwb: " << Rwb << std::endl;
+    // std::cout << "IMUCAMPOSE... tcw[0]: " << tcw[0] << std::endl;
+    // std::cout << "IMUCAMPOSE... Rcw[0]: " << Rcw[0] << std::endl;
+    // std::cout << "IMUCAMPOSE... tcb[0]: " << tcb[0] << std::endl;
+    // std::cout << "IMUCAMPOSE... Rcb[0]: " << Rcb[0] << std::endl;
+    // std::cout << "IMUCAMPOSE... Rbc[0]: " << Rbc[0] << std::endl;
+    // std::cout << "IMUCAMPOSE... tbc[0]: " << tbc[0] << std::endl;
+    // std::cout << "IMUCAMPOSE... bf: " << bf << std::endl;
+
 }
 
 
@@ -175,7 +188,9 @@ void ImuCamPose::Update(const double *pu)
         Rcw[i] = Rcb[i] * Rbw;
         tcw[i] = Rcb[i] * tbw + tcb[i];
     }
-
+    // std::cout << "Update ImuCamPose Rwb: " << Rwb << std::endl;
+    // std::cout << "Update ImuCamPose Rbw: " << Rbw << std::endl;
+    // std::cout << "Update ImuCamPose tbw: " << tbw << std::endl;
 }
 
 void ImuCamPose::UpdateW(const double *pu)
@@ -212,6 +227,11 @@ void ImuCamPose::UpdateW(const double *pu)
         Rcw[i] = Rcb[i] * Rbw;
         tcw[i] = Rcb[i] * tbw+tcb[i];
     }
+    // std::cout << "Update W ImuCamPose Rwb: " << Rwb << std::endl;
+    // std::cout << "Update W ImuCamPose Rbw: " << Rbw << std::endl;
+    // std::cout << "Update W ImuCamPose tbw: " << tbw << std::endl;
+    // std::cout << "Update W ImuCamPose DR: " << DR << std::endl;
+
 }
 
 InvDepthPoint::InvDepthPoint(double _rho, double _u, double _v, double fx, double fy, double cx, double cy, double bf): u(_u), v(_v), rho(_rho),
@@ -415,22 +435,18 @@ void EdgeStereoOnlyPose::linearizeOplus()
 VertexVelocity::VertexVelocity(Eigen::Vector3d velocity)
 {
     setEstimate(velocity.cast<double>());
-    std::cout << "set vertexvelocity estimate to " << velocity << std::endl;
 }
 
 
 VertexGyroBias::VertexGyroBias(Eigen::Vector3d gyro_bias)
 {
     setEstimate(gyro_bias.cast<double>());
-    std::cout << "set vertexgyrobias estimate to " << gyro_bias << std::endl;
-
 }
 
 
 VertexAccBias::VertexAccBias(Eigen::Vector3d acc_bias)
 {
     setEstimate(acc_bias.cast<double>());
-    std::cout << "set VertexAccBias estimate to " << acc_bias << std::endl;
 }
 
 
@@ -556,6 +572,24 @@ EdgeInertialGS::EdgeInertialGS(IMU::Preintegrated *pInt):JRg(pInt->JRg.cast<doub
             eigs[i]=0;
     Info = es.eigenvectors()*eigs.asDiagonal()*es.eigenvectors().transpose();
     setInformation(Info);
+
+    // std::cout << "Jrg is: " << JRg << std::endl;
+    // std::cout << "JPg is: " << JPg << std::endl;
+    // std::cout << "JPa is: " << JPa << std::endl;
+    // std::cout << "JVg is: " << JVg << std::endl;
+    // std::cout << "JVa is: " << JVa << std::endl;
+
+    // std::cout << "dR is: " << pInt->dR << std::endl;
+    // std::cout << "dV is: " << pInt->dV << std::endl;
+    // std::cout << "dP is: " << pInt->dP << std::endl;
+
+    // std::cout << "db is: " << pInt->db << std::endl;
+    // std::cout << "b is: " << pInt->b << std::endl;
+    // std::cout << "C is: " << pInt->C << std::endl;
+    // std::cout << "Info is: " << pInt->Info << std::endl;
+    // std::cout << "avgA is: " << pInt->avgA << std::endl;
+    // std::cout << "avgW is: " << pInt->avgW << std::endl;
+    // std::cout << "dT is: " << pInt->dT << std::endl;
 }
 
 
@@ -574,16 +608,28 @@ void EdgeInertialGS::computeError()
     g = VGDir->estimate().Rwg*gI;
     const double s = VS->estimate();
 
-    std::cout << "bias: " << b << std::endl;
+    // std::cout << "bias: " << b << "(ids:" << _vertices[3]->id() << ", " << _vertices[2]->id() << ")" << std::endl;
     const Eigen::Matrix3d dR = mpInt->GetDeltaRotation(b).cast<double>();
     const Eigen::Vector3d dV = mpInt->GetDeltaVelocity(b).cast<double>();
     const Eigen::Vector3d dP = mpInt->GetDeltaPosition(b).cast<double>();
+
+    // std::cout << "s: " << s << std::endl;
+    // std::cout << "dR: " << dR << std::endl;
+    // std::cout << "dV: " << dV << std::endl;
+    // std::cout << "dP: " << dP << std::endl;
+    // std::cout << "VP1 estimate Rwb: " << VP1->estimate().Rwb.transpose() << std::endl;
+    // std::cout << "VP1 estimate Rwb: " << VP2->estimate().Rwb << std::endl;
+    // std::cout << "VV2 estimate Rwb: " << VV2->estimate() << std::endl;
+    // std::cout << "VV1 estimate Rwb: " << VV1->estimate() << std::endl;
+    // std::cout << "g: " << g << std::endl;
+    // std::cout << "dt: " << dt << std::endl;
 
     const Eigen::Vector3d er = LogSO3(dR.transpose()*VP1->estimate().Rwb.transpose()*VP2->estimate().Rwb);
     const Eigen::Vector3d ev = VP1->estimate().Rwb.transpose()*(s*(VV2->estimate() - VV1->estimate()) - g*dt) - dV;
     const Eigen::Vector3d ep = VP1->estimate().Rwb.transpose()*(s*(VP2->estimate().twb - VP1->estimate().twb - VV1->estimate()*dt) - g*dt*dt/2) - dP;
 
     _error << er, ev, ep;
+    // std::cout << "_error: " << _error << std::endl;
 }
 
 void EdgeInertialGS::linearizeOplus()
@@ -806,6 +852,23 @@ Eigen::Matrix3d Skew(const Eigen::Vector3d &w)
     Eigen::Matrix3d W;
     W << 0.0, -w[2], w[1],w[2], 0.0, -w[0],-w[1],  w[0], 0.0;
     return W;
+}
+
+void EdgeMonoOnlyPose::set_robust_kernel(bool reset) {
+    // Darvis
+    // Note: setRobustKernel takes a RobustKernelHuber pointer
+    // ORBSLAM3 usually does this but occasionally passes in a 0 instead
+    // Here is an alternative implementation that takes a boolean:
+    // http://docs.ros.org/en/fuerte/api/re_vision/html/optimizable__graph_8h_source.html
+    // although this implementation isn't in the ORBSLAM3 modified g2o...
+    // so I have no idea how they are passing in a 0 and compiling it correctly.
+    // I *think* that passing in a 0 is equivalent to removing the robust kernel pointer.
+    if (reset) {
+        setRobustKernel(NULL);
+    } else {
+        g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
+        setRobustKernel(rk);
+    }
 }
 
 }
