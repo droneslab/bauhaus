@@ -28,7 +28,7 @@
 #include <Eigen/Dense>
 #include <../Sophus/sophus/se3.hpp>
 #include <mutex>
-#include "../../../target/cxxbridge/g2o/src/lib.rs.h"
+// #include "../../../target/cxxbridge/g2o/src/lib.rs.h"
 
 // #include "SerializationUtils.h"
 
@@ -37,6 +37,7 @@
 
 namespace g2o
 {
+struct RustImuPreintegrated;
 
 namespace IMU
 {
@@ -221,6 +222,7 @@ public:
     Eigen::Vector3f dV, dP;
     Eigen::Matrix3f JRg, JVg, JVa, JPg, JPa;
     Eigen::Vector3f avgA, avgW;
+    Eigen::Matrix<float,6,1> db;
 
 
 private:
@@ -228,7 +230,7 @@ private:
     Bias bu;
     // Dif between original and updated bias
     // This is used to compute the updated values of the preintegration
-    Eigen::Matrix<float,6,1> db;
+    // Eigen::Matrix<float,6,1> db;
 
     struct integrable
     {

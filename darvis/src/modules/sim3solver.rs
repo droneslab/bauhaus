@@ -47,10 +47,10 @@ impl Sim3Solver {
 
         let keyframe_mp1 = kf1.get_mp_matches(); // vpKeyFrameMP1
 
-        let kf1_rot: Mat = (&kf1.pose.get_rotation()).into(); // Rcw1
-        let kf1_trans: Mat = (&kf1.pose.get_translation()).into(); // tcw1
-        let kf2_rot: Mat = (&kf2.pose.get_rotation()).into(); // Rcw2
-        let kf2_trans: Mat = (&kf2.pose.get_translation()).into(); // tcw2
+        let kf1_rot: Mat = (&kf1.get_pose().get_rotation()).into(); // Rcw1
+        let kf1_trans: Mat = (&kf1.get_pose().get_translation()).into(); // tcw1
+        let kf2_rot: Mat = (&kf2.get_pose().get_rotation()).into(); // Rcw2
+        let kf2_trans: Mat = (&kf2.get_pose().get_translation()).into(); // tcw2
 
         let mut all_indices = vec![]; // mvAllIndices
         let mut indices1 = vec![]; // mvnIndices1

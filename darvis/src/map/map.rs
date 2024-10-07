@@ -68,7 +68,7 @@ impl Map {
         // For debugging
         debug!("PRINT MAP START;{}", identifier);
         for (id, kf) in &self.keyframes {
-            print!("PRINT MAP KF;{};{:?}", id, kf.pose);
+            print!("PRINT MAP KF;{};{:?}", id, kf.get_pose());
             print!(";");
             for connection in &kf.get_covisibility_keyframes(i32::MAX) {
                 print!("{},", connection);
@@ -465,12 +465,12 @@ impl Map {
 
         // Body position (IMU) of first keyframe is fixed to (0,0,0)
         for keyframe in self.keyframes.values_mut() {
-            let mut twc = keyframe.pose.inverse().clone();
+            let mut twc = keyframe.get_pose().inverse().clone();
             let twc_trans = twc.get_translation();
             twc.set_translation(nalgebra::Vector3::new(twc_trans[0] * s, twc_trans[1] * s, twc_trans[2] * s)); // just scaling translation by s
             let tyc = *t * twc;
             let tcy = tyc.inverse();
-            keyframe.pose = tcy;
+            keyframe.set_pose(tcy);
             let vw = keyframe.imu_data.velocity.unwrap();
             if !b_scaled_vel {
                 keyframe.imu_data.velocity = Some(DVVector3::new(*t.get_rotation() * *vw));

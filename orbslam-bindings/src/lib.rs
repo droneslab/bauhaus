@@ -160,6 +160,15 @@ pub mod ffi {
         pub vec: Vec<usize>
     }
 
+    struct DoubleVec {
+        vec: Vec<f64>,
+    }
+    struct SVDResult {
+        singular_values: Vec<f64>,
+        u: Vec<DoubleVec>,
+        v: Vec<DoubleVec>,
+    }
+
     unsafe extern "C++" {
         include!("orb_slam3/src/CVConvert.h");
         type BindCVMat = crate::BindCVMat;
@@ -293,7 +302,16 @@ pub mod ffi {
 
     }
 
-    
+    unsafe extern "C++" {
+        include!("orb_slam3/src/Extra.h");
+        fn normalize_rotation(
+            rotation: [[f64; 3]; 3]
+        ) -> [[f64; 3]; 3];
+        fn svd(
+            mat: Vec<DoubleVec>,
+        ) -> SVDResult;
+    }
+
     #[namespace = "DUtils"]
     unsafe extern "C++" {
 

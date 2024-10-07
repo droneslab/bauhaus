@@ -207,7 +207,7 @@ impl LoopManager {
         // Find first imu to be considered, supposing imu measurements start first
         let mut index = 0;
         let first_timestamp_in_camera = camera_timestamps[0];
-        while imu_data.timestamps[index] <= first_timestamp_in_camera {
+        while imu_data.timestamps[index] < first_timestamp_in_camera {
             index += 1;
         }
         imu_data.first_imu_idx = index - 1;
@@ -292,6 +292,7 @@ impl Iterator for LoopManager {
                 });
                 imu.first_imu_idx += 1;
             }
+            imu.first_imu_idx -= 1;
         };
 
         // Start next loop

@@ -13,6 +13,7 @@ use core::{
 use log::{debug, warn, info};
 use opencv::prelude::KeyPointTraitConst;
 use crate::map::pose::{DVTranslation, Pose};
+use crate::modules::local_bundle_adjustment::local_inertial_ba;
 use crate::modules::orbslam_matcher::ORBMatcherTrait;
 use crate::registered_actors::{self, CAMERA_MODULE, FEATURE_MATCHER, FEATURE_MATCHING_MODULE, LOCAL_MAP_OPTIMIZATION_MODULE, TRACKING_BACKEND};
 use crate::{System, MapLock};
@@ -84,7 +85,7 @@ impl Actor for LocalMapping {
             if message.is::<InitKeyFrameMsg>() {
                 LOCAL_MAPPING_IDLE.store(false, std::sync::atomic::Ordering::SeqCst);
                 let msg = message.downcast::<InitKeyFrameMsg>().unwrap_or_else(|_| panic!("Could not downcast local mapping message!"));
-                
+
                 // keyframe may have been deleted in map reset by tracking
                 if actor.map.read().keyframes.get(& msg.kf_id).is_some() {
                     actor.current_keyframe_id = msg.kf_id
@@ -95,16 +96,20 @@ impl Actor for LocalMapping {
                 // Should only happen for the first two keyframes created by the map because that is the only time
                 // the keyframe is bringing in mappoints that local mapping hasn't created.
                 // TODO (Stereo) ... Tracking can insert new stereo points, so we will also need to add in new points when processing a NewKeyFrameMsg.
-                actor.recently_added_mappoints.extend(
-                    actor.map.read()
-                    .keyframes.get(&actor.current_keyframe_id).unwrap()
-                    .get_mp_matches().iter()
-                    .filter(|item| item.is_some())
-                    .map(|item| item.unwrap().0)
-                    .collect::<Vec<Id>>()
-                );
+                if actor.map.read().keyframes.get(&actor.current_keyframe_id).is_some() {
+                    // If because of timing with map reset of tracking, tracking could have deleted map in meantime
+                    // Really need to think through this because otherwise we will have to check everywhere
+                    actor.recently_added_mappoints.extend(
+                        actor.map.read()
+                        .keyframes.get(&actor.current_keyframe_id).unwrap()
+                        .get_mp_matches().iter()
+                        .filter(|item| item.is_some())
+                        .map(|item| item.unwrap().0)
+                        .collect::<Vec<Id>>()
+                    );
+                    actor.local_mapping(0, HashMap::new());
+                };
 
-                actor.local_mapping();
             } else if message.is::<NewKeyFrameMsg>() {
                 if LOCAL_MAPPING_PAUSE_SWITCH.load(std::sync::atomic::Ordering::SeqCst) {
                     LOCAL_MAPPING_IDLE.store(true, std::sync::atomic::Ordering::SeqCst);
@@ -130,7 +135,7 @@ impl Actor for LocalMapping {
                 debug!("Local mapping working on kf {}", kf_id);
                 actor.current_keyframe_id = kf_id;
                 actor.current_tracking_state = msg.tracking_state;
-                actor.local_mapping();
+                actor.local_mapping(msg.matches_in_tracking, msg.tracked_mappoint_depths);
             } else if message.is::<Reset>() {
                 println!("LOCAL MAPPING RECEIVED RESET MSG");
                 actor.current_keyframe_id= -1;
@@ -151,7 +156,7 @@ impl Actor for LocalMapping {
 }
 
 impl LocalMapping {
-   fn local_mapping(&mut self) {
+   fn local_mapping(&mut self, matches_in_tracking: i32, tracked_mappoint_depths: HashMap<Id, f64>) {
         let _span = tracy_client::span!("local_mapping");
 
         match self.sensor.frame() {
@@ -199,32 +204,37 @@ impl LocalMapping {
             match self.sensor.is_imu() {
                 true => {
                     if self.map.read().imu_initialized {
-                        let lock = self.map.read();
-                        let current_kf = lock.keyframes.get(&self.current_keyframe_id).unwrap();
-                        let previous_kf = lock.keyframes.get(&current_kf.prev_kf_id.unwrap()).unwrap();
-                        let previous_previous_kf = lock.keyframes.get(&previous_kf.prev_kf_id.unwrap()).unwrap();
-                        let dist = {
-                            let first = (*previous_kf.get_camera_center() - *current_kf.get_camera_center()).norm();
-                            let second = (*previous_previous_kf.get_camera_center() - *previous_kf.get_camera_center()).norm();
-                            first + second
-                        };
+                        let rec_init = {
+                            let lock = self.map.read();
+                            let current_kf = lock.keyframes.get(&self.current_keyframe_id).unwrap();
+                            let previous_kf = lock.keyframes.get(&current_kf.prev_kf_id.unwrap()).unwrap();
+                            let previous_previous_kf = lock.keyframes.get(&previous_kf.prev_kf_id.unwrap()).unwrap();
+                            let dist = {
+                                let first = (*previous_kf.get_camera_center() - *current_kf.get_camera_center()).norm();
+                                let second = (*previous_previous_kf.get_camera_center() - *previous_kf.get_camera_center()).norm();
+                                first + second
+                            };
 
-                        if dist > 0.05 {
-                            self.imu_module.as_mut().unwrap().timestamp_init += current_kf.timestamp - previous_kf.timestamp;
-                        }
-                        if !self.map.read().imu_ba2 {
-                            if self.imu_module.as_ref().unwrap().timestamp_init < 10.0 && dist < 0.02 {
-                                warn!("Not enough motion for IMU initialization. Resetting...");
-                                todo!("Multi-maps");
-                                // mbResetRequestedActiveMap = true;
-                                // mpMapToReset = mpCurrentKeyFrame->GetMap();
-                                // mbBadImu = true;
+                            if dist > 0.05 {
+                                self.imu_module.as_mut().unwrap().timestamp_init += current_kf.timestamp - previous_kf.timestamp;
                             }
-                        }
+                            if !self.map.read().imu_ba2 {
+                                if self.imu_module.as_ref().unwrap().timestamp_init < 10.0 && dist < 0.02 {
+                                    warn!("Not enough motion for IMU initialization. Resetting...");
+                                    todo!("Multi-maps");
+                                    // mbResetRequestedActiveMap = true;
+                                    // mpMapToReset = mpCurrentKeyFrame->GetMap();
+                                    // mbBadImu = true;
+                                }
+                            }
 
-                        optimizer::local_inertial_ba();
-                        // bool bLarge = ((mpTracker->GetMatchesInliers()>75)&&mbMonocular)||((mpTracker->GetMatchesInliers()>100)&&!mbMonocular);
+                            !self.map.read().imu_ba2
+                        };
+                        let large = matches_in_tracking > 75 && self.sensor.is_mono() || matches_in_tracking > 100 && !self.sensor.is_mono();
+
                         // Optimizer::LocalInertialBA(mpCurrentKeyFrame, &mbAbortBA, mpCurrentKeyFrame->GetMap(),num_FixedKF_BA,num_OptKF_BA,num_MPs_BA,num_edges_BA, bLarge, !mpCurrentKeyFrame->GetMap()->GetIniertialBA2());
+                        local_inertial_ba(&mut self.map, self.current_keyframe_id, large, rec_init, tracked_mappoint_depths, self.sensor);
+
                     }
                 },
                 false => {
@@ -368,7 +378,7 @@ impl LocalMapping {
                 }
             }
 
-            pose1 = current_kf.pose; // sophTcw1
+            pose1 = current_kf.get_pose(); // sophTcw1
             translation1 = pose1.get_translation(); // tcw1
             rotation1 = pose1.get_rotation(); // Rcw1
             rotation_transpose1 = rotation1.transpose(); // Rwc1
@@ -425,7 +435,7 @@ impl LocalMapping {
                     Err(err) => panic!("Problem with search_for_triangulation {}", err)
                 };
 
-                pose2 = lock.keyframes.get(&neighbor_id)?.pose;
+                pose2 = lock.keyframes.get(&neighbor_id)?.get_pose();
                 translation2 = pose2.get_translation(); // tcw2
                 rotation2 = pose2.get_rotation(); // Rcw2
                 rotation_transpose2 = rotation2.transpose(); // Rwc2
@@ -448,7 +458,7 @@ impl LocalMapping {
                     // camera1 = mpCurrentKeyFrame->mpCamera2 TODO (STEREO) .. right now just using global CAMERA
                 } else {
                     let lock = self.map.read();
-                    pose1 = lock.keyframes.get(&self.current_keyframe_id)?.pose;
+                    pose1 = lock.keyframes.get(&self.current_keyframe_id)?.get_pose();
                     ow1 = lock.keyframes.get(&self.current_keyframe_id)?.get_camera_center();
                     // camera1 = mpCurrentKeyFrame->mpCamera TODO (STEREO)
                 }
@@ -460,7 +470,7 @@ impl LocalMapping {
                     // camera2 = neighbor_kf->mpCamera2 TODO (STEREO)
                 } else {
                     let lock = self.map.read();
-                    pose2 = lock.keyframes.get(&neighbor_id)?.pose;
+                    pose2 = lock.keyframes.get(&neighbor_id)?.get_pose();
                     ow2 = lock.keyframes.get(&neighbor_id)?.get_camera_center();
                     // camera2 = neighbor_kf->mpCamera TODO (STEREO)
                 }

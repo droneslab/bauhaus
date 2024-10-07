@@ -176,9 +176,9 @@ impl LoopClosing {
             corrected_sim3.insert(current_kf_id, loop_scw);
 
             let mut non_corrected_sim3 = KeyFrameAndPose::new();
-            non_corrected_sim3.insert(current_kf_id, current_kf.pose.into());
+            non_corrected_sim3.insert(current_kf_id, current_kf.get_pose().into());
 
-            let twc = current_kf.pose.inverse();
+            let twc = current_kf.get_pose().inverse();
 
             (current_connected_kfs, corrected_sim3, non_corrected_sim3, twc)
         };
@@ -189,12 +189,12 @@ impl LoopClosing {
 
             // Update keyframe pose with corrected Sim3. First transform Sim3 to SE3 (scale translation)
             let current_kf = lock.keyframes.get_mut(&current_kf_id).unwrap();
-            current_kf.pose = loop_scw.into();
-            println!("Corrected current kf {} (frame {}): {:?}", current_kf.id, current_kf.frame_id, current_kf.pose);
+            current_kf.set_pose(loop_scw.into());
+            println!("Corrected current kf {} (frame {}): {:?}", current_kf.id, current_kf.frame_id, current_kf.get_pose());
 
             for connected_kf_id in &current_connected_kfs {
                 let connected_kf = lock.keyframes.get_mut(connected_kf_id).unwrap();
-                let tiw = connected_kf.pose;
+                let tiw = connected_kf.get_pose();
 
                 if connected_kf_id != &current_kf_id {
                     let tic = tiw * twc;
@@ -205,12 +205,12 @@ impl LoopClosing {
                     corrected_sim3.insert(*connected_kf_id, corrected_siw);
 
                     // Update keyframe pose with corrected Sim3. First transform Sim3 to SE3 (scale translation)
-                    connected_kf.pose = corrected_siw.into();
+                    connected_kf.set_pose(corrected_siw.into());
 
                     // Pose without correction
                     let original_siw: Sim3 = tiw.into();
                     non_corrected_sim3.insert(*connected_kf_id, original_siw);
-                    println!("...corrected pose for kf {} (frame {}): {:?}", connected_kf_id, connected_kf.frame_id, connected_kf.pose);
+                    println!("...corrected pose for kf {} (frame {}): {:?}", connected_kf_id, connected_kf.frame_id, connected_kf.get_pose());
                 }
             }
 
@@ -430,13 +430,13 @@ fn run_gba(map: &mut MapLock, loop_kf: Id) {
 
             let (curr_kf_pose_inverse, curr_kf_gba_pose) = {
                 let curr_kf = lock.keyframes.get(&curr_kf_id).unwrap();
-                (curr_kf.pose.inverse(), curr_kf.gba_pose.clone())
+                (curr_kf.get_pose().inverse(), curr_kf.gba_pose.clone())
             };
 
             for child_id in & children {
                 let child = lock.keyframes.get_mut(child_id).unwrap();
                 if child.ba_global_for_kf != loop_kf {
-                    let tchildc = child.pose * curr_kf_pose_inverse;
+                    let tchildc = child.get_pose() * curr_kf_pose_inverse;
                     child.gba_pose = Some(tchildc * curr_kf_gba_pose.unwrap());
                     child.ba_global_for_kf = loop_kf;
                     println!("Add pose for child kf {}", child_id);
@@ -454,9 +454,9 @@ fn run_gba(map: &mut MapLock, loop_kf: Id) {
             }
 
             let kf = lock.keyframes.get_mut(&curr_kf_id).unwrap();
-            tcw_bef_gba.insert(curr_kf_id, kf.pose);
-            kf.pose = kf.gba_pose.unwrap().clone();
-            println!("Update kf {} with pose {:?}", curr_kf_id, kf.pose);
+            tcw_bef_gba.insert(curr_kf_id, kf.get_pose());
+            kf.set_pose(kf.gba_pose.unwrap().clone());
+            println!("Update kf {} with pose {:?}", curr_kf_id, kf.get_pose());
             i += 1;
 
             todo!("SOFIYA mVwbGBA");
@@ -497,7 +497,7 @@ fn run_gba(map: &mut MapLock, loop_kf: Id) {
 
 
                     // Backproject using corrected camera
-                    let twc = ref_kf.pose.inverse();
+                    let twc = ref_kf.get_pose().inverse();
                     let rwc = twc.get_rotation();
                     let twc = twc.get_translation();
 

@@ -5,7 +5,7 @@ use downcast_rs::{impl_downcast, Downcast};
 
 use crate::{actors::tracking_backend::TrackedMapPointData, map::{frame::Frame, keyframe::KeyFrame, map::{Id, Map}, pose::Sim3}, MapLock};
 
-use super::imu::ImuMeasurements;
+use super::imu::{ImuMeasurements, ImuPreIntegrated};
 
 /// *** Traits for modules. *** //
 
@@ -66,7 +66,7 @@ pub trait ImuModule: Send + Sync {
     fn ready(&self, map: &MapLock) -> bool;
     fn predict_state_last_keyframe(&self, map: &MapLock, current_frame: &mut Frame, last_keyframe_id: Id) -> Option<bool>;
     fn predict_state_last_frame(&self, current_frame: &mut Frame, last_frame: &mut Frame) -> Option<bool>;
-    fn preintegrate(&mut self, map: &MapLock, measurements: &mut ImuMeasurements, current_frame: &mut Frame, previous_frame: &mut Frame) -> bool;
+    fn preintegrate(&mut self, measurements: &mut ImuMeasurements, current_frame: &mut Frame, previous_frame: &mut Frame, last_keyframe_id: Id) -> bool;
     fn initialize(&self, map: &mut MapLock, current_keyframe_id: Id, prior_g: f64, prior_a: f64, fiba: bool, tracking_backend: Option<&Sender>);
 }
 
@@ -175,7 +175,7 @@ pub trait MapInitializationModule {
     type InitializationResult;
 
     fn try_initialize(&mut self, current_frame: &Self::Frame) -> Result<bool, Box<dyn std::error::Error>>;
-    fn create_initial_map(&mut self, map: &mut Self::Map) -> Self::InitializationResult ;
+    fn create_initial_map(&mut self, map: &mut Self::Map, imu_preintegrated_from_last_kf: & ImuPreIntegrated) -> Self::InitializationResult ;
 }
 
 /// *** Map initialization *** //
