@@ -118,6 +118,7 @@ impl FullMapOptimizationModule for GlobalBundleAdjustment {
             for (kf_id, vertex_id) in kf_vertex_ids {
                 if let Some(kf) = lock.keyframes.get_mut(&kf_id) {
                     let pose: Pose = optimizer.recover_optimized_frame_pose(vertex_id).into();
+                    println!("GBA: loop kf {}, initial kf {}", loop_kf, initial_kf_id);
 
                     if loop_kf == initial_kf_id {
                         kf.set_pose(pose.into());
@@ -125,6 +126,7 @@ impl FullMapOptimizationModule for GlobalBundleAdjustment {
                         // println!("GBA: Set kf {} pose: {:?}. Old pose: {:?}", kf.id, pose, kf.pose);
                         kf.gba_pose = Some(pose);
                         kf.ba_global_for_kf = loop_kf;
+                        debug!("(baglobal) set in gba, for kf {}: {}", kf.id, loop_kf);
                     }
                 } else {
                     // Possible that map actor deleted mappoint after local BA has finished but before
@@ -156,6 +158,7 @@ impl FullMapOptimizationModule for GlobalBundleAdjustment {
                         } else {
                             mp.gba_pose = Some(pos);
                             mp.ba_global_for_kf = loop_kf;
+                            debug!("(baglobal) set in gba, for mp {}: {}", mp.id, loop_kf);
                         }
                     },
                     None => continue,
@@ -174,6 +177,8 @@ pub fn full_inertial_ba(
         .iter()
         .max_by(|a, b| a.1.id.cmp(&b.1.id))
         .map(|(k, _v)| k).unwrap();
+
+    println!("BEGIN FULL INERTIAL BA... max kf id: {}, fix local: {}, loop id: {}", max_kf_id, fix_local, loop_id);
 
     // Setup optimizer
     // ... Note... pretty sure camera params aren't necessary for this optimization but throwing them in here anyway just in case
@@ -458,6 +463,7 @@ pub fn full_inertial_ba(
                 // println!("GBA: Set kf {} pose: {:?}. Old pose: {:?}", kf.id, pose, kf.pose);
                 kf.gba_pose = Some(pose);
                 kf.ba_global_for_kf = loop_id;
+                debug!("(baglobal) set in fiba, for kf {}: {}", kf.id, loop_id);
             }
 
             if kf.imu_data.is_imu_initialized {
@@ -531,6 +537,7 @@ pub fn full_inertial_ba(
                 let mp = lock.mappoints.get_mut(&mp_id).unwrap();
                 mp.gba_pose = Some(pos);
                 mp.ba_global_for_kf = loop_id;
+                debug!("(baglobal) set in fiba, for mp {}: {}", mp.id, loop_id);
             }
         }
     }

@@ -13,6 +13,7 @@ use crate::{
     actors::{loop_closing::{KeyFrameAndPose, GBA_KILL_SWITCH}, tracking_backend::TrackedMapPointData}, map::{frame::Frame, keyframe::KeyFrame, map::Id, pose::{DVTranslation, Pose, Sim3}}, registered_actors::{CAMERA, CAMERA_MODULE, FEATURE_DETECTION}, MapLock
 };
 use std::ops::Add;
+use std::ops::AddAssign;
 
 use super::imu::{ConstraintPoseImu, ImuBias, ImuCalib, ImuPreIntegrated};
 
@@ -381,8 +382,8 @@ pub fn pose_inertial_optimization_last_frame(
 
     // Recover Hessian, marginalize previous frame states and generate new prior for frame
     let mut h = nalgebra::SMatrix::<f64, 30, 30>::zeros();
-    let mut h_i: nalgebra::SMatrix::<f64, 24, 24> = optimizer.get_hessian_from_edge_inertial(0).into();
-    h.view_mut((0, 0), (24, 24)).add(&h_i); // Only one edge was created in this case
+    let h_i: nalgebra::SMatrix::<f64, 24, 24> = optimizer.get_hessian_from_edge_inertial(0).into();
+    h.view_mut((0, 0), (24, 24)).add_assign(&h_i); // Only one edge was created in this case
 
     // H.block<24,24>(0,0)+= ei->GetHessian(); 
         // ei from:
@@ -392,22 +393,22 @@ pub fn pose_inertial_optimization_last_frame(
     // Eigen::Matrix<double,6,6> Hgr = egr->GetHessian();
         // egr from:
         // EdgeGyroRW* egr = new EdgeGyroRW();
-    h.view_mut((9,9), (3,3)).add(&hgr.view((0,0), (3,3)));
-    h.view_mut((9,24), (3,3)).add(&hgr.view((0,3), (3,3)));
-    h.view_mut((24,9), (3,3)).add(&hgr.view((3,0), (3,3)));
-    h.view_mut((24,24), (3,3)).add(&hgr.view((3,3), (3,3)));
+    h.view_mut((9,9), (3,3)).add_assign(&hgr.view((0,0), (3,3)));
+    h.view_mut((9,24), (3,3)).add_assign(&hgr.view((0,3), (3,3)));
+    h.view_mut((24,9), (3,3)).add_assign(&hgr.view((3,0), (3,3)));
+    h.view_mut((24,24), (3,3)).add_assign(&hgr.view((3,3), (3,3)));
 
     let hgr: nalgebra::SMatrix::<f64, 6, 6> = optimizer.get_hessian_from_edge_acc().into();
     // Eigen::Matrix<double,6,6> Har = ear->GetHessian();
         // ear from: 
         // EdgeAccRW* ear = new EdgeAccRW();
-    h.view_mut((12,12), (3,3)).add(&hgr.view((0,0), (3,3)));
-    h.view_mut((12,27), (3,3)).add(&hgr.view((0,3), (3,3)));
-    h.view_mut((27,12), (3,3)).add(&hgr.view((3,0), (3,3)));
-    h.view_mut((27,27), (3,3)).add(&hgr.view((3,3), (3,3)));
+    h.view_mut((12,12), (3,3)).add_assign(&hgr.view((0,0), (3,3)));
+    h.view_mut((12,27), (3,3)).add_assign(&hgr.view((0,3), (3,3)));
+    h.view_mut((27,12), (3,3)).add_assign(&hgr.view((3,0), (3,3)));
+    h.view_mut((27,27), (3,3)).add_assign(&hgr.view((3,3), (3,3)));
 
     let h_ep: nalgebra::SMatrix::<f64, 15, 15> = optimizer.get_hessian_from_edge_prior().into();
-    h.view_mut((0,0), (15,15)).add(&h_ep);
+    h.view_mut((0,0), (15,15)).add_assign(&h_ep);
     // H.block<15,15>(0,0) += ep->GetHessian();
         // ep from:
         // EdgePriorPoseImu* ep = new EdgePriorPoseImu(pFp->mpcpi);
@@ -418,7 +419,7 @@ pub fn pose_inertial_optimization_last_frame(
     for mut edge in optimizer.pin_mut().get_mut_mono_onlypose_edges().iter_mut() {
         let idx = mp_indexes[i];
         if !frame.mappoint_matches.is_outlier(&idx) {
-            h.view_mut((15, 15), (6, 6)).add(&edge.inner.pin_mut().get_hessian().into());
+            h.view_mut((15, 15), (6, 6)).add_assign(&edge.inner.pin_mut().get_hessian().into());
             tot_in += 1;
         } else {
             tot_out += 1;
@@ -850,10 +851,6 @@ pub fn inertial_optimization_initialization(
 ) {
     // void Optimizer::InertialOptimization(Map *pMap, Eigen::Matrix3d &Rwg, double &scale, Eigen::Vector3d &bg, Eigen::Vector3d &ba, bool bMono, Eigen::MatrixXd  &covInertial, bool bFixedVel, bool bGauss, float priorG, float priorA)
 
-
-    println!("Inertial optimization initialization values...");
-    println!("rwg: {:?}", rwg);
-    
     let its = 200;
     let max_kf_id = * map.read().keyframes
         .iter()
@@ -1005,16 +1002,6 @@ pub fn inertial_optimization_initialization(
         bwz: vb[2],
     };
 
-    // VG = static_cast<VertexGyroBias*>(optimizer.vertex(maxKFid*2+2));
-    // VA = static_cast<VertexAccBias*>(optimizer.vertex(maxKFid*2+3));
-    // Vector6d vb;
-    // vb << VG->estimate(), VA->estimate();
-    // bg << VG->estimate();
-    // ba << VA->estimate();
-    // scale = VS->estimate();
-    // IMU::Bias b (vb[3],vb[4],vb[5],vb[0],vb[1],vb[2]);
-    // Rwg = VGDir->estimate().Rwg;
-
     //Keyframes velocities and biases
     let mut lock = map.write();
     for (kf_id, kf) in &mut lock.keyframes {
@@ -1023,11 +1010,7 @@ pub fn inertial_optimization_initialization(
         }
 
         let velocity = optimizer.recover_optimized_vertex_velocity(max_kf_id + kf_id + 1);
-        debug!("SET VELOCITY: {:?} ", velocity);
         kf.imu_data.velocity = Some(velocity.into());
-
-        debug!("KF {} imu data: {:?}", kf_id, kf.imu_data.imu_preintegrated);
-        debug!("get gyro bias: {:?}, bg: {:?}", kf.imu_data.imu_bias.get_gyro_bias(), bg);
 
         if (* kf.imu_data.imu_bias.get_gyro_bias() - ** bg).norm() > 0.01 {
             kf.imu_data.set_new_bias(b);
@@ -1805,6 +1788,7 @@ pub fn add_vertex_pose_frame(optimizer: &mut UniquePtr<BridgeSparseOptimizer>, f
 }
 
 pub fn marginalize(h: nalgebra::SMatrix<f64, 30, 30>, start: usize, end: usize) -> nalgebra::SMatrix<f64, 30, 30> {
+    // Sofiya: this is tested
     // Eigen::MatrixXd Optimizer::Marginalize(const Eigen::MatrixXd &H, const int &start, const int &end)
     // Goal
     // a  | ab | ac       a*  | 0 | ac*

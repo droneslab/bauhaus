@@ -175,7 +175,7 @@ impl ImuModule for IMU {
         };
 
         if map.read().keyframes.len() < min_kf {
-            debug!("IMU initialization: Early return not enough KFs ({})", map.read().keyframes.len());
+            debug!("IMU: Early return not enough KFs ({})", map.read().keyframes.len());
             return;
         }
 
@@ -192,18 +192,18 @@ impl ImuModule for IMU {
             keyframes
         };  // lpKF
         if keyframes.len() < min_kf {
-            debug!("IMU initialization: Early return not enough KFs #2 ({})", keyframes.len());
+            debug!("IMU:  Early return not enough KFs #2 ({})", keyframes.len());
             return;
         }
 
         let first_timestamp = map.read().keyframes.get(& keyframes[0]).unwrap().timestamp; // mFirstTs
         let current_timestamp = map.read().keyframes.get(&current_keyframe_id).unwrap().timestamp; // mpCurrentKeyFrame->mTimeStamp
         if (current_timestamp - first_timestamp) * 1e9 < min_time {
-            debug!("IMU initialization: Early return timestamps ({})... current keyframe is {}, first keyframe is {}", (current_timestamp - first_timestamp) * 1e9, current_keyframe_id, keyframes[0]);
+            debug!("IMU:  Early return timestamps ({})... current keyframe is {}, first keyframe is {}", (current_timestamp - first_timestamp) * 1e9, current_keyframe_id, keyframes[0]);
             return;
         }
 
-        println!("Imu initialization: start!");
+        println!("IMU: start initialization!");
 
         // Note: ignoring this because we can't access the local mapping queue in advance
         // Also, even if we could, items in the queue are not yet placed into the map as keyframes
@@ -217,7 +217,6 @@ impl ImuModule for IMU {
         // }
 
         let num_kfs = keyframes.len(); // N
-        let bias = ImuBias::new();
 
         // Constructing rwg below was tested!!
 
@@ -243,12 +242,6 @@ impl ImuModule for IMU {
 
                     dir_g = dir_g - (*prev_kf.get_imu_rotation() * imu_preintegrated.get_updated_delta_velocity());
 
-                    // println!("TEST RWG! KF ID: {}", kf.id);
-                    // println!("Imu position: {:?}", kf.get_imu_position());
-                    // println!("Prev kf imu rotation: {:?}", prev_kf.get_imu_rotation());
-                    // println!("Prev kf imu position: {:?}", prev_kf.get_imu_position());
-                    // println!("D_t: {}", imu_preintegrated.d_t);
-
                     (
                         DVVector3::new((*kf.get_imu_position() - *prev_kf.get_imu_position()) / imu_preintegrated.d_t),
                         kf.prev_kf_id.unwrap()
@@ -257,8 +250,6 @@ impl ImuModule for IMU {
                 let mut lock = map.write();
                 lock.keyframes.get_mut(kf_id).unwrap().imu_data.velocity = Some(velocity);
                 lock.keyframes.get_mut(& prev_kf_id).unwrap().imu_data.velocity = Some(velocity);
-
-                // println!("Set KF velocity (frame {}) {} {:?}", lock.keyframes.get(kf_id).unwrap().frame_id, kf_id,  velocity);
             }
 
             dir_g = dir_g / dir_g.norm();
@@ -279,7 +270,7 @@ impl ImuModule for IMU {
             mba = map.read().keyframes.get(&current_keyframe_id).unwrap().imu_data.imu_bias.get_acc_bias();
         }
 
-        println!("Begin inertial optimization for initialization");
+        println!("IMU: Begin inertial optimization");
 
         let mut scale = 1.0; // mScale
         let mut info_inertial = SMatrix::<f64, 9, 9>::zeros(); // infoInertial
@@ -298,8 +289,7 @@ impl ImuModule for IMU {
         );
 
         if scale < 1e-1 {
-            warn!("Scale too small");
-            debug!("Early return");
+            warn!("IMU: Scale too small. Early return");
             return;
         }
 
@@ -321,10 +311,10 @@ impl ImuModule for IMU {
             if !map.read().imu_initialized {
                 for i in 0..num_kfs {
                     map.write().keyframes.get_mut(&keyframes[i]).unwrap().imu_data.is_imu_initialized = true;
-                    println!("Set imu initialized for kf {}", keyframes[i]);
+                    println!("IMU: Set imu initialized for kf {}", keyframes[i]);
                 }
             } else {
-                println!("Map already initialized? #1");
+                println!("IMU: Map already initialized? #1");
             }
         }
 
@@ -347,14 +337,13 @@ impl ImuModule for IMU {
             let mut lock = map.write();
             lock.imu_initialized = true;
             lock.keyframes.get_mut(&current_keyframe_id).unwrap().imu_data.is_imu_initialized = true;
-            println!("Set imu initialized for kf {}", current_keyframe_id);
+            println!("IMU: Set imu initialized for kf {}", current_keyframe_id);
         } else {
-            println!("Map already initialized? #1");
+            println!("IMU: Map already initialized? #1");
         }
 
-        println!("Begin fiba");
-
         if fiba {
+            println!("IMU: Begin fiba");
             if prior_a != 0.0 {
                 full_inertial_ba(map, 100, false, current_keyframe_id, true, prior_g, prior_a);
             } else {
@@ -403,6 +392,7 @@ impl ImuModule for IMU {
                         child.bias_gba = Some(child.imu_data.imu_bias.clone());
                         println!("Add pose for child kf {}", child_id);
                     }
+                    println!("(baglobal) for kf {} is {}, current kf id is {}", child_id, child.ba_global_for_kf, current_keyframe_id);
                     kfs_to_check.push(*child_id);
                 }
 
@@ -411,7 +401,7 @@ impl ImuModule for IMU {
                 let kf = lock.keyframes.get_mut(&curr_kf_id).unwrap();
                 kf.tcw_bef_gba = Some(kf.get_pose());
                 kf.set_pose(kf.gba_pose.unwrap().clone());
-                println!("Update kf {} with pose {:?}", curr_kf_id, kf.get_pose());
+                println!("IMU: Update kf {} with pose {:?}", curr_kf_id, kf.get_pose());
                 i += 1;
 
                 if kf.imu_data.is_imu_initialized {
@@ -440,6 +430,7 @@ impl ImuModule for IMU {
                         }
 
                         // Map to non-corrected camera
+                        todo!("Map to non-corrected camera");
                         // todo sofiya
                         // let tcw_bef_gba_for_ref_kf = tcw_bef_gba.get(&mp.ref_kf_id).unwrap();
                         // let rcw = tcw_bef_gba_for_ref_kf.get_rotation();
