@@ -1,5 +1,7 @@
 use core::matrix::{DVMatrix4, DVMatrixDynamic, DVVector3};
 
+use dvos3binding::ffi::SVDComputeType;
+
 use crate::map::pose::Pose;
 
 pub fn triangulate(
@@ -17,9 +19,14 @@ pub fn triangulate(
     matrix.set_row(2, &(x_c2[0] * pose2m.row(2) - pose2m.row(0)));
     matrix.set_row(3, &(x_c2[1] * pose2m.row(2) - pose2m.row(1)));
 
-    let svd = dvos3binding::ffi::svd((&DVMatrix4::new(matrix)).into());
+    let svd = dvos3binding::ffi::svd((&DVMatrix4::new(matrix)).into(), SVDComputeType::FullV);
     let v: DVMatrixDynamic<f64> = (& svd.v).into();
     let x_3d_h = v.row(3);
+
+    // Old version using nalgebra:
+    // let svd = nalgebra::SVD::new(matrix, false, true);
+    // let binding = svd.v_t.unwrap();
+    // let x_3d_h = binding.row(3);
 
     if x_3d_h[3] == 0.0 {
         return None;

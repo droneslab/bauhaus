@@ -21,11 +21,21 @@ namespace orb_slam3 {
         return arr;
     }
 
-    SVDResult svd(rust::Vec<DoubleVec> mat){
+    SVDResult svd(rust::Vec<DoubleVec> mat, SVDComputeType compute_type){
         // Returns (U, V, singular values)
+        // Need to pass in type of SVD to compute, options below:
+        unsigned int compute_type_eigen;
+        switch (compute_type) {
+            case orb_slam3::SVDComputeType::ThinUThinV:
+                compute_type_eigen = Eigen::ComputeThinU | Eigen::ComputeThinV;
+                break;
+            case orb_slam3::SVDComputeType::FullV:
+                compute_type_eigen = Eigen::ComputeFullV;
+                break;
+        };
 
         Eigen::MatrixXd mat_c = rustvec_to_eigenmat(mat);
-        Eigen::JacobiSVD<Eigen::MatrixXd> svd(mat_c, Eigen::ComputeThinU | Eigen::ComputeThinV);
+        Eigen::JacobiSVD<Eigen::MatrixXd> svd(mat_c, compute_type_eigen);
         Eigen::JacobiSVD<Eigen::MatrixXd>::SingularValuesType singularValues_inv=svd.singularValues();
 
         SVDResult result;

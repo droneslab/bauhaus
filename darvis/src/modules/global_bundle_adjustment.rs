@@ -118,7 +118,7 @@ impl FullMapOptimizationModule for GlobalBundleAdjustment {
             for (kf_id, vertex_id) in kf_vertex_ids {
                 if let Some(kf) = lock.keyframes.get_mut(&kf_id) {
                     let pose: Pose = optimizer.recover_optimized_frame_pose(vertex_id).into();
-                    println!("GBA: loop kf {}, initial kf {}", loop_kf, initial_kf_id);
+                    // println!("GBA: loop kf {}, initial kf {}", loop_kf, initial_kf_id);
 
                     if loop_kf == initial_kf_id {
                         kf.set_pose(pose.into());
@@ -126,7 +126,7 @@ impl FullMapOptimizationModule for GlobalBundleAdjustment {
                         // println!("GBA: Set kf {} pose: {:?}. Old pose: {:?}", kf.id, pose, kf.pose);
                         kf.gba_pose = Some(pose);
                         kf.ba_global_for_kf = loop_kf;
-                        debug!("(baglobal) set in gba, for kf {}: {}", kf.id, loop_kf);
+                        // debug!("(baglobal) set in gba, for kf {}: {}", kf.id, loop_kf);
                     }
                 } else {
                     // Possible that map actor deleted mappoint after local BA has finished but before
@@ -158,7 +158,7 @@ impl FullMapOptimizationModule for GlobalBundleAdjustment {
                         } else {
                             mp.gba_pose = Some(pos);
                             mp.ba_global_for_kf = loop_kf;
-                            debug!("(baglobal) set in gba, for mp {}: {}", mp.id, loop_kf);
+                            // debug!("(baglobal) set in gba, for mp {}: {}", mp.id, loop_kf);
                         }
                     },
                     None => continue,
@@ -212,7 +212,7 @@ pub fn full_inertial_ba(
         optimizer::add_vertex_pose_keyframe(&mut optimizer, kf, fixed, kf.id);
         kf_vertex_fixed.insert(*kf_id, fixed);
 
-        println!("add vertex pose {}", kf.id);
+        // println!("add vertex pose {}", kf.id);
 
         if kf.imu_data.is_imu_initialized {
             optimizer.pin_mut().add_vertex_velocity(
@@ -220,7 +220,7 @@ pub fn full_inertial_ba(
                 fixed,
                 kf.imu_data.velocity.unwrap().into()
             );
-            println!("add vertex velocity {}", max_kf_id + 3 * kf.id + 1);
+            // println!("add vertex velocity {}", max_kf_id + 3 * kf.id + 1);
 
             if !init {
                 optimizer.pin_mut().add_vertex_gyrobias(
@@ -252,7 +252,7 @@ pub fn full_inertial_ba(
             false,
             kf.imu_data.imu_bias.get_acc_bias().into()
         );
-        println!("add vertex gyro and acc {} {}", 4 * max_kf_id + 2, 4 * max_kf_id + 3);
+        // println!("add vertex gyro and acc {} {}", 4 * max_kf_id + 2, 4 * max_kf_id + 3);
     }
 
     if fix_local {
@@ -320,7 +320,7 @@ pub fn full_inertial_ba(
 
     }
     for (id, preintegrated) in new_imu_preintegrated_for_kfs {
-        debug!("SET KF {} IMU PREINTEGRATED", id);
+        // debug!("SET KF {} IMU PREINTEGRATED", id);
         map.write().keyframes.get_mut(&id).unwrap().imu_data.imu_preintegrated = Some(preintegrated);
     }
 
@@ -343,104 +343,107 @@ pub fn full_inertial_ba(
     let mut mps_not_included: HashSet<Id> = HashSet::new(); // vbNotIncludedMP
 
     let mut _edges = Vec::new();
-    for (mp_id, mp) in & map.read().mappoints {
-        let id = mp_id + ini_mp_id + 1;
-        optimizer.pin_mut().add_vertex_sbapointxyz(
-            id,
-            Pose::new(* mp.position, Matrix3::identity()).into(),
-            false, // todo should this be false? not specified 
-            true
-        );
+    {
+        let lock = map.read();
+        for (mp_id, mp) in & lock.mappoints {
+            let id = mp_id + ini_mp_id + 1;
+            optimizer.pin_mut().add_vertex_sbapointxyz(
+                id,
+                Pose::new(* mp.position, Matrix3::identity()).into(),
+                false, // todo should this be false? not specified 
+                true
+            );
 
-        let mut all_fixed = true;
+            let mut all_fixed = true;
 
-        //Set edges
-        for (kf_id, (left_index, right_index)) in mp.get_observations() {
-            if *kf_id > max_kf_id {
-                continue;
-            }
+            //Set edges
+            for (kf_id, (left_index, right_index)) in mp.get_observations() {
+                if *kf_id > max_kf_id {
+                    continue;
+                }
 
-            if *left_index != -1 && *right_index == -1 {
-                let (keypoint, _) = map.read().keyframes.get(kf_id).unwrap().features.get_keypoint(*left_index as usize);
-                _edges.push(
-                    optimizer.pin_mut().add_edge_mono_binary(
-                        true, id, * kf_id,
-                        *mp_id,
-                        keypoint.pt().x, keypoint.pt().y,
-                        INV_LEVEL_SIGMA2[keypoint.octave() as usize],
-                        * TH_HUBER_MONO
-                    )
-                );
+                if *left_index != -1 && *right_index == -1 {
+                    let (keypoint, _) = lock.keyframes.get(kf_id).unwrap().features.get_keypoint(*left_index as usize);
+                    _edges.push(
+                        optimizer.pin_mut().add_edge_mono_binary(
+                            true, id, * kf_id,
+                            *mp_id,
+                            keypoint.pt().x, keypoint.pt().y,
+                            INV_LEVEL_SIGMA2[keypoint.octave() as usize],
+                            * TH_HUBER_MONO
+                        )
+                    );
 
-                if all_fixed && ! kf_vertex_fixed.get(kf_id).unwrap() {
-                    all_fixed = false;
+                    if all_fixed && ! kf_vertex_fixed.get(kf_id).unwrap() {
+                        all_fixed = false;
+                    }
+                }
+
+                if *right_index != -1 {
+                    todo!("Stereo");
+                    // kpUn = pKFi->mvKeysUn[leftIndex];
+                    // const float kp_ur = pKFi->mvuRight[leftIndex];
+                    // Eigen::Matrix<double,3,1> obs;
+                    // obs << kpUn.pt.x, kpUn.pt.y, kp_ur;
+
+                    // EdgeStereo* e = new EdgeStereo(0);
+
+                    // g2o::OptimizableGraph::Vertex* VP = dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(pKFi->mnId));
+                    // if(bAllFixed)
+                    //     if(!VP->fixed())
+                    //         bAllFixed=false;
+
+                    // e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(id)));
+                    // e->setVertex(1, VP);
+                    // e->setMeasurement(obs);
+                    // const float invSigma2 = pKFi->mvInvLevelSigma2[kpUn.octave];
+
+                    // e->setInformation(Eigen::Matrix3d::Identity()*invSigma2);
+
+                    // g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
+                    // e->setRobustKernel(rk);
+                    // rk->setDelta(thHuberStereo);
+
+                    // optimizer.addEdge(e);
+                }
+                {
+                    // TODO multiple cameras
+                    // if(pKFi->mpCamera2){ // Monocular right observation
+                    //     int rightIndex = get<1>(mit->second);
+
+                    //     if(rightIndex != -1 && rightIndex < pKFi->mvKeysRight.size()){
+                    //         rightIndex -= pKFi->NLeft;
+
+                    //         Eigen::Matrix<double,2,1> obs;
+                    //         kpUn = pKFi->mvKeysRight[rightIndex];
+                    //         obs << kpUn.pt.x, kpUn.pt.y;
+
+                    //         EdgeMono *e = new EdgeMono(1);
+
+                    //         g2o::OptimizableGraph::Vertex* VP = dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(pKFi->mnId));
+                    //         if(bAllFixed)
+                    //             if(!VP->fixed())
+                    //                 bAllFixed=false;
+
+                    //         e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(id)));
+                    //         e->setVertex(1, VP);
+                    //         e->setMeasurement(obs);
+                    //         const float invSigma2 = pKFi->mvInvLevelSigma2[kpUn.octave];
+                    //         e->setInformation(Eigen::Matrix2d::Identity()*invSigma2);
+
+                    //         g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
+                    //         e->setRobustKernel(rk);
+                    //         rk->setDelta(thHuberMono);
+
+                    //         optimizer.addEdge(e);
+                    //     }
                 }
             }
 
-            if *right_index != -1 {
-                todo!("Stereo");
-                // kpUn = pKFi->mvKeysUn[leftIndex];
-                // const float kp_ur = pKFi->mvuRight[leftIndex];
-                // Eigen::Matrix<double,3,1> obs;
-                // obs << kpUn.pt.x, kpUn.pt.y, kp_ur;
-
-                // EdgeStereo* e = new EdgeStereo(0);
-
-                // g2o::OptimizableGraph::Vertex* VP = dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(pKFi->mnId));
-                // if(bAllFixed)
-                //     if(!VP->fixed())
-                //         bAllFixed=false;
-
-                // e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(id)));
-                // e->setVertex(1, VP);
-                // e->setMeasurement(obs);
-                // const float invSigma2 = pKFi->mvInvLevelSigma2[kpUn.octave];
-
-                // e->setInformation(Eigen::Matrix3d::Identity()*invSigma2);
-
-                // g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
-                // e->setRobustKernel(rk);
-                // rk->setDelta(thHuberStereo);
-
-                // optimizer.addEdge(e);
+            if all_fixed {
+                optimizer.pin_mut().remove_vertex(id);
+                mps_not_included.insert(* mp_id);
             }
-            {
-                // TODO multiple cameras
-                // if(pKFi->mpCamera2){ // Monocular right observation
-                //     int rightIndex = get<1>(mit->second);
-
-                //     if(rightIndex != -1 && rightIndex < pKFi->mvKeysRight.size()){
-                //         rightIndex -= pKFi->NLeft;
-
-                //         Eigen::Matrix<double,2,1> obs;
-                //         kpUn = pKFi->mvKeysRight[rightIndex];
-                //         obs << kpUn.pt.x, kpUn.pt.y;
-
-                //         EdgeMono *e = new EdgeMono(1);
-
-                //         g2o::OptimizableGraph::Vertex* VP = dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(pKFi->mnId));
-                //         if(bAllFixed)
-                //             if(!VP->fixed())
-                //                 bAllFixed=false;
-
-                //         e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(id)));
-                //         e->setVertex(1, VP);
-                //         e->setMeasurement(obs);
-                //         const float invSigma2 = pKFi->mvInvLevelSigma2[kpUn.octave];
-                //         e->setInformation(Eigen::Matrix2d::Identity()*invSigma2);
-
-                //         g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
-                //         e->setRobustKernel(rk);
-                //         rk->setDelta(thHuberMono);
-
-                //         optimizer.addEdge(e);
-                //     }
-            }
-        }
-
-        if all_fixed {
-            optimizer.pin_mut().remove_vertex(id);
-            mps_not_included.insert(* mp_id);
         }
     }
 
@@ -463,7 +466,7 @@ pub fn full_inertial_ba(
                 // println!("GBA: Set kf {} pose: {:?}. Old pose: {:?}", kf.id, pose, kf.pose);
                 kf.gba_pose = Some(pose);
                 kf.ba_global_for_kf = loop_id;
-                debug!("(baglobal) set in fiba, for kf {}: {}", kf.id, loop_id);
+                // debug!("(baglobal) set in fiba, for kf {}: {}", kf.id, loop_id);
             }
 
             if kf.imu_data.is_imu_initialized {
@@ -537,7 +540,7 @@ pub fn full_inertial_ba(
                 let mp = lock.mappoints.get_mut(&mp_id).unwrap();
                 mp.gba_pose = Some(pos);
                 mp.ba_global_for_kf = loop_id;
-                debug!("(baglobal) set in fiba, for mp {}: {}", mp.id, loop_id);
+                // debug!("(baglobal) set in fiba, for mp {}: {}", mp.id, loop_id);
             }
         }
     }

@@ -244,6 +244,9 @@ impl LocalMapping {
         }
 
         // Initialize IMU
+        if LOCAL_MAPPING_ABORT.load(std::sync::atomic::Ordering::SeqCst) {
+            return;
+        }
         if self.sensor.is_imu() && !self.map.read().imu_initialized {
             let (prior_g, prior_a, fiba) = match self.sensor.frame() {
                 FrameSensor::Mono => (1e2, 1e10, true),
@@ -352,8 +355,6 @@ impl LocalMapping {
     fn create_new_mappoints(&mut self) -> Option<i32> {
         let _span = tracy_client::span!("create_new_mappoints");
 
-        println!("Creating new mappoints");
-
         // Retrieve neighbor keyframes in covisibility graph
         let nn = match self.sensor.is_mono() {
             true => 30,
@@ -388,14 +389,11 @@ impl LocalMapping {
             ow1 = current_kf.get_camera_center();
         }
 
-        println!("Create new mps... neighbor_kfs: {:?}", neighbor_kfs);
-
         // Search matches with epipolar restriction and triangulate
         let mut mps_created = 0;
         for neighbor_id in neighbor_kfs {
             if self.system.queue_len() > 1 {
                 // Abort additional work if there are too many keyframes in the msg queue.
-                println!("Create new mps... RETURN queue len");
                 return Some(0);
             }
 
@@ -512,7 +510,6 @@ impl LocalMapping {
                         continue // No stereo and very low parallax
                     }
                     if x3_d.is_none() {
-                        println!("Create new mps... RETURN x3d is none");
                         continue
                     }
                 }
@@ -522,12 +519,10 @@ impl LocalMapping {
                 let x3_d_nalg = *x3_d.unwrap();
                 let z1 = rotation1.row(2).transpose().dot(&x3_d_nalg) + (*translation1)[2];
                 if z1 <= 0.0 {
-                    println!("Create new mps... RETURN z1 <= 0.0");
                     continue;
                 }
                 let z2 = rotation2.row(2).transpose().dot(&x3_d_nalg) + (*translation2)[2];
                 if z2 <= 0.0 {
-                    println!("Create new mps... RETURN z2 <= 0.0");
                     continue;
                 }
 
@@ -553,7 +548,6 @@ impl LocalMapping {
                     let err_x1 = uv1.0 as f32 - kp1.pt().x;
                     let err_y1 = uv1.1 as f32 - kp1.pt().y;
                     if (err_x1 * err_x1  + err_y1 * err_y1) > 5.991 * sigma_square1 {
-                        println!("Create new mps... RETURN err > 5.991 * sigma_square1");
                         continue
                     }
                 }
@@ -592,20 +586,16 @@ impl LocalMapping {
                 let dist2 = normal2.norm();
 
                 if dist1 == 0.0 || dist2 == 0.0 {
-                    println!("Create new mps... RETURN dist 0.0");
-
                     continue;
                 }
 
                 if dist1 >= far_points_th || dist2 >= far_points_th {
-                    println!("Create new mps... RETURN dist far points");
                     continue;
                 }
 
                 let ratio_dist = dist2 / dist1;
                 let ratio_octave = (SCALE_FACTORS[kp1.octave() as usize] / SCALE_FACTORS[kp2.octave() as usize]) as f64;
                 if ratio_dist * ratio_factor < ratio_octave || ratio_dist > ratio_octave * ratio_factor {
-                    println!("Create new mps... RETURN ratio");
                     continue;
                 }
 
@@ -951,6 +941,8 @@ impl LocalMapping {
     fn scale_refinement(&mut self) {
         // Minimum number of keyframes to compute a solution
         // Minimum time (seconds) between first and last keyframe to compute a solution. Make the difference between monocular and stereo
+        let _span = tracy_client::span!("imu scale refinement");
+        println!("Scale refinement!");
 
         // Retrieve all keyframes in temporal order
         let lock = self.map.read();

@@ -746,7 +746,7 @@ impl From<&Vec<dvos3binding::ffi::DoubleVec>> for DVMatrixDynamic<f64> {
             for j in 0..row.len() {
                 let r: usize = i.try_into().unwrap();
                 let c: usize = j.try_into().unwrap();
-                res[(r, c)] = mat[i].vec[j];
+                res[(c, r)] = mat[i].vec[j];
             }
         }
         DVMatrixDynamic::<f64>::new(res)
