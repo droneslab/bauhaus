@@ -5,6 +5,7 @@ use core::{
     config::{SETTINGS, SYSTEM}, matrix::{DVMatrix3, DVMatrixDynamic, DVVector3}, sensor::{FrameSensor, Sensor}
 };
 use cxx::UniquePtr;
+use dvos3binding::ffi::SVDComputeType;
 use g2o::ffi::BridgeSparseOptimizer;
 use log::{debug, error, info, warn};
 use nalgebra::{Matrix3, Rotation3, UnitQuaternion, Vector3};
@@ -329,7 +330,7 @@ pub fn pose_inertial_optimization_last_frame(
     if num_inliers < 30 {
         num_bad = 0;
         let chi2_mono_out = 18.0;
-        let chi2_stereo_out = 24.0;
+        let _chi2_stereo_out = 24.0;
 
         let mut i = 0;
         for mut edge in optimizer.pin_mut().get_mut_mono_onlypose_edges().iter_mut() {
@@ -372,12 +373,12 @@ pub fn pose_inertial_optimization_last_frame(
         vg, va, -1, -1
     );
     let recovered_bias = ImuBias {
-        bax: recovered_bias_estimate.vb[3],
-        bay: recovered_bias_estimate.vb[4],
-        baz: recovered_bias_estimate.vb[5],
-        bwx: recovered_bias_estimate.vb[0],
-        bwy: recovered_bias_estimate.vb[1],
-        bwz: recovered_bias_estimate.vb[2],
+        bax: recovered_bias_estimate.vb[0],
+        bay: recovered_bias_estimate.vb[1],
+        baz: recovered_bias_estimate.vb[2],
+        bwx: recovered_bias_estimate.vb[3],
+        bwy: recovered_bias_estimate.vb[4],
+        bwz: recovered_bias_estimate.vb[5],
     };
 
     // Recover Hessian, marginalize previous frame states and generate new prior for frame
@@ -413,16 +414,11 @@ pub fn pose_inertial_optimization_last_frame(
         // ep from:
         // EdgePriorPoseImu* ep = new EdgePriorPoseImu(pFp->mpcpi);
 
-    let mut tot_in = 0;
-    let mut tot_out = 0;
     let mut i = 0;
     for mut edge in optimizer.pin_mut().get_mut_mono_onlypose_edges().iter_mut() {
         let idx = mp_indexes[i];
         if !frame.mappoint_matches.is_outlier(&idx) {
             h.view_mut((15, 15), (6, 6)).add_assign(&edge.inner.pin_mut().get_hessian().into());
-            tot_in += 1;
-        } else {
-            tot_out += 1;
         }
         i += 1;
     }
@@ -463,6 +459,7 @@ pub fn pose_inertial_optimization_last_frame(
         final_h
     )).unwrap();
         // pFrame->mpcpi = new ConstraintPoseImu(VP->estimate().Rwb,VP->estimate().twb,VV->estimate(),VG->estimate(),VA->estimate(),H.block<15,15>(15,15));
+    println!("Add mpcpi for frame {}", frame.frame_id);
 
     previous_frame.imu_data.constraint_pose_imu = None;
 
@@ -487,7 +484,7 @@ pub fn pose_inertial_optimization_last_keyframe(
     let mut optimizer = g2o::ffi::new_sparse_optimizer(7, camera_param, 0.0);
 
     let mut initial_mono_correspondences = 0; //nInitialMonoCorrespondences
-    let mut initial_stereo_correspondences = 0; //nInitialStereoCorrespondences
+    let mut _initial_stereo_correspondences = 0; //nInitialStereoCorrespondences
 
     // Set Frame vertex
     let vp = 0;
@@ -598,7 +595,7 @@ pub fn pose_inertial_optimization_last_keyframe(
         // }
     }
 
-    let num_initial_correspondences = initial_mono_correspondences + initial_stereo_correspondences;
+    let num_initial_correspondences = initial_mono_correspondences + _initial_stereo_correspondences;
 
     // Set Previous Frame Vertex
     let vpk = 4;
@@ -743,7 +740,7 @@ pub fn pose_inertial_optimization_last_keyframe(
     if num_inliers < 30 {
         num_bad = 0;
         let chi2_mono_out = 18.0;
-        let chi2_stereo_out = 24.0;
+        let _chi2_stereo_out = 24.0;
 
         let mut i = 0;
         for mut edge in optimizer.pin_mut().get_mut_mono_onlypose_edges().iter_mut() {
@@ -784,30 +781,25 @@ pub fn pose_inertial_optimization_last_keyframe(
         vg, va, -1, -1
     );
     let recovered_bias = ImuBias {
-        bax: recovered_bias_estimate.vb[3],
-        bay: recovered_bias_estimate.vb[4],
-        baz: recovered_bias_estimate.vb[5],
-        bwx: recovered_bias_estimate.vb[0],
-        bwy: recovered_bias_estimate.vb[1],
-        bwz: recovered_bias_estimate.vb[2],
+        bax: recovered_bias_estimate.vb[0],
+        bay: recovered_bias_estimate.vb[1],
+        baz: recovered_bias_estimate.vb[2],
+        bwx: recovered_bias_estimate.vb[3],
+        bwy: recovered_bias_estimate.vb[4],
+        bwz: recovered_bias_estimate.vb[5],
     };
 
     // Recover Hessian, marginalize keyFframe states and generate new prior for frame
     let mut h = nalgebra::SMatrix::<f64, 15, 15>::zeros();
-    h.view_mut((0, 0), (9, 9)).add(&optimizer.get_hessian2_from_edge_inertial(0).into());
-    h.view_mut((9, 9), (3, 3)).add(&optimizer.get_hessian2_from_edge_gyro().into());
-    h.view_mut((12, 12), (3, 3)).add(&optimizer.get_hessian2_from_edge_acc().into());
+    h.view_mut((0, 0), (9, 9)).add_assign(&optimizer.get_hessian2_from_edge_inertial(0).into());
+    h.view_mut((9, 9), (3, 3)).add_assign(&optimizer.get_hessian2_from_edge_gyro().into());
+    h.view_mut((12, 12), (3, 3)).add_assign(&optimizer.get_hessian2_from_edge_acc().into());
 
-    let mut tot_in = 0;
-    let mut tot_out = 0;
     let mut i = 0;
     for mut edge in optimizer.pin_mut().get_mut_mono_onlypose_edges().iter_mut() {
         let idx = mp_indexes[i];
         if !frame.mappoint_matches.is_outlier(&idx) {
-            h.view_mut((0, 0), (6, 6)).add(&edge.inner.pin_mut().get_hessian().into());
-            tot_in += 1;
-        } else {
-            tot_out += 1;
+            h.view_mut((0, 0), (6, 6)).add_assign(&edge.inner.pin_mut().get_hessian().into());
         }
         i += 1;
     }
@@ -839,6 +831,7 @@ pub fn pose_inertial_optimization_last_keyframe(
         recovered_bias,
         h
     )).unwrap();
+    println!("Add mpcpi for frame {}", frame.frame_id);
         // pFrame->mpcpi = new ConstraintPoseImu(VP->estimate().Rwb,VP->estimate().twb,VV->estimate(),VG->estimate(),VA->estimate(),H);
 
     return num_initial_correspondences - num_bad;
@@ -919,7 +912,7 @@ pub fn inertial_optimization_initialization(
             prior_a,
             prior_g
         );
-    
+
         optimizer.pin_mut().add_vertex_gdir(
             max_kf_id * 2 + 4,
             false,
@@ -976,7 +969,6 @@ pub fn inertial_optimization_initialization(
 
     // Compute error for different scales
     optimizer.pin_mut().optimize(its, false, false);
-    // scale = VS->estimate();
 
     // Recover optimized data
     // Biases
@@ -994,12 +986,12 @@ pub fn inertial_optimization_initialization(
     *rwg = estimate.rwg.into();
 
     let b = ImuBias {
-        bax: vb[3],
-        bay: vb[4],
-        baz: vb[5],
-        bwx: vb[0],
-        bwy: vb[1],
-        bwz: vb[2],
+        bax: vb[0],
+        bay: vb[1],
+        baz: vb[2],
+        bwx: vb[3],
+        bwy: vb[4],
+        bwz: vb[5],
     };
 
     //Keyframes velocities and biases
@@ -1010,7 +1002,9 @@ pub fn inertial_optimization_initialization(
         }
 
         let velocity = optimizer.recover_optimized_vertex_velocity(max_kf_id + kf_id + 1);
-        kf.imu_data.velocity = Some(velocity.into());
+        kf.imu_data.velocity = Some(velocity.into());  // Velocity is scaled after
+
+        println!("INERTIAL OPTIMIZATION! Set KF velocity {} {:?}", kf.id, kf.imu_data.velocity.unwrap());
 
         if (* kf.imu_data.imu_bias.get_gyro_bias() - ** bg).norm() > 0.01 {
             kf.imu_data.set_new_bias(b);
@@ -1166,7 +1160,7 @@ pub fn optimize_pose(
         // Take lock to construct factor graph
         let map_read_lock = map.read();
         for i in 0..frame.mappoint_matches.len() {
-            if let Some((mp_id, is_outlier)) = frame.mappoint_matches.get(i) {
+            if let Some((mp_id, _is_outlier)) = frame.mappoint_matches.get(i) {
                 let position = match map_read_lock.mappoints.get(&mp_id) {
                     Some(mp) => mp.position,
                     None => {
@@ -1788,7 +1782,7 @@ pub fn add_vertex_pose_frame(optimizer: &mut UniquePtr<BridgeSparseOptimizer>, f
 }
 
 pub fn marginalize(h: nalgebra::SMatrix<f64, 30, 30>, start: usize, end: usize) -> nalgebra::SMatrix<f64, 30, 30> {
-    // Sofiya: this is tested
+    // Sofiya: Tested!!
     // Eigen::MatrixXd Optimizer::Marginalize(const Eigen::MatrixXd &H, const int &start, const int &end)
     // Goal
     // a  | ab | ac       a*  | 0 | ac*
@@ -1827,7 +1821,7 @@ pub fn marginalize(h: nalgebra::SMatrix<f64, 30, 30>, start: usize, end: usize) 
     // Perform marginalization (Schur complement)
     let hn_vec = DVMatrixDynamic::new(hn.view((a + c, a + c), (b, b)).into_owned());
 
-    let svd_result = dvos3binding::ffi::svd((&hn_vec).into());
+    let svd_result = dvos3binding::ffi::svd((&hn_vec).into(), SVDComputeType::ThinUThinV);
     let mut singular_values_inv = nalgebra::DVector::from_row_slice(& svd_result.singular_values);
     let v = {
         // Note: All this instead of :

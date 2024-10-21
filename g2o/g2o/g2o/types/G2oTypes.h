@@ -280,11 +280,11 @@ public:
 
     void Update(const double *pu)
     {
-        std::cout << "Update gravity direction (original Rwg): " << Rwg << std::endl;
-        std::cout << "Update gravity direction pu: " << pu[0] << " " << pu[1] << std::endl;
+        // std::cout << "Update gravity direction (original Rwg): " << Rwg << std::endl;
+        // std::cout << "Update gravity direction pu: " << pu[0] << " " << pu[1] << std::endl;
 
         Rwg=Rwg*ExpSO3(pu[0],pu[1],0.0);
-        std::cout << "Update gravity direction: " << Rwg << std::endl;
+        // std::cout << "Update gravity direction: " << Rwg << std::endl;
     }
 
     Eigen::Matrix3d Rwg, Rgw;

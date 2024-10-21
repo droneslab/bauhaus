@@ -461,13 +461,14 @@ impl Map {
 
 
     pub fn apply_scaled_rotation(&mut self, t: &Pose, s: f64, b_scaled_vel: bool) {
+        // Sofiya: Tested!!
         // void Map::ApplyScaledRotation(const Sophus::SE3f &T, const float s, const bool bScaledVel)
 
         // Body position (IMU) of first keyframe is fixed to (0,0,0)
         for keyframe in self.keyframes.values_mut() {
             let mut twc = keyframe.get_pose().inverse().clone();
             let twc_trans = twc.get_translation();
-            twc.set_translation(nalgebra::Vector3::new(twc_trans[0] * s, twc_trans[1] * s, twc_trans[2] * s)); // just scaling translation by s
+            twc.set_translation(twc_trans.scale(s));
             let tyc = *t * twc;
             let tcy = tyc.inverse();
             keyframe.set_pose(tcy);
@@ -477,7 +478,14 @@ impl Map {
             } else {
                 keyframe.imu_data.velocity = Some(DVVector3::new(*t.get_rotation() * *vw * s));
             }
-            println!("Apply scaled rotation, set kf velocity {} {:?}", keyframe.id, keyframe.imu_data.velocity);
+        }
+
+        let mp_ids = self.mappoints.keys().cloned().collect::<Vec<Id>>();
+        for mp_id in mp_ids {
+            self.mappoints.get_mut(&mp_id).map(|mp|
+                mp.position = DVVector3::new(t.get_rotation().scale(s) * *mp.position + *t.get_translation()
+            ));
+            self.update_norm_and_depth(mp_id);
         }
         self.map_change_index += 1;
     }

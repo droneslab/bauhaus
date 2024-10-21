@@ -9,7 +9,7 @@ system:
       localization_only_mode: false
       vocabulary_file: "../Vocabulary/ORBvoc.txt"
       framesensor: Mono
-      imusensor: None
+      imusensor: Some
       first_actor_name: TRACKING_FRONTEND # Name of actor to kick off pipeline
 
       # FPS
@@ -21,7 +21,7 @@ system:
 
       # DEBUGGING
       log_level: debug # options are [trace, debug, info, warn, error]
-      check_deadlocks: false # Spawns a new thread to check for deadlocks every 2 secs, but slows stuff down.
+      check_deadlocks: true # Spawns a new thread to check for deadlocks every 2 secs, but slows stuff down.
       # To enable profiling, set features = ["enable"] for tracy-client in Cargo.toml
       # To turn on visualizer, uncomment visualizer actor below
 

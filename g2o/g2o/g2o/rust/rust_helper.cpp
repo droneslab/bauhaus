@@ -988,9 +988,9 @@ namespace g2o {
         estimate.ba = {ba[0], ba[1], ba[2]};
         estimate.scale = scale;
         estimate.rwg = {
-            Rwg(0,0), Rwg(0,1), Rwg(0,2),
-            Rwg(1,0), Rwg(1,1), Rwg(1,2),
-            Rwg(2,0), Rwg(2,1), Rwg(2,2)
+            Rwg(0,0), Rwg(1,0), Rwg(2,0),
+            Rwg(0,1), Rwg(1,1), Rwg(2,1),
+            Rwg(0,2), Rwg(1,2), Rwg(2,2)
         };
         return estimate;
     }

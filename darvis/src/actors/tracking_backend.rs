@@ -46,7 +46,7 @@ pub struct TrackingBackend {
     relocalization: Relocalization,
 
     // Poses in trajectory
-    trajectory_poses: Vec<Pose>, //mlRelativeFramePoses
+    pub trajectory_poses: Vec<Pose>, //mlRelativeFramePoses
     reference_kfs_for_trajectory: Vec<(Id, Option<Id>)>, //mlpReferences ... First is Id of reference kf, second is that kf's parent ID (in case kf is deleted but we need to know its parent later)
 
     // Global defaults
@@ -133,6 +133,7 @@ impl Actor for TrackingBackend {
                         if reset_map {
                             actor.last_frame = None;
                             actor.ref_kf_id = None;
+                            println!("Reset frame in tracking! Last frame and ref kf id are none");
                         } else {
                             if actor.current_frame.ref_kf_id.is_none() {
                                 actor.current_frame.ref_kf_id = actor.ref_kf_id;
@@ -559,9 +560,8 @@ impl TrackingBackend {
         } else {
             println!("self.imu.velocity: {:?}", self.imu.velocity);
             self.current_frame.pose = Some(self.imu.velocity.unwrap() * self.last_frame.as_ref().unwrap().pose.unwrap());
-            println!("Track motion model, set current frame pose to last frame pose * imu velocity: {:?}", self.current_frame.pose.unwrap());
-
         }
+        println!("Track motion model, initial pose prediction: {:?}", self.current_frame.pose.unwrap());
 
         self.current_frame.mappoint_matches.clear();
 
@@ -579,7 +579,7 @@ impl TrackingBackend {
             &self.map,
             self.sensor
         )?;
-        // debug!("Tracking search by projection with previous frame: {} matches / {} mappoints in last frame. ({} total mappoints in map)", matches, last_frame.mappoint_matches.debug_count, self.map.read().mappoints.len());
+        debug!("Tracking search by projection with previous frame: {} matches / {} mappoints in last frame. ({} total mappoints in map)", matches, self.last_frame.as_ref().unwrap().mappoint_matches.debug_count, self.map.read().mappoints.len());
 
         // If few matches, uses a wider window search
         if matches < 20 {
@@ -714,13 +714,19 @@ impl TrackingBackend {
             Err(e) => warn!("Error in search_local_points: {}", e)
         }
 
-        if !self.map.read().imu_initialized || (self.current_frame.frame_id <= self.relocalization.last_reloc_frame_id + (self.frames_to_reset_imu as i32)) {
+        // if !self.map.read().imu_initialized {
+        //     println!("POSE OPTIMIZATION CHOICE... regular (imu not init)");
             optimizer::optimize_pose(&mut self.current_frame, &self.map);
-        } else if !self.map_updated {
-            optimizer::pose_inertial_optimization_last_frame(&mut self.current_frame, &mut self.last_frame.as_mut().unwrap(), & self.track_in_view, &self.map, &self.sensor);
-        } else {
-            optimizer::pose_inertial_optimization_last_keyframe(&mut self.current_frame, & self.track_in_view, &self.map, &self.sensor);
-        }
+        // } else if (self.current_frame.frame_id <= self.relocalization.last_reloc_frame_id + (self.frames_to_reset_imu as i32)) {
+        //     println!("POSE OPTIMIZATION CHOICE... regular");
+        //     optimizer::optimize_pose(&mut self.current_frame, &self.map);
+        // } else if !self.map_updated {
+        //     println!("POSE OPTIMIZATION CHOICE... last frame");
+        //     optimizer::pose_inertial_optimization_last_frame(&mut self.current_frame, &mut self.last_frame.as_mut().unwrap(), & self.track_in_view, &self.map, &self.sensor);
+        // } else {
+        //     println!("POSE OPTIMIZATION CHOICE... last keyframe");
+        //     optimizer::pose_inertial_optimization_last_keyframe(&mut self.current_frame, & self.track_in_view, &self.map, &self.sensor);
+        // }
 
         self.matches_inliers = 0;
         // Update MapPoints Statistics
@@ -1235,9 +1241,9 @@ impl TrackingBackend {
         }
     }
 
-    fn update_frame_imu(&mut self, scale: f64, imu_bias: ImuBias, current_kf_id: Id, imu_initialized: bool) {
-        println!("UpdateFrameIMU, Set bias for KF {}", current_kf_id);
-
+    pub fn update_frame_imu(&mut self, scale: f64, imu_bias: ImuBias, current_kf_id: Id, imu_initialized: bool) {
+        // void Tracking::UpdateFrameIMU(const float s, const IMU::Bias &b, KeyFrame* pCurrentKeyFrame)
+        println!("UpdateFrameIMU, Set bias for KF {}, scale is {}, bias is {}", current_kf_id, scale, imu_bias);
         // Map * pMap = pCurrentKeyFrame->GetMap();
         // unsigned int index = mnFirstFrameId;
         // list<ORB_SLAM3::KeyFrame*>::iterator lRit = mlpReferences.begin();
@@ -1246,6 +1252,8 @@ impl TrackingBackend {
         for i in 0..self.trajectory_poses.len() {
             let mut pose = self.trajectory_poses[i];
             let (mut kf, mut parent) = self.reference_kfs_for_trajectory[i];
+
+            // println!("relative frame poses kf {}", kf);
 
             while self.map.read().keyframes.get(& kf).is_none() {
                 println!("KF deleted, finding parent {} {:?}", kf, parent);
@@ -1261,7 +1269,9 @@ impl TrackingBackend {
             }
 
             if self.map.read().keyframes.get(& kf).unwrap().origin_map_id == self.map.read().id {
+                // println!("OLD TRANSLATION FOR KF {}: {:?}", kf, pose.get_translation());
                 pose.set_translation(*pose.get_translation() * (scale));
+                // println!("New translation: {:?}", pose.get_translation());
             }
         }
         self.imu.last_bias = Some(imu_bias);
@@ -1388,6 +1398,11 @@ impl TrackingBackend {
     //* Next steps */
     fn create_new_map(&self) -> bool {
         todo!("Multimaps: Atlas::CreateNewMap");
+    }
+
+    //* For tests */
+    pub fn new_test(system: System, map: MapLock) -> Self {
+        return TrackingBackend::new_actorstate(system, map);
     }
 }
 

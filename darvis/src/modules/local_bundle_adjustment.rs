@@ -625,7 +625,7 @@ pub fn local_inertial_ba(map: &MapLock, curr_kf_id: Id, large: bool, rec_init: b
                 !kf.imu_data.is_imu_initialized ||
                 prev_kf.imu_data.imu_preintegrated.is_none() ||
                 !prev_kf.imu_data.is_imu_initialized {
-                    warn!("Error building inertial edge");
+                    warn!("Error building inertial edge... for kf {}: {} {} {} {}", kf.id, kf.imu_data.imu_preintegrated.is_none(), !kf.imu_data.is_imu_initialized, prev_kf.imu_data.imu_preintegrated.is_none(), !prev_kf.imu_data.is_imu_initialized);
                     continue;
             }
             let mut imu_preintegrated = kf.imu_data.imu_preintegrated.as_ref().unwrap().clone();
