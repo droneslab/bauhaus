@@ -17,7 +17,7 @@ pub type MapItems<T> = BTreeMap<Id, T>;
 pub struct Map {
     pub id: Id,
 
-    pub keyframes: MapItems<KeyFrame>, // = mspKeyFrames
+    keyframes: MapItems<KeyFrame>, // = mspKeyFrames
     pub mappoints: MapItems<MapPoint>, // = mspMapPoints
 
     keyframe_database: KeyFrameDatabase, // = mpKeyFrameDB
@@ -32,6 +32,7 @@ pub struct Map {
     pub imu_initialized: bool, // mbImuInitialized
     pub imu_ba2: bool, // mbIMU_BA2 
     pub map_change_index: i32, // mnMapChange
+    pub version: u64,
     _sensor: Sensor,
 
     // Following are in orbslam3, not sure if we need:
@@ -61,6 +62,7 @@ impl Map {
             keyframe_database: KeyFrameDatabase::new(),
             imu_initialized: false,
             map_change_index: 0,
+            version: 0
         }
     }
 
@@ -90,6 +92,35 @@ impl Map {
             debug!("");
         }
         debug!("PRINT MAP DONE");
+    }
+
+    pub fn get_keyframe(&self, id: Id) -> &KeyFrame {
+        self.keyframes.get(&id).expect(format!("Keyframe {} not found in map", id).as_str())
+    }
+    pub fn get_keyframe_mut(&mut self, id: Id) -> &mut KeyFrame {
+        self.keyframes.get_mut(&id).expect(format!("Keyframe {} not found in map", id).as_str())
+    }
+    pub fn has_keyframe(&self, id: Id) -> bool {
+        self.keyframes.contains_key(&id)
+    }
+    pub fn get_first_keyframe(&self) -> &KeyFrame {
+        self.keyframes.get(&self.initial_kf_id).expect(format!("Initial keyframe {} not found in map", self.initial_kf_id).as_str())
+    }
+    pub fn num_keyframes(&self) -> usize {
+        self.keyframes.len()
+    }
+    pub fn get_keyframes_iter(&self) -> std::collections::btree_map::Iter<Id, KeyFrame> {
+        self.keyframes.iter()
+    }
+    pub fn get_keyframes_iter_mut(&mut self) -> std::collections::btree_map::IterMut<Id, KeyFrame> {
+        self.keyframes.iter_mut()
+    }
+
+    pub fn get_mappoint(&self, id: Id) -> &MapPoint {
+        self.mappoints.get(&id).expect(format!("MapPoint {} not found in map", id).as_str())
+    }
+    pub fn has_mappoint(&self, id: Id) -> bool {
+        self.mappoints.contains_key(&id)
     }
 
     ////* &mut self */////////////////////////////////////////////////////
@@ -123,7 +154,7 @@ impl Map {
             // self.lowest_kf = kf; // TODO (mvp): ORBSLAM3:Map.cc:67, used to sort mspKeyFrames. I think we can ignore?
         }
 
-        let full_keyframe = KeyFrame::new(frame, self.id, new_kf_id);
+        let full_keyframe = KeyFrame::new(frame, self.id, new_kf_id, self.imu_initialized);
         let num_keypoints = full_keyframe.features.num_keypoints;
         self.keyframes.insert(new_kf_id, full_keyframe);
 
@@ -183,7 +214,7 @@ impl Map {
             return;
         }
 
-        let (connections1, matches1, parent1, mut children1);
+        let (connections1, matches1, parent1, mut children1, prev_kf_id, next_kf_id);
         {
             // TODO (timing) ... map mutability
             // same as other issue in map.rs, to remove this clone we need to be able to iterate over an immutable ref to matches and children while mutating other keyframes inside the loop
@@ -200,9 +231,21 @@ impl Map {
 
             // Remove from kf database
             self.keyframe_database.erase(&kf);
+
+            // Update prev_kf and next_kf
+            prev_kf_id = kf.prev_kf_id;
+            next_kf_id = kf.next_kf_id;
         }
         for conn_kf in connections1 {
             self.keyframes.get_mut(&conn_kf).unwrap().delete_connection(kf_id);
+        }
+
+        // Update prev_kf_id and next_kf_id of the prev and next kf (used for IMU)
+        if let Some(prev_kf_id) = prev_kf_id {
+            self.keyframes.get_mut(&prev_kf_id).unwrap().next_kf_id = next_kf_id;
+        }
+        if let Some(next_kf_id) = next_kf_id {
+            self.keyframes.get_mut(&next_kf_id).unwrap().prev_kf_id = prev_kf_id;
         }
 
         let mut test_just_mp_ids = Vec::new();
@@ -501,6 +544,9 @@ impl Map {
         self.last_mp_id = -1;
         self.imu_initialized = false;
         self.imu_ba2 = false;
+
+        self.version += 1;
+        info!("Map reset! Version = {}", self.version);
     }
 
 }

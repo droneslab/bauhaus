@@ -511,9 +511,9 @@ impl From<opencv::core::Mat> for DVMatrix3<f64> {
 impl<T: nalgebra::ComplexField> From<[[T; 3]; 3]> for DVMatrix3<T> {
     fn from(mat: [[T; 3]; 3]) -> DVMatrix3<T> { 
         DVMatrix3::new(nalgebra::Matrix3::<T>::new(
-            mat[0][0].clone(), mat[0][1].clone(), mat[0][2].clone(),
-            mat[1][0].clone(), mat[1][1].clone(), mat[1][2].clone(),
-            mat[2][0].clone(), mat[2][1].clone(), mat[2][2].clone()
+            mat[0][0].clone(), mat[1][0].clone(), mat[2][0].clone(),
+            mat[0][1].clone(), mat[1][1].clone(), mat[2][1].clone(),
+            mat[0][2].clone(), mat[1][2].clone(), mat[2][2].clone()
         ))
     }
 }

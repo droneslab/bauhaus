@@ -4,7 +4,7 @@ use log::{debug, warn};
 use nalgebra::{Matrix, Matrix3, SMatrix, Vector3, SVD};
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
-use crate::{actors::messages::UpdateFrameIMUMsg, map::{map::{Id, Map}, pose::{group_exp, DVTranslation}}, registered_actors::IMU, MapLock};
+use crate::{actors::messages::UpdateFrameIMUMsg, map::{map::{Id, Map}, pose::{group_exp, DVTranslation}, read_only_lock::ReadWriteMap}, registered_actors::IMU};
 use crate::modules::global_bundle_adjustment::full_inertial_ba;
 
 use crate::map::{frame::Frame, pose::Pose};
@@ -23,20 +23,18 @@ pub struct IMU {
     pub scale: f64, // mScale
     pub timestamp_init: f64, // mTinit // used by local mapping
 
-    imu_calib: ImuCalib,
-
     sensor: Sensor
 }
 impl ImuModule for IMU {
-    fn ready(&self, map: &MapLock) -> bool {
-        self.sensor.is_imu() && !self.velocity.is_none() && map.read().imu_initialized
+    fn ready(&self, map: &ReadWriteMap) -> Result<bool, Box<dyn std::error::Error>> {
+        Ok(self.sensor.is_imu() && !self.velocity.is_none() && map.read()?.imu_initialized)
     }
 
-    fn predict_state_last_keyframe(&self, map: &MapLock, current_frame: &mut Frame, last_keyframe_id: Id) -> Option<bool> {
+    fn predict_state_last_keyframe(&self, map: &ReadWriteMap, current_frame: &mut Frame, last_keyframe_id: Id) -> Result<bool, Box<dyn std::error::Error>> {
         // bool Tracking::PredictStateIMU()
         // Split into two functions: predict_state_last_keyframe predict_state_last_frame
-        let lock = map.read();
-        let kf = lock.keyframes.get(&last_keyframe_id)?;
+        let lock = map.read()?;
+        let kf = lock.get_keyframe(last_keyframe_id);
         let twb1 = * kf.get_imu_position();
         let rwb1 = * kf.get_imu_rotation();
         let vwb1 = * kf.imu_data.get_velocity();
@@ -54,7 +52,7 @@ impl ImuModule for IMU {
         current_frame.imu_data.imu_bias = kf.imu_data.imu_bias;
         // Predbias is never used anywhere??
         // mCurrentFrame.mPredBias = mCurrentFrame.mImuBias;
-        return Some(true);
+        return Ok(true);
 
     }
 
@@ -165,7 +163,7 @@ impl ImuModule for IMU {
         return true;
     }
 
-    fn initialize(&self, map: &mut MapLock, current_keyframe_id: Id, prior_g: f64, prior_a: f64, fiba: bool, tracking_backend: Option<&Sender>) {
+    fn initialize(&self, map: &mut ReadWriteMap, current_keyframe_id: Id, prior_g: f64, prior_a: f64, fiba: bool, tracking_backend: Option<&Sender>) -> Result<(), Box<dyn std::error::Error>> {
         //void LocalMapping::InitializeIMU(float priorG, float priorA, bool bFIBA)
         let _span = tracy_client::span!("IMU initialization");
 
@@ -174,33 +172,37 @@ impl ImuModule for IMU {
             FrameSensor::Stereo | FrameSensor::Rgbd => (1.0, 10),
         };
 
-        if map.read().keyframes.len() < min_kf {
-            debug!("IMU: Early return not enough KFs ({})", map.read().keyframes.len());
-            return;
-        }
+        let keyframes: VecDeque<Id>; // lpKF
+        {
+            let lock = map.read()?;
 
-        // Retrieve all keyframe in temporal order
-        let keyframes = {
-            let mut keyframes: VecDeque<Id> = VecDeque::new();
-            let map_lock = map.read();
-            let mut kf = map_lock.keyframes.get(&current_keyframe_id).unwrap();
-            while kf.prev_kf_id.is_some() {
-                keyframes.push_front(kf.id);
-                kf = map_lock.keyframes.get(&kf.prev_kf_id.unwrap()).unwrap();
+            if lock.num_keyframes() < min_kf {
+                debug!("IMU: Early return not enough KFs ({})", lock.num_keyframes());
+                return Ok(());
             }
-            keyframes.push_front(kf.id);
-            keyframes
-        };  // lpKF
-        if keyframes.len() < min_kf {
-            debug!("IMU:  Early return not enough KFs #2 ({})", keyframes.len());
-            return;
-        }
 
-        let first_timestamp = map.read().keyframes.get(& keyframes[0]).unwrap().timestamp; // mFirstTs
-        let current_timestamp = map.read().keyframes.get(&current_keyframe_id).unwrap().timestamp; // mpCurrentKeyFrame->mTimeStamp
-        if (current_timestamp - first_timestamp) * 1e9 < min_time {
-            debug!("IMU:  Early return timestamps ({})... current keyframe is {}, first keyframe is {}", (current_timestamp - first_timestamp) * 1e9, current_keyframe_id, keyframes[0]);
-            return;
+            // Retrieve all keyframe in temporal order
+            keyframes = {
+                let mut keyframes: VecDeque<Id> = VecDeque::new();
+                let mut kf = lock.get_keyframe(current_keyframe_id);
+                while kf.prev_kf_id.is_some() {
+                    keyframes.push_front(kf.id);
+                    kf = lock.get_keyframe(kf.prev_kf_id.unwrap());
+                }
+                keyframes.push_front(kf.id);
+                keyframes
+            }; 
+            if keyframes.len() < min_kf {
+                debug!("IMU:  Early return not enough KFs #2 ({})", keyframes.len());
+                return Ok(());
+            }
+
+            let first_timestamp = lock.get_keyframe( keyframes[0]).timestamp; // mFirstTs
+            let current_timestamp = lock.get_keyframe(current_keyframe_id).timestamp; // mpCurrentKeyFrame->mTimeStamp
+            if (current_timestamp - first_timestamp) * 1e9 < min_time {
+                debug!("IMU:  Early return timestamps ({})... current keyframe is {}, first keyframe is {}", (current_timestamp - first_timestamp) * 1e9, current_keyframe_id, keyframes[0]);
+                return Ok(());
+            }
         }
 
         // Note: ignoring this because we can't access the local mapping queue in advance
@@ -224,18 +226,15 @@ impl ImuModule for IMU {
         let mut mba: DVVector3<f64> = DVVector3::new_with(0.0, 0.0, 0.0); // mba
         let mut dir_g: Vector3<f64> = Vector3::zeros(); // dirG
 
-        if !map.read().imu_initialized {
+        if !map.read()?.imu_initialized {
             for kf_id in keyframes.iter() {
                 let (velocity, prev_kf_id) = {
-                    let lock = map.read();
-                    let kf = lock.keyframes.get(kf_id).unwrap();
+                    let lock = map.read()?;
+                    let kf = lock.get_keyframe(*kf_id);
                     if ! kf.prev_kf_id.is_some() {
                         continue;
                     }
-                    let prev_kf = match lock.keyframes.get(&kf.prev_kf_id.unwrap()) {
-                        Some(kf) => kf,
-                        None => continue
-                    };
+                    let prev_kf = lock.get_keyframe(kf.prev_kf_id.unwrap());
                     let imu_preintegrated = match kf.imu_data.imu_preintegrated.as_ref() {
                         Some(imu_preintegrated) => imu_preintegrated,
                         None => continue
@@ -248,9 +247,9 @@ impl ImuModule for IMU {
                         kf.prev_kf_id.unwrap()
                     )
                 };
-                let mut lock = map.write();
-                lock.keyframes.get_mut(kf_id).unwrap().imu_data.velocity = Some(velocity);
-                lock.keyframes.get_mut(& prev_kf_id).unwrap().imu_data.velocity = Some(velocity);
+                let mut lock = map.write()?;
+                lock.get_keyframe_mut(*kf_id).imu_data.velocity = Some(velocity);
+                lock.get_keyframe_mut(prev_kf_id).imu_data.velocity = Some(velocity);
             }
 
             dir_g = dir_g / dir_g.norm();
@@ -267,8 +266,8 @@ impl ImuModule for IMU {
             };
         } else {
             rwg = DVMatrix3::identity();
-            mbg = map.read().keyframes.get(&current_keyframe_id).unwrap().imu_data.imu_bias.get_gyro_bias();
-            mba = map.read().keyframes.get(&current_keyframe_id).unwrap().imu_data.imu_bias.get_acc_bias();
+            mbg = map.read()?.get_keyframe(current_keyframe_id).imu_data.imu_bias.get_gyro_bias();
+            mba = map.read()?.get_keyframe(current_keyframe_id).imu_data.imu_bias.get_acc_bias();
         }
 
         println!("IMU: Begin inertial optimization");
@@ -287,62 +286,67 @@ impl ImuModule for IMU {
             false,
             prior_g,
             prior_a,
-        );
+        )?;
 
         if scale < 1e-1 {
             warn!("IMU: Scale too small. Early return");
-            return;
+            return Ok(());
         }
 
         // Before this line we are not changing the map
         {
             if (scale - 1.0).abs() > 0.00001 || !self.sensor.is_mono() {
                 let twg = Pose::new(nalgebra::Vector3::zeros(), *rwg);
-                map.write().apply_scaled_rotation(&twg, scale, true);
+                map.write()?.apply_scaled_rotation(&twg, scale, true);
                 tracking_backend.unwrap().send(Box::new(
                     UpdateFrameIMUMsg{
                         scale,
-                        imu_bias: map.read().keyframes.get(&keyframes[0]).unwrap().imu_data.imu_bias.clone(),
+                        imu_bias: map.read()?.get_keyframe(keyframes[0]).imu_data.imu_bias.clone(),
                         current_kf_id: current_keyframe_id,
                         imu_initialized: false,
+                        expected_map_version: map.read()?.version
                     }
                 )).unwrap();
             }
 
             // Check if initialization OK
-            if !map.read().imu_initialized {
+            if !map.read()?.imu_initialized {
                 for i in 0..num_kfs {
-                    map.write().keyframes.get_mut(&keyframes[i]).unwrap().imu_data.is_imu_initialized = true;
+                    map.write()?.get_keyframe_mut(keyframes[i]).imu_data.is_imu_initialized = true;
+                    println!("Set is_imu_initialized for kf {}", keyframes[i]);
                 }
             }
         }
 
         {
-            let lock = map.read();
-            let first_kf = lock.keyframes.get(&keyframes[0]).unwrap();
+            let lock = map.read()?;
+            let first_kf = lock.get_keyframe(keyframes[0]);
             tracking_backend.unwrap().send(Box::new(
                 UpdateFrameIMUMsg{
                     scale: 1.0,
                     imu_bias: first_kf.imu_data.imu_bias.clone(),
                     current_kf_id: current_keyframe_id,
                     imu_initialized: false,
+                    expected_map_version: map.read()?.version
                 }
             )).unwrap();
             // thread::sleep(Duration::from_millis(20)); // Wait for update
         }
 
-        if !map.read().imu_initialized {
-            let mut lock = map.write();
-            lock.keyframes.get_mut(&current_keyframe_id).unwrap().imu_data.is_imu_initialized = true;
+        if !map.read()?.imu_initialized {
+            let mut lock = map.write()?;
+            lock.get_keyframe_mut(current_keyframe_id).imu_data.is_imu_initialized = true;
+            println!("Set is_imu_initialized for kf {}", current_keyframe_id);
+
         } else {
             warn!("IMU: Map already initialized? #1");
         }
 
         if fiba {
             if prior_a != 0.0 {
-                full_inertial_ba(map, 100, false, current_keyframe_id, true, prior_g, prior_a);
+                full_inertial_ba(map, 100, false, current_keyframe_id, true, prior_g, prior_a)?;
             } else {
-                full_inertial_ba(map, 100, false, current_keyframe_id, false, 0.0, 0.0);
+                full_inertial_ba(map, 100, false, current_keyframe_id, false, 0.0, 0.0)?;
             }
         }
 
@@ -356,22 +360,22 @@ impl ImuModule for IMU {
         // }
 
         {
-            let mut lock = map.write();
+            let mut lock = map.write()?;
             // Correct keyframes starting at map first keyframe
             let mut kfs_to_check = vec![lock.initial_kf_id];
             let mut i = 0;
             while i < kfs_to_check.len() {
                 let curr_kf_id = kfs_to_check[i];
                 println!("Curr kf id: {}", curr_kf_id);
-                let children = lock.keyframes.get(& curr_kf_id).unwrap().children.clone();
+                let children = lock.get_keyframe( curr_kf_id).children.clone();
 
                 let (curr_kf_pose_inverse, curr_kf_gba_pose) = {
-                    let curr_kf = lock.keyframes.get(&curr_kf_id).unwrap();
+                    let curr_kf = lock.get_keyframe(curr_kf_id);
                     (curr_kf.get_pose().inverse(), curr_kf.gba_pose.clone())
                 };
 
                 for child_id in & children {
-                    let child = lock.keyframes.get_mut(child_id).unwrap();
+                    let child = lock.get_keyframe_mut(*child_id);
 
                     if child.ba_global_for_kf != current_keyframe_id {
                         let tchildc = child.get_pose() * curr_kf_pose_inverse;
@@ -394,7 +398,7 @@ impl ImuModule for IMU {
 
 
 
-                let kf = lock.keyframes.get_mut(&curr_kf_id).unwrap();
+                let kf = lock.get_keyframe_mut(curr_kf_id);
                 kf.tcw_bef_gba = Some(kf.get_pose());
                 kf.set_pose(kf.gba_pose.unwrap().clone());
                 println!("IMU: Update kf {} with pose {:?}", curr_kf_id, kf.get_pose());
@@ -419,7 +423,7 @@ impl ImuModule for IMU {
                         mps_to_update.insert(*id, mp.gba_pose.unwrap());
                     } else {
                         // Update according to the correction of its reference keyframe
-                        let ref_kf = lock.keyframes.get(&mp.ref_kf_id).unwrap();
+                        let ref_kf = lock.get_keyframe(mp.ref_kf_id);
 
                         if ref_kf.ba_global_for_kf != current_keyframe_id {
                             continue;
@@ -450,10 +454,10 @@ impl ImuModule for IMU {
                 lock.mappoints.get_mut(&mp_id).unwrap().position = gba_pose;
             }
         }
-        map.write().map_change_index += 1;
-        map.write().imu_initialized = true;
+        map.write()?.map_change_index += 1;
+        map.write()?.imu_initialized = true;
         println!("IMU INITIALIZATION SUCCESSFUL!!!!!!!!!!!");
-
+        return Ok(());
     }
 }
 
@@ -463,7 +467,6 @@ impl IMU {
             velocity: None,
             imu_ba1: false,
             last_bias: None,
-            imu_calib: ImuCalib::new(),
             sensor: SETTINGS.get::<Sensor>(SYSTEM, "sensor"),
             imu_preintegrated_from_last_kf: ImuPreIntegrated::new(ImuBias::new()),
             rwg: Matrix3::identity(),
@@ -718,6 +721,7 @@ impl ImuPreIntegrated {
 
         // Total integrated time
         self.d_t += dt;
+
     }
 
     pub fn merge_previous(&mut self, prev: &ImuPreIntegrated) {
@@ -976,7 +980,7 @@ pub struct ImuDataFrame {
 }
 
 impl ImuDataFrame {
-    pub fn new(prev_frame: Option<& Frame>) -> Self {
+    pub fn new(prev_frame: Option<& Frame>, ) -> Self {
         let mut velocity = None;
         if let Some(prev_frame) = prev_frame {
             if let Some(vel) = prev_frame.imu_data.velocity {

@@ -3,7 +3,7 @@ use log::{warn, info};
 use opencv::{prelude::*, types::VectorOfKeyPoint,};
 
 use core::{
-    config::*, matrix::*, sensor::{FrameSensor, ImuSensor, Sensor}, system::{Actor, Timestamp}
+    config::*, matrix::*, sensor::{FrameSensor, ImuSensor, Sensor}, system::{Actor, MessageBox, Timestamp}
 };
 use crate::{
     actors::{
@@ -29,7 +29,7 @@ pub struct TrackingFrontEnd {
 impl Actor for TrackingFrontEnd {
     type MapRef = ();
 
-    fn new_actorstate(system: System, _map: Self::MapRef) -> TrackingFrontEnd {
+    fn spawn(system: System, _map: Self::MapRef) {
         let sensor = SETTINGS.get::<Sensor>(SYSTEM, "sensor");
 
         let _orb_extractor_right = match sensor.frame() {
@@ -41,7 +41,7 @@ impl Actor for TrackingFrontEnd {
             false => None
         };
 
-        TrackingFrontEnd {
+        let mut actor = TrackingFrontEnd {
             system,
             orb_extractor_left: new_feature_extraction_module(false),
             _orb_extractor_right,
@@ -51,94 +51,95 @@ impl Actor for TrackingFrontEnd {
             last_id: 0,
             max_frames: SETTINGS.get::<f64>(SYSTEM, "fps") as i32,
             sensor,
-        }
-    }
-
-    fn spawn(system: System, map: Self::MapRef) {
-        let mut actor = TrackingFrontEnd::new_actorstate(system, map);
-        let max_queue_size = actor.system.receiver_bound.unwrap_or(100);
-
+        };
         tracy_client::set_thread_name!("tracking frontend");
 
-        'outer: loop {
+        loop {
             let message = actor.system.receive().unwrap();
-
-            if message.is::<ImagePathMsg>() {
-                if actor.system.queue_len() > max_queue_size {
-                    // Abort additional work if there are too many frames in the msg queue.
-                    info!("Tracking frontend dropped 1 frame");
-                    continue;
-                }
-
-                let msg = message.downcast::<ImagePathMsg>().unwrap_or_else(|_| panic!("Could not downcast tracking frontend message!"));
-
-                let image = image::read_image_file(&msg.image_path);
-                let image_cols = image.cols() as u32;
-                let image_rows = image.rows() as u32;
-
-                // TODO (timing) ... cloned if visualizer running. maybe make global shared object?
-                let (keypoints, descriptors) = match actor.system.actors.get(VISUALIZER).is_some() {
-                    true => {
-                        let (keypoints, descriptors) = actor.extract_features(image.clone());
-                        actor.send_to_visualizer(keypoints.clone(), image, msg.timestamp);
-                        (keypoints, descriptors)
-                    },
-                    false => {
-                        let (keypoints, descriptors) = actor.extract_features(image);
-                        (keypoints, descriptors)
-                    }
-                };
-                actor.send_to_backend(keypoints, descriptors, image_cols, image_rows, msg.imu_measurements, msg.timestamp, msg.frame_id);
-
-                actor.last_id += 1;
-            } else if message.is::<ImageMsg>() {
-                if actor.system.queue_len() > max_queue_size {
-                    // Abort additional work if there are too many frames in the msg queue.
-                    info!("Tracking frontend dropped 1 frame");
-                    continue;
-                }
-
-                let msg = message.downcast::<ImageMsg>().unwrap_or_else(|_| panic!("Could not downcast tracking frontend message!"));
-
-                let image_cols = msg.image.cols() as u32;
-                let image_rows = msg.image.rows() as u32;
-
-                // TODO (timing) ... cloned if visualizer running. maybe make global shared object?
-                let (keypoints, descriptors) = match actor.system.actors.get(VISUALIZER).is_some() {
-                    true => {
-                        let (keypoints, descriptors) = actor.extract_features(msg.image.clone());
-                        actor.send_to_visualizer(keypoints.clone(), msg.image, msg.timestamp);
-                        (keypoints, descriptors)
-                    },
-                    false => {
-                        let (keypoints, descriptors) = actor.extract_features(msg.image);
-                        (keypoints, descriptors)
-                    }
-                };
-
-
-                actor.send_to_backend(keypoints, descriptors, image_cols, image_rows, msg.imu_measurements, msg.timestamp, msg.frame_id);
-                actor.last_id += 1;
-            } else if message.is::<TrackingStateMsg>() {
-                let msg = message.downcast::<TrackingStateMsg>().unwrap_or_else(|_| panic!("Could not downcast tracking frontend message!"));
-
-                match msg.state {
-                    TrackingState::Ok => { 
-                        actor.map_initialized = true;
-                        actor.init_id = msg.init_id
-                    },
-                    _ => {}
-                };
-            } else if message.is::<ShutdownMsg>() {
-                break 'outer;
-            } else {
-                warn!("Tracking frontend received unknown message type!");
+            if actor.handle_message(message) {
+                break;
             }
         }
     }
 }
 
 impl TrackingFrontEnd {
+
+    fn handle_message(&mut self, message: MessageBox) -> bool {
+        if message.is::<ImagePathMsg>() {
+            if self.system.queue_full() {
+                // Abort additional work if there are too many frames in the msg queue.
+                info!("Tracking frontend dropped 1 frame");
+                return false;
+            }
+
+            let msg = message.downcast::<ImagePathMsg>().unwrap_or_else(|_| panic!("Could not downcast tracking frontend message!"));
+
+            let image = image::read_image_file(&msg.image_path);
+            let image_cols = image.cols() as u32;
+            let image_rows = image.rows() as u32;
+
+            // TODO (timing) ... cloned if visualizer running. maybe make global shared object?
+            let (keypoints, descriptors) = match self.system.actors.get(VISUALIZER).is_some() {
+                true => {
+                    let (keypoints, descriptors) = self.extract_features(image.clone());
+                    self.send_to_visualizer(keypoints.clone(), image, msg.timestamp);
+                    (keypoints, descriptors)
+                },
+                false => {
+                    let (keypoints, descriptors) = self.extract_features(image);
+                    (keypoints, descriptors)
+                }
+            };
+            self.send_to_backend(keypoints, descriptors, image_cols, image_rows, msg.imu_measurements, msg.timestamp, msg.frame_id);
+
+            self.last_id += 1;
+        } else if message.is::<ImageMsg>() {
+            if self.system.queue_full() {
+                // Abort additional work if there are too many frames in the msg queue.
+                info!("Tracking frontend dropped 1 frame");
+                return false;
+            }
+
+            let msg = message.downcast::<ImageMsg>().unwrap_or_else(|_| panic!("Could not downcast tracking frontend message!"));
+
+            let image_cols = msg.image.cols() as u32;
+            let image_rows = msg.image.rows() as u32;
+
+            // TODO (timing) ... cloned if visualizer running. maybe make global shared object?
+            let (keypoints, descriptors) = match self.system.actors.get(VISUALIZER).is_some() {
+                true => {
+                    let (keypoints, descriptors) = self.extract_features(msg.image.clone());
+                    self.send_to_visualizer(keypoints.clone(), msg.image, msg.timestamp);
+                    (keypoints, descriptors)
+                },
+                false => {
+                    let (keypoints, descriptors) = self.extract_features(msg.image);
+                    (keypoints, descriptors)
+                }
+            };
+
+
+            self.send_to_backend(keypoints, descriptors, image_cols, image_rows, msg.imu_measurements, msg.timestamp, msg.frame_id);
+            self.last_id += 1;
+        } else if message.is::<TrackingStateMsg>() {
+            let msg = message.downcast::<TrackingStateMsg>().unwrap_or_else(|_| panic!("Could not downcast tracking frontend message!"));
+
+            match msg.state {
+                TrackingState::Ok => { 
+                    self.map_initialized = true;
+                    self.init_id = msg.init_id
+                },
+                _ => {}
+            };
+        } else if message.is::<ShutdownMsg>() {
+            return true;
+        } else {
+            warn!("Tracking frontend received unknown message type!");
+        }
+        return false;
+    }
+
     fn extract_features(&mut self, image: opencv::core::Mat) -> (DVVectorOfKeyPoint, DVMatrix) {
         let _span = tracy_client::span!("extract_features");
 

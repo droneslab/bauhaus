@@ -68,6 +68,7 @@ pub struct UpdateFrameIMUMsg {
     pub imu_bias: ImuBias,
     pub current_kf_id: Id,
     pub imu_initialized: bool,
+    pub expected_map_version: u64
 }
 impl ActorMessage for UpdateFrameIMUMsg {}
 

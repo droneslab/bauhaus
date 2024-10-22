@@ -51,8 +51,8 @@ impl KeyFrameDatabase {
         // From ORBSLAM3:
         // void KeyFrameDatabase::DetectNBestCandidates(KeyFrame *pKF, vector<KeyFrame*> &vpLoopCand, vector<KeyFrame*> &vpMergeCand, int nNumCandidates)
 
-        let curr_kf = map.keyframes.get(&curr_kf_id).unwrap();
-        let connected_kfs = map.keyframes.get(&curr_kf_id).unwrap().get_connected_keyframes();
+        let curr_kf = map.get_keyframe(*curr_kf_id);
+        let connected_kfs = map.get_keyframe(*curr_kf_id).get_connected_keyframes();
         let mut kfs_sharing_words = vec![]; //lKFsSharingWords
         let mut place_recognition_query = HashMap::new(); // mnPlaceRecognitionQuery
         let mut place_recognition_words = HashMap::new(); // mnPlaceRecognitionWords
@@ -102,7 +102,7 @@ impl KeyFrameDatabase {
         let mut place_recognition_score = HashMap::new(); // mPlaceRecognitionScore
         for kf_i_id in &kfs_sharing_words {
             if place_recognition_words[&kf_i_id] > min_common_words  {
-                let kf_i = map.keyframes.get(&kf_i_id).unwrap();
+                let kf_i = map.get_keyframe(*kf_i_id);
                 let si = VOCABULARY_MODULE.score(curr_kf.bow.as_ref().unwrap(), kf_i.bow.as_ref().unwrap());
                 place_recognition_score.insert(kf_i_id, si);
                 score_and_match.push((si, kf_i_id));
@@ -117,7 +117,7 @@ impl KeyFrameDatabase {
         let mut acc_score_and_match = vec![]; // lAccScoreAndMatch
         let mut best_acc_score = 0.0;
         for (score, kf_i_id) in score_and_match {
-            let kf_i = map.keyframes.get(&kf_i_id).unwrap();
+            let kf_i = map.get_keyframe(*kf_i_id);
             let neighbor_kfs = kf_i.get_covisibility_keyframes(10);
             let mut best_score = score;
             let mut acc_score = best_score;
@@ -166,8 +166,8 @@ impl KeyFrameDatabase {
         // From ORBSLAM2:
         // vector<KeyFrame*> KeyFrameDatabase::DetectLoopCandidates(KeyFrame* pKF, float minScore)
 
-        let curr_kf = map.keyframes.get(&curr_kf_id).unwrap();
-        let connected_kfs = map.keyframes.get(&curr_kf_id).unwrap().get_connected_keyframes();
+        let curr_kf = map.get_keyframe(*curr_kf_id);
+        let connected_kfs = map.get_keyframe(*curr_kf_id).get_connected_keyframes();
         let mut kfs_sharing_words = vec![]; //lKFsSharingWords
         let mut loop_words = HashMap::new(); // mnLoopWords
         let mut loop_query = HashMap::new(); // mnLoopQuery
@@ -218,7 +218,7 @@ impl KeyFrameDatabase {
         let mut loop_score = HashMap::new(); // mLoopScore
         for kf_i_id in &kfs_sharing_words {
             if loop_words[&kf_i_id] > min_common_words  {
-                let kf_i = map.keyframes.get(&kf_i_id).unwrap();
+                let kf_i = map.get_keyframe(*kf_i_id);
                 let si = VOCABULARY_MODULE.score(curr_kf.bow.as_ref().unwrap(), kf_i.bow.as_ref().unwrap());
                 loop_score.insert(kf_i_id, si);
                 if si >= min_score {
@@ -235,7 +235,7 @@ impl KeyFrameDatabase {
         let mut acc_score_and_match = vec![];
         let mut best_acc_score = min_score;
         for (score, kf_i_id) in score_and_match {
-            let kf_i = map.keyframes.get(&kf_i_id).unwrap();
+            let kf_i = map.get_keyframe(*kf_i_id);
             let neighbor_kfs = kf_i.get_covisibility_keyframes(10);
             let mut best_score = score;
             let mut acc_score = best_score;
@@ -330,7 +330,7 @@ impl KeyFrameDatabase {
         let mut reloc_score = HashMap::new(); // mRelocScore
         for kf_i_id in &kfs_sharing_words {
             if reloc_words[&kf_i_id] > min_common_words  {
-                let kf_i = map.keyframes.get(&kf_i_id).unwrap();
+                let kf_i = map.get_keyframe(*kf_i_id);
                 let si = VOCABULARY_MODULE.score(frame.bow.as_ref().unwrap(), kf_i.bow.as_ref().unwrap());
                 reloc_score.insert(kf_i_id, si);
                 score_and_match.push((si, kf_i_id));
@@ -345,7 +345,7 @@ impl KeyFrameDatabase {
         let mut acc_score_and_match = vec![];
         let mut best_acc_score = 0.0;
         for (score, kf_i_id) in score_and_match {
-            let kf_i = map.keyframes.get(&kf_i_id).unwrap();
+            let kf_i = map.get_keyframe(*kf_i_id);
             let neighbor_kfs = kf_i.get_covisibility_keyframes(10);
             let mut best_score = score;
             let mut acc_score = best_score;

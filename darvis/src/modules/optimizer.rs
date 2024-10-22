@@ -11,7 +11,7 @@ use log::{debug, error, info, warn};
 use nalgebra::{Matrix3, Rotation3, UnitQuaternion, Vector3};
 use opencv::prelude::KeyPointTraitConst;
 use crate::{
-    actors::{loop_closing::{KeyFrameAndPose, GBA_KILL_SWITCH}, tracking_backend::TrackedMapPointData}, map::{frame::Frame, keyframe::KeyFrame, map::Id, pose::{DVTranslation, Pose, Sim3}}, registered_actors::{CAMERA, CAMERA_MODULE, FEATURE_DETECTION}, MapLock
+    actors::{loop_closing::{KeyFrameAndPose, GBA_KILL_SWITCH}, tracking_backend::TrackedMapPointData}, map::{frame::Frame, keyframe::KeyFrame, map::Id, pose::{DVTranslation, Pose, Sim3}, read_only_lock::ReadWriteMap}, registered_actors::{CAMERA, CAMERA_MODULE, FEATURE_DETECTION}
 };
 use std::ops::Add;
 use std::ops::AddAssign;
@@ -53,8 +53,8 @@ lazy_static! {
 }
 
 pub fn pose_inertial_optimization_last_frame(
-    frame: &mut Frame, previous_frame: &mut Frame, tracked_mappoint_data: & HashMap<Id, TrackedMapPointData>, map: &MapLock, sensor: &Sensor
-) -> i32 {
+    frame: &mut Frame, previous_frame: &mut Frame, tracked_mappoint_data: & HashMap<Id, TrackedMapPointData>, map: &ReadWriteMap, sensor: &Sensor
+) -> Result<i32, Box<dyn std::error::Error> > {
     // int Optimizer::PoseInertialOptimizationLastFrame(Frame *pFrame, bool bRecInit)
     // but bRecInit is always set to false
 
@@ -108,7 +108,7 @@ pub fn pose_inertial_optimization_last_frame(
                 true,
                 vp,
                 mp_id,
-                (map.read().mappoints.get(&mp_id).unwrap().position).into(),
+                (map.read()?.mappoints.get(&mp_id).unwrap().position).into(),
                 kp.pt().x, kp.pt().y,
                 inv_sigma2,
                 *TH_HUBER_MONO
@@ -463,13 +463,13 @@ pub fn pose_inertial_optimization_last_frame(
 
     previous_frame.imu_data.constraint_pose_imu = None;
 
-    return num_initial_correspondences - num_bad;
+    return Ok(num_initial_correspondences - num_bad);
 }
 
 pub fn pose_inertial_optimization_last_keyframe(
     frame: &mut Frame, tracked_mappoint_data: & HashMap<Id, TrackedMapPointData>,
-    map: &MapLock, sensor: &Sensor
-) -> i32 {
+    map: &ReadWriteMap, sensor: &Sensor
+) -> Result<i32, Box<dyn std::error::Error> > {
     // int Optimizer::PoseInertialOptimizationLastKeyFrame(Frame *pFrame, bool bRecInit)
     // but bRecInit is always set to false
 
@@ -524,7 +524,7 @@ pub fn pose_inertial_optimization_last_keyframe(
                 true,
                 vp,
                 mp_id,
-                (map.read().mappoints.get(&mp_id).unwrap().position).into(),
+                (map.read()?.mappoints.get(&mp_id).unwrap().position).into(),
                 kp.pt().x, kp.pt().y,
                 inv_sigma2,
                 *TH_HUBER_MONO
@@ -603,8 +603,8 @@ pub fn pose_inertial_optimization_last_keyframe(
     let vgk = 6;
     let vak = 7;
     {
-        let lock = map.read();
-        let previous_keyframe = lock.keyframes.get(&frame.imu_data.prev_keyframe.expect("Frame has IMU data but no prev keyframe?")).unwrap();
+        let lock = map.read()?;
+        let previous_keyframe = lock.get_keyframe(frame.imu_data.prev_keyframe.expect("Frame has IMU data but no prev keyframe?"));
         add_vertex_pose_keyframe(&mut optimizer, previous_keyframe, true, vpk);
         optimizer.pin_mut().add_vertex_velocity(
             vvk,
@@ -834,19 +834,18 @@ pub fn pose_inertial_optimization_last_keyframe(
     println!("Add mpcpi for frame {}", frame.frame_id);
         // pFrame->mpcpi = new ConstraintPoseImu(VP->estimate().Rwb,VP->estimate().twb,VV->estimate(),VG->estimate(),VA->estimate(),H);
 
-    return num_initial_correspondences - num_bad;
+    return Ok(num_initial_correspondences - num_bad);
 }
 
 pub fn inertial_optimization_initialization(
-    map: &MapLock, rwg: &mut DVMatrix3<f64>, scale: &mut f64, 
+    map: &ReadWriteMap, rwg: &mut DVMatrix3<f64>, scale: &mut f64, 
     bg: &mut DVVector3<f64>, ba: &mut DVVector3<f64>, is_mono: bool, cov_inertial: &nalgebra::SMatrix::<f64, 9, 9>,
     fixed_velocity: bool, b_gauss: bool, prior_g: f64, prior_a: f64,
-) {
+) -> Result<(), Box<dyn std::error::Error> > {
     // void Optimizer::InertialOptimization(Map *pMap, Eigen::Matrix3d &Rwg, double &scale, Eigen::Vector3d &bg, Eigen::Vector3d &ba, bool bMono, Eigen::MatrixXd  &covInertial, bool bFixedVel, bool bGauss, float priorG, float priorA)
 
     let its = 200;
-    let max_kf_id = * map.read().keyframes
-        .iter()
+    let max_kf_id = * map.read()?.get_keyframes_iter()
         .max_by(|a, b| a.1.id.cmp(&b.1.id))
         .map(|(k, _v)| k).unwrap();
 
@@ -865,10 +864,10 @@ pub fn inertial_optimization_initialization(
     };
 
     {
-        let lock = map.read();
+        let lock = map.read()?;
 
         // Set KeyFrame vertices (fixed poses and optimizable velocities)
-        for (kf_id, kf) in &lock.keyframes {
+        for (kf_id, kf) in lock.get_keyframes_iter() {
             add_vertex_pose_keyframe(&mut optimizer, kf, true, kf.id);
 
             let velocity = match kf.imu_data.velocity {
@@ -886,7 +885,7 @@ pub fn inertial_optimization_initialization(
         }
 
         // Biases
-        let first_kf = lock.keyframes.first_key_value().unwrap().1;
+        let first_kf = lock.get_first_keyframe();
         let gyro_bias = first_kf.imu_data.imu_bias.get_gyro_bias();
         let vertex_gyro_bias_id = max_kf_id * 2 + 2;
         optimizer.pin_mut().add_vertex_gyrobias(
@@ -895,7 +894,6 @@ pub fn inertial_optimization_initialization(
             gyro_bias.into()
         );
 
-        let first_kf = lock.keyframes.first_key_value().unwrap().1;
         let acc_bias = first_kf.imu_data.imu_bias.get_acc_bias();
         let vertex_acc_bias_id = max_kf_id * 2 + 3;
         optimizer.pin_mut().add_vertex_accbias(
@@ -929,7 +927,7 @@ pub fn inertial_optimization_initialization(
         // Graph edges
         // IMU links with gravity and scale
         let mut new_imu_preintegrated_for_kfs: HashMap<Id, ImuPreIntegrated> = HashMap::new();
-        for (kf_id, keyframe) in & map.read().keyframes {
+        for (kf_id, keyframe) in map.read()?.get_keyframes_iter() {
             if *kf_id > max_kf_id ||
                 keyframe.prev_kf_id.is_none() ||
                 keyframe.imu_data.imu_preintegrated.is_none() ||
@@ -942,7 +940,7 @@ pub fn inertial_optimization_initialization(
             let prev_kf_id = keyframe.prev_kf_id.unwrap();
 
 
-            imu_preintegrated.set_new_bias(map.read().keyframes.get(&prev_kf_id).unwrap().imu_data.imu_bias);
+            imu_preintegrated.set_new_bias(map.read()?.get_keyframe(prev_kf_id).imu_data.imu_bias);
 
             optimizer.pin_mut().add_edge_inertial_gs(
                 prev_kf_id,
@@ -962,8 +960,8 @@ pub fn inertial_optimization_initialization(
             new_imu_preintegrated_for_kfs.insert(*kf_id, imu_preintegrated);
         }
         for (kf_id, new_imu_preintegrated) in new_imu_preintegrated_for_kfs {
-            let mut lock = map.write();
-            lock.keyframes.get_mut(&kf_id).unwrap().imu_data.imu_preintegrated = Some(new_imu_preintegrated);
+            let mut lock = map.write()?;
+            lock.get_keyframe_mut(kf_id).imu_data.imu_preintegrated = Some(new_imu_preintegrated);
         }
     }
 
@@ -995,8 +993,8 @@ pub fn inertial_optimization_initialization(
     };
 
     //Keyframes velocities and biases
-    let mut lock = map.write();
-    for (kf_id, kf) in &mut lock.keyframes {
+    let mut lock = map.write()?;
+    for (kf_id, kf) in lock.get_keyframes_iter_mut() {
         if *kf_id > max_kf_id {
             continue;
         }
@@ -1015,12 +1013,12 @@ pub fn inertial_optimization_initialization(
             kf.imu_data.set_new_bias(b);
         }
     }
+    Ok(())
 }
 
-pub fn inertial_optimization_scale_refinement(map: &MapLock, rwg: &mut nalgebra::Matrix3<f64>, scale: &mut f64) {
+pub fn inertial_optimization_scale_refinement(map: &ReadWriteMap, rwg: &mut nalgebra::Matrix3<f64>, scale: &mut f64) -> Result<(), Box<dyn std::error::Error> > {
     // void Optimizer::InertialOptimization(Map *pMap, Eigen::Matrix3d &Rwg, double &scale)
-    let max_kf_id = * map.read().keyframes
-        .iter()
+    let max_kf_id = * map.read()?.get_keyframes_iter()
         .max_by(|a, b| a.1.id.cmp(&b.1.id))
         .map(|(k, _v)| k).unwrap();
 
@@ -1036,10 +1034,10 @@ pub fn inertial_optimization_scale_refinement(map: &MapLock, rwg: &mut nalgebra:
     let mut optimizer = g2o::ffi::new_sparse_optimizer(6, camera_param, 1e3);
 
     {
-        let lock = map.read();
+        let lock = map.read()?;
 
         // Set KeyFrame vertices (all variables are fixed)
-        for (kf_id, kf) in &lock.keyframes {
+        for (kf_id, kf) in lock.get_keyframes_iter() {
             add_vertex_pose_keyframe(&mut optimizer, kf, true, kf.id);
 
             debug!("kf.imu_data.velocity {:?}", kf.imu_data.velocity);
@@ -1050,7 +1048,7 @@ pub fn inertial_optimization_scale_refinement(map: &MapLock, rwg: &mut nalgebra:
             );
 
             // Vertex of fixed biases
-            let first_kf = lock.keyframes.first_key_value().unwrap().1;
+            let first_kf = lock.get_first_keyframe();
             let gyro_bias = first_kf.imu_data.imu_bias.get_gyro_bias();
             optimizer.pin_mut().add_vertex_gyrobias(
                 2 * (max_kf_id + 1) + kf_id,
@@ -1082,7 +1080,7 @@ pub fn inertial_optimization_scale_refinement(map: &MapLock, rwg: &mut nalgebra:
         // Graph edges
         // IMU links with gravity and scale
         let mut new_imu_preintegrated_for_kfs: HashMap<Id, ImuPreIntegrated> = HashMap::new();
-        for (kf_id, keyframe) in & map.read().keyframes {
+        for (kf_id, keyframe) in map.read()?.get_keyframes_iter() {
             if *kf_id > max_kf_id ||
                 keyframe.prev_kf_id.is_none() ||
                 keyframe.imu_data.imu_preintegrated.is_none() ||
@@ -1094,7 +1092,7 @@ pub fn inertial_optimization_scale_refinement(map: &MapLock, rwg: &mut nalgebra:
             let mut imu_preintegrated = keyframe.imu_data.imu_preintegrated.as_ref().unwrap().clone();
             let prev_kf_id = keyframe.prev_kf_id.unwrap();
 
-            imu_preintegrated.set_new_bias(map.read().keyframes.get(&prev_kf_id).unwrap().imu_data.imu_bias);
+            imu_preintegrated.set_new_bias(map.read()?.get_keyframe(prev_kf_id).imu_data.imu_bias);
 
             optimizer.pin_mut().add_edge_inertial_gs(
                 prev_kf_id,
@@ -1114,8 +1112,8 @@ pub fn inertial_optimization_scale_refinement(map: &MapLock, rwg: &mut nalgebra:
             new_imu_preintegrated_for_kfs.insert(*kf_id, imu_preintegrated);
         }
         for (kf_id, new_imu_preintegrated) in new_imu_preintegrated_for_kfs {
-            let mut lock = map.write();
-            lock.keyframes.get_mut(&kf_id).unwrap().imu_data.imu_preintegrated = Some(new_imu_preintegrated);
+            let mut lock = map.write()?;
+            lock.get_keyframe_mut(kf_id).imu_data.imu_preintegrated = Some(new_imu_preintegrated);
         }
     }
     // Compute error for different scales
@@ -1132,11 +1130,12 @@ pub fn inertial_optimization_scale_refinement(map: &MapLock, rwg: &mut nalgebra:
     *scale = estimate.scale;
     *rwg = estimate.rwg.into();
 
+    Ok(())
 }
 
 pub fn optimize_pose(
-    frame: &mut Frame, map: &MapLock
-) -> Option<i32> {
+    frame: &mut Frame, map: &ReadWriteMap
+) -> Result<Option<i32>, Box<dyn std::error::Error> > {
     //int Optimizer::PoseOptimization(Frame *pFrame)
     let _span = tracy_client::span!("optimize_pose");
 
@@ -1158,7 +1157,7 @@ pub fn optimize_pose(
 
     {
         // Take lock to construct factor graph
-        let map_read_lock = map.read();
+        let map_read_lock = map.read()?;
         for i in 0..frame.mappoint_matches.len() {
             if let Some((mp_id, _is_outlier)) = frame.mappoint_matches.get(i) {
                 let position = match map_read_lock.mappoints.get(&mp_id) {
@@ -1182,7 +1181,7 @@ pub fn optimize_pose(
                         // );
 
                         // {
-                        //     let map_read_lock = map.read();
+                        //     let map_read_lock = map.read()?;
                         //     let position = &map_read_lock.mappoints.get(mp_id).unwrap().position;
                         //     optimizer.add_edge_stereo(
                         //         i as i32, edge.clone(), (position).into()
@@ -1209,7 +1208,7 @@ pub fn optimize_pose(
     }
 
     if initial_correspondences < 3 {
-        return None;
+        return Ok(None);
     }
 
     // We perform 4 optimizations, after each optimization we classify observation as inlier/outlier
@@ -1333,7 +1332,7 @@ pub fn optimize_pose(
     debug!("Set outliers in pose optimization: {}. Optimized pose: {:?}", num_bad, frame.pose.as_ref().unwrap());
 
     // Return number of inliers
-    return Some(initial_correspondences - num_bad);
+    return Ok(Some(initial_correspondences - num_bad));
 }
 
 
@@ -1354,12 +1353,12 @@ pub fn _optimize_essential_graph_4dof() {
 }
 
 pub fn optimize_essential_graph(
-    map: &MapLock, loop_kf: Id, curr_kf: Id,
+    map: &ReadWriteMap, loop_kf: Id, curr_kf: Id,
     loop_connections: BTreeMap<Id, HashSet<Id>>,
     non_corrected_sim3: &KeyFrameAndPose, corrected_sim3: &KeyFrameAndPose,
     corrected_mp_references: HashMap::<Id, Id>,
     fix_scale: bool
-) {
+) -> Result<(), Box<dyn std::error::Error> > {
     // void Optimizer::OptimizeEssentialGraph(Map* pMap, KeyFrame* pLoopKF, KeyFrame* pCurKF,
     //                                        const LoopClosing::KeyFrameAndPose &NonCorrectedSim3,
     //                                        const LoopClosing::KeyFrameAndPose &CorrectedSim3,
@@ -1381,8 +1380,8 @@ pub fn optimize_essential_graph(
         let mut edges_per_vertex = HashMap::new(); // for testing
 
         // Set KeyFrame vertices
-        let lock = map.read();
-        for (kf_id, kf) in &lock.keyframes {
+        let lock = map.read()?;
+        for (kf_id, kf) in lock.get_keyframes_iter() {
             let estimate = match corrected_sim3.get(kf_id) {
                 Some(sim3) => *sim3,
                 None => kf.get_pose().into()
@@ -1403,7 +1402,7 @@ pub fn optimize_essential_graph(
         let min_feat = 100;
         for (kf_i_id, connected_kfs) in &loop_connections {
             // let connected_kfs = loop_connections.get(&kf_i_id).unwrap();
-            let kf_i = lock.keyframes.get(&kf_i_id).unwrap();
+            let kf_i = lock.get_keyframe(*kf_i_id);
             let siw = v_scw.get(&kf_i_id).unwrap();
             let swi = siw.inverse();
 
@@ -1425,7 +1424,7 @@ pub fn optimize_essential_graph(
         }
 
         // Set normal edges
-        for (kf_i_id, kf_i) in lock.keyframes.iter() {
+        for (kf_i_id, kf_i) in lock.get_keyframes_iter() {
             let swi = match non_corrected_sim3.get(&kf_i_id) {
                 Some(sim3) => sim3.inverse(),
                 None => v_scw.get(&kf_i_id).unwrap().inverse()
@@ -1510,10 +1509,10 @@ pub fn optimize_essential_graph(
     let mut corrected_swc = HashMap::new();
     {
         // SE3 Pose Recovering. Sim3:[sR t;0 1] -> SE3:[R t/s;0 1]
-        let mut lock = map.write();
-        for kf in lock.keyframes.values_mut() {
+        let mut lock = map.write()?;
+        for (kf_id, kf) in lock.get_keyframes_iter_mut() {
             let corrected_siw: Sim3 = optimizer.recover_optimized_sim3(kf.id).into();
-            corrected_swc.insert(kf.id, corrected_siw.inverse());
+            corrected_swc.insert(*kf_id, corrected_siw.inverse());
 
             let tiw: Pose = corrected_siw.into(); //[R t/s;0 1]
 
@@ -1523,7 +1522,7 @@ pub fn optimize_essential_graph(
 
     {
         // Correct points. Transform to "non-optimized" reference keyframe pose and transform back with optimized pose
-        let mp_ids = map.read().mappoints.keys().cloned().collect::<Vec<Id>>();
+        let mp_ids = map.read()?.mappoints.keys().cloned().collect::<Vec<Id>>();
 
         let mps_corrected_by: HashMap<Id, i32> = HashMap::new(); // mnCorrectedByKF
 
@@ -1531,33 +1530,37 @@ pub fn optimize_essential_graph(
             let idr = if mps_corrected_by.contains_key(&mp_id) && *mps_corrected_by.get(&mp_id).unwrap() == curr_kf {
                 *corrected_mp_references.get(&mp_id).unwrap()
             } else {
-                map.read().mappoints.get(&mp_id).unwrap().ref_kf_id
+                map.read()?.mappoints.get(&mp_id).unwrap().ref_kf_id
             };
 
             let srw = v_scw.get(&idr).unwrap();
             let corrected_swr = corrected_swc[&idr];
 
             {
-                let mut lock = map.write();
+                let mut lock = map.write()?;
                 let mp = lock.mappoints.get_mut(&mp_id).unwrap();
                 let p_3d_w = mp.position;
                 mp.position = corrected_swr.map(&srw.map(&p_3d_w));
             }
 
-            let norm_and_depth = map.read().mappoints.get(&mp_id).unwrap().get_norm_and_depth(&map.read());
+            let norm_and_depth = {
+                let lock = map.read()?;
+                lock.mappoints.get(&mp_id).unwrap().get_norm_and_depth(&lock)
+            };
             if norm_and_depth.is_some() {
-                map.write().mappoints.get_mut(&mp_id).unwrap().update_norm_and_depth(norm_and_depth.unwrap());
+                map.write()?.mappoints.get_mut(&mp_id).unwrap().update_norm_and_depth(norm_and_depth.unwrap());
             }
         }
     }
 
-    map.write().map_change_index += 1;
+    map.write()?.map_change_index += 1;
+    Ok(())
 }
 
 pub fn optimize_sim3(
-    map: &MapLock, kf1_id: Id, kf2_id: Id, matched_mps: &mut Vec<Option<Id>>,
+    map: &ReadWriteMap, kf1_id: Id, kf2_id: Id, matched_mps: &mut Vec<Option<Id>>,
     sim3: &mut Sim3, th2: i32, fix_scale: bool
-) -> i32 {
+) -> Result<i32, Box<dyn std::error::Error> > {
     // From ORBSLAM2:
     // int Optimizer::OptimizeSim3(KeyFrame *pKF1, KeyFrame *pKF2, vector<MapPoint *> &vpMatches1, 
     //                             g2o::Sim3 &g2oS12, const float th2, const bool bFixScale)
@@ -1575,9 +1578,9 @@ pub fn optimize_sim3(
 
     // Camera poses
     let (kf1_rot, kf1_trans, kf2_rot, kf2_trans) = { // R1w, t1w, R2w, t2w
-        let lock = map.read();
-        let kf1 = lock.keyframes.get(&kf1_id).unwrap();
-        let kf2 = lock.keyframes.get(&kf2_id).unwrap();
+        let lock = map.read()?;
+        let kf1 = lock.get_keyframe(kf1_id);
+        let kf2 = lock.get_keyframe(kf2_id);
         (
             kf1.get_pose().get_rotation(),
             kf1.get_pose().get_translation(),
@@ -1599,9 +1602,9 @@ pub fn optimize_sim3(
     let mut edge_indexes = vec![];
     {
         // Set MapPoint vertices
-        let lock = map.read();
+        let lock = map.read()?;
         let mappoints1 = { // vpMapPoints1
-            let kf1 = lock.keyframes.get(&kf1_id).unwrap();
+            let kf1 = lock.get_keyframe(kf1_id);
             kf1.get_mp_matches()
         };
 
@@ -1653,11 +1656,11 @@ pub fn optimize_sim3(
 
             // Set edge x1 = S12*X2
             let huber_delta = (th2 as f32).sqrt();
-            let kf1 = lock.keyframes.get(&kf1_id).unwrap();
+            let kf1 = lock.get_keyframe(kf1_id);
             let (kp1, _) = kf1.features.get_keypoint(i);
 
             // Set edge x2 = S21*X1
-            let kf2 = lock.keyframes.get(&kf2_id).unwrap();
+            let kf2 = lock.get_keyframe(kf2_id);
             let (kp2, _) = kf2.features.get_keypoint(i2_left as usize);
 
             optimizer.pin_mut().add_both_sim_edges(
@@ -1689,7 +1692,7 @@ pub fn optimize_sim3(
         false => 5
     };
     if num_correspondences - num_bad < 10 {
-        return 0;
+        return Ok(0);
     }
 
     // Optimize again only with inliers
@@ -1714,7 +1717,7 @@ pub fn optimize_sim3(
     // Recover optimized Sim3
     let optimized_sim3: Sim3 = optimizer.recover_optimized_sim3(0).into();
     *sim3 = optimized_sim3;
-    return n_in;
+    return Ok(n_in);
 }
 
 pub fn add_vertex_pose_keyframe(optimizer: &mut UniquePtr<BridgeSparseOptimizer>, kf: &KeyFrame, fixed: bool, vertex_id: i32) {
@@ -1728,11 +1731,6 @@ pub fn add_vertex_pose_keyframe(optimizer: &mut UniquePtr<BridgeSparseOptimizer>
         & nalgebra::Rotation3::from_matrix(& *kf.get_imu_rotation())
     ); // lol whateverrr
     let tcb_rot = imu_calib.tcb.get_quaternion();
-
-    println!("KeyFrame {} translation: {:?}", kf.id, kf.get_pose().get_translation());
-    println!("KeyFrame {} rotation: {:?}", kf.id, kf.get_pose().get_rotation());
-    println!("KeyFrame {} imu position: {:?}", kf.id, kf.get_imu_position());
-    println!("KeyFrame {} imu rotation: {:?}", kf.id, kf.get_imu_rotation());
 
     optimizer.pin_mut().add_vertex_pose(
         vertex_id,

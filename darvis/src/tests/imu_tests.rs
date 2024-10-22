@@ -1,12 +1,55 @@
 
 mod sim3solver_tests {
-    use core::{config::{load_config, SETTINGS}, matrix::{DVMatrix, DVMatrix3, DVVector3, DVVectorOfKeyPoint}, read_only_lock::ReadWriteMap, system::{Actor, System, Timestamp}};
+    use core::{config::{load_config, SETTINGS}, matrix::{DVMatrix, DVMatrix3, DVVector3, DVVectorOfKeyPoint}, system::{Actor, System, Timestamp}};
     use std::{collections::{HashMap, HashSet}, env};
 
     use crossbeam_channel::unbounded;
     use nalgebra::{DMatrix, Matrix3, Quaternion, SMatrix, UnitQuaternion, Vector3};
 
     use crate::{actors::tracking_backend::TrackingBackend, map::{frame::Frame, keyframe::KeyFrame, map::Id, pose::{group_exp, Pose}}, modules::imu::{normalize_rotation, ImuBias, ImuCalib, ImuDataFrame, ImuPreIntegrated, IntegratedRotation, GRAVITY_VALUE}, registered_actors::CAMERA_MODULE};
+
+    // #[test]
+    fn test_update_frame_imu() {
+        let gz = nalgebra::Vector3::new(0.0, 0.0, -GRAVITY_VALUE);
+        let twb1 = nalgebra::Vector3::new(0.043944559991359711, 0.014681989327073097, 0.18302075564861298);
+        let rwb1 = nalgebra::Matrix3::new(
+        -0.0066180229187011719,     0.9985160231590271,  -0.054057840257883072,
+        0.28045958280563354,   0.053742527961730957,    0.95836031436920166,
+        0.95984315872192383, -0.0088187279179692268,   -0.28039908409118652
+        );
+        let vwb1 = nalgebra::Vector3::new( 0.011901642195880413, -0.015045445412397385, -0.22826705873012543);
+        let t12 = 0.050000190734863281;
+
+        let delta_rot = nalgebra::Matrix3::new(
+        0.9999082088470459,  0.0061537628062069416,  -0.012043275870382786,
+        -0.0060982056893408298,    0.99997037649154663,  0.0046455073170363903,
+        0.012071588076651096, -0.0045717405155301094,    0.99991637468338013,
+        );
+        let delta_pos = nalgebra::Vector3::new(0.0085019767284393311, 6.4905257204372901e-06, -0.0022448110394179821);
+        let delta_vel = nalgebra::Vector3::new(0.34468531608581543, -0.00065375061240047216, -0.087426729500293732);
+
+        let first = normalize_rotation(rwb1 * delta_rot);
+        let second = twb1 + vwb1 * t12 + 0.5 * t12 * t12 * gz + rwb1 * delta_pos;
+        let third = vwb1 + gz * t12 + rwb1 * delta_vel;
+
+        println!("First: {:?}", first);
+        println!("Second: {:?}", second);
+        println!("Third: {:?}", third);
+        
+
+        // EXPECTED:
+        // first:  -0.013359141536056995    0.99869292974472046  -0.049334701150655746
+        //     0.2916751503944397   0.051085446029901505    0.95515233278274536
+        //     0.95642423629760742 -0.0016296894755214453   -0.29197633266448975
+        // second: 0.044611208140850067
+        // 0.014163186773657799
+        // 0.16813471913337708
+        // third:   0.013693826273083687
+        // -0.0021965913474559784
+        // -0.36340495944023132
+        assert_eq!(1, -1); // just to get output from above, the actual assert doesn't matter
+
+    }
 
     // #[test]
     fn test_apply_scaled_rotation() {
@@ -323,7 +366,7 @@ mod sim3solver_tests {
             0.014522586017847061, 0.19346439838409424,0.075992681086063385
         );
         frame.pose = Some(Pose::new(trans, rot));
-        let kf = KeyFrame::new(frame, 1, 1);
+        let kf = KeyFrame::new(frame, 1, 1, true);
 
         println!("frame: {:?}", kf.get_imu_position());
         assert!(
@@ -1431,7 +1474,7 @@ mod sim3solver_tests {
         let mut mps_not_included: HashSet<Id> = HashSet::new(); // vbNotIncludedMP
 
         // let mut _edges = Vec::new();
-        // for (mp_id, mp) in & map.read().mappoints {
+        // for (mp_id, mp) in & map.read().unwrap().mappoints {
         //     let id = mp_id + ini_mp_id + 1;
         //     optimizer.pin_mut().add_vertex_sbapointxyz(
         //         id,
@@ -1449,7 +1492,7 @@ mod sim3solver_tests {
         //         }
 
         //         if *left_index != -1 && *right_index == -1 {
-        //             let (keypoint, _) = map.read().keyframes.get(kf_id).unwrap().features.get_keypoint(*left_index as usize);
+        //             let (keypoint, _) = map.read().unwrap().keyframes.get(kf_id).unwrap().features.get_keypoint(*left_index as usize);
         //             _edges.push(
         //                 optimizer.pin_mut().add_edge_mono_binary(
         //                     true, id, * kf_id,

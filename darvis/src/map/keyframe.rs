@@ -2,7 +2,7 @@ use std::{collections::{HashMap, HashSet}, cmp::min};
 use core::{config::{ SETTINGS, SYSTEM}, matrix::{DVMatrix, DVMatrix3, DVVector3}, sensor::Sensor, system::Timestamp};
 use log::{error, debug, warn};
 use opencv::core::{KeyPoint, Mat};
-use crate::{map::{map::Id, pose::Pose},modules::{bow::DVBoW, imu::*}, registered_actors::VOCABULARY_MODULE, MapLock};
+use crate::{map::{map::Id, pose::Pose},modules::{bow::DVBoW, imu::*}, registered_actors::VOCABULARY_MODULE};
 use super::{features::Features, frame::Frame, map::{Map, MapItems}, mappoint::MapPoint,};
 use crate::modules::module_definitions::VocabularyModule;
 
@@ -52,7 +52,7 @@ pub struct KeyFrame {
     // pub mnBAGlobalForKF: u64,
 }
 impl KeyFrame {
-    pub fn new(frame: Frame, origin_map_id: Id, id: Id) -> Self {
+    pub fn new(frame: Frame, origin_map_id: Id, id: Id, map_imu_initialized: bool) -> Self {
         let bow = match frame.bow {
             Some(bow) => Some(bow),
             None => {
@@ -61,6 +61,9 @@ impl KeyFrame {
                 Some(bow)
             }
         };
+
+        let mut imu_data = frame.imu_data;
+        imu_data.is_imu_initialized = map_imu_initialized;
 
         let mut kf = Self {
             timestamp: frame.timestamp,
@@ -82,7 +85,7 @@ impl KeyFrame {
             ba_global_for_kf: -1,
             prev_kf_id: None,
             next_kf_id: None,
-            imu_data: frame.imu_data,
+            imu_data,
             bias_gba: None,
             vwb_gba: None,
             imu_position: None,

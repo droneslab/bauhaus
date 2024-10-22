@@ -6,9 +6,9 @@ use std::{cmp::{max, min}, collections::HashMap};
 use log::warn;
 use opencv::{core::{no_array, norm, MatExprResult, Range, Scalar, CV_64F, NORM_L2}, hub_prelude::{KeyPointTraitConst, MatExprTraitConst, MatTraitConst}};
 use rand::Rng;
-use crate::modules::module_definitions::CameraModule;
+use crate::{map::read_only_lock::ReadWriteMap, modules::module_definitions::CameraModule};
 
-use crate::{map::{map::Id, pose::{DVRotation, Sim3}}, modules::optimizer::LEVEL_SIGMA2, registered_actors::CAMERA_MODULE, MapLock};
+use crate::{map::{map::Id, pose::{DVRotation, Sim3}}, modules::optimizer::LEVEL_SIGMA2, registered_actors::CAMERA_MODULE};
 use opencv::prelude::*;
 
 pub struct Sim3Solver {
@@ -37,13 +37,13 @@ pub struct Sim3Solver {
 }
 impl Sim3Solver {
     pub fn new(
-        map: &MapLock,
+        map: &ReadWriteMap,
         kf1_id: Id, kf2_id: Id, matches: &HashMap<usize, Id>, fix_scale: bool,
         mut keyframe_matched_mp: HashMap<usize, Id>
     ) -> Result<Self, Box<dyn std::error::Error>> {
-        let map_lock = map.read();
-        let kf1 = map_lock.keyframes.get(&kf1_id).unwrap();
-        let kf2 = map_lock.keyframes.get(&kf2_id).unwrap();
+        let map_lock = map.read()?;
+        let kf1 = map_lock.get_keyframe(kf1_id);
+        let kf2 = map_lock.get_keyframe(kf2_id);
 
         let keyframe_mp1 = kf1.get_mp_matches(); // vpKeyFrameMP1
 

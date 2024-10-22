@@ -5,13 +5,13 @@ use log::{debug, warn};
 use nalgebra::Matrix3;
 use opencv::core::KeyPointTraitConst;
 
-use crate::{map::{map::Id, pose::{DVTranslation, Pose}}, modules::optimizer::{INV_LEVEL_SIGMA2, TH_HUBER_2D}, registered_actors::CAMERA, MapLock};
+use crate::{map::{map::Id, pose::{DVTranslation, Pose}, read_only_lock::ReadWriteMap}, modules::optimizer::{INV_LEVEL_SIGMA2, TH_HUBER_2D}, registered_actors::CAMERA};
 
 use super::{imu::{ImuBias, ImuPreIntegrated}, module_definitions::FullMapOptimizationModule, optimizer::{self, TH_HUBER_MONO}};
 
 pub struct GlobalBundleAdjustment { }
 impl FullMapOptimizationModule for GlobalBundleAdjustment {
-    fn optimize(&self, map: &mut MapLock, iterations: i32, robust: bool, loop_kf: Id) { // stop_flag: Option<SharedPtr<bool>>
+    fn optimize(&self, map: &mut ReadWriteMap, iterations: i32, robust: bool, loop_kf: Id) -> Result<(), Box<dyn std::error::Error>> { // stop_flag: Option<SharedPtr<bool>>
         let _span = tracy_client::span!("global_bundle_adjustment");
         // void Optimizer::GlobalBundleAdjustemnt(Map* pMap, int nIterations, bool* pbStopFlag, const unsigned long nLoopKF, const bool bRobust)
         let sensor: Sensor = SETTINGS.get(SYSTEM, "sensor");
@@ -27,12 +27,12 @@ impl FullMapOptimizationModule for GlobalBundleAdjustment {
         // }
 
         let (kf_vertex_ids, mp_vertex_ids) = {
-            let lock = map.read();
+            let lock = map.read()?;
 
             // Set KeyFrame vertices
             let mut kf_vertex_ids = HashMap::new();
             let mut id_count = 0;
-            for (kf_id, kf) in &lock.keyframes {
+            for (kf_id, kf) in lock.get_keyframes_iter() {
                 optimizer.pin_mut().add_vertex_se3expmap(
                     id_count,
                     (kf.get_pose()).into(),
@@ -72,7 +72,7 @@ impl FullMapOptimizationModule for GlobalBundleAdjustment {
                             if *left_index != -1 {
                                 n_edges += 1;
 
-                                let (keypoint, _) = lock.keyframes.get(kf_id).unwrap().features.get_keypoint(*left_index as usize);
+                                let (keypoint, _) = lock.get_keyframe(*kf_id).features.get_keypoint(*left_index as usize);
                                 _edges.push(
                                     optimizer.pin_mut().add_edge_se3_project_xyz_monocular_binary(
                                         robust, id_count, *kf_vertex_ids.get(kf_id).unwrap(),
@@ -113,27 +113,25 @@ impl FullMapOptimizationModule for GlobalBundleAdjustment {
         }
 
         {
-            let mut lock = map.write();
+            let mut lock = map.write()?;
             let initial_kf_id = lock.initial_kf_id;
             for (kf_id, vertex_id) in kf_vertex_ids {
-                if let Some(kf) = lock.keyframes.get_mut(&kf_id) {
-                    let pose: Pose = optimizer.recover_optimized_frame_pose(vertex_id).into();
-                    // println!("GBA: loop kf {}, initial kf {}", loop_kf, initial_kf_id);
+                let kf = lock.get_keyframe_mut(kf_id);
+                let pose: Pose = optimizer.recover_optimized_frame_pose(vertex_id).into();
+                // println!("GBA: loop kf {}, initial kf {}", loop_kf, initial_kf_id);
 
-                    if loop_kf == initial_kf_id {
-                        kf.set_pose(pose.into());
-                    } else {
-                        // println!("GBA: Set kf {} pose: {:?}. Old pose: {:?}", kf.id, pose, kf.pose);
-                        kf.gba_pose = Some(pose);
-                        kf.ba_global_for_kf = loop_kf;
-                        // debug!("(baglobal) set in gba, for kf {}: {}", kf.id, loop_kf);
-                    }
+                if loop_kf == initial_kf_id {
+                    kf.set_pose(pose.into());
                 } else {
-                    // Possible that map actor deleted mappoint after local BA has finished but before
-                    // this message is processed
-                    println!("GBA: KF {} is deleted?", kf_id);
-                    continue;
+                    // println!("GBA: Set kf {} pose: {:?}. Old pose: {:?}", kf.id, pose, kf.pose);
+                    kf.gba_pose = Some(pose);
+                    kf.ba_global_for_kf = loop_kf;
+                    // debug!("(baglobal) set in gba, for kf {}: {}", kf.id, loop_kf);
                 }
+                // // Possible that map actor deleted mappoint after local BA has finished but before
+                // // this message is processed
+                // println!("GBA: KF {} is deleted?", kf_id);
+                // continue;
             }
 
             for (mp_id, vertex_id) in mp_vertex_ids {
@@ -165,16 +163,16 @@ impl FullMapOptimizationModule for GlobalBundleAdjustment {
                 };
             }
         }
+        Ok(())
     }
 }
 
 pub fn full_inertial_ba(
-    map: &MapLock, iterations: i32, fix_local: bool, loop_id: Id, 
+    map: &ReadWriteMap, iterations: i32, fix_local: bool, loop_id: Id, 
     init: bool, prior_g: f64, prior_a: f64, 
-    ) {
+    ) -> Result<(), Box<dyn std::error::Error>> {
     // void static FullInertialBA(Map *pMap, int its, const bool bFixLocal=false, const unsigned long nLoopKF=0, bool *pbStopFlag=NULL, bool bInit=false, float priorG = 1e2, float priorA=1e6, Eigen::VectorXd *vSingVal = NULL, bool *bHess=NULL);
-    let max_kf_id = * map.read().keyframes
-        .iter()
+    let max_kf_id = * map.read()?.get_keyframes_iter()
         .max_by(|a, b| a.1.id.cmp(&b.1.id))
         .map(|(k, _v)| k).unwrap();
 
@@ -195,7 +193,7 @@ pub fn full_inertial_ba(
     // Set KeyFrame vertices
     let mut inc_kf = 0;
     let mut kf_vertex_fixed = HashMap::new();
-    for (kf_id, kf) in & map.read().keyframes {
+    for (kf_id, kf) in map.read()?.get_keyframes_iter() {
         inc_kf = * kf_id;
 
         let fixed = if fix_local {
@@ -240,8 +238,8 @@ pub fn full_inertial_ba(
     }
 
     if init {
-        let lock = map.read();
-        let kf = lock.keyframes.get(&inc_kf).unwrap();
+        let lock = map.read()?;
+        let kf = lock.get_keyframe(inc_kf);
         optimizer.pin_mut().add_vertex_gyrobias(
             4 * max_kf_id + 2,
             false,
@@ -257,19 +255,19 @@ pub fn full_inertial_ba(
 
     if fix_local {
         if non_fixed < 3 {
-            return;
+            return Ok(());
         }
     }
 
     // IMU links
     let mut new_imu_preintegrated_for_kfs: HashMap<Id, ImuPreIntegrated> = HashMap::new();
 
-    for (kf_id, kf) in & map.read().keyframes {
+    for (kf_id, kf) in map.read()?.get_keyframes_iter() {
         if *kf_id > max_kf_id ||
             kf.prev_kf_id.is_none() ||
             kf.prev_kf_id.unwrap() > max_kf_id ||
             kf.imu_data.imu_preintegrated.is_none() ||
-            ! map.read().keyframes.get(&kf.prev_kf_id.unwrap()).unwrap().imu_data.is_imu_initialized
+            ! map.read()?.get_keyframe(kf.prev_kf_id.unwrap()).imu_data.is_imu_initialized
         {
             continue;
         }
@@ -277,7 +275,7 @@ pub fn full_inertial_ba(
         let mut imu_preintegrated = kf.imu_data.imu_preintegrated.as_ref().unwrap().clone();
         let prev_kf_id = kf.prev_kf_id.unwrap();
 
-        imu_preintegrated.set_new_bias(map.read().keyframes.get(&prev_kf_id).unwrap().imu_data.imu_bias);
+        imu_preintegrated.set_new_bias(map.read()?.get_keyframe(prev_kf_id).imu_data.imu_bias);
 
         let vp1_id = prev_kf_id;
         let vv1_id = max_kf_id + 3 * prev_kf_id + 1;
@@ -321,7 +319,7 @@ pub fn full_inertial_ba(
     }
     for (id, preintegrated) in new_imu_preintegrated_for_kfs {
         // debug!("SET KF {} IMU PREINTEGRATED", id);
-        map.write().keyframes.get_mut(&id).unwrap().imu_data.imu_preintegrated = Some(preintegrated);
+        map.write()?.get_keyframe_mut(id).imu_data.imu_preintegrated = Some(preintegrated);
     }
 
     if init {
@@ -344,7 +342,7 @@ pub fn full_inertial_ba(
 
     let mut _edges = Vec::new();
     {
-        let lock = map.read();
+        let lock = map.read()?;
         for (mp_id, mp) in & lock.mappoints {
             let id = mp_id + ini_mp_id + 1;
             optimizer.pin_mut().add_vertex_sbapointxyz(
@@ -363,7 +361,7 @@ pub fn full_inertial_ba(
                 }
 
                 if *left_index != -1 && *right_index == -1 {
-                    let (keypoint, _) = lock.keyframes.get(kf_id).unwrap().features.get_keypoint(*left_index as usize);
+                    let (keypoint, _) = lock.get_keyframe(*kf_id).features.get_keypoint(*left_index as usize);
                     _edges.push(
                         optimizer.pin_mut().add_edge_mono_binary(
                             true, id, * kf_id,
@@ -451,10 +449,10 @@ pub fn full_inertial_ba(
     optimizer.pin_mut().optimize(iterations, false, false);
 
     {
-        let mut lock = map.write();
+        let mut lock = map.write()?;
         // Recover optimized data
         // Keyframes
-        for (kf_id, kf) in &mut lock.keyframes {
+        for (kf_id, kf) in lock.get_keyframes_iter_mut() {
             if * kf_id > max_kf_id {
                 continue;
             }
@@ -516,7 +514,7 @@ pub fn full_inertial_ba(
     {
         // This is a really gross way to handle the locks but not sure if there is an easier option
         //Points
-        let mp_keys = map.read().mappoints.keys().cloned().collect::<Vec<Id>>();
+        let mp_keys = map.read()?.mappoints.keys().cloned().collect::<Vec<Id>>();
         for mp_id in mp_keys {
             if mps_not_included.contains(&mp_id) {
                 continue;
@@ -530,13 +528,16 @@ pub fn full_inertial_ba(
             let pos = DVTranslation::new(translation.vector);
 
             if loop_id == 0 {
-                map.write().mappoints.get_mut(&mp_id).unwrap().position = pos;
-                let norm_and_depth = map.read().mappoints.get(&mp_id).unwrap().get_norm_and_depth(&map.read());
+                map.write()?.mappoints.get_mut(&mp_id).unwrap().position = pos;
+                let norm_and_depth = {
+                    let lock = map.read()?;
+                    lock.mappoints.get(&mp_id).unwrap().get_norm_and_depth(&lock)
+                };
                 if norm_and_depth.is_some() {
-                    map.write().mappoints.get_mut(&mp_id).unwrap().update_norm_and_depth(norm_and_depth.unwrap());
+                    map.write()?.mappoints.get_mut(&mp_id).unwrap().update_norm_and_depth(norm_and_depth.unwrap());
                 }
             } else {
-                let mut lock = map.write();
+                let mut lock = map.write()?;
                 let mp = lock.mappoints.get_mut(&mp_id).unwrap();
                 mp.gba_pose = Some(pos);
                 mp.ba_global_for_kf = loop_id;
@@ -545,6 +546,7 @@ pub fn full_inertial_ba(
         }
     }
 
-    map.write().map_change_index += 1;
+    map.write()?.map_change_index += 1;
 
+    return Ok(());
 }
