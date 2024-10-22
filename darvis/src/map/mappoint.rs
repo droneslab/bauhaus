@@ -108,7 +108,7 @@ impl MapPoint {
 
         let (n, normal) = self.get_obs_normal(map, &self.position);
 
-        let ref_kf = map.keyframes.get(&self.ref_kf_id).unwrap();
+        let ref_kf = map.get_keyframe(self.ref_kf_id);
         let pc = (*self.position) - (*ref_kf.get_camera_center());
         let dist = pc.norm();
 
@@ -270,25 +270,22 @@ impl MapPoint {
         let mut n = 0;
         let position_opencv = **position;
         for (id, _) in &self.observations {
-            if let Some(kf) = map.keyframes.get(&id) {
-                let mut camera_center = kf.get_camera_center();
-                let owi = *camera_center;
-                let normali = position_opencv - owi;
-                normal = normal + normali / normali.norm();
-                n += 1;
+            let kf = map.get_keyframe(*id);
+            let mut camera_center = kf.get_camera_center();
+            let owi = *camera_center;
+            let normali = position_opencv - owi;
+            normal = normal + normali / normali.norm();
+            n += 1;
 
-                match self.sensor.frame() {
-                    FrameSensor::Stereo => {
-                        camera_center = kf.get_right_camera_center();
-                        let owi = *camera_center;
-                        let normali = position_opencv - owi;
-                        normal = normal + normali / normali.norm();
-                        n += 1;
-                    },
-                    _ => {}
-                }
-            } else {
-                error!("Mappoint {} has observation of keyframe {} but it is not in the map", self.id, id);
+            match self.sensor.frame() {
+                FrameSensor::Stereo => {
+                    camera_center = kf.get_right_camera_center();
+                    let owi = *camera_center;
+                    let normali = position_opencv - owi;
+                    normal = normal + normali / normali.norm();
+                    n += 1;
+                },
+                _ => {}
             }
         }
         (n, normal)
@@ -297,20 +294,12 @@ impl MapPoint {
     fn compute_descriptors(&self, map: &Map) -> Vec::<opencv::core::Mat> {
         let mut descriptors = Vec::<opencv::core::Mat>::new();
         for (id, (index1, index2)) in &self.observations {
-            match map.keyframes.get(&id) {
-                Some(kf) => {
-                    descriptors.push((*kf.features.descriptors.row(*index1 as u32)).clone());
-                    match self.sensor.frame() {
-                        FrameSensor::Stereo => descriptors.push((*kf.features.descriptors.row(*index2 as u32)).clone()),
-                        _ => {}
-                    }
-
-                },
-                None => {
-                    error!("Mappoint {} has observation of keyframe {} but it is not in the map", self.id, id);
-                }
-
-            };
+            let kf = map.get_keyframe(*id);
+            descriptors.push((*kf.features.descriptors.row(*index1 as u32)).clone());
+            match self.sensor.frame() {
+                FrameSensor::Stereo => descriptors.push((*kf.features.descriptors.row(*index2 as u32)).clone()),
+                _ => {}
+            }
         }
         descriptors
     }

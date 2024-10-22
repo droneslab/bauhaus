@@ -38,12 +38,16 @@ impl Frame {
     pub fn new(
         frame_id: Id, keypoints_vec: DVVectorOfKeyPoint, descriptors_vec: DVMatrix,
         im_width: u32, im_height: u32, image: Option<opencv::core::Mat>,
-        prev_frame: Option<& Frame>,
+        prev_frame: Option<& Frame>, map_imu_initialized: bool,
         timestamp: Timestamp
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let sensor = SETTINGS.get::<Sensor>(SYSTEM, "sensor");
         let features = Features::new(keypoints_vec, descriptors_vec, im_width, im_height, sensor)?;
         let num_keypoints = features.num_keypoints as usize;
+
+        let mut imu_data = ImuDataFrame::new(prev_frame);
+        imu_data.is_imu_initialized = map_imu_initialized;
+
         let frame = Self {
             frame_id,
             timestamp,
@@ -52,7 +56,7 @@ impl Frame {
             image,
             bow: None,
             mappoint_matches: MapPointMatches::new(num_keypoints),
-            imu_data: ImuDataFrame::new(prev_frame),
+            imu_data,
             pose: None,
             ref_kf_id: None,
         };
@@ -200,7 +204,7 @@ impl Frame {
     pub fn get_pose_relative(&self, map: &Map) -> Pose {
         let pose = self.pose.unwrap();
         let ref_kf_id = self.ref_kf_id.unwrap();
-        let ref_kf = map.keyframes.get(&ref_kf_id).expect("Can't get ref kf from map");
+        let ref_kf = map.get_keyframe(ref_kf_id);
         let ref_kf_pose = ref_kf.get_pose();
         pose * ref_kf_pose.inverse()
     }

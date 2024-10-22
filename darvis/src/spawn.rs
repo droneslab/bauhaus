@@ -2,12 +2,12 @@ use std::{collections::HashMap, sync::{Arc, Mutex}, thread::{self, JoinHandle}};
 use crossbeam_channel::unbounded;
 
 use core::{
-    config::{ActorConf, ModuleConf}, read_only_lock::ReadWriteMap, system::{Module, Receiver, Sender, System} 
+    config::{ActorConf, ModuleConf}, system::{Module, Receiver, Sender, System} 
 };
 use log::{info, warn};
 
 use crate::{
-    actors::messages::ShutdownMsg, map::map::Map, registered_actors::{self, SHUTDOWN_ACTOR, VOCABULARY_MODULE}, MapLock
+    actors::messages::ShutdownMsg, map::{map::Map, read_only_lock::ReadWriteMap}, registered_actors::{self, SHUTDOWN_ACTOR, VOCABULARY_MODULE}
 };
 use crate::modules::module_definitions::VocabularyModule;
 
@@ -39,14 +39,15 @@ pub fn launch_system(actor_config: Vec<ActorConf>, module_config: Vec<ModuleConf
     transmitters.insert(SHUTDOWN_ACTOR.to_string(), shutdown_tx);
 
     // * CREATE MAP *//
-    let writeable_map = ReadWriteMap::<Map>::new(Map::new()); // Arc::new(parking_lot::Mutex::new(Map::new()))
+    let writeable_map = ReadWriteMap::new(Map::new()); // Arc::new(parking_lot::Mutex::new(Map::new()))
 
     // * LOAD VOCABULARY *//
     VOCABULARY_MODULE.access();
 
     // * SPAWN USER-DEFINED ACTORS *//
-    for (actor_name, actor_tag, receiver_bound, receiver) in receivers {
-        spawn_actor(actor_tag, actor_name, &transmitters, receiver, receiver_bound, Some(&writeable_map));
+    for (actor_name, actor_tag, max_queue_size, receiver) in receivers {
+        let max_queue_size = max_queue_size.unwrap_or(100);
+        spawn_actor(actor_tag, actor_name, &transmitters, receiver, max_queue_size, Some(&writeable_map));
     }
 
     // * SPAWN DARVIS SYSTEM ACTORS *//
@@ -62,8 +63,8 @@ pub fn launch_system(actor_config: Vec<ActorConf>, module_config: Vec<ModuleConf
 
 fn spawn_actor(
     actor_tag: String, actor_name: String, 
-    transmitters: &HashMap<String, Sender>, receiver: Receiver, receiver_bound: Option<usize>, 
-    writeable_map: Option<&MapLock>
+    transmitters: &HashMap<String, Sender>, receiver: Receiver, max_queue_size: usize, 
+    writeable_map: Option<&ReadWriteMap>
 ) {
     info!("Spawning actor '{}' with name {}", &actor_tag, &actor_name);
 
@@ -80,7 +81,12 @@ fn spawn_actor(
             txs.insert(other_actor_name.clone(), other_actor_transmitter.clone());
         }
     }
-    let system = System {receiver, receiver_bound, actors: txs, my_name: actor_name.clone()};
+    let system = System {
+        receiver,
+        max_queue_size,
+        actors: txs,
+        my_name: actor_name.clone()
+    };
 
     thread::spawn(move || { 
         registered_actors::spawn_actor(actor_tag, system, map_clone);
@@ -98,7 +104,11 @@ fn spawn_shutdown_actor(transmitters: &HashMap<String, Sender>, receiver: Receiv
             txs.insert(other_actor_name.clone(), other_actor_transmitter.clone());
         }
     }
-    let system = System {receiver, receiver_bound: None, actors: txs, my_name: SHUTDOWN_ACTOR.to_string()};
+    let system = System {
+        receiver,
+        max_queue_size: 100,
+        actors: txs,
+        my_name: SHUTDOWN_ACTOR.to_string()};
 
     let join_handle = thread::spawn(move || { 
         registered_actors::spawn_actor(SHUTDOWN_ACTOR.to_string(), system, None);

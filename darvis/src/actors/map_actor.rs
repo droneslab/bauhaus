@@ -5,7 +5,7 @@
 // use logging_timer::{timer, finish};
 
 // use crate::{
-//     maplock::ReadWriteMap,
+//     ReadWriteMap::ReadWriteMap,
 //     map::{keyframe::*, map::*, mappoint::{MapPoint, PrelimMapPoint}, pose::DVPose},
 //     modules::{map_initialization::Initialization, optimizer::BundleAdjustmentResult}, actors::messages::{ShutdownMsg, KeyFrameIdMsg}, registered_actors::{TRACKING_BACKEND, LOCAL_MAPPING},
 // };

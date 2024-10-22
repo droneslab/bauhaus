@@ -13,7 +13,6 @@ use std::{collections::HashMap, sync::RwLock};
 use lazy_static::*;
 use linked_hash_map::LinkedHashMap;
 use log::info;
-use opencv::core::MatTraitConst;
 
 use std::fs::File;
 use std::io::Read;

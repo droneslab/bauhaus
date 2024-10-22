@@ -1,4 +1,4 @@
-use core::system::Actor;
+use core::system::{Actor, MessageBox};
 use core::config::{SETTINGS, SYSTEM};
 use core::sensor::{FrameSensor, ImuSensor, Sensor};
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -10,12 +10,13 @@ use opencv::core::KeyPointTraitConst;
 use crate::actors::local_mapping::LOCAL_MAPPING_IDLE;
 use crate::actors::messages::{KeyFrameIdMsg, LoopClosureGBAMsg, UpdateFrameIMUMsg};
 use crate::map::pose::{DVTranslation, Pose, Sim3};
+use crate::map::read_only_lock::ReadWriteMap;
 use crate::modules::module_definitions::{FeatureMatchingModule, ImuModule, LoopDetectionModule};
 use crate::modules::orbslam_matcher::ORBMatcherTrait;
 use crate::modules::sim3solver::Sim3Solver;
 use crate::modules::{optimizer};
 use crate::registered_actors::{self, FEATURE_MATCHING_MODULE, FULL_MAP_OPTIMIZATION_MODULE, VISUALIZER};
-use crate::{System, MapLock};
+use crate::{System};
 use crate::map::map::Id;
 use crate::modules::imu::IMU;
 
@@ -31,7 +32,7 @@ pub struct LoopClosing {
     system: System,
     sensor: Sensor,
 
-    map: MapLock,
+    map: ReadWriteMap,
 
     // Modules
     imu: Option<IMU>,
@@ -39,77 +40,78 @@ pub struct LoopClosing {
 }
 
 impl Actor for LoopClosing {
-    type MapRef = MapLock;
+    type MapRef = ReadWriteMap;
 
-    fn new_actorstate(system: System, map: Self::MapRef) -> LoopClosing {
+    fn spawn(system: System, map: Self::MapRef) {
         let imu = match SETTINGS.get::<Sensor>(SYSTEM, "sensor").imu() {
             ImuSensor::Some => Some(IMU::new()),
             _ => None
         };
 
-        LoopClosing {
+        let mut actor = LoopClosing {
             system,
             map,
             imu,
             sensor: SETTINGS.get(SYSTEM, "sensor"),
             loop_detection: registered_actors::new_loop_detection_module(),
-        }
-    }
-
-    fn spawn(system: System, map: Self::MapRef) {
-        let mut actor = LoopClosing::new_actorstate(system, map);
-
-        let max_queue_size = actor.system.receiver_bound.unwrap_or(100);
+        };
         tracy_client::set_thread_name!("loop closing");
 
-        'outer: loop {
+        loop {
             let message = actor.system.receive().unwrap();
-            if message.is::<KeyFrameIdMsg>() {
-                let msg = message.downcast::<KeyFrameIdMsg>().unwrap_or_else(|_| panic!("Could not downcast loop closing message!"));
-
-
-                let queue_len = actor.system.queue_len();
-                if queue_len > max_queue_size {
-                    // Abort additional work if there are too many frames in the msg queue.
-                    info!("Loop Closing dropped 1 frame, queue len: {}", queue_len);
-                    continue;
-                }
-
-                if msg.kf_id == 0 {
-                    // Don't add very first keyframe
-                    continue;
-                } else if actor.map.read().keyframes.get(&msg.kf_id).is_none() {
-                    // KF deleted by map already. Shouldn't happen often, but it can
-                    continue;
-                }
-
-                match actor.loop_closing(msg.kf_id) {
-                    Ok(_) => {},
-                    Err(e) => {
-                        warn!("Loop closing failed: {}", e);
-                    }
-                }
-            } else if message.is::<UpdateFrameIMUMsg>() {
-                // Does this even need to happen?
-                todo!("IMU: Process message from local mapping");
-            } else if message.is::<ShutdownMsg>() {
-                break 'outer;
-            } else {
-                warn!("Loop Closing received unknown message type!");
+            // Actor can early-return if self.map.read() returns an incorrect version of the map
+            // see read() in read_only_lock.rs for more info
+            if actor.handle_message(message).unwrap_or(false) {
+                break;
             }
+            actor.map.match_map_version();
         }
     }
-
-
 }
 
 impl LoopClosing {
+    fn handle_message(&mut self, message: MessageBox) -> Result<bool, Box<dyn std::error::Error>> {
+        if message.is::<KeyFrameIdMsg>() {
+            let msg = message.downcast::<KeyFrameIdMsg>().unwrap_or_else(|_| panic!("Could not downcast loop closing message!"));
+
+            if self.system.queue_full() {
+                // Abort additional work if there are too many frames in the msg queue.
+                info!("Loop Closing dropped 1 frame, queue len: {}", self.system.queue_len());
+                return Ok(false);
+            }
+
+            if msg.kf_id == 0 {
+                // Don't add very first keyframe
+                return Ok(false);
+            } else if !self.map.read()?.has_keyframe(msg.kf_id) {
+                // KF deleted by map already. Shouldn't happen often, but it can
+                return Ok(false);
+            }
+
+            match self.loop_closing(msg.kf_id) {
+                Ok(_) => {},
+                Err(e) => {
+                    warn!("Loop closing failed: {}", e);
+                }
+            }
+            return Ok(false);
+        } else if message.is::<UpdateFrameIMUMsg>() {
+            // Does this even need to happen?
+            todo!("IMU: Process message from local mapping");
+        } else if message.is::<ShutdownMsg>() {
+            return Ok(true);
+        } else {
+            warn!("Loop Closing received unknown message type!");
+            return Ok(false);
+        }
+    }
+
     fn loop_closing(&mut self, current_kf_id: Id) -> Result<(), Box<dyn std::error::Error>> {
         // Avoid that a keyframe can be erased while it is being process by this thread
         // TODO (design, fine-grained locking) would be great if we could just lock this keyframe
-        self.map.write().keyframes.get_mut(&current_kf_id).unwrap().dont_delete = true;
+        self.map.write()?.get_keyframe_mut(current_kf_id).dont_delete = true;
 
-        debug!("Loop closing working on kf {} (frame {})", current_kf_id, self.map.read().keyframes.get(&current_kf_id).unwrap().frame_id);
+        debug!("Loop closing working on kf {} (frame {})", current_kf_id, self.map.read()?.get_keyframe(current_kf_id).frame_id);
 
         // Detect loop candidates and check covisibility consistency
         match self.loop_detection.detect_loop(& self.map, current_kf_id) {
@@ -138,7 +140,7 @@ impl LoopClosing {
                         }
 
                         // Reset all variables
-                        self.map.write().keyframes.get_mut(&loop_kf).unwrap().dont_delete = false;
+                        self.map.write()?.get_keyframe_mut(loop_kf).dont_delete = false;
                     },
                     _ => ()
                 }
@@ -148,7 +150,7 @@ impl LoopClosing {
             }
         }
 
-        self.map.write().keyframes.get_mut(&current_kf_id).unwrap().dont_delete = false;
+        self.map.write()?.get_keyframe_mut(current_kf_id).dont_delete = false;
         thread::sleep(Duration::from_micros(5000));
         Ok(())
     }
@@ -162,12 +164,12 @@ impl LoopClosing {
         set_switches(Switches::CorrectLoopBeginning);
 
         // Ensure current keyframe is updated
-        self.map.write().update_connections(current_kf_id);
+        self.map.write()?.update_connections(current_kf_id);
 
         // Retrive keyframes connected to the current keyframe and compute corrected Sim3 pose by propagation
         let (current_connected_kfs, mut corrected_sim3, mut non_corrected_sim3, twc) = {
-            let lock = self.map.read();
-            let current_kf = lock.keyframes.get(&current_kf_id).unwrap();
+            let lock = self.map.read()?;
+            let current_kf = lock.get_keyframe(current_kf_id);
 
             let mut current_connected_kfs = current_kf.get_covisibility_keyframes(i32::MAX);
             current_connected_kfs.push(current_kf_id);
@@ -185,15 +187,15 @@ impl LoopClosing {
 
         let mut corrected_mp_references = HashMap::<Id, Id>::new(); // mnCorrectedReference in mappoints
         {
-            let mut lock = self.map.write();
+            let mut lock = self.map.write()?;
 
             // Update keyframe pose with corrected Sim3. First transform Sim3 to SE3 (scale translation)
-            let current_kf = lock.keyframes.get_mut(&current_kf_id).unwrap();
+            let current_kf = lock.get_keyframe_mut(current_kf_id);
             current_kf.set_pose(loop_scw.into());
             println!("Corrected current kf {} (frame {}): {:?}", current_kf.id, current_kf.frame_id, current_kf.get_pose());
 
             for connected_kf_id in &current_connected_kfs {
-                let connected_kf = lock.keyframes.get_mut(connected_kf_id).unwrap();
+                let connected_kf = lock.get_keyframe_mut(*connected_kf_id);
                 let tiw = connected_kf.get_pose();
 
                 if connected_kf_id != &current_kf_id {
@@ -220,7 +222,7 @@ impl LoopClosing {
                 let g2o_corrected_swi = g2o_corrected_siw.inverse();
                 let g2o_siw = non_corrected_sim3.get(kf_id).unwrap();
                 let mappoints = {
-                    let connected_kf = lock.keyframes.get(kf_id).unwrap();
+                    let connected_kf = lock.get_keyframe(*kf_id);
                     connected_kf.get_mp_matches().clone()
                 };
                 let mut count = 0;
@@ -258,7 +260,7 @@ impl LoopClosing {
                 // Make sure connections are updated
                 lock.update_connections(*kf_id);
             }
-            self.map.write().map_change_index += 1;
+            self.map.write()?.map_change_index += 1;
 
             // Start Loop Fusion
             // Update matched map points and replace if duplicated
@@ -266,7 +268,7 @@ impl LoopClosing {
             let mut num_added = 0;
             for i in 0..current_matched_points.len() {
                 if let Some(loop_mp_id) = current_matched_points[i] {
-                    let curr_kf = lock.keyframes.get(&current_kf_id).unwrap();
+                    let curr_kf = lock.get_keyframe(current_kf_id);
                     match lock.mappoints.get(&loop_mp_id) {
                         None => {
                             if let Some((curr_mp_id, _is_outlier)) = curr_kf.get_mp_match(&(i as u32)) {
@@ -296,7 +298,7 @@ impl LoopClosing {
         //             mappoint_matches: self.current_matched_points.iter().filter(|m| m.is_some()).map(|m| m.unwrap()).collect(),
         //             loop_mappoints: loop_mappoints.clone(),
         //             keyframes_affected: corrected_sim3.keys().cloned().collect(),
-        //             timestamp: self.map.read().keyframes.get(&current_kf_id).unwrap().timestamp
+        //             timestamp: self.map.read()?.get_keyframe(&current_kf_id).unwrap().timestamp
         //         }
         // ));
 
@@ -310,13 +312,13 @@ impl LoopClosing {
         let mut test_unique_kfs: HashSet<Id> = HashSet::new();
 
         for kf_id in &current_connected_kfs {
-            let mut map = self.map.write();
-            let previous_neighbors = map.keyframes.get(kf_id).unwrap().get_covisibility_keyframes(i32::MAX);
+            let mut map = self.map.write()?;
+            let previous_neighbors = map.get_keyframe(*kf_id).get_covisibility_keyframes(i32::MAX);
 
             // Update connections. Detect new links.
             map.update_connections(*kf_id);
 
-            let connected_kfs: HashSet<i32> = map.keyframes.get(kf_id).unwrap().get_connected_keyframes().iter().map(|(id, _)| *id).collect();
+            let connected_kfs: HashSet<i32> = map.get_keyframe(*kf_id).get_connected_keyframes().iter().map(|(id, _)| *id).collect();
             test_unique_kfs.extend(connected_kfs.clone());
             loop_connections.insert(*kf_id, connected_kfs);
 
@@ -346,10 +348,10 @@ impl LoopClosing {
             loop_connections, &non_corrected_sim3, &corrected_sim3, 
             corrected_mp_references,
             !self.sensor.is_mono()
-        );
+        )?;
 
         // Add loop edge
-        self.map.write().add_kf_loop_edges(loop_kf, current_kf_id);
+        self.map.write()?.add_kf_loop_edges(loop_kf, current_kf_id);
 
         // Launch a new thread to perform Global Bundle Adjustment
         let mut map_copy = self.map.clone();
@@ -361,12 +363,12 @@ impl LoopClosing {
         //     Box::new(
         //         LoopClosureGBAMsg { 
         //             kf_id: current_kf_id,
-        //             timestamp: self.map.read().keyframes.get(&current_kf_id).unwrap().timestamp
+        //             timestamp: self.map.read()?.get_keyframe(&current_kf_id).unwrap().timestamp
         //         }
         // ));
 
         thread::spawn(move || {
-            run_gba(&mut map_copy, current_kf_id);
+            run_gba(&mut map_copy, current_kf_id).unwrap_or_else(|e| error!("Global Bundle Adjustment early returned because map was reset: {}", e));
         });
 
         Ok(())
@@ -384,7 +386,7 @@ impl LoopClosing {
             for i in 0..replace_points.len() {
                 if let Some(mp_to_replace) = replace_points[i] {
                     let replace_with = loop_mappoints[i];
-                    self.map.write().replace_mappoint(mp_to_replace, replace_with);
+                    self.map.write()?.replace_mappoint(mp_to_replace, replace_with);
                     num_fused += 1;
                 }
             }
@@ -395,14 +397,14 @@ impl LoopClosing {
 }
 
 
-fn run_gba(map: &mut MapLock, loop_kf: Id) {
+fn run_gba(map: &mut ReadWriteMap, loop_kf: Id) -> Result<(), Box<dyn std::error::Error>> {
     // void LoopClosing::RunGlobalBundleAdjustment(unsigned long nLoopKF)
     let _span = tracy_client::span!("run_gba_in_thread");
     info!("Starting Global Bundle Adjustment");
 
     set_switches(Switches::GbaBeginning);
 
-    FULL_MAP_OPTIMIZATION_MODULE.optimize(map, 10, false, loop_kf);
+    FULL_MAP_OPTIMIZATION_MODULE.optimize(map, 10, false, loop_kf)?;
 
     // Update all MapPoints and KeyFrames
     // Local Mapping was active during BA, that means that there might be new keyframes
@@ -413,28 +415,28 @@ fn run_gba(map: &mut MapLock, loop_kf: Id) {
 
     if GBA_KILL_SWITCH.load(Ordering::SeqCst) {
         set_switches(Switches::GbaDone);
-        return;
+        return Ok(());
     }
 
     set_switches(Switches::PostGBAUpdate);
 
     {
-        let mut lock = map.write();
+        let mut lock = map.write()?;
         // Correct keyframes starting at map first keyframe
         let mut kfs_to_check = vec![lock.initial_kf_id];
         let mut i = 0;
         let mut tcw_bef_gba: HashMap<Id, Pose> = HashMap::new();
         while i < kfs_to_check.len() {
             let curr_kf_id = kfs_to_check[i];
-            let children = lock.keyframes.get(& curr_kf_id).unwrap().children.clone();
+            let children = lock.get_keyframe(curr_kf_id).children.clone();
 
             let (curr_kf_pose_inverse, curr_kf_gba_pose) = {
-                let curr_kf = lock.keyframes.get(&curr_kf_id).unwrap();
+                let curr_kf = lock.get_keyframe(curr_kf_id);
                 (curr_kf.get_pose().inverse(), curr_kf.gba_pose.clone())
             };
 
             for child_id in & children {
-                let child = lock.keyframes.get_mut(child_id).unwrap();
+                let child = lock.get_keyframe_mut(*child_id);
                 if child.ba_global_for_kf != loop_kf {
                     let tchildc = child.get_pose() * curr_kf_pose_inverse;
                     child.gba_pose = Some(tchildc * curr_kf_gba_pose.unwrap());
@@ -453,7 +455,7 @@ fn run_gba(map: &mut MapLock, loop_kf: Id) {
                 kfs_to_check.push(*child_id);
             }
 
-            let kf = lock.keyframes.get_mut(&curr_kf_id).unwrap();
+            let kf = lock.get_keyframe_mut(curr_kf_id);
             tcw_bef_gba.insert(curr_kf_id, kf.get_pose());
             kf.set_pose(kf.gba_pose.unwrap().clone());
             println!("Update kf {} with pose {:?}", curr_kf_id, kf.get_pose());
@@ -483,7 +485,7 @@ fn run_gba(map: &mut MapLock, loop_kf: Id) {
                     mps_to_update.insert(*id, mp.gba_pose.unwrap());
                 } else {
                     // Update according to the correction of its reference keyframe
-                    let ref_kf = lock.keyframes.get(&mp.ref_kf_id).unwrap();
+                    let ref_kf = lock.get_keyframe(mp.ref_kf_id);
 
                     if ref_kf.ba_global_for_kf != loop_kf {
                         continue;
@@ -513,11 +515,12 @@ fn run_gba(map: &mut MapLock, loop_kf: Id) {
         }
     }
 
-    map.write().map_change_index += 1;
+    map.write()?.map_change_index += 1;
 
     set_switches(Switches::GbaDone);
 
     info!("Map updated!");
+    Ok(())
 }
 
 enum Switches {
