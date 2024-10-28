@@ -1,5 +1,9 @@
 // A lot of functions here are copied over from sim3solver.rs so that we don't have
 // to make the full sim3solver object which relies on the map
+#![allow(dead_code)]
+#![allow(unused_imports)]
+#![allow(unused_variables)]
+#![allow(non_snake_case)]
 
 #[cfg(test)]
 mod sim3solver_tests {
@@ -338,7 +342,7 @@ mod sim3solver_tests {
 
     fn compare_mats(m1: &Mat, m2: &Mat) -> bool {
         let mut diff = Mat::default();
-        opencv::core::absdiff(m1, m2, &mut diff);
+        opencv::core::absdiff(m1, m2, &mut diff).unwrap();
         let mut diff_sum = Mat::default();
         opencv::core::reduce(&diff, &mut diff_sum, 0, opencv::core::REDUCE_SUM, CV_64F).unwrap();
         let diff_sum = diff_sum.at_2d::<f64>(0, 0).unwrap();

@@ -1,7 +1,6 @@
 use std::{collections::{HashMap, HashSet}, cmp::min};
-use core::{config::{ SETTINGS, SYSTEM}, matrix::{DVMatrix, DVMatrix3, DVVector3}, sensor::Sensor, system::Timestamp};
+use core::{config::{ SETTINGS, SYSTEM}, matrix::{DVMatrix3, DVVector3}, sensor::Sensor, system::Timestamp};
 use log::{error, debug, warn};
-use opencv::core::{KeyPoint, Mat};
 use crate::{map::{map::Id, pose::Pose},modules::{bow::DVBoW, imu::*}, registered_actors::VOCABULARY_MODULE};
 use super::{features::Features, frame::Frame, map::{Map, MapItems}, mappoint::MapPoint,};
 use crate::modules::module_definitions::VocabularyModule;
@@ -97,7 +96,7 @@ impl KeyFrame {
         kf
     }
 
-    pub fn print_mappoints(&self) {
+    pub fn _print_mappoints(&self) {
         println!("Mappoints for keyframe {}", self.id);
         for item in &self.mappoint_matches.matches {
             if let Some((mp_id, _outlier)) = item {
@@ -144,10 +143,10 @@ impl KeyFrame {
     pub fn get_mp_match_index(&self, id: &Id) -> Option<usize> { 
         self.mappoint_matches.matches.iter().position(|item| item.is_some() && item.unwrap().0 == *id)
     }
-    pub fn mp_match_len(&self) -> usize { self.mappoint_matches.matches.iter().filter(|m| m.is_some()).count() }
+    pub fn _mp_match_len(&self) -> usize { self.mappoint_matches.matches.iter().filter(|m| m.is_some()).count() }
 
     pub fn get_tracked_mappoints(&self, map: &Map, min_observations: u32) -> i32 { self.mappoint_matches.tracked_mappoints(map, min_observations) }
-    pub fn debug_get_mps_count(&self) -> i32 { self.mappoint_matches.debug_count }
+    pub fn _debug_get_mps_count(&self) -> i32 { self.mappoint_matches.debug_count }
 
     pub fn get_camera_center(&self) -> DVVector3<f64> {
         self.pose.inverse().get_translation()
@@ -314,7 +313,7 @@ impl MapPointMatches {
         self.matches[index].as_mut().unwrap().1 = is_outlier;
     }
 
-    pub fn mappoints_with_observations(&self, map: &Map) -> i32 {
+    pub fn _mappoints_with_observations(&self, map: &Map) -> i32 {
         (&self.matches)
         .into_iter()
         .filter(|item| {

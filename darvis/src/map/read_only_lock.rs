@@ -1,3 +1,6 @@
+#![allow(dead_code)]
+#![allow(unused_variables)]
+
 /// *** Structs to wrap map to manage read/write access *** ///
 // ReadOnlyWrapper is used by all actors but the map actor.
 // Trying to write on read-only will give a compilation error.
@@ -11,6 +14,7 @@
 //     RwLockReadGuard, //MappedRwLockReadGuard,
 //     RwLockWriteGuard, //MappedRwLockWriteGuard,
 // };
+
 use std::{backtrace::Backtrace, sync::Arc, time::Instant};
 use log::{debug, warn};
 use parking_lot::{
@@ -22,8 +26,6 @@ use parking_lot::{
 };
 
 use super::map::Map;
-
-pub type UnlockedToRead<'a, Map> = MappedRwLockReadGuard<'a, Map>;
 
 #[derive(Debug, Clone)]
 pub struct ReadOnlyMap<T> {

@@ -1,4 +1,4 @@
-use std::{borrow::Cow, collections::{BTreeMap, BTreeSet, HashMap, HashSet}, fs::{self, File}, io::BufWriter, sync::Arc, time::Duration};
+use std::{borrow::Cow, collections::{BTreeMap, BTreeSet, HashMap, HashSet}, fs::{self, File}, io::BufWriter, sync::Arc};
 use log::warn;
 use mcap::{Schema, Channel, records::MessageHeader, Writer};
 use opencv::prelude::{Mat, MatTraitConst, MatTraitConstManual};
@@ -21,7 +21,7 @@ static TRAJECTORY_COLOR: Color = Color { r: 1.0, g: 0.0, b: 0.0, a: 1.0 };
 static MAPPOINT_COLOR: Color = Color { r: 1.0, g: 1.0, b: 1.0, a: 1.0 };
 static MAPPOINT_MATCH_COLOR: Color = Color { r: 0.0, g: 1.0, b: 0.0, a: 1.0 };
 static MAPPOINT_LOCAL_COLOR: Color = Color { r: 0.0, g: 0.0, b: 1.0, a: 1.0 };
-static MAPPOINT_SIZE: Vector3 = Vector3 { x: 0.01, y: 0.01, z: 0.01 };
+static MAPPOINT_SIZE: Vector3 = Vector3 {  x: 0.01, y: 0.01, z: 0.01 };
 static MAPPOINT_LARGE_SIZE: Vector3 = Vector3 { x: 0.1, y: 0.1, z: 0.1 };
 //Keyframes
 static KEYFRAME_COLOR: Color = Color { r: 0.5, g: 0.0, b: 0.0, a: 1.0 };
@@ -180,7 +180,7 @@ impl DarvisVisualizer {
         // This is for debugging
         self.clear_scene(msg.timestamp, LOOP_CLOSURE_CHANNEL).await?;
         let mut entities = Vec::new();
-        let lock = self.map.read().unwrap();
+        let lock = self.map.read()?;
 
         for kf_id in &msg.relevant_keyframes {
             let kf = lock.get_keyframe(*kf_id);
@@ -210,7 +210,7 @@ impl DarvisVisualizer {
         // This is for debugging
         self.clear_scene(msg.timestamp, LOOP_CLOSURE_CHANNEL).await?;
         let mut entities = Vec::new();
-        let lock = self.map.read().unwrap();
+        let lock = self.map.read()?;
 
         for (mappoint_id, mappoint) in &lock.mappoints {
             let mp_sphere = {
@@ -275,7 +275,7 @@ impl DarvisVisualizer {
 
         println!("Drawing all mappoints");
 
-        let map = self.map.read().unwrap();
+        let map = self.map.read()?;
         let mut curr_mappoints = HashSet::new();
         for (mappoint_id, mappoint) in &map.mappoints {
             let pose = Pose::new_with_default_rot(mappoint.position);
@@ -409,13 +409,14 @@ impl DarvisVisualizer {
         };
         self.writer.write(TRANSFORM_CHANNEL, transform, timestamp, 0).await.expect("Could not write transform");
 
-        let map = self.map.read().unwrap();
+        let map = self.map.read()?;
 
         // Draw keyframes and trajectory
         // Re-draw each time because kf poses may have neen optimized since last drawing
         let mut sorted_kfs = map.get_keyframes_iter().map(|(id, _)| id).collect::<Vec<&Id>>();
         sorted_kfs.sort();
         let mut prev_pose: Point3 = Pose::default().into();
+        let mut prev_pose_test = Pose::default();
         let mut prev_id = 0;
         for id in sorted_kfs {
             let curr_pose = map.get_keyframe(*id).get_pose().inverse();
@@ -443,14 +444,15 @@ impl DarvisVisualizer {
                     timestamp, 
                     "world",
                     format!("kf {}", id),
-                    vec![],
+                    // vec![],
                     // Old code to draw arrow:
-                    // vec![self.create_arrow(&curr_pose, KEYFRAME_COLOR.clone())],
+                    vec![self._create_arrow(&curr_pose, KEYFRAME_COLOR.clone())],
                     vec![],
                     vec![]
                 )
             );
             prev_pose = curr_pose.into();
+            prev_pose_test = curr_pose;
             prev_id = *id;
         }
 
@@ -463,6 +465,7 @@ impl DarvisVisualizer {
         self.previous_keyframes = curr_keyframes;
 
         // Lastly, add the trajectory line from the last keyframe to the current pose
+        println!("SOFIYA DEBUG, last kf -> prev_pose: {:?}", *prev_pose_test.get_translation() - *frame_pose.get_translation());
         let points = vec![prev_pose, frame_pose.inverse().into()];
         entities.push(
             self.create_scene_entity(
@@ -486,7 +489,7 @@ impl DarvisVisualizer {
 
     async fn plot_map_info(&mut self, tracked_mappoints: &Vec<std::option::Option<(i32, bool)>>, timestamp: Timestamp) -> Result<(), Box<dyn std::error::Error>> {
         // Write map info to foxglove
-        let map = self.map.read().unwrap();
+        let map = self.map.read()?;
 
         let map_info = MapInfo {
             keyframes: map.num_keyframes() as f64,
@@ -511,7 +514,7 @@ impl DarvisVisualizer {
 
         let mappoint_match_ids = mappoint_matches.iter().filter_map(|item| item.map(|(id, _)| id)).collect::<HashSet<Id>>();
 
-        let map = self.map.read().unwrap();
+        let map = self.map.read()?;
         let mut curr_mappoints = HashSet::new();
         for (mappoint_id, mappoint) in &map.mappoints {
             let pose = Pose::new_with_default_rot(mappoint.position);
@@ -572,9 +575,8 @@ impl DarvisVisualizer {
         // But won't update if a keyframe is deleted! Need to keep track of that and delete manually
 
         let mut entities = Vec::new();
-        let map = self.map.read().unwrap();
+        let map = self.map.read()?;
         for (kf_id, kf) in map.get_keyframes_iter() {
-            let kf = map.get_keyframe(*kf_id);
             let pose = kf.get_pose().inverse();
 
             let mut spheres = Vec::new();
@@ -651,10 +653,10 @@ impl DarvisVisualizer {
         ArrowPrimitive { 
             pose: Some(pose.into()),
             color: Some(color),
-            shaft_length: 0.025,
-            shaft_diameter: 0.025,
-            head_length: 0.05,
-            head_diameter: 0.035
+            shaft_length: 0.005,
+            shaft_diameter: 0.005,
+            head_length: 0.01,
+            head_diameter: 0.01
         }
     }
 

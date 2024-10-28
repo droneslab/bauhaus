@@ -430,6 +430,7 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
                 local_ba_for_kf.insert(kf_id, curr_kf_id);
             }
         }
+        println!("LI_BA, optimizable kfs: {:?}", optimizable_kfs);
 
         // Optimizable points seen by temporal optimizable keyframes
         for i in 0..optimizable_kfs.len() {
@@ -445,6 +446,7 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
                 }
             }
         }
+        println!("LI_BA, optimizable points: {:?}", local_mappoints);
     }
 
     // Fixed Keyframe: First frame previous KF to optimization window)
@@ -457,10 +459,12 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
         if let Some(prev_kf_id) = last_opt_kf.prev_kf_id {
             fixed_keyframes.push(prev_kf_id);
             ba_fixed_for_kf.insert(prev_kf_id, curr_kf_id);
+            println!("LI_BA, add fixed keyframe #1: {}", prev_kf_id);
         } else {
             ba_local_for_kf.insert(* optimizable_kfs.back().unwrap(), 0);
             ba_fixed_for_kf.insert(* optimizable_kfs.back().unwrap(), curr_kf_id);
             fixed_keyframes.push(* optimizable_kfs.back().unwrap());
+            println!("LI_BA, add fixed keyframe #2: {}", optimizable_kfs.back().unwrap());
             optimizable_kfs.pop_back();
         }
     }
@@ -510,6 +514,7 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
 
                 if local && fixed {
                     ba_fixed_for_kf.insert(* kf_id, curr_kf_id);
+                    fixed_keyframes.push(* kf_id);
                 }
             }
 
@@ -517,6 +522,7 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
                 break;
             }
         }
+        println!("LI_BA, fixed keyframes which are not covisible: {:?}", fixed_keyframes);
     }
 
     let non_fixed = fixed_keyframes.len() == 0;
@@ -533,7 +539,7 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
         // to avoid iterating for finding optimal lambda
         g2o::ffi::new_sparse_optimizer(5, camera_param, 1e-2)
     } else {
-        g2o::ffi::new_sparse_optimizer(5, camera_param, 1e10)
+        g2o::ffi::new_sparse_optimizer(5, camera_param, 1.0)
     };
 
 
@@ -924,7 +930,10 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
                 bwy: estimate.vb[1],
                 bwz: estimate.vb[2],
             };
-            map.write()?.get_keyframe_mut(kf_id).imu_data.imu_bias = b;
+            let mut lock = map.write()?;
+            let kf = lock.get_keyframe_mut(kf_id);
+            kf.imu_data.imu_bias = b;
+            kf.imu_data.velocity = Some(velocity.into());
         }
     }
 

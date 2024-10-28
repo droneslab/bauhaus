@@ -1,27 +1,24 @@
 use core::system::{Actor, MessageBox};
 use core::config::{SETTINGS, SYSTEM};
-use core::sensor::{FrameSensor, ImuSensor, Sensor};
+use core::sensor::{ImuSensor, Sensor};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::Duration;
-use log::{debug, error, info, trace, warn};
-use opencv::core::KeyPointTraitConst;
+use log::{debug, error, info, warn};
 use crate::actors::local_mapping::LOCAL_MAPPING_IDLE;
-use crate::actors::messages::{KeyFrameIdMsg, LoopClosureGBAMsg, UpdateFrameIMUMsg};
+use crate::actors::messages::{KeyFrameIdMsg, UpdateFrameIMUMsg};
 use crate::map::pose::{DVTranslation, Pose, Sim3};
 use crate::map::read_only_lock::ReadWriteMap;
-use crate::modules::module_definitions::{FeatureMatchingModule, ImuModule, LoopDetectionModule};
-use crate::modules::orbslam_matcher::ORBMatcherTrait;
-use crate::modules::sim3solver::Sim3Solver;
-use crate::modules::{optimizer};
-use crate::registered_actors::{self, FEATURE_MATCHING_MODULE, FULL_MAP_OPTIMIZATION_MODULE, VISUALIZER};
-use crate::{System};
+use crate::modules::module_definitions::LoopDetectionModule;
+use crate::modules::optimizer;
+use crate::registered_actors::{self, FEATURE_MATCHING_MODULE, FULL_MAP_OPTIMIZATION_MODULE};
+use crate::System;
 use crate::map::map::Id;
 use crate::modules::imu::IMU;
 
 use super::local_mapping::LOCAL_MAPPING_PAUSE_SWITCH;
-use super::messages::{ShutdownMsg};
+use super::messages::ShutdownMsg;
 
 pub type KeyFrameAndPose = HashMap<Id, Sim3>;
 
@@ -225,7 +222,6 @@ impl LoopClosing {
                     let connected_kf = lock.get_keyframe(*kf_id);
                     connected_kf.get_mp_matches().clone()
                 };
-                let mut count = 0;
                 for i in 0..mappoints.len() {
                     let mp_id = match mappoints.get(i).unwrap() {
                         Some((id, _)) => id,
@@ -254,7 +250,6 @@ impl LoopClosing {
                     } else {
                         error!("Mappoint {} has empty observations", mp_id);
                     }
-                    count += 1;
                 }
 
                 // Make sure connections are updated
@@ -519,7 +514,6 @@ fn run_gba(map: &mut ReadWriteMap, loop_kf: Id) -> Result<(), Box<dyn std::error
 
     set_switches(Switches::GbaDone);
 
-    info!("Map updated!");
     Ok(())
 }
 

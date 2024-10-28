@@ -1,13 +1,13 @@
 use std::{collections::{BTreeMap, BTreeSet, HashMap}, sync::atomic::Ordering, thread::sleep, time::Duration};
-use log::{warn, info, debug, error};
-use core::{config::*, matrix::DVMatrix, sensor::{FrameSensor, ImuSensor, Sensor}, system::{Actor, MessageBox, Timestamp}};
+use log::{warn, info, debug};
+use core::{config::*, sensor::{FrameSensor, ImuSensor, Sensor}, system::{Actor, MessageBox, Timestamp}};
 use crate::{
-    actors::{local_mapping::LOCAL_MAPPING_IDLE, loop_closing::KeyFrameAndPose, messages::{FeatureMsg, InitKeyFrameMsg, LastKeyFrameUpdatedMsg, ShutdownMsg, TrackingStateMsg, TrajectoryMsg, UpdateFrameIMUMsg, VisTrajectoryMsg}}, map::{
+    actors::{local_mapping::LOCAL_MAPPING_IDLE, messages::{FeatureMsg, InitKeyFrameMsg, LastKeyFrameUpdatedMsg, ShutdownMsg, TrackingStateMsg, TrajectoryMsg, UpdateFrameIMUMsg, VisTrajectoryMsg}}, map::{
         frame::Frame, map::Id, pose::Pose, read_only_lock::ReadWriteMap
-    }, modules::{imu::{normalize_rotation, ImuBias, ImuMeasurements, ImuPreIntegrated, GRAVITY_VALUE, IMU}, map_initialization::MapInitialization, module_definitions::FeatureMatchingModule, optimizer, orbslam_matcher, relocalization::Relocalization}, registered_actors::{self, FEATURE_MATCHING_MODULE, LOCAL_MAPPING, LOOP_CLOSING, SHUTDOWN_ACTOR, TRACKING_BACKEND, TRACKING_FRONTEND, VISUALIZER}, System, MAP_INITIALIZED
+    }, modules::{imu::{normalize_rotation, ImuMeasurements, ImuPreIntegrated, GRAVITY_VALUE, IMU}, map_initialization::MapInitialization, optimizer, relocalization::Relocalization}, registered_actors::{FEATURE_MATCHING_MODULE, LOCAL_MAPPING, SHUTDOWN_ACTOR, TRACKING_BACKEND, TRACKING_FRONTEND, VISUALIZER}, System, MAP_INITIALIZED
 };
 use crate::modules::module_definitions::ImuModule;
-use super::{messages::{NewKeyFrameMsg, Reset}};
+use super::messages::NewKeyFrameMsg;
 use crate::modules::module_definitions::MapInitializationModule;
 use crate::modules::module_definitions::RelocalizationModule;
 
@@ -147,7 +147,6 @@ impl TrackingBackend {
                         }
                         self.last_frame = Some(self.current_frame.clone());
                     }
-                    println!("after tracking done, reset map is {}, last frame is {}", reset_map, self.last_frame.is_some());
 
                     match self.state {
                         TrackingState::Ok | TrackingState::RecentlyLost => {
@@ -217,7 +216,6 @@ impl TrackingBackend {
 
         self.map_updated = self.map.read()?.map_change_index > self.last_map_change_index;
         self.last_map_change_index = self.map.read()?.map_change_index;
-        println!("Map updated: {:?} {:?}", self.map_updated, self.map.read()?.map_change_index);
 
         // Initial estimation of camera pose and matching
         match (self.localization_only_mode, self.state) {
@@ -326,41 +324,38 @@ impl TrackingBackend {
                 }
             },
             (false, TrackingState::RecentlyLost) => {
-                let relocalize_success = match self.imu.ready(&self.map)? {
-                    true => {
-                        todo!("Relocalization, shutting down for now.");
-                        // let _ok = self.imu.predict_state(&mut self.map, & self.current_frame);
-                        // self.relocalization.past_cutoff(&self.current_frame)
-                    },
-                    false => {
-                        // TODO (relocalization): remove the call to shutdown actor and uncomment line of code below.
-                        // This is just to gracefully shut down instead of panicking at the to do 
-                        todo!("Relocalization! Shutting down for now.");
-                        self.system.send(SHUTDOWN_ACTOR, Box::new(ShutdownMsg{}));
-                        self.state = TrackingState::Lost;
-                        return Ok((false, false));
-                        // !self.relocalization.run() && self.relocalization.sec_since_lost(&self.current_frame) > 3
-                    }
-                };
-                self.state = match relocalize_success {
-                    true => {
-                        warn!("Relocalization unsuccessful...");
-                        TrackingState::Lost
-                    },
-                    false => {
-                        warn!("Setting state to recently lost!");
-                        TrackingState::RecentlyLost
-                    }
-                }
+                todo!("Relocalization! Shutting down for now.");
+                // let relocalize_success = match self.imu.ready(&self.map)? {
+                //     true => {
+                //         let _ok = self.imu.predict_state(&mut self.map, & self.current_frame);
+                //         self.relocalization.past_cutoff(&self.current_frame)
+                //     },
+                //     false => {
+                //         self.system.send(SHUTDOWN_ACTOR, Box::new(ShutdownMsg{}));
+                //         self.state = TrackingState::Lost;
+                //         return Ok((false, false));
+                //         // !self.relocalization.run() && self.relocalization.sec_since_lost(&self.current_frame) > 3
+                //     }
+                // };
+                // self.state = match relocalize_success {
+                //     true => {
+                //         warn!("Relocalization unsuccessful...");
+                //         TrackingState::Lost
+                //     },
+                //     false => {
+                //         warn!("Setting state to recently lost!");
+                //         TrackingState::RecentlyLost
+                //     }
+                // }
             },
             (false, TrackingState::Lost) => {
                 match self.map.read()?.num_keyframes() < 10 {
                     true => {
                         warn!("Reseting current map...");
                         todo!("Multi-maps, Can use the reset_active_map_code but there is no multi-map reasoning.");
-                        self.system.send(SHUTDOWN_ACTOR, Box::new(ShutdownMsg{}));
-                        self.state = TrackingState::Lost;
-                        return Ok((false, false));
+                        // self.system.send(SHUTDOWN_ACTOR, Box::new(ShutdownMsg{}));
+                        // self.state = TrackingState::Lost;
+                        // return Ok((false, false));
                     },
                     false => {
                         info!("Creating new map...");
@@ -383,7 +378,7 @@ impl TrackingBackend {
         } else if matches!(self.state, TrackingState::Ok) {
             if self.sensor.is_imu() {
                 warn!("Track lost for less than 1 second, resetting active map...");
-                self.reset_active_map();
+                self.reset_active_map()?;
                 return Ok((false, true));
             }
             self.relocalization.timestamp_lost = Some(self.current_frame.timestamp);
@@ -429,6 +424,7 @@ impl TrackingBackend {
             let need_new_kf = self.need_new_keyframe()?;
             if need_new_kf && (matches!(self.state, TrackingState::Ok) || insert_if_lost_anyway) {
                 self.create_new_keyframe();
+                println!("CREATED NEW KF!");
                 created_new_kf = true;
             }
 
@@ -489,7 +485,6 @@ impl TrackingBackend {
                 timestamp: last_frame.timestamp
             })
         );
-
         self.system.try_send(VISUALIZER, Box::new(VisTrajectoryMsg{
             pose: self.current_frame.pose.unwrap(),
             mappoint_matches: self.current_frame.mappoint_matches.matches.clone(),
@@ -507,13 +502,11 @@ impl TrackingBackend {
         // We perform first an ORB matching with the reference keyframe
         // If enough matches are found we setup a PnP solver
 
-        println!("TRACK REFERENCE KF");
         self.current_frame.compute_bow();
         let nmatches;
         {
             let map_read_lock = self.map.read()?;
             self.ref_kf_id = Some(map_read_lock.last_kf_id);
-            println!("(1) TRACK REF KF, SET REF KF TO: {}", self.ref_kf_id.unwrap());
             let ref_kf = map_read_lock.get_keyframe(self.ref_kf_id.unwrap());
 
             nmatches = FEATURE_MATCHING_MODULE.search_by_bow_with_frame(ref_kf, &mut self.current_frame, true, 0.7)?;
@@ -724,19 +717,17 @@ impl TrackingBackend {
             Err(e) => warn!("Error in search_local_points: {}", e)
         }
 
+        println!("Before pose optimization, keyframe pose is: {:?}", self.current_frame.pose.unwrap());
         if !self.map.read()?.imu_initialized {
-            println!("POSE OPTIMIZATION CHOICE... regular (imu not init)");
             optimizer::optimize_pose(&mut self.current_frame, &self.map)?;
         } else if self.current_frame.frame_id <= self.relocalization.last_reloc_frame_id + (self.frames_to_reset_imu as i32) {
-            println!("POSE OPTIMIZATION CHOICE... regular");
             optimizer::optimize_pose(&mut self.current_frame, &self.map)?;
         } else if !self.map_updated {
-            println!("POSE OPTIMIZATION CHOICE... last frame");
             optimizer::pose_inertial_optimization_last_frame(&mut self.current_frame, &mut self.last_frame.as_mut().unwrap(), & self.track_in_view, &self.map, &self.sensor)?;
         } else {
-            println!("POSE OPTIMIZATION CHOICE... last keyframe");
             optimizer::pose_inertial_optimization_last_keyframe(&mut self.current_frame, & self.track_in_view, &self.map, &self.sensor)?;
         }
+        println!("After pose optimization, keyframe pose is: {:?}", self.current_frame.pose.unwrap());
 
         self.matches_inliers = 0;
         // Update MapPoints Statistics
@@ -781,6 +772,20 @@ impl TrackingBackend {
                 return Ok((self.matches_inliers > 10, self.matches_inliers));
             },
             _ => {}
+        }
+
+        println!("Sofiya debug, current pose: translation: {:?}, rotation: {:?}", self.current_frame.pose.unwrap().get_translation(), self.current_frame.pose.unwrap().get_rotation());
+
+        if self.matches_inliers == 0 && self.current_frame.frame_id > 800 {
+            self.system.try_send(VISUALIZER, Box::new(VisTrajectoryMsg{
+                pose: self.current_frame.pose.unwrap(),
+                mappoint_matches: self.current_frame.mappoint_matches.matches.clone(),
+                nontracked_mappoints: self.non_tracked_mappoints.clone(),
+                mappoints_in_tracking: self.local_mappoints.clone(),
+                timestamp: self.current_frame.timestamp
+            }));
+            println!("PAUSED AT FRAME {}", self.current_frame.frame_id);
+            sleep(Duration::from_millis(100000));
         }
 
         println!("Track local map... matches inliers: {}, imu initialized: {}", self.matches_inliers, self.map.read()?.imu_initialized);
@@ -911,7 +916,6 @@ impl TrackingBackend {
         if max_kf_id != 0 {
             self.current_frame.ref_kf_id = Some(max_kf_id);
             self.ref_kf_id = Some(max_kf_id);
-            println!("(2) TRACK REF KF, SET REF KF TO: {}", self.ref_kf_id.unwrap());
         }
         Ok(())
     }
@@ -1162,6 +1166,10 @@ impl TrackingBackend {
         let num_kfs = self.map.read()?.num_keyframes();
         let not_enough_frames_since_last_reloc = (self.current_frame.frame_id < self.relocalization.last_reloc_frame_id + (self.max_frames_to_insert_kf as i32)) && (num_kfs as i32 > self.max_frames_to_insert_kf);
 
+        if not_enough_frames_since_last_reloc {
+            return Ok(false);
+        }
+
         if self.sensor.is_imu() && !self.map.read()?.imu_initialized {
             if (self.current_frame.timestamp - self.last_kf_timestamp.unwrap()) * 1e9 >= 0.25 { // 250 milliseconds
                 return Ok(true);
@@ -1249,19 +1257,19 @@ impl TrackingBackend {
 
     pub fn update_frame_imu(&mut self, msg: UpdateFrameIMUMsg) -> Result<(), Box<dyn std::error::Error>>{
         // void Tracking::UpdateFrameIMU(const float s, const IMU::Bias &b, KeyFrame* pCurrentKeyFrame)
+        let _span = tracy_client::span!("update_frame_imu");
+
         let scale = msg.scale;
         let imu_bias = msg.imu_bias;
         let current_kf_id = msg.current_kf_id;
         let expected_map_version = msg.expected_map_version;
-        println!("UpdateFrameIMU, Set bias for KF {}, scale is {}, bias is {}", current_kf_id, scale, imu_bias);
+        println!("IMU: Updateframeimu, Set bias for KF {}, scale is {}, bias is {}", current_kf_id, scale, imu_bias);
         // Map * pMap = pCurrentKeyFrame->GetMap();
         // unsigned int index = mnFirstFrameId;
         // list<ORB_SLAM3::KeyFrame*>::iterator lRit = mlpReferences.begin();
         // list<bool>::iterator lbL = mlbLost.begin(); // todo this is always true??
 
         let lock = self.map.read()?;
-
-        println!("Check version? {} {}", self.map.get_version(), expected_map_version);
 
         if self.map.get_version() != expected_map_version {
             warn!("Map was reset since this message was sent, ignoring!");
@@ -1270,41 +1278,17 @@ impl TrackingBackend {
 
         for i in 0..self.trajectory_poses.len() {
             let mut pose = self.trajectory_poses[i];
-            let (mut kf_id, mut parent_id) = self.reference_kfs_for_trajectory[i];
-            if !lock.has_keyframe(kf_id) {
-                kf_id = kf_id - 1;
-            }
-
-            // while !lock.has_keyframe(kf_id) {
-            //     parent_id = parent_id;
- 
-            //     if let Some(parent) = parent_id {
-            //         kf_id = parent;
-            //     } else {
-            //         break;
-            //     }
-            // }
-
-            if lock.get_keyframe(kf_id).origin_map_id == lock.id {
-                // println!("OLD TRANSLATION FOR KF {}: {:?}", kf, pose.get_translation());
-                pose.set_translation(*pose.get_translation() * (scale));
-                println!("Set new translation for kf {}: {:?}", kf_id, pose.get_translation());
-            }
+            pose.set_translation(*pose.get_translation() * (scale));
         }
-        self.imu.last_bias = Some(imu_bias);
         self.last_kf_timestamp = Some(lock.get_keyframe(current_kf_id).timestamp);
         self.last_frame.as_mut().unwrap().imu_data.set_new_bias(imu_bias);
         self.current_frame.imu_data.set_new_bias(imu_bias);
-
-        while !self.current_frame.imu_data.imu_preintegrated.is_some() {
-            println!("Waiting for bias to be set");
-            std::thread::sleep(std::time::Duration::from_millis(500));
-        }
 
         // if(mLastFrame.mnId == mLastFrame.mpLastKeyFrame->mnFrameId)
         let lock = lock;
         let last_kf = lock.get_keyframe(lock.last_kf_id);
         if self.last_frame.as_ref().unwrap().frame_id == lock.last_kf_id {
+            let last_rot = self.last_frame.as_ref().unwrap().pose.unwrap().get_rotation();
             self.last_frame.as_mut().unwrap().set_imu_pose_velocity(
             Pose::new(
                 * last_kf.get_imu_position(),
@@ -1312,28 +1296,42 @@ impl TrackingBackend {
             ),
             * last_kf.imu_data.get_velocity()
             );
-            println!("setimuposevelocity #1");
+            debug!("IMU: Updateframeimu, Last frame pose diff: {:?}", *last_kf.get_pose().get_rotation() - *last_rot);
         } else {
+            let last_frame = self.last_frame.as_mut().unwrap();
             let gz = nalgebra::Vector3::new(0.0, 0.0, -GRAVITY_VALUE);
             let twb1 = * last_kf.get_imu_position();
             let rwb1 = * last_kf.get_imu_rotation();
             let vwb1 = * last_kf.imu_data.get_velocity();
             let t12 = last_kf.imu_data.imu_preintegrated.as_ref().unwrap().d_t;
 
-                        println!("setimuposevelocity #2");
-
-            println!("twb1: {:?}, rwb1: {:?}, vwb1: {:?}, t12: {}", twb1, rwb1, vwb1, t12);
-            let delta_rot = last_kf.imu_data.imu_preintegrated.as_ref().unwrap().get_updated_delta_rotation();
-            let delta_pos = last_kf.imu_data.imu_preintegrated.as_ref().unwrap().get_updated_delta_position();
-            let delta_vel = last_kf.imu_data.imu_preintegrated.as_ref().unwrap().get_updated_delta_velocity();
-            self.last_frame.as_mut().unwrap().set_imu_pose_velocity(
+            let last_rot = last_frame.pose.unwrap().get_rotation();
+            let last_trans = last_frame.pose.unwrap().get_translation();
+            let delta_rot = last_frame.imu_data.imu_preintegrated.as_ref().unwrap().get_updated_delta_rotation();
+            let delta_pos = last_frame.imu_data.imu_preintegrated.as_ref().unwrap().get_updated_delta_position();
+            let delta_vel = last_frame.imu_data.imu_preintegrated.as_ref().unwrap().get_updated_delta_velocity();
+            last_frame.set_imu_pose_velocity(
                 Pose::new(
                     twb1 + vwb1 * t12 + 0.5 * t12 * t12 * gz + rwb1 * delta_pos,
                     * normalize_rotation(rwb1 * delta_rot),
                 ),
                 vwb1 + gz * t12 + rwb1 * delta_vel
             );
-            println!("t12: {}, delta_pos: {:?}, delta_rot: {:?}, delta_vel: {:?}", t12, delta_pos, delta_rot, delta_vel);
+
+            debug!("IMU: Updateframeimu, last frame id: {}, Last frame diff rotation: {:?}", last_frame.frame_id, *last_frame.pose.unwrap().get_rotation() - *last_rot);
+            println!("IMU: Updateframeimu, last frame diff translation: {:?}", *last_frame.pose.unwrap().get_translation() - *last_trans);
+
+
+            println!("last_rot = {:?}", last_rot);
+            println!("last trans = {:?}", last_trans);
+            println!("delta rot = {:?}", delta_rot);
+            println!("delta pos = {:?}", delta_pos);
+            println!("delta vel = {:?}", delta_vel);
+            println!("twb1 = {:?}", twb1);
+            println!("rwb1 = {:?}", rwb1);
+            println!("vwb1 = {:?}", vwb1);
+            println!("t12 = {:?}", t12);
+
         }
 
         if self.current_frame.imu_data.imu_preintegrated.is_some() {
@@ -1347,8 +1345,10 @@ impl TrackingBackend {
             let delta_rot = self.current_frame.imu_data.imu_preintegrated.as_ref().unwrap().get_updated_delta_rotation();
             let delta_pos = self.current_frame.imu_data.imu_preintegrated.as_ref().unwrap().get_updated_delta_position();
             let delta_vel = self.current_frame.imu_data.imu_preintegrated.as_ref().unwrap().get_updated_delta_velocity();
-            
-            println!("Set current frame imu preintegrated");
+
+            // Sofiya... I think the current frame pose is getting rotated/flipped here?
+            let last_rot = self.current_frame.pose.unwrap().get_rotation();
+            let last_trans = self.current_frame.pose.unwrap().get_translation();
 
             self.current_frame.set_imu_pose_velocity(
                 Pose::new(
@@ -1357,7 +1357,26 @@ impl TrackingBackend {
                 ),
                 vwb1 + gz * t12 + rwb1 * delta_vel
             );
+            println!("IMU: Updateframeimu, Current frame diff rotation: {:?}", *self.current_frame.pose.unwrap().get_rotation() - *last_rot);
+            println!("IMU: Updateframeimu, Current frame diff translation: {:?}", *self.current_frame.pose.unwrap().get_translation() - *last_trans);
+
+
         }
+        // if self.current_frame.frame_id > 600 {
+        //     tracy_client::Client::running()
+        //     .expect("message! without a running Client")
+        //     .message("PAUSED!", 2);
+
+        //     self.system.try_send(VISUALIZER, Box::new(VisTrajectoryMsg{
+        //         pose: self.current_frame.pose.unwrap(),
+        //         mappoint_matches: self.current_frame.mappoint_matches.matches.clone(),
+        //         nontracked_mappoints: self.non_tracked_mappoints.clone(),
+        //         mappoints_in_tracking: self.local_mappoints.clone(),
+        //         timestamp: self.current_frame.timestamp
+        //     }));
+        //     println!("PAUSED AT FRAME {}", self.current_frame.frame_id);
+        //     sleep(Duration::from_millis(100000));
+        // }
         Ok(())
     }
 
@@ -1413,7 +1432,7 @@ impl TrackingBackend {
     }
 
     //* For tests */
-    pub fn new_test(system: System, map: ReadWriteMap) -> Self {
+    pub fn _new_test(system: System, map: ReadWriteMap) -> Self {
         let sensor = SETTINGS.get::<Sensor>(SYSTEM, "sensor");
         TrackingBackend {
             system,

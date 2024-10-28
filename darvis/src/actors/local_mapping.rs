@@ -77,9 +77,7 @@ impl Actor for LocalMapping {
             let message = actor.system.receive().unwrap();
             // Actor can early-return if self.map.read() returns an incorrect version of the map
             // see read() in read_only_lock.rs for more info
-            if actor.handle_message(message).is_ok() {
-                continue;
-            } else {
+            if !actor.handle_message(message).is_ok() {
                 println!("LOCAL MAPPING RESET !");
                 actor.current_keyframe_id= -1;
                 actor.recently_added_mappoints.clear();
@@ -112,7 +110,6 @@ impl LocalMapping {
             // the keyframe is bringing in mappoints that local mapping hasn't created.
             // TODO (Stereo) ... Tracking can insert new stereo points, so we will also need to add in new points when processing a NewKeyFrameMsg.
             if self.map.read()?.has_keyframe(self.current_keyframe_id) {
-                let kf = self.map.read()?.get_keyframe(self.current_keyframe_id);
                 // If because of timing with map reset of tracking, tracking could have deleted map in meantime
                 // Really need to think through this because otherwise we will have to check everywhere
                 self.recently_added_mappoints.extend(

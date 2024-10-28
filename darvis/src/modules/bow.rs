@@ -1,19 +1,10 @@
 use std::fmt;
 use cxx::{UniquePtr, let_cxx_string};
 use log::info;
-use core::{matrix::DVMatrix,};
+use core::matrix::DVMatrix;
 use crate::modules::module_definitions::VocabularyModule;
 
-use crate::map::keyframe::KeyFrame;
-
 use super::module_definitions::BoWModule;
-
-pub struct OpenCVVisionImpl { }
-impl OpenCVVisionImpl {
-    pub fn new() -> Self {
-        Self { }
-    }
-}
 
 pub struct Vocabulary {
     vocabulary: UniquePtr<dvos3binding::ffi::ORBVocabulary>,

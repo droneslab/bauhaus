@@ -1,11 +1,11 @@
+#![allow(dead_code)]
+
 use std::collections::{BTreeMap, HashMap, HashSet};
-use log::{info, warn, error, debug};
-use rustc_hash::FxHashMap;
+use log::{info, error, debug};
 use core::{config::{SETTINGS, SYSTEM}, matrix::DVVector3, sensor::Sensor};
 use crate::map::{keyframe::*, mappoint::*};
-use std::ops::MulAssign;
 
-use super::{frame::Frame, keyframe_database::KeyFrameDatabase, pose::{DVTranslation, Pose}};
+use super::{frame::Frame, keyframe_database::KeyFrameDatabase, pose::Pose};
 
 pub type Id = i32;
 // pub type MapItems<T> = HashMap<Id, T>;
@@ -66,7 +66,7 @@ impl Map {
         }
     }
 
-    pub fn print_current_map(&self, identifier: String) {
+    pub fn _print_current_map(&self, identifier: String) {
         // For debugging
         debug!("PRINT MAP START;{}", identifier);
         for (id, kf) in &self.keyframes {
@@ -494,12 +494,12 @@ impl Map {
         self.keyframe_database.detect_n_best_candidates(&self, &kf_id, num_candidates)
     }
 
-    pub fn detect_loop_candidates_above_min_score(&self, kf_id: Id, min_score: f32) -> Vec<Id> {
-        self.keyframe_database.detect_candidates_above_score(&self, &kf_id, min_score)
+    pub fn _detect_loop_candidates_above_min_score(&self, kf_id: Id, min_score: f32) -> Vec<Id> {
+        self.keyframe_database._detect_candidates_above_score(&self, &kf_id, min_score)
     }
 
-    pub fn  detect_relocalization_candidates(&self, frame: &Frame) -> Vec<Id> {
-        self.keyframe_database.detect_relocalization_candidates(&self, frame)
+    pub fn  _detect_relocalization_candidates(&self, frame: &Frame) -> Vec<Id> {
+        self.keyframe_database._detect_relocalization_candidates(&self, frame)
     }
 
 

@@ -1,4 +1,5 @@
 // Everything in this function uses opencv::Mat objects instead of nalgebra or DVMatrix (which wraps nalgebra) objects
+#![allow(non_snake_case)]
 
 use std::{cmp::{max, min}, collections::HashMap};
 
@@ -8,7 +9,7 @@ use opencv::{core::{no_array, norm, MatExprResult, Range, Scalar, CV_64F, NORM_L
 use rand::Rng;
 use crate::{map::read_only_lock::ReadWriteMap, modules::module_definitions::CameraModule};
 
-use crate::{map::{map::Id, pose::{DVRotation, Sim3}}, modules::optimizer::LEVEL_SIGMA2, registered_actors::CAMERA_MODULE};
+use crate::{map::{map::Id, pose::Sim3}, modules::optimizer::LEVEL_SIGMA2, registered_actors::CAMERA_MODULE};
 use opencv::prelude::*;
 
 pub struct Sim3Solver {
@@ -38,8 +39,7 @@ pub struct Sim3Solver {
 impl Sim3Solver {
     pub fn new(
         map: &ReadWriteMap,
-        kf1_id: Id, kf2_id: Id, matches: &HashMap<usize, Id>, fix_scale: bool,
-        mut keyframe_matched_mp: HashMap<usize, Id>
+        kf1_id: Id, kf2_id: Id, matches: &HashMap<usize, Id>, fix_scale: bool
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let map_lock = map.read()?;
         let kf1 = map_lock.get_keyframe(kf1_id);
@@ -447,7 +447,6 @@ struct Sim3Estimation{
     inliers_i: Vec<bool>, // mvbInliersi
     inliers_count: i32, // mnInliersi
 }
-
 
 struct RansacState {
     // Current Ransac State
