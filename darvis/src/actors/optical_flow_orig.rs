@@ -272,7 +272,7 @@
 //                         if last_frame.is_some() && last_frame.as_ref().unwrap().ref_kf_id.is_some()
 //                         {
 //                             let relative_pose = {
-//                                 let map_read = actor.map.read().unwrap();
+//                                 let map_read = actor.map.read()?;
 //                                 let mut last_frame_map = map_read.keyframes.get(&last_kf_id).unwrap().pose.clone();
 //                                 last_frame_map
 //                             };
@@ -287,7 +287,7 @@
 //                             if last_kf_id != actor.ref_kf_id.unwrap() {
 //                                 // last_pose = Pose::new(nalgebra::Vector3::new(0.0, 0.0, 0.0), nalgebra::Matrix3::identity());
 
-//                                 // last_pose = actor.map.read().unwrap().keyframes.get(&last_kf_id).unwrap().pose.clone();
+//                                 // last_pose = actor.map.read()?.keyframes.get(&last_kf_id).unwrap().pose.clone();
 //                                 last_kf_id = actor.ref_kf_id.unwrap();
 //                             }
 //                         }
@@ -639,16 +639,16 @@
 //                                         // Set current frame's updated info from map initialization
 //                                         current_frame.ref_kf_id = Some(curr_kf_id);
 //                                         current_frame.pose = Some(curr_kf_pose);
-//                                         current_frame.mappoint_matches = self.map.read().unwrap().keyframes.get(&curr_kf_id).unwrap().clone_matches();
+//                                         current_frame.mappoint_matches = self.map.read()?.keyframes.get(&curr_kf_id).unwrap().clone_matches();
 //                                     }
 //                                     self.state = TrackingState::Ok;
 
 //                                     // Log initial pose in shutdown actor
 //                                     self.system.send(SHUTDOWN_ACTOR, 
 //                                     Box::new(TrajectoryMsg{
-//                                             pose: self.map.read().unwrap().keyframes.get(&ini_kf_id).unwrap().pose,
+//                                             pose: self.map.read()?.keyframes.get(&ini_kf_id).unwrap().pose,
 //                                             ref_kf_id: ini_kf_id,
-//                                             timestamp: self.map.read().unwrap().keyframes.get(&ini_kf_id).unwrap().timestamp
+//                                             timestamp: self.map.read()?.keyframes.get(&ini_kf_id).unwrap().timestamp
 //                                         })
 //                                     );
 
@@ -696,7 +696,7 @@
 //                     true => TrackingState::Ok,
 //                     false => {
 //                         self.relocalization.timestamp_lost = Some(current_frame.timestamp);
-//                         match self.map.read().unwrap().num_keyframes() > 10 {
+//                         match self.map.read()?.num_keyframes() > 10 {
 //                             true =>{warn!("State recently lost!"); TrackingState::RecentlyLost},
 //                             false => TrackingState::Lost
 //                         }
@@ -731,7 +731,7 @@
 //                 }
 //             },
 //             (false, TrackingState::Lost) => {
-//                 match self.map.read().unwrap().num_keyframes() < 10 {
+//                 match self.map.read()?.num_keyframes() < 10 {
 //                     true => {
 //                         warn!("Reseting current map...");
 //                         error!("Resetting current map! Shutting down for now.");
@@ -789,7 +789,7 @@
 //             }
 
 //             // Clean VO matches
-//             current_frame.delete_mappoints_without_observations(&self.map.read().unwrap());
+//             current_frame.delete_mappoints_without_observations(&self.map.read()?);
 
 //             // Check if we need to insert a new keyframe
 //             let insert_if_lost_anyway = self.insert_kfs_when_lost && matches!(self.state, TrackingState::RecentlyLost) && self.sensor.is_imu();
@@ -808,7 +808,7 @@
 
 //         // Reset if the camera get lost soon after initialization
 //         if matches!(self.state, TrackingState::Lost) {
-//             if self.map.read().unwrap().num_keyframes() <= 10  || (self.sensor.is_imu() && !self.imu.is_initialized) {
+//             if self.map.read()?.num_keyframes() <= 10  || (self.sensor.is_imu() && !self.imu.is_initialized) {
 //                 warn!("tracking_backend::handle_message;Track lost soon after initialization, resetting...",);
 //                 // TODO (RESET)
 //             } else {
@@ -833,7 +833,7 @@
 //                 // the next iteration.
 //                 current_frame.pose.unwrap()
 //             } else {
-//                 let map = self.map.read().unwrap();
+//                 let map = self.map.read()?;
 //                 let ref_kf = map.keyframes.get(&self.ref_kf_id.unwrap()).expect("Can't get ref kf from map");
 //                 ref_kf.pose
 //             };
@@ -873,7 +873,7 @@
 //         current_frame.compute_bow();
 //         let nmatches;
 //         {
-//             let map_read_lock = self.map.read().unwrap();
+//             let map_read_lock = self.map.read()?;
 //             self.ref_kf_id = Some(map_read_lock.last_kf_id);
 //             let ref_kf = map_read_lock.keyframes.get(&self.ref_kf_id.unwrap()).unwrap();
 
@@ -940,7 +940,7 @@
 //             &self.map,
 //             self.sensor
 //         )?;
-//         debug!("Tracking search by projection with previous frame: {} matches / {} mappoints in last frame. ({} total mappoints in map)", matches, last_frame.mappoint_matches.debug_count, self.map.read().unwrap().mappoints.len());
+//         debug!("Tracking search by projection with previous frame: {} matches / {} mappoints in last frame. ({} total mappoints in map)", matches, last_frame.mappoint_matches.debug_count, self.map.read()?.mappoints.len());
 
 //         // If few matches, uses a wider window search
 //         if matches < 20 {
@@ -954,7 +954,7 @@
 //                 &self.map,
 //                 self.sensor
 //             )?;
-//             debug!("Tracking search by projection with previous frame: {} matches / {} mappoints in last frame. ({} total mappoints in map)", matches, last_frame.mappoint_matches.debug_count, self.map.read().unwrap().mappoints.len());
+//             debug!("Tracking search by projection with previous frame: {} matches / {} mappoints in last frame. ({} total mappoints in map)", matches, last_frame.mappoint_matches.debug_count, self.map.read()?.mappoints.len());
 //         }
 
 //         if matches < 20 {
@@ -986,7 +986,7 @@
 
 //         // Update pose according to reference keyframe
 //         let ref_kf_id = last_frame.ref_kf_id.unwrap();
-//         let map_lock = self.map.read().unwrap();
+//         let map_lock = self.map.read()?;
 //         let ref_kf_pose = map_lock.keyframes.get(&ref_kf_id).expect(format!("Reference kf {} should be in map", ref_kf_id).as_str()).pose;
 //         last_frame.pose = Some(*self.trajectory_poses.last().unwrap() * ref_kf_pose);
 
@@ -1083,12 +1083,12 @@
 //         for index in 0..current_frame.mappoint_matches.len() {
 //             if let Some((mp_id, is_outlier)) = current_frame.mappoint_matches.get(index) {
 //                 if !is_outlier {
-//                     if let Some(mp) = self.map.read().unwrap().mappoints.get(&mp_id) {
+//                     if let Some(mp) = self.map.read()?.mappoints.get(&mp_id) {
 //                         mp.increase_found(1);
 //                     }
 
 //                     if self.localization_only_mode {
-//                         let map_read_lock = self.map.read().unwrap();
+//                         let map_read_lock = self.map.read()?;
 //                         if let Some(mp) = map_read_lock.mappoints.get(&mp_id) {
 //                             if mp.get_observations().len() > 0 {
 //                                 self.matches_inliers+=1;
@@ -1143,7 +1143,7 @@
 
 //         // BTreeMap so items are sorted, so we have the same output as orbslam for testing. Can probably revert to regular hashmap later.
 //         let mut kf_counter = BTreeMap::<Id, i32>::new();
-//         let lock = self.map.read().unwrap();
+//         let lock = self.map.read()?;
 //         // TODO (IMU) ... Check below should be !self.imu.is_initialized || current_frame.frame_id < self.relocalization.last_reloc_frame_id + 2
 //         if current_frame.frame_id < self.relocalization.last_reloc_frame_id + 2 {
 //             for i in 0..current_frame.mappoint_matches.len() {
@@ -1245,7 +1245,7 @@
 //         let _span = tracy_client::span!("update_local_points");
 //         // void Tracking::UpdateLocalPoints()
 //         self.local_mappoints.clear();
-//         let lock = self.map.read().unwrap();
+//         let lock = self.map.read()?;
 //         let mut kfs_to_remove = vec![];
 //         for kf_id in self.local_keyframes.iter().rev() {
 //             match lock.keyframes.get(kf_id) {
@@ -1277,7 +1277,7 @@
 //         // Do not search map points already matched
 //         {
 //             let mut increased_visible = vec![];
-//             let lock = self.map.read().unwrap();
+//             let lock = self.map.read()?;
 //             for index in 0..current_frame.mappoint_matches.len() {
 //                 if let Some((id, _)) = current_frame.mappoint_matches.get(index as usize) {
 //                     if let Some(mp) = lock.mappoints.get(&id) {
@@ -1297,7 +1297,7 @@
 //         // Project points in frame and check its visibility
 //         let mut to_match = 0;
 //         {
-//             let lock = self.map.read().unwrap();
+//             let lock = self.map.read()?;
 //             for mp_id in &self.local_mappoints {
 //                 if self.last_frame_seen.get(mp_id) == Some(&current_frame.frame_id) {
 //                     continue;
@@ -1360,7 +1360,7 @@
 //                 &self.track_in_view, &self.track_in_view_r,
 //                 &self.map, self.sensor
 //             )?;
-//             debug!("Tracking search local points: {} matches / {} local points. ({} total mappoints in map)", matches, self.local_mappoints.len(), self.map.read().unwrap().mappoints.len());
+//             debug!("Tracking search local points: {} matches / {} local points. ({} total mappoints in map)", matches, self.local_mappoints.len(), self.map.read()?.mappoints.len());
 
 //         }
 
@@ -1481,7 +1481,7 @@
 //     }
 
 //     fn need_new_keyframe(&mut self, current_frame: &mut Frame) -> bool {
-//         let num_kfs = self.map.read().unwrap().num_keyframes();
+//         let num_kfs = self.map.read()?.num_keyframes();
 //         let not_enough_frames_since_last_reloc = (current_frame.frame_id < self.relocalization.last_reloc_frame_id + (self.max_frames_to_insert_kf as i32)) && (num_kfs as i32 > self.max_frames_to_insert_kf);
 //         let imu_not_initialized = self.sensor.is_imu() && !self.imu.is_initialized;
 
@@ -1502,7 +1502,7 @@
 //             false => 3
 //         };
 
-//         let map_lock = self.map.read().unwrap();
+//         let map_lock = self.map.read()?;
 //         let tracked_mappoints = map_lock.keyframes.get(&self.ref_kf_id.unwrap())
 //             .map(|kf| kf.get_tracked_mappoints(&*map_lock, min_observations) as f32)
 //             .unwrap_or(0.0);
@@ -1581,7 +1581,7 @@
 //             // }
 //             self.last_frame_seen.insert(mp_id, current_frame.frame_id);
 //         }
-//         current_frame.mappoint_matches.tracked_mappoints(&*self.map.read().unwrap(), 1)
+//         current_frame.mappoint_matches.tracked_mappoints(&*self.map.read()?, 1)
 //     }
 
 //     //* Next steps */

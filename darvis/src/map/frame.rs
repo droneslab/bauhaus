@@ -1,10 +1,8 @@
-use core::{config::{SETTINGS, SYSTEM}, matrix::{DVMatrix, DVMatrix3, DVVector3, DVVectorOfKeyPoint}, sensor::{FrameSensor, ImuSensor, Sensor}, system::Timestamp};
-use log::debug;
-use opencv::core::{KeyPoint, Mat};
+use core::{config::{SETTINGS, SYSTEM}, matrix::{DVMatrix, DVMatrix3, DVVector3, DVVectorOfKeyPoint}, sensor::{FrameSensor, Sensor}, system::Timestamp};
 
 use crate::modules::{imu::{ImuCalib, ImuDataFrame}, module_definitions::VocabularyModule};
 
-use crate::{actors::tracking_backend::TrackedMapPointData, modules::{bow::DVBoW, imu::{ImuBias, ImuPreIntegrated}}, registered_actors::{CAMERA_MODULE, VOCABULARY_MODULE}};
+use crate::{actors::tracking_backend::TrackedMapPointData, modules::bow::DVBoW, registered_actors::{CAMERA_MODULE, VOCABULARY_MODULE}};
 
 use super::{features::Features, keyframe::MapPointMatches, map::{Id, Map}, mappoint::MapPoint, pose::{DVTranslation, Pose}};
 use crate::modules::module_definitions::CameraModule;
@@ -72,10 +70,6 @@ impl Frame {
         let sensor = SETTINGS.get::<Sensor>(SYSTEM, "sensor");
         let features = Features::empty();
         let num_keypoints = features.num_keypoints as usize;
-        let imu_bias = match sensor.imu() {
-            ImuSensor::Some => Some(ImuBias::new()),
-            _ => None
-        };
         let frame = Self {
             frame_id,
             timestamp,
@@ -119,7 +113,7 @@ impl Frame {
         Ok(())
     }
 
-    pub fn get_camera_center(&self) -> Option<DVTranslation> {
+    pub fn _get_camera_center(&self) -> Option<DVTranslation> {
         Some(DVTranslation::new(-self.pose?.get_rotation().transpose() * *self.pose?.get_translation()))
     }
 
@@ -201,14 +195,6 @@ impl Frame {
     }
 
 
-    pub fn get_pose_relative(&self, map: &Map) -> Pose {
-        let pose = self.pose.unwrap();
-        let ref_kf_id = self.ref_kf_id.unwrap();
-        let ref_kf = map.get_keyframe(ref_kf_id);
-        let ref_kf_pose = ref_kf.get_pose();
-        pose * ref_kf_pose.inverse()
-    }
-
     pub fn delete_mappoint_outliers(&mut self) -> Vec<(Id, usize)> {
         // Should only be called on a Frame.
         // In the chance you might want to call this on a keyframe, you also need to delete the mappoints' observations to the kf!
@@ -228,7 +214,7 @@ impl Frame {
         // Should only be called on a Frame.
         // In the chance you might want to call this on a keyframe, you also need to delete the mappoints' observations to the kf!
         for i in 0..self.mappoint_matches.len() {
-            if let Some((mp_id, is_outlier)) = self.mappoint_matches.get(i as usize) {
+            if let Some((mp_id, _is_outlier)) = self.mappoint_matches.get(i as usize) {
                 match map.mappoints.get(&mp_id) {
                     Some(mp) => {
                         if mp.get_observations().len() == 0 {
@@ -262,9 +248,8 @@ impl Frame {
 
     pub fn set_imu_pose_velocity(&mut self, new_pose: Pose, vwb: nalgebra::Vector3<f64>) {
         // void Frame::SetImuPoseVelocity(const Eigen::Matrix3f &Rwb, const Eigen::Vector3f &twb, const Eigen::Vector3f &Vwb)
-        debug!("SET VELOCITY: {:?} ", vwb);
         self.imu_data.velocity = Some(DVVector3::new(vwb));
-        let new_pose = new_pose.inverse(); // Tbw
+        let new_pose = new_pose.group_inverse(); // Tbw
         self.pose = Some(ImuCalib::new().tcb * new_pose);
     }
 

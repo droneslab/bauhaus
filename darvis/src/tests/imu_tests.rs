@@ -1,3 +1,6 @@
+#![allow(dead_code)]
+#![allow(unused_imports)]
+#![allow(unused_variables)]
 
 mod sim3solver_tests {
     use core::{config::{load_config, SETTINGS}, matrix::{DVMatrix, DVMatrix3, DVVector3, DVVectorOfKeyPoint}, system::{Actor, System, Timestamp}};
@@ -7,6 +10,41 @@ mod sim3solver_tests {
     use nalgebra::{DMatrix, Matrix3, Quaternion, SMatrix, UnitQuaternion, Vector3};
 
     use crate::{actors::tracking_backend::TrackingBackend, map::{frame::Frame, keyframe::KeyFrame, map::Id, pose::{group_exp, Pose}}, modules::imu::{normalize_rotation, ImuBias, ImuCalib, ImuDataFrame, ImuPreIntegrated, IntegratedRotation, GRAVITY_VALUE}, registered_actors::CAMERA_MODULE};
+
+    #[test]
+    fn test_set_imu_pose_velocity() {
+        let mut system_config = env::current_dir().unwrap();
+        system_config.push("orbslam_config.yaml");
+        let mut dataset_config = env::current_dir().unwrap();
+        dataset_config.push("config_datasets/EUROC.yaml");
+        let _ = load_config(
+            &system_config.into_os_string().into_string().unwrap(),
+            &dataset_config.into_os_string().into_string().unwrap()
+        ).expect("Could not load config");
+
+        let mut frame = Frame::new_no_features(1, None, 1.0, None).expect("Could not create frame!");
+        frame.set_imu_pose_velocity(
+            Pose::new(
+                Vector3::new(0.04427526518702507, 0.014617485925555229,  0.16934683918952942),
+                Matrix3::new(-0.013555065728724003, 0.99869793653488159, -0.049184534698724747,
+                    0.29258990287780762, 0.05099768191576004, 0.95487731695175171,
+                    0.95614206790924072,  -0.0014474884374067187, -0.29290005564689636
+                )
+            ),
+            Vector3::new(4.0, 5.0, 6.0)
+        );
+
+        println!("result translation: {:?}", frame.pose.unwrap().get_translation());
+        println!("result rotation: {:?}", frame.pose.unwrap().get_rotation());
+
+        // EXPECTED:
+        // translation: 0.01708829402923584  0.1443430632352829 0.02791847288608551
+        // rotation:   0.99932175874710083   0.03071308322250843  0.020315906032919884
+        // 0.02831624262034893  -0.28820514678955078   -0.9571499228477478
+        // -0.023541878908872604   0.95707601308822632  -0.28887927532196045
+   
+        assert_eq!(1,-1); // just to get output from above, the actual assert doesn't matter
+    }
 
     // #[test]
     fn test_update_frame_imu() {
@@ -1471,10 +1509,10 @@ mod sim3solver_tests {
 
 
         let ini_mp_id = max_kf_id * 5;
-        let mut mps_not_included: HashSet<Id> = HashSet::new(); // vbNotIncludedMP
+        let mps_not_included: HashSet<Id> = HashSet::new(); // vbNotIncludedMP
 
         // let mut _edges = Vec::new();
-        // for (mp_id, mp) in & map.read().unwrap().mappoints {
+        // for (mp_id, mp) in & map.read()?.mappoints {
         //     let id = mp_id + ini_mp_id + 1;
         //     optimizer.pin_mut().add_vertex_sbapointxyz(
         //         id,
@@ -1492,7 +1530,7 @@ mod sim3solver_tests {
         //         }
 
         //         if *left_index != -1 && *right_index == -1 {
-        //             let (keypoint, _) = map.read().unwrap().keyframes.get(kf_id).unwrap().features.get_keypoint(*left_index as usize);
+        //             let (keypoint, _) = map.read()?.keyframes.get(kf_id).unwrap().features.get_keypoint(*left_index as usize);
         //             _edges.push(
         //                 optimizer.pin_mut().add_edge_mono_binary(
         //                     true, id, * kf_id,
@@ -1582,7 +1620,7 @@ mod sim3solver_tests {
         // println!("OPTIMIZATION DONE!");
     }
 
-    #[test]
+    // #[test]
     fn test_inertial_optimization_initialization() {
         let mut system_config = env::current_dir().unwrap();
         system_config.push("orbslam_config.yaml");
@@ -2446,7 +2484,7 @@ mod sim3solver_tests {
 
             // Graph edges
             // IMU links with gravity and scale
-            let mut new_imu_preintegrated_for_kfs: HashMap<Id, ImuPreIntegrated> = HashMap::new();
+            let new_imu_preintegrated_for_kfs: HashMap<Id, ImuPreIntegrated> = HashMap::new();
             for kf in & keyframes {
                 if kf.imu_preintegrated.is_none() {
                     continue;

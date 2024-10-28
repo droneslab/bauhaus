@@ -2,8 +2,6 @@
 
 use std::collections::{HashSet, HashMap};
 
-use log::debug;
-
 use crate::{map::{keyframe::KeyFrame, map::Id}, modules::module_definitions::BoWModule, registered_actors::VOCABULARY_MODULE};
 use crate::modules::module_definitions::VocabularyModule;
 
@@ -80,13 +78,13 @@ impl KeyFrameDatabase {
 
         // Only compare against those keyframes that share enough words
         let mut max_common_words = 0;
-        let mut max_word_kf_id = -1;
+        // let mut max_word_kf_id = -1;
         for kf_id in &kfs_sharing_words {
             match place_recognition_words.get(&kf_id) {
                 Some(words) => {
                     if *words > max_common_words {
                         max_common_words = *words;
-                        max_word_kf_id = *kf_id;
+                        // max_word_kf_id = *kf_id;
                     }
                 },
                 None => continue
@@ -162,7 +160,7 @@ impl KeyFrameDatabase {
         return (merge_candidates, loop_candidates);
     }
 
-    pub fn detect_candidates_above_score(&self, map: &Map, curr_kf_id: &Id, min_score: f32) -> Vec<Id> {
+    pub fn _detect_candidates_above_score(&self, map: &Map, curr_kf_id: &Id, min_score: f32) -> Vec<Id> {
         // From ORBSLAM2:
         // vector<KeyFrame*> KeyFrameDatabase::DetectLoopCandidates(KeyFrame* pKF, float minScore)
 
@@ -198,13 +196,13 @@ impl KeyFrameDatabase {
 
         // Only compare against those keyframes that share enough words
         let mut max_common_words = 0;
-        let mut max_word_kf_id = -1;
+        // let mut max_word_kf_id = -1;
         for kf_id in &kfs_sharing_words {
             match loop_words.get(&kf_id) {
                 Some(words) => {
                     if *words > max_common_words {
                         max_common_words = *words;
-                        max_word_kf_id = *kf_id;
+                        // max_word_kf_id = *kf_id;
                     }
                 },
                 None => continue
@@ -282,7 +280,7 @@ impl KeyFrameDatabase {
         return loop_candidates;
     }
 
-    pub fn detect_relocalization_candidates(&self, map: &Map, frame: &Frame) -> Vec<Id> {
+    pub fn _detect_relocalization_candidates(&self, map: &Map, frame: &Frame) -> Vec<Id> {
         // std::vector<KeyFrame*> DetectRelocalizationCandidates(Frame* F, Map* pMap);
         let mut kfs_sharing_words = vec![]; //lKFsSharingWords
 

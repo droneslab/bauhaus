@@ -1,9 +1,9 @@
-use core::{config::{SETTINGS, SYSTEM}, system::{Actor, Module, System}};
-use std::sync::{Arc, Mutex};
+use core::{config::{SETTINGS, SYSTEM}, system::{Actor, System}};
+use std::sync::Arc;
 use log::error;
 use parking_lot::RwLock;
 
-use crate::{map::read_only_lock::ReadWriteMap, modules::{bow::Vocabulary, camera::{Camera, CameraType}, imu::IMU, module_definitions::{FeatureExtractionModule, FeatureMatchingModule, FullMapOptimizationModule, ImuModule, LocalMapOptimizationModule, LoopDetectionModule}, orbslam_matcher::ORBMatcherTrait}};
+use crate::{map::read_only_lock::ReadWriteMap, modules::{bow::Vocabulary, camera::{Camera, CameraType}, imu::IMU, module_definitions::{FeatureExtractionModule, FullMapOptimizationModule, LocalMapOptimizationModule, LoopDetectionModule}, orbslam_matcher::ORBMatcherTrait}};
 use crate::modules::module_definitions::VocabularyModule;
 
 // USER-DEFINED ACTORS: add a string to name your actor here

@@ -4,9 +4,9 @@ use std::collections::{HashMap, HashSet};
 use log::debug;
 use opencv::core::KeyPointTraitConst;
 
-use crate::{map::{map::Id, pose::Sim3, read_only_lock::ReadWriteMap}, registered_actors::{self, FEATURE_MATCHING_MODULE}};
+use crate::{map::{map::Id, pose::Sim3, read_only_lock::ReadWriteMap}, registered_actors::FEATURE_MATCHING_MODULE};
 
-use super::{module_definitions::LoopDetectionModule, optimizer, orbslam_matcher::ORBMatcherTrait, sim3solver::Sim3Solver};
+use super::{module_definitions::LoopDetectionModule, optimizer, sim3solver::Sim3Solver};
 
 pub struct ORBSLAM3LoopDetection {
     num_coincidences: i32,
@@ -237,7 +237,6 @@ impl ORBSLAM3LoopDetection {
                     *most_bow_matches_kf,
                     &vp_matched_mappoints,
                     fixed_scale,
-                    keyframe_matched_mp
                 )?;
                 solver.set_ransac_parameters(0.99, bow_inliers_threshold, 300);
 

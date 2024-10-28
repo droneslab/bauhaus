@@ -9,11 +9,10 @@ use opencv::prelude::KeyPointTraitConst;
 use crate::map::map::Id;
 use crate::map::read_only_lock::ReadWriteMap;
 use crate::map::{frame::Frame, pose::Pose};
-use crate::modules::optimizer;
-use crate::registered_actors::{self, CAMERA_MODULE, FEATURE_MATCHING_MODULE, FULL_MAP_OPTIMIZATION_MODULE};
+use crate::registered_actors::{CAMERA_MODULE, FEATURE_MATCHING_MODULE, FULL_MAP_OPTIMIZATION_MODULE};
 use crate::modules::module_definitions::CameraModule;
 use super::imu::{ImuBias, ImuPreIntegrated};
-use super::module_definitions::{FeatureMatchingModule, MapInitializationModule};
+use super::module_definitions::MapInitializationModule;
 
 
 pub struct MapInitialization {
@@ -200,10 +199,10 @@ impl MapInitialization {
         };
 
         // Bundle Adjustment
-        FULL_MAP_OPTIMIZATION_MODULE.optimize(map, 20, true, 0);
+        FULL_MAP_OPTIMIZATION_MODULE.optimize(map, 20, true, 0)?;
 
         let median_depth = {
-            let lock = map.read().unwrap();
+            let lock = map.read()?;
             lock.get_keyframe(initial_kf_id).compute_scene_median_depth(& lock.mappoints, 2)
         };
         let inverse_median_depth = match self.sensor {
@@ -211,7 +210,11 @@ impl MapInitialization {
             _ => 1.0 / median_depth
         };
 
-        if median_depth < 0.0 || map.read().unwrap().get_keyframe(curr_kf_id).get_tracked_mappoints(&map.read().unwrap(), 1) < 50 {
+        let tracked_mappoints = {
+            let lock = map.read()?;
+            lock.get_keyframe(curr_kf_id).get_tracked_mappoints(&lock, 1)
+        };
+        if median_depth < 0.0 || tracked_mappoints < 50 {
             // reset active map
             warn!("map::create_initial_map_monocular;wrong initialization");
             return Ok(None);
@@ -238,8 +241,11 @@ impl MapInitialization {
                     mp.position = DVVector3::new((*mp.position) * inverse_median_depth);
                 }
 
-                let norm_and_depth = map.read().unwrap().mappoints.get(&mp_id)
-                    .and_then(|mp| {mp.get_norm_and_depth(& map.read().unwrap())}).unwrap();
+                let norm_and_depth =  {
+                    let lock = map.read()?;
+                    lock.mappoints.get(&mp_id)
+                        .and_then(|mp| {mp.get_norm_and_depth(& lock)}).unwrap()
+                };
                 map.write()?.mappoints.get_mut(&mp_id)
                     .map(|mp| mp.update_norm_and_depth(norm_and_depth));
             }
@@ -275,7 +281,7 @@ impl MapInitialization {
         // TODO (multimaps)
         // mpAtlas->GetCurrentMap()->mvpKeyFrameOrigins.push_back(pKFini)
         let (curr_kf_pose, relevant_mappoints, curr_kf_timestamp) = {
-            let lock = map.read().unwrap();
+            let lock = map.read()?;
 
             let curr_kf_pose = lock.get_keyframe(curr_kf_id).get_pose();
             let curr_kf_timestamp = lock.get_keyframe(curr_kf_id).timestamp;

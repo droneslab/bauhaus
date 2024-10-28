@@ -75,12 +75,12 @@ impl Pose {
     pub fn group_inverse(&self) -> Pose {
         // Note: idk about this, but it seems like a different function from the regular inverse() above.
         // See Sophus:
-            /// Returns group inverse.
-            ///
+            // / Returns group inverse.
+            // /
             // SOPHUS_FUNC SE3<Scalar> inverse() const {
             //     SO3<Scalar> invR = so3().inverse();
             //     return SE3<Scalar>(invR, invR * (translation() * Scalar(-1)));
-            // }        
+            // }
         let invr = self.0.rotation.inverse();
         Pose::new(
             invr * self.0.translation.vector * -1.0,
@@ -413,7 +413,7 @@ pub fn group_exp(omega: &nalgebra::Vector3<f64>) -> nalgebra::UnitQuaternion<f64
     let theta;
 
     if theta_sq < EPSILON*EPSILON {
-        theta = 0.0;
+        // theta = 0.0;
         let theta_po4 = theta_sq * theta_sq;
         imag_factor = 0.5 - 1.0 / 48.0 * theta_sq + 1.0 / 3840.0 * theta_po4;
         real_factor = 1.0 - 1.0 / 8.0 * theta_sq + 1.0 / 384.0 * theta_po4;

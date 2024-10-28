@@ -1,15 +1,15 @@
 extern crate g2o;
 use log::{warn, info};
-use opencv::{prelude::*, types::VectorOfKeyPoint,};
+use opencv::prelude::*;
 
 use core::{
-    config::*, matrix::*, sensor::{FrameSensor, ImuSensor, Sensor}, system::{Actor, MessageBox, Timestamp}
+    config::*, matrix::*, sensor::{FrameSensor, Sensor}, system::{Actor, MessageBox, Timestamp}
 };
 use crate::{
     actors::{
         messages::{FeatureMsg, ImageMsg, ImagePathMsg, ShutdownMsg, TrackingStateMsg, VisFeaturesMsg},
         tracking_backend::TrackingState,
-    }, map::map::Id, modules::{image, imu::ImuMeasurements, module_definitions::FeatureExtractionModule, orbslam_extractor::ORBExtractor}, registered_actors::{new_feature_extraction_module, FEATURE_DETECTION, VISUALIZER}, System
+    }, map::map::Id, modules::{image, imu::ImuMeasurements, module_definitions::FeatureExtractionModule}, registered_actors::{new_feature_extraction_module, VISUALIZER}, System
 };
 
 

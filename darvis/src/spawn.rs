@@ -2,7 +2,7 @@ use std::{collections::HashMap, sync::{Arc, Mutex}, thread::{self, JoinHandle}};
 use crossbeam_channel::unbounded;
 
 use core::{
-    config::{ActorConf, ModuleConf}, system::{Module, Receiver, Sender, System} 
+    config::{ActorConf, ModuleConf}, system::{Receiver, Sender, System} 
 };
 use log::{info, warn};
 

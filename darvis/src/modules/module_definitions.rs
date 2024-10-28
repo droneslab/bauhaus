@@ -1,9 +1,7 @@
 use core::{matrix::{DVMatrix, DVMatrix3, DVVector3, DVVectorOfKeyPoint, DVVectorOfPoint2f}, sensor::Sensor, system::{Module, Sender}};
 use std::{collections::{BTreeSet, HashMap}, fmt::Debug};
 
-use downcast_rs::{impl_downcast, Downcast};
-
-use crate::{actors::tracking_backend::TrackedMapPointData, map::{frame::Frame, keyframe::KeyFrame, map::{Id, Map}, pose::Sim3, read_only_lock::ReadWriteMap}};
+use crate::{actors::tracking_backend::TrackedMapPointData, map::{frame::Frame, keyframe::KeyFrame, map::Id, pose::Sim3, read_only_lock::ReadWriteMap}};
 
 use super::imu::{ImuMeasurements, ImuPreIntegrated};
 
@@ -77,7 +75,7 @@ pub trait FeatureExtractionModule {
 
 impl Module for dyn FeatureExtractionModule { }
 impl Debug for dyn FeatureExtractionModule {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         todo!()
     }
 }
@@ -123,7 +121,7 @@ pub trait FeatureMatchingModule {
     ) -> Result<i32, Box<dyn std::error::Error>>;
 }
 impl Debug for dyn FeatureMatchingModule {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         todo!()
     }
 }
@@ -137,7 +135,7 @@ pub trait SearchForTriangulationTrait {
     ) -> Result<Vec<(usize, usize)>, Box<dyn std::error::Error>> ;
 }
 pub trait SearchBySim3Trait {
-    fn search_by_sim3(&self, map: &ReadWriteMap, kf1_id: Id, kf2_id: Id, matches: &mut HashMap<usize, i32>, sim3: &Sim3, th: f32) -> i32 ;
+    fn search_by_sim3(&self, map: &ReadWriteMap, kf1_id: Id, kf2_id: Id, matches: &mut HashMap<usize, i32>, sim3: &Sim3, th: f32) -> Result<i32, Box<dyn std::error::Error>> ;
 }
 
 pub trait FuseTrait {

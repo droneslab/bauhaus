@@ -186,9 +186,9 @@ pub fn full_inertial_ba(
     let cy= SETTINGS.get::<f64>(CAMERA, "cy");
     let camera_param = [fx, fy, cx,cy];
 
-    let mut optimizer = g2o::ffi::new_sparse_optimizer(5, camera_param, 1e5);
+    let mut optimizer = g2o::ffi::new_sparse_optimizer(5, camera_param, 1e-5);
 
-    let mut non_fixed = 0;
+    let non_fixed = 0;
 
     // Set KeyFrame vertices
     let mut inc_kf = 0;
@@ -209,6 +209,7 @@ pub fn full_inertial_ba(
 
         optimizer::add_vertex_pose_keyframe(&mut optimizer, kf, fixed, kf.id);
         kf_vertex_fixed.insert(*kf_id, fixed);
+        println!("FIBA, add keyframe {}", kf.id);
 
         // println!("add vertex pose {}", kf.id);
 
@@ -460,21 +461,24 @@ pub fn full_inertial_ba(
 
             if loop_id == 0 {
                 kf.set_pose(pose.into());
+                debug!("FIBA result, KF {} pose: {:?} ", kf.id, pose);
             } else {
                 // println!("GBA: Set kf {} pose: {:?}. Old pose: {:?}", kf.id, pose, kf.pose);
                 kf.gba_pose = Some(pose);
                 kf.ba_global_for_kf = loop_id;
                 // debug!("(baglobal) set in fiba, for kf {}: {}", kf.id, loop_id);
+                debug!("FIBA result, KF {} gba pose: {:?} ", kf.id, pose);
             }
 
             if kf.imu_data.is_imu_initialized {
                 let vertex_velocity = optimizer.recover_optimized_vertex_velocity(max_kf_id + 3 * kf.id + 1);
 
                 if loop_id == 0 {
-                    debug!("SET VELOCITY: {:?} ", vertex_velocity);
+                    debug!("FIBA result, KF {} velocity: {:?} ", kf.id, vertex_velocity);
                     kf.imu_data.velocity = Some(vertex_velocity.into());
                 } else {
                     kf.vwb_gba = Some(vertex_velocity.into());
+                    debug!("FIBA result, KF {} gba velocity: {:?} ", kf.id, vertex_velocity);
                 }
 
                 let (vg_id, va_id) = if !init {
@@ -541,6 +545,7 @@ pub fn full_inertial_ba(
                 let mp = lock.mappoints.get_mut(&mp_id).unwrap();
                 mp.gba_pose = Some(pos);
                 mp.ba_global_for_kf = loop_id;
+                println!("FIBA result, mp posgba... {} ... {}: {:?}", mp_id, mp_id + ini_mp_id + 1, pos);
                 // debug!("(baglobal) set in fiba, for mp {}: {}", mp.id, loop_id);
             }
         }
