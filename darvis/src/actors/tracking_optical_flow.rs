@@ -224,11 +224,11 @@ impl TrackingOpticalFlow {
             if self.initialization.is_none() {
                 self.initialization = Some(MapInitialization::new());
             }
-            let init_success = self.initialization.as_mut().unwrap().try_initialize(&current_frame)?;
+            let init_success = self.initialization.as_mut().unwrap().try_initialize(&current_frame, &mut self.imu.as_mut().unwrap().imu_preintegrated_from_last_kf)?;
             if init_success {
                 let (ini_kf_id, curr_kf_id);
                 {
-                    (ini_kf_id, curr_kf_id) = match self.initialization.as_mut().unwrap().create_initial_map_monocular(&mut self.map,  & self.imu.as_ref().unwrap().imu_preintegrated_from_last_kf)? {
+                    (ini_kf_id, curr_kf_id) = match self.initialization.as_mut().unwrap().create_initial_map_monocular(&mut self.map,  &mut self.imu.as_mut().unwrap().imu_preintegrated_from_last_kf)? {
                         Some((curr_kf_pose, curr_kf_id, ini_kf_id, local_mappoints, curr_kf_timestamp, map_scale)) => {
                             // Map needs to be initialized before tracking can begin. Received from map actor
                             self.frames_since_last_kf = 0;
@@ -255,7 +255,8 @@ impl TrackingOpticalFlow {
                             Box::new(TrajectoryMsg{
                                     pose: self.map.read()?.get_keyframe(ini_kf_id).get_pose(),
                                     ref_kf_id: ini_kf_id,
-                                    timestamp: self.map.read()?.get_keyframe(ini_kf_id).timestamp
+                                    timestamp: self.map.read()?.get_keyframe(ini_kf_id).timestamp,
+                                    map_version: self.map.read()?.version
                                 })
                             );
 
@@ -272,10 +273,10 @@ impl TrackingOpticalFlow {
 
                 // Send first two keyframes to local mapping
                 self.system.send(LOCAL_MAPPING, Box::new(
-                    InitKeyFrameMsg { kf_id: ini_kf_id }
+                    InitKeyFrameMsg { kf_id: ini_kf_id, map_version: self.map.read()?.version }
                 ));
                 self.system.send(LOCAL_MAPPING,Box::new(
-                    InitKeyFrameMsg { kf_id: curr_kf_id }
+                    InitKeyFrameMsg { kf_id: curr_kf_id, map_version: self.map.read()?.version }
                 ));
 
                 self.state = TrackingState::Ok;
@@ -370,8 +371,7 @@ impl TrackingOpticalFlow {
                 let lock = self.map.read()?;
                 if let Some(ref_kf_id) = self.ref_kf_id {
                     let ref_kf = lock.get_keyframe(ref_kf_id);
-                    current_frame.imu_data.set_new_bias(ref_kf.imu_data.imu_bias);
-                    println!("Tracking, set current frame bias to last KF ({}) bias {}", ref_kf.frame_id, ref_kf.imu_data.imu_bias);
+                    current_frame.imu_data.set_new_bias(ref_kf.imu_data.get_imu_bias());
                 }
                 self.imu.as_mut().unwrap().preintegrate(&mut imu_measurements, &mut current_frame, self.last_frame.as_mut().unwrap(), lock.last_kf_id);
             }
@@ -578,7 +578,8 @@ impl TrackingOpticalFlow {
             Box::new(TrajectoryMsg{
                 pose: self.current_frame.pose.unwrap().inverse(),
                 ref_kf_id: self.current_frame.ref_kf_id.unwrap(),
-                timestamp: self.current_frame.timestamp
+                timestamp: self.current_frame.timestamp,
+                map_version: self.map.read()?.version
             })
         );
 
@@ -587,7 +588,8 @@ impl TrackingOpticalFlow {
             mappoint_matches: vec![],
             nontracked_mappoints: HashMap::new(),
             mappoints_in_tracking: self.local_mappoints.clone(),
-            timestamp: self.current_frame.timestamp
+            timestamp: self.current_frame.timestamp,
+            map_version: self.map.read()?.version
         }));
 
         Ok(())
@@ -996,7 +998,8 @@ impl TrackingOpticalFlow {
                 keyframe: current_frame.clone(),
                 tracking_state: self.state,
                 matches_in_tracking: self.matches_inliers,
-                tracked_mappoint_depths: todo!("Keep track of mappoint depths!")
+                tracked_mappoint_depths: todo!("Keep track of mappoint depths!"),
+                map_version: self.map.read()?.version
             } )
         );
 

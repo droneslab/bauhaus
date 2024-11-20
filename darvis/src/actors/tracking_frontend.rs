@@ -178,7 +178,7 @@ impl TrackingFrontEnd {
             image_width,
             image_height,
             timestamp,
-            frame_id: frame_id as i32
+            frame_id: frame_id as i32,
         })).unwrap();
     }
 

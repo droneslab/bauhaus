@@ -417,6 +417,7 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
     local_ba_for_kf.insert(curr_kf_id, curr_kf_id);
     let mut local_mappoints: Vec<Id> = vec![]; // lLocalMapPoints
     let mut local_ba_for_mp: HashMap<Id, Id> = HashMap::new(); // mappoint::mnBALocalForKF
+    let mut ba_local_for_kf: HashMap<Id, Id> = HashMap::new(); // keyframe::mnBALocalForKF
 
     {
         let lock = map.read()?;
@@ -430,11 +431,12 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
                 local_ba_for_kf.insert(kf_id, curr_kf_id);
             }
         }
-        println!("LI_BA, optimizable kfs: {:?}", optimizable_kfs);
+        // println!("LI_BA, optimizable kfs: {:?}", optimizable_kfs);
 
         // Optimizable points seen by temporal optimizable keyframes
         for i in 0..optimizable_kfs.len() {
             let mps = lock.get_keyframe(optimizable_kfs[i]).get_mp_matches();
+            ba_local_for_kf.insert(optimizable_kfs[i], curr_kf_id);
             for data in mps {
                 if let Some((mp_id, _)) = data {
                     if let Some(mp) = lock.mappoints.get(&mp_id) {
@@ -446,13 +448,12 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
                 }
             }
         }
-        println!("LI_BA, optimizable points: {:?}", local_mappoints);
+        // println!("LI_BA, optimizable points: {:?}", local_mappoints);
     }
 
     // Fixed Keyframe: First frame previous KF to optimization window)
     let mut fixed_keyframes: Vec<Id> = vec![]; // lFixedKeyFrames
     let mut ba_fixed_for_kf: HashMap<Id, Id> = HashMap::new(); // keyframe::mnBAFixedForKF
-    let mut ba_local_for_kf: HashMap<Id, Id> = HashMap::new(); // keyframe::mnBALocalForKF
     {
         let lock = map.read()?;
         let last_opt_kf = lock.get_keyframe(*optimizable_kfs.back().unwrap());
@@ -523,6 +524,7 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
             }
         }
         println!("LI_BA, fixed keyframes which are not covisible: {:?}", fixed_keyframes);
+        println!("LI_BA, optimizable keyframes: {:?}", optimizable_kfs);
     }
 
     let non_fixed = fixed_keyframes.len() == 0;
@@ -549,6 +551,7 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
         for kf_id in &optimizable_kfs {
             let kf = lock.get_keyframe(*kf_id);
 
+            debug!("Sofiya Add vertex: {}", kf.id);
             super::optimizer::add_vertex_pose_keyframe(&mut optimizer, kf, false, kf.id);
 
             if kf.imu_data.is_imu_initialized {
@@ -560,12 +563,12 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
                 optimizer.pin_mut().add_vertex_gyrobias(
                     max_kf_id + 3 * kf.id + 2,
                     false,
-                    kf.imu_data.imu_bias.get_gyro_bias().into()
+                    kf.imu_data.get_imu_bias().get_gyro_bias().into()
                 );
                 optimizer.pin_mut().add_vertex_accbias(
                     max_kf_id + 3 * kf.id + 3,
                     false,
-                    kf.imu_data.imu_bias.get_acc_bias().into()
+                    kf.imu_data.get_imu_bias().get_acc_bias().into()
                 );
             }
         }
@@ -573,12 +576,14 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
         // Set Local visual KeyFrame vertices
         for kf_id in &opt_vis_kfs {
             let kf = lock.get_keyframe(*kf_id);
+            debug!("Sofiya Add vertex: {}", kf.id);
             super::optimizer::add_vertex_pose_keyframe(&mut optimizer, kf, false, kf.id);
         }
 
         // Set Fixed KeyFrame vertices
         for kf_id in &fixed_keyframes {
             let kf = lock.get_keyframe(*kf_id);
+            debug!("Sofiya Add vertex: {}", kf.id);
             super::optimizer::add_vertex_pose_keyframe(&mut optimizer, kf, true, kf.id);
 
             // This should be done only for keyframe just before temporal window
@@ -591,12 +596,12 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
                 optimizer.pin_mut().add_vertex_gyrobias(
                     max_kf_id + 3 * kf.id + 2,
                     true,
-                    kf.imu_data.imu_bias.get_gyro_bias().into()
+                    kf.imu_data.get_imu_bias().get_gyro_bias().into()
                 );
                 optimizer.pin_mut().add_vertex_accbias(
                     max_kf_id + 3 * kf.id + 3,
                     true,
-                    kf.imu_data.imu_bias.get_acc_bias().into()
+                    kf.imu_data.get_imu_bias().get_acc_bias().into()
                 );
             }
         }
@@ -624,7 +629,7 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
                     continue;
             }
             let mut imu_preintegrated = kf.imu_data.imu_preintegrated.as_ref().unwrap().clone();
-            imu_preintegrated.set_new_bias(prev_kf.imu_data.imu_bias);
+            imu_preintegrated.set_new_bias(prev_kf.imu_data.get_imu_bias());
 
             let mut set_robust_kernel = false;
             let mut delta = 0.0;
@@ -713,6 +718,7 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
             let mp = lock.mappoints.get(mp_id).unwrap();
 
             let vertex_id = mp.id + ini_mp_id + 1;
+            debug!("Sofiya Add vertex: {}", vertex_id);
             optimizer.pin_mut().add_vertex_sbapointxyz(
                 vertex_id,
                 Pose::new(*mp.position, Matrix3::identity()).into(), // create pose out of translation only
@@ -899,7 +905,7 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
     }
 
     for kf_id in &fixed_keyframes {
-        let pose = optimizer.recover_optimized_frame_pose(*kf_id);
+        let pose = optimizer.recover_optimized_vertex_pose(*kf_id);
         let mut lock = map.write()?;
         lock.get_keyframe_mut(*kf_id).set_pose(pose.into());
         // SOFIYA KF DELETE: Possible that map actor deleted mappoint after local BA has finished but before
@@ -932,7 +938,7 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
             };
             let mut lock = map.write()?;
             let kf = lock.get_keyframe_mut(kf_id);
-            kf.imu_data.imu_bias = b;
+            kf.imu_data.set_new_bias(b);
             kf.imu_data.velocity = Some(velocity.into());
         }
     }

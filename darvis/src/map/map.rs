@@ -112,6 +112,9 @@ impl Map {
     pub fn get_keyframes_iter(&self) -> std::collections::btree_map::Iter<Id, KeyFrame> {
         self.keyframes.iter()
     }
+    pub fn get_keyframe_keys(&self) -> std::collections::btree_map::Keys<Id, KeyFrame> {
+        self.keyframes.keys()
+    }
     pub fn get_keyframes_iter_mut(&mut self) -> std::collections::btree_map::IterMut<Id, KeyFrame> {
         self.keyframes.iter_mut()
     }
@@ -202,6 +205,7 @@ impl Map {
             .remove(id)
             .map(|mappoint| {
                 let obs = mappoint.get_observations();
+                debug!("Discard mp {} with matches {:?}", id, obs);
                 for (kf_id, indexes) in obs {
                     self.keyframes.get_mut(&kf_id).unwrap().mappoint_matches.delete_at_indices(*indexes);
                 }
@@ -506,6 +510,7 @@ impl Map {
     pub fn apply_scaled_rotation(&mut self, t: &Pose, s: f64, b_scaled_vel: bool) {
         // Sofiya: Tested!!
         // void Map::ApplyScaledRotation(const Sophus::SE3f &T, const float s, const bool bScaledVel)
+        let _span = tracy_client::span!("apply_scaled_rotation");
 
         // Body position (IMU) of first keyframe is fixed to (0,0,0)
         for keyframe in self.keyframes.values_mut() {

@@ -10,14 +10,19 @@ namespace orb_slam3 {
              rot_array[1][0], rot_array[1][1], rot_array[1][2],
              rot_array[2][0], rot_array[2][1], rot_array[2][2];
 
+        // std::cout << "R in c++: " << R << std::endl;
+
         Eigen::JacobiSVD<Eigen::Matrix3d> svd(R, Eigen::ComputeFullU | Eigen::ComputeFullV);
         auto temp = svd.matrixU() * svd.matrixV().transpose();
+
+        // std::cout << "Result in C++: " << temp << std::endl;
 
         std::array<std::array<double, 3>, 3> arr  = { {
             {temp(0,0), temp(0,1), temp(0,2)},
             {temp(1,0), temp(1,1), temp(1,2)},
             {temp(2,0), temp(2,1), temp(2,2)}
         } };
+
         return arr;
     }
 

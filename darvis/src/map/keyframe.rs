@@ -1,4 +1,4 @@
-use std::{collections::{HashMap, HashSet}, cmp::min};
+use std::{backtrace::Backtrace, cmp::min, collections::{HashMap, HashSet}};
 use core::{config::{ SETTINGS, SYSTEM}, matrix::{DVMatrix3, DVVector3}, sensor::Sensor, system::Timestamp};
 use log::{error, debug, warn};
 use crate::{map::{map::Id, pose::Pose},modules::{bow::DVBoW, imu::*}, registered_actors::VOCABULARY_MODULE};
@@ -30,7 +30,7 @@ pub struct KeyFrame {
     // IMU //
     // Preintegrated IMU measurements from previous keyframe
     pub imu_data: ImuDataFrame,
-    pub imu_position: Option<DVVector3<f64>>, // mOwb
+    pub imu_position: Option<DVVector3<f32>>, // mOwb
     pub sensor: Sensor,
 
     // todo (design, fine-grained locking) I would like to get rid of this but until we have fine-grained locking this is the only way to prevent deletion without taking the entire map
@@ -120,6 +120,11 @@ impl KeyFrame {
                 *pose_inverse.get_rotation() * *ImuCalib::new().tcb.get_translation() + *pose_inverse.get_translation()
             )
         );
+        println!("mRwc: {:?}", pose_inverse.get_rotation());
+        println!("mTcb: {:?}", ImuCalib::new().tcb.get_translation());
+        println!("mTwc: {:?}", pose_inverse.get_translation());
+
+        println!("SET KF IMU POSITION: {} {:?}. backtrace: {}", self.id, self.imu_position, Backtrace::capture());
    }
 
     pub fn get_connected_kf_weight(&self, kf_id: Id) -> i32{ self.connections.get_weight(&kf_id) }
@@ -223,13 +228,13 @@ impl KeyFrame {
     }
 
     // *IMU *//
-    pub fn get_imu_rotation(&self) -> DVMatrix3<f64> {
+    pub fn get_imu_rotation(&self) -> DVMatrix3<f32> {
         // Eigen::Matrix3f KeyFrame::GetImuRotation()
         // Note: in Orbslam this is: (mTwc * mImuCalib.mTcb).rotationMatrix();
         // and mTwc is inverse of the pose
-        (self.pose.inverse() * ImuCalib::new().tcb).get_rotation()
+        DVMatrix3::new(*self.pose.inverse().get_rotation() * *ImuCalib::new().tcb.get_rotation())
     }
-    pub fn get_imu_position(&self) -> DVVector3<f64> {
+    pub fn get_imu_position(&self) -> DVVector3<f32> {
         // Eigen::Vector3f KeyFrame::GetImuPosition()
         self.imu_position.expect("IMU position not set")
     }

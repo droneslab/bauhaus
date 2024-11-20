@@ -31,14 +31,14 @@ impl MapInitializationModule for MapInitialization {
     type Map = ReadWriteMap;
     type InitializationResult = Result<Option<(Pose, i32, i32, BTreeSet<Id>, Timestamp, f64)>, Box<dyn std::error::Error>>;
 
-    fn try_initialize(&mut self, current_frame: &Frame) -> Result<bool, Box<dyn std::error::Error>> {
+    fn try_initialize(&mut self, current_frame: &Frame, imu_preintegrated_from_last_kf: &mut ImuPreIntegrated) -> Result<bool, Box<dyn std::error::Error>> {
         match self.sensor.frame() {
-            FrameSensor::Mono => self.monocular_initialization(current_frame),
+            FrameSensor::Mono => self.monocular_initialization(current_frame, imu_preintegrated_from_last_kf),
             _ => self.stereo_initialization()
         }
     }
 
-    fn create_initial_map(&mut self, map: &mut Self::Map, imu_preintegrated_from_last_kf: & ImuPreIntegrated) -> Self::InitializationResult {
+    fn create_initial_map(&mut self, map: &mut Self::Map, imu_preintegrated_from_last_kf: &mut  ImuPreIntegrated) -> Self::InitializationResult {
         match self.sensor.frame() {
             FrameSensor::Mono => self.create_initial_map_monocular(map, imu_preintegrated_from_last_kf),
             _ => self.create_initial_map_stereo()
@@ -61,7 +61,7 @@ impl MapInitialization {
         }
     }
 
-    fn monocular_initialization(&mut self, current_frame: &Frame) -> Result<bool, Box<dyn std::error::Error>> {
+    fn monocular_initialization(&mut self, current_frame: &Frame, imu_preintegrated_from_last_kf: &mut  ImuPreIntegrated) -> Result<bool, Box<dyn std::error::Error>> {
         // Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Tracking.cc#L2448
 
         self.current_frame = Some(current_frame.clone());
@@ -78,17 +78,15 @@ impl MapInitialization {
             self.last_frame = Some(current_frame.clone());
 
             if self.sensor.is_imu() {
-                self.current_frame.as_mut().unwrap().imu_data.imu_preintegrated = Some(ImuPreIntegrated::new(ImuBias::new()));
+                *imu_preintegrated_from_last_kf = ImuPreIntegrated::new(ImuBias::new());
+                self.current_frame.as_mut().unwrap().imu_data.imu_preintegrated = Some(imu_preintegrated_from_last_kf.clone());
             }
 
-            println!("Mono initialization... current frame {:?}, initial frame {:?}, last frame {:?}", self.current_frame.as_ref().unwrap().frame_id, self.initial_frame.as_ref().unwrap().frame_id, self.last_frame.as_ref().unwrap().frame_id);
-
             self.ready_to_initialize = true;
-            println!("Set ready to initialize");
             return Ok(false);
         } else {
             if current_frame.features.num_keypoints <=100 || self.sensor.is_imu() && (self.last_frame.as_ref().unwrap().timestamp - self.initial_frame.as_ref().unwrap().timestamp) * 1e9 > 1.0 {
-                println!("QUIT: Timestamp too high?");
+                debug!("QUIT: Timestamp too high?");
                 self.ready_to_initialize = false;
                 return Ok(false);
             }
@@ -139,7 +137,7 @@ impl MapInitialization {
     }
 
     pub fn create_initial_map_monocular(
-        &mut self, map: &mut ReadWriteMap, imu_preintegrated_from_last_kf: & ImuPreIntegrated,
+        &mut self, map: &mut ReadWriteMap, imu_preintegrated_from_last_kf: &mut  ImuPreIntegrated
     ) -> Result<Option<(Pose, i32, i32, BTreeSet<Id>, Timestamp, f64)>, Box<dyn std::error::Error>> {
         // TODO (design, rust issues) - we have to do some pretty gross things with calling functions in this section
         // so that we can have multiple references to parts of the map. This should get cleaned up, but I'm not sure how.
@@ -258,6 +256,8 @@ impl MapInitialization {
                     let curr_kf = lock.get_keyframe_mut(curr_kf_id);
                     curr_kf.prev_kf_id = Some(initial_kf_id);
                     curr_kf.imu_data.imu_preintegrated = Some(imu_preintegrated_from_last_kf.clone());
+                    debug!("Initialization preintegrated: {}", imu_preintegrated_from_last_kf.measurements.len());
+                    *imu_preintegrated_from_last_kf = ImuPreIntegrated::new(ImuBias::new());
                 }
                 {
                     let ini_kf = lock.get_keyframe_mut(initial_kf_id);
