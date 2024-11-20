@@ -172,6 +172,8 @@ pub fn full_inertial_ba(
     init: bool, prior_g: f64, prior_a: f64, 
     ) -> Result<(), Box<dyn std::error::Error>> {
     // void static FullInertialBA(Map *pMap, int its, const bool bFixLocal=false, const unsigned long nLoopKF=0, bool *pbStopFlag=NULL, bool bInit=false, float priorG = 1e2, float priorA=1e6, Eigen::VectorXd *vSingVal = NULL, bool *bHess=NULL);
+    let _span = tracy_client::span!("FullInertialBA");
+
     let max_kf_id = * map.read()?.get_keyframes_iter()
         .max_by(|a, b| a.1.id.cmp(&b.1.id))
         .map(|(k, _v)| k).unwrap();
@@ -209,7 +211,6 @@ pub fn full_inertial_ba(
 
         optimizer::add_vertex_pose_keyframe(&mut optimizer, kf, fixed, kf.id);
         kf_vertex_fixed.insert(*kf_id, fixed);
-        println!("FIBA, add keyframe {}", kf.id);
 
         // println!("add vertex pose {}", kf.id);
 
@@ -219,18 +220,17 @@ pub fn full_inertial_ba(
                 fixed,
                 kf.imu_data.velocity.unwrap().into()
             );
-            // println!("add vertex velocity {}", max_kf_id + 3 * kf.id + 1);
 
             if !init {
                 optimizer.pin_mut().add_vertex_gyrobias(
                     max_kf_id + 3 * kf.id + 2,
                     fixed,
-                    kf.imu_data.imu_bias.get_gyro_bias().into()
+                    kf.imu_data.get_imu_bias().get_gyro_bias().into()
                 );
                 optimizer.pin_mut().add_vertex_accbias(
                     max_kf_id + 3 * kf.id + 3,
                     fixed,
-                    kf.imu_data.imu_bias.get_acc_bias().into()
+                    kf.imu_data.get_imu_bias().get_acc_bias().into()
                 );
             }
         } else {
@@ -244,14 +244,13 @@ pub fn full_inertial_ba(
         optimizer.pin_mut().add_vertex_gyrobias(
             4 * max_kf_id + 2,
             false,
-            kf.imu_data.imu_bias.get_gyro_bias().into()
+            kf.imu_data.get_imu_bias().get_gyro_bias().into()
         );
         optimizer.pin_mut().add_vertex_accbias(
             4 * max_kf_id + 3,
             false,
-            kf.imu_data.imu_bias.get_acc_bias().into()
+            kf.imu_data.get_imu_bias().get_acc_bias().into()
         );
-        // println!("add vertex gyro and acc {} {}", 4 * max_kf_id + 2, 4 * max_kf_id + 3);
     }
 
     if fix_local {
@@ -263,64 +262,70 @@ pub fn full_inertial_ba(
     // IMU links
     let mut new_imu_preintegrated_for_kfs: HashMap<Id, ImuPreIntegrated> = HashMap::new();
 
-    for (kf_id, kf) in map.read()?.get_keyframes_iter() {
-        if *kf_id > max_kf_id ||
-            kf.prev_kf_id.is_none() ||
-            kf.prev_kf_id.unwrap() > max_kf_id ||
-            kf.imu_data.imu_preintegrated.is_none() ||
-            ! map.read()?.get_keyframe(kf.prev_kf_id.unwrap()).imu_data.is_imu_initialized
-        {
-            continue;
-        }
+    {
+        let lock = map.read()?;
+        for (kf_id, kf) in lock.get_keyframes_iter() {
+            if *kf_id > max_kf_id ||
+                kf.prev_kf_id.is_none() ||
+                kf.prev_kf_id.unwrap() > max_kf_id ||
+                kf.imu_data.imu_preintegrated.is_none() ||
+                ! lock.get_keyframe(kf.prev_kf_id.unwrap()).imu_data.is_imu_initialized
+            {
+                continue;
+            }
 
-        let mut imu_preintegrated = kf.imu_data.imu_preintegrated.as_ref().unwrap().clone();
-        let prev_kf_id = kf.prev_kf_id.unwrap();
+            let mut imu_preintegrated = kf.imu_data.imu_preintegrated.as_ref().unwrap().clone();
+            let prev_kf_id = kf.prev_kf_id.unwrap();
 
-        imu_preintegrated.set_new_bias(map.read()?.get_keyframe(prev_kf_id).imu_data.imu_bias);
+            imu_preintegrated.set_new_bias(lock.get_keyframe(prev_kf_id).imu_data.get_imu_bias());
 
-        let vp1_id = prev_kf_id;
-        let vv1_id = max_kf_id + 3 * prev_kf_id + 1;
+            let vp1_id = prev_kf_id;
+            let vv1_id = max_kf_id + 3 * prev_kf_id + 1;
 
-        let (vg1_id, va1_id, vg2_id, va2_id) = if !init {
-            let vg1_id = max_kf_id + 3 * prev_kf_id + 2;
-            let va1_id = max_kf_id + 3 * prev_kf_id + 3;
-            let vg2_id = max_kf_id + 3 * kf.id + 2;
-            let va2_id = max_kf_id + 3 * kf.id + 3;
-            (vg1_id, va1_id, vg2_id, va2_id)
-        } else {
-            let vg1_id = 4 * max_kf_id + 2;
-            let va1_id = 4 * max_kf_id + 3;
-            (vg1_id, va1_id, -1, -1)
-        };
+            let (vg1_id, va1_id, vg2_id, va2_id) = if !init {
+                let vg1_id = max_kf_id + 3 * prev_kf_id + 2;
+                let va1_id = max_kf_id + 3 * prev_kf_id + 3;
+                let vg2_id = max_kf_id + 3 * kf.id + 2;
+                let va2_id = max_kf_id + 3 * kf.id + 3;
+                (vg1_id, va1_id, vg2_id, va2_id)
+            } else {
+                let vg1_id = 4 * max_kf_id + 2;
+                let va1_id = 4 * max_kf_id + 3;
+                (vg1_id, va1_id, -1, -1)
+            };
 
-        let vp2_id = kf.id;
-        let vv2_id = max_kf_id + 3 * kf.id + 1;
+            let vp2_id = kf.id;
+            let vv2_id = max_kf_id + 3 * kf.id + 1;
 
-        // println!("(all of them) {} {} {} {} {} {} ", vp1_id, vv1_id, vg1_id, va1_id, vp2_id, vv2_id);
-        optimizer.pin_mut().add_edge_inertial(
-            vp1_id,
-            vv1_id,
-            vg1_id,
-            va1_id,
-            vp2_id,
-            vv2_id,
-            (& imu_preintegrated).into(),
-            true,
-            16.92
-        );
-
-        if !init {
-            optimizer.pin_mut().add_edge_gyro_and_acc(
-                vg1_id, vg2_id, va1_id, va2_id,
-                (& imu_preintegrated).into()
+            // println!("(all of them) {} {} {} {} {} {} ", vp1_id, vv1_id, vg1_id, va1_id, vp2_id, vv2_id);
+            optimizer.pin_mut().add_edge_inertial(
+                vp1_id,
+                vv1_id,
+                vg1_id,
+                va1_id,
+                vp2_id,
+                vv2_id,
+                (& imu_preintegrated).into(),
+                true,
+                16.92
             );
-        }
-        new_imu_preintegrated_for_kfs.insert(*kf_id, imu_preintegrated);
 
+            if !init {
+                optimizer.pin_mut().add_edge_gyro_and_acc(
+                    vg1_id, vg2_id, va1_id, va2_id,
+                    (& imu_preintegrated).into()
+                );
+            }
+            new_imu_preintegrated_for_kfs.insert(*kf_id, imu_preintegrated);
+
+        }
     }
-    for (id, preintegrated) in new_imu_preintegrated_for_kfs {
-        // debug!("SET KF {} IMU PREINTEGRATED", id);
-        map.write()?.get_keyframe_mut(id).imu_data.imu_preintegrated = Some(preintegrated);
+    {
+        let mut lock = map.write()?;
+        for (id, preintegrated) in new_imu_preintegrated_for_kfs {
+            // debug!("SET KF {} IMU PREINTEGRATED", id);
+            lock.get_keyframe_mut(id).imu_data.imu_preintegrated = Some(preintegrated);
+        }
     }
 
     if init {
@@ -340,6 +345,7 @@ pub fn full_inertial_ba(
 
     let ini_mp_id = max_kf_id * 5;
     let mut mps_not_included: HashSet<Id> = HashSet::new(); // vbNotIncludedMP
+    let mut mps_included: HashSet<Id> = HashSet::new(); 
 
     let mut _edges = Vec::new();
     {
@@ -442,10 +448,12 @@ pub fn full_inertial_ba(
             if all_fixed {
                 optimizer.pin_mut().remove_vertex(id);
                 mps_not_included.insert(* mp_id);
+                println!("FIBA remove vertex");
+            } else {
+                mps_included.insert(* mp_id);
             }
         }
     }
-
 
     optimizer.pin_mut().optimize(iterations, false, false);
 
@@ -457,7 +465,7 @@ pub fn full_inertial_ba(
             if * kf_id > max_kf_id {
                 continue;
             }
-            let pose: Pose = optimizer.recover_optimized_frame_pose(*kf_id).into();
+            let pose: Pose = optimizer.recover_optimized_vertex_pose(*kf_id).into();
 
             if loop_id == 0 {
                 kf.set_pose(pose.into());
@@ -467,7 +475,7 @@ pub fn full_inertial_ba(
                 kf.gba_pose = Some(pose);
                 kf.ba_global_for_kf = loop_id;
                 // debug!("(baglobal) set in fiba, for kf {}: {}", kf.id, loop_id);
-                debug!("FIBA result, KF {} gba pose: {:?} ", kf.id, pose);
+                debug!("FIBA result, KF {} gba pose: {:?} ", kf.id, pose.get_rotation());
             }
 
             if kf.imu_data.is_imu_initialized {
@@ -545,7 +553,6 @@ pub fn full_inertial_ba(
                 let mp = lock.mappoints.get_mut(&mp_id).unwrap();
                 mp.gba_pose = Some(pos);
                 mp.ba_global_for_kf = loop_id;
-                println!("FIBA result, mp posgba... {} ... {}: {:?}", mp_id, mp_id + ini_mp_id + 1, pos);
                 // debug!("(baglobal) set in fiba, for mp {}: {}", mp.id, loop_id);
             }
         }

@@ -143,9 +143,8 @@ impl LocalMapping {
             let kf_id = self.map.write()?.insert_keyframe_to_map(msg.keyframe, false);
 
             // Send the new keyframe ID directly back to the sender so they can use the ID 
-            self.system.find_actor(TRACKING_BACKEND).send(Box::new(InitKeyFrameMsg{kf_id})).unwrap();
+            self.system.find_actor(TRACKING_BACKEND).send(Box::new(InitKeyFrameMsg{kf_id, map_version: self.map.get_version()})).unwrap();
 
-            debug!("Local mapping working on kf {}", kf_id);
             self.current_keyframe_id = kf_id;
             self.current_tracking_state = msg.tracking_state;
             self.local_mapping(msg.matches_in_tracking, msg.tracked_mappoint_depths)?;
@@ -179,7 +178,7 @@ impl LocalMapping {
         let mps_created = self.create_new_mappoints()?;
 
         self.system.find_actor(TRACKING_BACKEND).send(Box::new(
-            LastKeyFrameUpdatedMsg{}
+            LastKeyFrameUpdatedMsg{map_version: self.map.get_version()}
         )).unwrap();
 
 
@@ -210,7 +209,7 @@ impl LocalMapping {
                             if dist > 0.05 {
                                 self.imu_module.as_mut().unwrap().timestamp_init += current_kf.timestamp - previous_kf.timestamp;
                             }
-                            if !self.map.read()?.imu_ba2 {
+                            if !lock.imu_ba2 {
                                 if self.imu_module.as_ref().unwrap().timestamp_init < 10.0 && dist < 0.02 {
                                     warn!("Not enough motion for IMU initialization. Resetting...");
                                     todo!("Multi-maps");
@@ -220,7 +219,7 @@ impl LocalMapping {
                                 }
                             }
 
-                            !self.map.read()?.imu_ba2
+                            !lock.imu_ba2
                         };
                         let large = matches_in_tracking > 75 && self.sensor.is_mono() || matches_in_tracking > 100 && !self.sensor.is_mono();
 
@@ -244,8 +243,6 @@ impl LocalMapping {
 
             self.imu_module.as_mut().unwrap().initialize(&mut self.map, self.current_keyframe_id, prior_g, prior_a, fiba, Some(self.system.find_actor(TRACKING_BACKEND)))?;
         }
-
-        println!("Map has {} keyframes and {} mappoints" , self.map.read()?.num_keyframes(), self.map.read()?.mappoints.len());
 
         // Check redundant local Keyframes
         let kfs_culled = self.keyframe_culling()?;
@@ -282,11 +279,12 @@ impl LocalMapping {
         }
 
         debug!("For keyframe {}, culled {} mappoints, created {} mappoints, culled {} keyframes", self.current_keyframe_id, mps_culled, mps_created, kfs_culled);
+        info!("Map has {} keyframes and {} mappoints" , self.map.read()?.num_keyframes(), self.map.read()?.mappoints.len());
 
         tracy_client::plot!("MAP INFO: KeyFrames", self.map.read()?.num_keyframes() as f64);
         tracy_client::plot!("MAP INFO: MapPoints", self.map.read()?.mappoints.len() as f64);
 
-        self.system.try_send(LOOP_CLOSING, Box::new(KeyFrameIdMsg{ kf_id: self.current_keyframe_id }));
+        self.system.try_send(LOOP_CLOSING, Box::new(KeyFrameIdMsg{ kf_id: self.current_keyframe_id, map_version: self.map.get_version() }));
         Ok(())
     }
 
@@ -964,10 +962,10 @@ impl LocalMapping {
             self.system.find_actor(TRACKING_BACKEND).send(Box::new(
                 UpdateFrameIMUMsg{
                     scale: imu.scale,
-                    imu_bias: kf.imu_data.imu_bias.clone(),
+                    imu_bias: kf.imu_data.get_imu_bias().clone(),
                     current_kf_id: self.current_keyframe_id,
                     imu_initialized: true,
-                    expected_map_version: self.map.read()?.version
+                    map_version: self.map.read()?.version
                 }
             )).unwrap();
             // mpTracker->UpdateFrameIMU(mScale,mpCurrentKeyFrame->GetImuBias(),mpCurrentKeyFrame);

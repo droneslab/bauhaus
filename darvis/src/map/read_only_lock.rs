@@ -68,7 +68,7 @@ impl ReadWriteMap {
         if inner.version == self.version {
             Ok(RwLockWriteGuard::map(inner, |unlocked| unlocked))
         } else { 
-            warn!("Map version mismatch: I have {}, map has {}. Backtrace: {:?}", self.version, inner.version, Backtrace::capture());
+            warn!("Map version mismatch: I have {}, map has {}.", self.version, inner.version); // Backtrace::capture()
             Err("Map version mismatch".into())
         }
     }
@@ -81,7 +81,7 @@ impl ReadWriteMap {
         if inner.version == self.version {
             Ok(RwLockReadGuard::map(inner , |unlocked| unlocked))
         } else { 
-            warn!("Map version mismatch: I have {}, map has {}. Backtrace: {:?}", self.version, inner.version, Backtrace::capture());
+            warn!("Map version mismatch: I have {}, map has {}.", self.version, inner.version); // , Backtrace::capture()
             Err("Map version mismatch".into())
         }
     }

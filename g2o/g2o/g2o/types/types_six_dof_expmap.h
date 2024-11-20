@@ -205,7 +205,7 @@ public:
   Vector3d Xw;
   double fx, fy, cx, cy;
 
-  void set_robust_kernel(bool reset); // Darvis
+  void set_robust_kernel(bool reset, float delta); // Darvis
 };
 
 

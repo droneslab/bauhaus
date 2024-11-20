@@ -447,7 +447,7 @@ public:
     }
 
 
-  void set_robust_kernel(bool reset); // Darvis
+  void set_robust_kernel(bool reset, float delta); // Darvis
 
 public:
     const Eigen::Vector3d Xw;

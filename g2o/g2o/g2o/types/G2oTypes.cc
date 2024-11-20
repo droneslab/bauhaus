@@ -854,7 +854,8 @@ Eigen::Matrix3d Skew(const Eigen::Vector3d &w)
     return W;
 }
 
-void EdgeMonoOnlyPose::set_robust_kernel(bool reset) {
+void EdgeMonoOnlyPose::set_robust_kernel(bool reset, float delta)
+{
     // Darvis
     // Note: setRobustKernel takes a RobustKernelHuber pointer
     // ORBSLAM3 usually does this but occasionally passes in a 0 instead
@@ -868,7 +869,7 @@ void EdgeMonoOnlyPose::set_robust_kernel(bool reset) {
     } else {
         g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
         setRobustKernel(rk);
+        rk->setDelta(delta);
     }
 }
-
 }

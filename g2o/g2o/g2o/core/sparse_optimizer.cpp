@@ -369,10 +369,10 @@ void SparseOptimizer::printStats() {
     }
     if (verbose()) {
       computeActiveErrors();
-      cerr << "iteration= -1\t chi2= " << activeChi2()
-          << "\t time= 0.0"
-          << "\t cumTime= 0.0"
-          << "\t (using initial guess from " << costFunction.name() << ")" << endl;
+      std::cout << "iteration= -1\t chi2= " << activeChi2()
+                << "\t time= 0.0"
+                << "\t cumTime= 0.0"
+                << "\t (using initial guess from " << costFunction.name() << ")" << endl;
     }
   }
 
@@ -427,13 +427,13 @@ void SparseOptimizer::printStats() {
         cumTime += dts;
         if (! errorComputed)
           computeActiveErrors();
-        cerr << "iteration= " << i
-          << "\t chi2= " << FIXED(activeRobustChi2())
-          << "\t time= " << dts
-          << "\t cumTime= " << cumTime
-          << "\t edges= " << _activeEdges.size();
-        _algorithm->printVerbose(cerr);
-        cerr << endl;
+        std::cout << "iteration= " << i
+                  << "\t chi2= " << FIXED(activeRobustChi2())
+                  << "\t time= " << dts
+                  << "\t cumTime= " << cumTime
+                  << "\t edges= " << _activeEdges.size() << "\t ";
+        _algorithm->printVerbose(std::cout);
+        std::cout << endl;
       }
       ++cjIterations; 
       postIteration(i);

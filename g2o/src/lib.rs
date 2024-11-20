@@ -409,8 +409,8 @@ pub mod ffi {
         fn isDepthPositive(self: &EdgeMonoOnlyPose) -> bool;
         #[rust_name = "is_depth_positive"]
         fn isDepthPositive(self: &EdgeSE3ProjectXYZ) -> bool;
-        fn set_robust_kernel(self: Pin<&mut EdgeMonoOnlyPose>, reset: bool);
-        fn set_robust_kernel(self: Pin<&mut EdgeSE3ProjectXYZOnlyPose>, reset: bool);
+        fn set_robust_kernel(self: Pin<&mut EdgeMonoOnlyPose>, reset: bool, delta: f32);
+        fn set_robust_kernel(self: Pin<&mut EdgeSE3ProjectXYZOnlyPose>, reset: bool, delta: f32);
         #[rust_name = "get_hessian"]
         fn GetHessianRust(self: Pin<&mut EdgeMonoOnlyPose>) -> [[f64; 6]; 6];
         // #[rust_name = "get_hessian"]

@@ -46,7 +46,7 @@ impl ORBSLAM3LoopDetection {
 
         if num_proj_matches >= 30 {
             let mut scm = {
-                let twm = map.read()?.get_keyframe(current_kf_id).get_pose().inverse();
+                let twm = map.read()?.get_keyframe(current_kf_id).get_pose().group_inverse();
                 let twm_as_sim3 = Sim3::new(twm.get_translation(), twm.get_rotation(), 1.0);
                 *scw * twm_as_sim3
             };
@@ -350,7 +350,7 @@ impl ORBSLAM3LoopDetection {
                                         let mut sjw = {
                                             let kf_j_pose = map.read()?.get_keyframe(current_cov_kfs[j]).get_pose();
                                             let sjc = Sim3 {
-                                                pose: kf_j_pose * current_kf_pose.inverse(),
+                                                pose: kf_j_pose * current_kf_pose.group_inverse(),
                                                 scale: 1.0
                                             };
 
@@ -452,7 +452,7 @@ impl LoopDetectionModule for ORBSLAM3LoopDetection {
         if self.num_coincidences > 0 {
             // Find from the last KF candidates
             let mut scw = {
-                let tcl = map.read()?.get_keyframe(current_kf_id).get_pose() * map.read()?.get_keyframe(self.last_current_kf).get_pose().inverse();
+                let tcl = map.read()?.get_keyframe(current_kf_id).get_pose() * map.read()?.get_keyframe(self.last_current_kf).get_pose().group_inverse();
                 let tcl_as_sim3: Sim3 = tcl.into();
                 tcl_as_sim3 * self.loop_slw
             };

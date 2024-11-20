@@ -6,10 +6,10 @@ use foxglove::{foxglove::items::{line_primitive, scene_entity_deletion, ArrowPri
 use base64::{engine::general_purpose, Engine as _};
 
 use core::{
-    config::SETTINGS, matrix::DVVectorOfKeyPoint, system::{Actor, MessageBox, System, Timestamp}
+    config::SETTINGS, matrix::{DVVector3, DVVectorOfKeyPoint}, system::{Actor, MessageBox, System, Timestamp}
 };
 use crate::{
-    actors::messages::{ShutdownMsg, VisFeatureMatchMsg, VisFeaturesMsg, VisTrajectoryMsg}, map::{map::Id, pose::Pose, read_only_lock::ReadWriteMap}, modules::image, registered_actors::VISUALIZER
+    actors::messages::{ShutdownMsg, VisFeatureMatchMsg, VisFeaturesMsg, VisTrajectoryMsg}, map::{map::Id, pose::{DVRotation, Pose}, read_only_lock::ReadWriteMap}, modules::image, registered_actors::VISUALIZER
 };
 
 use super::messages::{LoopClosureEssentialGraphMsg, LoopClosureGBAMsg, LoopClosureMapPointFusionMsg};
@@ -17,14 +17,14 @@ use super::messages::{LoopClosureEssentialGraphMsg, LoopClosureGBAMsg, LoopClosu
 // Default visual stuff //
 // Trajectory and frame
 static TRAJECTORY_COLOR: Color = Color { r: 1.0, g: 0.0, b: 0.0, a: 1.0 };
+static CURRENT_FRAME_COLOR: Color = Color { r: 0.0, g: 1.0, b: 0.0, a: 1.0 };
+static KEYFRAME_COLOR: Color = Color { r: 0.0, g: 0.0, b: 1.0, a: 1.0 };
 // Mappoints and mappoint matches
 static MAPPOINT_COLOR: Color = Color { r: 1.0, g: 1.0, b: 1.0, a: 1.0 };
 static MAPPOINT_MATCH_COLOR: Color = Color { r: 0.0, g: 1.0, b: 0.0, a: 1.0 };
 static MAPPOINT_LOCAL_COLOR: Color = Color { r: 0.0, g: 0.0, b: 1.0, a: 1.0 };
 static MAPPOINT_SIZE: Vector3 = Vector3 {  x: 0.01, y: 0.01, z: 0.01 };
 static MAPPOINT_LARGE_SIZE: Vector3 = Vector3 { x: 0.1, y: 0.1, z: 0.1 };
-//Keyframes
-static KEYFRAME_COLOR: Color = Color { r: 0.5, g: 0.0, b: 0.0, a: 1.0 };
 
 enum ImageDrawType {
     NONE,
@@ -359,16 +359,16 @@ impl DarvisVisualizer {
     }
 
     async fn update_draw_map(&mut self, msg: VisTrajectoryMsg) {
-        self.draw_trajectory(msg.pose, msg.timestamp).await.expect("Visualizer could not draw trajectory!");
+        self.draw_trajectory(msg.pose, msg.timestamp).await;
 
-        self.plot_map_info(&msg.mappoint_matches, msg.timestamp).await.expect("Visualizer could not plot map info!");
+        self.plot_map_info(&msg.mappoint_matches, msg.timestamp).await;
 
         if !SETTINGS.get::<bool>(VISUALIZER, "draw_only_trajectory") {
-            self.draw_mappoints(&msg.mappoints_in_tracking, &msg.mappoint_matches, msg.timestamp).await.expect("Visualizer could not draw mappoints!");
+            self.draw_mappoints(&msg.mappoints_in_tracking, &msg.mappoint_matches, msg.timestamp).await;
         }
 
         if SETTINGS.get::<bool>(VISUALIZER, "draw_connected_kfs") {
-            self.draw_connected_kfs(msg.timestamp).await.expect("Visualizer could not draw connected kfs!");
+            self.draw_connected_kfs(msg.timestamp).await;
         }
         self.current_update_id += 1;
         self.prev_pose = msg.pose.into();
@@ -385,14 +385,12 @@ impl DarvisVisualizer {
         // Draw current pose
         // This entity is overwritten at every update, so only one camera is in view at all times
         entities.push(
-            self.create_scene_entity(
+            self.create_frame_scene_entity(
                 timestamp, 
                 "world",
                 format!("cam"),
-                vec![],
-                // Old code to draw arrow:
-                // vec![self.create_arrow(&inverse_frame_pose, FRAME_COLOR.clone())],
-                vec![], vec![]
+                &inverse_frame_pose,
+                CURRENT_FRAME_COLOR.clone()
             )
         );
 
@@ -440,15 +438,12 @@ impl DarvisVisualizer {
             );
 
             entities.push(
-                self.create_scene_entity(
+                self.create_frame_scene_entity(
                     timestamp, 
                     "world",
                     format!("kf {}", id),
-                    // vec![],
-                    // Old code to draw arrow:
-                    vec![self._create_arrow(&curr_pose, KEYFRAME_COLOR.clone())],
-                    vec![],
-                    vec![]
+                    &curr_pose,
+                    KEYFRAME_COLOR.clone(),
                 )
             );
             prev_pose = curr_pose.into();
@@ -465,7 +460,6 @@ impl DarvisVisualizer {
         self.previous_keyframes = curr_keyframes;
 
         // Lastly, add the trajectory line from the last keyframe to the current pose
-        println!("SOFIYA DEBUG, last kf -> prev_pose: {:?}", *prev_pose_test.get_translation() - *frame_pose.get_translation());
         let points = vec![prev_pose, frame_pose.inverse().into()];
         entities.push(
             self.create_scene_entity(
@@ -699,6 +693,70 @@ impl DarvisVisualizer {
         Ok(())
     }
 
+    fn create_frame_scene_entity(&self, timestamp: Timestamp, frame_id: &str, entity_id: String, pose: &Pose, color: Color) -> SceneEntity {
+        fn create_line(init_point1: (f64, f64, f64), init_point2: (f64, f64, f64), rot: &DVRotation, trans: &DVVector3<f64>, color: &Color) -> LinePrimitive {
+            let point1 = {
+                let temp = **rot * *DVVector3::new_with(init_point1.0, init_point1.1, init_point1.2);
+                Point3{x: temp.x + trans.x, y: temp.y + trans.y, z: temp.z + trans.z}
+            };
+            let point2 = {
+                let temp = **rot * *DVVector3::new_with(init_point2.0, init_point2.1, init_point2.2);
+                Point3{x: temp.x + trans.x, y: temp.y + trans.y, z: temp.z + trans.z}
+            };
+
+            LinePrimitive {
+                r#type: line_primitive::Type::LineStrip as i32,
+                pose: make_pose(0.0, 0.0, 0.0),
+                thickness: 2.0,
+                scale_invariant: true,
+                points: vec![point1, point2],
+                color: Some(color.clone()),
+                colors: vec![],
+                indices: vec![],
+            }
+        }
+
+        let (seconds, nanos) = convert_timestamp(timestamp);
+        let trans = pose.get_translation();
+        let rot = pose.get_rotation();
+        let w = 0.075;
+        let h = 0.05;
+        let z = 0.025;
+
+        let lines = vec![
+            // Rectangle
+            create_line((w, h, z), (w, - h, z), &rot, &trans, &color),
+            create_line((- w, h, z), (- w, - h, z), &rot, &trans, &color),
+            create_line((- w, h, z), (w, h, z), &rot, &trans, &color),
+            create_line((- w, - h, z), (w, - h, z), &rot, &trans, &color),
+            // Diagonals
+            // create_line((- w, h, z), (w, - h, z), &rot, &trans, &color),
+            // create_line((w, h, z), (- w, - h, z), &rot, &trans, &color),
+            // Protruding pyramid
+            create_line((0.0, 0.0, 0.0), (w, h, z), &rot, &trans, &color),
+            create_line((0.0, 0.0, 0.0), (w, - h, z), &rot, &trans, &color),
+            create_line((0.0, 0.0, 0.0), (- w, - h, z), &rot, &trans, &color),
+            create_line((0.0, 0.0, 0.0), (- w, h, z), &rot, &trans, &color),
+            ];
+
+        SceneEntity {
+            timestamp: Some(prost_types::Timestamp { seconds, nanos }),
+            frame_id: frame_id.to_string(),
+            id: entity_id,
+            lifetime: None,
+            frame_locked: false,
+            metadata: vec![],
+            arrows: vec![],
+            cubes: vec![],
+            spheres: vec![],
+            cylinders: vec![],
+            lines,
+            triangles: vec![],
+            texts: vec![],
+            models: vec![],
+        }
+    }
+        
     fn create_scene_entity(
         &self, timestamp: Timestamp, frame_id: &str, entity_id: String,
         arrows: Vec<ArrowPrimitive>, lines: Vec<LinePrimitive>, spheres: Vec<SpherePrimitive>

@@ -61,6 +61,7 @@ pub trait BoWModule {
 
 /// *** IMU *** //
 pub trait ImuModule: Send + Sync {
+    fn reset(&mut self);
     fn ready(&self, map: &ReadWriteMap) -> Result<bool, Box<dyn std::error::Error>>;
     fn predict_state_last_keyframe(&self, map: &ReadWriteMap, current_frame: &mut Frame, last_keyframe_id: Id) -> Result<bool, Box<dyn std::error::Error>>;
     fn predict_state_last_frame(&self, current_frame: &mut Frame, last_frame: &mut Frame) -> Option<bool>;
@@ -172,8 +173,8 @@ pub trait MapInitializationModule {
     type Map;
     type InitializationResult;
 
-    fn try_initialize(&mut self, current_frame: &Self::Frame) -> Result<bool, Box<dyn std::error::Error>>;
-    fn create_initial_map(&mut self, map: &mut Self::Map, imu_preintegrated_from_last_kf: & ImuPreIntegrated) -> Self::InitializationResult ;
+    fn try_initialize(&mut self, current_frame: &Self::Frame, imu_preintegrated_from_last_kf: &mut ImuPreIntegrated) -> Result<bool, Box<dyn std::error::Error>>;
+    fn create_initial_map(&mut self, map: &mut Self::Map, imu_preintegrated_from_last_kf: &mut ImuPreIntegrated) -> Self::InitializationResult ;
 }
 
 /// *** Map initialization *** //

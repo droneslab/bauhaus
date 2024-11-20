@@ -248,9 +248,17 @@ impl Frame {
 
     pub fn set_imu_pose_velocity(&mut self, new_pose: Pose, vwb: nalgebra::Vector3<f64>) {
         // void Frame::SetImuPoseVelocity(const Eigen::Matrix3f &Rwb, const Eigen::Vector3f &twb, const Eigen::Vector3f &Vwb)
+
+        println!("Input translation before group inverse: {:?} {:?}", new_pose, new_pose.get_rotation());
         self.imu_data.velocity = Some(DVVector3::new(vwb));
-        let new_pose = new_pose.group_inverse(); // Tbw
+        let new_pose = new_pose.inverse(); // Tbw
+        println!("Translation after group inverse: {:?} {:?}", new_pose, new_pose.get_rotation());
         self.pose = Some(ImuCalib::new().tcb * new_pose);
+
+        println!("tcb: {:?}", ImuCalib::new().tcb);
     }
 
 }
+
+// Translation after group inverse: t[-0.3265,-0.1613,-0.2605] r[0.6635,0.7266,-0.0867,-0.1558] DVMatrix3([[-0.07085331461714924, 0.9912424830150882, 0.11143674292551078], [0.9372115208547813, 0.1044014818341865, -0.3327685318173793], [-0.34148846684014306, 0.08086204583677778, -0.9364010660813342]])
+// [37m[56.318 src/modules/imu.rs:74 [37mDEBUG[0m[37m] PREDICT STATE LAST KEYFRAME NEW POSE = Some(t[-0.0941,0.3024,-0.2739] r[0.9822,0.0542,0.0602,-0.1693])[0m

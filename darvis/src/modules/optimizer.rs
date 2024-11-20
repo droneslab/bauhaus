@@ -76,13 +76,13 @@ pub fn pose_inertial_optimization_last_frame(
     let va = 3;
     add_vertex_pose_frame(&mut optimizer, frame, false, vp);
     optimizer.pin_mut().add_vertex_velocity(
-        vv, false, frame.imu_data.get_velocity().into()
+        vv, false, frame.imu_data.velocity.unwrap().into()
     );
     optimizer.pin_mut().add_vertex_gyrobias(
-        vg, false, frame.imu_data.imu_bias.get_gyro_bias().into()
+        vg, false, frame.imu_data.get_imu_bias().get_gyro_bias().into()
     );
     optimizer.pin_mut().add_vertex_accbias(
-        va, false, frame.imu_data.imu_bias.get_acc_bias().into()
+        va, false, frame.imu_data.get_imu_bias().get_acc_bias().into()
     );
 
     // Set MapPoint vertices
@@ -107,7 +107,7 @@ pub fn pose_inertial_optimization_last_frame(
                 true,
                 vp,
                 mp_id,
-                (map.read()?.mappoints.get(&mp_id).unwrap().position).into(),
+                (map.read()?.mappoints.get(&mp_id).expect(format!("Could not get mp {}", mp_id).as_str()).position).into(),
                 kp.pt().x, kp.pt().y,
                 inv_sigma2,
                 *TH_HUBER_MONO
@@ -178,6 +178,7 @@ pub fn pose_inertial_optimization_last_frame(
     }
 
     let num_initial_correspondences = initial_mono_correspondences + initial_stereo_correspondences;
+    debug!("Num initial correspondences: {}", num_initial_correspondences);
 
     // Set Previous Frame Vertex
     let vpk = 4;
@@ -194,12 +195,12 @@ pub fn pose_inertial_optimization_last_frame(
     optimizer.pin_mut().add_vertex_gyrobias(
         vgk,
         false,
-        previous_frame.imu_data.imu_bias.get_gyro_bias().into()
+        previous_frame.imu_data.get_imu_bias().get_gyro_bias().into()
     );
     optimizer.pin_mut().add_vertex_accbias(
         vak,
         false,
-        previous_frame.imu_data.imu_bias.get_acc_bias().into()
+        previous_frame.imu_data.get_imu_bias().get_acc_bias().into()
     );
 
     optimizer.pin_mut().add_edge_inertial(
@@ -215,7 +216,6 @@ pub fn pose_inertial_optimization_last_frame(
         frame.imu_data.imu_preintegrated.as_ref().unwrap().into(),
     );
 
-    // todo sofiya where does  pFp->mpcpi come from?
     if previous_frame.imu_data.constraint_pose_imu.is_some() {
         let cpi = previous_frame.imu_data.constraint_pose_imu.as_ref().unwrap();
         optimizer.pin_mut().add_edge_prior_pose_imu(
@@ -271,7 +271,7 @@ pub fn pose_inertial_optimization_last_frame(
             }
 
             if iteration == 2 {
-                edge.inner.pin_mut().set_robust_kernel(false);
+                edge.inner.pin_mut().set_robust_kernel(true, 0.0);
             }
             i += 1;
         }
@@ -366,12 +366,12 @@ pub fn pose_inertial_optimization_last_frame(
         vg, va, -1, -1
     );
     let recovered_bias = ImuBias {
-        bax: recovered_bias_estimate.vb[0],
-        bay: recovered_bias_estimate.vb[1],
-        baz: recovered_bias_estimate.vb[2],
-        bwx: recovered_bias_estimate.vb[3],
-        bwy: recovered_bias_estimate.vb[4],
-        bwz: recovered_bias_estimate.vb[5],
+        bax: recovered_bias_estimate.vb[3],
+        bay: recovered_bias_estimate.vb[4],
+        baz: recovered_bias_estimate.vb[5],
+        bwx: recovered_bias_estimate.vb[0],
+        bwy: recovered_bias_estimate.vb[1],
+        bwz: recovered_bias_estimate.vb[2],
     };
 
     // Recover Hessian, marginalize previous frame states and generate new prior for frame
@@ -484,23 +484,29 @@ pub fn pose_inertial_optimization_last_keyframe(
     let vv = 1;
     let vg = 2;
     let va = 3;
+    println!("POSE OPT! Add frame");
     add_vertex_pose_frame(&mut optimizer, frame, false, vp);
+    println!("POSE OPT! Add vertex velocity {:?}", frame.imu_data.velocity.unwrap());
     optimizer.pin_mut().add_vertex_velocity(
-        vv, false, frame.imu_data.get_velocity().into()
+        vv, false, frame.imu_data.velocity.unwrap().into()
     );
+    println!("POSE OPT! Add vertex gyro bias {:?}", frame.imu_data.get_imu_bias().get_gyro_bias());
     optimizer.pin_mut().add_vertex_gyrobias(
-        vg, false, frame.imu_data.imu_bias.get_gyro_bias().into()
+        vg, false, frame.imu_data.get_imu_bias().get_gyro_bias().into()
     );
+    println!("POSE OPT! Add vertex acc bias {:?}", frame.imu_data.get_imu_bias().get_acc_bias());
     optimizer.pin_mut().add_vertex_accbias(
-        va, false, frame.imu_data.imu_bias.get_acc_bias().into()
+        va, false, frame.imu_data.get_imu_bias().get_acc_bias().into()
     );
 
+    let mut bla = 0;
     // Set MapPoint vertices
     let mut mp_indexes = vec![]; // vnIndexEdgeMono
     for i in 0..frame.mappoint_matches.matches.len() {
         if frame.mappoint_matches.matches[i].is_none() {
             continue;
         }
+        bla += 1;
         let (mp_id, _) = frame.mappoint_matches.matches[i].unwrap();
 
         let (kp, is_right) = frame.features.get_keypoint(i);
@@ -589,6 +595,7 @@ pub fn pose_inertial_optimization_last_keyframe(
     }
 
     let num_initial_correspondences = initial_mono_correspondences + _initial_stereo_correspondences;
+    debug!("POSE OPT! Num initial correspondences: {}, bla: {}", num_initial_correspondences, bla);
 
     // Set Previous Frame Vertex
     let vpk = 4;
@@ -599,23 +606,28 @@ pub fn pose_inertial_optimization_last_keyframe(
         let lock = map.read()?;
         let previous_keyframe = lock.get_keyframe(frame.imu_data.prev_keyframe.expect("Frame has IMU data but no prev keyframe?"));
         add_vertex_pose_keyframe(&mut optimizer, previous_keyframe, true, vpk);
+        println!("POSE OPT! Add vertex velocity {:?}", previous_keyframe.imu_data.velocity.unwrap());
         optimizer.pin_mut().add_vertex_velocity(
             vvk,
             true,
             previous_keyframe.imu_data.velocity.unwrap().into()
         );
+        println!("POSE OPT! Add vertex gyro bias {:?}", previous_keyframe.imu_data.get_imu_bias().get_gyro_bias());
         optimizer.pin_mut().add_vertex_gyrobias(
             vgk,
             true,
-            previous_keyframe.imu_data.imu_bias.get_gyro_bias().into()
+            previous_keyframe.imu_data.get_imu_bias().get_gyro_bias().into()
         );
+        println!("POSE OPT! Add vertex acc bias {:?}", previous_keyframe.imu_data.get_imu_bias().get_acc_bias());
         optimizer.pin_mut().add_vertex_accbias(
             vak,
             true,
-            previous_keyframe.imu_data.imu_bias.get_acc_bias().into()
+            previous_keyframe.imu_data.get_imu_bias().get_acc_bias().into()
         );
     }
 
+    println!("POSE OPT! Add edge inertial {} {} {} {} {} {} ", vpk, vvk, vgk, vak, vp, vv);
+    println!("(imu preintegrated is: {:?}", frame.imu_data.imu_preintegrated.as_ref().unwrap());
     optimizer.pin_mut().add_edge_inertial(
         vpk, vvk, vgk, vak, vp, vv,
         frame.imu_data.imu_preintegrated.as_ref().unwrap().into(),
@@ -631,8 +643,8 @@ pub fn pose_inertial_optimization_last_keyframe(
 
     // We perform 4 optimizations, after each optimization we classify observation as inlier/outlier
     // At the next optimization, outliers are not included, but at the end they can be classified as inliers again.
-    let chi2_mono = vec![5.991,5.991,5.991,5.991];
-    let _chi2_stereo = vec![7.815,7.815,7.815, 7.815];
+    let chi2_mono = vec![12.0, 7.5, 5.991, 5.991];
+    let _chi2_stereo = vec![15.6, 9.8, 7.815, 7.815];
     let iterations = vec![10,10,10,10];
 
     let mut num_bad = 0;
@@ -657,6 +669,8 @@ pub fn pose_inertial_optimization_last_keyframe(
 
             let chi2 = edge.inner.chi2();
 
+            // println!("Result mappoint... chi2 {}, chi2_mono[iteration] {}, is_close {}, chi2_close {}, edge.inner.is_depth_positive() {}", chi2, chi2_mono[iteration], is_close, chi2_close, edge.inner.is_depth_positive());
+            // Sofiya... chi2s are very high
             if (chi2 > chi2_mono[iteration] && !is_close) ||
                 (is_close && chi2 > chi2_close) ||
                 ! edge.inner.is_depth_positive()
@@ -670,7 +684,7 @@ pub fn pose_inertial_optimization_last_keyframe(
             }
 
             if iteration == 2 {
-                edge.inner.pin_mut().set_robust_kernel(false);
+                edge.inner.pin_mut().set_robust_kernel(true, 0.0);
             }
             i += 1;
         }
@@ -762,19 +776,21 @@ pub fn pose_inertial_optimization_last_keyframe(
         vg, va, -1, -1
     );
     let recovered_bias = ImuBias {
-        bax: recovered_bias_estimate.vb[0],
-        bay: recovered_bias_estimate.vb[1],
-        baz: recovered_bias_estimate.vb[2],
-        bwx: recovered_bias_estimate.vb[3],
-        bwy: recovered_bias_estimate.vb[4],
-        bwz: recovered_bias_estimate.vb[5],
+        bax: recovered_bias_estimate.vb[3],
+        bay: recovered_bias_estimate.vb[4],
+        baz: recovered_bias_estimate.vb[5],
+        bwx: recovered_bias_estimate.vb[0],
+        bwy: recovered_bias_estimate.vb[1],
+        bwz: recovered_bias_estimate.vb[2],
     };
+    debug!("Recovered pose: {:?}, recovered velocity: {:?}, recovered bias: {:?}", recovered_pose, recovered_velocity, recovered_bias);
 
     // Recover Hessian, marginalize keyFframe states and generate new prior for frame
     let mut h = nalgebra::SMatrix::<f64, 15, 15>::zeros();
     h.view_mut((0, 0), (9, 9)).add_assign(&optimizer.get_hessian2_from_edge_inertial(0).into());
     h.view_mut((9, 9), (3, 3)).add_assign(&optimizer.get_hessian2_from_edge_gyro().into());
     h.view_mut((12, 12), (3, 3)).add_assign(&optimizer.get_hessian2_from_edge_acc().into());
+    debug!("H is: {:?}", h);
 
     let mut i = 0;
     for mut edge in optimizer.pin_mut().get_mut_mono_onlypose_edges().iter_mut() {
@@ -784,6 +800,7 @@ pub fn pose_inertial_optimization_last_keyframe(
         }
         i += 1;
     }
+    debug!("new H is: {:?}", h);
 
     match sensor.frame() {
         FrameSensor::Stereo => {
@@ -821,7 +838,7 @@ pub fn pose_inertial_optimization_last_keyframe(
 pub fn inertial_optimization_initialization(
     map: &ReadWriteMap, rwg: &mut DVMatrix3<f64>, scale: &mut f64, 
     bg: &mut DVVector3<f64>, ba: &mut DVVector3<f64>, is_mono: bool,
-    fixed_velocity: bool, prior_g: f64, prior_a: f64,
+    prior_g: f64, prior_a: f64,
 ) -> Result<(), Box<dyn std::error::Error> > {
     // void Optimizer::InertialOptimization(Map *pMap, Eigen::Matrix3d &Rwg, double &scale, Eigen::Vector3d &bg, Eigen::Vector3d &ba, bool bMono, Eigen::MatrixXd  &covInertial, bool bFixedVel, bool bGauss, float priorG, float priorA)
 
@@ -838,11 +855,13 @@ pub fn inertial_optimization_initialization(
     let cy= SETTINGS.get::<f64>(CAMERA, "cy");
     let camera_param = [fx, fy, cx,cy];
 
-    println!("IMU init.... initial rwg: {:?}", rwg);
+    println!("11/14 IMU init.... initial rwg: {:?}", rwg);
 
     let mut optimizer = if prior_g != 0.0 {
+        println!("11/14 SET LAMBDA INIT = 1e3");
         g2o::ffi::new_sparse_optimizer(5, camera_param, 1e3)
     } else {
+        println!("11/14 SET LAMBDA INIT = 0");
         g2o::ffi::new_sparse_optimizer(5, camera_param, 0.0)
     };
 
@@ -859,29 +878,30 @@ pub fn inertial_optimization_initialization(
                     panic!("Should have velocity by now!")
                 }
             };
-            println!("IMU init.... initial KF {} velocity: {:?}", kf.id, kf.imu_data.velocity.unwrap());
 
+
+            println!("KF {} velocity in rust: {:?}", kf.id, velocity);
             optimizer.pin_mut().add_vertex_velocity(
                 max_kf_id + kf_id + 1,
-                fixed_velocity,
+                false,
                 velocity.into()
             );
         }
 
         // Biases
         let first_kf = lock.get_first_keyframe();
-        let gyro_bias = first_kf.imu_data.imu_bias.get_gyro_bias();
+        let gyro_bias = first_kf.imu_data.get_imu_bias().get_gyro_bias();
         let vertex_gyro_bias_id = max_kf_id * 2 + 2;
         optimizer.pin_mut().add_vertex_gyrobias(
             vertex_gyro_bias_id,
-            fixed_velocity,
+            false,
             gyro_bias.into()
         );
-        let acc_bias = first_kf.imu_data.imu_bias.get_acc_bias();
+        let acc_bias = first_kf.imu_data.get_imu_bias().get_acc_bias();
         let vertex_acc_bias_id = max_kf_id * 2 + 3;
         optimizer.pin_mut().add_vertex_accbias(
             vertex_acc_bias_id,
-            fixed_velocity,
+            false,
             acc_bias.into()
         );
 
@@ -893,8 +913,6 @@ pub fn inertial_optimization_initialization(
             prior_a,
             prior_g
         );
-        println!("IMU init.... initial gyro bias: {:?}", gyro_bias);
-        println!("IMU init.... initial acc bias: {:?}", acc_bias);
 
         optimizer.pin_mut().add_vertex_gdir(
             max_kf_id * 2 + 4,
@@ -906,8 +924,6 @@ pub fn inertial_optimization_initialization(
             !is_mono,  // Fixed for stereo case
             *scale,
         );
-        println!("IMU init.... initial scale: {:?}", scale);
-
     }
 
     {
@@ -927,7 +943,7 @@ pub fn inertial_optimization_initialization(
             let prev_kf_id = keyframe.prev_kf_id.unwrap();
 
 
-            imu_preintegrated.set_new_bias(map.read()?.get_keyframe(prev_kf_id).imu_data.imu_bias);
+            imu_preintegrated.set_new_bias(map.read()?.get_keyframe(prev_kf_id).imu_data.get_imu_bias());
 
             optimizer.pin_mut().add_edge_inertial_gs(
                 prev_kf_id,
@@ -970,16 +986,16 @@ pub fn inertial_optimization_initialization(
     *scale = estimate.scale;
     *rwg = estimate.rwg.into();
 
-    // println!("C++ RWG: {:?}", estimate.rwg);
-    // println!("Rust RWG: {:?}", rwg);
+    println!("Rust RWG: {:?}", rwg);
+    // todo sofiya should this be flipped?
 
     let b = ImuBias {
-        bax: vb[0],
-        bay: vb[1],
-        baz: vb[2],
-        bwx: vb[3],
-        bwy: vb[4],
-        bwz: vb[5],
+        bax: vb[3],
+        bay: vb[4],
+        baz: vb[5],
+        bwx: vb[0],
+        bwy: vb[1],
+        bwz: vb[2],
     };
 
     println!("IMU init.... RESULT bias: {:?}", b);
@@ -994,17 +1010,18 @@ pub fn inertial_optimization_initialization(
         let velocity = optimizer.recover_optimized_vertex_velocity(max_kf_id + kf_id + 1);
         kf.imu_data.velocity = Some(velocity.into());  // Velocity is scaled after
 
-        if (* kf.imu_data.imu_bias.get_gyro_bias() - ** bg).norm() > 0.01 {
+        if (* kf.imu_data.get_imu_bias().get_gyro_bias() - ** bg).norm() > 0.01 {
             kf.imu_data.set_new_bias(b);
+
             if let Some(imu_preintegrated) = kf.imu_data.imu_preintegrated.as_mut() {
                 imu_preintegrated.reintegrate();
-                println!("(IMU init) reintegrate");
             }
         } else {
             kf.imu_data.set_new_bias(b);
         }
-        println!("IMU init.... RESULT KF velocity {} {:?}", kf.id, kf.imu_data.velocity.unwrap());
-        println!("IMU init.... RESULT KF bias {} {:?}", kf.id, kf.imu_data.imu_bias);
+        
+        println!("INERTIAL OPTIMIZATION RESULTS.... KF bias {} {:?}", kf.id, kf.imu_data.get_imu_bias());
+        println!("INERTIAL OPTIMIZATION RESULTS.... KF velocity {} {:?}", kf.id, kf.imu_data.velocity.unwrap());
 
     }
     Ok(())
@@ -1043,7 +1060,7 @@ pub fn inertial_optimization_scale_refinement(map: &ReadWriteMap, rwg: &mut nalg
 
             // Vertex of fixed biases
             let first_kf = lock.get_first_keyframe();
-            let gyro_bias = first_kf.imu_data.imu_bias.get_gyro_bias();
+            let gyro_bias = first_kf.imu_data.get_imu_bias().get_gyro_bias();
             optimizer.pin_mut().add_vertex_gyrobias(
                 2 * (max_kf_id + 1) + kf_id,
                 true,
@@ -1053,7 +1070,7 @@ pub fn inertial_optimization_scale_refinement(map: &ReadWriteMap, rwg: &mut nalg
             optimizer.pin_mut().add_vertex_accbias(
                 3 * (max_kf_id + 1) + kf_id,
                 true,
-                first_kf.imu_data.imu_bias.get_acc_bias().into()
+                first_kf.imu_data.get_imu_bias().get_acc_bias().into()
             );
         }
 
@@ -1086,7 +1103,7 @@ pub fn inertial_optimization_scale_refinement(map: &ReadWriteMap, rwg: &mut nalg
             let mut imu_preintegrated = keyframe.imu_data.imu_preintegrated.as_ref().unwrap().clone();
             let prev_kf_id = keyframe.prev_kf_id.unwrap();
 
-            imu_preintegrated.set_new_bias(map.read()?.get_keyframe(prev_kf_id).imu_data.imu_bias);
+            imu_preintegrated.set_new_bias(map.read()?.get_keyframe(prev_kf_id).imu_data.get_imu_bias());
 
             optimizer.pin_mut().add_edge_inertial_gs(
                 prev_kf_id,
@@ -1240,7 +1257,7 @@ pub fn optimize_pose(
             }
 
             if iteration == 2 {
-                edge.inner.pin_mut().set_robust_kernel(true);
+                edge.inner.pin_mut().set_robust_kernel(true, 0.0);
             }
             index += 1;
         }
@@ -1726,6 +1743,11 @@ pub fn add_vertex_pose_keyframe(optimizer: &mut UniquePtr<BridgeSparseOptimizer>
     ); // lol whateverrr
     let tcb_rot = imu_calib.tcb.get_quaternion();
 
+    println!("translation: {:?}", kf.get_pose().get_translation());
+    println!("rotation: {:?}", rot);
+    println!("imu position: {:?}", kf.get_imu_position());
+    println!("imu rotation: {:?}", imu_rot);
+
     optimizer.pin_mut().add_vertex_pose(
         vertex_id,
         fixed,
@@ -1753,10 +1775,10 @@ pub fn add_vertex_pose_frame(optimizer: &mut UniquePtr<BridgeSparseOptimizer>, f
     ); // lol whateverrr
     let tcb_rot = imu_calib.tcb.get_quaternion();
 
-    // println!("KeyFrame {} translation: {:?}", kf.id, kf.get_pose().get_translation());
-    // println!("KeyFrame {} rotation: {:?}", kf.id, kf.get_pose().get_rotation());
-    // println!("KeyFrame {} imu position: {:?}", kf.id, kf.get_imu_position());
-    // println!("KeyFrame {} imu rotation: {:?}", kf.id, kf.get_imu_rotation());
+    println!("translation: {:?}", frame.pose.unwrap().get_translation());
+    println!("rotation: {:?}", rot);
+    println!("imu position: {:?}", frame.get_imu_position());
+    println!("imu rotation: {:?}", imu_rot);
 
     optimizer.pin_mut().add_vertex_pose(
         vertex_id,

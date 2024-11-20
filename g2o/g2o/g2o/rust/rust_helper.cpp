@@ -54,6 +54,7 @@ namespace g2o {
 
             g2o::OptimizationAlgorithmLevenberg* solver = new g2o::OptimizationAlgorithmLevenberg(solver_ptr);
             optimizer->setAlgorithm(solver);
+            optimizer->setVerbose(false);
 
             if (lambda_init > 0) {
                 solver->setUserLambdaInit(lambda_init);
@@ -227,6 +228,7 @@ namespace g2o {
         VV->setFixed(set_fixed);
         // std::cout << "Add vertex velocity" << std::endl;
         optimizer->addVertex(VV);
+        std::cout << "11/14 ADD VELOCITY. Vertex id: " << vertex_id << " with velocity: " << vel.transpose() << ", fixed: " << set_fixed << std::endl;
     }
 
     void BridgeSparseOptimizer::add_vertex_gyrobias(
@@ -239,8 +241,7 @@ namespace g2o {
         VG->setFixed(set_fixed);
         // std::cout << "Add vertex gyrobias" << std::endl;
         optimizer->addVertex(VG);
-        // std::cout << "GYRO BIAS. Vertex id: " << vertex_id << " with bias: " << bias << "... with estimate: " << VG->estimate().transpose() << " ... fixed: " << set_fixed << std::endl;
-
+        std::cout << "11/14 ADD GYRO BIAS. Vertex id: " << vertex_id << " with bias: " << bias.transpose() << ", fixed: " << set_fixed << std::endl;
     }
 
     void BridgeSparseOptimizer::add_vertex_accbias(
@@ -253,7 +254,7 @@ namespace g2o {
         VA->setFixed(set_fixed);
         // std::cout << "Add vertex acc bias" << std::endl;
         optimizer->addVertex(VA);
-        // std::cout << "ACC BIAS. Vertex id: " << vertex_id << ", fixed: " << set_fixed << std::endl;
+        std::cout << "11/14 ACC BIAS. Vertex id: " << vertex_id << " with bias: " << bias.transpose() << ", fixed: " << set_fixed << std::endl;
     }
 
     void BridgeSparseOptimizer::add_vertex_gdir(
@@ -269,6 +270,8 @@ namespace g2o {
         VGDir->setFixed(set_fixed);
         // std::cout << "Add vertex gdir" << std::endl;
         optimizer->addVertex(VGDir);
+
+        std::cout << "11/14 ADD GDIR. rwg: " << rwg_eig << std::endl;
     }
 
     void BridgeSparseOptimizer::add_vertex_scale(
@@ -279,6 +282,7 @@ namespace g2o {
         VS->setFixed(set_fixed);
         // std::cout << "Add vertex scale" << std::endl;
         optimizer->addVertex(VS);
+        std::cout << "11/14 ADD SCALE. scale: " << scale << ", set fixed: " << set_fixed << std::endl;
     }
 
     void BridgeSparseOptimizer::add_vertex_sbapointxyz(
@@ -495,6 +499,9 @@ namespace g2o {
         epg->setInformation(infoPriorG*Eigen::Matrix3d::Identity());
         optimizer->addEdge(epg);
 
+        std::cout << "11/14 ADD PRIOR ACC BIAS. bprior: " << bprior_eig.transpose() << ", priorA: " << priorA << std::endl;
+        std::cout << "11/14 ADD PRIOR GYRO BIAS. bprior: " << bprior_eig.transpose() << ", priorG: " << priorG << std::endl;
+
         // std::cout << "PRIOR ACC BIAS. Connect to vertex: "<< optimizer->vertex(vertex_id1) << " priorA: " << priorA << std::endl;
         // std::cout << "PRIOR GYRO BIAS. Connect to vertex: "<< optimizer->vertex(vertex_id2) << " priorG: " << priorG << std::endl;
     }
@@ -600,9 +607,14 @@ namespace g2o {
         Eigen::Vector3d vwb2(vwb.data());
         Eigen::Vector3d bg2(bg.data());
         Eigen::Vector3d ba2(ba.data());
-        Matrix15d H2(H2.data());
+        Matrix15d H2;
+        for (int i = 0; i < 15; i++) {
+            for (int j = 0; j < 15; j++) {
+                H2(i,j) = H[i][j];
+            }
+        }
 
-        ConstraintPoseImu * constraint_pose = new ConstraintPoseImu(Rwb2, twb2, vwb2, bg2, ba2, H2);
+        ConstraintPoseImu *constraint_pose = new ConstraintPoseImu(Rwb2, twb2, vwb2, bg2, ba2, H2);
 
         EdgePriorPoseImu* ep = new EdgePriorPoseImu(constraint_pose);
 
@@ -889,6 +901,8 @@ namespace g2o {
         g2o::SE3Quat SE3quat = vSE3->estimate();
         Vector3d translation = SE3quat.translation();
         Quaterniond rotation = SE3quat.rotation();
+        // std::cout << "Rotation in C++: " << SE3quat.rotation().toRotationMatrix() << std::endl;
+        // std::cout << "Quaternion in C++: " << SE3quat.rotation().coeffs().transpose() << std::endl;
 
         Pose pose;
         pose.translation = {
@@ -932,7 +946,7 @@ namespace g2o {
             (double) rotation.z()
         };
 
-        // std::cout << "Optimized pose in c++: t " << SE3quat.translation().transpose() << " r " << SE3quat.rotation().vec().transpose() << std::endl;
+        std::cout << "Optimized pose in c++: t " << translation.transpose() << " r " << rotation << std::endl;
 
         return pose;
     }
@@ -969,6 +983,8 @@ namespace g2o {
             bg << 0, 0, 0;
         }
 
+        std::cout << "C++ Bias: acc..." << ba << ", gyro..." << bg << std::endl;
+
         double scale;
         Eigen::Matrix3d Rwg;
         if (vs != -1 && vgdir != -1) {
@@ -980,7 +996,6 @@ namespace g2o {
             scale = 0.0;
             Rwg = Eigen::Matrix3d::Identity();
         }
-
 
         InertialEstimate estimate;
         estimate.vb = {vb[0], vb[1], vb[2], vb[3], vb[4], vb[5]};

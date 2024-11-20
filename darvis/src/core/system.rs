@@ -89,7 +89,9 @@ impl Actor for NullActor {
 }
 
 
-pub trait ActorMessage: Downcast + Send {}
+pub trait ActorMessage: Downcast + Send {
+    fn get_map_version(&self) -> u64;
+}
 impl_downcast!(ActorMessage);
 
 pub trait Base: Downcast {}
