@@ -14,9 +14,9 @@ name = "core"
 path = "src/core/lib.rs"
 
 [profile.release]
-debug = true
+debug = false
 #codegen-units = 1
-lto = "fat"
+# lto = "fat"
 
 [rust]
 debuginfo-level = 1
@@ -46,8 +46,39 @@ foxglove-ws = "0.2.2"
 tokio = "1.36.0"
 base64 = "0.21.7"
 
-#cc = { version = "1.0.79", features = ["parallel"] }
-opencv = "0.85.2"
+cc = { version = "1.0.79", features = ["parallel"] }
+opencv = { version = "0.85.2", default-features = false, features = [
+    "imgproc",
+    "imgcodecs",
+    "videoio",
+    "highgui",
+    "calib3d",
+    "features2d",
+    "objdetect",
+    "flann",
+    "photo",
+    "stitching",
+    "gapi",
+    "alphamat",
+    "aruco",
+    "bgsegm",
+    "ccalib",
+    "face",
+    "img_hash",
+    "line_descriptor",
+    "rapid",
+    "rgbd",
+    "stereo",
+    "surface_matching",
+    "tracking",
+    "videostab",
+    "xfeatures2d",
+    "ximgproc",
+    "xobjdetect",
+    "xphoto",
+ 
+] }
+
 nalgebra = {version = "0.32.3", features = ["serde-serialize"]}
 cv-convert = {version = '0.25.0', default_features = false, features = ['opencv_0-85','nalgebra_0-32']}
 cxx = "1.0"

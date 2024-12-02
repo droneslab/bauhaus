@@ -1,0 +1,1114 @@
+warning: unused manifest key: env
+warning: unused manifest key: rust
+    Updating crates.io index
+     Locking 19 packages to latest compatible versions
+ Downgrading cc v1.2.2 -> v1.0.79 (available: v1.2.2)
+ Downgrading cmake v0.1.52 -> v0.1.50 (available: v0.1.52)
+ Downgrading cxx v1.0.133 -> v1.0.118 (available: v1.0.133)
+ Downgrading cxx-build v1.0.133 -> v1.0.118 (available: v1.0.133)
+ Downgrading cxxbridge-flags v1.0.133 -> v1.0.118 (available: v1.0.133)
+ Downgrading cxxbridge-macro v1.0.133 -> v1.0.118 (available: v1.0.133)
+ Downgrading generator v0.8.3 -> v0.7.5
+ Downgrading jobserver v0.1.32 -> v0.1.26 (available: v0.1.32)
+ Downgrading loom v0.7.2 -> v0.5.6
+      Adding lz4_flex v0.11.3
+ Downgrading mcap v0.12.0 -> v0.9.2 (available: v0.12.0)
+    Updating opencv v0.84.3 -> v0.85.3 (available: v0.93.5)
+    Updating opencv-binding-generator v0.71.0 -> v0.75.0
+      Adding static_assertions v1.1.0
+      Adding tracing-attributes v0.1.28
+ Downgrading tracy-client v0.16.5 -> v0.16.1 (available: v0.16.5)
+      Adding tracy-client-sys v0.21.0 (available: v0.21.2)
+      Adding twox-hash v1.6.3
+ Downgrading windows v0.58.0 -> v0.48.0
+   Compiling proc-macro2 v1.0.92
+   Compiling unicode-ident v1.0.14
+   Compiling cfg-if v1.0.0
+   Compiling libc v0.2.167
+   Compiling autocfg v1.4.0
+   Compiling memchr v2.7.4
+   Compiling once_cell v1.20.2
+   Compiling version_check v0.9.5
+   Compiling bytes v1.9.0
+   Compiling regex-syntax v0.8.5
+   Compiling fnv v1.0.7
+   Compiling serde v1.0.215
+   Compiling log v0.4.22
+   Compiling hashbrown v0.15.2
+   Compiling equivalent v1.0.1
+   Compiling either v1.13.0
+   Compiling num-traits v0.2.19
+   Compiling quote v1.0.37
+   Compiling stable_deref_trait v1.2.0
+   Compiling typenum v1.17.0
+   Compiling jobserver v0.1.26
+   Compiling fixedbitset v0.4.2
+   Compiling syn v2.0.90
+   Compiling cc v1.0.79
+   Compiling indexmap v2.7.0
+   Compiling itoa v1.0.14
+   Compiling anyhow v1.0.93
+   Compiling smallvec v1.13.2
+   Compiling byteorder v1.5.0
+   Compiling syn v1.0.109
+   Compiling pkg-config v0.3.31
+   Compiling adler2 v2.0.0
+   Compiling percent-encoding v2.3.1
+   Compiling gimli v0.31.1
+   Compiling miniz_oxide v0.8.0
+   Compiling object v0.36.5
+   Compiling aho-corasick v1.1.3
+   Compiling bytemuck v1.20.0
+   Compiling writeable v0.5.5
+   Compiling rustc-demangle v0.1.24
+   Compiling pin-project-lite v0.2.15
+   Compiling litemap v0.7.4
+   Compiling lock_api v0.4.12
+   Compiling generic-array v0.14.7
+   Compiling paste v1.0.15
+   Compiling regex-automata v0.4.9
+   Compiling parking_lot_core v0.9.10
+   Compiling petgraph v0.6.5
+   Compiling thread-id v4.2.2
+   Compiling icu_locid_transform_data v1.5.0
+   Compiling scopeguard v1.2.0
+   Compiling futures-core v0.3.31
+   Compiling glob v0.3.1
+   Compiling addr2line v0.24.2
+   Compiling synstructure v0.13.1
+   Compiling clang-sys v1.8.1
+   Compiling getrandom v0.2.15
+   Compiling itertools v0.12.1
+   Compiling regex v1.11.1
+   Compiling backtrace v0.3.74
+   Compiling slab v0.4.9
+   Compiling scratch v1.0.7
+   Compiling icu_properties_data v1.5.0
+   Compiling futures-sink v0.3.31
+   Compiling safe_arch v0.7.2
+   Compiling link-cplusplus v1.0.9
+   Compiling socket2 v0.5.8
+   Compiling mio v1.0.3
+   Compiling parking_lot v0.12.3
+   Compiling signal-hook-registry v1.4.2
+   Compiling zerofrom-derive v0.1.5
+   Compiling yoke-derive v0.7.5
+   Compiling serde_derive v1.0.215
+   Compiling zerovec-derive v0.10.3
+   Compiling displaydoc v0.2.5
+   Compiling zerocopy-derive v0.7.35
+   Compiling icu_provider_macros v1.5.0
+   Compiling prost-derive v0.12.6
+   Compiling tokio-macros v2.4.0
+   Compiling http v0.2.12
+   Compiling zerocopy v0.7.35
+   Compiling libloading v0.8.6
+   Compiling utf8_iter v1.0.4
+   Compiling zerofrom v0.1.5
+   Compiling httparse v1.9.5
+   Compiling yoke v0.7.5
+   Compiling write16 v1.0.0
+   Compiling icu_normalizer_data v1.5.0
+   Compiling utf16_iter v1.0.5
+   Compiling zerovec v0.10.4
+   Compiling thiserror v1.0.69
+   Compiling unicode-width v0.1.14
+   Compiling ppv-lite86 v0.2.20
+   Compiling termcolor v1.4.1
+   Compiling tokio v1.41.1
+   Compiling codespan-reporting v0.11.1
+   Compiling futures-macro v0.3.31
+   Compiling thiserror-impl v1.0.69
+   Compiling tinystr v0.7.6
+   Compiling icu_collections v1.5.0
+   Compiling icu_locid v1.5.0
+   Compiling wide v0.7.30
+   Compiling icu_provider v1.5.0
+   Compiling crypto-common v0.1.6
+   Compiling block-buffer v0.10.4
+   Compiling zstd-sys v2.0.13+zstd.1.5.6
+   Compiling icu_locid_transform v1.5.0
+   Compiling approx v0.5.1
+   Compiling ident_case v1.0.1
+   Compiling rustix v0.38.41
+   Compiling futures-task v0.3.31
+   Compiling semver v1.0.23
+   Compiling pin-utils v0.1.0
+   Compiling cxxbridge-flags v1.0.118
+   Compiling getrandom v0.1.16
+   Compiling cxx v1.0.118
+   Compiling futures-util v0.3.31
+   Compiling icu_properties v1.5.1
+   Compiling darling_core v0.20.10
+   Compiling num-complex v0.4.6
+   Compiling icu_normalizer v1.5.0
+   Compiling clang v2.0.0
+   Compiling idna_adapter v1.2.0
+   Compiling digest v0.10.7
+   Compiling cxx-build v1.0.118
+   Compiling rand_core v0.6.4
+   Compiling form_urlencoded v1.2.1
+   Compiling cmake v0.1.50
+   Compiling matrixmultiply v0.3.9
+   Compiling dunce v1.0.5
+   Compiling linux-raw-sys v0.4.14
+   Compiling ryu v1.0.18
+   Compiling prettyplease v0.2.25
+   Compiling cpufeatures v0.2.16
+   Compiling bitflags v2.6.0
+   Compiling prost v0.12.6
+   Compiling sha1 v0.10.6
+   Compiling opencv-binding-generator v0.75.0
+   Compiling darling_macro v0.20.10
+   Compiling rand_chacha v0.3.1
+   Compiling idna v1.0.3
+   Compiling num-integer v0.1.46
+   Compiling tracing-core v0.1.33
+   Compiling unicase v2.8.0
+   Compiling serde_json v1.0.133
+   Compiling vcpkg v0.2.15
+   Compiling fastrand v2.2.0
+   Compiling rawpointer v0.2.1
+   Compiling shlex v1.3.0
+   Compiling mime v0.3.17
+   Compiling binrw_derive v0.12.0
+   Compiling zstd-safe v5.0.2+zstd.1.5.2
+   Compiling tempfile v3.14.0
+   Compiling tracing v0.1.41
+   Compiling mime_guess v2.0.5
+   Compiling num-rational v0.4.2
+   Compiling rand_core v0.5.1
+   Compiling url v2.5.4
+   Compiling darling v0.20.10
+   Compiling rand v0.8.5
+   Compiling prost-types v0.12.6
+   Compiling tokio-util v0.7.12
+   Compiling http v1.1.0
+   Compiling multer v2.1.0
+   Compiling owo-colors v3.5.0
+   Compiling utf-8 v0.7.6
+   Compiling cfg_aliases v0.2.1
+   Compiling binrw v0.12.0
+   Compiling heck v0.5.0
+   Compiling data-encoding v2.6.0
+   Compiling multimap v0.10.0
+   Compiling httpdate v1.0.3
+   Compiling static_assertions v1.1.0
+   Compiling try-lock v0.2.5
+   Compiling tungstenite v0.21.0
+   Compiling want v0.3.1
+   Compiling prost-build v0.12.6
+   Compiling twox-hash v1.6.3
+   Compiling nix v0.29.0
+   Compiling h2 v0.3.26
+   Compiling enumset_derive v0.10.0
+   Compiling rand_chacha v0.2.2
+   Compiling headers-core v0.2.0
+   Compiling http-body v0.4.6
+   Compiling pin-project-internal v1.1.7
+   Compiling opencv v0.85.3
+   Compiling cxxbridge-macro v1.0.118
+   Compiling futures-channel v0.3.31
+   Compiling tracy-client-sys v0.21.0
+   Compiling itertools v0.13.0
+   Compiling encoding_rs v0.8.35
+   Compiling array-init v2.1.0
+   Compiling tower-service v0.3.3
+   Compiling base64 v0.21.7
+   Compiling spin v0.9.8
+   Compiling utf8parse v0.2.2
+   Compiling crossbeam-utils v0.8.20
+   Compiling anstyle-parse v0.2.6
+   Compiling headers v0.3.9
+   Compiling prost-derive v0.13.3
+   Compiling pin-project v1.1.7
+   Compiling enumset v1.1.5
+   Compiling foxglove v0.1.0 (/home/nitin/Downloads/Darvis_New/darvis/foxglove)
+   Compiling rand v0.7.3
+   Compiling hyper v0.14.31
+   Compiling tokio-tungstenite v0.21.0
+   Compiling lz4_flex v0.11.3
+   Compiling dvos3binding v0.1.0 (/home/nitin/Downloads/Darvis_New/darvis/orbslam-bindings)
+   Compiling g2o v0.1.0 (/home/nitin/Downloads/Darvis_New/darvis/g2o)
+   Compiling env_logger v0.7.1
+   Compiling serde_urlencoded v0.7.1
+   Compiling simba v0.7.3
+   Compiling simba v0.8.1
+   Compiling nalgebra-macros v0.1.0
+   Compiling nalgebra-macros v0.2.2
+   Compiling num_cpus v1.16.0
+   Compiling error-chain v0.12.4
+   Compiling ahash v0.8.11
+   Compiling crc32fast v1.4.2
+   Compiling lazy_static v1.5.0
+   Compiling anstyle-query v1.1.2
+   Compiling scoped-tls v1.0.1
+   Compiling colorchoice v1.0.3
+   Compiling is_terminal_polyfill v1.70.1
+   Compiling anstyle v1.0.10
+   Compiling colored v2.1.0
+   Compiling anstream v0.6.18
+   Compiling quickcheck v0.9.2
+   Compiling prost v0.13.3
+   Compiling warp v0.3.7
+   Compiling env_filter v0.1.2
+   Compiling logging_timer_proc_macros v1.1.1
+   Compiling tokio-stream v0.1.16
+   Compiling quickcheck_macros v0.9.1
+   Compiling uuid v1.11.0
+   Compiling csv-core v0.1.11
+   Compiling half v2.4.1
+   Compiling slice-of-array v0.3.2
+   Compiling humantime v2.1.0
+   Compiling linked-hash-map v0.5.6
+   Compiling iana-time-zone v0.1.61
+   Compiling yaml-rust v0.4.5
+   Compiling env_logger v0.11.5
+   Compiling chrono v0.4.38
+   Compiling csv v1.3.1
+   Compiling nalgebra v0.32.6
+   Compiling nalgebra v0.31.4
+   Compiling ordered-map v0.4.2
+   Compiling logging_timer v1.1.1
+   Compiling crossbeam-channel v0.5.13
+   Compiling prost-types v0.13.3
+   Compiling ctrlc v3.4.5
+   Compiling fern v0.7.0
+   Compiling foxglove-ws v0.2.2
+   Compiling simba v0.9.0
+   Compiling dynamize v0.3.5
+   Compiling derivative v2.2.0
+   Compiling downcast-rs v1.2.1
+   Compiling array2d v0.3.2
+   Compiling spin_sleep v1.2.1
+   Compiling rustc-hash v1.1.0
+   Compiling nohash-hasher v0.2.0
+   Compiling tracy-client v0.16.1
+error: failed to run custom build command for `opencv v0.85.3`
+
+Caused by:
+  process didn't exit successfully: `/home/nitin/Downloads/Darvis_New/darvis/darvis/target/debug/build/opencv-041ee10faeed156f/build-script-build` (exit status: 101)
+  --- stdout
+  cargo:rerun-if-env-changed=OPENCV4_NO_PKG_CONFIG
+  cargo:rerun-if-env-changed=PKG_CONFIG_x86_64-unknown-linux-gnu
+  cargo:rerun-if-env-changed=PKG_CONFIG_x86_64_unknown_linux_gnu
+  cargo:rerun-if-env-changed=HOST_PKG_CONFIG
+  cargo:rerun-if-env-changed=PKG_CONFIG
+  cargo:rerun-if-env-changed=OPENCV4_STATIC
+  cargo:rerun-if-env-changed=OPENCV4_DYNAMIC
+  cargo:rerun-if-env-changed=PKG_CONFIG_ALL_STATIC
+  cargo:rerun-if-env-changed=PKG_CONFIG_ALL_DYNAMIC
+  cargo:rerun-if-env-changed=PKG_CONFIG_PATH_x86_64-unknown-linux-gnu
+  cargo:rerun-if-env-changed=PKG_CONFIG_PATH_x86_64_unknown_linux_gnu
+  cargo:rerun-if-env-changed=HOST_PKG_CONFIG_PATH
+  cargo:rerun-if-env-changed=PKG_CONFIG_PATH
+  cargo:rerun-if-env-changed=PKG_CONFIG_LIBDIR_x86_64-unknown-linux-gnu
+  cargo:rerun-if-env-changed=PKG_CONFIG_LIBDIR_x86_64_unknown_linux_gnu
+  cargo:rerun-if-env-changed=HOST_PKG_CONFIG_LIBDIR
+  cargo:rerun-if-env-changed=PKG_CONFIG_LIBDIR
+  cargo:rerun-if-env-changed=PKG_CONFIG_SYSROOT_DIR_x86_64-unknown-linux-gnu
+  cargo:rerun-if-env-changed=PKG_CONFIG_SYSROOT_DIR_x86_64_unknown_linux_gnu
+  cargo:rerun-if-env-changed=HOST_PKG_CONFIG_SYSROOT_DIR
+  cargo:rerun-if-env-changed=PKG_CONFIG_SYSROOT_DIR
+  cargo:rerun-if-env-changed=PKG_CONFIG_SYSROOT_DIR
+  cargo:rerun-if-env-changed=SYSROOT
+  cargo:rerun-if-env-changed=OPENCV4_STATIC
+  cargo:rerun-if-env-changed=OPENCV4_DYNAMIC
+  cargo:rerun-if-env-changed=PKG_CONFIG_ALL_STATIC
+  cargo:rerun-if-env-changed=PKG_CONFIG_ALL_DYNAMIC
+  cargo:rerun-if-env-changed=PKG_CONFIG_x86_64-unknown-linux-gnu
+  cargo:rerun-if-env-changed=PKG_CONFIG_x86_64_unknown_linux_gnu
+  cargo:rerun-if-env-changed=HOST_PKG_CONFIG
+  cargo:rerun-if-env-changed=PKG_CONFIG
+  cargo:rerun-if-env-changed=OPENCV4_STATIC
+  cargo:rerun-if-env-changed=OPENCV4_DYNAMIC
+  cargo:rerun-if-env-changed=PKG_CONFIG_ALL_STATIC
+  cargo:rerun-if-env-changed=PKG_CONFIG_ALL_DYNAMIC
+  cargo:rerun-if-env-changed=PKG_CONFIG_PATH_x86_64-unknown-linux-gnu
+  cargo:rerun-if-env-changed=PKG_CONFIG_PATH_x86_64_unknown_linux_gnu
+  cargo:rerun-if-env-changed=HOST_PKG_CONFIG_PATH
+  cargo:rerun-if-env-changed=PKG_CONFIG_PATH
+  cargo:rerun-if-env-changed=PKG_CONFIG_LIBDIR_x86_64-unknown-linux-gnu
+  cargo:rerun-if-env-changed=PKG_CONFIG_LIBDIR_x86_64_unknown_linux_gnu
+  cargo:rerun-if-env-changed=HOST_PKG_CONFIG_LIBDIR
+  cargo:rerun-if-env-changed=PKG_CONFIG_LIBDIR
+  cargo:rerun-if-env-changed=PKG_CONFIG_SYSROOT_DIR_x86_64-unknown-linux-gnu
+  cargo:rerun-if-env-changed=PKG_CONFIG_SYSROOT_DIR_x86_64_unknown_linux_gnu
+  cargo:rerun-if-env-changed=HOST_PKG_CONFIG_SYSROOT_DIR
+  cargo:rerun-if-env-changed=PKG_CONFIG_SYSROOT_DIR
+  cargo:rustc-cfg=ocvrs_opencv_branch_4
+  cargo:rerun-if-env-changed=OPENCV_PACKAGE_NAME
+  cargo:rerun-if-env-changed=OPENCV_PKGCONFIG_NAME
+  cargo:rerun-if-env-changed=OPENCV_CMAKE_NAME
+  cargo:rerun-if-env-changed=OPENCV_CMAKE_BIN
+  cargo:rerun-if-env-changed=OPENCV_VCPKG_NAME
+  cargo:rerun-if-env-changed=OPENCV_LINK_LIBS
+  cargo:rerun-if-env-changed=OPENCV_LINK_PATHS
+  cargo:rerun-if-env-changed=OPENCV_INCLUDE_PATHS
+  cargo:rerun-if-env-changed=OPENCV_DISABLE_PROBES
+  cargo:rerun-if-env-changed=OPENCV_MSVC_CRT
+  cargo:rerun-if-env-changed=CMAKE_PREFIX_PATH
+  cargo:rerun-if-env-changed=OpenCV_DIR
+  cargo:rerun-if-env-changed=PKG_CONFIG_PATH
+  cargo:rerun-if-env-changed=VCPKG_ROOT
+  cargo:rerun-if-env-changed=VCPKGRS_DYNAMIC
+  cargo:rerun-if-env-changed=VCPKGRS_TRIPLET
+  cargo:rerun-if-env-changed=OCVRS_DOCS_GENERATE_DIR
+  cargo:rerun-if-env-changed=DOCS_RS
+  cargo:rerun-if-changed=/home/nitin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp/xfeatures2d.hpp
+  cargo:rerun-if-changed=/home/nitin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp/ccalib.hpp
+  cargo:rerun-if-changed=/home/nitin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp/alphamat.hpp
+  cargo:rerun-if-changed=/home/nitin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp/photo.hpp
+  cargo:rerun-if-changed=/home/nitin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp/sfm.hpp
+  cargo:rerun-if-changed=/home/nitin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp/dnn.hpp
+  cargo:rerun-if-changed=/home/nitin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp/videoio.hpp
+  cargo:rerun-if-changed=/home/nitin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp/aruco.hpp
+  cargo:rerun-if-changed=/home/nitin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp/gapi.hpp
+  cargo:rerun-if-changed=/home/nitin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp/face.hpp
+  cargo:rerun-if-changed=/home/nitin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp/hdf.hpp
+  cargo:rerun-if-changed=/home/nitin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp/core.hpp
+  cargo:rerun-if-changed=/home/nitin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp/manual-core.cpp
+  cargo:rerun-if-changed=/home/nitin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp/ocvrs_common.hpp
+  cargo:rerun-if-changed=/home/nitin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp/bioinspired.hpp
+  cargo:rerun-if-changed=Cargo.toml
+
+  --- stderr
+  === Crate version: Some("0.85.3")
+  === Environment configuration:
+  ===   OPENCV_PACKAGE_NAME = None
+  ===   OPENCV_PKGCONFIG_NAME = None
+  ===   OPENCV_CMAKE_NAME = None
+  ===   OPENCV_CMAKE_BIN = None
+  ===   OPENCV_VCPKG_NAME = None
+  ===   OPENCV_LINK_LIBS = None
+  ===   OPENCV_LINK_PATHS = None
+  ===   OPENCV_INCLUDE_PATHS = None
+  ===   OPENCV_DISABLE_PROBES = None
+  ===   OPENCV_MSVC_CRT = None
+  ===   CMAKE_PREFIX_PATH = None
+  ===   OpenCV_DIR = None
+  ===   PKG_CONFIG_PATH = Some("/usr/local/lib/pkgconfig")
+  ===   VCPKG_ROOT = None
+  ===   VCPKGRS_DYNAMIC = None
+  ===   VCPKGRS_TRIPLET = None
+  ===   OCVRS_DOCS_GENERATE_DIR = None
+  ===   DOCS_RS = None
+  ===   PATH = Some("/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:/opt/gcc-arm-none-eabi-10-2020-q4-major/bin:/usr/lib/ccache:/home/nitin/Downloads/ardupilot/Tools/autotest:/home/nitin/.cargo/bin:/home/nitin/.opam/4.14.0/bin:/home/nitin/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/bin:/usr/lib/jvm/default/bin:/usr/bin/site_perl:/usr/bin/vendor_perl:/usr/bin/core_perl:/var/lib/snapd/snap/bin:/home/nitin/.fzf/bin")
+  === Enabled features:
+  ===   CALIB3D
+  ===   CLANG_RUNTIME
+  ===   FEATURES2D
+  ===   FLANN
+  ===   XFEATURES2D
+  === Detected probe priority based on environment vars: pkg_config: true, cmake: false, vcpkg: false
+  === Probing the OpenCV library in the following order: environment, pkg_config, cmake, vcpkg_cmake, vcpkg
+  === Can't probe using: environment, continuing with other methods because: Some environment variables are missing
+  === Probing OpenCV library using pkg_config
+  === Successfully probed using: pkg_config
+  === OpenCV library configuration: Library {
+      include_paths: [
+          "/usr/local/include/opencv4",
+      ],
+      version: Version {
+          major: 4,
+          minor: 7,
+          patch: 0,
+      },
+      cargo_metadata: [
+          "cargo:rustc-link-search=/usr/local/lib",
+          "cargo:rustc-link-lib=opencv_gapi",
+          "cargo:rustc-link-lib=opencv_stitching",
+          "cargo:rustc-link-lib=opencv_aruco",
+          "cargo:rustc-link-lib=opencv_barcode",
+          "cargo:rustc-link-lib=opencv_bgsegm",
+          "cargo:rustc-link-lib=opencv_bioinspired",
+          "cargo:rustc-link-lib=opencv_ccalib",
+          "cargo:rustc-link-lib=opencv_dnn_objdetect",
+          "cargo:rustc-link-lib=opencv_dnn_superres",
+          "cargo:rustc-link-lib=opencv_dpm",
+          "cargo:rustc-link-lib=opencv_face",
+          "cargo:rustc-link-lib=opencv_freetype",
+          "cargo:rustc-link-lib=opencv_fuzzy",
+          "cargo:rustc-link-lib=opencv_hdf",
+          "cargo:rustc-link-lib=opencv_hfs",
+          "cargo:rustc-link-lib=opencv_img_hash",
+          "cargo:rustc-link-lib=opencv_intensity_transform",
+          "cargo:rustc-link-lib=opencv_line_descriptor",
+          "cargo:rustc-link-lib=opencv_mcc",
+          "cargo:rustc-link-lib=opencv_quality",
+          "cargo:rustc-link-lib=opencv_rapid",
+          "cargo:rustc-link-lib=opencv_reg",
+          "cargo:rustc-link-lib=opencv_rgbd",
+          "cargo:rustc-link-lib=opencv_saliency",
+          "cargo:rustc-link-lib=opencv_stereo",
+          "cargo:rustc-link-lib=opencv_structured_light",
+          "cargo:rustc-link-lib=opencv_phase_unwrapping",
+          "cargo:rustc-link-lib=opencv_superres",
+          "cargo:rustc-link-lib=opencv_optflow",
+          "cargo:rustc-link-lib=opencv_surface_matching",
+          "cargo:rustc-link-lib=opencv_tracking",
+          "cargo:rustc-link-lib=opencv_highgui",
+          "cargo:rustc-link-lib=opencv_datasets",
+          "cargo:rustc-link-lib=opencv_text",
+          "cargo:rustc-link-lib=opencv_plot",
+          "cargo:rustc-link-lib=opencv_videostab",
+          "cargo:rustc-link-lib=opencv_videoio",
+          "cargo:rustc-link-lib=opencv_wechat_qrcode",
+          "cargo:rustc-link-lib=opencv_xfeatures2d",
+          "cargo:rustc-link-lib=opencv_shape",
+          "cargo:rustc-link-lib=opencv_ml",
+          "cargo:rustc-link-lib=opencv_ximgproc",
+          "cargo:rustc-link-lib=opencv_video",
+          "cargo:rustc-link-lib=opencv_xobjdetect",
+          "cargo:rustc-link-lib=opencv_objdetect",
+          "cargo:rustc-link-lib=opencv_calib3d",
+          "cargo:rustc-link-lib=opencv_imgcodecs",
+          "cargo:rustc-link-lib=opencv_features2d",
+          "cargo:rustc-link-lib=opencv_dnn",
+          "cargo:rustc-link-lib=opencv_flann",
+          "cargo:rustc-link-lib=opencv_xphoto",
+          "cargo:rustc-link-lib=opencv_photo",
+          "cargo:rustc-link-lib=opencv_imgproc",
+          "cargo:rustc-link-lib=opencv_core",
+      ],
+  }
+  === Detected OpenCV module header dir at: /usr/local/include/opencv4/opencv2
+  === Found OpenCV version: 4.7.0 in headers located at: /usr/local/include/opencv4
+  === Generating code in: /home/nitin/Downloads/Darvis_New/darvis/darvis/target/debug/build/opencv-7cbd690f37d97381/out
+  === Placing generated bindings into: /home/nitin/Downloads/Darvis_New/darvis/darvis/target/debug/build/opencv-7cbd690f37d97381/out/opencv
+  === Using OpenCV headers from: /usr/local/include/opencv4
+  === Clang: clang version 18.1.8
+  === Clang command line args: [
+      "-isystem/usr/lib64/gcc/x86_64-pc-linux-gnu/14.2.1/../../../../include/c++/14.2.1",
+      "-isystem/usr/lib64/gcc/x86_64-pc-linux-gnu/14.2.1/../../../../include/c++/14.2.1/x86_64-pc-linux-gnu",
+      "-isystem/usr/lib64/gcc/x86_64-pc-linux-gnu/14.2.1/../../../../include/c++/14.2.1/backward",
+      "-isystem/home/linuxbrew/.linuxbrew/Cellar/llvm/15.0.7_1/lib/clang/15.0.7/include",
+      "-isystem/usr/local/include",
+      "-isystem/usr/include",
+      "-I/usr/local/include/opencv4",
+      "-F/usr/local/include/opencv4",
+      "-I/home/nitin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp",
+      "-F/home/nitin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp",
+      "-DOCVRS_PARSING_HEADERS",
+      "-includeocvrs_common.hpp",
+      "-std=c++14",
+  ]
+  === Available jobs from the environment created jobserver is: 0 or there is an error reading that value
+  === Creating a new job server with num_jobs: 8
+  === Generating 5 modules
+  === Running: "/home/nitin/Downloads/Darvis_New/darvis/darvis/target/debug/build/opencv-041ee10faeed156f/build-script-build" "/usr/local/include/opencv4" "/home/nitin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp" "/home/nitin/Downloads/Darvis_New/darvis/darvis/target/debug/build/opencv-7cbd690f37d97381/out" "calib3d" ""
+  === Running: "/home/nitin/Downloads/Darvis_New/darvis/darvis/target/debug/build/opencv-041ee10faeed156f/build-script-build" "/usr/local/include/opencv4" "/home/nitin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp" "/home/nitin/Downloads/Darvis_New/darvis/darvis/target/debug/build/opencv-7cbd690f37d97381/out" "flann" ""
+  === Running: "/home/nitin/Downloads/Darvis_New/darvis/darvis/target/debug/build/opencv-041ee10faeed156f/build-script-build" "/usr/local/include/opencv4" "/home/nitin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp" "/home/nitin/Downloads/Darvis_New/darvis/darvis/target/debug/build/opencv-7cbd690f37d97381/out" "core" ""
+  === Running: "/home/nitin/Downloads/Darvis_New/darvis/darvis/target/debug/build/opencv-041ee10faeed156f/build-script-build" "/usr/local/include/opencv4" "/home/nitin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp" "/home/nitin/Downloads/Darvis_New/darvis/darvis/target/debug/build/opencv-7cbd690f37d97381/out" "xfeatures2d" ""
+  === Running: "/home/nitin/Downloads/Darvis_New/darvis/darvis/target/debug/build/opencv-041ee10faeed156f/build-script-build" "/usr/local/include/opencv4" "/home/nitin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp" "/home/nitin/Downloads/Darvis_New/darvis/darvis/target/debug/build/opencv-7cbd690f37d97381/out" "features2d" ""
+  thread 'main' panicked at /home/nitin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-binding-generator-0.75.0/src/element.rs:71:21:
+  internal error: entered unreachable code: Can't get kind of parent for cpp namespace: Entity {
+      kind: LinkageSpec,
+      display_name: None,
+      location: Some(
+          SourceLocation {
+              file: Some(
+                  File {
+                      path: "/usr/lib64/gcc/x86_64-pc-linux-gnu/14.2.1/../../../../include/c++/14.2.1/bits/exception.h",
+                  },
+              ),
+              line: 38,
+              column: 8,
+              offset: 1315,
+          },
+      ),
+  }
+  note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+  thread 'main' panicked at core/src/panicking.rs:221:5:
+  panic in a function that cannot unwind
+  stack backtrace:
+     0:     0x557b870fb0aa - std::backtrace_rs::backtrace::libunwind::trace::h5a5b8284f2d0c266
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/../../backtrace/src/backtrace/libunwind.rs:116:5
+     1:     0x557b870fb0aa - std::backtrace_rs::backtrace::trace_unsynchronized::h76d4f1c9b0b875e3
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/../../backtrace/src/backtrace/mod.rs:66:5
+     2:     0x557b870fb0aa - std::sys::backtrace::_print_fmt::hc4546b8364a537c6
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/sys/backtrace.rs:66:9
+     3:     0x557b870fb0aa - <std::sys::backtrace::BacktraceLock::print::DisplayBacktrace as core::fmt::Display>::fmt::h5b6bd5631a6d1f6b
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/sys/backtrace.rs:39:26
+     4:     0x557b87123b53 - core::fmt::rt::Argument::fmt::h270f6602a2b96f62
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/core/src/fmt/rt.rs:177:76
+     5:     0x557b87123b53 - core::fmt::write::h7550c97b06c86515
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/core/src/fmt/mod.rs:1186:21
+     6:     0x557b870f7403 - std::io::Write::write_fmt::h7b09c64fe0be9c84
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/io/mod.rs:1839:15
+     7:     0x557b870faef2 - std::sys::backtrace::BacktraceLock::print::h2395ccd2c84ba3aa
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/sys/backtrace.rs:42:9
+     8:     0x557b870fc0bc - std::panicking::default_hook::{{closure}}::he19d4c7230e07961
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/panicking.rs:268:22
+     9:     0x557b870fbf02 - std::panicking::default_hook::hf614597d3c67bbdb
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/panicking.rs:295:9
+    10:     0x557b870fc697 - std::panicking::rust_panic_with_hook::h8942133a8b252070
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/panicking.rs:801:13
+    11:     0x557b870fc4f6 - std::panicking::begin_panic_handler::{{closure}}::hb5f5963570096b29
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/panicking.rs:667:13
+    12:     0x557b870fb589 - std::sys::backtrace::__rust_end_short_backtrace::h6208cedc1922feda
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/sys/backtrace.rs:170:18
+    13:     0x557b870fc1bc - rust_begin_unwind
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/panicking.rs:665:5
+    14:     0x557b86abeced - core::panicking::panic_nounwind_fmt::runtime::h1f507a806003dfb2
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/core/src/panicking.rs:112:18
+    15:     0x557b86abeced - core::panicking::panic_nounwind_fmt::h357fc035dc231634
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/core/src/panicking.rs:122:5
+    16:     0x557b86abed82 - core::panicking::panic_nounwind::hd0dad372654c389a
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/core/src/panicking.rs:221:5
+    17:     0x557b86abeee5 - core::panicking::panic_cannot_unwind::h65aefd062253eb19
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/core/src/panicking.rs:310:5
+    18:     0x557b86feb4b1 - clang::Entity::visit_children::visit::h4bf5a912ca983eda
+    19:     0x7f8eab1814f4 - <unknown>
+    20:     0x7f8ea9e73b5a - <unknown>
+    21:     0x7f8ea9e6fa71 - <unknown>
+    22:     0x7f8ea9e743fd - clang_visitChildren
+    23:     0x557b8700b05f - clang_sys::clang_visitChildren::h2d887ec3733ec349
+    24:     0x557b86c92e07 - clang::Entity::visit_children::he63806dfc5bbbd13
+    25:     0x557b86d41ec6 - <opencv_binding_generator::generator_env::GeneratorEnvPopulator as opencv_binding_generator::walker::EntityWalkerVisitor>::visit_entity::h5093423ee2062f7f
+    26:     0x557b86cf5a3c - opencv_binding_generator::walker::visit_cv_namespace::{{closure}}::hb66b0f9a41532c81
+    27:     0x557b86ced1be - <F as clang::Entity::visit_children::EntityCallback>::call::h9eea5f6fcace60ea
+    28:     0x557b86feb556 - clang::Entity::visit_children::visit::h4bf5a912ca983eda
+    29:     0x7f8ea9e7183c - <unknown>
+    30:     0x7f8ea9e736e2 - <unknown>
+    31:     0x7f8ea9e73a40 - <unknown>
+    32:     0x7f8ea9e70669 - <unknown>
+    33:     0x7f8ea9e743fd - clang_visitChildren
+    34:     0x557b8700b05f - clang_sys::clang_visitChildren::h2d887ec3733ec349
+    35:     0x557b86c93074 - clang::Entity::visit_children::hf6533bd4559d9eca
+    36:     0x557b86cf5767 - opencv_binding_generator::walker::visit_cv_namespace::h259fd4fdfac99a9b
+    37:     0x557b86cf54d3 - <clang::Entity as opencv_binding_generator::walker::EntityWalkerExt>::walk_opencv_entities::{{closure}}::h84e25ddae5192e01
+    38:     0x557b86ced27e - <F as clang::Entity::visit_children::EntityCallback>::call::hd00bdfc5a39afb57
+    39:     0x557b86feb556 - clang::Entity::visit_children::visit::h4bf5a912ca983eda
+    40:     0x7f8ea9e7183c - <unknown>
+    41:     0x7f8ea9e736e2 - <unknown>
+    42:     0x7f8ea9e6eec3 - <unknown>
+    43:     0x7f8ea9e743fd - clang_visitChildren
+    44:     0x557b8700b05f - clang_sys::clang_visitChildren::h2d887ec3733ec349
+    45:     0x557b86c926d4 - clang::Entity::visit_children::hc3090f52b27f2f94
+    46:     0x557b86c99d64 - <clang::Entity as opencv_binding_generator::walker::EntityWalkerExt>::walk_opencv_entities::h3dedeb2935a935b5
+    47:     0x557b86d4233f - opencv_binding_generator::generator_env::GeneratorEnv::new::hc3fbb19df7754126
+    48:     0x557b86af1b40 - opencv_binding_generator::generator::Generator::generate::{{closure}}::hfdc223db82c1d87e
+    49:     0x557b86af195d - opencv_binding_generator::generator::Generator::pre_process::h5fd2d480ed057c15
+    50:     0x557b86af1ac8 - opencv_binding_generator::generator::Generator::generate::h5756e266a33f549c
+    51:     0x557b86ade01e - build_script_build::binding_generator::run::h6e9d1e2764c004f1
+    52:     0x557b86add54a - build_script_build::binding_generator::handle_running_binding_generator::hdd074a8f52335642
+    53:     0x557b86ae30bf - build_script_build::main::h9e890f5ca258a927
+    54:     0x557b86ae6343 - core::ops::function::FnOnce::call_once::hb882b1be3bb7c387
+    55:     0x557b86af9bc6 - std::sys::backtrace::__rust_begin_short_backtrace::ha9c29875fc66bee9
+    56:     0x557b86ad27d9 - std::rt::lang_start::{{closure}}::h6f86c62860d72bd4
+    57:     0x557b870f251e - core::ops::function::impls::<impl core::ops::function::FnOnce<A> for &F>::call_once::hfdb85f4ee94732d3
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/core/src/ops/function.rs:284:13
+    58:     0x557b870f251e - std::panicking::try::do_call::h6e577310f330cbef
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/panicking.rs:557:40
+    59:     0x557b870f251e - std::panicking::try::ha588d438267d2645
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/panicking.rs:520:19
+    60:     0x557b870f251e - std::panic::catch_unwind::h429fda1e025f26d9
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/panic.rs:358:14
+    61:     0x557b870f251e - std::rt::lang_start_internal::{{closure}}::h7b731265e841c4bf
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/rt.rs:174:48
+    62:     0x557b870f251e - std::panicking::try::do_call::hc0f6a675b7ae5a36
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/panicking.rs:557:40
+    63:     0x557b870f251e - std::panicking::try::h4c93b7ff0671f1ff
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/panicking.rs:520:19
+    64:     0x557b870f251e - std::panic::catch_unwind::hcc1e154961d16ce6
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/panic.rs:358:14
+    65:     0x557b870f251e - std::rt::lang_start_internal::h1c66660c99c8424c
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/rt.rs:174:20
+    66:     0x557b86ad27b7 - std::rt::lang_start::hbb86198a776e6654
+    67:     0x557b86ae4b65 - main
+    68:     0x7f8eabb07e08 - <unknown>
+    69:     0x7f8eabb07ecc - __libc_start_main
+    70:     0x557b86abf5f5 - _start
+    71:                0x0 - <unknown>
+  thread caused non-unwinding panic. aborting.
+  thread 'main' panicked at /home/nitin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-binding-generator-0.75.0/src/element.rs:71:21:
+  internal error: entered unreachable code: Can't get kind of parent for cpp namespace: Entity {
+      kind: LinkageSpec,
+      display_name: None,
+      location: Some(
+          SourceLocation {
+              file: Some(
+                  File {
+                      path: "/usr/lib64/gcc/x86_64-pc-linux-gnu/14.2.1/../../../../include/c++/14.2.1/bits/exception.h",
+                  },
+              ),
+              line: 38,
+              column: 8,
+              offset: 1315,
+          },
+      ),
+  }
+  note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+  thread 'main' panicked at core/src/panicking.rs:221:5:
+  panic in a function that cannot unwind
+  stack backtrace:
+     0:     0x55c075a6b0aa - std::backtrace_rs::backtrace::libunwind::trace::h5a5b8284f2d0c266
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/../../backtrace/src/backtrace/libunwind.rs:116:5
+     1:     0x55c075a6b0aa - std::backtrace_rs::backtrace::trace_unsynchronized::h76d4f1c9b0b875e3
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/../../backtrace/src/backtrace/mod.rs:66:5
+     2:     0x55c075a6b0aa - std::sys::backtrace::_print_fmt::hc4546b8364a537c6
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/sys/backtrace.rs:66:9
+     3:     0x55c075a6b0aa - <std::sys::backtrace::BacktraceLock::print::DisplayBacktrace as core::fmt::Display>::fmt::h5b6bd5631a6d1f6b
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/sys/backtrace.rs:39:26
+     4:     0x55c075a93b53 - core::fmt::rt::Argument::fmt::h270f6602a2b96f62
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/core/src/fmt/rt.rs:177:76
+     5:     0x55c075a93b53 - core::fmt::write::h7550c97b06c86515
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/core/src/fmt/mod.rs:1186:21
+     6:     0x55c075a67403 - std::io::Write::write_fmt::h7b09c64fe0be9c84
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/io/mod.rs:1839:15
+     7:     0x55c075a6aef2 - std::sys::backtrace::BacktraceLock::print::h2395ccd2c84ba3aa
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/sys/backtrace.rs:42:9
+     8:     0x55c075a6c0bc - std::panicking::default_hook::{{closure}}::he19d4c7230e07961
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/panicking.rs:268:22
+     9:     0x55c075a6bf02 - std::panicking::default_hook::hf614597d3c67bbdb
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/panicking.rs:295:9
+    10:     0x55c075a6c697 - std::panicking::rust_panic_with_hook::h8942133a8b252070
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/panicking.rs:801:13
+    11:     0x55c075a6c4f6 - std::panicking::begin_panic_handler::{{closure}}::hb5f5963570096b29
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/panicking.rs:667:13
+    12:     0x55c075a6b589 - std::sys::backtrace::__rust_end_short_backtrace::h6208cedc1922feda
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/sys/backtrace.rs:170:18
+    13:     0x55c075a6c1bc - rust_begin_unwind
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/panicking.rs:665:5
+    14:     0x55c07542eced - core::panicking::panic_nounwind_fmt::runtime::h1f507a806003dfb2
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/core/src/panicking.rs:112:18
+    15:     0x55c07542eced - core::panicking::panic_nounwind_fmt::h357fc035dc231634
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/core/src/panicking.rs:122:5
+    16:     0x55c07542ed82 - core::panicking::panic_nounwind::hd0dad372654c389a
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/core/src/panicking.rs:221:5
+    17:     0x55c07542eee5 - core::panicking::panic_cannot_unwind::h65aefd062253eb19
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/core/src/panicking.rs:310:5
+    18:     0x55c07595b4b1 - clang::Entity::visit_children::visit::h4bf5a912ca983eda
+    19:     0x7fd4f73814f4 - <unknown>
+    20:     0x7fd4f6073b5a - <unknown>
+    21:     0x7fd4f606fa71 - <unknown>
+    22:     0x7fd4f60743fd - clang_visitChildren
+    23:     0x55c07597b05f - clang_sys::clang_visitChildren::h2d887ec3733ec349
+    24:     0x55c075602e07 - clang::Entity::visit_children::he63806dfc5bbbd13
+    25:     0x55c0756b1ec6 - <opencv_binding_generator::generator_env::GeneratorEnvPopulator as opencv_binding_generator::walker::EntityWalkerVisitor>::visit_entity::h5093423ee2062f7f
+    26:     0x55c075665a3c - opencv_binding_generator::walker::visit_cv_namespace::{{closure}}::hb66b0f9a41532c81
+    27:     0x55c07565d1be - <F as clang::Entity::visit_children::EntityCallback>::call::h9eea5f6fcace60ea
+    28:     0x55c07595b556 - clang::Entity::visit_children::visit::h4bf5a912ca983eda
+    29:     0x7fd4f607183c - <unknown>
+    30:     0x7fd4f60736e2 - <unknown>
+    31:     0x7fd4f6073a40 - <unknown>
+    32:     0x7fd4f6070669 - <unknown>
+    33:     0x7fd4f60743fd - clang_visitChildren
+    34:     0x55c07597b05f - clang_sys::clang_visitChildren::h2d887ec3733ec349
+    35:     0x55c075603074 - clang::Entity::visit_children::hf6533bd4559d9eca
+    36:     0x55c075665767 - opencv_binding_generator::walker::visit_cv_namespace::h259fd4fdfac99a9b
+    37:     0x55c0756654d3 - <clang::Entity as opencv_binding_generator::walker::EntityWalkerExt>::walk_opencv_entities::{{closure}}::h84e25ddae5192e01
+    38:     0x55c07565d27e - <F as clang::Entity::visit_children::EntityCallback>::call::hd00bdfc5a39afb57
+    39:     0x55c07595b556 - clang::Entity::visit_children::visit::h4bf5a912ca983eda
+    40:     0x7fd4f607183c - <unknown>
+    41:     0x7fd4f60736e2 - <unknown>
+    42:     0x7fd4f606eec3 - <unknown>
+    43:     0x7fd4f60743fd - clang_visitChildren
+    44:     0x55c07597b05f - clang_sys::clang_visitChildren::h2d887ec3733ec349
+    45:     0x55c0756026d4 - clang::Entity::visit_children::hc3090f52b27f2f94
+    46:     0x55c075609d64 - <clang::Entity as opencv_binding_generator::walker::EntityWalkerExt>::walk_opencv_entities::h3dedeb2935a935b5
+    47:     0x55c0756b233f - opencv_binding_generator::generator_env::GeneratorEnv::new::hc3fbb19df7754126
+    48:     0x55c075461b40 - opencv_binding_generator::generator::Generator::generate::{{closure}}::hfdc223db82c1d87e
+    49:     0x55c07546195d - opencv_binding_generator::generator::Generator::pre_process::h5fd2d480ed057c15
+    50:     0x55c075461ac8 - opencv_binding_generator::generator::Generator::generate::h5756e266a33f549c
+    51:     0x55c07544e01e - build_script_build::binding_generator::run::h6e9d1e2764c004f1
+    52:     0x55c07544d54a - build_script_build::binding_generator::handle_running_binding_generator::hdd074a8f52335642
+    53:     0x55c0754530bf - build_script_build::main::h9e890f5ca258a927
+    54:     0x55c075456343 - core::ops::function::FnOnce::call_once::hb882b1be3bb7c387
+    55:     0x55c075469bc6 - std::sys::backtrace::__rust_begin_short_backtrace::ha9c29875fc66bee9
+    56:     0x55c0754427d9 - std::rt::lang_start::{{closure}}::h6f86c62860d72bd4
+    57:     0x55c075a6251e - core::ops::function::impls::<impl core::ops::function::FnOnce<A> for &F>::call_once::hfdb85f4ee94732d3
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/core/src/ops/function.rs:284:13
+    58:     0x55c075a6251e - std::panicking::try::do_call::h6e577310f330cbef
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/panicking.rs:557:40
+    59:     0x55c075a6251e - std::panicking::try::ha588d438267d2645
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/panicking.rs:520:19
+    60:     0x55c075a6251e - std::panic::catch_unwind::h429fda1e025f26d9
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/panic.rs:358:14
+    61:     0x55c075a6251e - std::rt::lang_start_internal::{{closure}}::h7b731265e841c4bf
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/rt.rs:174:48
+    62:     0x55c075a6251e - std::panicking::try::do_call::hc0f6a675b7ae5a36
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/panicking.rs:557:40
+    63:     0x55c075a6251e - std::panicking::try::h4c93b7ff0671f1ff
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/panicking.rs:520:19
+    64:     0x55c075a6251e - std::panic::catch_unwind::hcc1e154961d16ce6
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/panic.rs:358:14
+    65:     0x55c075a6251e - std::rt::lang_start_internal::h1c66660c99c8424c
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/rt.rs:174:20
+    66:     0x55c0754427b7 - std::rt::lang_start::hbb86198a776e6654
+    67:     0x55c075454b65 - main
+    68:     0x7fd4f7d77e08 - <unknown>
+    69:     0x7fd4f7d77ecc - __libc_start_main
+    70:     0x55c07542f5f5 - _start
+    71:                0x0 - <unknown>
+  thread caused non-unwinding panic. aborting.
+  thread 'main' panicked at /home/nitin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-binding-generator-0.75.0/src/element.rs:71:21:
+  internal error: entered unreachable code: Can't get kind of parent for cpp namespace: Entity {
+      kind: LinkageSpec,
+      display_name: None,
+      location: Some(
+          SourceLocation {
+              file: Some(
+                  File {
+                      path: "/usr/lib64/gcc/x86_64-pc-linux-gnu/14.2.1/../../../../include/c++/14.2.1/bits/exception.h",
+                  },
+              ),
+              line: 38,
+              column: 8,
+              offset: 1315,
+          },
+      ),
+  }
+  note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+  thread 'main' panicked at core/src/panicking.rs:221:5:
+  panic in a function that cannot unwind
+  stack backtrace:
+     0:     0x55f3630740aa - std::backtrace_rs::backtrace::libunwind::trace::h5a5b8284f2d0c266
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/../../backtrace/src/backtrace/libunwind.rs:116:5
+     1:     0x55f3630740aa - std::backtrace_rs::backtrace::trace_unsynchronized::h76d4f1c9b0b875e3
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/../../backtrace/src/backtrace/mod.rs:66:5
+     2:     0x55f3630740aa - std::sys::backtrace::_print_fmt::hc4546b8364a537c6
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/sys/backtrace.rs:66:9
+     3:     0x55f3630740aa - <std::sys::backtrace::BacktraceLock::print::DisplayBacktrace as core::fmt::Display>::fmt::h5b6bd5631a6d1f6b
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/sys/backtrace.rs:39:26
+     4:     0x55f36309cb53 - core::fmt::rt::Argument::fmt::h270f6602a2b96f62
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/core/src/fmt/rt.rs:177:76
+     5:     0x55f36309cb53 - core::fmt::write::h7550c97b06c86515
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/core/src/fmt/mod.rs:1186:21
+     6:     0x55f363070403 - std::io::Write::write_fmt::h7b09c64fe0be9c84
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/io/mod.rs:1839:15
+     7:     0x55f363073ef2 - std::sys::backtrace::BacktraceLock::print::h2395ccd2c84ba3aa
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/sys/backtrace.rs:42:9
+     8:     0x55f3630750bc - std::panicking::default_hook::{{closure}}::he19d4c7230e07961
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/panicking.rs:268:22
+     9:     0x55f363074f02 - std::panicking::default_hook::hf614597d3c67bbdb
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/panicking.rs:295:9
+    10:     0x55f363075697 - std::panicking::rust_panic_with_hook::h8942133a8b252070
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/panicking.rs:801:13
+    11:     0x55f3630754f6 - std::panicking::begin_panic_handler::{{closure}}::hb5f5963570096b29
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/panicking.rs:667:13
+    12:     0x55f363074589 - std::sys::backtrace::__rust_end_short_backtrace::h6208cedc1922feda
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/sys/backtrace.rs:170:18
+    13:     0x55f3630751bc - rust_begin_unwind
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/panicking.rs:665:5
+    14:     0x55f362a37ced - core::panicking::panic_nounwind_fmt::runtime::h1f507a806003dfb2
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/core/src/panicking.rs:112:18
+    15:     0x55f362a37ced - core::panicking::panic_nounwind_fmt::h357fc035dc231634
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/core/src/panicking.rs:122:5
+    16:     0x55f362a37d82 - core::panicking::panic_nounwind::hd0dad372654c389a
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/core/src/panicking.rs:221:5
+    17:     0x55f362a37ee5 - core::panicking::panic_cannot_unwind::h65aefd062253eb19
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/core/src/panicking.rs:310:5
+    18:     0x55f362f644b1 - clang::Entity::visit_children::visit::h4bf5a912ca983eda
+    19:     0x7f9f579814f4 - <unknown>
+    20:     0x7f9f56673b5a - <unknown>
+    21:     0x7f9f5666fa71 - <unknown>
+    22:     0x7f9f566743fd - clang_visitChildren
+    23:     0x55f362f8405f - clang_sys::clang_visitChildren::h2d887ec3733ec349
+    24:     0x55f362c0be07 - clang::Entity::visit_children::he63806dfc5bbbd13
+    25:     0x55f362cbaec6 - <opencv_binding_generator::generator_env::GeneratorEnvPopulator as opencv_binding_generator::walker::EntityWalkerVisitor>::visit_entity::h5093423ee2062f7f
+    26:     0x55f362c6ea3c - opencv_binding_generator::walker::visit_cv_namespace::{{closure}}::hb66b0f9a41532c81
+    27:     0x55f362c661be - <F as clang::Entity::visit_children::EntityCallback>::call::h9eea5f6fcace60ea
+    28:     0x55f362f64556 - clang::Entity::visit_children::visit::h4bf5a912ca983eda
+    29:     0x7f9f5667183c - <unknown>
+    30:     0x7f9f566736e2 - <unknown>
+    31:     0x7f9f56673a40 - <unknown>
+    32:     0x7f9f56670669 - <unknown>
+    33:     0x7f9f566743fd - clang_visitChildren
+    34:     0x55f362f8405f - clang_sys::clang_visitChildren::h2d887ec3733ec349
+    35:     0x55f362c0c074 - clang::Entity::visit_children::hf6533bd4559d9eca
+    36:     0x55f362c6e767 - opencv_binding_generator::walker::visit_cv_namespace::h259fd4fdfac99a9b
+    37:     0x55f362c6e4d3 - <clang::Entity as opencv_binding_generator::walker::EntityWalkerExt>::walk_opencv_entities::{{closure}}::h84e25ddae5192e01
+    38:     0x55f362c6627e - <F as clang::Entity::visit_children::EntityCallback>::call::hd00bdfc5a39afb57
+    39:     0x55f362f64556 - clang::Entity::visit_children::visit::h4bf5a912ca983eda
+    40:     0x7f9f5667183c - <unknown>
+    41:     0x7f9f566736e2 - <unknown>
+    42:     0x7f9f5666eec3 - <unknown>
+    43:     0x7f9f566743fd - clang_visitChildren
+    44:     0x55f362f8405f - clang_sys::clang_visitChildren::h2d887ec3733ec349
+    45:     0x55f362c0b6d4 - clang::Entity::visit_children::hc3090f52b27f2f94
+    46:     0x55f362c12d64 - <clang::Entity as opencv_binding_generator::walker::EntityWalkerExt>::walk_opencv_entities::h3dedeb2935a935b5
+    47:     0x55f362cbb33f - opencv_binding_generator::generator_env::GeneratorEnv::new::hc3fbb19df7754126
+    48:     0x55f362a6ab40 - opencv_binding_generator::generator::Generator::generate::{{closure}}::hfdc223db82c1d87e
+    49:     0x55f362a6a95d - opencv_binding_generator::generator::Generator::pre_process::h5fd2d480ed057c15
+    50:     0x55f362a6aac8 - opencv_binding_generator::generator::Generator::generate::h5756e266a33f549c
+    51:     0x55f362a5701e - build_script_build::binding_generator::run::h6e9d1e2764c004f1
+    52:     0x55f362a5654a - build_script_build::binding_generator::handle_running_binding_generator::hdd074a8f52335642
+    53:     0x55f362a5c0bf - build_script_build::main::h9e890f5ca258a927
+    54:     0x55f362a5f343 - core::ops::function::FnOnce::call_once::hb882b1be3bb7c387
+    55:     0x55f362a72bc6 - std::sys::backtrace::__rust_begin_short_backtrace::ha9c29875fc66bee9
+    56:     0x55f362a4b7d9 - std::rt::lang_start::{{closure}}::h6f86c62860d72bd4
+    57:     0x55f36306b51e - core::ops::function::impls::<impl core::ops::function::FnOnce<A> for &F>::call_once::hfdb85f4ee94732d3
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/core/src/ops/function.rs:284:13
+    58:     0x55f36306b51e - std::panicking::try::do_call::h6e577310f330cbef
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/panicking.rs:557:40
+    59:     0x55f36306b51e - std::panicking::try::ha588d438267d2645
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/panicking.rs:520:19
+    60:     0x55f36306b51e - std::panic::catch_unwind::h429fda1e025f26d9
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/panic.rs:358:14
+    61:     0x55f36306b51e - std::rt::lang_start_internal::{{closure}}::h7b731265e841c4bf
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/rt.rs:174:48
+    62:     0x55f36306b51e - std::panicking::try::do_call::hc0f6a675b7ae5a36
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/panicking.rs:557:40
+    63:     0x55f36306b51e - std::panicking::try::h4c93b7ff0671f1ff
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/panicking.rs:520:19
+    64:     0x55f36306b51e - std::panic::catch_unwind::hcc1e154961d16ce6
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/panic.rs:358:14
+    65:     0x55f36306b51e - std::rt::lang_start_internal::h1c66660c99c8424c
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/rt.rs:174:20
+    66:     0x55f362a4b7b7 - std::rt::lang_start::hbb86198a776e6654
+    67:     0x55f362a5db65 - main
+    68:     0x7f9f58381e08 - <unknown>
+    69:     0x7f9f58381ecc - __libc_start_main
+    70:     0x55f362a385f5 - _start
+    71:                0x0 - <unknown>
+  thread caused non-unwinding panic. aborting.
+  thread 'main' panicked at /home/nitin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-binding-generator-0.75.0/src/element.rs:71:21:
+  internal error: entered unreachable code: Can't get kind of parent for cpp namespace: Entity {
+      kind: LinkageSpec,
+      display_name: None,
+      location: Some(
+          SourceLocation {
+              file: Some(
+                  File {
+                      path: "/usr/lib64/gcc/x86_64-pc-linux-gnu/14.2.1/../../../../include/c++/14.2.1/bits/exception.h",
+                  },
+              ),
+              line: 38,
+              column: 8,
+              offset: 1315,
+          },
+      ),
+  }
+  note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+  thread 'main' panicked at core/src/panicking.rs:221:5:
+  panic in a function that cannot unwind
+  stack backtrace:
+     0:     0x55ee458e10aa - std::backtrace_rs::backtrace::libunwind::trace::h5a5b8284f2d0c266
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/../../backtrace/src/backtrace/libunwind.rs:116:5
+     1:     0x55ee458e10aa - std::backtrace_rs::backtrace::trace_unsynchronized::h76d4f1c9b0b875e3
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/../../backtrace/src/backtrace/mod.rs:66:5
+     2:     0x55ee458e10aa - std::sys::backtrace::_print_fmt::hc4546b8364a537c6
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/sys/backtrace.rs:66:9
+     3:     0x55ee458e10aa - <std::sys::backtrace::BacktraceLock::print::DisplayBacktrace as core::fmt::Display>::fmt::h5b6bd5631a6d1f6b
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/sys/backtrace.rs:39:26
+     4:     0x55ee45909b53 - core::fmt::rt::Argument::fmt::h270f6602a2b96f62
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/core/src/fmt/rt.rs:177:76
+     5:     0x55ee45909b53 - core::fmt::write::h7550c97b06c86515
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/core/src/fmt/mod.rs:1186:21
+     6:     0x55ee458dd403 - std::io::Write::write_fmt::h7b09c64fe0be9c84
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/io/mod.rs:1839:15
+     7:     0x55ee458e0ef2 - std::sys::backtrace::BacktraceLock::print::h2395ccd2c84ba3aa
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/sys/backtrace.rs:42:9
+     8:     0x55ee458e20bc - std::panicking::default_hook::{{closure}}::he19d4c7230e07961
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/panicking.rs:268:22
+     9:     0x55ee458e1f02 - std::panicking::default_hook::hf614597d3c67bbdb
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/panicking.rs:295:9
+    10:     0x55ee458e2697 - std::panicking::rust_panic_with_hook::h8942133a8b252070
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/panicking.rs:801:13
+    11:     0x55ee458e24f6 - std::panicking::begin_panic_handler::{{closure}}::hb5f5963570096b29
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/panicking.rs:667:13
+    12:     0x55ee458e1589 - std::sys::backtrace::__rust_end_short_backtrace::h6208cedc1922feda
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/sys/backtrace.rs:170:18
+    13:     0x55ee458e21bc - rust_begin_unwind
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/panicking.rs:665:5
+    14:     0x55ee452a4ced - core::panicking::panic_nounwind_fmt::runtime::h1f507a806003dfb2
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/core/src/panicking.rs:112:18
+    15:     0x55ee452a4ced - core::panicking::panic_nounwind_fmt::h357fc035dc231634
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/core/src/panicking.rs:122:5
+    16:     0x55ee452a4d82 - core::panicking::panic_nounwind::hd0dad372654c389a
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/core/src/panicking.rs:221:5
+    17:     0x55ee452a4ee5 - core::panicking::panic_cannot_unwind::h65aefd062253eb19
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/core/src/panicking.rs:310:5
+    18:     0x55ee457d14b1 - clang::Entity::visit_children::visit::h4bf5a912ca983eda
+    19:     0x7fdd881814f4 - <unknown>
+    20:     0x7fdd86e73b5a - <unknown>
+    21:     0x7fdd86e6fa71 - <unknown>
+    22:     0x7fdd86e743fd - clang_visitChildren
+    23:     0x55ee457f105f - clang_sys::clang_visitChildren::h2d887ec3733ec349
+    24:     0x55ee45478e07 - clang::Entity::visit_children::he63806dfc5bbbd13
+    25:     0x55ee45527ec6 - <opencv_binding_generator::generator_env::GeneratorEnvPopulator as opencv_binding_generator::walker::EntityWalkerVisitor>::visit_entity::h5093423ee2062f7f
+    26:     0x55ee454dba3c - opencv_binding_generator::walker::visit_cv_namespace::{{closure}}::hb66b0f9a41532c81
+    27:     0x55ee454d31be - <F as clang::Entity::visit_children::EntityCallback>::call::h9eea5f6fcace60ea
+    28:     0x55ee457d1556 - clang::Entity::visit_children::visit::h4bf5a912ca983eda
+    29:     0x7fdd86e7183c - <unknown>
+    30:     0x7fdd86e736e2 - <unknown>
+    31:     0x7fdd86e73a40 - <unknown>
+    32:     0x7fdd86e70669 - <unknown>
+    33:     0x7fdd86e743fd - clang_visitChildren
+    34:     0x55ee457f105f - clang_sys::clang_visitChildren::h2d887ec3733ec349
+    35:     0x55ee45479074 - clang::Entity::visit_children::hf6533bd4559d9eca
+    36:     0x55ee454db767 - opencv_binding_generator::walker::visit_cv_namespace::h259fd4fdfac99a9b
+    37:     0x55ee454db4d3 - <clang::Entity as opencv_binding_generator::walker::EntityWalkerExt>::walk_opencv_entities::{{closure}}::h84e25ddae5192e01
+    38:     0x55ee454d327e - <F as clang::Entity::visit_children::EntityCallback>::call::hd00bdfc5a39afb57
+    39:     0x55ee457d1556 - clang::Entity::visit_children::visit::h4bf5a912ca983eda
+    40:     0x7fdd86e7183c - <unknown>
+    41:     0x7fdd86e736e2 - <unknown>
+    42:     0x7fdd86e6eec3 - <unknown>
+    43:     0x7fdd86e743fd - clang_visitChildren
+    44:     0x55ee457f105f - clang_sys::clang_visitChildren::h2d887ec3733ec349
+    45:     0x55ee454786d4 - clang::Entity::visit_children::hc3090f52b27f2f94
+    46:     0x55ee4547fd64 - <clang::Entity as opencv_binding_generator::walker::EntityWalkerExt>::walk_opencv_entities::h3dedeb2935a935b5
+    47:     0x55ee4552833f - opencv_binding_generator::generator_env::GeneratorEnv::new::hc3fbb19df7754126
+    48:     0x55ee452d7b40 - opencv_binding_generator::generator::Generator::generate::{{closure}}::hfdc223db82c1d87e
+    49:     0x55ee452d795d - opencv_binding_generator::generator::Generator::pre_process::h5fd2d480ed057c15
+    50:     0x55ee452d7ac8 - opencv_binding_generator::generator::Generator::generate::h5756e266a33f549c
+    51:     0x55ee452c401e - build_script_build::binding_generator::run::h6e9d1e2764c004f1
+    52:     0x55ee452c354a - build_script_build::binding_generator::handle_running_binding_generator::hdd074a8f52335642
+    53:     0x55ee452c90bf - build_script_build::main::h9e890f5ca258a927
+    54:     0x55ee452cc343 - core::ops::function::FnOnce::call_once::hb882b1be3bb7c387
+    55:     0x55ee452dfbc6 - std::sys::backtrace::__rust_begin_short_backtrace::ha9c29875fc66bee9
+    56:     0x55ee452b87d9 - std::rt::lang_start::{{closure}}::h6f86c62860d72bd4
+    57:     0x55ee458d851e - core::ops::function::impls::<impl core::ops::function::FnOnce<A> for &F>::call_once::hfdb85f4ee94732d3
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/core/src/ops/function.rs:284:13
+    58:     0x55ee458d851e - std::panicking::try::do_call::h6e577310f330cbef
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/panicking.rs:557:40
+    59:     0x55ee458d851e - std::panicking::try::ha588d438267d2645
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/panicking.rs:520:19
+    60:     0x55ee458d851e - std::panic::catch_unwind::h429fda1e025f26d9
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/panic.rs:358:14
+    61:     0x55ee458d851e - std::rt::lang_start_internal::{{closure}}::h7b731265e841c4bf
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/rt.rs:174:48
+    62:     0x55ee458d851e - std::panicking::try::do_call::hc0f6a675b7ae5a36
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/panicking.rs:557:40
+    63:     0x55ee458d851e - std::panicking::try::h4c93b7ff0671f1ff
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/panicking.rs:520:19
+    64:     0x55ee458d851e - std::panic::catch_unwind::hcc1e154961d16ce6
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/panic.rs:358:14
+    65:     0x55ee458d851e - std::rt::lang_start_internal::h1c66660c99c8424c
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/rt.rs:174:20
+    66:     0x55ee452b87b7 - std::rt::lang_start::hbb86198a776e6654
+    67:     0x55ee452cab65 - main
+    68:     0x7fdd88abde08 - <unknown>
+    69:     0x7fdd88abdecc - __libc_start_main
+    70:     0x55ee452a55f5 - _start
+    71:                0x0 - <unknown>
+  thread caused non-unwinding panic. aborting.
+  thread '<unnamed>' panicked at /home/nitin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/build/generator.rs:108:25:
+  Failed to run the bindings generator for module: calib3d
+  note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+  thread 'main' panicked at /home/nitin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/build/generator.rs:117:32:
+  Generator process panicked: Any { .. }
+  thread 'main' panicked at /home/nitin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-binding-generator-0.75.0/src/element.rs:71:21:
+  internal error: entered unreachable code: Can't get kind of parent for cpp namespace: Entity {
+      kind: LinkageSpec,
+      display_name: None,
+      location: Some(
+          SourceLocation {
+              file: Some(
+                  File {
+                      path: "/usr/lib64/gcc/x86_64-pc-linux-gnu/14.2.1/../../../../include/c++/14.2.1/bits/exception.h",
+                  },
+              ),
+              line: 38,
+              column: 8,
+              offset: 1315,
+          },
+      ),
+  }
+  note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+  thread 'main' panicked at core/src/panicking.rs:221:5:
+  panic in a function that cannot unwind
+  stack backtrace:
+     0:     0x558a312730aa - std::backtrace_rs::backtrace::libunwind::trace::h5a5b8284f2d0c266
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/../../backtrace/src/backtrace/libunwind.rs:116:5
+     1:     0x558a312730aa - std::backtrace_rs::backtrace::trace_unsynchronized::h76d4f1c9b0b875e3
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/../../backtrace/src/backtrace/mod.rs:66:5
+     2:     0x558a312730aa - std::sys::backtrace::_print_fmt::hc4546b8364a537c6
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/sys/backtrace.rs:66:9
+     3:     0x558a312730aa - <std::sys::backtrace::BacktraceLock::print::DisplayBacktrace as core::fmt::Display>::fmt::h5b6bd5631a6d1f6b
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/sys/backtrace.rs:39:26
+     4:     0x558a3129bb53 - core::fmt::rt::Argument::fmt::h270f6602a2b96f62
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/core/src/fmt/rt.rs:177:76
+     5:     0x558a3129bb53 - core::fmt::write::h7550c97b06c86515
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/core/src/fmt/mod.rs:1186:21
+     6:     0x558a3126f403 - std::io::Write::write_fmt::h7b09c64fe0be9c84
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/io/mod.rs:1839:15
+     7:     0x558a31272ef2 - std::sys::backtrace::BacktraceLock::print::h2395ccd2c84ba3aa
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/sys/backtrace.rs:42:9
+     8:     0x558a312740bc - std::panicking::default_hook::{{closure}}::he19d4c7230e07961
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/panicking.rs:268:22
+     9:     0x558a31273f02 - std::panicking::default_hook::hf614597d3c67bbdb
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/panicking.rs:295:9
+    10:     0x558a31274697 - std::panicking::rust_panic_with_hook::h8942133a8b252070
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/panicking.rs:801:13
+    11:     0x558a312744f6 - std::panicking::begin_panic_handler::{{closure}}::hb5f5963570096b29
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/panicking.rs:667:13
+    12:     0x558a31273589 - std::sys::backtrace::__rust_end_short_backtrace::h6208cedc1922feda
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/sys/backtrace.rs:170:18
+    13:     0x558a312741bc - rust_begin_unwind
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/panicking.rs:665:5
+    14:     0x558a30c36ced - core::panicking::panic_nounwind_fmt::runtime::h1f507a806003dfb2
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/core/src/panicking.rs:112:18
+    15:     0x558a30c36ced - core::panicking::panic_nounwind_fmt::h357fc035dc231634
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/core/src/panicking.rs:122:5
+    16:     0x558a30c36d82 - core::panicking::panic_nounwind::hd0dad372654c389a
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/core/src/panicking.rs:221:5
+    17:     0x558a30c36ee5 - core::panicking::panic_cannot_unwind::h65aefd062253eb19
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/core/src/panicking.rs:310:5
+    18:     0x558a311634b1 - clang::Entity::visit_children::visit::h4bf5a912ca983eda
+    19:     0x7fbdb03814f4 - <unknown>
+    20:     0x7fbdaf073b5a - <unknown>
+    21:     0x7fbdaf06fa71 - <unknown>
+    22:     0x7fbdaf0743fd - clang_visitChildren
+    23:     0x558a3118305f - clang_sys::clang_visitChildren::h2d887ec3733ec349
+    24:     0x558a30e0ae07 - clang::Entity::visit_children::he63806dfc5bbbd13
+    25:     0x558a30eb9ec6 - <opencv_binding_generator::generator_env::GeneratorEnvPopulator as opencv_binding_generator::walker::EntityWalkerVisitor>::visit_entity::h5093423ee2062f7f
+    26:     0x558a30e6da3c - opencv_binding_generator::walker::visit_cv_namespace::{{closure}}::hb66b0f9a41532c81
+    27:     0x558a30e651be - <F as clang::Entity::visit_children::EntityCallback>::call::h9eea5f6fcace60ea
+    28:     0x558a31163556 - clang::Entity::visit_children::visit::h4bf5a912ca983eda
+    29:     0x7fbdaf07183c - <unknown>
+    30:     0x7fbdaf0736e2 - <unknown>
+    31:     0x7fbdaf073a40 - <unknown>
+    32:     0x7fbdaf070669 - <unknown>
+    33:     0x7fbdaf0743fd - clang_visitChildren
+    34:     0x558a3118305f - clang_sys::clang_visitChildren::h2d887ec3733ec349
+    35:     0x558a30e0b074 - clang::Entity::visit_children::hf6533bd4559d9eca
+    36:     0x558a30e6d767 - opencv_binding_generator::walker::visit_cv_namespace::h259fd4fdfac99a9b
+    37:     0x558a30e6d4d3 - <clang::Entity as opencv_binding_generator::walker::EntityWalkerExt>::walk_opencv_entities::{{closure}}::h84e25ddae5192e01
+    38:     0x558a30e6527e - <F as clang::Entity::visit_children::EntityCallback>::call::hd00bdfc5a39afb57
+    39:     0x558a31163556 - clang::Entity::visit_children::visit::h4bf5a912ca983eda
+    40:     0x7fbdaf07183c - <unknown>
+    41:     0x7fbdaf0736e2 - <unknown>
+    42:     0x7fbdaf06eec3 - <unknown>
+    43:     0x7fbdaf0743fd - clang_visitChildren
+    44:     0x558a3118305f - clang_sys::clang_visitChildren::h2d887ec3733ec349
+    45:     0x558a30e0a6d4 - clang::Entity::visit_children::hc3090f52b27f2f94
+    46:     0x558a30e11d64 - <clang::Entity as opencv_binding_generator::walker::EntityWalkerExt>::walk_opencv_entities::h3dedeb2935a935b5
+    47:     0x558a30eba33f - opencv_binding_generator::generator_env::GeneratorEnv::new::hc3fbb19df7754126
+    48:     0x558a30c69b40 - opencv_binding_generator::generator::Generator::generate::{{closure}}::hfdc223db82c1d87e
+    49:     0x558a30c6995d - opencv_binding_generator::generator::Generator::pre_process::h5fd2d480ed057c15
+    50:     0x558a30c69ac8 - opencv_binding_generator::generator::Generator::generate::h5756e266a33f549c
+    51:     0x558a30c5601e - build_script_build::binding_generator::run::h6e9d1e2764c004f1
+    52:     0x558a30c5554a - build_script_build::binding_generator::handle_running_binding_generator::hdd074a8f52335642
+    53:     0x558a30c5b0bf - build_script_build::main::h9e890f5ca258a927
+    54:     0x558a30c5e343 - core::ops::function::FnOnce::call_once::hb882b1be3bb7c387
+    55:     0x558a30c71bc6 - std::sys::backtrace::__rust_begin_short_backtrace::ha9c29875fc66bee9
+    56:     0x558a30c4a7d9 - std::rt::lang_start::{{closure}}::h6f86c62860d72bd4
+    57:     0x558a3126a51e - core::ops::function::impls::<impl core::ops::function::FnOnce<A> for &F>::call_once::hfdb85f4ee94732d3
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/core/src/ops/function.rs:284:13
+    58:     0x558a3126a51e - std::panicking::try::do_call::h6e577310f330cbef
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/panicking.rs:557:40
+    59:     0x558a3126a51e - std::panicking::try::ha588d438267d2645
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/panicking.rs:520:19
+    60:     0x558a3126a51e - std::panic::catch_unwind::h429fda1e025f26d9
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/panic.rs:358:14
+    61:     0x558a3126a51e - std::rt::lang_start_internal::{{closure}}::h7b731265e841c4bf
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/rt.rs:174:48
+    62:     0x558a3126a51e - std::panicking::try::do_call::hc0f6a675b7ae5a36
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/panicking.rs:557:40
+    63:     0x558a3126a51e - std::panicking::try::h4c93b7ff0671f1ff
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/panicking.rs:520:19
+    64:     0x558a3126a51e - std::panic::catch_unwind::hcc1e154961d16ce6
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/panic.rs:358:14
+    65:     0x558a3126a51e - std::rt::lang_start_internal::h1c66660c99c8424c
+                                 at /rustc/90b35a6239c3d8bdabc530a6a0816f7ff89a0aaf/library/std/src/rt.rs:174:20
+    66:     0x558a30c4a7b7 - std::rt::lang_start::hbb86198a776e6654
+    67:     0x558a30c5cb65 - main
+    68:     0x7fbdb0c98e08 - <unknown>
+    69:     0x7fbdb0c98ecc - __libc_start_main
+    70:     0x558a30c375f5 - _start
+    71:                0x0 - <unknown>
+  thread caused non-unwinding panic. aborting.
+warning: build failed, waiting for other jobs to finish...
