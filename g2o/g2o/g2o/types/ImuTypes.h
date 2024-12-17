@@ -29,7 +29,6 @@
 #include <../Sophus/sophus/se3.hpp>
 #include <mutex>
 #include "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/cxxbridge/g2o/src/lib.rs.h"
->>>>>>> main
 
 // #include "SerializationUtils.h"
 
