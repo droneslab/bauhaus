@@ -80,7 +80,7 @@ opencv = { version = "0.85.2", default-features = false, features = [
 ] }
 
 nalgebra = {version = "0.32.3", features = ["serde-serialize"]}
-cv-convert = {version = '0.25.0', default_features = false, features = ['opencv_0-85','nalgebra_0-32']}
+cv-convert = {version = '0.25.0', default-features = false, features = ['opencv_0-85','nalgebra_0-32']}
 cxx = "1.0"
 
 yaml-rust = "*"

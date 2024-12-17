@@ -10,8 +10,12 @@ path = "src/lib.rs"
 
 [dependencies]
 cxx = "1.0.108"
-opencv = "0.85.2"
-
+#opencv = {version = "0.85.2"}
+opencv = { version = "0.85.2", default-features = false, features = [
+    "features2d",
+    "xfeatures2d",
+ 
+] }
 [build-dependencies]
 cxx-build = "1.0.108"
 cmake = "0.1.50"

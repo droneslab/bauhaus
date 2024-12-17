@@ -213,7 +213,7 @@ g2o/orbslam_types/Pinhole.cc
 
 # rust bindings
 g2o/rust/rust_helper.cpp
-../target/cxxbridge/g2o/src/lib.rs.cc
+/home/nitin/Downloads/Darvis_New/darvis/darvis/target/cxxbridge/g2o/src/lib.rs.cc
 )
 
 include_directories(../target/cxxbridge)
