@@ -84,7 +84,6 @@ namespace g2o {
     double tempChi=currentChi;
 
     double iniChi = currentChi;
-    // std::cout << "Initial chi: " << iniChi << std::endl;
 
     _solver->buildSystem();
     if (globalStats) {
@@ -133,7 +132,7 @@ namespace g2o {
       double scale = computeScale();
       scale += 1e-3; // make sure it's non-zero :)
     //   double scale = ok2 ? computeScale() + cst(1e-3) : 1; // make sure it's non-zero :)
-    //   rho /=  scale;
+      rho /=  scale;
 
       if (rho>0 && g2o_isfinite(tempChi) ){ // last step was good // Sofiya: add  && ok2
         double alpha = 1.-pow((2*rho-1),3);

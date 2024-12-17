@@ -46,7 +46,7 @@ impl ORBSLAM3LoopDetection {
 
         if num_proj_matches >= 30 {
             let mut scm = {
-                let twm = map.read().keyframes.get(&current_kf_id).unwrap().pose.inverse();
+                let twm = map.read().keyframes.get(&current_kf_id).unwrap().get_pose().inverse();
                 let twm_as_sim3 = Sim3::new(twm.get_translation(), twm.get_rotation(), 1.0);
                 *scw * twm_as_sim3
             };
@@ -272,7 +272,7 @@ impl ORBSLAM3LoopDetection {
                         }
 
                         let mut scm = solver.get_estimates(); // gScm
-                        let smw = map.read().keyframes.get(&most_bow_matches_kf).unwrap().pose.into(); // gSmw
+                        let smw = map.read().keyframes.get(&most_bow_matches_kf).unwrap().get_pose().into(); // gSmw
                         let scw = scm * smw; // gScw // Similarity matrix of current from the world position
 
                         let mut matched_mps = vec![None; num_curr_kf_matches]; // vpMatchedMP
@@ -299,7 +299,7 @@ impl ORBSLAM3LoopDetection {
                             );
 
                             if num_opt_matches >= sim3_inliers_threshold {
-                                let smw = map.read().keyframes.get(&most_bow_matches_kf).unwrap().pose.into(); // gSmw
+                                let smw = map.read().keyframes.get(&most_bow_matches_kf).unwrap().get_pose().into(); // gSmw
                                 let scw = scm * smw; // gScw // Similarity matrix of current from the world position
 
                                 let mut matched_mps = vec![None; num_curr_kf_matches]; // vpMatchedMP
@@ -346,10 +346,10 @@ impl ORBSLAM3LoopDetection {
                                     let mut num_kfs = 0; // nNumKFs
 
                                     let mut j = 0;
-                                    let current_kf_pose = map.read().keyframes.get(&current_kf_id).unwrap().pose;
+                                    let current_kf_pose = map.read().keyframes.get(&current_kf_id).unwrap().get_pose();
                                     while num_kfs < 3 && j < current_cov_kfs.len() {
                                         let mut sjw = {
-                                            let kf_j_pose = map.read().keyframes.get(&current_cov_kfs[j]).unwrap().pose;
+                                            let kf_j_pose = map.read().keyframes.get(&current_cov_kfs[j]).unwrap().get_pose();
                                             let sjc = Sim3 {
                                                 pose: kf_j_pose * current_kf_pose.inverse(),
                                                 scale: 1.0
@@ -453,7 +453,7 @@ impl LoopDetectionModule for ORBSLAM3LoopDetection {
         if self.num_coincidences > 0 {
             // Find from the last KF candidates
             let mut scw = {
-                let tcl = map.read().keyframes.get(&current_kf_id).unwrap().pose * map.read().keyframes.get(&self.last_current_kf).unwrap().pose.inverse();
+                let tcl = map.read().keyframes.get(&current_kf_id).unwrap().get_pose() * map.read().keyframes.get(&self.last_current_kf).unwrap().get_pose().inverse();
                 let tcl_as_sim3: Sim3 = tcl.into();
                 tcl_as_sim3 * self.loop_slw
             };

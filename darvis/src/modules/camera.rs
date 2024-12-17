@@ -29,6 +29,7 @@ pub struct Camera {
     pub stereo_baseline: f64, //mb
     pub th_depth: i32, //mThDepth
     pub dist_coef: Option<Vec<f32>>, //mDistCoef
+    pub uncertainty: f32, //function call to uncertainty2
 }
 
 impl CameraModule for Camera {
@@ -215,7 +216,8 @@ impl Camera {
             fx,
             fy,
             cx,
-            cy
+            cy,
+            uncertainty: 1.0
         })
     }
 }

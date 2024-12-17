@@ -72,6 +72,22 @@ impl Pose {
         Pose(self.0.inverse())
     }
 
+    pub fn group_inverse(&self) -> Pose {
+        // Note: idk about this, but it seems like a different function from the regular inverse() above.
+        // See Sophus:
+            /// Returns group inverse.
+            ///
+            // SOPHUS_FUNC SE3<Scalar> inverse() const {
+            //     SO3<Scalar> invR = so3().inverse();
+            //     return SE3<Scalar>(invR, invR * (translation() * Scalar(-1)));
+            // }        
+        let invr = self.0.rotation.inverse();
+        Pose::new(
+            invr * self.0.translation.vector * -1.0,
+            invr.into(),
+        )
+    }
+
     pub fn component_mul(&self, other: &Pose) -> (DVTranslation, DVRotation) {
         let matrix_self = self.0.to_matrix();
         let matrix_other = (*other).to_matrix();
@@ -374,3 +390,53 @@ impl Into<g2o::ffi::RustSim3> for Sim3 {
         }
     }
 }
+
+pub fn group_exp(omega: &nalgebra::Vector3<f64>) -> nalgebra::UnitQuaternion<f64> {
+    // From Sophus:
+        // / Group exponential
+        // /
+        // / This functions takes in an element of tangent space (= rotation vector
+        // / ``omega``) and returns the corresponding element of the group SO(3).
+        // /
+        // / To be more specific, this function computes ``expmat(hat(omega))``
+        // / with ``expmat(.)`` being the matrix exponential and ``hat(.)`` being the
+        // / hat()-operator of SO(3).
+        // /
+    // See functions:
+    // SOPHUS_FUNC static SO3<Scalar> exp(Tangent const& omega) 
+    // and SOPHUS_FUNC static SO3<Scalar> expAndTheta(Tangent const& omega, Scalar* theta)
+    const EPSILON: f64 = 1e-5;
+
+    let theta_sq = omega.norm_squared();
+    let real_factor;
+    let imag_factor;
+    let theta;
+
+    if theta_sq < EPSILON*EPSILON {
+        theta = 0.0;
+        let theta_po4 = theta_sq * theta_sq;
+        imag_factor = 0.5 - 1.0 / 48.0 * theta_sq + 1.0 / 3840.0 * theta_po4;
+        real_factor = 1.0 - 1.0 / 8.0 * theta_sq + 1.0 / 384.0 * theta_po4;
+    } else {
+        theta = theta_sq.sqrt();
+        let half_theta = 0.5 * theta;
+        let sin_half_theta = half_theta.sin();
+        imag_factor = sin_half_theta / theta;
+        real_factor = half_theta.cos();
+    }
+
+    let result = nalgebra::UnitQuaternion::from_quaternion(
+        Quaternion::new(
+            real_factor,
+            imag_factor * omega[0],
+            imag_factor * omega[1],
+            imag_factor * omega[2]
+        )
+    );
+    // if abs(result.norm_squared() - 1.0) < EPSILON {
+    //     panic!("SO3::exp failed! omega: {:?}, real: {:?}, img: {:?}", omega, real_factor, imag_factor);
+    // }
+
+    return result;
+}
+

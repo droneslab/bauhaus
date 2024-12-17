@@ -72,6 +72,8 @@ src/ORBextractor.cc
 src/ORBextractor.h
 src/ORBmatcher.cc
 src/ORBmatcher.h
+src/Extra.cc
+src/Extra.h
 src/TwoViewReconstruction.cc
 src/TwoViewReconstruction.h
 src/Converter.cc

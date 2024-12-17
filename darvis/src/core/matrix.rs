@@ -517,6 +517,15 @@ impl<T: nalgebra::ComplexField> From<[[T; 3]; 3]> for DVMatrix3<T> {
         ))
     }
 }
+impl<T: nalgebra::ComplexField> From<& DVMatrix3<T>> for [[T; 3]; 3] {
+    fn from(mat: & DVMatrix3<T>) -> [[T; 3]; 3] { 
+        [
+            [mat[(0,0)].clone(), mat[(0,1)].clone(), mat[(0,2)].clone()],
+            [mat[(1,0)].clone(), mat[(1,1)].clone(), mat[(1,2)].clone()],
+            [mat[(2,0)].clone(), mat[(2,1)].clone(), mat[(2,2)].clone()]
+        ]
+    }
+}
 impl<T: nalgebra::ComplexField> From<&mut DVMatrix3<T>> for [[T; 3]; 3] {
     fn from(mat: &mut DVMatrix3<T>) -> [[T; 3]; 3] { 
         [
@@ -526,7 +535,6 @@ impl<T: nalgebra::ComplexField> From<&mut DVMatrix3<T>> for [[T; 3]; 3] {
         ]
     }
 }
-
 // Two index implementations, one for matrix3[(x,y)] and one for [(x)]
 impl<T> Index<(usize, usize)> for DVMatrix3<T> {
     type Output = T;
@@ -581,6 +589,24 @@ impl<T: Clone> From<DVMatrix4<T>> for nalgebra::Matrix4<T> {
 }
 impl<T: Clone> From<&DVMatrix4<T>> for nalgebra::Matrix4<T> {
     fn from(vec: &DVMatrix4<T>) -> nalgebra::Matrix4<T> { vec.0.clone() }
+}
+impl From<&DVMatrix4<f64>> for Vec<dvos3binding::ffi::DoubleVec> {
+    fn from(mat: &DVMatrix4<f64>) -> Vec<dvos3binding::ffi::DoubleVec> {
+        let mut res = Vec::new();
+
+        for i in 0..mat.0.nrows() {
+            let mut row = Vec::new();
+            for j in 0..mat.0.ncols() {
+                let r: usize = i.try_into().unwrap();
+                let c: usize = j.try_into().unwrap();
+                row.push(mat.0[(r, c)]);
+            }
+            res.push(dvos3binding::ffi::DoubleVec { 
+                vec: row
+            });
+        }
+        res
+    }
 }
 // Two index implementations, one for matrix3[(x,y)] and one for [(x)]
 impl<T> Index<(usize, usize)> for DVMatrix4<T> {
@@ -649,20 +675,21 @@ impl<T> Index<usize> for DVMatrix7x7<T> {
 
 
 #[derive(Clone, Debug)]
-pub struct DVMatrixGrayscale ( nalgebra::DMatrix<u8> );
+pub struct DVMatrixDynamic<T> ( nalgebra::DMatrix<T> );
 
-impl DVMatrixGrayscale {
+impl<T> DVMatrixDynamic<T> {
     // Constructors
-    pub fn new(vec: nalgebra::DMatrix<u8>) -> Self {
-        DVMatrixGrayscale ( vec )
+    pub fn new(vec: nalgebra::DMatrix<T>) -> Self {
+        DVMatrixDynamic ( vec )
     }
 }
-// &DVMatrixGrayscale implemented instead of DVMatrixGrayscale because this avoids having to take 
+// DVMatrixDynamic<u8> is used for greyscale images!
+// &DVMatrixDynamic implemented instead of DVMatrixDynamic because this avoids having to take 
 // ownership of the matrix when calling .into() ... this is useful because this matrix is usually
 // inside an Arc<ImageMsg> and you cannot move out of an arc. Alternatively, we could copy the matrix
 // but that takes too much time/memory.
-impl From<&DVMatrixGrayscale> for opencv::core::Mat {
-    fn from(mat: &DVMatrixGrayscale) -> opencv::core::Mat {
+impl From<&DVMatrixDynamic<u8>> for opencv::core::Mat {
+    fn from(mat: &DVMatrixDynamic<u8>) -> opencv::core::Mat {
         let mut new_mat = Mat::new_rows_cols_with_default(mat.0.nrows().try_into().unwrap(),mat.0.ncols().try_into().unwrap(),CV_8UC1, opencv::core::Scalar::all(0.0)).unwrap();
 
         for i in 0..mat.0.nrows() {
@@ -675,8 +702,8 @@ impl From<&DVMatrixGrayscale> for opencv::core::Mat {
         new_mat
     }
 }
-impl From<opencv::core::Mat> for DVMatrixGrayscale {
-    fn from(mat: opencv::core::Mat) -> DVMatrixGrayscale {
+impl From<opencv::core::Mat> for DVMatrixDynamic<u8> {
+    fn from(mat: opencv::core::Mat) -> DVMatrixDynamic<u8> {
         let mut dmat = nalgebra::DMatrix::from_element(mat.rows().try_into().unwrap(), mat.cols().try_into().unwrap(), 0u8);
         for i in 0..mat.rows() {
             for j in 0..mat.cols() {
@@ -686,7 +713,48 @@ impl From<opencv::core::Mat> for DVMatrixGrayscale {
                 dmat[(r, c)] = val;
             }
         }
-        DVMatrixGrayscale(dmat)
+        DVMatrixDynamic(dmat)
     }
 }
 
+impl From<&DVMatrixDynamic<f64>> for Vec<dvos3binding::ffi::DoubleVec> {
+    fn from(mat: &DVMatrixDynamic<f64>) -> Vec<dvos3binding::ffi::DoubleVec> {
+        let mut res = Vec::new();
+
+        for i in 0..mat.0.nrows() {
+            let mut row = Vec::new();
+            for j in 0..mat.0.ncols() {
+                let r: usize = i.try_into().unwrap();
+                let c: usize = j.try_into().unwrap();
+                row.push(mat.0[(r, c)]);
+            }
+            res.push(dvos3binding::ffi::DoubleVec { 
+                vec: row
+            });
+        }
+        res
+    }
+}
+impl From<&Vec<dvos3binding::ffi::DoubleVec>> for DVMatrixDynamic<f64> {
+    fn from(mat: &Vec<dvos3binding::ffi::DoubleVec>) -> DVMatrixDynamic<f64> {
+        let rows = mat.len();
+        let cols = mat[0].vec.len();
+        let mut res = nalgebra::DMatrix::zeros(rows, cols);
+
+        for i in 0..mat.len() {
+            let row = & mat[i].vec;
+            for j in 0..row.len() {
+                let r: usize = i.try_into().unwrap();
+                let c: usize = j.try_into().unwrap();
+                res[(r, c)] = mat[i].vec[j];
+            }
+        }
+        DVMatrixDynamic::<f64>::new(res)
+    }
+}
+impl<T: Clone> Deref for DVMatrixDynamic<T> {
+    type Target = nalgebra::DMatrix<T>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}

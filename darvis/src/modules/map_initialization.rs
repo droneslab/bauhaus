@@ -25,7 +25,6 @@ pub struct MapInitialization {
     pub initial_frame: Option<Frame>,
     pub last_frame: Option<Frame>,
     pub current_frame: Option<Frame>,
-    pub imu_preintegrated_from_last_kf: ImuPreIntegrated, // mpImuPreintegratedFromLastKF
     sensor: Sensor,
 }
 impl MapInitializationModule for MapInitialization {
@@ -40,9 +39,9 @@ impl MapInitializationModule for MapInitialization {
         }
     }
 
-    fn create_initial_map(&mut self, map: &mut Self::Map) -> Self::InitializationResult {
+    fn create_initial_map(&mut self, map: &mut Self::Map, imu_preintegrated_from_last_kf: & ImuPreIntegrated) -> Self::InitializationResult {
         match self.sensor.frame() {
-            FrameSensor::Mono => self.create_initial_map_monocular(map),
+            FrameSensor::Mono => self.create_initial_map_monocular(map, imu_preintegrated_from_last_kf),
             _ => self.create_initial_map_stereo()
         }
     }
@@ -51,7 +50,6 @@ impl MapInitializationModule for MapInitialization {
 impl MapInitialization {
     pub fn new() -> Self {
         let sensor: Sensor = SETTINGS.get(SYSTEM, "sensor");
-
         Self {
             mp_matches: Vec::new(),
             prev_matched: DVVectorOfPoint2f::empty(),
@@ -60,7 +58,6 @@ impl MapInitialization {
             initial_frame: None,
             last_frame: None,
             current_frame: None,
-            imu_preintegrated_from_last_kf: ImuPreIntegrated::new(ImuBias::new()),
             sensor
         }
     }
@@ -80,8 +77,10 @@ impl MapInitialization {
 
             self.initial_frame = Some(current_frame.clone());
             self.last_frame = Some(current_frame.clone());
-            self.imu_preintegrated_from_last_kf = ImuPreIntegrated::new(ImuBias::new());
-            self.current_frame.as_mut().unwrap().imu_data.imu_preintegrated = Some(self.imu_preintegrated_from_last_kf.clone());
+
+            if self.sensor.is_imu() {
+                self.current_frame.as_mut().unwrap().imu_data.imu_preintegrated = Some(ImuPreIntegrated::new(ImuBias::new()));
+            }
 
             println!("Mono initialization... current frame {:?}, initial frame {:?}, last frame {:?}", self.current_frame.as_ref().unwrap().frame_id, self.initial_frame.as_ref().unwrap().frame_id, self.last_frame.as_ref().unwrap().frame_id);
 
@@ -141,7 +140,7 @@ impl MapInitialization {
     }
 
     pub fn create_initial_map_monocular(
-        &mut self, map: &mut MapLock
+        &mut self, map: &mut MapLock, imu_preintegrated_from_last_kf: & ImuPreIntegrated,
     ) -> Option<(Pose, i32, i32, BTreeSet<Id>, Timestamp, f64)> {
         // TODO (design, rust issues) - we have to do some pretty gross things with calling functions in this section
         // so that we can have multiple references to parts of the map. This should get cleaned up, but I'm not sure how.
@@ -222,8 +221,10 @@ impl MapInitialization {
         {
             let mut lock = map.write();
             let curr_kf = lock.keyframes.get_mut(&curr_kf_id)?;
-            let new_trans = *(curr_kf.pose.get_translation()) * inverse_median_depth;
-            curr_kf.pose.set_translation(new_trans);
+            let new_trans = *(curr_kf.get_pose().get_translation()) * inverse_median_depth;
+            let mut new_pose = curr_kf.get_pose();
+            new_pose.set_translation(new_trans);
+            curr_kf.set_pose(new_pose);
         }
 
 
@@ -250,8 +251,7 @@ impl MapInitialization {
                 {
                     let curr_kf = lock.keyframes.get_mut(&curr_kf_id)?;
                     curr_kf.prev_kf_id = Some(initial_kf_id);
-                    curr_kf.imu_data.imu_preintegrated = Some(self.imu_preintegrated_from_last_kf.clone());
-                    self.imu_preintegrated_from_last_kf = ImuPreIntegrated::new(curr_kf.imu_data.imu_preintegrated.as_ref().unwrap().get_updated_bias());
+                    curr_kf.imu_data.imu_preintegrated = Some(imu_preintegrated_from_last_kf.clone());
                 }
                 {
                     let ini_kf = lock.keyframes.get_mut(&initial_kf_id)?;
@@ -277,7 +277,7 @@ impl MapInitialization {
         let (curr_kf_pose, relevant_mappoints, curr_kf_timestamp) = {
             let lock = map.read();
 
-            let curr_kf_pose = lock.keyframes.get(&curr_kf_id)?.pose;
+            let curr_kf_pose = lock.keyframes.get(&curr_kf_id)?.get_pose();
             let curr_kf_timestamp = lock.keyframes.get(&curr_kf_id)?.timestamp;
 
             // Update tracking with new info

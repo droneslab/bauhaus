@@ -294,16 +294,32 @@ fn load_camera_settings(camera_fn: &String, module_info: &mut Vec<ModuleConf>) {
     add_setting_f64("CAMERA", "p1", &yaml_document["p1"]);
     add_setting_f64("CAMERA", "p2", &yaml_document["p2"]);
     add_setting_f64("CAMERA", "k3", &yaml_document["k3"]);
-    add_setting_f64("CAMERA", "stereo_baseline_times_fx", &yaml_document["stereo_baseline_times_fx"]);
-    add_setting_i32("CAMERA", "thdepth", &yaml_document["thdepth"]);
+    match SETTINGS.get::<Sensor>(SYSTEM, "sensor") {
+        Sensor(FrameSensor::Stereo, _) | Sensor(FrameSensor::Rgbd, _) => {
+            add_setting_f64("CAMERA", "stereo_baseline_times_fx", &yaml_document["stereo_baseline_times_fx"]);
+            add_setting_i32("CAMERA", "thdepth", &yaml_document["thdepth"]);
+        },
+        Sensor(FrameSensor::Mono, _) => {
+            SETTINGS.insert(&"CAMERA", &"stereo_baseline_times_fx", 0.0);
+            info!("\t {} {} = {}", "CAMERA", "stereo_baseline_times_fx", 0.0);
+            SETTINGS.insert(&"CAMERA", &"thdepth", 0);
+            info!("\t {} {} = {}", "CAMERA", "thdepth", 0);
 
-    // Not all datasets have imu information
-    add_setting_f64("IMU", "noise_gyro", &yaml_document["imu__noise_gyro"]);
-    add_setting_f64("IMU", "noise_acc", &yaml_document["imu__noise_acc"]);
-    add_setting_f64("IMU", "gyro_walk", &yaml_document["imu__gyro_walk"]);
-    add_setting_f64("IMU", "acc_walk", &yaml_document["imu__acc_walk"]);
-    add_setting_f64("IMU", "frequency", &yaml_document["imu__frequency"]);
-    add_setting_imu_matrix("IMU", "T_b_c1", vec![&yaml_document["imu__T_b_c1_row1"],&yaml_document["imu__T_b_c1_row2"],&yaml_document["imu__T_b_c1_row3"],&yaml_document["imu__T_b_c1_row4"]]);
+        }
+    }
+
+    // Not all datasets have imu information, but that only matters if imu is used
+    // match SETTINGS.get::<Sensor>(SYSTEM, "sensor").imu() {
+    //     ImuSensor::Some => {
+            add_setting_f64("IMU", "noise_gyro", &yaml_document["imu__noise_gyro"]);
+            add_setting_f64("IMU", "noise_acc", &yaml_document["imu__noise_acc"]);
+            add_setting_f64("IMU", "gyro_walk", &yaml_document["imu__gyro_walk"]);
+            add_setting_f64("IMU", "acc_walk", &yaml_document["imu__acc_walk"]);
+            add_setting_f64("IMU", "frequency", &yaml_document["imu__frequency"]);
+            add_setting_imu_matrix("IMU", "T_b_c1", vec![&yaml_document["imu__T_b_c1_row1"],&yaml_document["imu__T_b_c1_row2"],&yaml_document["imu__T_b_c1_row3"],&yaml_document["imu__T_b_c1_row4"]]);
+    //     },
+    //     _ => {}
+    // };
 
     // Add dataset name
     add_setting_string("CAMERA", "dataset", &yaml_document["dataset"]);

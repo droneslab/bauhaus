@@ -18,13 +18,14 @@
 
 #ifndef G2OTYPES_H
 #define G2OTYPES_H
+// #error "some stupid message"
 
 #include "../core/base_vertex.h"
 #include "../core/base_binary_edge.h"
 #include "../types/types_sba.h"
-#include "../types/ImuTypes.h"
 #include "../core/base_multi_edge.h"
 #include "../core/base_unary_edge.h"
+#include <math.h>
 
 #include<opencv2/core/core.hpp>
 
@@ -32,8 +33,8 @@
 #include <Eigen/Geometry>
 #include <Eigen/Dense>
 
+#include "../types/ImuTypes.h"
 #include"../orbslam_types/Converter.h"
-#include <math.h>
 #include "../orbslam_types/Pinhole.h"
 
 namespace g2o
@@ -279,7 +280,11 @@ public:
 
     void Update(const double *pu)
     {
+        std::cout << "Update gravity direction (original Rwg): " << Rwg << std::endl;
+        std::cout << "Update gravity direction pu: " << pu[0] << " " << pu[1] << std::endl;
+
         Rwg=Rwg*ExpSO3(pu[0],pu[1],0.0);
+        std::cout << "Update gravity direction: " << Rwg << std::endl;
     }
 
     Eigen::Matrix3d Rwg, Rgw;
@@ -408,7 +413,7 @@ class EdgeMonoOnlyPose : public g2o::BaseUnaryEdge<2,Eigen::Vector2d,VertexPose>
 public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-    EdgeMonoOnlyPose(const Eigen::Vector3f &Xw_, int cam_idx_=0):Xw(Xw_.cast<double>()),
+    EdgeMonoOnlyPose(const Eigen::Vector3d &Xw_, int cam_idx_=0):Xw(Xw_.cast<double>()),
         cam_idx(cam_idx_){}
 
     virtual bool read(std::istream& is){return false;}
@@ -422,7 +427,7 @@ public:
 
     virtual void linearizeOplus();
 
-    bool isDepthPositive()
+    bool isDepthPositive() const
     {
         const VertexPose* VPose = static_cast<const VertexPose*>(_vertices[0]);
         return VPose->estimate().isDepthPositive(Xw,cam_idx);
@@ -432,6 +437,17 @@ public:
         linearizeOplus();
         return _jacobianOplusXi.transpose()*information()*_jacobianOplusXi;
     }
+
+    // Darvis
+    std::array<std::array<double, 6>, 6> GetHessianRust() {
+        Eigen::Matrix<double,6,6> hessian = GetHessian();
+        std::array<std::array<double,6>, 6> raw_data;
+        Eigen::Matrix<double, 6, 6, Eigen::RowMajor> ::Map(raw_data[0].data() ) = hessian;
+        return raw_data;
+    }
+
+
+  void set_robust_kernel(bool reset); // Darvis
 
 public:
     const Eigen::Vector3d Xw;

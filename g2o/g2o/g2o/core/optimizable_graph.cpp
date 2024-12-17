@@ -243,7 +243,7 @@ namespace g2o {
   {
     Vertex* inserted = vertex(v->id());
     if (inserted) {
-      cerr << __FUNCTION__ << ": FATAL, a vertex with ID " << v->id() << " has already been registered with this graph" << endl;
+      std::cout << __FUNCTION__ << ": FATAL, a vertex with ID " << v->id() << " has already been registered with this graph" << endl;
       assert(0 && "Vertex with this ID already contained in the graph");
       return false;
     }
