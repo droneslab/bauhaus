@@ -7,7 +7,7 @@ master:
 
 system:
       localization_only_mode: false
-      vocabulary_file: "/home/darvis/Downloads/OS3_Git_Latest/darvis-orbslam3/Vocabulary/ORBvoc.txt"
+      vocabulary_file: "/home/f1tenth/Downloads/OS3_Git_Latest/darvis-orbslam3/Vocabulary/ORBvoc.txt"
       framesensor: Mono
       imusensor: None # options are [None, Some]
       first_actor_name: TRACKING_FRONTEND # Name of actor to kick off pipeline
