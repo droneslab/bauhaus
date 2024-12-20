@@ -30,7 +30,7 @@ pub struct KeyFrame {
     // IMU //
     // Preintegrated IMU measurements from previous keyframe
     pub imu_data: ImuDataFrame,
-    pub imu_position: Option<DVVector3<f32>>, // mOwb
+    pub imu_position: Option<DVVector3<f64>>, // mOwb
     pub sensor: Sensor,
 
     // todo (design, fine-grained locking) I would like to get rid of this but until we have fine-grained locking this is the only way to prevent deletion without taking the entire map
@@ -114,18 +114,23 @@ impl KeyFrame {
     pub fn get_pose(&self) -> Pose { self.pose }
     pub fn set_pose(&mut self, new_pose: Pose) {
         self.pose = new_pose;
-        let pose_inverse = self.pose.inverse();
-        self.imu_position = Some(
-            DVVector3::new(
-                *pose_inverse.get_rotation() * *ImuCalib::new().tcb.get_translation() + *pose_inverse.get_translation()
-            )
-        );
-        println!("mRwc: {:?}", pose_inverse.get_rotation());
-        println!("mTcb: {:?}", ImuCalib::new().tcb.get_translation());
-        println!("mTwc: {:?}", pose_inverse.get_translation());
 
-        println!("SET KF IMU POSITION: {} {:?}. backtrace: {}", self.id, self.imu_position, Backtrace::capture());
-   }
+        if self.sensor.is_imu() {
+            let pose_inverse = self.pose.inverse();
+            self.imu_position = Some(
+                DVVector3::new(
+                    *pose_inverse.get_rotation() * *ImuCalib::new().tcb.get_translation() + *pose_inverse.get_translation()
+                )
+            );
+            // println!("Regular pose: {:?}", self.pose.get_translation());
+            // println!("Regular rotation: {:?}", self.pose.get_rotation());
+            // println!("mRwc: {:?}", pose_inverse.get_rotation());
+            // println!("mTcb: {:?}", ImuCalib::new().tcb.get_translation());
+            // println!("mTwc: {:?}", pose_inverse.get_translation());
+
+            // println!("SET KF IMU POSITION: {} {:?}. backtrace: {}", self.id, self.imu_position, Backtrace::capture());
+        }
+    }
 
     pub fn get_connected_kf_weight(&self, kf_id: Id) -> i32{ self.connections.get_weight(&kf_id) }
     pub fn add_connection(&mut self, kf_id: Id, weight: i32) { self.connections.add(&kf_id, weight); }
@@ -207,6 +212,9 @@ impl KeyFrame {
         // To get all connections, pass in i32::MAX as `num`
         // num is the target number of keyframes to return
        let max_len = min(self.connections.ordered_connected_keyframes.len(), num as usize);
+
+    tracy_client::plot!("Connected KFs {}", self.connections.ordered_connected_keyframes.len() as f64);
+
        let (connections, _) : (Vec<i32>, Vec<i32>) = self.connections.ordered_connected_keyframes[0..max_len].iter().cloned().unzip();
        connections
     }
@@ -228,13 +236,13 @@ impl KeyFrame {
     }
 
     // *IMU *//
-    pub fn get_imu_rotation(&self) -> DVMatrix3<f32> {
+    pub fn get_imu_rotation(&self) -> DVMatrix3<f64> {
         // Eigen::Matrix3f KeyFrame::GetImuRotation()
         // Note: in Orbslam this is: (mTwc * mImuCalib.mTcb).rotationMatrix();
         // and mTwc is inverse of the pose
         DVMatrix3::new(*self.pose.inverse().get_rotation() * *ImuCalib::new().tcb.get_rotation())
     }
-    pub fn get_imu_position(&self) -> DVVector3<f32> {
+    pub fn get_imu_position(&self) -> DVVector3<f64> {
         // Eigen::Vector3f KeyFrame::GetImuPosition()
         self.imu_position.expect("IMU position not set")
     }
@@ -275,17 +283,17 @@ impl MapPointMatches {
         }
     }
 
-    pub fn delete_with_id(&mut self, mp_id: Id) {
-        for index in 0..self.matches.len() {
-            if let Some((id, _)) = self.matches[index] {
-                if id == mp_id {
-                    self.matches[index] = None;
-                    self.debug_count -= 1;
-                    return
-                }
-            }
-        }
-    }
+    // pub fn delete_with_id(&mut self, mp_id: Id) {
+    //     for index in 0..self.matches.len() {
+    //         if let Some((id, _)) = self.matches[index] {
+    //             if id == mp_id {
+    //                 self.matches[index] = None;
+    //                 self.debug_count -= 1;
+    //                 return
+    //             }
+    //         }
+    //     }
+    // }
 
     pub fn delete_at_indices(&mut self, indices: (i32, i32)) -> (Option<(Id, bool)>, Option<(Id, bool)>) {
         // Indices are (left, right). Right should be -1 for mono. Maybe we can rewrite this to make it more clear?
@@ -348,7 +356,7 @@ impl MapPointMatches {
                         Some(mappoint) => {
                             if check_obs {
                                 if mappoint.num_obs <= 1 {
-                                    debug!("mappoint.num_obs {}", mappoint.num_obs);
+                                    // debug!("mappoint.num_obs {}", mappoint.num_obs);
                                 }
                                 mappoint.num_obs >= (min_observations as i32)
                             } else {

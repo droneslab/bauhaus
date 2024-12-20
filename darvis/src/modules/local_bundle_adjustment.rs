@@ -1,6 +1,7 @@
 use core::{config::{SETTINGS, SYSTEM}, sensor::{FrameSensor, Sensor}};
 use std::{cmp::min, collections::{HashMap, HashSet, VecDeque}};
 
+use g2o::ffi::VertexPoseRecoverType;
 use log::{debug, info, warn};
 use nalgebra::Matrix3;
 use opencv::core::KeyPointTraitConst;
@@ -54,8 +55,7 @@ impl LocalMapOptimizationModule for LocalBundleAdjustment {
             let mut local_ba_for_kf = HashMap::new();
             local_ba_for_kf.insert(keyframe.id, keyframe.id);
 
-            let covisibility_kfs = keyframe.get_covisibility_keyframes(i32::MAX);
-            println!("LBA! Covisibility kfs: {}, {:?}", covisibility_kfs.len(), covisibility_kfs);
+            // let covisibility_kfs = keyframe.get_covisibility_keyframes(i32::MAX);
 
             for kf_id in keyframe.get_covisibility_keyframes(i32::MAX) {
                 let kf = lock.get_keyframe(kf_id);
@@ -91,6 +91,8 @@ impl LocalMapOptimizationModule for LocalBundleAdjustment {
                     }
                 }
             }
+            tracy_client::plot!("LBA: local mps in local kfs ", local_mappoints.len() as f64);
+
 
             // Fixed Keyframes. Keyframes that see Local MapPoints but that are not Local Keyframes
             let mut fixed_cameras = Vec::new();
@@ -112,6 +114,9 @@ impl LocalMapOptimizationModule for LocalBundleAdjustment {
                     // SOFIYA KF DELETE: KF could have been deleted during optimization, ok to ignore
                 }
             }
+
+            tracy_client::plot!("LBA: fixed_cameras ", fixed_cameras.len() as f64);
+
             if fixed_cameras.len() + num_fixed_kf == 0 {
                 warn!("LM_LBA: There are 0 fixed KF in the optimizations, LBA aborted");
             }
@@ -125,7 +130,7 @@ impl LocalMapOptimizationModule for LocalBundleAdjustment {
             for kf_id in &local_keyframes {
                 let kf = lock.get_keyframe(*kf_id);
                 let set_fixed = *kf_id == lock.initial_kf_id;
-                optimizer.pin_mut().add_vertex_se3expmap(kf.id, (kf.get_pose()).into(), set_fixed);
+                optimizer.pin_mut().add_vertex_se3expmap(kf.id, (kf.get_pose()).into(), false);
                 kf_vertex_ids.insert(*kf_id, kf.id);
                 if kf.id > max_kf_id {
                     max_kf_id = kf.id;
@@ -274,6 +279,8 @@ impl LocalMapOptimizationModule for LocalBundleAdjustment {
             }
         }
 
+        println!("LBA: KFs to optimize: {}, Fixed KFs: {}, MPs to optimize: {}, Edges: {}", kfs_to_optimize, fixed_kfs, mps_to_optimize, edges);
+        
         tracy_client::plot!("LBA: KFs to Optimize", kfs_to_optimize as f64);
         tracy_client::plot!("LBA: Fixed KFs", fixed_kfs as f64);
         tracy_client::plot!("LBA: MPs to Optimize", mps_to_optimize as f64);
@@ -291,19 +298,20 @@ impl LocalMapOptimizationModule for LocalBundleAdjustment {
             optimizer.pin_mut().optimize(10, false, false);
         }
 
+        // Check inlier observations
+        let mut mps_to_discard = Vec::new(); // vToErase
+        let mut i = 0;
+        for edge in optimizer.pin_mut().get_mut_xyz_edges().iter() {
+            if edge.inner.chi2() > 5.991 || !edge.inner.is_depth_positive() {
+                mps_to_discard.push((edges_kf_body[i], edge.mappoint_id));
+            }
+            i += 1;
+        }
+
         {
             let _span = tracy_client::span!("local_bundle_adjustment::post_process");
 
-            // Check inlier observations
-            let mut mps_to_discard = Vec::new(); // vToErase
-            let mut i = 0;
-            for edge in optimizer.pin_mut().get_mut_xyz_edges().iter() {
-                if edge.inner.chi2() > 5.991 || !edge.inner.is_depth_positive() {
-                    mps_to_discard.push((edges_kf_body[i], edge.mappoint_id));
-                }
-                i += 1;
-            }
-
+            let mut lock = map.write()?;
 
             if matches!(sensor.frame(), FrameSensor::Stereo) {
                 todo!("Stereo");
@@ -339,50 +347,58 @@ impl LocalMapOptimizationModule for LocalBundleAdjustment {
                 // }
             }
 
-            for (kf_id, mp_id) in mps_to_discard {
-                if map.read()?.mappoints.get(&mp_id).is_none() {
-                    // Mappoint may have been deleted in call to delete_observation, if not enough matches
-                    continue;
+            {
+                let _span = tracy_client::span!("lba::post_process::delete_obs");
+
+                for (kf_id, mp_id) in mps_to_discard {
+                    lock.delete_observation(kf_id, mp_id);
                 }
-                map.write()?.delete_observation(kf_id, mp_id);
             }
 
-            // Recover optimized data
-            for (kf_id, vertex_id) in kf_vertex_ids {
-                let pose = optimizer.recover_optimized_frame_pose(vertex_id);
-                let mut lock = map.write()?;
-
-                lock.get_keyframe_mut(kf_id).set_pose(pose.into());
-                // SOFIYA KF DELETE: Possible that map actor deleted mappoint after local BA has finished but before
-                // this message is processed
+            {
+                let _span = tracy_client::span!("lba::post_process::recover_kfs");
+                // Recover optimized data
+                for (kf_id, vertex_id) in kf_vertex_ids {
+                    let pose = optimizer.recover_optimized_frame_pose(vertex_id);
+                    lock.get_keyframe_mut(kf_id).set_pose(pose.into());
+                }
             }
 
-            //Points
-            for (mp_id, vertex_id) in mp_vertex_ids {
-                if map.read()?.mappoints.get(&mp_id).is_none() {
-                    // Mappoint could have been deleted in the delete_observation call above.
-                    continue;
-                }
+            {
+                let _span = tracy_client::span!("lba::post_process::recover_mps");
 
-                let position = optimizer.recover_optimized_mappoint_pose(vertex_id);
-                let translation = nalgebra::Translation3::new(
-                    position.translation[0] as f64,
-                    position.translation[1] as f64,
-                    position.translation[2] as f64
-                );
-                let mut lock = map.write()?;
-                match lock.mappoints.get_mut(&mp_id) {
-                    // Possible that map actor deleted mappoint after local BA has finished but before
-                    // this message is processed
-                    Some(mp) => {
-                            mp.position = DVTranslation::new(translation.vector);
-                            let norm_and_depth = lock.mappoints.get(&mp_id).unwrap().get_norm_and_depth(&lock);
-                            if norm_and_depth.is_some() {
-                                lock.mappoints.get_mut(&mp_id).unwrap().update_norm_and_depth(norm_and_depth.unwrap());
-                            }
-                    },
-                    None => continue,
-                };
+                //Points
+                println!("lLocalMapPoints: {:?}", mp_vertex_ids.len());
+                for (mp_id, vertex_id) in mp_vertex_ids {
+                    let _span = tracy_client::span!("lba::post_process::recover_mps::bindings");
+
+                    let position = optimizer.recover_optimized_mappoint_pose(vertex_id);
+                    let translation = nalgebra::Translation3::new(
+                        position.translation[0] as f64,
+                        position.translation[1] as f64,
+                        position.translation[2] as f64
+                    );
+                    drop(_span);
+
+                    let _span = tracy_client::span!("lba::post_process::recover_mps::update");
+
+                    let norm_and_depth = match lock.mappoints.get(&mp_id) {
+                        Some(mp) => {
+                            mp.get_norm_and_depth(&lock)
+                        },
+                        None => {
+                            // Possible that map actor deleted mappoint after local BA has finished but before
+                            // this message is processed
+                            continue;
+                        }
+                    };
+
+                    let mp = lock.mappoints.get_mut(&mp_id).unwrap();
+                    mp.position = DVTranslation::new(translation.vector);
+                    if norm_and_depth.is_some() {
+                        mp.update_norm_and_depth(norm_and_depth.unwrap());
+                    }
+                }
             }
         }
 
@@ -672,7 +688,8 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
                 max_kf_id + 3 * kf_id + 2,
                 max_kf_id + 3 * prev_kf.id + 3, 
                 max_kf_id + 3 * kf_id + 3,
-                (& imu_preintegrated).into()
+                (& imu_preintegrated).into(),
+                false
             );
 
             new_imu_preintegrated_for_kfs.insert(kf_id, imu_preintegrated);
@@ -905,7 +922,7 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
     }
 
     for kf_id in &fixed_keyframes {
-        let pose = optimizer.recover_optimized_vertex_pose(*kf_id);
+        let pose = optimizer.recover_optimized_vertex_pose(*kf_id, VertexPoseRecoverType::Cw);
         let mut lock = map.write()?;
         lock.get_keyframe_mut(*kf_id).set_pose(pose.into());
         // SOFIYA KF DELETE: Possible that map actor deleted mappoint after local BA has finished but before
@@ -917,7 +934,7 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
     for i in 0..optimizable_kfs.len() {
         let kf_id = optimizable_kfs[i];
 
-        let pose = optimizer.recover_optimized_vertex_pose(kf_id);
+        let pose = optimizer.recover_optimized_vertex_pose(kf_id, VertexPoseRecoverType::Cw);
         map.write()?.get_keyframe_mut(kf_id).set_pose(pose.into());
 
         if map.read()?.get_keyframe(kf_id).imu_data.is_imu_initialized {
@@ -946,7 +963,7 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
     // Local visual KeyFrame
     for i in 0..opt_vis_kfs.len() {
         let kf_id = opt_vis_kfs[i];
-        let pose = optimizer.recover_optimized_vertex_pose(kf_id);
+        let pose = optimizer.recover_optimized_vertex_pose(kf_id, VertexPoseRecoverType::Cw);
         map.write()?.get_keyframe_mut(kf_id).set_pose(pose.into());
     }
 

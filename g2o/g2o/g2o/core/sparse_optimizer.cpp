@@ -368,11 +368,12 @@ void SparseOptimizer::printStats() {
       v->pop();
     }
     if (verbose()) {
-      computeActiveErrors();
-      std::cout << "iteration= -1\t chi2= " << activeChi2()
-                << "\t time= 0.0"
-                << "\t cumTime= 0.0"
-                << "\t (using initial guess from " << costFunction.name() << ")" << endl;
+        std::cout << "SOFIYA! Compute active errors initial guess" << std::endl;
+        computeActiveErrors();
+        std::cout << "iteration= -1\t chi2= " << activeChi2()
+                  << "\t time= 0.0"
+                  << "\t cumTime= 0.0"
+                  << "\t (using initial guess from " << costFunction.name() << ")" << endl;
     }
   }
 
@@ -416,17 +417,20 @@ void SparseOptimizer::printStats() {
 
       bool errorComputed = false;
       if (_computeBatchStatistics) {
-        computeActiveErrors();
-        errorComputed = true;
-        _batchStatistics[i].chi2 = activeRobustChi2();
-        _batchStatistics[i].timeIteration = get_monotonic_time()-ts;
+          std::cout << "SOFIYA! Compute active errors batch statistics" << std::endl;
+          computeActiveErrors();
+          errorComputed = true;
+          _batchStatistics[i].chi2 = activeRobustChi2();
+          _batchStatistics[i].timeIteration = get_monotonic_time() - ts;
       }
 
       if (verbose()){
         double dts = get_monotonic_time()-ts;
         cumTime += dts;
-        if (! errorComputed)
-          computeActiveErrors();
+        if (! errorComputed) {
+            std::cout << "SOFIYA! Compute active errors not error computed" << std::endl;
+            computeActiveErrors();
+        }
         std::cout << "iteration= " << i
                   << "\t chi2= " << FIXED(activeRobustChi2())
                   << "\t time= " << dts

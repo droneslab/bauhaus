@@ -1,6 +1,6 @@
 use std::{collections::BTreeMap, fmt::Debug, sync::atomic::{AtomicI32, Ordering}};
 use core::{matrix::DVMatrix, config::{SETTINGS, SYSTEM}, sensor::{Sensor, FrameSensor}};
-use log::{error, warn};
+use log::{debug, error, warn};
 extern crate nalgebra as na;
 use crate::{matrix::DVVector3, modules::orbslam_matcher::SCALE_FACTORS, registered_actors::{FEATURE_DETECTION, FEATURE_MATCHING_MODULE}};
 use super::{map::{Id, Map}, keyframe::KeyFrame, pose::DVTranslation};
@@ -208,7 +208,7 @@ impl MapPoint {
         }
     }
     pub(super) fn delete_observation(&mut self, kf_id: &Id) -> bool {
-        let _span = tracy_client::span!("delete_observation");
+        // let _span = tracy_client::span!("delete_observation");
 
         // void MapPoint::EraseObservation(KeyFrame* pKF)
         if let Some((left_index, right_index)) = self.observations.get(kf_id) {
@@ -266,6 +266,8 @@ impl MapPoint {
     }
 
     fn get_obs_normal(&self, map: &Map, position: &DVVector3<f64>) -> (i32, nalgebra::Vector3<f64>) { 
+        // let _span = tracy_client::span!("UpdateNormalAndDepth");
+
         let mut normal = na::Vector3::<f64>::zeros();
         let mut n = 0;
         let position_opencv = **position;

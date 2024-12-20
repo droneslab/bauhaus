@@ -11,7 +11,7 @@ use crate::map::{frame::Frame, pose::Pose};
 
 use super::{module_definitions::ImuModule, optimizer};
 
-pub const GRAVITY_VALUE: f32 = 9.81;
+pub const GRAVITY_VALUE: f64 = 9.81;
 
 #[derive(Debug, Clone)]
 pub struct IMU {
@@ -69,12 +69,22 @@ impl ImuModule for IMU {
         println!("kf delta rotation: {:?}", self.imu_preintegrated_from_last_kf.get_delta_rotation(bias));
         println!("kf delta position: {:.3}", self.imu_preintegrated_from_last_kf.get_delta_position(bias));
         println!("kf delta velocity: {:?}", self.imu_preintegrated_from_last_kf.get_delta_velocity(bias));
-        println!("rwb2: {:?}", rwb2);
         println!("twb2: {:?}", twb2);
         println!("vwb2: {:?}", vwb2);
         println!("imu bias: {:?}", bias);
 
         debug!("PREDICT STATE LAST KEYFRAME NEW POSE = {:?}", current_frame.pose);
+
+
+        for (_kf_id, kf) in lock.get_keyframes_iter() {
+            if kf.imu_data.velocity.is_some() {
+                println!("KF {} velocity: {:?}", kf.id, kf.imu_data.velocity.unwrap());
+            } else {
+                println!("KF {} has no velocity", kf.id);
+            }
+
+            println!("KF {} imu position: {:?}", kf.id, kf.get_imu_position());
+        }
         // Predbias is never used anywhere??
         // mCurrentFrame.mPredBias = mCurrentFrame.mImuBias;
         return Ok(true);
@@ -531,16 +541,16 @@ impl Debug for ImuPoint {
 pub struct ImuCalib {
     pub tcb: Pose,
     pub tbc: Pose,
-    pub cov: SMatrix<f32, 6, 6>,
-    pub cov_walk: SMatrix<f32, 6, 6>,
+    pub cov: SMatrix<f64, 6, 6>,
+    pub cov_walk: SMatrix<f64, 6, 6>,
 }
 impl ImuCalib {
     pub fn new() -> Self{
-        let imu_frequency = SETTINGS.get::<f64>(IMU, "frequency") as f32;
-        let na = SETTINGS.get::<f64>(IMU, "noise_acc") as f32;
-        let ngw = SETTINGS.get::<f64>(IMU, "gyro_walk") as f32;
-        let naw = SETTINGS.get::<f64>(IMU, "acc_walk") as f32;
-        let ng = SETTINGS.get::<f64>(IMU, "noise_gyro") as f32;
+        let imu_frequency = SETTINGS.get::<f64>(IMU, "frequency");
+        let na = SETTINGS.get::<f64>(IMU, "noise_acc");
+        let ngw = SETTINGS.get::<f64>(IMU, "gyro_walk");
+        let naw = SETTINGS.get::<f64>(IMU, "acc_walk");
+        let ng = SETTINGS.get::<f64>(IMU, "noise_gyro");
         let sf = imu_frequency.sqrt();
         let tbc = {
             let tbc = SETTINGS.get::<DVMatrix4<f64>>(IMU, "T_b_c1");
@@ -557,7 +567,7 @@ impl ImuCalib {
         ImuCalib::new_internal(tbc,ng * sf,na * sf, ngw / sf, naw / sf)
     }
 
-    fn new_internal(tbc: Pose, ng: f32, na: f32, ngw: f32, naw: f32) -> Self {
+    fn new_internal(tbc: Pose, ng: f64, na: f64, ngw: f64, naw: f64) -> Self {
         // void Calib::Set(const Sophus::SE3<float> &sophTbc, const float &ng, const float &na, const float &ngw, const float &naw) {
 
         let ng2 = ng * ng;
@@ -565,7 +575,7 @@ impl ImuCalib {
         let ngw2 = ngw * ngw;
         let naw2 = naw * naw;
 
-        let cov: SMatrix<f32, 6, 6> = SMatrix::from_row_slice(&[
+        let cov: SMatrix<f64, 6, 6> = SMatrix::from_row_slice(&[
             ng2, 0.0, 0.0, 0.0, 0.0, 0.0,
             0.0, ng2, 0.0, 0.0, 0.0, 0.0,
             0.0, 0.0, ng2, 0.0, 0.0, 0.0,
@@ -574,7 +584,7 @@ impl ImuCalib {
             0.0, 0.0, 0.0, 0.0, 0.0, na2,
         ]);
 
-        let cov_walk: SMatrix<f32, 6, 6> = SMatrix::from_row_slice(&[
+        let cov_walk: SMatrix<f64, 6, 6> = SMatrix::from_row_slice(&[
             ngw2, 0.0, 0.0, 0.0, 0.0, 0.0,
             0.0, ngw2, 0.0, 0.0, 0.0, 0.0,
             0.0, 0.0, ngw2, 0.0, 0.0, 0.0,
@@ -595,38 +605,38 @@ impl ImuCalib {
 
 #[derive(Debug, Clone)]
 pub struct Integrable {
-    a: Vector3<f32>, // acceleration
-    w: Vector3<f32>, // angular velocity
-    t: f32
+    a: Vector3<f64>, // acceleration
+    w: Vector3<f64>, // angular velocity
+    t: f64
 }
 
 #[derive(Debug, Clone)]
 pub struct ImuPreIntegrated {
-    pub d_t: f32, // dT
-    c: SMatrix<f32, 15, 15>, // Eigen::Matrix<float,15,15> C;
-    info: SMatrix<f32, 15, 15>, // Eigen::Matrix<float,15,15> Info;
-    nga_walk: SMatrix<f32, 6, 6>, // Eigen::DiagonalMatrix<float,6> Nga, NgaWalk
-    nga: SMatrix<f32, 6, 6>, // Eigen::DiagonalMatrix<float,6> Nga, NgaWalk
+    pub d_t: f64, // dT
+    pub c: SMatrix<f64, 15, 15>, // Eigen::Matrix<float,15,15> C;
+    pub info: SMatrix<f64, 15, 15>, // Eigen::Matrix<float,15,15> Info;
+    pub nga_walk: SMatrix<f64, 6, 6>, // Eigen::DiagonalMatrix<float,6> Nga, NgaWalk
+    pub nga: SMatrix<f64, 6, 6>, // Eigen::DiagonalMatrix<float,6> Nga, NgaWalk
 
     // Values for the original bias (when integration was computed)
-    b: ImuBias,
+    pub b: ImuBias,
 
-    d_r: Matrix3<f32>, // Eigen::Matrix3f dR;
-    d_v: Vector3<f32>, // Eigen::Vector3f dV;
-    d_p: Vector3<f32>, // Eigen::Vector3f dP;
-    jrg: Matrix3<f32>, // Eigen::Matrix3f JRg;
-    jvg: Matrix3<f32>, // Eigen::Matrix3f JVg;
-    jva: Matrix3<f32>, // Eigen::Matrix3f JVa;
-    jpg: Matrix3<f32>, // Eigen::Matrix3f JPg;
-    jpa: Matrix3<f32>, // Eigen::Matrix3f JPa;
-    avg_a: Vector3<f32>, // Eigen::Vector3f avgA;
-    avg_w: Vector3<f32>, // Eigen::Vector3f avgW;
+    pub d_r: Matrix3<f64>, // Eigen::Matrix3f dR;
+    pub d_v: Vector3<f64>, // Eigen::Vector3f dV;
+    pub d_p: Vector3<f64>, // Eigen::Vector3f dP;
+    pub jrg: Matrix3<f64>, // Eigen::Matrix3f JRg;
+    pub jvg: Matrix3<f64>, // Eigen::Matrix3f JVg;
+    pub jva: Matrix3<f64>, // Eigen::Matrix3f JVa;
+    pub jpg: Matrix3<f64>, // Eigen::Matrix3f JPg;
+    pub jpa: Matrix3<f64>, // Eigen::Matrix3f JPa;
+    pub avg_a: Vector3<f64>, // Eigen::Vector3f avgA;
+    pub avg_w: Vector3<f64>, // Eigen::Vector3f avgW;
 
     // Updated bias
-    bu: ImuBias,
+    pub bu: ImuBias,
     // Dif between original and updated bias
     // This is used to compute the updated values of the preintegration
-    d_b: SMatrix<f32, 6, 1>, //  Eigen::Matrix<float,6,1> db;
+    pub d_b: SMatrix<f64, 6, 1>, //  Eigen::Matrix<float,6,1> db;
 
     pub measurements: Vec<Integrable>, // mvMeasurements
 }
@@ -642,19 +652,19 @@ impl ImuPreIntegrated {
             bu: bias,
             measurements: vec![],
             d_t: 0.0,
-            c: SMatrix::<f32, 15, 15>::zeros(),
-            info: SMatrix::<f32, 15, 15>::zeros(),
+            c: SMatrix::<f64, 15, 15>::zeros(),
+            info: SMatrix::<f64, 15, 15>::zeros(),
             d_r: Matrix3::identity(),
-            d_v: Vector3::<f32>::zeros(),
-            d_p: Vector3::<f32>::zeros(),
-            jrg: Matrix3::<f32>::zeros(),
-            jvg: Matrix3::<f32>::zeros(),
-            jva: Matrix3::<f32>::zeros(),
-            jpg: Matrix3::<f32>::zeros(),
-            jpa: Matrix3::<f32>::zeros(),
-            avg_a: Vector3::<f32>::zeros(),
-            avg_w: Vector3::<f32>::zeros(),
-            d_b: SMatrix::<f32, 6, 1>::zeros(),
+            d_v: Vector3::<f64>::zeros(),
+            d_p: Vector3::<f64>::zeros(),
+            jrg: Matrix3::<f64>::zeros(),
+            jvg: Matrix3::<f64>::zeros(),
+            jva: Matrix3::<f64>::zeros(),
+            jpg: Matrix3::<f64>::zeros(),
+            jpa: Matrix3::<f64>::zeros(),
+            avg_a: Vector3::<f64>::zeros(),
+            avg_w: Vector3::<f64>::zeros(),
+            d_b: SMatrix::<f64, 6, 1>::zeros(),
         }
     }
 
@@ -667,9 +677,9 @@ impl ImuPreIntegrated {
         self.jva = Matrix3::zeros();
         self.jpg = Matrix3::zeros();
         self.jpa = Matrix3::zeros();
-        self.c = SMatrix::<f32, 15, 15>::zeros();
-        self.info = SMatrix::<f32, 15, 15>::zeros();
-        self.d_b = SMatrix::<f32, 6, 1>::zeros();
+        self.c = SMatrix::<f64, 15, 15>::zeros();
+        self.info = SMatrix::<f64, 15, 15>::zeros();
+        self.d_b = SMatrix::<f64, 6, 1>::zeros();
         self.b = new_bias;
         self.bu = new_bias;
         self.avg_a = Vector3::zeros();
@@ -688,7 +698,7 @@ impl ImuPreIntegrated {
         }
     }
 
-    pub fn integrate_new_measurement(&mut self, acceleration: Vector3<f32>, ang_vel: Vector3<f32>, dt: f32) {
+    pub fn integrate_new_measurement(&mut self, acceleration: Vector3<f64>, ang_vel: Vector3<f64>, dt: f64) {
         // Sofiya: Tested!!
 
         // void Preintegrated::IntegrateNewMeasurement(const Eigen::Vector3f &acceleration, const Eigen::Vector3f &angVel, const float &dt)
@@ -795,20 +805,20 @@ impl ImuPreIntegrated {
         // Not used???
     }
 
-    pub fn get_delta_rotation(&self, b_: ImuBias) -> Matrix3<f32> {
+    pub fn get_delta_rotation(&self, b_: ImuBias) -> Matrix3<f64> {
         // Preintegrated::GetDeltaRotation
         let dbg = Vector3::new(b_.bwx - self.b.bwx, b_.bwy - self.b.bwy, b_.bwz - self.b.bwz);
         let part2 = group_exp(& (self.jrg * dbg));
         let part2_mat = part2.to_rotation_matrix();
         * normalize_rotation(self.d_r * part2_mat)
     }
-    pub fn get_delta_velocity(&self, b_: ImuBias) -> Vector3<f32> {
+    pub fn get_delta_velocity(&self, b_: ImuBias) -> Vector3<f64> {
         // Preintegrated::GetDeltaVelocity
         let dbg = Vector3::new(b_.bwx - self.b.bwx, b_.bwy - self.b.bwy, b_.bwz - self.b.bwz);
         let dba = Vector3::new(b_.bax - self.b.bax, b_.bay - self.b.bay, b_.baz - self.b.baz);
         self.d_v + self.jvg * dbg + self.jva * dba
     }
-    pub fn get_delta_position(&self, b_: ImuBias) -> Vector3<f32> {
+    pub fn get_delta_position(&self, b_: ImuBias) -> Vector3<f64> {
         // Preintegrated::GetDeltaPosition
         let dbg = Vector3::new(b_.bwx - self.b.bwx, b_.bwy - self.b.bwy, b_.bwz - self.b.bwz);
         let dba = Vector3::new(b_.bax - self.b.bax, b_.bay - self.b.bay, b_.baz - self.b.baz);
@@ -816,7 +826,7 @@ impl ImuPreIntegrated {
         println!("get delta position... self.d_p: {:?}, self.jpg: {:?}, self.dbg: {:?}, jpa: {:?}, dba: {:?}", self.d_p, self.jpg, dbg, self.jpa, dba);
         self.d_p + self.jpg * dbg + self.jpa * dba
     }
-    pub fn get_updated_delta_rotation(&self) -> Matrix3<f32> {
+    pub fn get_updated_delta_rotation(&self) -> Matrix3<f64> {
         // Preintegrated::GetUpdatedDeltaRotation
         let part2 = group_exp(& (self.jrg * self.d_b.fixed_rows::<3>(0)));
         let part2_mat = part2.to_rotation_matrix();
@@ -824,25 +834,25 @@ impl ImuPreIntegrated {
 
         // return NormalizeRotation(dR * Sophus::SO3f::exp(JRg*db.head(3)).matrix());
     }
-    pub fn get_updated_delta_velocity(&self) -> Vector3<f32> {
+    pub fn get_updated_delta_velocity(&self) -> Vector3<f64> {
         // Preintegrated::GetUpdatedDeltaVelocity
         // dV + JVg * db.head(3) + JVa * db.tail(3);
         self.d_v + self.jvg * self.d_b.fixed_rows::<3>(0) + self.jva * self.d_b.fixed_rows::<3>(3)
     }
-    pub fn get_updated_delta_position(&self) -> Vector3<f32> {
+    pub fn get_updated_delta_position(&self) -> Vector3<f64> {
         // Preintegrated::GetUpdatedDeltaPosition
         // return dP + JPg*db.head(3) + JPa*db.tail(3);
         self.d_p + self.jpg * self.d_b.fixed_rows::<3>(0) + self.jpa * self.d_b.fixed_rows::<3>(3)
     }
-    pub fn get_original_delta_rotation(&self) -> Matrix3<f32>{
+    pub fn get_original_delta_rotation(&self) -> Matrix3<f64>{
         // Preintegrated::GetOriginalDeltaRotation
         self.d_r
     }
-    pub fn get_original_delta_velocity(&self) -> Vector3<f32> {
+    pub fn get_original_delta_velocity(&self) -> Vector3<f64> {
         // Preintegrated::GetOriginalDeltaVelocity
         self.d_v
     }
-    pub fn get_original_delta_position(&self) -> Vector3<f32> {
+    pub fn get_original_delta_position(&self) -> Vector3<f64> {
         // Preintegrated::GetOriginalDeltaPosition
         self.d_p
     }
@@ -857,13 +867,6 @@ impl ImuPreIntegrated {
 }
 impl Into<g2o::ffi::RustImuPreintegrated> for & ImuPreIntegrated {
     fn into(self) -> g2o::ffi::RustImuPreintegrated {
-        fn matrix_into_vec(mat: Matrix3<f64>) -> [[f32; 3]; 3] {
-            [
-                [mat[(0, 0)] as f32, mat[(0, 1)] as f32, mat[(0, 2)] as f32],
-                [mat[(1, 0)] as f32, mat[(1, 1)] as f32, mat[(1, 2)] as f32],
-                [mat[(2, 0)] as f32, mat[(2, 1)] as f32, mat[(2, 2)] as f32],
-            ]
-        }
         let mut c: [[f32; 15]; 15] = [[0.0;15]; 15];
         for i in 0..15 {
             for j in 0..15 {
@@ -884,7 +887,7 @@ impl Into<g2o::ffi::RustImuPreintegrated> for & ImuPreIntegrated {
             dv: [self.d_v[0] as f32, self.d_v[1] as f32, self.d_v[2] as f32],
             avga: [self.avg_a[0] as f32, self.avg_a[1] as f32, self.avg_a[2] as f32],
             avgw: [self.avg_w[0] as f32, self.avg_w[1] as f32, self.avg_w[2] as f32],
-            dr: (&DVMatrix3::new(self.jpa)).into(),
+            dr: (&DVMatrix3::new(self.d_r)).into(),
             bias: self.b.into(),
             t: self.d_t as f64,
             dp: [self.d_p[0] as f32, self.d_p[1] as f32, self.d_p[2] as f32],
@@ -896,12 +899,12 @@ impl Into<g2o::ffi::RustImuPreintegrated> for & ImuPreIntegrated {
 
 #[derive(Clone, Debug, Copy, Serialize, Deserialize)]
 pub struct ImuBias {
-    pub bax: f32,
-    pub bay: f32,
-    pub baz: f32,
-    pub bwx: f32,
-    pub bwy: f32,
-    pub bwz: f32,
+    pub bax: f64,
+    pub bay: f64,
+    pub baz: f64,
+    pub bwx: f64,
+    pub bwy: f64,
+    pub bwz: f64,
 }
 impl ImuBias {
     pub fn new() -> Self {
@@ -914,10 +917,10 @@ impl ImuBias {
             bwz: 0.0,
         }
     }
-    pub fn get_gyro_bias(&self) -> DVVector3<f32> {
+    pub fn get_gyro_bias(&self) -> DVVector3<f64> {
         DVVector3::new_with(self.bwx, self.bwy, self.bwz)
     }
-    pub fn get_acc_bias(&self) -> DVVector3<f32> {
+    pub fn get_acc_bias(&self) -> DVVector3<f64> {
         DVVector3::new_with(self.bax, self.bay, self.baz)
     }
 }
@@ -940,12 +943,12 @@ impl Into<g2o::ffi::RustImuBias> for ImuBias {
 }
 
 pub struct IntegratedRotation {
-    pub delta_t: f32, // deltaT // integration time
-    pub delta_r: Matrix3<f32>, // deltaR
-    pub right_j: Matrix3<f32>, // rightJ // right jacobian
+    pub delta_t: f64, // deltaT // integration time
+    pub delta_r: Matrix3<f64>, // deltaR
+    pub right_j: Matrix3<f64>, // rightJ // right jacobian
 }
 impl IntegratedRotation {
-    pub fn new(ang_vel: nalgebra::Vector3<f32>, imu_bias: ImuBias, time: f32) -> Self {
+    pub fn new(ang_vel: nalgebra::Vector3<f64>, imu_bias: ImuBias, time: f64) -> Self {
         let x = (ang_vel[0] - imu_bias.bwx) * time;
         let y = (ang_vel[1] - imu_bias.bwy) * time;
         let z = (ang_vel[2] - imu_bias.bwz) * time;
@@ -985,7 +988,7 @@ pub fn normalize_rotation(mat: Matrix3<f64>) ->  DVMatrix3<f64> {
     res.into()
 }
 
-pub fn hat(vec: & Vector3<f32>) -> Matrix3<f32> {
+pub fn hat(vec: & Vector3<f64>) -> Matrix3<f64> {
     Matrix3::from_row_slice(&[
         0.0, -vec[2], vec[1],
         vec[2], 0.0, -vec[0],
@@ -1003,10 +1006,10 @@ pub struct ImuDataFrame {
     // IMU //
     // Preintegrated IMU measurements from previous keyframe
     pub is_imu_initialized: bool, // bImu
-    imu_bias: ImuBias,
+    pub imu_bias: ImuBias,
     pub imu_preintegrated: Option<ImuPreIntegrated>,  // mpImuPreintegrated
     pub imu_preintegrated_frame: Option<ImuPreIntegrated>, // mpImuPreintegratedFrame
-    pub velocity: Option<DVVector3<f32>>, // mVw
+    pub velocity: Option<DVVector3<f64>>, // mVw
     pub constraint_pose_imu: Option<ConstraintPoseImu>, // mpcpi
     pub prev_keyframe: Option<Id>, // mpLastKeyFrame
 }
@@ -1044,11 +1047,11 @@ impl ImuDataFrame {
 
 #[derive(Debug, Clone)]
 pub struct ConstraintPoseImu {
-    pub rwb: DVMatrix3<f32>,
-    pub twb: DVVector3<f32>,
-    pub vwb: Vector3<f32>,
-    pub bg: DVVector3<f32>,
-    pub ba: DVVector3<f32>,
+    pub rwb: DVMatrix3<f64>,
+    pub twb: DVVector3<f64>,
+    pub vwb: Vector3<f64>,
+    pub bg: DVVector3<f64>,
+    pub ba: DVVector3<f64>,
     pub h: nalgebra::SMatrix<f64, 15, 15>
 }
 impl ConstraintPoseImu {

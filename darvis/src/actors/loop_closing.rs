@@ -110,42 +110,42 @@ impl LoopClosing {
 
         debug!("Loop closing working on kf {} (frame {})", current_kf_id, self.map.read()?.get_keyframe(current_kf_id).frame_id);
 
-        // Detect loop candidates and check covisibility consistency
-        match self.loop_detection.detect_loop(& self.map, current_kf_id) {
-            Ok((merge_kf, loop_kf, scw, loop_mappoints, current_matched_points)) => {
-                if merge_kf.is_some() {
-                    info!("KF {}: Merge detected!", current_kf_id);
-                }
+        // // Detect loop candidates and check covisibility consistency
+        // match self.loop_detection.detect_loop(& self.map, current_kf_id) {
+        //     Ok((merge_kf, loop_kf, scw, loop_mappoints, current_matched_points)) => {
+        //         if merge_kf.is_some() {
+        //             info!("KF {}: Merge detected!", current_kf_id);
+        //         }
 
-                match (loop_kf, scw) {
-                    (Some(loop_kf), Some(scw)) => {
-                        info!("KF {}: Loop detected! with KF {}", current_kf_id, loop_kf);
+        //         match (loop_kf, scw) {
+        //             (Some(loop_kf), Some(scw)) => {
+        //                 info!("KF {}: Loop detected! with KF {}", current_kf_id, loop_kf);
 
-                        match self.sensor.is_imu() {
-                            true => {
-                                todo!("IMU");
-                                // Lines 235-258
-                            },
-                            false => {}
-                        };
+        //                 match self.sensor.is_imu() {
+        //                     true => {
+        //                         todo!("IMU");
+        //                         // Lines 235-258
+        //                     },
+        //                     false => {}
+        //                 };
 
-                        match self.correct_loop(current_kf_id, loop_kf, scw, loop_mappoints, current_matched_points) {
-                            Ok(_) => {},
-                            Err(e) => {
-                                warn!("Loop correction failed: {}", e);
-                            }
-                        }
+        //                 match self.correct_loop(current_kf_id, loop_kf, scw, loop_mappoints, current_matched_points) {
+        //                     Ok(_) => {},
+        //                     Err(e) => {
+        //                         warn!("Loop correction failed: {}", e);
+        //                     }
+        //                 }
 
-                        // Reset all variables
-                        self.map.write()?.get_keyframe_mut(loop_kf).dont_delete = false;
-                    },
-                    _ => ()
-                }
-            },
-            Err(e) => {
-                warn!("Loop detection failed: {}", e);
-            }
-        }
+        //                 // Reset all variables
+        //                 self.map.write()?.get_keyframe_mut(loop_kf).dont_delete = false;
+        //             },
+        //             _ => ()
+        //         }
+        //     },
+        //     Err(e) => {
+        //         warn!("Loop detection failed: {}", e);
+        //     }
+        // }
 
         self.map.write()?.get_keyframe_mut(current_kf_id).dont_delete = false;
         thread::sleep(Duration::from_micros(5000));

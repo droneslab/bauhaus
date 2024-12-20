@@ -103,7 +103,7 @@ namespace g2o {
             if (lambda_init > 0) {
                 solver->setUserLambdaInit(lambda_init);
             }
-            optimizer->setVerbose(true);
+            optimizer->setVerbose(false);
 
             optimizer->setAlgorithm(solver);
             optimizer_type = 5;
@@ -124,7 +124,7 @@ namespace g2o {
             BlockSolverX * solver_ptr = new BlockSolverX(linearSolver);
 
             OptimizationAlgorithmGaussNewton* solver = new OptimizationAlgorithmGaussNewton(solver_ptr);
-            optimizer->setVerbose(false);
+            optimizer->setVerbose(true);
             optimizer->setAlgorithm(solver);
 
             optimizer_type = 7;
@@ -194,6 +194,8 @@ namespace g2o {
         vector<float> camera_calib{fx,fy,cx,cy};
         ORB_SLAM3::Pinhole * camera = new ORB_SLAM3::Pinhole(camera_calib);
 
+        std::cout << "POSE OPT! Add frame" << std::endl;
+
         Eigen::Vector3d imu_position2(imu_position.data());
         Eigen::Matrix3d imu_rotation2 = Eigen::Quaterniond(imu_rotation.data()).toRotationMatrix();
         Eigen::Vector3d translation2(translation.data());
@@ -228,7 +230,7 @@ namespace g2o {
         VV->setFixed(set_fixed);
         // std::cout << "Add vertex velocity" << std::endl;
         optimizer->addVertex(VV);
-        std::cout << "11/14 ADD VELOCITY. Vertex id: " << vertex_id << " with velocity: " << vel.transpose() << ", fixed: " << set_fixed << std::endl;
+        std::cout << "POST OPT! ADD VELOCITY. Vertex id: " << vertex_id << " with velocity: " << vel.transpose() << ", fixed: " << set_fixed << std::endl;
     }
 
     void BridgeSparseOptimizer::add_vertex_gyrobias(
@@ -241,7 +243,7 @@ namespace g2o {
         VG->setFixed(set_fixed);
         // std::cout << "Add vertex gyrobias" << std::endl;
         optimizer->addVertex(VG);
-        std::cout << "11/14 ADD GYRO BIAS. Vertex id: " << vertex_id << " with bias: " << bias.transpose() << ", fixed: " << set_fixed << std::endl;
+        std::cout << "POSE OPT! ADD GYRO BIAS. Vertex id: " << vertex_id << " with bias: " << bias.transpose() << ", fixed: " << set_fixed << std::endl;
     }
 
     void BridgeSparseOptimizer::add_vertex_accbias(
@@ -478,6 +480,7 @@ namespace g2o {
         rust_edge.mappoint_id = mp_id;
         this->mono_onlypose_edges.emplace(this->mono_onlypose_edges.end(), std::move(rust_edge));
 
+        std::cout << "POSE OPT! Add edge mono... MapPointDummy { id: " << mp_id << ", position: DVVector3::new_with(" << worldpos_vec.transpose() << "), kp: (" << obs.transpose() << ", " << inv_sigma2 << ") }, " << std::endl;
     }
 
 
@@ -533,7 +536,7 @@ namespace g2o {
         if (set_information) {
             ei->setInformation(ei->information() * information_weight);
         }
-        ei->setId(optimizer->edges().size());
+        // ei->setId(optimizer->edges().size());
 
         // std::cout << "GRAPH EDGE. Connect to: " << vertex_P1_id << "has edge? " << (optimizer->vertex(vertex_P1_id) != NULL) << std::endl;
         // std::cout << "GRAPH EDGE. Connect to: " << vertex_V1_id << "has edge? " << (optimizer->vertex(vertex_V1_id) != NULL) << std::endl;
@@ -544,8 +547,8 @@ namespace g2o {
         // std::cout << "GRAPH EDGE. Connect to: " << vertex_GDir_id << "has edge? " << (optimizer->vertex(vertex_GDir_id) != NULL) << std::endl;
         // std::cout << "GRAPH EDGE. Connect to: " << vertex_S_id << "has edge? " << (optimizer->vertex(vertex_S_id) != NULL) << std::endl;
 
+        std::cout << "POSE OPT! Add edge inertial" << std::endl;
         optimizer->addEdge(ei);
-
     }
 
     void BridgeSparseOptimizer::add_edge_inertial(
@@ -556,7 +559,7 @@ namespace g2o {
         bool set_robust_kernel, float delta
     ) {
         g2o::IMU::Preintegrated* pre_ = new g2o::IMU::Preintegrated(& imu_preintegrated);
-        g2o::EdgeInertial* ei = new g2o::EdgeInertial(pre_);
+        g2o::EdgeInertial *ei = new g2o::EdgeInertial(pre_);
         ei->setVertex(0,dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer->vertex(vertex_P1_id)));
         ei->setVertex(1,dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer->vertex(vertex_V1_id)));
         ei->setVertex(2,dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer->vertex(vertex_G_id)));
@@ -569,14 +572,14 @@ namespace g2o {
             ei->setRobustKernel(rk);
             rk->setDelta(delta);
         }
-        ei->setId(optimizer->edges().size());
+        // ei->setId(optimizer->edges().size());
 
-        // std::cout << "GRAPH EDGE. Connect to: " << vertex_P1_id << "has edge? " << (optimizer->vertex(vertex_P1_id) != NULL) << std::endl;
-        // std::cout << "GRAPH EDGE. Connect to: " << vertex_V1_id << "has edge? " << (optimizer->vertex(vertex_V1_id) != NULL) << std::endl;
-        // std::cout << "GRAPH EDGE. Connect to: " << vertex_G_id << "has edge? " << (optimizer->vertex(vertex_G_id) != NULL) << std::endl;
-        // std::cout << "GRAPH EDGE. Connect to: " << vertex_A_id << "has edge? " << (optimizer->vertex(vertex_A_id) != NULL) << std::endl;
-        // std::cout << "GRAPH EDGE. Connect to: " << vertex_P2_id << "has edge? " << (optimizer->vertex(vertex_P2_id) != NULL) << std::endl;
-        // std::cout << "GRAPH EDGE. Connect to: " << vertex_V2_id << "has edge? " << (optimizer->vertex(vertex_V2_id) != NULL) << std::endl;
+        std::cout << "GRAPH EDGE. Connect to: " << vertex_P1_id << " has vertex? " << (optimizer->vertex(vertex_P1_id) != NULL) << std::endl;
+        std::cout << "GRAPH EDGE. Connect to: " << vertex_V1_id << " has vertex? " << (optimizer->vertex(vertex_V1_id) != NULL) << std::endl;
+        std::cout << "GRAPH EDGE. Connect to: " << vertex_G_id << " has vertex? " << (optimizer->vertex(vertex_G_id) != NULL) << std::endl;
+        std::cout << "GRAPH EDGE. Connect to: " << vertex_A_id << " has vertex? " << (optimizer->vertex(vertex_A_id) != NULL) << std::endl;
+        std::cout << "GRAPH EDGE. Connect to: " << vertex_P2_id << " has vertex? " << (optimizer->vertex(vertex_P2_id) != NULL) << std::endl;
+        std::cout << "GRAPH EDGE. Connect to: " << vertex_V2_id << " has vertex? " << (optimizer->vertex(vertex_V2_id) != NULL) << std::endl;
 
         optimizer->addEdge(ei);
 
@@ -636,25 +639,44 @@ namespace g2o {
     void BridgeSparseOptimizer::add_edge_gyro_and_acc(
         int vertex1_id, int vertex2_id,
         int vertex3_id, int vertex4_id,
-        RustImuPreintegrated imu_preintegrated
+        RustImuPreintegrated imu_preintegrated,
+        bool compute_error
     ) {
-        g2o::IMU::Preintegrated* pre_ = new g2o::IMU::Preintegrated(& imu_preintegrated);
+        // g2o::IMU::Preintegrated* pre_ = new g2o::IMU::Preintegrated(& imu_preintegrated);
+        Eigen::Matrix<float, 15, 15> C;
+        for (int i = 0; i < 15; i++)
+        {
+            for (int j = 0; j < 15; j++)
+            {
+                C(i, j) = imu_preintegrated.c[j][i];
+            }
+        }
 
         EdgeGyroRW* egr= new EdgeGyroRW();
         egr->setVertex(0, optimizer->vertex(vertex1_id));
         egr->setVertex(1, optimizer->vertex(vertex2_id));
-        Eigen::Matrix3d InfoG = pre_->C.block<3,3>(9,9).cast<double>().inverse();
+        Eigen::Matrix3d InfoG = C.block<3,3>(9,9).cast<double>().inverse();
         egr->setInformation(InfoG);
-        egr->computeError();
+        if (compute_error) {
+            egr->computeError();
+        }
         optimizer->addEdge(egr);
+
+        std::cout << "POSE OPT! Add edge gyro, C block: " << C.block<3, 3>(9, 9).cast<double>() << std::endl;
+        std::cout << "POSE OPT! Add edge gyro, inverse C block: " << InfoG << std::endl;
 
         EdgeAccRW* ear = new EdgeAccRW();
         ear->setVertex(0, optimizer->vertex(vertex3_id));
         ear->setVertex(1, optimizer->vertex(vertex4_id));
-        Eigen::Matrix3d InfoA = pre_->C.block<3,3>(12,12).cast<double>().inverse();
+        Eigen::Matrix3d InfoA = C.block<3,3>(12,12).cast<double>().inverse();
         ear->setInformation(InfoA);
-        ear->computeError();
+        if (compute_error) {
+            ear->computeError();
+        }
         optimizer->addEdge(ear);
+
+        std::cout << "POSE OPT! Add edge acc, C block: " << C.block<3, 3>(12, 12) << std::endl;
+        std::cout << "POSE OPT! Add edge acc, inverse C block: " << InfoA << std::endl;
 
         // std::cout << "(gyro) edge  added vertex " << vertex1_id << "..." << (optimizer->vertex(vertex1_id) == NULL) << std::endl;
         // std::cout << "(gyro) edge  added vertex " << vertex2_id << "..." << (optimizer->vertex(vertex2_id) == NULL) << std::endl;
@@ -874,9 +896,8 @@ namespace g2o {
 
     void BridgeSparseOptimizer::save(rust::Str filename, int save_id) const
     {   
-        bool is_saved = optimizer->save((std::to_string(save_id)+"_"+filename.data()).c_str()); 
-
-
+        bool is_saved = optimizer->save((std::to_string(save_id)+"_"+filename.data()).c_str());
+        std::cout << "Saved? " << is_saved << std::endl;
     }
     //** Optimization *//
     void BridgeSparseOptimizer::optimize(int iterations, bool online, bool compute_active_errors) {
@@ -922,16 +943,23 @@ namespace g2o {
         return pose;
     }
 
-
-    Pose BridgeSparseOptimizer::recover_optimized_vertex_pose(int vertex_id) const {
+    Pose BridgeSparseOptimizer::recover_optimized_vertex_pose(int vertex_id, VertexPoseRecoverType recover_type) const
+    {
         g2o::VertexPose* VP = static_cast<g2o::VertexPose*>(optimizer->vertex(vertex_id));
+        Sophus::SE3d *se3;
 
-        Eigen::Matrix3d Rcw = VP->estimate().Rcw[0].cast<double>();
-        Eigen::Vector3d tcw = VP->estimate().tcw[0].cast<double>();
-        Sophus::SE3d Tcw(VP->estimate().Rcw[0].cast<double>(), VP->estimate().tcw[0].cast<double>());
+        // "cw"" used by Bundle adjustments, "wb"" used by pose optimization in tracking
+        switch (recover_type) {
+            case VertexPoseRecoverType::Cw:
+                se3 = new Sophus::SE3d(VP->estimate().Rcw[0].cast<double>(), VP->estimate().tcw[0].cast<double>());
+                break;
+            case VertexPoseRecoverType::Wb:
+                se3 = new Sophus::SE3d(VP->estimate().Rwb.cast<double>(), VP->estimate().twb.cast<double>());
+                break;
+        }
 
-        Vector3d translation = Tcw.translation();
-        Quaterniond rotation = Tcw.unit_quaternion();
+        Vector3d translation = se3->translation();
+        Quaterniond rotation = se3->unit_quaternion();
 
         Pose pose;
         pose.translation = {
@@ -955,13 +983,13 @@ namespace g2o {
         // std::cout<< "recover_optimized_mappoint_pose" << std::endl;
         VertexSBAPointXYZ* v = static_cast<VertexSBAPointXYZ*>(optimizer->vertex(vertex_id));
 
-        Eigen::Vector3f pos = v->estimate().cast<float>();
+        Eigen::Vector3d pos = v->estimate();
 
         Position position;
         position.translation = {
-            (double) pos.x(),
-            (double) pos.y(),
-            (double) pos.z()
+            pos.x(),
+            pos.y(),
+            pos.z()
         };
         return position;
     }
@@ -981,6 +1009,7 @@ namespace g2o {
         } else {
             vb << 0, 0, 0, 0, 0, 0;
             bg << 0, 0, 0;
+            ba << 0, 0, 0;
         }
 
         std::cout << "C++ Bias: acc..." << ba << ", gyro..." << bg << std::endl;
@@ -1003,9 +1032,9 @@ namespace g2o {
         estimate.ba = {ba[0], ba[1], ba[2]};
         estimate.scale = scale;
         estimate.rwg = {
-            Rwg(0,0), Rwg(1,0), Rwg(2,0),
-            Rwg(0,1), Rwg(1,1), Rwg(2,1),
-            Rwg(0,2), Rwg(1,2), Rwg(2,2)
+            Rwg(0,0), Rwg(0,1), Rwg(0,2),
+            Rwg(1,0), Rwg(1,1), Rwg(1,2),
+            Rwg(2,0), Rwg(2,1), Rwg(2,2)
         };
         return estimate;
     }

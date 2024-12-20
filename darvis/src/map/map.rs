@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
-use std::collections::{BTreeMap, HashMap, HashSet};
-use log::{info, error, debug};
+use std::{backtrace::Backtrace, collections::{BTreeMap, HashMap, HashSet}};
+use log::{debug, error, info, warn};
 use core::{config::{SETTINGS, SYSTEM}, matrix::DVVector3, sensor::Sensor};
 use crate::map::{keyframe::*, mappoint::*};
 
@@ -205,7 +205,7 @@ impl Map {
             .remove(id)
             .map(|mappoint| {
                 let obs = mappoint.get_observations();
-                debug!("Discard mp {} with matches {:?}", id, obs);
+                // debug!("Discard mp {} with matches {:?}", id, obs);
                 for (kf_id, indexes) in obs {
                     self.keyframes.get_mut(&kf_id).unwrap().mappoint_matches.delete_at_indices(*indexes);
                 }
@@ -319,7 +319,7 @@ impl Map {
         }
         self.keyframes.remove(&kf_id);
 
-        debug!("Discard keyframe {}", kf_id);
+        debug!("Sof: Discard keyframe {}", kf_id);
     }
 
     pub fn update_connections(&mut self, main_kf_id: Id) {
@@ -381,7 +381,11 @@ impl Map {
     }
 
     pub fn delete_observation(&mut self, kf_id: Id, mp_id: Id) {
-        self.keyframes.get_mut(&kf_id).unwrap().mappoint_matches.delete_with_id(mp_id);
+        if self.mappoints.get(&mp_id).is_none() {
+            warn!("Trying to remove observation from kf {} to mp {} but mp is already deleted!", kf_id, mp_id);
+            return;
+        }
+        self.keyframes.get_mut(&kf_id).unwrap().mappoint_matches.delete_at_indices(self.mappoints.get(&mp_id).unwrap().get_index_in_keyframe(kf_id));
         let should_delete_mappoint = self.mappoints.get_mut(&mp_id).unwrap().delete_observation(&kf_id);
         if should_delete_mappoint {
             self.discard_mappoint(&mp_id);
@@ -416,7 +420,7 @@ impl Map {
         for (kf_id, (index_left, index_right)) in observations {
             // Replace measurement in keyframe
             let kf = self.keyframes.get_mut(&kf_id).unwrap();
-            let mp = self.mappoints.get(&mp_id).unwrap();
+            let mp = self.mappoints.get(&mp_id).expect(format!("Could not get mp {}", mp_id).as_str());
 
             if !mp.get_observations().contains_key(&kf_id) {
                 if index_left != -1 {

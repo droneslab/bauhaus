@@ -307,6 +307,27 @@ fn load_camera_settings(camera_fn: &String, module_info: &mut Vec<ModuleConf>) {
         }
     }
 
+    if !yaml_document["new_height"].is_badvalue() {
+        let new_height = yaml_document["new_height"].as_i64().unwrap() as i32;
+        let old_height = yaml_document["height"].as_i64().unwrap();
+        let scale_row_factor = (new_height as f64) / (old_height as f64);
+
+        SETTINGS.insert(&"CAMERA", &"fy", yaml_document["fy"].as_f64().unwrap() * scale_row_factor);
+        SETTINGS.insert(&"CAMERA", &"cy", yaml_document["cy"].as_f64().unwrap() * scale_row_factor);
+        add_setting_i32("CAMERA", "height", &yaml_document["new_height"]);
+    }
+
+    if !yaml_document["new_width"].is_badvalue() {
+        let new_width = yaml_document["new_width"].as_i64().unwrap() as i32;
+        let old_width = yaml_document["width"].as_i64().unwrap();
+        let scale_col_factor = (new_width as f64) / (old_width as f64);
+
+        SETTINGS.insert(&"CAMERA", &"fx", yaml_document["fx"].as_f64().unwrap() * scale_col_factor);
+        SETTINGS.insert(&"CAMERA", &"cx", yaml_document["cx"].as_f64().unwrap() * scale_col_factor);
+        add_setting_i32("CAMERA", "width", &yaml_document["new_width"]);
+    }
+
+
     // Not all datasets have imu information, but that only matters if imu is used
     // match SETTINGS.get::<Sensor>(SYSTEM, "sensor").imu() {
     //     ImuSensor::Some => {

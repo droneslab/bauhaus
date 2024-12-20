@@ -4,17 +4,17 @@ use nalgebra::{Quaternion, UnitQuaternion};
 use num_traits::abs;
 use serde::{Deserialize, Serialize};
 
-pub type DVTranslation = DVVector3<f32>;
-pub type DVRotation = DVMatrix3<f32>;
+pub type DVTranslation = DVVector3<f64>;
+pub type DVRotation = DVMatrix3<f64>;
 
 #[derive(Clone, Serialize, Deserialize, Copy, Default)]
 // Note: I'm not sure that Isometry3 is thread safe, could be the same problem
 // as with opencv matrices pointing to the same underlying memory even though
 // it looks like different objects in Rust. I think we need to be careful here.
-pub struct Pose ( nalgebra::IsometryMatrix3<f32> );
+pub struct Pose ( nalgebra::IsometryMatrix3<f64> );
 
 impl Pose {
-    pub fn new(translation : nalgebra::Vector3<f32>, rotation: nalgebra::Matrix3<f32>) -> Pose {
+    pub fn new(translation : nalgebra::Vector3<f64>, rotation: nalgebra::Matrix3<f64>) -> Pose {
         let trans = nalgebra::Translation3::from(translation);
         let rot = nalgebra::Rotation3::from_matrix(&rotation);
         let pose = nalgebra::IsometryMatrix3::from_parts(trans, rot);
@@ -23,15 +23,15 @@ impl Pose {
 
     pub fn new_with_default_rot(translation: DVTranslation) -> Pose {
         let translation = nalgebra::Translation3::new(
-            translation[0] as f32,
-            translation[1] as f32,
-            translation[2] as f32
+            translation[0],
+            translation[1],
+            translation[2]
         );
         let rotation3 = nalgebra::Rotation3::identity();
         Pose ( nalgebra::IsometryMatrix3::from_parts(translation,rotation3) )
     }
 
-    pub fn new_with_default_trans(rotation: nalgebra::Matrix3<f32>) -> Pose {
+    pub fn new_with_default_trans(rotation: nalgebra::Matrix3<f64>) -> Pose {
         let translation = nalgebra::Translation3::new(0.0, 0.0, 0.0);
         let rot = nalgebra::Rotation3::from_matrix(&rotation);
         Pose ( nalgebra::IsometryMatrix3::from_parts(translation,rot) )
@@ -396,7 +396,7 @@ impl Into<g2o::ffi::RustSim3> for Sim3 {
     }
 }
 
-pub fn group_exp(omega: &nalgebra::Vector3<f32>) -> nalgebra::UnitQuaternion<f32> {
+pub fn group_exp(omega: &nalgebra::Vector3<f64>) -> nalgebra::UnitQuaternion<f64> {
     // From Sophus:
         // / Group exponential
         // /
@@ -410,7 +410,7 @@ pub fn group_exp(omega: &nalgebra::Vector3<f32>) -> nalgebra::UnitQuaternion<f32
     // See functions:
     // SOPHUS_FUNC static SO3<Scalar> exp(Tangent const& omega) 
     // and SOPHUS_FUNC static SO3<Scalar> expAndTheta(Tangent const& omega, Scalar* theta)
-    const EPSILON: f32 = 1e-5;
+    const EPSILON: f64 = 1e-5;
 
     let theta_sq = omega.norm_squared();
     let real_factor;
