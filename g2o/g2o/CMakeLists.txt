@@ -19,7 +19,6 @@ endif()
 MESSAGE(STATUS "BUILD TYPE:" ${CMAKE_BUILD_TYPE})
 
 SET (G2O_LIB_TYPE STATIC)
-SET (CMAKE_CXX_COMPILER=/home/darvis/Downloads/llvm_build/bin/clang)
 # There seems to be an issue with MSVC8
 # see http://eigen.tuxfamily.org/bz/show_bug.cgi?id=83
 if(MSVC90)

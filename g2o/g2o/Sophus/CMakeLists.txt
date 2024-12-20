@@ -10,7 +10,6 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()
 
-SET (CMAKE_CXX_COMPILER=/home/darvis/Downloads/llvm_build/bin/clang)
 
 # Set compiler specific settings (FixMe: Should not cmake do this for us automatically?)
 # Sofiya: Added -flto=thin to enable link time optimization with Rust: https://doc.rust-lang.org/rustc/linker-plugin-lto.html#toolchain-compatibility
