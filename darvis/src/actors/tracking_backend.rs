@@ -452,7 +452,7 @@ impl TrackingBackend {
             let insert_if_lost_anyway = self.insert_kfs_when_lost && matches!(self.state, TrackingState::RecentlyLost) && self.sensor.is_imu();
             let need_new_kf = self.need_new_keyframe()?;
             if need_new_kf && (matches!(self.state, TrackingState::Ok) || insert_if_lost_anyway) {
-                self.create_new_keyframe();
+                self.create_new_keyframe()?;
                 created_new_kf = true;
             }
 
@@ -594,12 +594,14 @@ impl TrackingBackend {
                 println!("Track motion model, initial pose prediction: {:?}", self.current_frame.pose.unwrap());
                 println!("Last frame pose is: {:?}", self.last_frame.as_ref().unwrap().pose.unwrap());
                 println!("Last keyframe is {}, pose is: {:?}", self.ref_kf_id.unwrap(), self.map.read()?.get_keyframe(self.ref_kf_id.unwrap()).get_pose());
-
+                
                 {
                     let curr_pose = self.current_frame.pose.unwrap().get_translation();
                     let last_frame_pose = self.last_frame.as_ref().unwrap().pose.unwrap().get_translation();
                     let last_kf_pose = self.map.read()?.get_keyframe(self.ref_kf_id.unwrap()).get_pose().get_translation();
                     let last_last_kf_pose = self.map.read()?.get_keyframe(self.map.read()?.get_keyframe(self.ref_kf_id.unwrap()).parent.unwrap()).get_pose().get_translation();
+
+                    println!("Last last keyframe is {}, pose is: {:?}", self.map.read()?.get_keyframe(self.map.read()?.get_keyframe(self.ref_kf_id.unwrap()).parent.unwrap()).id, last_last_kf_pose);
                     println!("DISTANCE #1! {:?}", curr_pose.metric_distance(&last_frame_pose));
                     println!("DISTANCE #2! {:?}", last_frame_pose.metric_distance(&last_kf_pose));
                     println!("DISTANCE #3! {:?}", last_kf_pose.metric_distance(&last_last_kf_pose));
@@ -612,7 +614,8 @@ impl TrackingBackend {
                 //         mappoint_matches: self.current_frame.mappoint_matches.matches.clone(),
                 //         nontracked_mappoints: self.non_tracked_mappoints.clone(),
                 //         mappoints_in_tracking: self.local_mappoints.clone(),
-                //         timestamp: self.current_frame.timestamp
+                //         timestamp: self.current_frame.timestamp,
+                //         map_version: self.map.read()?.version
                 //     }));
                 //     sleep(Duration::from_millis(100000));
                 // }
@@ -625,7 +628,6 @@ impl TrackingBackend {
                 self.imu.predict_state_last_frame(&mut self.current_frame, self.last_frame.as_mut().unwrap());
 
                 println!("PREDICT STATE LAST FRAME!!!!!!!!");
-                sleep(Duration::from_secs(100));
             }
         println!("Track motion model, initial pose prediction: {:?}", self.current_frame.pose.unwrap());
         println!("Last frame pose is: {:?}", self.last_frame.as_ref().unwrap().pose.unwrap());
@@ -805,7 +807,7 @@ impl TrackingBackend {
             optimizer::pose_inertial_optimization_last_frame(&mut self.current_frame, &mut self.last_frame.as_mut().unwrap(), & self.track_in_view, &self.map, &self.sensor)?;
         } else {
             // println!("Current frame id: {}", self.current_frame.frame_id);
-            // if self.current_frame.frame_id > 1000 {
+            // if self.current_frame.frame_id > 600 {
             //     println!("PAUSED AT FRAME {}", self.current_frame.frame_id);
 
             //     self.system.try_send(VISUALIZER, Box::new(VisTrajectoryMsg{
@@ -1026,7 +1028,7 @@ impl TrackingBackend {
                         if self.mp_track_reference_for_frame.get(mp_id) != Some(&self.current_frame.frame_id) {
                             self.local_mappoints.insert(*mp_id);
                             self.mp_track_reference_for_frame.insert(*mp_id, self.current_frame.frame_id);
-                            debug!("Add mp {} from kf {}", mp_id, kf.id);
+                            // debug!("Add mp {} from kf {}", mp_id, kf.id);
                         }
                     }
                 } 
@@ -1046,8 +1048,10 @@ impl TrackingBackend {
         let _span = tracy_client::span!("search_local_points");
         //void Tracking::SearchLocalPoints()
         // Do not search map points already matched
+        let mut increased_visible = vec![];
+        let mut to_match = 0;
+
         {
-            let mut increased_visible = vec![];
             let lock = self.map.read()?;
             for index in 0..self.current_frame.mappoint_matches.len() {
                 if let Some((id, _)) = self.current_frame.mappoint_matches.get(index as usize) {
@@ -1063,14 +1067,10 @@ impl TrackingBackend {
                     }
                 }
             }
-        }
 
-        // Project points in frame and check its visibility
-        let mut to_match = 0;
-        {
+            // Project points in frame and check its visibility
             let mut last_frame_seen = 0;
             let mut not_in_frustum = 0;
-            let lock = self.map.read()?;
             for mp_id in &self.local_mappoints {
                 if self.last_frame_seen.get(mp_id) == Some(&self.current_frame.frame_id) {
                     last_frame_seen += 1;
@@ -1106,31 +1106,34 @@ impl TrackingBackend {
                 };
             }
             println!("Search local points: {} local mappoints, {} last frame seen, {} not in frustum, {} to match", self.local_mappoints.len(), last_frame_seen, not_in_frustum, to_match);
-
         }
 
         if to_match > 0 {
-            let mut th = match self.sensor.frame() {
-                FrameSensor::Rgbd => 3,
-                _ => 1
-            };
-            if self.map.read()?.imu_initialized {
-                if self.map.read()?.imu_ba2 {
-                    th = 2;
-                } else {
+            let mut th;
+            {
+                let lock = self.map.read()?;
+                th = match self.sensor.frame() {
+                    FrameSensor::Rgbd => 3,
+                    _ => 1
+                };
+                if lock.imu_initialized {
+                    if lock.imu_ba2 {
+                        th = 2;
+                    } else {
+                        th = 6;
+                    }
+                } else if !lock.imu_initialized && self.sensor.is_imu() {
                     th = 6;
                 }
-            } else if !self.map.read()?.imu_initialized && self.sensor.is_imu() {
-                th = 6;
-            }
 
-            // If the camera has been relocalised recently, perform a coarser search
-            if self.current_frame.frame_id < self.relocalization.last_reloc_frame_id + 2 {
-                th = 5;
-            }
-            match self.state {
-                TrackingState::RecentlyLost | TrackingState::Lost => th = 15,
-                _ => {}
+                // If the camera has been relocalised recently, perform a coarser search
+                if self.current_frame.frame_id < self.relocalization.last_reloc_frame_id + 2 {
+                    th = 5;
+                }
+                match self.state {
+                    TrackingState::RecentlyLost | TrackingState::Lost => th = 15,
+                    _ => {}
+                }
             }
 
             let (non_tracked_points, matches) = FEATURE_MATCHING_MODULE.search_by_projection(

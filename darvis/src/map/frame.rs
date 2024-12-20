@@ -232,7 +232,9 @@ impl Frame {
         // Eigen::Matrix3f KeyFrame::GetImuRotation()
         // Note: in Orbslam this is: (mTwc * mImuCalib.mTcb).rotationMatrix();
         // and mTwc is inverse of the pose
-        (self.pose.expect("Should have pose by now").inverse() * ImuCalib::new().tcb).get_rotation()
+        DVMatrix3::new(
+            *self.pose.expect("Should have pose by now").inverse().get_rotation() * *ImuCalib::new().tcb.get_rotation()
+        )
     }
 
     pub fn get_imu_position(&self) -> DVVector3<f64> {
@@ -241,9 +243,16 @@ impl Frame {
         // mRwc * mImuCalib.mTcb.translation() + mOw;
         // where mOw = twc (inverse of pose translation)
 
-        DVVector3::new(
-            *self.pose.unwrap().get_rotation() * *ImuCalib::new().tcb.get_translation() + *self.pose.unwrap().inverse().get_translation()
-        )
+        println!("Get imu position... rotation: {:?}", self.pose.unwrap().get_rotation());
+        println!("Get imu position... translation: {:?}", self.pose.unwrap().old_inverse().get_translation());
+        println!("Tcb... {:?}", ImuCalib::new().tcb.get_translation());
+        let inverse = self.pose.unwrap().old_inverse();
+
+        let res = DVVector3::new(
+            *inverse.get_rotation() * *ImuCalib::new().tcb.get_translation() + *inverse.get_translation()
+        );
+        println!("res... {:?}", res);
+        res
     }
 
     pub fn set_imu_pose_velocity(&mut self, new_pose: Pose, vwb: nalgebra::Vector3<f64>) {
@@ -252,10 +261,11 @@ impl Frame {
         println!("Input translation before group inverse: {:?} {:?}", new_pose, new_pose.get_rotation());
         self.imu_data.velocity = Some(DVVector3::new(vwb));
         let new_pose = new_pose.inverse(); // Tbw
-        println!("Translation after group inverse: {:?} {:?}", new_pose, new_pose.get_rotation());
-        self.pose = Some(ImuCalib::new().tcb * new_pose);
+        println!("Inverse translation: {:?} {:?}", new_pose, new_pose.get_rotation());
 
-        println!("tcb: {:?}", ImuCalib::new().tcb);
+        self.pose = Some(ImuCalib::new().tcb * new_pose);
+        println!("Result translation: {:?} {:?}", self.pose, self.pose.unwrap().get_rotation());
+
     }
 
 }

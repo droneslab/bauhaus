@@ -6,8 +6,8 @@ use core::{
 };
 use cxx::UniquePtr;
 use dvos3binding::ffi::SVDComputeType;
-use g2o::ffi::BridgeSparseOptimizer;
-use log::{debug, error};
+use g2o::ffi::{BridgeSparseOptimizer, VertexPoseRecoverType};
+use log::{debug, error, warn};
 use nalgebra::Matrix3;
 use opencv::prelude::KeyPointTraitConst;
 use crate::{
@@ -85,6 +85,7 @@ pub fn pose_inertial_optimization_last_frame(
         va, false, frame.imu_data.get_imu_bias().get_acc_bias().into()
     );
 
+    println!("Frame mappoint matches: {:?}", frame.mappoint_matches.matches);
     // Set MapPoint vertices
     let mut mp_indexes = vec![]; // vnIndexEdgeMono
     for i in 0..frame.mappoint_matches.matches.len() {
@@ -95,24 +96,32 @@ pub fn pose_inertial_optimization_last_frame(
 
         let (kp, is_right) = frame.features.get_keypoint(i);
         if !is_right {
-            // Left monocular observation
-            initial_mono_correspondences += 1;
-            frame.mappoint_matches.set_outlier(i, false);
+            if let Some(mappoint) = map.read()?.mappoints.get(&mp_id) {
+                // Left monocular observation
+                initial_mono_correspondences += 1;
+                frame.mappoint_matches.set_outlier(i, false);
 
-            // Add here uncerteinty
-            let unc2 = CAMERA_MODULE.uncertainty;
-            let inv_sigma2 = INV_LEVEL_SIGMA2[kp.octave() as usize] / unc2;
+                // Add here uncerteinty
+                let unc2 = CAMERA_MODULE.uncertainty;
+                let inv_sigma2 = INV_LEVEL_SIGMA2[kp.octave() as usize] / unc2;
 
-            optimizer.pin_mut().add_edge_mono_only_pose(
-                true,
-                vp,
-                mp_id,
-                (map.read()?.mappoints.get(&mp_id).expect(format!("Could not get mp {}", mp_id).as_str()).position).into(),
-                kp.pt().x, kp.pt().y,
-                inv_sigma2,
-                *TH_HUBER_MONO
-            );
-            mp_indexes.push(i as u32);
+                optimizer.pin_mut().add_edge_mono_only_pose(
+                    true,
+                    vp,
+                    mp_id,
+                    mappoint.position.into(),
+                    kp.pt().x, kp.pt().y,
+                    inv_sigma2,
+                    *TH_HUBER_MONO
+                );
+                mp_indexes.push(i as u32);
+
+            } else {
+                warn!("Mappoint {} deleted but was in current frame matches, probably just a timing error.", mp_id);
+                frame.mappoint_matches.delete_at_indices((i as i32, -1)); // TODO STEREO should not be -1
+
+                continue;
+            }
         } else {
             todo!("Stereo");
             // nInitialStereoCorrespondences++;
@@ -214,6 +223,7 @@ pub fn pose_inertial_optimization_last_frame(
         vgk, vg,
         vak, va,
         frame.imu_data.imu_preintegrated.as_ref().unwrap().into(),
+        false
     );
 
     if previous_frame.imu_data.constraint_pose_imu.is_some() {
@@ -358,7 +368,7 @@ pub fn pose_inertial_optimization_last_frame(
     // num_inliers = num_inliers_mono + num_inliers_stereo;
 
     // Recover optimized pose, velocity and biases
-    let recovered_pose: Pose = optimizer.recover_optimized_vertex_pose(vp).into();
+    let recovered_pose: Pose = optimizer.recover_optimized_vertex_pose(vp, VertexPoseRecoverType::Wb).into();
     let recovered_velocity = optimizer.recover_optimized_vertex_velocity(vv);
     frame.set_imu_pose_velocity(recovered_pose, recovered_velocity.into());
 
@@ -639,6 +649,7 @@ pub fn pose_inertial_optimization_last_keyframe(
         vgk, vg,
         vak, va,
         frame.imu_data.imu_preintegrated.as_ref().unwrap().into(),
+        false
     );
 
     // We perform 4 optimizations, after each optimization we classify observation as inlier/outlier
@@ -678,9 +689,11 @@ pub fn pose_inertial_optimization_last_keyframe(
                 frame.mappoint_matches.set_outlier(mp_idx as usize, true);
                 edge.inner.pin_mut().set_level(1);
                 num_bad += 1;
+                println!("SET LEVEL {}, CHI2 {}, IS CLOSE {}, IS DEPTH POSITIVE {}", 1, chi2, is_close, edge.inner.is_depth_positive());
             } else {
                 frame.mappoint_matches.set_outlier(mp_idx as usize, false);
                 edge.inner.pin_mut().set_level(0);
+                println!("SET LEVEL {}, CHI2 {}, IS CLOSE {}, IS DEPTH POSITIVE {}", 0, chi2, is_close, edge.inner.is_depth_positive());
             }
 
             if iteration == 2 {
@@ -768,7 +781,7 @@ pub fn pose_inertial_optimization_last_keyframe(
     }
 
     // Recover optimized pose, velocity and biases
-    let recovered_pose: Pose = optimizer.recover_optimized_vertex_pose(vp).into();
+    let recovered_pose: Pose = optimizer.recover_optimized_vertex_pose(vp, VertexPoseRecoverType::Wb).into();
     let recovered_velocity = optimizer.recover_optimized_vertex_velocity(vv);
     frame.set_imu_pose_velocity(recovered_pose, recovered_velocity.into());
 
@@ -926,11 +939,12 @@ pub fn inertial_optimization_initialization(
         );
     }
 
-    {
-        // Graph edges
-        // IMU links with gravity and scale
+    // Graph edges
+    // IMU links with gravity and scale
+    let new_imu_preintegrated_for_kfs = {
+        let lock = map.read()?;
         let mut new_imu_preintegrated_for_kfs: HashMap<Id, ImuPreIntegrated> = HashMap::new();
-        for (kf_id, keyframe) in map.read()?.get_keyframes_iter() {
+        for (kf_id, keyframe) in lock.get_keyframes_iter() {
             if *kf_id > max_kf_id ||
                 keyframe.prev_kf_id.is_none() ||
                 keyframe.imu_data.imu_preintegrated.is_none() ||
@@ -943,7 +957,7 @@ pub fn inertial_optimization_initialization(
             let prev_kf_id = keyframe.prev_kf_id.unwrap();
 
 
-            imu_preintegrated.set_new_bias(map.read()?.get_keyframe(prev_kf_id).imu_data.get_imu_bias());
+            imu_preintegrated.set_new_bias(lock.get_keyframe(prev_kf_id).imu_data.get_imu_bias());
 
             optimizer.pin_mut().add_edge_inertial_gs(
                 prev_kf_id,
@@ -962,10 +976,11 @@ pub fn inertial_optimization_initialization(
             );
             new_imu_preintegrated_for_kfs.insert(*kf_id, imu_preintegrated);
         }
-        for (kf_id, new_imu_preintegrated) in new_imu_preintegrated_for_kfs {
-            let mut lock = map.write()?;
-            lock.get_keyframe_mut(kf_id).imu_data.imu_preintegrated = Some(new_imu_preintegrated);
-        }
+        new_imu_preintegrated_for_kfs
+    };
+    for (kf_id, new_imu_preintegrated) in new_imu_preintegrated_for_kfs {
+        let mut lock = map.write()?;
+        lock.get_keyframe_mut(kf_id).imu_data.imu_preintegrated = Some(new_imu_preintegrated);
     }
 
     // Compute error for different scales
@@ -1776,7 +1791,7 @@ pub fn add_vertex_pose_frame(optimizer: &mut UniquePtr<BridgeSparseOptimizer>, f
     let tcb_rot = imu_calib.tcb.get_quaternion();
 
     println!("translation: {:?}", frame.pose.unwrap().get_translation());
-    println!("rotation: {:?}", rot);
+    println!("rotation: {:?}", frame.pose.unwrap().get_rotation());
     println!("imu position: {:?}", frame.get_imu_position());
     println!("imu rotation: {:?}", imu_rot);
 

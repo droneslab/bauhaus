@@ -1,6 +1,7 @@
 use core::{config::{SETTINGS, SYSTEM}, sensor::{FrameSensor, Sensor}};
 use std::collections::{HashMap, HashSet};
 
+use g2o::ffi::VertexPoseRecoverType;
 use log::{debug, warn};
 use nalgebra::Matrix3;
 use opencv::core::KeyPointTraitConst;
@@ -313,7 +314,8 @@ pub fn full_inertial_ba(
             if !init {
                 optimizer.pin_mut().add_edge_gyro_and_acc(
                     vg1_id, vg2_id, va1_id, va2_id,
-                    (& imu_preintegrated).into()
+                    (& imu_preintegrated).into(),
+                    true
                 );
             }
             new_imu_preintegrated_for_kfs.insert(*kf_id, imu_preintegrated);
@@ -465,7 +467,7 @@ pub fn full_inertial_ba(
             if * kf_id > max_kf_id {
                 continue;
             }
-            let pose: Pose = optimizer.recover_optimized_vertex_pose(*kf_id).into();
+            let pose: Pose = optimizer.recover_optimized_vertex_pose(*kf_id, VertexPoseRecoverType::Cw).into();
 
             if loop_id == 0 {
                 kf.set_pose(pose.into());

@@ -2,6 +2,11 @@
 pub mod ffi {
     // Shared structs with fields visible to both languages.
 
+    enum VertexPoseRecoverType {
+        Cw,
+        Wb
+    }
+
     //* Pose types */
     struct Pose {
         translation: [f64; 3], // in C++: array<double, 3>,
@@ -254,6 +259,7 @@ pub mod ffi {
             vertex3_id: i32,
             vertex4_id: i32,
             imu_preintegrated: RustImuPreintegrated,
+            compute_error: bool
         );
         fn add_edge_inertial_gs(
             self: Pin<&mut BridgeSparseOptimizer>,
@@ -318,6 +324,7 @@ pub mod ffi {
         fn recover_optimized_vertex_pose(
             self: &BridgeSparseOptimizer,
             vertex: i32,
+            recover_type_: VertexPoseRecoverType,
         ) -> Pose;
         fn recover_optimized_mappoint_pose(
             self: &BridgeSparseOptimizer,

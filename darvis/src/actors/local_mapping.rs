@@ -346,11 +346,14 @@ impl LocalMapping {
         let fpt = SETTINGS.get::<f64>(FEATURE_MATCHER, "far_points_threshold");
         let far_points_th = if fpt == 0.0 { INFINITY } else { fpt };
 
-        let (mut neighbor_kfs, mut pose1, translation1, rotation1, rotation_transpose1, mut ow1);
+        let mut mps_to_insert = vec![];
+        let mut mps_created = 0;
         {
-            let map = self.map.read()?;
-            let current_kf = map.get_keyframe(self.current_keyframe_id);
-            neighbor_kfs = current_kf.get_covisibility_keyframes(nn);
+            let _span = tracy_client::span!("create_new_mappoints: before loop");
+            let lock = self.map.read()?;
+
+            let current_kf = lock.get_keyframe(self.current_keyframe_id);
+            let mut neighbor_kfs = current_kf.get_covisibility_keyframes(nn);
             if self.sensor.is_imu() {
                 let mut count = 0;
                 let mut pkf = current_kf;
@@ -359,35 +362,35 @@ impl LocalMapping {
                     if !neighbor_kfs.contains(&prev_kf) {
                         neighbor_kfs.push(prev_kf);
                     }
-                    pkf = map.get_keyframe(prev_kf);
+                    pkf = lock.get_keyframe(prev_kf);
                     count += 1;
                 }
             }
 
-            pose1 = current_kf.get_pose(); // sophTcw1
-            translation1 = pose1.get_translation(); // tcw1
-            rotation1 = pose1.get_rotation(); // Rcw1
-            rotation_transpose1 = rotation1.transpose(); // Rwc1
-            ow1 = current_kf.get_camera_center();
-        }
+            let mut pose1 = current_kf.get_pose(); // sophTcw1
+            let translation1 = pose1.get_translation(); // tcw1
+            let rotation1 = pose1.get_rotation(); // Rcw1
+            let rotation_transpose1 = rotation1.transpose(); // Rwc1
+            let mut ow1 = current_kf.get_camera_center();
 
-        // Search matches with epipolar restriction and triangulate
-        let mut mps_created = 0;
-        for neighbor_id in neighbor_kfs {
-            if self.system.queue_len() > 1 {
-                // Abort additional work if there are too many keyframes in the msg queue.
-                return Ok(0);
-            }
+            drop(_span);
+            let _span = tracy_client::span!("create_new_mappoints: loop");
+            println!("Create_new_mappoints neighbor_kfs: {:?}", neighbor_kfs);
 
-            // Check first that baseline is not too short
-            let (mut ow2, baseline);
-            {
-                let lock = self.map.read()?;
-                ow2 = lock.get_keyframe(neighbor_id).get_camera_center();
-                baseline = (*ow2 - *ow1).norm();
+            // Search matches with epipolar restriction and triangulate
+            for neighbor_id in neighbor_kfs {
+                if self.system.queue_len() > 1 {
+                    // Abort additional work if there are too many keyframes in the msg queue.
+                    return Ok(0);
+                }
+                let neighbor_kf = lock.get_keyframe(neighbor_id);
+
+                // Check first that baseline is not too short
+                let mut ow2 = neighbor_kf.get_camera_center();
+                let baseline = (*ow2 - *ow1).norm();
                 match self.sensor.is_mono() {
                     true => {
-                        let median_depth_neigh = lock.get_keyframe(neighbor_id).compute_scene_median_depth(&lock.mappoints, 2);
+                        let median_depth_neigh = neighbor_kf.compute_scene_median_depth(&lock.mappoints, 2);
                         if baseline / median_depth_neigh < 0.01 {
                             debug!("Local mapping create new mappoints, continuing bc baseline.. baseline {} median scene depth {}", baseline, median_depth_neigh);
                             continue
@@ -399,21 +402,16 @@ impl LocalMapping {
                         }
                     }
                 }
-            }
 
-            // Search matches that fullfil epipolar constraint
-            let course = match self.sensor.is_imu() {
-                true => self.map.read()?.imu_ba2 && matches!(self.current_tracking_state, TrackingState::RecentlyLost),
-                false => false
-            };
+                // Search matches that fullfil epipolar constraint
+                let course = match self.sensor.is_imu() {
+                    true => lock.imu_ba2 && matches!(self.current_tracking_state, TrackingState::RecentlyLost),
+                    false => false
+                };
 
-            let (matches, mut pose2, translation2, rotation2, rotation_transpose2);
-            {
-                let lock = self.map.read()?;
-
-                matches = match FEATURE_MATCHING_MODULE.search_for_triangulation(
-                    lock.get_keyframe(self.current_keyframe_id),
-                    lock.get_keyframe(neighbor_id),
+                let matches = match FEATURE_MATCHING_MODULE.search_for_triangulation(
+                    current_kf,
+                    neighbor_kf,
                     false, false, course,
                     self.sensor
                 ) {
@@ -421,182 +419,181 @@ impl LocalMapping {
                     Err(err) => panic!("Problem with search_for_triangulation {}", err)
                 };
 
-                pose2 = lock.get_keyframe(neighbor_id).get_pose();
-                translation2 = pose2.get_translation(); // tcw2
-                rotation2 = pose2.get_rotation(); // Rcw2
-                rotation_transpose2 = rotation2.transpose(); // Rwc2
-            }
+                let mut pose2 = neighbor_kf.get_pose();
+                let translation2 = pose2.get_translation(); // tcw2
+                let rotation2 = pose2.get_rotation(); // Rcw2
+                let rotation_transpose2 = rotation2.transpose(); // Rwc2
 
-            // Triangulate each match
-            for (idx1, idx2) in matches {
-                let (kp1, right1, kp2, right2) = {
-                    let lock = self.map.read()?;
-                    let (kp1, right1) = lock.get_keyframe(self.current_keyframe_id).features.get_keypoint(idx1);
-                    let (kp2, right2) = lock.get_keyframe(neighbor_id).features.get_keypoint(idx2);
-                    (kp1, right1, kp2, right2)
-                };
+                // Triangulate each match
+                for (idx1, idx2) in matches {
+                    let (kp1, right1, kp2, right2) = {
+                        let (kp1, right1) = current_kf.features.get_keypoint(idx1);
+                        let (kp2, right2) = neighbor_kf.features.get_keypoint(idx2);
+                        (kp1, right1, kp2, right2)
+                    };
 
-                if right1 {
-                    let lock = self.map.read()?;
-                    let _kp1_ur = lock.get_keyframe(self.current_keyframe_id).features.get_mv_right(idx1);
-                    pose1 = lock.get_keyframe(self.current_keyframe_id).get_right_pose();
-                    ow1 = lock.get_keyframe(self.current_keyframe_id).get_right_camera_center();
-                    // camera1 = mpCurrentKeyFrame->mpCamera2 TODO (STEREO) .. right now just using global CAMERA
-                } else {
-                    let lock = self.map.read()?;
-                    pose1 = lock.get_keyframe(self.current_keyframe_id).get_pose();
-                    ow1 = lock.get_keyframe(self.current_keyframe_id).get_camera_center();
-                    // camera1 = mpCurrentKeyFrame->mpCamera TODO (STEREO)
-                }
-                if right2 {
-                    let lock = self.map.read()?;
-                    let _kp2_ur = lock.get_keyframe(neighbor_id).features.get_mv_right(idx2);
-                    pose2 = lock.get_keyframe(neighbor_id).get_right_pose();
-                    ow2 = lock.get_keyframe(neighbor_id).get_right_camera_center();
-                    // camera2 = neighbor_kf->mpCamera2 TODO (STEREO)
-                } else {
-                    let lock = self.map.read()?;
-                    pose2 = lock.get_keyframe(neighbor_id).get_pose();
-                    ow2 = lock.get_keyframe(neighbor_id).get_camera_center();
-                    // camera2 = neighbor_kf->mpCamera TODO (STEREO)
-                }
-
-                // Check parallax between rays
-                let xn1 = CAMERA_MODULE.unproject_eig(&kp1.pt());
-                let xn2 = CAMERA_MODULE.unproject_eig(&kp2.pt());
-                let ray1 = rotation_transpose1 * (*xn1);
-                let ray2 = rotation_transpose2 * (*xn2);
-                let cos_parallax_rays = ray1.dot(&ray2) / (ray1.norm() * ray2.norm());
-                let (cos_parallax_stereo1, cos_parallax_stereo2) = (cos_parallax_rays + 1.0, cos_parallax_rays + 1.0);
-                if right1 {
-                    todo!("Stereo");
-                    // cosParallaxStereo1 = cos(2*atan2(mpCurrentKeyFrame->mb/2,mpCurrentKeyFrame->mvDepth[idx1]));
-                } else if right2 {
-                    todo!("Stereo");
-                    //cosParallaxStereo2 = cos(2*atan2(neighbor_kf->mb/2,neighbor_kf->mvDepth[idx2]));
-                }
-                let cos_parallax_stereo = cos_parallax_stereo1.min(cos_parallax_stereo2);
-
-                let x3_d;
-                {
-                    let lock = self.map.read()?;
-                    let good_parallax_with_imu = cos_parallax_rays < 0.9996 && self.sensor.is_imu();
-                    let good_parallax_wo_imu = cos_parallax_rays < 0.9998 && !self.sensor.is_imu();
-                    if cos_parallax_rays < cos_parallax_stereo && cos_parallax_rays > 0.0 && (right1 || right2 || good_parallax_with_imu || good_parallax_wo_imu) {
-                        x3_d = geometric_tools::triangulate(xn1, xn2, pose1, pose2);
-                    } else if right1 && cos_parallax_stereo1 < cos_parallax_stereo2 {
-                        x3_d = CAMERA_MODULE.unproject_stereo(lock.get_keyframe(self.current_keyframe_id), idx1);
-                    } else if right2 && cos_parallax_stereo2 < cos_parallax_stereo1 {
-                        x3_d = CAMERA_MODULE.unproject_stereo(lock.get_keyframe(neighbor_id), idx2);
+                    if right1 {
+                        let _kp1_ur = current_kf.features.get_mv_right(idx1);
+                        pose1 = current_kf.get_right_pose();
+                        ow1 = current_kf.get_right_camera_center();
+                        // camera1 = mpCurrentKeyFrame->mpCamera2 TODO (STEREO) .. right now just using global CAMERA
                     } else {
-                        continue // No stereo and very low parallax
+                        pose1 = current_kf.get_pose();
+                        ow1 = current_kf.get_camera_center();
+                        // camera1 = mpCurrentKeyFrame->mpCamera TODO (STEREO)
                     }
-                    if x3_d.is_none() {
-                        continue
+                    if right2 {
+                        let _kp2_ur = neighbor_kf.features.get_mv_right(idx2);
+                        pose2 = neighbor_kf.get_right_pose();
+                        ow2 = neighbor_kf.get_right_camera_center();
+                        // camera2 = neighbor_kf->mpCamera2 TODO (STEREO)
+                    } else {
+                        pose2 = neighbor_kf.get_pose();
+                        ow2 = neighbor_kf.get_camera_center();
+                        // camera2 = neighbor_kf->mpCamera TODO (STEREO)
                     }
-                }
 
-
-                //Check triangulation in front of cameras
-                let x3_d_nalg = *x3_d.unwrap();
-                let z1 = rotation1.row(2).transpose().dot(&x3_d_nalg) + (*translation1)[2];
-                if z1 <= 0.0 {
-                    continue;
-                }
-                let z2 = rotation2.row(2).transpose().dot(&x3_d_nalg) + (*translation2)[2];
-                if z2 <= 0.0 {
-                    continue;
-                }
-
-                //Check reprojection error in first keyframe
-                let sigma_square1 = LEVEL_SIGMA2[kp1.octave() as usize];
-                let x1 = rotation1.row(0).transpose().dot(&x3_d_nalg) + (*translation1)[0];
-                let y1 = rotation1.row(1).transpose().dot(&x3_d_nalg) + (*translation1)[1];
-
-                if right1 {
-                    todo!("Stereo");
-                    // let invz1 = 1.0 / z1;
-                    // let u1 = CAMERA_MODULE.fx * x1 * invz1 + CAMERA_MODULE.cx;
-                    // let u1_r = u1 - CAMERA_MODULE.stereo_baseline_times_fx * invz1;
-                    // let v1 = CAMERA_MODULE.fy * y1 * invz1 + CAMERA_MODULE.cy;
-                    // let err_x1 = u1 as f32 - kp1.pt().x;
-                    // let err_y1 = v1 as f32 - kp1.pt().y;
-                    // let err_x1_r = u1_r as f32 - kp1_ur.unwrap();
-                    // if (err_x1 * err_x1  + err_y1 * err_y1 + err_x1_r * err_x1_r) > 7.8 * sigma_square1 {
-                    //     continue
-                    // }
-                } else {
-                    let uv1 = CAMERA_MODULE.project(DVVector3::new_with(x1, y1, z1));
-                    let err_x1 = uv1.0 as f32 - kp1.pt().x;
-                    let err_y1 = uv1.1 as f32 - kp1.pt().y;
-                    if (err_x1 * err_x1  + err_y1 * err_y1) > 5.991 * sigma_square1 {
-                        continue
+                    // Check parallax between rays
+                    let xn1 = CAMERA_MODULE.unproject_eig(&kp1.pt());
+                    let xn2 = CAMERA_MODULE.unproject_eig(&kp2.pt());
+                    let ray1 = rotation_transpose1 * (*xn1);
+                    let ray2 = rotation_transpose2 * (*xn2);
+                    let cos_parallax_rays = ray1.dot(&ray2) / (ray1.norm() * ray2.norm());
+                    let (cos_parallax_stereo1, cos_parallax_stereo2) = (cos_parallax_rays + 1.0, cos_parallax_rays + 1.0);
+                    if right1 {
+                        todo!("Stereo");
+                        // cosParallaxStereo1 = cos(2*atan2(mpCurrentKeyFrame->mb/2,mpCurrentKeyFrame->mvDepth[idx1]));
+                    } else if right2 {
+                        todo!("Stereo");
+                        //cosParallaxStereo2 = cos(2*atan2(neighbor_kf->mb/2,neighbor_kf->mvDepth[idx2]));
                     }
-                }
+                    let cos_parallax_stereo = cos_parallax_stereo1.min(cos_parallax_stereo2);
 
-                //Check reprojection error in second keyframe
-                let sigma_square2 = LEVEL_SIGMA2[kp2.octave() as usize];
-                let x2 = rotation2.row(0).transpose().dot(&x3_d_nalg) + (*translation2)[0];
-                let y2 = rotation2.row(1).transpose().dot(&x3_d_nalg) + (*translation2)[1];
-
-                if right2 {
-                    todo!("Stereo");
-                    // let invz2 = 1.0 / z2;
-                    // let u2 = CAMERA_MODULE.fx * x2 * invz2 + CAMERA_MODULE.cx;// This should be camera2, not camera
-                    // let u2_r = u2 - CAMERA_MODULE.stereo_baseline_times_fx * invz2;
-                    // let v2 = CAMERA_MODULE.fy * y2 * invz2 + CAMERA_MODULE.cy;// This should be camera2, not camera
-                    // let err_x2 = u2 as f32 - kp2.pt().x;
-                    // let err_y2 = v2 as f32 - kp2.pt().y;
-                    // let err_x2_r = u2_r as f32 - kp2_ur.unwrap();
-                    // if (err_x2 * err_x2  + err_y2 * err_y2 + err_x2_r * err_x2_r) > 7.8 * sigma_square2 {
-                    //     continue
-                    // }
-                } else {
-                    let uv2 = CAMERA_MODULE.project(DVVector3::new_with(x2, y2, z2));
-                    let err_x2 = uv2.0 as f32 - kp2.pt().x;
-                    let err_y2 = uv2.1 as f32 - kp2.pt().y;
-                    if (err_x2 * err_x2  + err_y2 * err_y2) > 5.991 * sigma_square2 {
-                        continue
+                    let x3_d;
+                    {
+                        let good_parallax_with_imu = cos_parallax_rays < 0.9996 && self.sensor.is_imu();
+                        let good_parallax_wo_imu = cos_parallax_rays < 0.9998 && !self.sensor.is_imu();
+                        if cos_parallax_rays < cos_parallax_stereo && cos_parallax_rays > 0.0 && (right1 || right2 || good_parallax_with_imu || good_parallax_wo_imu) {
+                            x3_d = geometric_tools::triangulate(xn1, xn2, pose1, pose2);
+                        } else if right1 && cos_parallax_stereo1 < cos_parallax_stereo2 {
+                            x3_d = CAMERA_MODULE.unproject_stereo(lock.get_keyframe(self.current_keyframe_id), idx1);
+                        } else if right2 && cos_parallax_stereo2 < cos_parallax_stereo1 {
+                            x3_d = CAMERA_MODULE.unproject_stereo(lock.get_keyframe(neighbor_id), idx2);
+                        } else {
+                            continue // No stereo and very low parallax
+                        }
+                        if x3_d.is_none() {
+                            continue
+                        }
                     }
-                }
 
-                //Check scale consistency
-                let normal1 = *x3_d.unwrap() - *ow1;
-                let dist1 = normal1.norm();
 
-                let normal2 = *x3_d.unwrap() - *ow2;
-                let dist2 = normal2.norm();
+                    //Check triangulation in front of cameras
+                    let x3_d_nalg = *x3_d.unwrap();
+                    let z1 = rotation1.row(2).transpose().dot(&x3_d_nalg) + (*translation1)[2];
+                    if z1 <= 0.0 {
+                        continue;
+                    }
+                    let z2 = rotation2.row(2).transpose().dot(&x3_d_nalg) + (*translation2)[2];
+                    if z2 <= 0.0 {
+                        continue;
+                    }
 
-                if dist1 == 0.0 || dist2 == 0.0 {
-                    continue;
-                }
+                    //Check reprojection error in first keyframe
+                    let sigma_square1 = LEVEL_SIGMA2[kp1.octave() as usize];
+                    let x1 = rotation1.row(0).transpose().dot(&x3_d_nalg) + (*translation1)[0];
+                    let y1 = rotation1.row(1).transpose().dot(&x3_d_nalg) + (*translation1)[1];
 
-                if dist1 >= far_points_th || dist2 >= far_points_th {
-                    continue;
-                }
+                    if right1 {
+                        todo!("Stereo");
+                        // let invz1 = 1.0 / z1;
+                        // let u1 = CAMERA_MODULE.fx * x1 * invz1 + CAMERA_MODULE.cx;
+                        // let u1_r = u1 - CAMERA_MODULE.stereo_baseline_times_fx * invz1;
+                        // let v1 = CAMERA_MODULE.fy * y1 * invz1 + CAMERA_MODULE.cy;
+                        // let err_x1 = u1 as f32 - kp1.pt().x;
+                        // let err_y1 = v1 as f32 - kp1.pt().y;
+                        // let err_x1_r = u1_r as f32 - kp1_ur.unwrap();
+                        // if (err_x1 * err_x1  + err_y1 * err_y1 + err_x1_r * err_x1_r) > 7.8 * sigma_square1 {
+                        //     continue
+                        // }
+                    } else {
+                        let uv1 = CAMERA_MODULE.project(DVVector3::new_with(x1, y1, z1));
+                        let err_x1 = uv1.0 as f32 - kp1.pt().x;
+                        let err_y1 = uv1.1 as f32 - kp1.pt().y;
+                        if (err_x1 * err_x1  + err_y1 * err_y1) > 5.991 * sigma_square1 {
+                            continue
+                        }
+                    }
 
-                let ratio_dist = dist2 / dist1;
-                let ratio_octave = (SCALE_FACTORS[kp1.octave() as usize] / SCALE_FACTORS[kp2.octave() as usize]) as f64;
-                if ratio_dist * ratio_factor < ratio_octave || ratio_dist > ratio_octave * ratio_factor {
-                    continue;
-                }
+                    //Check reprojection error in second keyframe
+                    let sigma_square2 = LEVEL_SIGMA2[kp2.octave() as usize];
+                    let x2 = rotation2.row(0).transpose().dot(&x3_d_nalg) + (*translation2)[0];
+                    let y2 = rotation2.row(1).transpose().dot(&x3_d_nalg) + (*translation2)[1];
 
-                // Triangulation is successful
-                {
-                    let mut lock = self.map.write()?;
+                    if right2 {
+                        todo!("Stereo");
+                        // let invz2 = 1.0 / z2;
+                        // let u2 = CAMERA_MODULE.fx * x2 * invz2 + CAMERA_MODULE.cx;// This should be camera2, not camera
+                        // let u2_r = u2 - CAMERA_MODULE.stereo_baseline_times_fx * invz2;
+                        // let v2 = CAMERA_MODULE.fy * y2 * invz2 + CAMERA_MODULE.cy;// This should be camera2, not camera
+                        // let err_x2 = u2 as f32 - kp2.pt().x;
+                        // let err_y2 = v2 as f32 - kp2.pt().y;
+                        // let err_x2_r = u2_r as f32 - kp2_ur.unwrap();
+                        // if (err_x2 * err_x2  + err_y2 * err_y2 + err_x2_r * err_x2_r) > 7.8 * sigma_square2 {
+                        //     continue
+                        // }
+                    } else {
+                        let uv2 = CAMERA_MODULE.project(DVVector3::new_with(x2, y2, z2));
+                        let err_x2 = uv2.0 as f32 - kp2.pt().x;
+                        let err_y2 = uv2.1 as f32 - kp2.pt().y;
+                        if (err_x2 * err_x2  + err_y2 * err_y2) > 5.991 * sigma_square2 {
+                            continue
+                        }
+                    }
+
+                    //Check scale consistency
+                    let normal1 = *x3_d.unwrap() - *ow1;
+                    let dist1 = normal1.norm();
+
+                    let normal2 = *x3_d.unwrap() - *ow2;
+                    let dist2 = normal2.norm();
+
+                    if dist1 == 0.0 || dist2 == 0.0 {
+                        continue;
+                    }
+
+                    if dist1 >= far_points_th || dist2 >= far_points_th {
+                        continue;
+                    }
+
+                    let ratio_dist = dist2 / dist1;
+                    let ratio_octave = (SCALE_FACTORS[kp1.octave() as usize] / SCALE_FACTORS[kp2.octave() as usize]) as f64;
+                    if ratio_dist * ratio_factor < ratio_octave || ratio_dist > ratio_octave * ratio_factor {
+                        continue;
+                    }
+
+                    // Triangulation is successful
                     let origin_map_id = lock.id;
                     let observations = vec![
                         (self.current_keyframe_id, lock.get_keyframe(self.current_keyframe_id).features.num_keypoints, idx1),
-                        (neighbor_id, lock.get_keyframe(neighbor_id).features.num_keypoints, idx2)
+                        (neighbor_id, neighbor_kf.features.num_keypoints, idx2)
                     ];
 
-                    let mp_id = lock.insert_mappoint_to_map(x3_d.unwrap(), self.current_keyframe_id, origin_map_id, observations);
-                    mps_created += 1;
-                    self.recently_added_mappoints.insert(mp_id);
-                }
+                    mps_to_insert.push((x3_d.unwrap(), self.current_keyframe_id, origin_map_id, observations));
 
+                }
             }
         }
+
+        let _span = tracy_client::span!("create_new_mappoints::insert_mappoints");
+        let mut lock = self.map.write()?;
+        for (x3_d, ref_kf_id, origin_map_id, observations) in mps_to_insert {
+            let mp_id = lock.insert_mappoint_to_map(x3_d, ref_kf_id, origin_map_id, observations)
+            ;
+            self.recently_added_mappoints.insert(mp_id);
+            mps_created += 1;
+        }
+
         Ok(mps_created)
     }
 
@@ -717,16 +714,17 @@ impl LocalMapping {
         // Update points
         // Clone needed here for same reason as in map:insert_keyframe_to_map, read explanation there.
         let mappoint_matches = self.map.read()?.get_keyframe(self.current_keyframe_id).get_mp_matches().clone();
+        let mut lock = self.map.write()?;
         for mp_match in mappoint_matches {
             match mp_match {
                 Some((mp_id, _)) => {
-                    self.map.write()?.update_mappoint(mp_id);
+                    lock.update_mappoint(mp_id);
                 },
                 None => {}
             }
         }
         // Update connections in covisibility graph
-        self.map.write()?.update_connections(self.current_keyframe_id);
+        lock.update_connections(self.current_keyframe_id);
 
         Ok(())
     }

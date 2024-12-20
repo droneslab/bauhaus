@@ -140,9 +140,10 @@ impl ORBMatcherTrait for ORBMatcher { }
 
 impl DescriptorDistanceTrait for ORBMatcher {
     fn descriptor_distance(&self, desc1: &Mat, desc2: &Mat) -> i32 {
+        // let _span = tracy_client::span!("descriptor_distance");
         // This code is equivalent to:
         // return opencv::core::norm2(
-        //     a, b, opencv::core::NormTypes::NORM_HAMMING as i32, &Mat::default()
+        //     desc1, desc2, opencv::core::NormTypes::NORM_HAMMING as i32, &Mat::default()
         // ).unwrap() as i32;
         // But much faster!!
         dvos3binding::ffi::descriptor_distance(
@@ -158,6 +159,23 @@ impl DescriptorDistanceTrait for ORBMatcher {
             },
             false
         )
+
+        // let mut dist = 0;
+        // let mut pa = desc1.as_raw();
+        // let mut pb = desc2.as_raw();
+
+        // for _ in 0..8 {
+        //     let mut v = pa ^ pb;
+        //     v = v - ((v >> 1) & 0x55555555);
+        //     v = (v & 0x33333333) + ((v >> 2) & 0x33333333);
+        //     dist += (((v + (v >> 4)) & 0xF0F0F0F) * 0x1010101) >> 24;
+
+        //     pa += 1;
+        //     pb += 1;
+        // }
+
+        // return dist;
+
     }
 }
 
@@ -1088,6 +1106,8 @@ impl SearchForTriangulationTrait for ORBMatcher {
         // Some math based on ORB-SLAM2 to avoid some confusion with Sophus.
         // Look here: https://github.com/raulmur/ORB_SLAM2/blob/master/src/ORBmatcher.cc#L657
 
+        let _span2 = tracy_client::span!("search_for_triangulation::pre");
+
         //Compute epipole in second image
         let cw = *kf_1.get_camera_center(); //Cw
         let r2w = *kf_2.get_pose().get_rotation(); //R2w
@@ -1134,13 +1154,13 @@ impl SearchForTriangulationTrait for ORBMatcher {
         let mut i = 0;
         let mut j = 0;
 
+        drop(_span2);
+
         while i < kf1_featvec.len() && j < kf2_featvec.len() {
             let kf1_node_id = kf1_featvec[i];
             let kf2_node_id = kf2_featvec[j];
             if kf1_node_id == kf2_node_id {
                 let kf1_indices_size = kf_1.bow.as_ref().unwrap().get_feat_vec().vec_size(kf1_node_id);
-
-                // let _span = tracy_client::span!("search_for_triangulation_outerloop");
 
                 for i1 in 0..kf1_indices_size {
                     let kf1_index = kf_1.bow.as_ref().unwrap().get_feat_vec().vec_get(kf1_node_id, i1); // = idx1
@@ -1290,6 +1310,7 @@ impl SearchForTriangulationTrait for ORBMatcher {
         return Ok(matched_pairs);
     }
 }
+
 impl FuseTrait for ORBMatcher {
     fn fuse_from_loop_closing(&self,  kf_id: &Id, scw: &Sim3, mappoints: &Vec<Id>, map: &ReadWriteMap, th: i32) ->  Result<Vec<Option<Id>>, Box<dyn std::error::Error>> {
         // int ORBmatcher::Fuse(KeyFrame *pKF, Sophus::Sim3f &Scw, const vector<MapPoint *> &vpPoints, float th, vector<MapPoint *> &vpReplacePoint)
