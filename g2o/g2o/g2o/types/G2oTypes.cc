@@ -72,16 +72,16 @@ ImuCamPose::ImuCamPose(
     Rwb0 = Rwb;
     DR.setIdentity();
 
-    // std::cout << "IMUCAMPOSE... twb: " << twb << std::endl;
-    // std::cout << "IMUCAMPOSE... Rwb: " << Rwb << std::endl;
-    // std::cout << "IMUCAMPOSE... tcw[0]: " << tcw[0] << std::endl;
-    // std::cout << "IMUCAMPOSE... Rcw[0]: " << Rcw[0] << std::endl;
-    // std::cout << "IMUCAMPOSE... tcb[0]: " << tcb[0] << std::endl;
-    // std::cout << "IMUCAMPOSE... Rcb[0]: " << Rcb[0] << std::endl;
-    // std::cout << "IMUCAMPOSE... Rbc[0]: " << Rbc[0] << std::endl;
-    // std::cout << "IMUCAMPOSE... tbc[0]: " << tbc[0] << std::endl;
-    // std::cout << "IMUCAMPOSE... bf: " << bf << std::endl;
+    std::cout << "ImuCamPose imu position: " << twb << std::endl;
+    std::cout << "ImuCamPose imu rotation: " << Rwb << std::endl;
+    std::cout << "ImuCamPose position: " << tcw[0] << std::endl;
+    std::cout << "ImuCamPose rotation: " << Rcw[0] << std::endl;
 
+    std::cout << "(constants) ImuCamPose mImuCalib.mTcb translation: " << tcb[0] << std::endl;
+    std::cout << "(constants) ImuCamPose mImuCalib.mTcb rotation: " << Rcb[0] << std::endl;
+    std::cout << "(constants) ImuCamPose Rbc[0]: " << Rbc[0] << std::endl;
+    std::cout << "(constants) ImuCamPose tbc[0]: " << tbc[0] << std::endl;
+    std::cout << "(constants) ImuCamPose bf: " << bf << std::endl;
 }
 
 
@@ -115,6 +115,19 @@ ImuCamPose::ImuCamPose(
     // For posegraph 4DoF
     Rwb0 = Rwb;
     DR.setIdentity();
+
+    std::cout << " What's this?" << std::endl;
+
+    std::cout << "ImuCamPose imu position: " << twb << std::endl;
+    std::cout << "ImuCamPose imu rotation: " << Rwb << std::endl;
+    std::cout << "ImuCamPose position: " << tcw[0] << std::endl;
+    std::cout << "ImuCamPose rotation: " << Rcw[0] << std::endl;
+
+    std::cout << "(constants) ImuCamPose mImuCalib.mTcb translation: " << tcb[0] << std::endl;
+    std::cout << "(constants) ImuCamPose mImuCalib.mTcb rotation: " << Rcb[0] << std::endl;
+    std::cout << "(constants) ImuCamPose Rbc[0]: " << Rbc[0] << std::endl;
+    std::cout << "(constants) ImuCamPose tbc[0]: " << tbc[0] << std::endl;
+    std::cout << "(constants) ImuCamPose bf: " << bf << std::endl;
 }
 
 void ImuCamPose::SetParam(const std::vector<Eigen::Matrix3d> &_Rcw, const std::vector<Eigen::Vector3d> &_tcw, const std::vector<Eigen::Matrix3d> &_Rbc,
@@ -143,7 +156,14 @@ Eigen::Vector2d ImuCamPose::Project(const Eigen::Vector3d &Xw, int cam_idx) cons
 {
     Eigen::Vector3d Xc = Rcw[cam_idx] * Xw + tcw[cam_idx];
 
-    return pCamera[cam_idx]->project(Xc);
+    std::cout << "vpose estimate.... ImuCamPose project... Rcw " << Rcw[cam_idx] << std::endl;
+    std::cout << "vpose estimate.... ImuCamPose project... tcw" << tcw[cam_idx] << std::endl;
+    std::cout << "vpose estimate.... ImuCamPose project... Xc" << Xc << std::endl;
+
+    Eigen::Vector2d result = pCamera[cam_idx]->project(Xc);
+    std::cout << "vpose estimate.... ImuCamPose project... result" << result << std::endl;
+
+    return result;
 }
 
 Eigen::Vector3d ImuCamPose::ProjectStereo(const Eigen::Vector3d &Xw, int cam_idx) const
@@ -361,15 +381,15 @@ void EdgeMonoOnlyPose::linearizeOplus()
     const Eigen::Vector3d Xb = VPose->estimate().Rbc[cam_idx]*Xc+VPose->estimate().tbc[cam_idx];
     const Eigen::Matrix3d &Rcb = VPose->estimate().Rcb[cam_idx];
 
-    Eigen::Matrix<double,2,3> proj_jac = VPose->estimate().pCamera[cam_idx]->projectJac(Xc);
+    Eigen::Matrix<double, 2, 3> proj_jac = VPose->estimate().pCamera[cam_idx]->projectJac(Xc);
 
-    Eigen::Matrix<double,3,6> SE3deriv;
+    Eigen::Matrix<double, 3, 6> SE3deriv;
     double x = Xb(0);
     double y = Xb(1);
     double z = Xb(2);
-    SE3deriv << 0.0, z,   -y, 1.0, 0.0, 0.0,
-            -z , 0.0, x, 0.0, 1.0, 0.0,
-            y ,  -x , 0.0, 0.0, 0.0, 1.0;
+    SE3deriv << 0.0, z, -y, 1.0, 0.0, 0.0,
+        -z, 0.0, x, 0.0, 1.0, 0.0,
+        y, -x, 0.0, 0.0, 0.0, 1.0;
     _jacobianOplusXi = proj_jac * Rcb * SE3deriv; // symbol different becasue of update mode
 }
 
@@ -469,10 +489,27 @@ EdgeInertial::EdgeInertial(IMU::Preintegrated *pInt):JRg(pInt->JRg.cast<double>(
             eigs[i]=0;
     Info = es.eigenvectors()*eigs.asDiagonal()*es.eigenvectors().transpose();
     setInformation(Info);
+
+    Eigen::IOFormat CommaFmt(Eigen::StreamPrecision, Eigen::DontAlignCols, ", ", ", ", "", "", "", "");
+
+    std::cout << "EdgeInertial! Jrg: " << JRg.format(CommaFmt) << std::endl;
+    std::cout << "EdgeInertial! Jvg: " << JVg.format(CommaFmt) << std::endl;
+    std::cout << "EdgeInertial! Jpg: " << JPg.format(CommaFmt) << std::endl;
+    std::cout << "EdgeInertial! Jva: " << JVa.format(CommaFmt) << std::endl;
+    std::cout << "EdgeInertial! Jpa: " << JPa.format(CommaFmt) << std::endl;
+    std::cout << "EdgeInertial! dR: " << pInt->dR.format(CommaFmt) << std::endl;
+    std::cout << "EdgeInertial! dV: " << pInt->dV.format(CommaFmt) << std::endl;
+    std::cout << "EdgeInertial! db: " << pInt->db.format(CommaFmt) << std::endl;
+    std::cout << "EdgeInertial! dP: " << pInt->dP.format(CommaFmt) << std::endl;
+    std::cout << "EdgeInertial! avgA: " << pInt->avgA.format(CommaFmt) << std::endl;
+    std::cout << "EdgeInertial! avgW: " << pInt->avgW.format(CommaFmt) << std::endl;
+
+    std::cout << "EdgeInertial! dt: " << dt << std::endl;
+    std::cout << "EdgeInertial! full C: " << pInt->C.format(CommaFmt) << std::endl;
+
+    std::cout << "(for ref) EdgeInertial! C block: " << pInt->C.block<9, 9>(0, 0).format(CommaFmt) << std::endl;
+    std::cout << "Info: " << Info.format(CommaFmt) << std::endl;
 }
-
-
-
 
 void EdgeInertial::computeError()
 {
@@ -493,6 +530,15 @@ void EdgeInertial::computeError()
                                                                - VV1->estimate()*dt - g*dt*dt/2) - dP;
 
     _error << er, ev, ep;
+
+    std::cout << "error edgeinertial: " << _error << std::endl;
+    std::cout << "(Vertices: " << VP1->id() << ", " << VV1->id() << ", " << VG1->id() << ", " << VA1->id() << ", " << VP2->id() << ", " << VV2->id() << ")" << std::endl;
+    std::cout << "First error: " << dR.transpose() * VP1->estimate().Rwb.transpose() * VP2->estimate().Rwb << std::endl;
+    std::cout << "dr transpose: " << dR.transpose() << std::endl;
+    std::cout << "VP1 Rwb transpose: " << VP1->estimate().Rwb.transpose() << std::endl;
+    std::cout << "VP2 Rwb: " << VP2->estimate().Rwb << std::endl;
+
+    std::cout << "(b1: " << b1 << ")" << std::endl;
 }
 
 void EdgeInertial::linearizeOplus()
@@ -854,7 +900,8 @@ Eigen::Matrix3d Skew(const Eigen::Vector3d &w)
     return W;
 }
 
-void EdgeMonoOnlyPose::set_robust_kernel(bool reset) {
+void EdgeMonoOnlyPose::set_robust_kernel(bool reset, float delta)
+{
     // Darvis
     // Note: setRobustKernel takes a RobustKernelHuber pointer
     // ORBSLAM3 usually does this but occasionally passes in a 0 instead
@@ -868,7 +915,7 @@ void EdgeMonoOnlyPose::set_robust_kernel(bool reset) {
     } else {
         g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
         setRobustKernel(rk);
+        rk->setDelta(delta);
     }
 }
-
 }

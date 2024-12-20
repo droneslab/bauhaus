@@ -47,6 +47,9 @@ RGB: 1
 width: 752
 height: 480
 
+new_width: 600
+new_height: 350
+
 stereo_overlapping_begin: 0
 stereo_overlapping_end: 1000
 

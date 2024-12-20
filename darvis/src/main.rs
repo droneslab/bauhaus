@@ -1,16 +1,14 @@
-use std::{collections::VecDeque, env, fs::{File, OpenOptions}, io::{self, BufRead}, path::Path, sync::atomic::AtomicBool, thread::{self, sleep}, time::{self, Duration, SystemTime}};
-use map::map::Map;
+use std::{collections::VecDeque, env, fs::{File, OpenOptions}, io::{self, BufRead}, path::Path, sync::atomic::AtomicBool, thread::{self, sleep}, time::Duration};
 use fern::colors::{ColoredLevelConfig, Color};
 use glob::glob;
 use log::{debug, info, warn};
 use modules::imu::{ImuMeasurements, ImuPoint};
-use sensor::Sensor;
 use opencv::core::Point3f;
 use spin_sleep::LoopHelper;
 #[macro_use] extern crate lazy_static;
 
-use core::{*, config::*, system::System, read_only_lock::ReadWriteMap};
-use crate::{actors::messages::{ImageMsg, ShutdownMsg}, modules::{image, optimizer}};
+use core::{*, config::*, system::System};
+use crate::{actors::messages::{ImageMsg, ShutdownMsg}, modules::image};
 use crate::map::map::Id;
 
 mod actors;
@@ -20,8 +18,7 @@ mod map;
 mod modules;
 mod tests;
 
-pub type MapLock = ReadWriteMap<Map>;
-// pub type MapLock = Arc<Mutex<Map>>; // Replace above line with this if you want to switch all locks to mutexes
+// pub type ReadWriteMap = Arc<Mutex<Map>>; // Replace above line with this if you want to switch all locks to mutexes
 
 // To profile memory usage with tracy
 // use tracy_client::*;
@@ -63,7 +60,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if SETTINGS.get::<bool>(SYSTEM, "check_deadlocks") {
         // This slows stuff down, so only enable this if you really need to.
         // This seems to find deadlocks more consistently if you turn all rwlocks into
-        // mutexes. You can do that pretty quickly by modifying pub type MapLock in the 
+        // mutexes. You can do that pretty quickly by modifying pub type ReadWriteMap in the 
         // beginning of this file and turning usages of read() and write() into lock().
         thread::spawn(move || { 
             loop {

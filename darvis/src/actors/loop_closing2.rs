@@ -14,7 +14,7 @@
 // use crate::modules::sim3solver::Sim3Solver;
 // use crate::modules::{optimizer, orbmatcher};
 // use crate::registered_actors::{LOOP_CLOSING, VOCABULARY};
-// use crate::{System, MapLock};
+// use crate::{System, ReadWriteMap};
 // use crate::map::map::Id;
 // use crate::modules::imu::ImuModule;
 
@@ -31,7 +31,7 @@
 //     system: System,
 //     sensor: Sensor,
 
-//     map: MapLock,
+//     map: ReadWriteMap,
 //     _imu: Option<ImuModule>,
 
 //     // Loop detector variables
@@ -51,7 +51,7 @@
 // }
 
 // impl Actor for LoopClosing {
-//     type MapRef = MapLock;
+//     type MapRef = ReadWriteMap;
 
 //     fn new_actorstate(system: System, map: Self::MapRef) -> LoopClosing {
 
@@ -114,7 +114,7 @@
 //         // TODO (design, fine-grained locking) would be great if we could just lock this keyframe
 //         self.map.write().keyframes.get_mut(&self.current_kf_id).unwrap().dont_delete = true;
 
-//         debug!("Loop closing working on kf {} (frame {})", self.current_kf_id, self.map.read().keyframes.get(&self.current_kf_id).unwrap().frame_id);
+//         debug!("Loop closing working on kf {} (frame {})", self.current_kf_id, self.map.read()?.keyframes.get(&self.current_kf_id).unwrap().frame_id);
 
 //         // Detect loop candidates and check covisibility consistency
 //         if self.detect_loop() {
@@ -143,7 +143,7 @@
 //     fn detect_loop(&mut self) -> bool {
 //         let _span = tracy_client::span!("detect_loop");
 //         //If the map contains less than 10 KF or less than 10 KF have passed from last loop detection
-//         if self.map.read().keyframes.len() <= 10 {
+//         if self.map.read()?.num_keyframes() <= 10 {
 //             return false;
 //         }
 
@@ -151,7 +151,7 @@
 //         // This is the lowest score to a connected keyframe in the covisibility graph
 //         // We will impose loop candidates to have a higher similarity than this
 //         let min_score = {
-//             let lock = self.map.read();
+//             let lock = self.map.read()?;
 //             let connected_keyframes = lock.keyframes.get(&self.current_kf_id).unwrap().get_covisibility_keyframes(i32::MAX);
 //             print!("Connected KFs: ");
 
@@ -171,7 +171,7 @@
 //         println!();
 
 //         // Query the database imposing the minimum score
-//         let candidate_kfs = self.map.read().kf_db_detect_loop_candidates(self.current_kf_id, min_score);
+//         let candidate_kfs = self.map.read()?.kf_db_detect_loop_candidates(self.current_kf_id, min_score);
 
 //         debug!("Candidate kfs: {:?}", candidate_kfs);
 
@@ -191,7 +191,7 @@
 //         let mut consistent_group = vec![false; self.consistent_groups.len()]; // vbConsistentGroup
 
 //         for cand_kf_id in candidate_kfs {
-//             let map_read_lock = self.map.read();
+//             let map_read_lock = self.map.read()?;
 //             let candidate_kf = map_read_lock.keyframes.get(&cand_kf_id).unwrap();
 //             let mut candidate_group: Vec<Id> = candidate_kf.get_connected_keyframes().keys().cloned().collect();
 //             candidate_group.push(cand_kf_id);
@@ -255,7 +255,7 @@
 //                 let candidate_kf_id = self.enough_consistent_candidates[i];
 
 //                 mappoint_matches[i] = {
-//                     let map_read_lock = self.map.read();
+//                     let map_read_lock = self.map.read()?;
 //                     let current_keyframe = map_read_lock.keyframes.get(&self.current_kf_id).unwrap();
 
 //                     let keyframe = map_read_lock.keyframes.get(&candidate_kf_id).unwrap();
@@ -332,7 +332,7 @@
 //                     if num_inliers >= 20 {
 //                         has_match = true;
 //                         self.matched_kf = kf_id;
-//                         let lock = self.map.read();
+//                         let lock = self.map.read()?;
 //                         let kf = lock.keyframes.get(&kf_id).unwrap();
 
 //                         let smw = Sim3 {
@@ -356,12 +356,12 @@
 //         }
 
 //         // Retrieve MapPoints seen in Loop Keyframe and neighbors
-//         let mut loop_connected_keyframes = self.map.read().keyframes.get(&self.matched_kf).unwrap().get_covisibility_keyframes(i32::MAX); // vpLoopConnectedKFs
+//         let mut loop_connected_keyframes = self.map.read()?.keyframes.get(&self.matched_kf).unwrap().get_covisibility_keyframes(i32::MAX); // vpLoopConnectedKFs
 //         loop_connected_keyframes.push(self.matched_kf);
 //         self.loop_mappoints.clear();
 //         let mut loop_point_for_kf = HashMap::new(); // mnLoopPointForKF
 //         {
-//             let map_read_lock = self.map.read();
+//             let map_read_lock = self.map.read()?;
 //             for kf_id in loop_connected_keyframes {
 //                 let keyframe = map_read_lock.keyframes.get(&kf_id).unwrap();
 //                 let mappoints = keyframe.get_mp_matches();
@@ -433,16 +433,16 @@
 //         self.map.write().update_connections(self.current_kf_id);
 
 //         // Retrive keyframes connected to the current keyframe and compute corrected Sim3 pose by propagation
-//         self.current_connected_kfs = self.map.read().keyframes.get(&self.current_kf_id).unwrap().get_covisibility_keyframes(i32::MAX);
+//         self.current_connected_kfs = self.map.read()?.keyframes.get(&self.current_kf_id).unwrap().get_covisibility_keyframes(i32::MAX);
 //         self.current_connected_kfs.push(self.current_kf_id);
 
 //         let mut corrected_sim3 = KeyFrameAndPose::new();
 //         let mut non_corrected_sim3 = KeyFrameAndPose::new();
 //         corrected_sim3.insert(self.current_kf_id, self.scw.clone());
-//         let twc = self.map.read().keyframes.get(&self.current_kf_id).unwrap().pose.inverse();
+//         let twc = self.map.read()?.keyframes.get(&self.current_kf_id).unwrap().pose.inverse();
 
 //         for connected_kf_id in &self.current_connected_kfs {
-//             let map = self.map.read();
+//             let map = self.map.read()?;
 //             let connected_kf = map.keyframes.get(connected_kf_id).unwrap();
 //             let pose = connected_kf.pose;
 
@@ -473,7 +473,7 @@
 //             let g2o_corrected_swi = g2o_corrected_siw.inverse();
 //             let g2o_siw = non_corrected_sim3.get(kf_id).unwrap();
 //             let mappoints = {
-//                 let map = self.map.read();
+//                 let map = self.map.read()?;
 //                 let connected_kf = map.keyframes.get(kf_id).unwrap();
 //                 connected_kf.get_mp_matches().clone()
 //             };
@@ -499,7 +499,7 @@
 //                 corrected_mp_references.insert(*mp_id, *kf_id);
 
 //                 let norm_and_depth = {
-//                     let map = self.map.read();
+//                     let map = self.map.read()?;
 //                     let mp = map.mappoints.get(mp_id).unwrap();
 //                     mp.get_norm_and_depth(&map)
 //                 };
@@ -606,7 +606,7 @@
 // }
 
 
-// fn run_gba(map: &mut MapLock, loop_kf: Id) {
+// fn run_gba(map: &mut ReadWriteMap, loop_kf: Id) {
 //     // void LoopClosing::RunGlobalBundleAdjustment(unsigned long nLoopKF)
 //     let _span = tracy_client::span!("run_gba_in_thread");
 //     info!("Starting Global Bundle Adjustment");

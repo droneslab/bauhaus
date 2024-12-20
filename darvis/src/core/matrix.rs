@@ -510,31 +510,58 @@ impl From<opencv::core::Mat> for DVMatrix3<f64> {
 }
 impl<T: nalgebra::ComplexField> From<[[T; 3]; 3]> for DVMatrix3<T> {
     fn from(mat: [[T; 3]; 3]) -> DVMatrix3<T> { 
+        // Sofiya: STOP FLIPPING THESE! This is correct
         DVMatrix3::new(nalgebra::Matrix3::<T>::new(
-            mat[0][0].clone(), mat[0][1].clone(), mat[0][2].clone(),
-            mat[1][0].clone(), mat[1][1].clone(), mat[1][2].clone(),
-            mat[2][0].clone(), mat[2][1].clone(), mat[2][2].clone()
+            mat[0][0].clone(), mat[1][0].clone(), mat[2][0].clone(),
+            mat[0][1].clone(), mat[1][1].clone(), mat[2][1].clone(),
+            mat[0][2].clone(), mat[1][2].clone(), mat[2][2].clone()
+            // mat[0][0].clone(), mat[0][1].clone(), mat[0][2].clone(),
+            // mat[1][0].clone(), mat[1][1].clone(), mat[1][2].clone(),
+            // mat[2][0].clone(), mat[2][1].clone(), mat[2][2].clone()
+
         ))
     }
 }
 impl<T: nalgebra::ComplexField> From<& DVMatrix3<T>> for [[T; 3]; 3] {
     fn from(mat: & DVMatrix3<T>) -> [[T; 3]; 3] { 
+        // Sofiya: STOP FLIPPING THESE! This is correct
         [
-            [mat[(0,0)].clone(), mat[(0,1)].clone(), mat[(0,2)].clone()],
-            [mat[(1,0)].clone(), mat[(1,1)].clone(), mat[(1,2)].clone()],
-            [mat[(2,0)].clone(), mat[(2,1)].clone(), mat[(2,2)].clone()]
+            // [mat[(0,0)].clone(), mat[(0,1)].clone(), mat[(0,2)].clone()],
+            // [mat[(1,0)].clone(), mat[(1,1)].clone(), mat[(1,2)].clone()],
+            // [mat[(2,0)].clone(), mat[(2,1)].clone(), mat[(2,2)].clone()]
+            [mat[(0,0)].clone(), mat[(1,0)].clone(), mat[(2,0)].clone()],
+            [mat[(0,1)].clone(), mat[(1,1)].clone(), mat[(2,1)].clone()],
+            [mat[(0,2)].clone(), mat[(1,2)].clone(), mat[(2,2)].clone()]
         ]
     }
 }
 impl<T: nalgebra::ComplexField> From<&mut DVMatrix3<T>> for [[T; 3]; 3] {
     fn from(mat: &mut DVMatrix3<T>) -> [[T; 3]; 3] { 
+        // Sofiya: STOP FLIPPING THESE! This is correct
         [
-            [mat[(0,0)].clone(), mat[(0,1)].clone(), mat[(0,2)].clone()],
-            [mat[(1,0)].clone(), mat[(1,1)].clone(), mat[(1,2)].clone()],
-            [mat[(2,0)].clone(), mat[(2,1)].clone(), mat[(2,2)].clone()]
+            // [mat[(0,0)].clone(), mat[(0,1)].clone(), mat[(0,2)].clone()],
+            // [mat[(1,0)].clone(), mat[(1,1)].clone(), mat[(1,2)].clone()],
+            // [mat[(2,0)].clone(), mat[(2,1)].clone(), mat[(2,2)].clone()]
+            [mat[(0,0)].clone(), mat[(1,0)].clone(), mat[(2,0)].clone()],
+            [mat[(0,1)].clone(), mat[(1,1)].clone(), mat[(2,1)].clone()],
+            [mat[(0,2)].clone(), mat[(1,2)].clone(), mat[(2,2)].clone()]
         ]
     }
 }
+impl From<&DVMatrix3<f64>> for [[f32; 3]; 3] {
+    fn from(mat: &DVMatrix3<f64>) -> [[f32; 3]; 3] { 
+        // Sofiya: STOP FLIPPING THESE! This is correct
+        [
+            // [mat[(0,0)].clone(), mat[(0,1)].clone(), mat[(0,2)].clone()],
+            // [mat[(1,0)].clone(), mat[(1,1)].clone(), mat[(1,2)].clone()],
+            // [mat[(2,0)].clone(), mat[(2,1)].clone(), mat[(2,2)].clone()]
+            [mat[(0,0)].clone() as f32, mat[(1,0)].clone()  as f32, mat[(2,0)].clone()  as f32],
+            [mat[(0,1)].clone()  as f32, mat[(1,1)].clone()  as f32, mat[(2,1)].clone()  as f32],
+            [mat[(0,2)].clone()  as f32, mat[(1,2)].clone()  as f32, mat[(2,2)].clone()  as f32]
+        ]
+    }
+}
+
 // Two index implementations, one for matrix3[(x,y)] and one for [(x)]
 impl<T> Index<(usize, usize)> for DVMatrix3<T> {
     type Output = T;
@@ -746,7 +773,7 @@ impl From<&Vec<dvos3binding::ffi::DoubleVec>> for DVMatrixDynamic<f64> {
             for j in 0..row.len() {
                 let r: usize = i.try_into().unwrap();
                 let c: usize = j.try_into().unwrap();
-                res[(r, c)] = mat[i].vec[j];
+                res[(c, r)] = mat[i].vec[j];
             }
         }
         DVMatrixDynamic::<f64>::new(res)

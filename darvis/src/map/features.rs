@@ -11,15 +11,13 @@ use core::config::SETTINGS;
 use std::fmt::Debug;
 use core::sensor::{Sensor, FrameSensor};
 use opencv::prelude::{Mat, MatTraitConst, MatTrait, KeyPointTraitConst};
-use opencv::types::{VectorOff32};
+use opencv::types::VectorOff32;
 use opencv::core::{KeyPoint, CV_32F, Scalar, Point2f};
 use crate::registered_actors::{CAMERA_MODULE, FEATURES};
 use crate::{
     matrix::{DVMatrix, DVVectorOfKeyPoint},
     map::map::Id,
 };
-
-use super::keyframe::MapPointMatches;
 
 
 #[derive(Clone, Debug, Default)]
@@ -243,7 +241,7 @@ impl Features {
         }
     }
 
-    pub fn has_left_kp(&self) -> Option<u32> {
+    pub fn _has_left_kp(&self) -> Option<u32> {
         match &self.keypoints {
             KeyPoints::Stereo{keypoints_left_cutoff, ..} => Some(*keypoints_left_cutoff),
             _ => None
@@ -277,7 +275,7 @@ impl Features {
         }
     }
 
-    pub fn replace_keypoints_and_descriptors(&mut self, keypoints: opencv::types::VectorOfKeyPoint, descriptors: Mat) {
+    pub fn _replace_keypoints_and_descriptors(&mut self, keypoints: opencv::types::VectorOfKeyPoint, descriptors: Mat) {
         match &self.keypoints {
             KeyPoints::Mono{..} => {
                 self.num_keypoints = keypoints.len() as u32;
@@ -349,10 +347,6 @@ impl Features {
             },
             KeyPoints::Empty => panic!("Keypoints should not be empty")
         }
-    }
-
-    fn assign_features_to_grid() {
-
     }
 
     fn undistort_keypoints(keypoints: &DVVectorOfKeyPoint) -> Result<DVVectorOfKeyPoint, Box<dyn std::error::Error>> {

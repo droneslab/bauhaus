@@ -1,8 +1,7 @@
-use std::{collections::{HashMap, HashSet}, cmp::min};
-use core::{config::{ SETTINGS, SYSTEM}, matrix::{DVMatrix, DVMatrix3, DVVector3}, sensor::Sensor, system::Timestamp};
+use std::{backtrace::Backtrace, cmp::min, collections::{HashMap, HashSet}};
+use core::{config::{ SETTINGS, SYSTEM}, matrix::{DVMatrix3, DVVector3}, sensor::Sensor, system::Timestamp};
 use log::{error, debug, warn};
-use opencv::core::{KeyPoint, Mat};
-use crate::{map::{map::Id, pose::Pose},modules::{bow::DVBoW, imu::*}, registered_actors::VOCABULARY_MODULE, MapLock};
+use crate::{map::{map::Id, pose::Pose},modules::{bow::DVBoW, imu::*}, registered_actors::VOCABULARY_MODULE};
 use super::{features::Features, frame::Frame, map::{Map, MapItems}, mappoint::MapPoint,};
 use crate::modules::module_definitions::VocabularyModule;
 
@@ -52,7 +51,7 @@ pub struct KeyFrame {
     // pub mnBAGlobalForKF: u64,
 }
 impl KeyFrame {
-    pub fn new(frame: Frame, origin_map_id: Id, id: Id) -> Self {
+    pub fn new(frame: Frame, origin_map_id: Id, id: Id, map_imu_initialized: bool) -> Self {
         let bow = match frame.bow {
             Some(bow) => Some(bow),
             None => {
@@ -61,6 +60,9 @@ impl KeyFrame {
                 Some(bow)
             }
         };
+
+        let mut imu_data = frame.imu_data;
+        imu_data.is_imu_initialized = map_imu_initialized;
 
         let mut kf = Self {
             timestamp: frame.timestamp,
@@ -82,7 +84,7 @@ impl KeyFrame {
             ba_global_for_kf: -1,
             prev_kf_id: None,
             next_kf_id: None,
-            imu_data: frame.imu_data,
+            imu_data,
             bias_gba: None,
             vwb_gba: None,
             imu_position: None,
@@ -94,7 +96,7 @@ impl KeyFrame {
         kf
     }
 
-    pub fn print_mappoints(&self) {
+    pub fn _print_mappoints(&self) {
         println!("Mappoints for keyframe {}", self.id);
         for item in &self.mappoint_matches.matches {
             if let Some((mp_id, _outlier)) = item {
@@ -112,13 +114,23 @@ impl KeyFrame {
     pub fn get_pose(&self) -> Pose { self.pose }
     pub fn set_pose(&mut self, new_pose: Pose) {
         self.pose = new_pose;
-        let pose_inverse = self.pose.inverse();
-        self.imu_position = Some(
-            DVVector3::new(
-                *pose_inverse.get_rotation() * *ImuCalib::new().tcb.get_translation() + *pose_inverse.get_translation()
-            )
-        );
-   }
+
+        if self.sensor.is_imu() {
+            let pose_inverse = self.pose.inverse();
+            self.imu_position = Some(
+                DVVector3::new(
+                    *pose_inverse.get_rotation() * *ImuCalib::new().tcb.get_translation() + *pose_inverse.get_translation()
+                )
+            );
+            // println!("Regular pose: {:?}", self.pose.get_translation());
+            // println!("Regular rotation: {:?}", self.pose.get_rotation());
+            // println!("mRwc: {:?}", pose_inverse.get_rotation());
+            // println!("mTcb: {:?}", ImuCalib::new().tcb.get_translation());
+            // println!("mTwc: {:?}", pose_inverse.get_translation());
+
+            // println!("SET KF IMU POSITION: {} {:?}. backtrace: {}", self.id, self.imu_position, Backtrace::capture());
+        }
+    }
 
     pub fn get_connected_kf_weight(&self, kf_id: Id) -> i32{ self.connections.get_weight(&kf_id) }
     pub fn add_connection(&mut self, kf_id: Id, weight: i32) { self.connections.add(&kf_id, weight); }
@@ -141,10 +153,10 @@ impl KeyFrame {
     pub fn get_mp_match_index(&self, id: &Id) -> Option<usize> { 
         self.mappoint_matches.matches.iter().position(|item| item.is_some() && item.unwrap().0 == *id)
     }
-    pub fn mp_match_len(&self) -> usize { self.mappoint_matches.matches.iter().filter(|m| m.is_some()).count() }
+    pub fn _mp_match_len(&self) -> usize { self.mappoint_matches.matches.iter().filter(|m| m.is_some()).count() }
 
     pub fn get_tracked_mappoints(&self, map: &Map, min_observations: u32) -> i32 { self.mappoint_matches.tracked_mappoints(map, min_observations) }
-    pub fn debug_get_mps_count(&self) -> i32 { self.mappoint_matches.debug_count }
+    pub fn _debug_get_mps_count(&self) -> i32 { self.mappoint_matches.debug_count }
 
     pub fn get_camera_center(&self) -> DVVector3<f64> {
         self.pose.inverse().get_translation()
@@ -200,6 +212,9 @@ impl KeyFrame {
         // To get all connections, pass in i32::MAX as `num`
         // num is the target number of keyframes to return
        let max_len = min(self.connections.ordered_connected_keyframes.len(), num as usize);
+
+    tracy_client::plot!("Connected KFs {}", self.connections.ordered_connected_keyframes.len() as f64);
+
        let (connections, _) : (Vec<i32>, Vec<i32>) = self.connections.ordered_connected_keyframes[0..max_len].iter().cloned().unzip();
        connections
     }
@@ -225,7 +240,7 @@ impl KeyFrame {
         // Eigen::Matrix3f KeyFrame::GetImuRotation()
         // Note: in Orbslam this is: (mTwc * mImuCalib.mTcb).rotationMatrix();
         // and mTwc is inverse of the pose
-        (self.pose.inverse() * ImuCalib::new().tcb).get_rotation()
+        DVMatrix3::new(*self.pose.inverse().get_rotation() * *ImuCalib::new().tcb.get_rotation())
     }
     pub fn get_imu_position(&self) -> DVVector3<f64> {
         // Eigen::Vector3f KeyFrame::GetImuPosition()
@@ -268,17 +283,17 @@ impl MapPointMatches {
         }
     }
 
-    pub fn delete_with_id(&mut self, mp_id: Id) {
-        for index in 0..self.matches.len() {
-            if let Some((id, _)) = self.matches[index] {
-                if id == mp_id {
-                    self.matches[index] = None;
-                    self.debug_count -= 1;
-                    return
-                }
-            }
-        }
-    }
+    // pub fn delete_with_id(&mut self, mp_id: Id) {
+    //     for index in 0..self.matches.len() {
+    //         if let Some((id, _)) = self.matches[index] {
+    //             if id == mp_id {
+    //                 self.matches[index] = None;
+    //                 self.debug_count -= 1;
+    //                 return
+    //             }
+    //         }
+    //     }
+    // }
 
     pub fn delete_at_indices(&mut self, indices: (i32, i32)) -> (Option<(Id, bool)>, Option<(Id, bool)>) {
         // Indices are (left, right). Right should be -1 for mono. Maybe we can rewrite this to make it more clear?
@@ -311,7 +326,7 @@ impl MapPointMatches {
         self.matches[index].as_mut().unwrap().1 = is_outlier;
     }
 
-    pub fn mappoints_with_observations(&self, map: &Map) -> i32 {
+    pub fn _mappoints_with_observations(&self, map: &Map) -> i32 {
         (&self.matches)
         .into_iter()
         .filter(|item| {
@@ -341,7 +356,7 @@ impl MapPointMatches {
                         Some(mappoint) => {
                             if check_obs {
                                 if mappoint.num_obs <= 1 {
-                                    debug!("mappoint.num_obs {}", mappoint.num_obs);
+                                    // debug!("mappoint.num_obs {}", mappoint.num_obs);
                                 }
                                 mappoint.num_obs >= (min_observations as i32)
                             } else {

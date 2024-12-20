@@ -1,11 +1,11 @@
-use std::collections::{BTreeMap, HashMap, HashSet};
-use log::{info, warn, error, debug};
-use rustc_hash::FxHashMap;
+#![allow(dead_code)]
+
+use std::{backtrace::Backtrace, collections::{BTreeMap, HashMap, HashSet}};
+use log::{debug, error, info, warn};
 use core::{config::{SETTINGS, SYSTEM}, matrix::DVVector3, sensor::Sensor};
 use crate::map::{keyframe::*, mappoint::*};
-use std::ops::MulAssign;
 
-use super::{frame::Frame, keyframe_database::KeyFrameDatabase, pose::{DVTranslation, Pose}};
+use super::{frame::Frame, keyframe_database::KeyFrameDatabase, pose::Pose};
 
 pub type Id = i32;
 // pub type MapItems<T> = HashMap<Id, T>;
@@ -17,7 +17,7 @@ pub type MapItems<T> = BTreeMap<Id, T>;
 pub struct Map {
     pub id: Id,
 
-    pub keyframes: MapItems<KeyFrame>, // = mspKeyFrames
+    keyframes: MapItems<KeyFrame>, // = mspKeyFrames
     pub mappoints: MapItems<MapPoint>, // = mspMapPoints
 
     keyframe_database: KeyFrameDatabase, // = mpKeyFrameDB
@@ -32,6 +32,7 @@ pub struct Map {
     pub imu_initialized: bool, // mbImuInitialized
     pub imu_ba2: bool, // mbIMU_BA2 
     pub map_change_index: i32, // mnMapChange
+    pub version: u64,
     _sensor: Sensor,
 
     // Following are in orbslam3, not sure if we need:
@@ -61,10 +62,11 @@ impl Map {
             keyframe_database: KeyFrameDatabase::new(),
             imu_initialized: false,
             map_change_index: 0,
+            version: 0
         }
     }
 
-    pub fn print_current_map(&self, identifier: String) {
+    pub fn _print_current_map(&self, identifier: String) {
         // For debugging
         debug!("PRINT MAP START;{}", identifier);
         for (id, kf) in &self.keyframes {
@@ -90,6 +92,38 @@ impl Map {
             debug!("");
         }
         debug!("PRINT MAP DONE");
+    }
+
+    pub fn get_keyframe(&self, id: Id) -> &KeyFrame {
+        self.keyframes.get(&id).expect(format!("Keyframe {} not found in map", id).as_str())
+    }
+    pub fn get_keyframe_mut(&mut self, id: Id) -> &mut KeyFrame {
+        self.keyframes.get_mut(&id).expect(format!("Keyframe {} not found in map", id).as_str())
+    }
+    pub fn has_keyframe(&self, id: Id) -> bool {
+        self.keyframes.contains_key(&id)
+    }
+    pub fn get_first_keyframe(&self) -> &KeyFrame {
+        self.keyframes.get(&self.initial_kf_id).expect(format!("Initial keyframe {} not found in map", self.initial_kf_id).as_str())
+    }
+    pub fn num_keyframes(&self) -> usize {
+        self.keyframes.len()
+    }
+    pub fn get_keyframes_iter(&self) -> std::collections::btree_map::Iter<Id, KeyFrame> {
+        self.keyframes.iter()
+    }
+    pub fn get_keyframe_keys(&self) -> std::collections::btree_map::Keys<Id, KeyFrame> {
+        self.keyframes.keys()
+    }
+    pub fn get_keyframes_iter_mut(&mut self) -> std::collections::btree_map::IterMut<Id, KeyFrame> {
+        self.keyframes.iter_mut()
+    }
+
+    pub fn get_mappoint(&self, id: Id) -> &MapPoint {
+        self.mappoints.get(&id).expect(format!("MapPoint {} not found in map", id).as_str())
+    }
+    pub fn has_mappoint(&self, id: Id) -> bool {
+        self.mappoints.contains_key(&id)
     }
 
     ////* &mut self */////////////////////////////////////////////////////
@@ -123,7 +157,7 @@ impl Map {
             // self.lowest_kf = kf; // TODO (mvp): ORBSLAM3:Map.cc:67, used to sort mspKeyFrames. I think we can ignore?
         }
 
-        let full_keyframe = KeyFrame::new(frame, self.id, new_kf_id);
+        let full_keyframe = KeyFrame::new(frame, self.id, new_kf_id, self.imu_initialized);
         let num_keypoints = full_keyframe.features.num_keypoints;
         self.keyframes.insert(new_kf_id, full_keyframe);
 
@@ -171,6 +205,7 @@ impl Map {
             .remove(id)
             .map(|mappoint| {
                 let obs = mappoint.get_observations();
+                // debug!("Discard mp {} with matches {:?}", id, obs);
                 for (kf_id, indexes) in obs {
                     self.keyframes.get_mut(&kf_id).unwrap().mappoint_matches.delete_at_indices(*indexes);
                 }
@@ -183,7 +218,7 @@ impl Map {
             return;
         }
 
-        let (connections1, matches1, parent1, mut children1);
+        let (connections1, matches1, parent1, mut children1, prev_kf_id, next_kf_id);
         {
             // TODO (timing) ... map mutability
             // same as other issue in map.rs, to remove this clone we need to be able to iterate over an immutable ref to matches and children while mutating other keyframes inside the loop
@@ -200,9 +235,21 @@ impl Map {
 
             // Remove from kf database
             self.keyframe_database.erase(&kf);
+
+            // Update prev_kf and next_kf
+            prev_kf_id = kf.prev_kf_id;
+            next_kf_id = kf.next_kf_id;
         }
         for conn_kf in connections1 {
             self.keyframes.get_mut(&conn_kf).unwrap().delete_connection(kf_id);
+        }
+
+        // Update prev_kf_id and next_kf_id of the prev and next kf (used for IMU)
+        if let Some(prev_kf_id) = prev_kf_id {
+            self.keyframes.get_mut(&prev_kf_id).unwrap().next_kf_id = next_kf_id;
+        }
+        if let Some(next_kf_id) = next_kf_id {
+            self.keyframes.get_mut(&next_kf_id).unwrap().prev_kf_id = prev_kf_id;
         }
 
         let mut test_just_mp_ids = Vec::new();
@@ -272,7 +319,7 @@ impl Map {
         }
         self.keyframes.remove(&kf_id);
 
-        debug!("Discard keyframe {}", kf_id);
+        debug!("Sof: Discard keyframe {}", kf_id);
     }
 
     pub fn update_connections(&mut self, main_kf_id: Id) {
@@ -334,7 +381,11 @@ impl Map {
     }
 
     pub fn delete_observation(&mut self, kf_id: Id, mp_id: Id) {
-        self.keyframes.get_mut(&kf_id).unwrap().mappoint_matches.delete_with_id(mp_id);
+        if self.mappoints.get(&mp_id).is_none() {
+            warn!("Trying to remove observation from kf {} to mp {} but mp is already deleted!", kf_id, mp_id);
+            return;
+        }
+        self.keyframes.get_mut(&kf_id).unwrap().mappoint_matches.delete_at_indices(self.mappoints.get(&mp_id).unwrap().get_index_in_keyframe(kf_id));
         let should_delete_mappoint = self.mappoints.get_mut(&mp_id).unwrap().delete_observation(&kf_id);
         if should_delete_mappoint {
             self.discard_mappoint(&mp_id);
@@ -369,7 +420,7 @@ impl Map {
         for (kf_id, (index_left, index_right)) in observations {
             // Replace measurement in keyframe
             let kf = self.keyframes.get_mut(&kf_id).unwrap();
-            let mp = self.mappoints.get(&mp_id).unwrap();
+            let mp = self.mappoints.get(&mp_id).expect(format!("Could not get mp {}", mp_id).as_str());
 
             if !mp.get_observations().contains_key(&kf_id) {
                 if index_left != -1 {
@@ -451,23 +502,25 @@ impl Map {
         self.keyframe_database.detect_n_best_candidates(&self, &kf_id, num_candidates)
     }
 
-    pub fn detect_loop_candidates_above_min_score(&self, kf_id: Id, min_score: f32) -> Vec<Id> {
-        self.keyframe_database.detect_candidates_above_score(&self, &kf_id, min_score)
+    pub fn _detect_loop_candidates_above_min_score(&self, kf_id: Id, min_score: f32) -> Vec<Id> {
+        self.keyframe_database._detect_candidates_above_score(&self, &kf_id, min_score)
     }
 
-    pub fn  detect_relocalization_candidates(&self, frame: &Frame) -> Vec<Id> {
-        self.keyframe_database.detect_relocalization_candidates(&self, frame)
+    pub fn  _detect_relocalization_candidates(&self, frame: &Frame) -> Vec<Id> {
+        self.keyframe_database._detect_relocalization_candidates(&self, frame)
     }
 
 
     pub fn apply_scaled_rotation(&mut self, t: &Pose, s: f64, b_scaled_vel: bool) {
+        // Sofiya: Tested!!
         // void Map::ApplyScaledRotation(const Sophus::SE3f &T, const float s, const bool bScaledVel)
+        let _span = tracy_client::span!("apply_scaled_rotation");
 
         // Body position (IMU) of first keyframe is fixed to (0,0,0)
         for keyframe in self.keyframes.values_mut() {
             let mut twc = keyframe.get_pose().inverse().clone();
             let twc_trans = twc.get_translation();
-            twc.set_translation(nalgebra::Vector3::new(twc_trans[0] * s, twc_trans[1] * s, twc_trans[2] * s)); // just scaling translation by s
+            twc.set_translation(twc_trans.scale(s));
             let tyc = *t * twc;
             let tcy = tyc.inverse();
             keyframe.set_pose(tcy);
@@ -477,7 +530,14 @@ impl Map {
             } else {
                 keyframe.imu_data.velocity = Some(DVVector3::new(*t.get_rotation() * *vw * s));
             }
-            println!("Apply scaled rotation, set kf velocity {} {:?}", keyframe.id, keyframe.imu_data.velocity);
+        }
+
+        let mp_ids = self.mappoints.keys().cloned().collect::<Vec<Id>>();
+        for mp_id in mp_ids {
+            self.mappoints.get_mut(&mp_id).map(|mp|
+                mp.position = DVVector3::new(t.get_rotation().scale(s) * *mp.position + *t.get_translation()
+            ));
+            self.update_norm_and_depth(mp_id);
         }
         self.map_change_index += 1;
     }
@@ -493,6 +553,9 @@ impl Map {
         self.last_mp_id = -1;
         self.imu_initialized = false;
         self.imu_ba2 = false;
+
+        self.version += 1;
+        info!("Map reset! Version = {}", self.version);
     }
 
 }

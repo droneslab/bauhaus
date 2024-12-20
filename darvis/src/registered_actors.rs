@@ -1,9 +1,9 @@
-use core::{config::{SETTINGS, SYSTEM}, system::{Actor, Module, System}};
-use std::sync::{Arc, Mutex};
+use core::{config::{SETTINGS, SYSTEM}, system::{Actor, System}};
+use std::sync::Arc;
 use log::error;
 use parking_lot::RwLock;
 
-use crate::{modules::{bow::Vocabulary, camera::{Camera, CameraType}, imu::IMU, module_definitions::{FeatureExtractionModule, FeatureMatchingModule, FullMapOptimizationModule, ImuModule, LocalMapOptimizationModule, LoopDetectionModule}, orbslam_matcher::ORBMatcherTrait}, MapLock};
+use crate::{map::read_only_lock::ReadWriteMap, modules::{bow::Vocabulary, camera::{Camera, CameraType}, imu::IMU, module_definitions::{FeatureExtractionModule, FullMapOptimizationModule, LocalMapOptimizationModule, LoopDetectionModule}, orbslam_matcher::ORBMatcherTrait}};
 use crate::modules::module_definitions::VocabularyModule;
 
 // USER-DEFINED ACTORS: add a string to name your actor here
@@ -84,7 +84,7 @@ lazy_static! {
 
 
 pub fn spawn_actor(
-    actor_tag: String, system: System, map: Option<MapLock>
+    actor_tag: String, system: System, map: Option<ReadWriteMap>
 ) {
     // Spawn actors using the actor TAG, not NAME. These match up your intended actor with the actual file that implements it.
     // If it is clearer to you, you could make these tags equivalent to the name of the file that implements the actor.

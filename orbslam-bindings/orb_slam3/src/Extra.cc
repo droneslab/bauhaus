@@ -10,22 +10,37 @@ namespace orb_slam3 {
              rot_array[1][0], rot_array[1][1], rot_array[1][2],
              rot_array[2][0], rot_array[2][1], rot_array[2][2];
 
+        // std::cout << "R in c++: " << R << std::endl;
+
         Eigen::JacobiSVD<Eigen::Matrix3d> svd(R, Eigen::ComputeFullU | Eigen::ComputeFullV);
         auto temp = svd.matrixU() * svd.matrixV().transpose();
+
+        // std::cout << "Result in C++: " << temp << std::endl;
 
         std::array<std::array<double, 3>, 3> arr  = { {
             {temp(0,0), temp(0,1), temp(0,2)},
             {temp(1,0), temp(1,1), temp(1,2)},
             {temp(2,0), temp(2,1), temp(2,2)}
         } };
+
         return arr;
     }
 
-    SVDResult svd(rust::Vec<DoubleVec> mat){
+    SVDResult svd(rust::Vec<DoubleVec> mat, SVDComputeType compute_type){
         // Returns (U, V, singular values)
+        // Need to pass in type of SVD to compute, options below:
+        unsigned int compute_type_eigen;
+        switch (compute_type) {
+            case orb_slam3::SVDComputeType::ThinUThinV:
+                compute_type_eigen = Eigen::ComputeThinU | Eigen::ComputeThinV;
+                break;
+            case orb_slam3::SVDComputeType::FullV:
+                compute_type_eigen = Eigen::ComputeFullV;
+                break;
+        };
 
         Eigen::MatrixXd mat_c = rustvec_to_eigenmat(mat);
-        Eigen::JacobiSVD<Eigen::MatrixXd> svd(mat_c, Eigen::ComputeThinU | Eigen::ComputeThinV);
+        Eigen::JacobiSVD<Eigen::MatrixXd> svd(mat_c, compute_type_eigen);
         Eigen::JacobiSVD<Eigen::MatrixXd>::SingularValuesType singularValues_inv=svd.singularValues();
 
         SVDResult result;

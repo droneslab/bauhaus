@@ -280,11 +280,11 @@ public:
 
     void Update(const double *pu)
     {
-        std::cout << "Update gravity direction (original Rwg): " << Rwg << std::endl;
-        std::cout << "Update gravity direction pu: " << pu[0] << " " << pu[1] << std::endl;
+        // std::cout << "Update gravity direction (original Rwg): " << Rwg << std::endl;
+        // std::cout << "Update gravity direction pu: " << pu[0] << " " << pu[1] << std::endl;
 
         Rwg=Rwg*ExpSO3(pu[0],pu[1],0.0);
-        std::cout << "Update gravity direction: " << Rwg << std::endl;
+        // std::cout << "Update gravity direction: " << Rwg << std::endl;
     }
 
     Eigen::Matrix3d Rwg, Rgw;
@@ -422,7 +422,15 @@ public:
     void computeError(){
         const VertexPose* VPose = static_cast<const VertexPose*>(_vertices[0]);
         const Eigen::Vector2d obs(_measurement);
-        _error = obs - VPose->estimate().Project(Xw,cam_idx);
+        auto estimate = VPose->estimate();
+        auto vposeestimateproject = estimate.Project(Xw, cam_idx);
+        _error = obs - vposeestimateproject;
+        std::cout << "error edgemonoonlypose: " << _error << std::endl;
+        std::cout << "(obs: " << obs << ")" << std::endl;
+        // std::cout << "(Vpose estimate: " << estimate << ")" << std::endl;
+        std::cout << "(Vpose estimate project: " << vposeestimateproject << ")" << std::endl;
+
+        std::cout << "(Xw: " << Xw << ")" << std::endl;
     }
 
     virtual void linearizeOplus();
@@ -447,7 +455,7 @@ public:
     }
 
 
-  void set_robust_kernel(bool reset); // Darvis
+  void set_robust_kernel(bool reset, float delta); // Darvis
 
 public:
     const Eigen::Vector3d Xw;

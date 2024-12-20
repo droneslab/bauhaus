@@ -129,33 +129,41 @@ Preintegrated::Preintegrated(g2o::RustImuPreintegrated * pre)
     // These are used by the EdgeInertialGS object (G2oTypes.cc), in calls to:
     // GetDeltaRotation, GetDeltaVelocity, GetDeltaPosition, GetDeltaBias
     // on the mpInt object
+    // Not included: info, nga, ngawalk
+
     b = IMU::Bias(pre->bias.b_acc_x, pre->bias.b_acc_y, pre->bias.b_acc_z, pre->bias.b_ang_vel_x, pre->bias.b_ang_vel_y, pre->bias.b_ang_vel_z);
+
+    std::cout << "set imupreintegrated, b is: " << b << std::endl;
 
     // Nga = calib.Cov;
     // NgaWalk = calib.CovWalk;
     Initialize(b);
 
+
+    bu = b;
+
     dT = pre->t;
 
-    JRg << pre->jrg[0][0], pre->jrg[0][1], pre->jrg[0][2],
-        pre->jrg[1][0], pre->jrg[1][1], pre->jrg[1][2],
-        pre->jrg[2][0], pre->jrg[2][1], pre->jrg[2][2];
-    JPg << pre->jpg[0][0], pre->jpg[0][1], pre->jpg[0][2],
-        pre->jpg[1][0], pre->jpg[1][1], pre->jpg[1][2],
-        pre->jpg[2][0], pre->jpg[2][1], pre->jpg[2][2];
-    JPa << pre->jpa[0][0], pre->jpa[0][1], pre->jpa[0][2],
-        pre->jpa[1][0], pre->jpa[1][1], pre->jpa[1][2],
-        pre->jpa[2][0], pre->jpa[2][1], pre->jpa[2][2];
-    JVg << pre->jvg[0][0], pre->jvg[0][1], pre->jvg[0][2],
-        pre->jvg[1][0], pre->jvg[1][1], pre->jvg[1][2],
-        pre->jvg[2][0], pre->jvg[2][1], pre->jvg[2][2];
-    JVa << pre->jva[0][0], pre->jva[0][1], pre->jva[0][2],
-        pre->jva[1][0], pre->jva[1][1], pre->jva[1][2],
-        pre->jva[2][0], pre->jva[2][1], pre->jva[2][2];    
+    JRg << pre->jrg[0][0], pre->jrg[1][0], pre->jrg[2][0],
+        pre->jrg[0][1], pre->jrg[1][1], pre->jrg[2][1],
+        pre->jrg[0][2], pre->jrg[1][2], pre->jrg[2][2];
+    JPg << pre->jpg[0][0], pre->jpg[1][0], pre->jpg[2][0],
+        pre->jpg[0][1], pre->jpg[1][1], pre->jpg[2][1],
+        pre->jpg[0][2], pre->jpg[1][2], pre->jpg[2][2];
+    JPa << pre->jpa[0][0], pre->jpa[1][0], pre->jpa[2][0],
+        pre->jpa[0][1], pre->jpa[1][1], pre->jpa[2][1],
+        pre->jpa[0][2], pre->jpa[1][2], pre->jpa[2][2];
+    JVg << pre->jvg[0][0], pre->jvg[1][0], pre->jvg[2][0],
+        pre->jvg[0][1], pre->jvg[1][1], pre->jvg[2][1],
+        pre->jvg[0][2], pre->jvg[1][2], pre->jvg[2][2];
+    JVa << pre->jva[0][0], pre->jva[1][0], pre->jva[2][0],
+        pre->jva[0][1], pre->jva[1][1], pre->jva[2][1],
+        pre->jva[0][2], pre->jva[1][2], pre->jva[2][2];
 
-    dR << pre->dr[0][0], pre->dr[0][1], pre->dr[0][2],
-        pre->dr[1][0], pre->dr[1][1], pre->dr[1][2],
-        pre->dr[2][0], pre->dr[2][1], pre->dr[2][2];
+    dR << pre->dr[0][0], pre->dr[1][0], pre->dr[2][0],
+        pre->dr[0][1], pre->dr[1][1], pre->dr[2][1],
+        pre->dr[0][2], pre->dr[1][2], pre->dr[2][2];
+
 
     dV = Eigen::Vector3f(pre->dv.data());
     db = Eigen::Matrix<float,6,1>(pre->db.data());
@@ -164,26 +172,13 @@ Preintegrated::Preintegrated(g2o::RustImuPreintegrated * pre)
     avgA = Eigen::Vector3f(pre->avga.data());
     avgW = Eigen::Vector3f(pre->avgw.data());
 
-    C.setZero();
-    Eigen::Matrix<float,15,15> C_;
-    C_ << pre->c[0][0], pre->c[0][1], pre->c[0][2], pre->c[0][3], pre->c[0][4], pre->c[0][5], pre->c[0][6], pre->c[0][7], pre->c[0][8], pre->c[0][9], pre->c[0][10],  pre->c[0][11],  pre->c[0][12],  pre->c[0][13],  pre->c[0][14],
-        pre->c[1][0], pre->c[1][1], pre->c[1][2], pre->c[1][3], pre->c[1][4], pre->c[1][5], pre->c[1][6], pre->c[1][7], pre->c[1][8], pre->c[1][9], pre->c[1][10],  pre->c[1][11],  pre->c[1][12],  pre->c[1][13],  pre->c[1][14],
-        pre->c[2][0], pre->c[2][1], pre->c[2][2], pre->c[2][3], pre->c[2][4], pre->c[2][5], pre->c[2][6], pre->c[2][7], pre->c[2][8], pre->c[2][9], pre->c[2][10],  pre->c[2][11],  pre->c[2][12],  pre->c[2][13],  pre->c[2][14],
-        pre->c[3][0], pre->c[3][1], pre->c[3][2], pre->c[3][3], pre->c[3][4], pre->c[3][5], pre->c[3][6], pre->c[3][7], pre->c[3][8], pre->c[3][9], pre->c[3][10],  pre->c[3][11],  pre->c[3][12],  pre->c[3][13],  pre->c[3][14],
-        pre->c[4][0], pre->c[4][1], pre->c[4][2], pre->c[4][3], pre->c[4][4], pre->c[4][5], pre->c[4][6], pre->c[4][7], pre->c[4][8], pre->c[4][9], pre->c[4][10],  pre->c[4][11],  pre->c[4][12],  pre->c[4][13],  pre->c[4][14],
-        pre->c[5][0], pre->c[5][1], pre->c[5][2], pre->c[5][3], pre->c[5][4], pre->c[5][5], pre->c[5][6], pre->c[5][7], pre->c[5][8], pre->c[5][9], pre->c[5][10],  pre->c[5][11],  pre->c[5][12],  pre->c[5][13],  pre->c[5][14],
-        pre->c[6][0], pre->c[6][1], pre->c[6][2], pre->c[6][3], pre->c[6][4], pre->c[6][5], pre->c[6][6], pre->c[6][7], pre->c[6][8], pre->c[6][9], pre->c[6][10],  pre->c[6][11],  pre->c[6][12],  pre->c[6][13],  pre->c[6][14],
-        pre->c[7][0], pre->c[7][1], pre->c[7][2], pre->c[7][3], pre->c[7][4], pre->c[7][5], pre->c[7][6], pre->c[7][7], pre->c[7][8], pre->c[7][9], pre->c[7][10],  pre->c[7][11],  pre->c[7][12],  pre->c[7][13],  pre->c[7][14],
-        pre->c[8][0], pre->c[8][1], pre->c[8][2], pre->c[8][3], pre->c[8][4], pre->c[8][5], pre->c[8][6], pre->c[8][7], pre->c[8][8], pre->c[8][9],  pre->c[8][10],  pre->c[8][11],  pre->c[8][12],  pre->c[8][13],  pre->c[8][14],
-        pre->c[9][0], pre->c[9][1], pre->c[9][2], pre->c[9][3], pre->c[9][4], pre->c[9][5], pre->c[9][6], pre->c[9][7], pre->c[9][8], pre->c[9][9], pre->c[9][10],  pre->c[9][11],  pre->c[9][12],  pre->c[9][13],  pre->c[9][14],
-        pre->c[10][0], pre->c[10][1], pre->c[10][2], pre->c[10][3], pre->c[10][4], pre->c[10][5], pre->c[10][6], pre->c[10][7], pre->c[10][8], pre->c[10][9], pre->c[10][10], pre->c[10][11], pre->c[10][12], pre->c[10][13], pre->c[10][14],
-        pre->c[11][0], pre->c[11][1], pre->c[11][2], pre->c[11][3], pre->c[11][4], pre->c[11][5], pre->c[11][6], pre->c[11][7], pre->c[11][8], pre->c[11][9], pre->c[11][10], pre->c[11][11], pre->c[11][12], pre->c[11][13], pre->c[11][14],
-        pre->c[12][0], pre->c[12][1], pre->c[12][2], pre->c[12][3], pre->c[12][4], pre->c[12][5], pre->c[12][6], pre->c[12][7], pre->c[12][8], pre->c[12][9], pre->c[12][10], pre->c[12][11], pre->c[12][12], pre->c[12][13], pre->c[12][14],
-        pre->c[13][0], pre->c[13][1], pre->c[13][2], pre->c[13][3], pre->c[13][4], pre->c[13][5], pre->c[13][6], pre->c[13][7], pre->c[13][8], pre->c[13][9], pre->c[13][10], pre->c[13][11], pre->c[13][12], pre->c[13][13], pre->c[13][14],
-        pre->c[14][0], pre->c[14][1], pre->c[14][2], pre->c[14][3], pre->c[14][4], pre->c[14][5], pre->c[14][6], pre->c[14][7], pre->c[14][8], pre->c[14][9], pre->c[14][10], pre->c[14][11], pre->c[14][12], pre->c[14][13], pre->c[14][14];
-
-    C = C_;
-    pre->c.data();
+    for (int i = 0; i < 15; i++)
+    {
+        for (int j = 0; j < 15; j++)
+        {
+            C(i, j) = pre->c[j][i];
+        }
+    }
 }
 
 void Preintegrated::CopyFrom(Preintegrated* pImuPre)
@@ -349,6 +344,11 @@ Eigen::Matrix3f Preintegrated::GetDeltaRotation(const Bias &b_)
         dbg = Eigen::Vector3f(0,0,0);
     }
 
+    std::cout << "Get delta rotation.... " << std::endl;
+    std::cout << "...b: " << b << std::endl;
+    std::cout << "...Jrg: " << JRg << std::endl;
+    std::cout << "...dbg: " << dbg << std::endl;
+
     return NormalizeRotation(dR * Sophus::SO3f::exp(JRg * dbg).matrix());
 }
 
@@ -423,24 +423,25 @@ void Bias::CopyFrom(Bias &b)
 
 std::ostream& operator<< (std::ostream &out, const Bias &b)
 {
-    if(b.bwx>0)
+    out << "bax: ";
+    if (b.bax > 0)
         out << " ";
-    out << b.bwx << ",";
-    if(b.bwy>0)
+    out << b.bax << ", bay: ";
+    if (b.bay > 0)
         out << " ";
-    out << b.bwy << ",";
-    if(b.bwz>0)
+    out << b.bay << ", baz: ";
+    if (b.baz > 0)
         out << " ";
-    out << b.bwz << ",";
-    if(b.bax>0)
+    out << b.baz << "; bwx: ";
+    if (b.bwx > 0)
         out << " ";
-    out << b.bax << ",";
-    if(b.bay>0)
+    out << b.bwx << ", bwy: ";
+    if (b.bwy > 0)
         out << " ";
-    out << b.bay << ",";
-    if(b.baz>0)
+    out << b.bwy << ", bwz: ";
+    if (b.bwz > 0)
         out << " ";
-    out << b.baz;
+    out << b.bwz;
 
     return out;
 }

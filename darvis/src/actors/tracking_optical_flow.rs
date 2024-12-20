@@ -4,13 +4,13 @@ use std::{collections::{BTreeMap, BTreeSet, HashMap}, sync::atomic::Ordering, th
 use opencv::{prelude::*, types::VectorOfKeyPoint,types::VectorOfPoint2f, types::VectorOfu8, types::VectorOfMat};
 
 use core::{
-    config::*, matrix::*, sensor::{FrameSensor, ImuSensor, Sensor}, system::{Actor, System, Timestamp}
+    config::*, matrix::*, sensor::{FrameSensor, ImuSensor, Sensor}, system::{Actor, MessageBox, System, Timestamp}
 };
 use crate::{
     actors::{
         messages::{ImageMsg, LastKeyFrameUpdatedMsg, ShutdownMsg, UpdateFrameIMUMsg, VisFeaturesMsg},
         tracking_backend::TrackingState,
-    }, map::{features::Features, frame::Frame, keyframe::{KeyFrame, MapPointMatches}, map::Id, pose::Pose}, modules::{image, imu::{ImuBias, ImuMeasurements, ImuPreIntegrated, IMU}, map_initialization::MapInitialization, module_definitions::{FeatureExtractionModule, FeatureMatchingModule, ImuModule}, optimizer, orbslam_extractor::ORBExtractor, orbslam_matcher, relocalization::Relocalization}, registered_actors::{self, CAMERA_MODULE, FEATURE_MATCHING_MODULE, LOCAL_MAPPING, SHUTDOWN_ACTOR, TRACKING_BACKEND, VISUALIZER}, MapLock, MAP_INITIALIZED
+    }, map::{features::Features, frame::Frame, keyframe::MapPointMatches, map::Id, pose::Pose, read_only_lock::ReadWriteMap}, modules::{image, imu::{ImuBias, ImuMeasurements, ImuPreIntegrated, IMU}, map_initialization::MapInitialization, module_definitions::{FeatureExtractionModule, ImuModule}, optimizer, orbslam_extractor::ORBExtractor, relocalization::Relocalization}, registered_actors::{CAMERA_MODULE, FEATURE_MATCHING_MODULE, LOCAL_MAPPING, SHUTDOWN_ACTOR, TRACKING_BACKEND, VISUALIZER}, MAP_INITIALIZED
 };
 
 use super::{local_mapping::LOCAL_MAPPING_IDLE, messages::{ImagePathMsg, InitKeyFrameMsg, NewKeyFrameMsg, TrajectoryMsg, VisTrajectoryMsg}, tracking_backend::TrackedMapPointData};
@@ -25,6 +25,11 @@ pub struct TrackingOpticalFlow {
     _orb_extractor_right: Option<Box<dyn FeatureExtractionModule>>,
     orb_extractor_ini: Option<Box<dyn FeatureExtractionModule>>,
     init_id: Id,
+
+    // Frames
+    last_frame: Option<Frame>,
+    curr_frame_id: i32,
+    current_frame: Frame,
 
     /// Backend
     state: TrackingState,
@@ -42,7 +47,7 @@ pub struct TrackingOpticalFlow {
 
     /// References to map
     map_initialized: bool,
-    map: MapLock,
+    map: ReadWriteMap,
     initialization: Option<MapInitialization>, // data sent to map actor to initialize new map
     map_scale: f64,
 
@@ -70,9 +75,9 @@ pub struct TrackingOpticalFlow {
 }
 
 impl Actor for TrackingOpticalFlow {
-    type MapRef = MapLock;
+    type MapRef = ReadWriteMap;
 
-    fn new_actorstate(system: System, map: Self::MapRef) -> TrackingOpticalFlow {
+    fn spawn(system: System, map: Self::MapRef) {
         let sensor = SETTINGS.get::<Sensor>(SYSTEM, "sensor");
         let _orb_extractor_right: Option<Box<dyn FeatureExtractionModule>> = match sensor.frame() {
             FrameSensor::Stereo => Some(Box::new(ORBExtractor::new(false))),
@@ -88,7 +93,7 @@ impl Actor for TrackingOpticalFlow {
         // };
         let imu = Some(IMU::new());
 
-        TrackingOpticalFlow {
+        let mut actor = TrackingOpticalFlow {
             system,
             orb_extractor_left: Box::new(ORBExtractor::new(false)),
             _orb_extractor_right,
@@ -120,79 +125,80 @@ impl Actor for TrackingOpticalFlow {
             last_frame_seen: HashMap::new(),
             non_tracked_mappoints: HashMap::new(),
             last_keyframe_mappoint_matches: None,
-        }
-    }
-
-    fn spawn(system: System, map: Self::MapRef) {
+            last_frame: None,
+            current_frame: Frame::new_no_features(-1, None, 0.0, None).expect("Should be able to make dummy frame"),
+            curr_frame_id: -1
+        };
         tracy_client::set_thread_name!("tracking optical flow");
 
-        let mut actor = TrackingOpticalFlow::new_actorstate(system, map);
-        let max_queue_size = actor.system.receiver_bound.unwrap_or(100);
-
-        let mut curr_frame_id: Id = -1;
-        let mut last_frame: Option<Frame> = None;
-
-        'outer: loop {
+        loop {
             let message = actor.system.receive().unwrap();
-
-            if message.is::<ImagePathMsg>() || message.is::<ImageMsg>() {
-                if actor.system.queue_len() > max_queue_size {
-                    // Abort additional work if there are too many frames in the msg queue.
-                    info!("Tracking optical flow dropped 1 frame");
-                    continue;
-                }
-
-                let (image, timestamp, imu_measurements) = if message.is::<ImagePathMsg>() {
-                    let msg = message.downcast::<ImagePathMsg>().unwrap_or_else(|_| panic!("Could not downcast tracking message!"));
-                    (image::read_image_file(&msg.image_path), msg.timestamp, msg.imu_measurements)
-                } else {
-                    let msg = message.downcast::<ImageMsg>().unwrap_or_else(|_| panic!("Could not downcast tracking message!"));
-                    (msg.image, msg.timestamp, msg.imu_measurements)
-                };
-    
-                match actor.track(image, &mut curr_frame_id, timestamp, &mut last_frame, imu_measurements) {
-                    Ok((mut curr_frame, created_kf)) => { 
-                        curr_frame.ref_kf_id = actor.ref_kf_id;
-
-                        match actor.state {
-                            TrackingState::Ok | TrackingState::RecentlyLost => {
-                                actor.update_trajectory_in_logs(&curr_frame, last_frame.as_mut().unwrap(), created_kf).expect("Could not save trajectory")
-                            },
-                            _ => {},
-                        };
-                        last_frame = Some(curr_frame);
-                        curr_frame_id += 1;
-                        actor.frames_since_last_kf = if created_kf { 0 } else { actor.frames_since_last_kf + 1 };
-                     },
-                    Err(e) => {
-                        error!("Error in tracking optical flow: {}", e);
-                        continue;
-                    }
-                };
-            } else if message.is::<InitKeyFrameMsg>() {
-                // Received from local mapping after it inserts a keyframe
-                let msg = message.downcast::<InitKeyFrameMsg>().unwrap_or_else(|_| panic!("Could not downcast tracking frontend message!"));
-
-                actor.ref_kf_id = Some(msg.kf_id);
-            } else if message.is::<LastKeyFrameUpdatedMsg>() {
-                // Received from local mapping after it culls and creates new MPs for the last inserted KF
-                actor.state = TrackingState::Ok;
-            } else if message.is::<UpdateFrameIMUMsg>() {
-                todo!("IMU ... process message from local mapping!");
-            } else if message.is::<ShutdownMsg>() {
-                break 'outer;
-            } else {
-                warn!("Tracking backend received unknown message type!");
+            if actor.handle_message(message) {
+                break;
             }
+            actor.map.match_map_version();
         }
     }
+
 }
 
 impl TrackingOpticalFlow {
+    fn handle_message(&mut self, message: MessageBox) -> bool {
+        if message.is::<ImagePathMsg>() || message.is::<ImageMsg>() {
+            if self.system.queue_full() {
+                // Abort additional work if there are too many frames in the msg queue.
+                info!("Tracking optical flow dropped 1 frame");
+                return false;
+            }
+
+            let (image, timestamp, imu_measurements) = if message.is::<ImagePathMsg>() {
+                let msg = message.downcast::<ImagePathMsg>().unwrap_or_else(|_| panic!("Could not downcast tracking message!"));
+                (image::read_image_file(&msg.image_path), msg.timestamp, msg.imu_measurements)
+            } else {
+                let msg = message.downcast::<ImageMsg>().unwrap_or_else(|_| panic!("Could not downcast tracking message!"));
+                (msg.image, msg.timestamp, msg.imu_measurements)
+            };
+
+            match self.track(image, timestamp, imu_measurements) {
+                Ok((mut curr_frame, created_kf)) => { 
+                    curr_frame.ref_kf_id = self.ref_kf_id;
+
+                    match self.state {
+                        TrackingState::Ok | TrackingState::RecentlyLost => {
+                            self.update_trajectory_in_logs(created_kf).expect("Could not save trajectory")
+                        },
+                        _ => {},
+                    };
+                    self.last_frame = Some(curr_frame);
+                    self.curr_frame_id += 1;
+                    self.frames_since_last_kf = if created_kf { 0 } else { self.frames_since_last_kf + 1 };
+                    },
+                Err(e) => {
+                    error!("Error in tracking optical flow: {}", e);
+                    return false;
+                }
+            };
+        } else if message.is::<InitKeyFrameMsg>() {
+            // Received from local mapping after it inserts a keyframe
+            let msg = message.downcast::<InitKeyFrameMsg>().unwrap_or_else(|_| panic!("Could not downcast tracking frontend message!"));
+
+            self.ref_kf_id = Some(msg.kf_id);
+        } else if message.is::<LastKeyFrameUpdatedMsg>() {
+            // Received from local mapping after it culls and creates new MPs for the last inserted KF
+            self.state = TrackingState::Ok;
+        } else if message.is::<UpdateFrameIMUMsg>() {
+            todo!("IMU ... process message from local mapping!");
+        } else if message.is::<ShutdownMsg>() {
+            return true;
+        } else {
+            warn!("Tracking backend received unknown message type!");
+        }
+        return false;
+    }
+
     fn track(
         &mut self,
-        curr_img: opencv::core::Mat, curr_frame_id: &mut i32, timestamp: Timestamp,
-        last_frame: &mut Option<Frame>,
+        curr_img: opencv::core::Mat, timestamp: Timestamp,
         mut imu_measurements: ImuMeasurements,
     ) -> Result<(Frame, bool), Box<dyn std::error::Error>> {
         let mut current_frame: Frame;
@@ -201,27 +207,28 @@ impl TrackingOpticalFlow {
 
         if matches!(self.state, TrackingState::NotInitialized) {
             // If map is not initialized yet, just extract features and try to initialize
-            let (keypoints, descriptors) = self.extract_features(curr_img.clone(), *curr_frame_id);
+            let (keypoints, descriptors) = self.extract_features(curr_img.clone(), self.curr_frame_id);
 
             current_frame = Frame::new(
-                *curr_frame_id, 
+                self.curr_frame_id, 
                 keypoints,
                 descriptors,
                 curr_img.cols() as u32,
                 curr_img.rows() as u32,
                 Some(curr_img.clone()),
-                last_frame.as_ref(),
+                self.last_frame.as_ref(),
+                self.map.read()?.imu_initialized,
                 timestamp,
             ).expect("Could not create frame!");
 
             if self.initialization.is_none() {
                 self.initialization = Some(MapInitialization::new());
             }
-            let init_success = self.initialization.as_mut().unwrap().try_initialize(&current_frame)?;
+            let init_success = self.initialization.as_mut().unwrap().try_initialize(&current_frame, &mut self.imu.as_mut().unwrap().imu_preintegrated_from_last_kf)?;
             if init_success {
                 let (ini_kf_id, curr_kf_id);
                 {
-                    (ini_kf_id, curr_kf_id) = match self.initialization.as_mut().unwrap().create_initial_map_monocular(&mut self.map,  & self.imu.as_ref().unwrap().imu_preintegrated_from_last_kf) {
+                    (ini_kf_id, curr_kf_id) = match self.initialization.as_mut().unwrap().create_initial_map_monocular(&mut self.map,  &mut self.imu.as_mut().unwrap().imu_preintegrated_from_last_kf)? {
                         Some((curr_kf_pose, curr_kf_id, ini_kf_id, local_mappoints, curr_kf_timestamp, map_scale)) => {
                             // Map needs to be initialized before tracking can begin. Received from map actor
                             self.frames_since_last_kf = 0;
@@ -232,23 +239,24 @@ impl TrackingOpticalFlow {
                             self.last_kf_timestamp = Some(curr_kf_timestamp);
                             self.map_scale = map_scale;
                             if self.sensor.is_imu() {
-                                self.imu.as_mut().unwrap().imu_preintegrated_from_last_kf = ImuPreIntegrated::new(self.map.read().keyframes.get(& curr_kf_id).unwrap().imu_data.imu_preintegrated.as_ref().unwrap().get_updated_bias());
+                                self.imu.as_mut().unwrap().imu_preintegrated_from_last_kf = ImuPreIntegrated::new(self.map.read()?.get_keyframe( curr_kf_id).imu_data.imu_preintegrated.as_ref().unwrap().get_updated_bias());
                             }
 
                             {
                                 // Set current frame's updated info from map initialization
                                 current_frame.pose = Some(curr_kf_pose);
                                 current_frame.ref_kf_id = Some(curr_kf_id);
-                                self.last_keyframe_mappoint_matches = Some(self.map.read().keyframes.get(&curr_kf_id).unwrap().clone_matches());
+                                self.last_keyframe_mappoint_matches = Some(self.map.read()?.get_keyframe(curr_kf_id).clone_matches());
                             }
                             self.state = TrackingState::Ok;
 
                             // Log initial pose in shutdown actor
                             self.system.send(SHUTDOWN_ACTOR, 
                             Box::new(TrajectoryMsg{
-                                    pose: self.map.read().keyframes.get(&ini_kf_id).unwrap().get_pose(),
+                                    pose: self.map.read()?.get_keyframe(ini_kf_id).get_pose(),
                                     ref_kf_id: ini_kf_id,
-                                    timestamp: self.map.read().keyframes.get(&ini_kf_id).unwrap().timestamp
+                                    timestamp: self.map.read()?.get_keyframe(ini_kf_id).timestamp,
+                                    map_version: self.map.read()?.version
                                 })
                             );
 
@@ -265,10 +273,10 @@ impl TrackingOpticalFlow {
 
                 // Send first two keyframes to local mapping
                 self.system.send(LOCAL_MAPPING, Box::new(
-                    InitKeyFrameMsg { kf_id: ini_kf_id }
+                    InitKeyFrameMsg { kf_id: ini_kf_id, map_version: self.map.read()?.version }
                 ));
                 self.system.send(LOCAL_MAPPING,Box::new(
-                    InitKeyFrameMsg { kf_id: curr_kf_id }
+                    InitKeyFrameMsg { kf_id: curr_kf_id, map_version: self.map.read()?.version }
                 ));
 
                 self.state = TrackingState::Ok;
@@ -279,41 +287,40 @@ impl TrackingOpticalFlow {
         } else {
             // If this is not the first image, track features from the last image
 
-            let mut last_frame = last_frame.as_mut().unwrap();
             // let (keypoints, descriptors) = self.extract_features(curr_img.clone(), *curr_frame_id);
             current_frame = Frame::new_no_features(
-                *curr_frame_id, 
+                self.curr_frame_id, 
                 Some(curr_img.clone()),
                 timestamp,
-                Some(& last_frame)
+                Some(& self.last_frame.as_mut().unwrap())
             ).expect("Could not create frame!");
 
-            let status = self.get_feature_tracks(last_frame, &mut current_frame)?;
+            let status = self.get_feature_tracks()?;
 
             debug!("Optical flow, tracked {} from original {}", current_frame.features.num_keypoints, status.len());
 
-            let transform = Self::calculate_transform(&last_frame, &current_frame)?;
+            let transform = self.calculate_transform()?;
             // self.associate_feature_tracks_with_mappoints(&mut current_frame, last_frame);
 
             // Scale translation with median depth
 
             // Old scale using distance between last keyframes
             // let try_scale = {
-            //     let lock = self.map.read();
+            //     let lock = self.map.read()?;
             //     let ref_kf_id = self.ref_kf_id.unwrap();
 
             //     let mut count = 1;
-            //     while lock.keyframes.get(&(ref_kf_id - count)).is_none() {
+            //     while lock.get_keyframe(&(ref_kf_id - count)).is_none() {
             //         count += 1;
             //     }
-            //     let second_to_last = lock.keyframes.get(&(ref_kf_id - count)).unwrap();
-            //     let last_kf = lock.keyframes.get(&ref_kf_id).unwrap();
+            //     let second_to_last = lock.get_keyframe((ref_kf_id - count));
+            //     let last_kf = lock.get_keyframe(ref_kf_id);
             //     (*second_to_last.get_camera_center() - *last_kf.get_camera_center()).norm()
             // };
 
             let new_trans = *transform.get_translation() * (self.map_scale);
             current_frame.pose = Some(
-                Pose::new(new_trans, * transform.get_rotation()) * last_frame.pose.unwrap()
+                Pose::new(new_trans, * transform.get_rotation()) * self.last_frame.as_ref().unwrap().pose.unwrap()
             );
 
             // Sofiya: old extracting features
@@ -361,34 +368,33 @@ impl TrackingOpticalFlow {
             // }
 
             if self.sensor.is_imu() {
+                let lock = self.map.read()?;
                 if let Some(ref_kf_id) = self.ref_kf_id {
-                    if let Some(ref_kf) = self.map.read().keyframes.get(&ref_kf_id) {
-                        current_frame.imu_data.set_new_bias(ref_kf.imu_data.imu_bias);
-                        println!("Tracking, set current frame bias to last KF ({}) bias {}", ref_kf.frame_id, ref_kf.imu_data.imu_bias);
-                    }
+                    let ref_kf = lock.get_keyframe(ref_kf_id);
+                    current_frame.imu_data.set_new_bias(ref_kf.imu_data.get_imu_bias());
                 }
-                self.imu.as_mut().unwrap().preintegrate(&mut imu_measurements, &mut current_frame, last_frame, self.map.read().last_kf_id);
+                self.imu.as_mut().unwrap().preintegrate(&mut imu_measurements, &mut current_frame, self.last_frame.as_mut().unwrap(), lock.last_kf_id);
             }
 
 
             if c1a || c1b || c1c {
-                self.extract_features_and_add_to_existing(&mut current_frame, *curr_frame_id)?;
+                self.extract_features_and_add_to_existing()?;
 
                 println!("Current pose guess: {:?}", current_frame.pose.unwrap());
 
-                let matches = self.track_reference_keyframe(&mut current_frame, &last_frame.pose.unwrap());
+                let matches = self.track_reference_keyframe();
 
                 // println!("Matches with reference keyframe: {} (kf is {})", matches?, self.ref_kf_id.unwrap());
 
                 // // Condition 2: Few tracked points compared to reference keyframe. Lots of visual odometry compared to map matches.
                 // // let c2 = (((self.matches_inliers as f32) < tracked_mappoints * th_ref_ratio || need_to_insert_close)) && self.matches_inliers > 15;
-                // let c2 = matches < self.map.read().keyframes.get(&self.ref_kf_id.unwrap()).unwrap().mp_match_len() as f32 * 0.5;
+                // let c2 = matches < self.map.read()?.get_keyframe(&self.ref_kf_id.unwrap()).unwrap().mp_match_len() as f32 * 0.5;
 
                 // if true {
                     debug!("Creating new keyframe!");
                     created_keyframe = true;
 
-                    let (track_success, matches) = self.track_local_map(&mut current_frame);
+                    let (track_success, matches) = self.track_local_map(&mut current_frame)?;
                     // if !track_success {
                     //     panic!("Tracking lost with {} matches to local map! Need to relocalize", matches);
                     // } else {
@@ -424,18 +430,18 @@ impl TrackingOpticalFlow {
     }
 
 
-    fn extract_features_and_add_to_existing(&mut self, frame: &mut Frame, curr_frame_id: i32) -> Result<(), Box<dyn std::error::Error>> {
+    fn extract_features_and_add_to_existing(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         let _span = tracy_client::span!("extract features");
 
-        let (keypoints, descriptors) = self.extract_features(frame.image.as_ref().unwrap().clone(), curr_frame_id);
+        let (keypoints, descriptors) = self.extract_features(self.current_frame.image.as_ref().unwrap().clone(), self.curr_frame_id);
 
         let mut new_keypoints = VectorOfKeyPoint::new();
         let mut new_descriptor = Mat::default();
         let mut new_descriptor_vec = VectorOfMat::new();
 
-        for i in 0..frame.features.num_keypoints {
-            new_keypoints.push(frame.features.get_keypoint(i as usize).0);
-            new_descriptor_vec.push((* frame.features.descriptors.row(i as u32)).clone());
+        for i in 0..self.current_frame.features.num_keypoints {
+            new_keypoints.push(self.current_frame.features.get_keypoint(i as usize).0);
+            new_descriptor_vec.push((* self.current_frame.features.descriptors.row(i as u32)).clone());
         }
 
         for i in 0..keypoints.len() {
@@ -447,12 +453,15 @@ impl TrackingOpticalFlow {
 
         // println!("Re-extracting features, before: {}, after: {}", frame.features.num_keypoints, new_keypoints.len());
 
-        frame.replace_features(DVVectorOfKeyPoint::new(new_keypoints), DVMatrix::new(new_descriptor))?;
+        self.current_frame.replace_features(DVVectorOfKeyPoint::new(new_keypoints), DVMatrix::new(new_descriptor))?;
         Ok(())
     }
 
-    fn get_feature_tracks(&self, frame1: &mut Frame, frame2: &mut Frame) -> Result<VectorOfu8, Box<dyn std::error::Error>> {
+    fn get_feature_tracks(&mut self) -> Result<VectorOfu8, Box<dyn std::error::Error>> {
         let mut status = VectorOfu8::new();
+
+        let frame1 = self.last_frame.as_mut().unwrap();
+        let mut frame2 = &mut self.current_frame;
 
         let mut points1: VectorOfPoint2f = frame1.features.get_all_keypoints().iter().map(|kp| kp.pt()).collect();
         let mut points2 = VectorOfPoint2f::new();
@@ -503,10 +512,10 @@ impl TrackingOpticalFlow {
         Ok(status)
     }
 
-    fn calculate_transform(last_frame: &Frame, current_frame: &Frame) -> Result<Pose, Box<dyn std::error::Error>> {
+    fn calculate_transform(&self) -> Result<Pose, Box<dyn std::error::Error>> {
         // recovering the pose and the essential matrix
-        let prev_features: VectorOfPoint2f = last_frame.features.get_all_keypoints().iter().map(|kp| kp.pt()).collect();
-        let curr_features: VectorOfPoint2f = current_frame.features.get_all_keypoints().iter().map(|kp| kp.pt()).collect();
+        let prev_features: VectorOfPoint2f = self.last_frame.as_ref().unwrap().features.get_all_keypoints().iter().map(|kp| kp.pt()).collect();
+        let curr_features: VectorOfPoint2f = self.current_frame.features.get_all_keypoints().iter().map(|kp| kp.pt()).collect();
 
         let (mut recover_r, mut recover_t, mut mask) = (Mat::default(), Mat::default(), Mat::default());
         let essential_mat = opencv::calib3d::find_essential_mat(
@@ -544,41 +553,43 @@ impl TrackingOpticalFlow {
     }
 
     fn update_trajectory_in_logs(
-        &mut self, current_frame: &Frame, last_frame: &Frame, created_new_kf: bool,
+        &mut self, created_new_kf: bool,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let relative_pose = {
             let reference_pose = if created_new_kf {
                 // If we created a new kf this round, the relative keyframe pose is the same as the current frame pose.
-                current_frame.pose.unwrap()
-            } else if last_frame.pose.is_none() {
+                self.current_frame.pose.unwrap()
+            } else if self.last_frame.as_ref().unwrap().pose.is_none() {
                 // This condition should only happen for the first frame after initialization
-                self.map.read().keyframes.get(&self.ref_kf_id.unwrap()).expect("Can't get ref kf from map").get_pose().inverse()
+                self.map.read()?.get_keyframe(self.ref_kf_id.unwrap()).get_pose().inverse()
             } else {
-                last_frame.pose.unwrap()
+                self.last_frame.as_ref().unwrap().pose.unwrap()
             };
 
-            current_frame.pose.unwrap() * reference_pose.inverse()
+            self.current_frame.pose.unwrap() * reference_pose.inverse()
         };
 
         self.trajectory_poses.push(relative_pose);
 
-        info!("Frame {} pose: {:?}", current_frame.frame_id, current_frame.pose);
+        info!("Frame {} pose: {:?}", self.current_frame.frame_id, self.current_frame.pose);
 
         self.system.send(
             SHUTDOWN_ACTOR, 
             Box::new(TrajectoryMsg{
-                pose: current_frame.pose.unwrap().inverse(),
-                ref_kf_id: current_frame.ref_kf_id.unwrap(),
-                timestamp: current_frame.timestamp
+                pose: self.current_frame.pose.unwrap().inverse(),
+                ref_kf_id: self.current_frame.ref_kf_id.unwrap(),
+                timestamp: self.current_frame.timestamp,
+                map_version: self.map.read()?.version
             })
         );
 
         self.system.try_send(VISUALIZER, Box::new(VisTrajectoryMsg{
-            pose: current_frame.pose.unwrap(),
+            pose: self.current_frame.pose.unwrap(),
             mappoint_matches: vec![],
             nontracked_mappoints: HashMap::new(),
             mappoints_in_tracking: self.local_mappoints.clone(),
-            timestamp: current_frame.timestamp
+            timestamp: self.current_frame.timestamp,
+            map_version: self.map.read()?.version
         }));
 
         Ok(())
@@ -590,8 +601,8 @@ impl TrackingOpticalFlow {
 
     //     println!("PRev: {}, curr: {}", prev_features.len(), curr_features.len());
         
-    //     let lock = self.map.read();
-    //     let ref_kf = lock.keyframes.get(& self.ref_kf_id.unwrap()).unwrap();
+    //     let lock = self.map.read()?;
+    //     let ref_kf = lock.get_keyframe(& self.ref_kf_id.unwrap()).unwrap();
 
     //     for idx in 0..prev_features.len() {
             
@@ -601,20 +612,20 @@ impl TrackingOpticalFlow {
 
     // }
 
-    fn track_reference_keyframe(&mut self, current_frame: &mut Frame, last_frame_pose: &Pose) -> Result<u32, Box<dyn std::error::Error>> {
+    fn track_reference_keyframe(&mut self) -> Result<u32, Box<dyn std::error::Error>> {
         let _span = tracy_client::span!("track_reference_keyframe");
         // Tracking::TrackReferenceKeyFrame()
         // We perform first an ORB matching with the reference keyframe
         // If enough matches are found we setup a PnP solver
 
-        current_frame.compute_bow();
+        self.current_frame.compute_bow();
         let nmatches;
         {
-            let map_read_lock = self.map.read();
+            let map_read_lock = self.map.read()?;
             self.ref_kf_id = Some(map_read_lock.last_kf_id);
-            let ref_kf = map_read_lock.keyframes.get(&self.ref_kf_id.unwrap()).unwrap();
+            let ref_kf = map_read_lock.get_keyframe(self.ref_kf_id.unwrap());
 
-            nmatches = FEATURE_MATCHING_MODULE.search_by_bow_with_frame(ref_kf, current_frame, true, 0.7)?;
+            nmatches = FEATURE_MATCHING_MODULE.search_by_bow_with_frame(ref_kf, &mut self.current_frame, true, 0.7)?;
             debug!("Tracking search by bow: {} matches / {} matches in keyframe {}. ({} total mappoints in map)", nmatches, ref_kf.get_mp_matches().iter().filter(|item| item.is_some()).count(), ref_kf.id, map_read_lock.mappoints.len());
         }
 
@@ -623,16 +634,16 @@ impl TrackingOpticalFlow {
             return Ok(nmatches);
         }
 
-        current_frame.pose = Some(* last_frame_pose);
-        optimizer::optimize_pose(current_frame, &self.map);
+        self.current_frame.pose = Some(* self.last_frame.as_ref().unwrap().pose.as_ref().unwrap());
+        optimizer::optimize_pose(&mut self.current_frame, &self.map)?;
 
         // Discard outliers
-        let nmatches_map = self.discard_outliers(current_frame);
+        let nmatches_map = self.discard_outliers()?;
 
         return Ok(nmatches_map as u32);
     }
 
-    fn track_local_map(&mut self, current_frame: &mut Frame) -> (bool, i32) {
+    fn track_local_map(&mut self, current_frame: &mut Frame) -> Result<(bool, i32), Box<dyn std::error::Error>> {
         let _span = tracy_client::span!("track_local_map");
         // bool Tracking::TrackLocalMap()
         // We have an estimation of the camera pose and some map points tracked in the frame.
@@ -640,44 +651,41 @@ impl TrackingOpticalFlow {
 
         // self.update_local_keyframes(current_frame);
         {
-            let lock = self.map.read();
-            let mut local_kf_vec: Vec<Id> = lock.keyframes.get(&self.ref_kf_id.unwrap()).unwrap().get_covisibility_keyframes(5).iter().map(|x| *x).collect();
+            let lock = self.map.read()?;
+            let mut local_kf_vec: Vec<Id> = lock.get_keyframe(self.ref_kf_id.unwrap()).get_covisibility_keyframes(5).iter().map(|x| *x).collect();
             local_kf_vec.push(self.ref_kf_id.unwrap());
 
             // Also include some keyframes that are neighbors to already-included keyframes
             let mut i = 0;
             while local_kf_vec.len() <= 80 && i < local_kf_vec.len() { // Limit the number of keyframes
                 let next_kf_id = local_kf_vec[i];
-                let kf = lock.keyframes.get(&next_kf_id);
-                match kf {
-                    Some(kf) => {
-                        for kf_id in &kf.get_covisibility_keyframes(10) {
-                            if self.kf_track_reference_for_frame.get(kf_id) != Some(&current_frame.frame_id) {
-                                local_kf_vec.push(*kf_id);
-                                self.kf_track_reference_for_frame.insert(*kf_id, current_frame.frame_id);
-                                break;
-                            }
+                if lock.has_keyframe(next_kf_id) {
+                    let kf = lock.get_keyframe(next_kf_id);
+                    for kf_id in &kf.get_covisibility_keyframes(10) {
+                        if self.kf_track_reference_for_frame.get(kf_id) != Some(&current_frame.frame_id) {
+                            local_kf_vec.push(*kf_id);
+                            self.kf_track_reference_for_frame.insert(*kf_id, current_frame.frame_id);
+                            break;
                         }
-                        for kf_id in &kf.children {
-                            if self.kf_track_reference_for_frame.get(kf_id) != Some(&current_frame.frame_id) {
-                                local_kf_vec.push(*kf_id);
-                                self.kf_track_reference_for_frame.insert(*kf_id, current_frame.frame_id);
-                                break;
-                            }
+                    }
+                    for kf_id in &kf.children {
+                        if self.kf_track_reference_for_frame.get(kf_id) != Some(&current_frame.frame_id) {
+                            local_kf_vec.push(*kf_id);
+                            self.kf_track_reference_for_frame.insert(*kf_id, current_frame.frame_id);
+                            break;
                         }
+                    }
 
-                        if let Some(parent_id) = kf.parent {
-                            if self.kf_track_reference_for_frame.get(&parent_id) != Some(&current_frame.frame_id) {
-                                local_kf_vec.push(parent_id);
-                                self.kf_track_reference_for_frame.insert(parent_id, current_frame.frame_id);
-                            }
-                        };
-                    },
-                    None => {
-                        // KF could have been deleted since constructing local_kf_vec
-                        local_kf_vec.remove(i);
-                    },
-                };
+                    if let Some(parent_id) = kf.parent {
+                        if self.kf_track_reference_for_frame.get(&parent_id) != Some(&current_frame.frame_id) {
+                            local_kf_vec.push(parent_id);
+                            self.kf_track_reference_for_frame.insert(parent_id, current_frame.frame_id);
+                        }
+                    };
+                } else {
+                    // KF could have been deleted since constructing local_kf_vec
+                    local_kf_vec.remove(i);
+                }
 
                 i += 1;
             }
@@ -686,27 +694,27 @@ impl TrackingOpticalFlow {
             // println!("Local keyframes: {:?}", self.local_keyframes);
         }
 
-        self.update_local_points(current_frame);
+        self.update_local_points(current_frame)?;
         match self.search_local_points(current_frame) {
             Ok(res) => res,
             Err(e) => warn!("Error in search_local_points: {}", e)
         }
 
-        optimizer::optimize_pose(current_frame, &self.map);
+        optimizer::optimize_pose(current_frame, &self.map)?;
 
-        self.discard_outliers(current_frame);
+        self.discard_outliers()?;
 
         self.matches_inliers = 0;
         // Update MapPoints Statistics
         for index in 0..current_frame.mappoint_matches.len() {
             if let Some((mp_id, is_outlier)) = current_frame.mappoint_matches.get(index) {
                 if !is_outlier {
-                    if let Some(mp) = self.map.read().mappoints.get(&mp_id) {
+                    if let Some(mp) = self.map.read()?.mappoints.get(&mp_id) {
                         mp.increase_found(1);
                     }
 
                     if self.localization_only_mode {
-                        let map_read_lock = self.map.read();
+                        let map_read_lock = self.map.read()?;
                         if let Some(mp) = map_read_lock.mappoints.get(&mp_id) {
                             if mp.get_observations().len() > 0 {
                                 self.matches_inliers+=1;
@@ -730,37 +738,37 @@ impl TrackingOpticalFlow {
         // More restrictive if there was a relocalization recently
         if current_frame.frame_id < self.relocalization.last_reloc_frame_id + (self.max_frames_to_insert_kf as i32) && self.matches_inliers<50 {
             warn!("track_local_map unsuccessful; matches in frame < 50 : {}",self.matches_inliers);
-            return (false, self.matches_inliers);
+            return Ok((false, self.matches_inliers));
         }
 
         match self.state {
             TrackingState::RecentlyLost => { 
-                return (self.matches_inliers > 10, self.matches_inliers);
+                return Ok((self.matches_inliers > 10, self.matches_inliers));
             },
             _ => {}
         }
 
         match self.sensor {
             Sensor(FrameSensor::Mono, ImuSensor::Some) => { 
-                return (
-                    !(self.matches_inliers<15 && self.map.read().imu_initialized) && !(self.matches_inliers<50 && !self.map.read().imu_initialized),
+                return Ok((
+                    !(self.matches_inliers<15 && self.map.read()?.imu_initialized) && !(self.matches_inliers<50 && !self.map.read()?.imu_initialized),
                     self.matches_inliers
-                )
+                ))
             },
             Sensor(FrameSensor::Stereo, ImuSensor::Some) | Sensor(FrameSensor::Rgbd, ImuSensor::Some) => {
-                return (self.matches_inliers >= 15, self.matches_inliers);
+                return Ok((self.matches_inliers >= 15, self.matches_inliers));
             },
-            _ => { return (self.matches_inliers > 30, self.matches_inliers) }
+            _ => { return Ok((self.matches_inliers > 30, self.matches_inliers)) }
         }
     }
 
-    fn update_local_keyframes(&mut self, current_frame: &mut Frame) -> Option<()> {
+    fn update_local_keyframes(&mut self, current_frame: &mut Frame) -> Result<(), Box<dyn std::error::Error>> {
         let _span = tracy_client::span!("update_local_keyframes");
         // void Tracking::UpdateLocalKeyFrames()
         // Each map point votes for the keyframes in which it has been observed
 
         let mut kf_counter = BTreeMap::<Id, i32>::new();
-        let lock = self.map.read();
+        let lock = self.map.read()?;
         for i in 0..current_frame.mappoint_matches.len() {
             if let Some((mp_id, _is_outlier)) = current_frame.mappoint_matches.get(i as usize) {
                 if let Some(mp) = lock.mappoints.get(&mp_id) {
@@ -793,36 +801,33 @@ impl TrackingOpticalFlow {
         let mut i = 0;
         while local_kf_vec.len() <= 80 && i < local_kf_vec.len() { // Limit the number of keyframes
             let next_kf_id = local_kf_vec[i];
-            let kf = lock.keyframes.get(&next_kf_id);
-            match kf {
-                Some(kf) => {
-                    for kf_id in &kf.get_covisibility_keyframes(10) {
-                        if self.kf_track_reference_for_frame.get(kf_id) != Some(&current_frame.frame_id) {
-                            local_kf_vec.push(*kf_id);
-                            self.kf_track_reference_for_frame.insert(*kf_id, current_frame.frame_id);
-                            break;
-                        }
+            if lock.has_keyframe(next_kf_id) {
+                let kf = lock.get_keyframe(next_kf_id);
+                for kf_id in &kf.get_covisibility_keyframes(10) {
+                    if self.kf_track_reference_for_frame.get(kf_id) != Some(&current_frame.frame_id) {
+                        local_kf_vec.push(*kf_id);
+                        self.kf_track_reference_for_frame.insert(*kf_id, current_frame.frame_id);
+                        break;
                     }
-                    for kf_id in &kf.children {
-                        if self.kf_track_reference_for_frame.get(kf_id) != Some(&current_frame.frame_id) {
-                            local_kf_vec.push(*kf_id);
-                            self.kf_track_reference_for_frame.insert(*kf_id, current_frame.frame_id);
-                            break;
-                        }
+                }
+                for kf_id in &kf.children {
+                    if self.kf_track_reference_for_frame.get(kf_id) != Some(&current_frame.frame_id) {
+                        local_kf_vec.push(*kf_id);
+                        self.kf_track_reference_for_frame.insert(*kf_id, current_frame.frame_id);
+                        break;
                     }
+                }
 
-                    if let Some(parent_id) = kf.parent {
-                        if self.kf_track_reference_for_frame.get(&parent_id) != Some(&current_frame.frame_id) {
-                            local_kf_vec.push(parent_id);
-                            self.kf_track_reference_for_frame.insert(parent_id, current_frame.frame_id);
-                        }
-                    };
-                },
-                None => {
-                    // KF could have been deleted since constructing local_kf_vec
-                    local_kf_vec.remove(i);
-                },
-            };
+                if let Some(parent_id) = kf.parent {
+                    if self.kf_track_reference_for_frame.get(&parent_id) != Some(&current_frame.frame_id) {
+                        local_kf_vec.push(parent_id);
+                        self.kf_track_reference_for_frame.insert(parent_id, current_frame.frame_id);
+                    }
+                };
+            } else {
+                // KF could have been deleted since constructing local_kf_vec
+                local_kf_vec.remove(i);
+            }
 
             i += 1;
         }
@@ -841,29 +846,29 @@ impl TrackingOpticalFlow {
             current_frame.ref_kf_id = Some(max_kf_id);
             self.ref_kf_id = Some(max_kf_id);
         }
-        None
+        Ok(())
     }
 
-    fn update_local_points(&mut self, current_frame: &mut Frame) {
+    fn update_local_points(&mut self, current_frame: &mut Frame) -> Result<(), Box<dyn std::error::Error>> {
         let _span = tracy_client::span!("update_local_points");
         // void Tracking::UpdateLocalPoints()
         self.local_mappoints.clear();
-        let lock = self.map.read();
+        let lock = self.map.read()?;
         let mut kfs_to_remove = vec![];
         for kf_id in self.local_keyframes.iter().rev() {
-            match lock.keyframes.get(kf_id) {
-                Some(kf) => {
-                    let mp_ids = kf.get_mp_matches();
-                    for item in mp_ids {
-                        if let Some((mp_id, _)) = item {
-                            if self.mp_track_reference_for_frame.get(mp_id) != Some(&current_frame.frame_id) {
-                                self.local_mappoints.insert(*mp_id);
-                                self.mp_track_reference_for_frame.insert(*mp_id, current_frame.frame_id);
-                            }
+            if lock.has_keyframe(*kf_id) {
+                let kf = lock.get_keyframe(*kf_id);
+                let mp_ids = kf.get_mp_matches();
+                for item in mp_ids {
+                    if let Some((mp_id, _)) = item {
+                        if self.mp_track_reference_for_frame.get(mp_id) != Some(&current_frame.frame_id) {
+                            self.local_mappoints.insert(*mp_id);
+                            self.mp_track_reference_for_frame.insert(*mp_id, current_frame.frame_id);
                         }
                     }
-                },
-                None => kfs_to_remove.push(*kf_id),
+                }
+            } else {
+                kfs_to_remove.push(*kf_id);
             }
         }
 
@@ -873,6 +878,8 @@ impl TrackingOpticalFlow {
         for kf_id in kfs_to_remove {
             self.local_keyframes.remove(&kf_id);
         }
+
+        Ok(())
     }
 
     fn search_local_points(&mut self, current_frame: &mut Frame) -> Result<(), Box<dyn std::error::Error>> {
@@ -882,7 +889,7 @@ impl TrackingOpticalFlow {
         // Do not search map points already matched
         {
             let mut increased_visible = vec![];
-            let lock = self.map.read();
+            let lock = self.map.read()?;
             for index in 0..current_frame.mappoint_matches.len() {
                 if let Some((id, _)) = current_frame.mappoint_matches.get(index as usize) {
                     if let Some(mp) = lock.mappoints.get(&id) {
@@ -902,7 +909,7 @@ impl TrackingOpticalFlow {
         // Project points in frame and check its visibility
         let mut to_match = 0;
         {
-            let lock = self.map.read();
+            let lock = self.map.read()?;
             for mp_id in &self.local_mappoints {
                 if self.last_frame_seen.get(mp_id) == Some(&current_frame.frame_id) {
                     continue;
@@ -941,13 +948,13 @@ impl TrackingOpticalFlow {
                 FrameSensor::Rgbd => 3,
                 _ => 1
             };
-            if self.map.read().imu_initialized {
-                if self.map.read().imu_ba2 {
+            if self.map.read()?.imu_initialized {
+                if self.map.read()?.imu_ba2 {
                     th = 2;
                 } else {
                     th = 6;
                 }
-            } else if !self.map.read().imu_initialized && self.sensor.is_imu() {
+            } else if !self.map.read()?.imu_initialized && self.sensor.is_imu() {
                 th = 10;
             }
 
@@ -968,7 +975,7 @@ impl TrackingOpticalFlow {
                 &self.map, self.sensor
             )?;
             self.non_tracked_mappoints = non_tracked_points;
-            debug!("Tracking search local points: {} matches / {} local points. ({} total mappoints in map)", matches, self.local_mappoints.len(), self.map.read().mappoints.len());
+            debug!("Tracking search local points: {} matches / {} local points. ({} total mappoints in map)", matches, self.local_mappoints.len(), self.map.read()?.mappoints.len());
 
         }
 
@@ -991,7 +998,8 @@ impl TrackingOpticalFlow {
                 keyframe: current_frame.clone(),
                 tracking_state: self.state,
                 matches_in_tracking: self.matches_inliers,
-                tracked_mappoint_depths: todo!("Keep track of mappoint depths!")
+                tracked_mappoint_depths: todo!("Keep track of mappoint depths!"),
+                map_version: self.map.read()?.version
             } )
         );
 
@@ -999,12 +1007,12 @@ impl TrackingOpticalFlow {
     }
 
 
-    fn discard_outliers(&mut self, current_frame: &mut Frame) -> i32 {
-        let discarded = current_frame.delete_mappoint_outliers();
+    fn discard_outliers(&mut self) -> Result<i32, Box<dyn std::error::Error>> {
+        let discarded = self.current_frame.delete_mappoint_outliers();
         for (mp_id, _index) in discarded {
-            self.last_frame_seen.insert(mp_id, current_frame.frame_id);
+            self.last_frame_seen.insert(mp_id, self.current_frame.frame_id);
         }
-        current_frame.mappoint_matches.tracked_mappoints(&*self.map.read(), 1)
+        Ok(self.current_frame.mappoint_matches.tracked_mappoints(&*self.map.read()?, 1))
     }
 
 }

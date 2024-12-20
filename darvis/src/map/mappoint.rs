@@ -1,8 +1,8 @@
-use std::{backtrace::Backtrace, collections::BTreeMap, fmt::Debug, sync::atomic::{AtomicI32, Ordering}};
+use std::{collections::BTreeMap, fmt::Debug, sync::atomic::{AtomicI32, Ordering}};
 use core::{matrix::DVMatrix, config::{SETTINGS, SYSTEM}, sensor::{Sensor, FrameSensor}};
-use log::{error, warn};
+use log::{debug, error, warn};
 extern crate nalgebra as na;
-use crate::{matrix::DVVector3, modules::{module_definitions::FeatureMatchingModule, orbslam_matcher::{ORBMatcherTrait, SCALE_FACTORS}}, registered_actors::{self, FEATURE_DETECTION, FEATURE_MATCHING_MODULE}};
+use crate::{matrix::DVVector3, modules::orbslam_matcher::SCALE_FACTORS, registered_actors::{FEATURE_DETECTION, FEATURE_MATCHING_MODULE}};
 use super::{map::{Id, Map}, keyframe::KeyFrame, pose::DVTranslation};
 
 #[derive(Debug)]
@@ -108,7 +108,7 @@ impl MapPoint {
 
         let (n, normal) = self.get_obs_normal(map, &self.position);
 
-        let ref_kf = map.keyframes.get(&self.ref_kf_id).unwrap();
+        let ref_kf = map.get_keyframe(self.ref_kf_id);
         let pc = (*self.position) - (*ref_kf.get_camera_center());
         let dist = pc.norm();
 
@@ -208,7 +208,7 @@ impl MapPoint {
         }
     }
     pub(super) fn delete_observation(&mut self, kf_id: &Id) -> bool {
-        let _span = tracy_client::span!("delete_observation");
+        // let _span = tracy_client::span!("delete_observation");
 
         // void MapPoint::EraseObservation(KeyFrame* pKF)
         if let Some((left_index, right_index)) = self.observations.get(kf_id) {
@@ -266,29 +266,28 @@ impl MapPoint {
     }
 
     fn get_obs_normal(&self, map: &Map, position: &DVVector3<f64>) -> (i32, nalgebra::Vector3<f64>) { 
+        // let _span = tracy_client::span!("UpdateNormalAndDepth");
+
         let mut normal = na::Vector3::<f64>::zeros();
         let mut n = 0;
         let position_opencv = **position;
         for (id, _) in &self.observations {
-            if let Some(kf) = map.keyframes.get(&id) {
-                let mut camera_center = kf.get_camera_center();
-                let owi = *camera_center;
-                let normali = position_opencv - owi;
-                normal = normal + normali / normali.norm();
-                n += 1;
+            let kf = map.get_keyframe(*id);
+            let mut camera_center = kf.get_camera_center();
+            let owi = *camera_center;
+            let normali = position_opencv - owi;
+            normal = normal + normali / normali.norm();
+            n += 1;
 
-                match self.sensor.frame() {
-                    FrameSensor::Stereo => {
-                        camera_center = kf.get_right_camera_center();
-                        let owi = *camera_center;
-                        let normali = position_opencv - owi;
-                        normal = normal + normali / normali.norm();
-                        n += 1;
-                    },
-                    _ => {}
-                }
-            } else {
-                error!("Mappoint {} has observation of keyframe {} but it is not in the map", self.id, id);
+            match self.sensor.frame() {
+                FrameSensor::Stereo => {
+                    camera_center = kf.get_right_camera_center();
+                    let owi = *camera_center;
+                    let normali = position_opencv - owi;
+                    normal = normal + normali / normali.norm();
+                    n += 1;
+                },
+                _ => {}
             }
         }
         (n, normal)
@@ -297,20 +296,12 @@ impl MapPoint {
     fn compute_descriptors(&self, map: &Map) -> Vec::<opencv::core::Mat> {
         let mut descriptors = Vec::<opencv::core::Mat>::new();
         for (id, (index1, index2)) in &self.observations {
-            match map.keyframes.get(&id) {
-                Some(kf) => {
-                    descriptors.push((*kf.features.descriptors.row(*index1 as u32)).clone());
-                    match self.sensor.frame() {
-                        FrameSensor::Stereo => descriptors.push((*kf.features.descriptors.row(*index2 as u32)).clone()),
-                        _ => {}
-                    }
-
-                },
-                None => {
-                    error!("Mappoint {} has observation of keyframe {} but it is not in the map", self.id, id);
-                }
-
-            };
+            let kf = map.get_keyframe(*id);
+            descriptors.push((*kf.features.descriptors.row(*index1 as u32)).clone());
+            match self.sensor.frame() {
+                FrameSensor::Stereo => descriptors.push((*kf.features.descriptors.row(*index2 as u32)).clone()),
+                _ => {}
+            }
         }
         descriptors
     }

@@ -1,16 +1,15 @@
-use core::system::Module;
 use std::cmp::Ordering;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::f64::INFINITY;
 use core::config::SETTINGS;
-use core::matrix::{DVMatrix, DVVector3, DVVectorOfPoint2f};
+use core::matrix::{DVVector3, DVVectorOfPoint2f};
 use core::sensor::{Sensor, FrameSensor};
 use log::{debug, error};
 use opencv::core::KeyPoint;
 use opencv::prelude::*;
-use crate::MapLock;
 use crate::actors::tracking_backend::TrackedMapPointData;
 use crate::map::pose::{DVTranslation, Pose, Sim3};
+use crate::map::read_only_lock::ReadWriteMap;
 use crate::modules::optimizer::LEVEL_SIGMA2;
 use crate::registered_actors::{CAMERA, CAMERA_MODULE, FEATURE_DETECTION, FEATURE_MATCHER};
 use crate::map::{map::Id, keyframe::KeyFrame, frame::Frame};
@@ -141,9 +140,10 @@ impl ORBMatcherTrait for ORBMatcher { }
 
 impl DescriptorDistanceTrait for ORBMatcher {
     fn descriptor_distance(&self, desc1: &Mat, desc2: &Mat) -> i32 {
+        // let _span = tracy_client::span!("descriptor_distance");
         // This code is equivalent to:
         // return opencv::core::norm2(
-        //     a, b, opencv::core::NormTypes::NORM_HAMMING as i32, &Mat::default()
+        //     desc1, desc2, opencv::core::NormTypes::NORM_HAMMING as i32, &Mat::default()
         // ).unwrap() as i32;
         // But much faster!!
         dvos3binding::ffi::descriptor_distance(
@@ -159,6 +159,23 @@ impl DescriptorDistanceTrait for ORBMatcher {
             },
             false
         )
+
+        // let mut dist = 0;
+        // let mut pa = desc1.as_raw();
+        // let mut pb = desc2.as_raw();
+
+        // for _ in 0..8 {
+        //     let mut v = pa ^ pb;
+        //     v = v - ((v >> 1) & 0x55555555);
+        //     v = (v & 0x33333333) + ((v >> 2) & 0x33333333);
+        //     dist += (((v + (v >> 4)) & 0xF0F0F0F) * 0x1010101) >> 24;
+
+        //     pa += 1;
+        //     pb += 1;
+        // }
+
+        // return dist;
+
     }
 }
 
@@ -470,7 +487,7 @@ impl FeatureMatchingModule for ORBMatcher {
         &self, 
         frame: &mut Frame, mappoints: &mut BTreeSet<Id>, th: i32, ratio: f64,
         track_in_view: &HashMap<Id, TrackedMapPointData>, track_in_view_right: &HashMap<Id, TrackedMapPointData>, 
-        map: &MapLock, sensor: Sensor
+        map: &ReadWriteMap, sensor: Sensor
     ) -> Result<(HashMap<Id, i32>, i32), Box<dyn std::error::Error>> {
         // int SearchByProjection(Frame &F, const std::vector<MapPoint*> &vpMapPoints, const float th=3, const bool bFarPoints = false, const float thFarPoints = 50.0f);
         // Search matches between Frame keypoints and projected MapPoints. Returns number of matches
@@ -481,13 +498,9 @@ impl FeatureMatchingModule for ORBMatcher {
 
         let mut non_tracked_points = HashMap::new();
 
-        let map = map.read();
+        let map = map.read()?;
         let mut local_mps_to_remove = vec![];
 
-        let mut indices_empty = 0;
-        let mut level = 0;
-        let mut level2 = 0;
-        let mut track_in_view_c = 0;
         for mp_id in &*mappoints {
             let mp = match map.mappoints.get(&mp_id) {
                 Some(mp) => mp,
@@ -564,7 +577,6 @@ impl FeatureMatchingModule for ORBMatcher {
                     // Apply ratio to second match (only if best and second are in the same scale level)
                     if best_dist <= self.high_threshold {
                         if best_level == best_level2 && (best_dist as f64) > (ratio * best_dist2 as f64) {
-                            level += 1;
                             continue;
                         }
                         if best_level != best_level2 || (best_dist as f64) <= (ratio * best_dist2 as f64) {
@@ -584,14 +596,8 @@ impl FeatureMatchingModule for ORBMatcher {
 
                             num_matches += 1;
                         }
-                    } else {
-                        level2 += 1;
                     }
-                } else {
-                    indices_empty += 1;
                 }
-            } else {
-                track_in_view_c += 1;
             }
 
             if let Some(_mp_data) = track_in_view_right.get(&mp_id) {
@@ -679,7 +685,7 @@ impl FeatureMatchingModule for ORBMatcher {
         &self, 
         current_frame: &mut Frame, last_frame: &mut Frame, th: i32,
         should_check_orientation: bool,
-        map: &MapLock, sensor: Sensor
+        map: &ReadWriteMap, sensor: Sensor
     ) -> Result<i32, Box<dyn std::error::Error>> {
         // int ORBmatcher::SearchByProjection(Frame &CurrentFrame, const Frame &LastFrame, const float th, const bool bMono)
 
@@ -703,9 +709,9 @@ impl FeatureMatchingModule for ORBMatcher {
         let backward = -tlc[2] > CAMERA_MODULE.stereo_baseline && !sensor.is_mono();
 
         {
-            let map = map.read();
+            let map = map.read()?;
             for idx1 in 0..last_frame.features.get_all_keypoints().len() {
-                if let Some((mp_id, is_outlier)) = last_frame.mappoint_matches.get(idx1 as usize) {
+                if let Some((mp_id, _is_outlier)) = last_frame.mappoint_matches.get(idx1 as usize) {
                     if last_frame.mappoint_matches.is_outlier(&(idx1 as u32)) { continue; }
                     // Project
                     let mappoint = match map.mappoints.get(&mp_id) {
@@ -748,7 +754,7 @@ impl FeatureMatchingModule for ORBMatcher {
                     let mut best_idx: i32 = -1;
 
                     for idx2 in indices_2 {
-                        if let Some((mp_id, is_outlier)) = current_frame.mappoint_matches.get(idx2 as usize) {
+                        if let Some((mp_id, _is_outlier)) = current_frame.mappoint_matches.get(idx2 as usize) {
                             if let Some(mappoint) = map.mappoints.get(&mp_id) {
                                 if mappoint.get_observations().len() > 0 { 
                                     continue;
@@ -816,7 +822,7 @@ impl FeatureMatchingModule for ORBMatcher {
         _current_frame: &mut Frame, _keyframe: &KeyFrame,
         _th: i32, _should_check_orientation: bool, _ratio: f64,
         _track_in_view: &HashMap<Id, TrackedMapPointData>, _track_in_view_right: &HashMap<Id, TrackedMapPointData>,
-        _map: &MapLock, _sensor: Sensor
+        _map: &ReadWriteMap, _sensor: Sensor
     ) -> Result<i32, Box<dyn std::error::Error>> {
         // int SearchByProjection(Frame &CurrentFrame, KeyFrame* pKF, const std::set<MapPoint*> &sAlreadyFound, const float th, const int ORBdist);
         // Project MapPoints seen in KeyFrame into the Frame and search matches.
@@ -826,7 +832,7 @@ impl FeatureMatchingModule for ORBMatcher {
 
     fn search_by_projection_for_loop_detection1(
         &self, 
-        map: &MapLock, kf_id: &Id, scw: &Sim3, 
+        map: &ReadWriteMap, kf_id: &Id, scw: &Sim3, 
         candidates: &Vec<Id>, // vpPoints
         kfs_for_candidates: &Vec<Id>, // vpPointsKFs
         matches: &mut Vec<Option<Id>>, // vpMatched
@@ -836,7 +842,7 @@ impl FeatureMatchingModule for ORBMatcher {
         // return vpMatchedKF
         // Used in loop detection
 
-        let lock = map.read();
+        let lock = map.read()?;
 
         let tcw: Pose = (*scw).into();
         let rot = tcw.get_rotation();
@@ -855,7 +861,6 @@ impl FeatureMatchingModule for ORBMatcher {
         let mut n_wrong_dist = 0;
         let mut n_viewing_angle = 0;
         let mut n_indices = 0;
-        let mut n_has_match  = 0;
         let mut n_levels  = 0;
         let mut n_final_dist_too_low = 0;
 
@@ -880,7 +885,7 @@ impl FeatureMatchingModule for ORBMatcher {
 
             // Transform into Camera Coords.
             let p3dc = *rot * p3dw + *trans;
-        
+
             // Depth must be positive
             if p3dc[2] < 0.0 {
                 n_depth += 1;
@@ -896,7 +901,7 @@ impl FeatureMatchingModule for ORBMatcher {
             let v = CAMERA_MODULE.fy * y + CAMERA_MODULE.cy;
 
             // Point must be inside the image
-            let kf = lock.keyframes.get(&kf_id).unwrap();
+            let kf = lock.get_keyframe(*kf_id);
             if !kf.features.is_in_image(u, v) {
                 n_not_in_image += 1;
                 continue;
@@ -972,7 +977,7 @@ impl FeatureMatchingModule for ORBMatcher {
 
     fn search_by_projection_for_loop_detection2(
         &self, 
-        map: &MapLock, kf_id: &Id, scw: &Sim3, 
+        map: &ReadWriteMap, kf_id: &Id, scw: &Sim3, 
         candidates: &Vec<Id>,
         matches: &mut Vec<Option<Id>>,
         threshold: i32, hamming_ratio: f64
@@ -980,7 +985,7 @@ impl FeatureMatchingModule for ORBMatcher {
         // int ORBmatcher::SearchByProjection(KeyFrame* pKF, Sophus::Sim3<float> &Scw, const std::vector<MapPoint*> &vpPoints, const std::vector<KeyFrame*> &vpPointsKFs, std::vector<MapPoint*> &vpMatched, std::vector<KeyFrame*> &vpMatchedKF, int th, float ratioHamming)
         // Used in loop detection
 
-        let lock = map.read();
+        let lock = map.read()?;
 
         let tcw: Pose = (*scw).into();
         let rot = tcw.get_rotation();
@@ -1021,7 +1026,7 @@ impl FeatureMatchingModule for ORBMatcher {
             let (u, v) = CAMERA_MODULE.project(DVTranslation::new(p3dc));
 
             // Point must be inside the image
-            let kf = lock.keyframes.get(&kf_id).unwrap();
+            let kf = lock.get_keyframe(*kf_id);
             if !kf.features.is_in_image(u, v) {
                 continue;
             }
@@ -1101,6 +1106,8 @@ impl SearchForTriangulationTrait for ORBMatcher {
         // Some math based on ORB-SLAM2 to avoid some confusion with Sophus.
         // Look here: https://github.com/raulmur/ORB_SLAM2/blob/master/src/ORBmatcher.cc#L657
 
+        let _span2 = tracy_client::span!("search_for_triangulation::pre");
+
         //Compute epipole in second image
         let cw = *kf_1.get_camera_center(); //Cw
         let r2w = *kf_2.get_pose().get_rotation(); //R2w
@@ -1147,19 +1154,13 @@ impl SearchForTriangulationTrait for ORBMatcher {
         let mut i = 0;
         let mut j = 0;
 
-        let mut total_visited = 0;
-        let mut total_outer_loop = 0;
-        let mut total_inner_loop = 0;
+        drop(_span2);
 
         while i < kf1_featvec.len() && j < kf2_featvec.len() {
             let kf1_node_id = kf1_featvec[i];
             let kf2_node_id = kf2_featvec[j];
             if kf1_node_id == kf2_node_id {
-                total_visited += 1;
                 let kf1_indices_size = kf_1.bow.as_ref().unwrap().get_feat_vec().vec_size(kf1_node_id);
-                total_outer_loop += kf1_indices_size;
-
-                // let _span = tracy_client::span!("search_for_triangulation_outerloop");
 
                 for i1 in 0..kf1_indices_size {
                     let kf1_index = kf_1.bow.as_ref().unwrap().get_feat_vec().vec_get(kf1_node_id, i1); // = idx1
@@ -1184,8 +1185,6 @@ impl SearchForTriangulationTrait for ORBMatcher {
 
                         let kf2_indices_size = kf_2.bow.as_ref().unwrap().get_feat_vec().vec_size(kf2_node_id);
 
-                        total_inner_loop += kf2_indices_size;
-                        // let _span = tracy_client::span!("search_for_triangulation_innerloop");
 
                         for i2 in 0..kf2_indices_size {
                             let kf2_index = kf_2.bow.as_ref().unwrap().get_feat_vec().vec_get(kf2_node_id, i2); // = idx2
@@ -1311,15 +1310,16 @@ impl SearchForTriangulationTrait for ORBMatcher {
         return Ok(matched_pairs);
     }
 }
+
 impl FuseTrait for ORBMatcher {
-    fn fuse_from_loop_closing(&self,  kf_id: &Id, scw: &Sim3, mappoints: &Vec<Id>, map: &MapLock, th: i32) ->  Result<Vec<Option<Id>>, Box<dyn std::error::Error>> {
+    fn fuse_from_loop_closing(&self,  kf_id: &Id, scw: &Sim3, mappoints: &Vec<Id>, map: &ReadWriteMap, th: i32) ->  Result<Vec<Option<Id>>, Box<dyn std::error::Error>> {
         // int ORBmatcher::Fuse(KeyFrame *pKF, Sophus::Sim3f &Scw, const vector<MapPoint *> &vpPoints, float th, vector<MapPoint *> &vpReplacePoint)
 
         // Decompose Scw
         let tcw: Pose = (*scw).into();
         let ow = tcw.inverse().get_translation();
 
-        let already_found: HashSet<Id> = map.read().keyframes.get(kf_id).unwrap().get_mp_matches().iter()
+        let already_found: HashSet<Id> = map.read()?.get_keyframe(*kf_id).get_mp_matches().iter()
             .filter(|item| item.is_some() )
             .map(|item| item.unwrap().0)
             .collect();
@@ -1328,8 +1328,8 @@ impl FuseTrait for ORBMatcher {
 
         let observations_to_add = {
             let mut observations_to_add = vec![];
-            let map_lock = map.read();
-            let current_kf = map_lock.keyframes.get(kf_id).unwrap();
+            let map_lock = map.read()?;
+            let current_kf = map_lock.get_keyframe(*kf_id);
 
             // For each candidate MapPoint project and match
             for i in 0..mappoints.len() {
@@ -1427,7 +1427,7 @@ impl FuseTrait for ORBMatcher {
             observations_to_add
         };
 
-        let mut map_write_lock = map.write();
+        let mut map_write_lock = map.write()?;
         for (kf_id, mp_id, idx) in observations_to_add {
             map_write_lock.add_observation(*kf_id, mp_id, idx as u32, false);
         }
@@ -1436,13 +1436,13 @@ impl FuseTrait for ORBMatcher {
 
     }
 
-    fn fuse(&self,  kf_id: &Id, fuse_candidates: &Vec<Option<(Id, bool)>>, map: &MapLock, th: f32, is_right: bool) {
+    fn fuse(&self,  kf_id: &Id, fuse_candidates: &Vec<Option<(Id, bool)>>, map: &ReadWriteMap, th: f32, is_right: bool) -> Result<(), Box<dyn std::error::Error>> {
         // int ORBmatcher::Fuse(KeyFrame *pKF, const vector<MapPoint *> &vpMapPoints, const float th, const bool bRight)
 
         let (tcw, rcw, ow, _camera);
         {
-            let lock = map.read();
-            let keyframe = lock.keyframes.get(kf_id).unwrap();
+            let lock = map.read()?;
+            let keyframe = lock.get_keyframe(*kf_id);
 
             (tcw, rcw, ow, _camera) = match is_right {
                 true => {
@@ -1467,7 +1467,7 @@ impl FuseTrait for ORBMatcher {
 
             let (mut best_dist, mut best_idx);
             {
-                let lock = map.read();
+                let lock = map.read()?;
                 let mappoint = match lock.mappoints.get(&mp_id) {
                     Some(mp) => mp,
                     None => {
@@ -1490,7 +1490,7 @@ impl FuseTrait for ORBMatcher {
                 let uv = CAMERA_MODULE.project(DVVector3::new(p_3d_c));
 
                 // Point must be inside the image
-                if !lock.keyframes.get(kf_id).unwrap().features.is_in_image(uv.0, uv.1) {
+                if !lock.get_keyframe(*kf_id).features.is_in_image(uv.0, uv.1) {
                     continue;
                 }
 
@@ -1513,7 +1513,7 @@ impl FuseTrait for ORBMatcher {
                 // Search in a radius
                 let predicted_level = mappoint.predict_scale(&dist_3d);
                 let radius = th * SCALE_FACTORS[predicted_level as usize];
-                let indices = lock.keyframes.get(kf_id).unwrap().features.get_features_in_area(&uv.0, &uv.1, radius as f64, None);
+                let indices = lock.get_keyframe(*kf_id).features.get_features_in_area(&uv.0, &uv.1, radius as f64, None);
                 if indices.is_empty() {
                     continue;
                 }
@@ -1523,7 +1523,7 @@ impl FuseTrait for ORBMatcher {
                 best_idx = -1;
 
                 for idx2 in indices {
-                    let (kp, is_right) = lock.keyframes.get(kf_id).unwrap().features.get_keypoint(idx2 as usize);
+                    let (kp, is_right) = lock.get_keyframe(*kf_id).features.get_keypoint(idx2 as usize);
                     let kp_level = kp.octave();
 
                     if kp_level < predicted_level - 1 || kp_level > predicted_level {
@@ -1557,7 +1557,7 @@ impl FuseTrait for ORBMatcher {
                         }
                     }
 
-                    let desc_kf = lock.keyframes.get(kf_id).unwrap().features.descriptors.row(idx2);
+                    let desc_kf = lock.get_keyframe(*kf_id).features.descriptors.row(idx2);
                     let dist = self.descriptor_distance(&lock.mappoints.get(mp_id).unwrap().best_descriptor, &desc_kf);
 
                     if dist < best_dist {
@@ -1570,13 +1570,13 @@ impl FuseTrait for ORBMatcher {
             // If there is already a MapPoint replace otherwise add new measurement
             if best_dist <= self.low_threshold {
                 let prev_mappoint_match = {
-                    let lock = map.read();
-                    lock.keyframes.get(kf_id).unwrap().get_mp_match(&(best_idx as u32))
+                    let lock = map.read()?;
+                    lock.get_keyframe(*kf_id).get_mp_match(&(best_idx as u32))
                 };
 
                 if let Some((mp_in_kf_id, _is_outlier)) = prev_mappoint_match {
                     let (mp_in_kf_obs, mp_obs) = {
-                        let lock = map.read();
+                        let lock = map.read()?;
                         if lock.mappoints.get(&mp_in_kf_id).is_none() {
                             error!("Can't find mp {} for kf {} at index {}", mp_in_kf_id, kf_id, best_idx);
                         }
@@ -1586,34 +1586,35 @@ impl FuseTrait for ORBMatcher {
                     };
 
                     if mp_in_kf_obs > mp_obs {
-                        map.write().replace_mappoint(*mp_id, mp_in_kf_id);
+                        map.write()?.replace_mappoint(*mp_id, mp_in_kf_id);
                     } else {
-                        map.write().replace_mappoint(mp_in_kf_id, *mp_id);
+                        map.write()?.replace_mappoint(mp_in_kf_id, *mp_id);
                     }
                 } else {
-                    map.write().add_observation(*kf_id, *mp_id, best_idx as u32, false);
+                    map.write()?.add_observation(*kf_id, *mp_id, best_idx as u32, false);
                 }
             }
         }
+        Ok(())
     }
 
 }
 
 impl SearchBySim3Trait for ORBMatcher {
-    fn search_by_sim3(&self,  map: &MapLock, kf1_id: Id, kf2_id: Id, matches: &mut HashMap<usize, i32>, sim3: &Sim3, th: f32) -> i32 {
+    fn search_by_sim3(&self,  map: &ReadWriteMap, kf1_id: Id, kf2_id: Id, matches: &mut HashMap<usize, i32>, sim3: &Sim3, th: f32) -> Result<i32, Box<dyn std::error::Error>> {
         // From ORB-SLAM2:
         // int ORBmatcher::SearchBySim3(KeyFrame *pKF1, KeyFrame *pKF2, vector<MapPoint*> &vpMatches12,
         //                          const float &s12, const cv::Mat &R12, const cv::Mat &t12, const float th)
 
-        let lock = map.read();
+        let lock = map.read()?;
 
         // Camera 1 from world
-        let kf1 = lock.keyframes.get(&kf1_id).unwrap();
+        let kf1 = lock.get_keyframe(kf1_id);
         let r1w = kf1.get_pose().get_rotation();
         let t1w = kf1.get_pose().get_translation();
 
         // Camera 2 from world
-        let kf2 = lock.keyframes.get(&kf2_id).unwrap();
+        let kf2 = lock.get_keyframe(kf2_id);
         let r2w = kf2.get_pose().get_rotation();
         let tw2 = kf2.get_pose().get_translation();
 
@@ -1820,7 +1821,7 @@ impl SearchBySim3Trait for ORBMatcher {
                 }
             }
         }
-        return found;
+        return Ok(found);
 
     }
 }

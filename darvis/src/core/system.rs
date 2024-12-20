@@ -18,8 +18,8 @@ pub struct System {
     // can't make DVSender an enum depending on each actor because a collection can't hold different types
     pub actors: HashMap<String, Sender>,
     pub receiver: Receiver,
-    pub receiver_bound: Option<usize>,
     pub my_name: String,
+    pub max_queue_size: usize,
 }
 
 impl System {
@@ -59,6 +59,10 @@ impl System {
         self.receiver.len()
     }
 
+    pub fn queue_full(&self) -> bool {
+        self.receiver.len() > self.max_queue_size 
+    }
+
     pub fn copy_transmitters(&self, actor_name: &String) -> HashMap<String, Sender> {
         let mut txs = HashMap::new();
         for (other_actor_name, other_actor_transmitter) in &self.actors {
@@ -79,16 +83,15 @@ impl NullActor {
 impl Actor for NullActor {
     type MapRef = ();
 
-    fn new_actorstate(_system: System, _map: Self::MapRef) -> Self {
-        NullActor{}
-    }
     fn spawn(_system: System, _map: Self::MapRef)  {
         error!("Actor Not Implemented!!");
     }
 }
 
 
-pub trait ActorMessage: Downcast + Send {}
+pub trait ActorMessage: Downcast + Send {
+    fn get_map_version(&self) -> u64;
+}
 impl_downcast!(ActorMessage);
 
 pub trait Base: Downcast {}
@@ -98,7 +101,6 @@ impl_downcast!(Base);
 pub trait Actor {
     type MapRef;
 
-    fn new_actorstate(system: System, map: Self::MapRef) -> Self;
     fn spawn(system: System, map: Self::MapRef);
 }
 

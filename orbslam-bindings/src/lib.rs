@@ -168,6 +168,11 @@ pub mod ffi {
         u: Vec<DoubleVec>,
         v: Vec<DoubleVec>,
     }
+    enum SVDComputeType {
+        ThinUThinV,
+        FullV,
+    }
+
 
     unsafe extern "C++" {
         include!("orb_slam3/src/CVConvert.h");
@@ -309,6 +314,7 @@ pub mod ffi {
         ) -> [[f64; 3]; 3];
         fn svd(
             mat: Vec<DoubleVec>,
+            compute_type: SVDComputeType,
         ) -> SVDResult;
     }
 

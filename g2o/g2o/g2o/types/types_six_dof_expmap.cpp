@@ -432,7 +432,8 @@ void EdgeStereoSE3ProjectXYZOnlyPose::linearizeOplus() {
   _jacobianOplusXi(2,5) = _jacobianOplusXi(0,5)-bf*invz_2;
 }
 
-  void EdgeSE3ProjectXYZOnlyPose::set_robust_kernel(bool reset) {
+void EdgeSE3ProjectXYZOnlyPose::set_robust_kernel(bool reset, float delta)
+{
     // Darvis
     // Note: setRobustKernel takes a RobustKernelHuber pointer
     // ORBSLAM3 usually does this but occasionally passes in a 0 instead
@@ -446,8 +447,8 @@ void EdgeStereoSE3ProjectXYZOnlyPose::linearizeOplus() {
     } else {
         RobustKernelHuber* rk = new RobustKernelHuber;
         setRobustKernel(rk);
+        rk->setDelta(delta);
     }
-
-  }
+}
 
 } // end namespace

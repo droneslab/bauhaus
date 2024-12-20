@@ -1,10 +1,8 @@
-use core::{config::{SETTINGS, SYSTEM}, matrix::{DVMatrix, DVMatrix3, DVVector3, DVVectorOfKeyPoint}, sensor::{FrameSensor, ImuSensor, Sensor}, system::Timestamp};
-use log::debug;
-use opencv::core::{KeyPoint, Mat};
+use core::{config::{SETTINGS, SYSTEM}, matrix::{DVMatrix, DVMatrix3, DVVector3, DVVectorOfKeyPoint}, sensor::{FrameSensor, Sensor}, system::Timestamp};
 
 use crate::modules::{imu::{ImuCalib, ImuDataFrame}, module_definitions::VocabularyModule};
 
-use crate::{actors::tracking_backend::TrackedMapPointData, modules::{bow::DVBoW, imu::{ImuBias, ImuPreIntegrated}}, registered_actors::{CAMERA_MODULE, VOCABULARY_MODULE}};
+use crate::{actors::tracking_backend::TrackedMapPointData, modules::bow::DVBoW, registered_actors::{CAMERA_MODULE, VOCABULARY_MODULE}};
 
 use super::{features::Features, keyframe::MapPointMatches, map::{Id, Map}, mappoint::MapPoint, pose::{DVTranslation, Pose}};
 use crate::modules::module_definitions::CameraModule;
@@ -38,12 +36,16 @@ impl Frame {
     pub fn new(
         frame_id: Id, keypoints_vec: DVVectorOfKeyPoint, descriptors_vec: DVMatrix,
         im_width: u32, im_height: u32, image: Option<opencv::core::Mat>,
-        prev_frame: Option<& Frame>,
+        prev_frame: Option<& Frame>, map_imu_initialized: bool,
         timestamp: Timestamp
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let sensor = SETTINGS.get::<Sensor>(SYSTEM, "sensor");
         let features = Features::new(keypoints_vec, descriptors_vec, im_width, im_height, sensor)?;
         let num_keypoints = features.num_keypoints as usize;
+
+        let mut imu_data = ImuDataFrame::new(prev_frame);
+        imu_data.is_imu_initialized = map_imu_initialized;
+
         let frame = Self {
             frame_id,
             timestamp,
@@ -52,7 +54,7 @@ impl Frame {
             image,
             bow: None,
             mappoint_matches: MapPointMatches::new(num_keypoints),
-            imu_data: ImuDataFrame::new(prev_frame),
+            imu_data,
             pose: None,
             ref_kf_id: None,
         };
@@ -68,10 +70,6 @@ impl Frame {
         let sensor = SETTINGS.get::<Sensor>(SYSTEM, "sensor");
         let features = Features::empty();
         let num_keypoints = features.num_keypoints as usize;
-        let imu_bias = match sensor.imu() {
-            ImuSensor::Some => Some(ImuBias::new()),
-            _ => None
-        };
         let frame = Self {
             frame_id,
             timestamp,
@@ -115,7 +113,7 @@ impl Frame {
         Ok(())
     }
 
-    pub fn get_camera_center(&self) -> Option<DVTranslation> {
+    pub fn _get_camera_center(&self) -> Option<DVTranslation> {
         Some(DVTranslation::new(-self.pose?.get_rotation().transpose() * *self.pose?.get_translation()))
     }
 
@@ -197,14 +195,6 @@ impl Frame {
     }
 
 
-    pub fn get_pose_relative(&self, map: &Map) -> Pose {
-        let pose = self.pose.unwrap();
-        let ref_kf_id = self.ref_kf_id.unwrap();
-        let ref_kf = map.keyframes.get(&ref_kf_id).expect("Can't get ref kf from map");
-        let ref_kf_pose = ref_kf.get_pose();
-        pose * ref_kf_pose.inverse()
-    }
-
     pub fn delete_mappoint_outliers(&mut self) -> Vec<(Id, usize)> {
         // Should only be called on a Frame.
         // In the chance you might want to call this on a keyframe, you also need to delete the mappoints' observations to the kf!
@@ -224,7 +214,7 @@ impl Frame {
         // Should only be called on a Frame.
         // In the chance you might want to call this on a keyframe, you also need to delete the mappoints' observations to the kf!
         for i in 0..self.mappoint_matches.len() {
-            if let Some((mp_id, is_outlier)) = self.mappoint_matches.get(i as usize) {
+            if let Some((mp_id, _is_outlier)) = self.mappoint_matches.get(i as usize) {
                 match map.mappoints.get(&mp_id) {
                     Some(mp) => {
                         if mp.get_observations().len() == 0 {
@@ -242,7 +232,9 @@ impl Frame {
         // Eigen::Matrix3f KeyFrame::GetImuRotation()
         // Note: in Orbslam this is: (mTwc * mImuCalib.mTcb).rotationMatrix();
         // and mTwc is inverse of the pose
-        (self.pose.expect("Should have pose by now").inverse() * ImuCalib::new().tcb).get_rotation()
+        DVMatrix3::new(
+            *self.pose.expect("Should have pose by now").inverse().get_rotation() * *ImuCalib::new().tcb.get_rotation()
+        )
     }
 
     pub fn get_imu_position(&self) -> DVVector3<f64> {
@@ -251,17 +243,32 @@ impl Frame {
         // mRwc * mImuCalib.mTcb.translation() + mOw;
         // where mOw = twc (inverse of pose translation)
 
-        DVVector3::new(
-            *self.pose.unwrap().get_rotation() * *ImuCalib::new().tcb.get_translation() + *self.pose.unwrap().inverse().get_translation()
-        )
+        println!("Get imu position... rotation: {:?}", self.pose.unwrap().get_rotation());
+        println!("Get imu position... translation: {:?}", self.pose.unwrap().old_inverse().get_translation());
+        println!("Tcb... {:?}", ImuCalib::new().tcb.get_translation());
+        let inverse = self.pose.unwrap().old_inverse();
+
+        let res = DVVector3::new(
+            *inverse.get_rotation() * *ImuCalib::new().tcb.get_translation() + *inverse.get_translation()
+        );
+        println!("res... {:?}", res);
+        res
     }
 
     pub fn set_imu_pose_velocity(&mut self, new_pose: Pose, vwb: nalgebra::Vector3<f64>) {
         // void Frame::SetImuPoseVelocity(const Eigen::Matrix3f &Rwb, const Eigen::Vector3f &twb, const Eigen::Vector3f &Vwb)
-        debug!("SET VELOCITY: {:?} ", vwb);
+
+        println!("Input translation before group inverse: {:?} {:?}", new_pose, new_pose.get_rotation());
         self.imu_data.velocity = Some(DVVector3::new(vwb));
         let new_pose = new_pose.inverse(); // Tbw
+        println!("Inverse translation: {:?} {:?}", new_pose, new_pose.get_rotation());
+
         self.pose = Some(ImuCalib::new().tcb * new_pose);
+        println!("Result translation: {:?} {:?}", self.pose, self.pose.unwrap().get_rotation());
+
     }
 
 }
+
+// Translation after group inverse: t[-0.3265,-0.1613,-0.2605] r[0.6635,0.7266,-0.0867,-0.1558] DVMatrix3([[-0.07085331461714924, 0.9912424830150882, 0.11143674292551078], [0.9372115208547813, 0.1044014818341865, -0.3327685318173793], [-0.34148846684014306, 0.08086204583677778, -0.9364010660813342]])
+// [37m[56.318 src/modules/imu.rs:74 [37mDEBUG[0m[37m] PREDICT STATE LAST KEYFRAME NEW POSE = Some(t[-0.0941,0.3024,-0.2739] r[0.9822,0.0542,0.0602,-0.1693])[0m

@@ -1,12 +1,11 @@
 use core::{config::SETTINGS, matrix::{DVMatrix, DVVectorOfKeyPoint}, system::Module};
 use std::{fmt, fmt::Debug};
 
-use cxx::UniquePtr;
 use opencv::features2d::Feature2DTrait;
 
-use crate::registered_actors::{CAMERA, FEATURE_DETECTION};
+use crate::registered_actors::FEATURE_DETECTION;
 
-use super::module_definitions::{FeatureExtractionModule};
+use super::module_definitions::FeatureExtractionModule;
 
 
 pub struct OpenCVExtractor {
