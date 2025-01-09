@@ -8,10 +8,15 @@ pub mod ffi {
     }
 
     //* Pose types */
+    struct PoseQuat {
+        translation: [f64; 3], // in C++: array<double, 3>,
+        rotation: [f64; 4] // in C++: array<double, 4>
+    }
     struct Pose {
         translation: [f64; 3], // in C++: array<double, 3>,
-        rotation: [f64; 4] // in C++: array<double, 4> 
+        rotation: [[f64; 3];3] // in C++: array<array<double, 3>, 3>
     }
+
     struct Position {
         translation: [f64; 3],
     }
@@ -125,7 +130,7 @@ pub mod ffi {
         fn add_vertex_se3expmap(
             self: Pin<&mut BridgeSparseOptimizer>,
             vertex_id: i32,
-            pose: Pose,
+            pose: PoseQuat,
             set_fixed: bool
         );
         fn add_vertex_pose(
@@ -134,11 +139,11 @@ pub mod ffi {
             set_fixed: bool,
             num_cams: i32,
             imu_position: [f64; 3],
-            imu_rotation: [f64; 4],
+            imu_rotation: [[f64; 3]; 3],
             translation: [f64; 3],
-            rotation: [f64; 4],
+            rotation: [[f64; 3]; 3],
             tcb_translation: [f64; 3],
-            tcb_rotation: [f64; 4],
+            tcb_rotation: [[f64; 3]; 3],
             tbc_translation: [f64; 3],
             bf: f32,
         );
@@ -175,14 +180,14 @@ pub mod ffi {
         fn add_vertex_sbapointxyz(
             self: Pin<&mut BridgeSparseOptimizer>,
             vertex_id: i32,
-            pose: Pose,
+            pose: Position,
             set_fixed: bool,
             set_marginalized: bool
         );
         fn update_estimate_vertex_se3xpmap(
             self: Pin<&mut BridgeSparseOptimizer>,
             vertex: i32,
-            pose: Pose,
+            pose: PoseQuat,
         );
 
         //* Adding and modifying edges */
@@ -316,6 +321,12 @@ pub mod ffi {
             iterations: i32,
             online: bool,
             compute_active_errors: bool
+        );
+
+        fn print_optimized_vertex_pose(
+            self: &BridgeSparseOptimizer,
+            vertex: i32,
+            recover_type_: VertexPoseRecoverType,
         );
         fn recover_optimized_frame_pose(
             self: &BridgeSparseOptimizer,

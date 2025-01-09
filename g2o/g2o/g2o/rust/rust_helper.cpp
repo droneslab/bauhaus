@@ -165,7 +165,7 @@ namespace g2o {
     }
 
     void BridgeSparseOptimizer::add_vertex_se3expmap (
-        int vertex_id,  Pose pose, bool set_fixed
+        int vertex_id,  PoseQuat pose, bool set_fixed
     ) {
         if (optimizer_type == 1 || optimizer_type == 2) {
             VertexSE3Expmap * vSE3 = new VertexSE3Expmap();
@@ -180,15 +180,15 @@ namespace g2o {
         }
     }
 
-    void BridgeSparseOptimizer::add_vertex_pose (
+    void BridgeSparseOptimizer::add_vertex_pose(
         int vertex_id, bool set_fixed,
-        int num_cams, 
-        array<double, 3> imu_position, array<double, 4> imu_rotation,
-        array<double, 3> translation, array<double, 4> rotation,
-        array<double, 3> tcb_translation, array<double, 4> tcb_rotation,
+        int num_cams,
+        array<double, 3> imu_position, array<array<double, 3>, 3> imu_rotation,
+        array<double, 3> translation, array<array<double, 3>, 3> rotation,
+        array<double, 3> tcb_translation, array<array<double, 3>, 3> tcb_rotation,
         array<double, 3> tbc_translation,
-        float bf
-    ) {
+        float bf)
+    {
         // Used by inertial optimizations
 
         vector<float> camera_calib{fx,fy,cx,cy};
@@ -197,12 +197,26 @@ namespace g2o {
         std::cout << "POSE OPT! Add frame" << std::endl;
 
         Eigen::Vector3d imu_position2(imu_position.data());
-        Eigen::Matrix3d imu_rotation2 = Eigen::Quaterniond(imu_rotation.data()).toRotationMatrix();
+        Eigen::Matrix3d imu_rotation2;
+        imu_rotation2 << imu_rotation[0][0], imu_rotation[1][0], imu_rotation[2][0],
+            imu_rotation[0][1], imu_rotation[1][1], imu_rotation[2][1],
+            imu_rotation[0][2], imu_rotation[1][2], imu_rotation[2][2];
         Eigen::Vector3d translation2(translation.data());
-        Eigen::Matrix3d rotation2 = Eigen::Quaterniond(rotation.data()).toRotationMatrix();
+        Eigen::Matrix3d rotation2;
+        rotation2 << rotation[0][0], rotation[1][0], rotation[2][0],
+            rotation[0][1], rotation[1][1], rotation[2][1],
+            rotation[0][2], rotation[1][2], rotation[2][2];
         Eigen::Vector3d tcb_translation2(tcb_translation.data());
-        Eigen::Matrix3d tcb_rotation2 = Eigen::Quaterniond(tcb_rotation.data()).toRotationMatrix();
+        Eigen::Matrix3d tcb_rotation2;
+        tcb_rotation2 << tcb_rotation[0][0], tcb_rotation[1][0], tcb_rotation[2][0],
+            tcb_rotation[0][1], tcb_rotation[1][1], tcb_rotation[2][1],
+            tcb_rotation[0][2], tcb_rotation[1][2], tcb_rotation[2][2];
         Eigen::Vector3d tbc_translation2(tbc_translation.data());
+
+        std::cout << "ADD VERTEX POSE ROTATIONS: " << std::endl;
+        std::cout << "...imu_rotation2: " << imu_rotation2 << std::endl;
+        std::cout << "...rotation2: " << std::setprecision(15) << rotation2 << std::endl;
+        std::cout << "...tcb_rotation2: " << tcb_rotation2 << std::endl;
 
         g2o::VertexPose* VP = new g2o::VertexPose(
             1, camera,
@@ -263,9 +277,9 @@ namespace g2o {
         int vertex_id, bool set_fixed, array<array<double, 3>, 3> rwg
     ) {
         Eigen::Matrix3d rwg_eig;
-        rwg_eig << rwg[0][0], rwg[0][1], rwg[0][2],
-                   rwg[1][0], rwg[1][1], rwg[1][2],
-                   rwg[2][0], rwg[2][1], rwg[2][2];
+        rwg_eig << rwg[0][0], rwg[1][0], rwg[2][0],
+                   rwg[0][1], rwg[1][1], rwg[2][1],
+                   rwg[0][2], rwg[1][2], rwg[2][2];
 
         g2o::VertexGDir* VGDir = new g2o::VertexGDir(rwg_eig);
         VGDir->setId(vertex_id);
@@ -288,10 +302,10 @@ namespace g2o {
     }
 
     void BridgeSparseOptimizer::add_vertex_sbapointxyz(
-        int vertex_id,  Pose pose, bool set_fixed, bool set_marginalized
-    ) {
+        int vertex_id, Position pos, bool set_fixed, bool set_marginalized)
+    {
         VertexSBAPointXYZ * vPoint = new VertexSBAPointXYZ();
-        Eigen::Vector3d translation(pose.translation.data());
+        Eigen::Vector3d translation(pos.translation.data());
         vPoint->setEstimate(translation);
         // std::cout << "Set mp to " << vPoint->estimate() << std::endl;
         vPoint->setId(vertex_id);
@@ -300,7 +314,7 @@ namespace g2o {
         optimizer->addVertex(vPoint);
     }
 
-    SE3Quat BridgeSparseOptimizer::format_pose(Pose pose) const {
+    SE3Quat BridgeSparseOptimizer::format_pose(PoseQuat pose) const {
         Eigen::Vector3d trans_vec(pose.translation.data());
         auto rot_quat_val = pose.rotation.data();
         Eigen::Quaterniond rot_quat(rot_quat_val[0], rot_quat_val[1], rot_quat_val[2],rot_quat_val[3]);
@@ -308,7 +322,7 @@ namespace g2o {
         return SE3Quat(rot_quat, trans_vec);
     }
 
-    void BridgeSparseOptimizer::update_estimate_vertex_se3xpmap(int vertex_id, Pose pose) {
+    void BridgeSparseOptimizer::update_estimate_vertex_se3xpmap(int vertex_id, PoseQuat pose) {
         VertexSE3Expmap* v = dynamic_cast<VertexSE3Expmap*>(optimizer->vertex(vertex_id));
         v->setEstimate(format_pose(pose));
     }
@@ -943,9 +957,26 @@ namespace g2o {
         return pose;
     }
 
-    Pose BridgeSparseOptimizer::recover_optimized_vertex_pose(int vertex_id, VertexPoseRecoverType recover_type) const
+    void BridgeSparseOptimizer::print_optimized_vertex_pose(int vertex_id, VertexPoseRecoverType recover_type) const
     {
-        g2o::VertexPose* VP = static_cast<g2o::VertexPose*>(optimizer->vertex(vertex_id));
+        g2o::VertexPose *VP = static_cast<g2o::VertexPose *>(optimizer->vertex(vertex_id));
+        Sophus::SE3d *se3;
+
+        // "cw"" used by Bundle adjustments, "wb"" used by pose optimization in tracking
+        switch (recover_type) {
+            case VertexPoseRecoverType::Cw:
+                std::cout << "SOFIYA RECOVERED ROTATION! " << VP->estimate().Rcw[0].cast<double>() << std::endl;
+                std::cout << "SOFIYA RECOVERED TRANSLATION! " << VP->estimate().tcw[0].cast<double>() << std::endl;
+                break;
+            case VertexPoseRecoverType::Wb:
+                std::cout << "SOFIYA RECOVERED ROTATION! " << VP->estimate().Rwb.cast<double>() << std::endl;
+                std::cout << "SOFIYA RECOVERED TRANSLATION! " << VP->estimate().twb.cast<double>() << std::endl;
+                break;
+        }
+    }
+
+    Pose BridgeSparseOptimizer::recover_optimized_vertex_pose(int vertex_id, VertexPoseRecoverType recover_type) const {
+        g2o::VertexPose *VP = static_cast<g2o::VertexPose *>(optimizer->vertex(vertex_id));
         Sophus::SE3d *se3;
 
         // "cw"" used by Bundle adjustments, "wb"" used by pose optimization in tracking
@@ -954,6 +985,9 @@ namespace g2o {
                 se3 = new Sophus::SE3d(VP->estimate().Rcw[0].cast<double>(), VP->estimate().tcw[0].cast<double>());
                 break;
             case VertexPoseRecoverType::Wb:
+                std::cout << "SOFIYA RECOVERED ROTATION! " << VP->estimate().Rwb.cast<double>() << std::endl;
+                std::cout << "SOFIYA RECOVERED TRANSLATION! " << VP->estimate().twb.cast<double>() << std::endl;
+
                 se3 = new Sophus::SE3d(VP->estimate().Rwb.cast<double>(), VP->estimate().twb.cast<double>());
                 break;
         }
@@ -1080,4 +1114,4 @@ namespace g2o {
         
         delete optimizer;
     }
-} // end namespace
+    } // end namespace

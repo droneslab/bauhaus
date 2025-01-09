@@ -320,12 +320,19 @@ fn load_camera_settings(camera_fn: &String, module_info: &mut Vec<ModuleConf>) {
     if !yaml_document["new_width"].is_badvalue() {
         let new_width = yaml_document["new_width"].as_i64().unwrap() as i32;
         let old_width = yaml_document["width"].as_i64().unwrap();
-        let scale_col_factor = (new_width as f64) / (old_width as f64);
+        let scale_col_factor = (new_width as f32) / (old_width as f32);
 
-        SETTINGS.insert(&"CAMERA", &"fx", yaml_document["fx"].as_f64().unwrap() * scale_col_factor);
-        SETTINGS.insert(&"CAMERA", &"cx", yaml_document["cx"].as_f64().unwrap() * scale_col_factor);
+        // println!("Old width: {}", old_width);
+        // println!("New width: {}", new_width);
+        // println!("Scale col factor: {}", scale_col_factor);
+        // println!("Old fx: {}", yaml_document["fx"].as_f64().unwrap());
+
+        SETTINGS.insert(&"CAMERA", &"fx", yaml_document["fx"].as_f64().unwrap() * scale_col_factor as f64);
+        SETTINGS.insert(&"CAMERA", &"cx", yaml_document["cx"].as_f64().unwrap() * scale_col_factor as f64);
         add_setting_i32("CAMERA", "width", &yaml_document["new_width"]);
     }
+
+    println!("SOFIYA! MVPARAMETERS: {:?} {:?} {:?} {:?}", SETTINGS.get::<f64>("CAMERA", "fx"), SETTINGS.get::<f64>("CAMERA", "fy"), SETTINGS.get::<f64>("CAMERA", "cx"), SETTINGS.get::<f64>("CAMERA", "cy"));
 
 
     // Not all datasets have imu information, but that only matters if imu is used

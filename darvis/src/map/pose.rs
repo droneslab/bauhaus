@@ -16,7 +16,9 @@ pub struct Pose ( nalgebra::IsometryMatrix3<f64> );
 impl Pose {
     pub fn new(translation : nalgebra::Vector3<f64>, rotation: nalgebra::Matrix3<f64>) -> Pose {
         let trans = nalgebra::Translation3::from(translation);
-        let rot = nalgebra::Rotation3::from_matrix(&rotation);
+        let rot = nalgebra::Rotation3::from_matrix_unchecked(rotation);
+
+        println!("Create pose rotation is: {:?}", rotation);
         let pose = nalgebra::IsometryMatrix3::from_parts(trans, rot);
         Pose (pose)
     }
@@ -33,7 +35,7 @@ impl Pose {
 
     pub fn new_with_default_trans(rotation: nalgebra::Matrix3<f64>) -> Pose {
         let translation = nalgebra::Translation3::new(0.0, 0.0, 0.0);
-        let rot = nalgebra::Rotation3::from_matrix(&rotation);
+        let rot = nalgebra::Rotation3::from_matrix_unchecked(rotation);
         Pose ( nalgebra::IsometryMatrix3::from_parts(translation,rot) )
     }
 
@@ -65,7 +67,7 @@ impl Pose {
     }
 
     pub fn set_rotation(&mut self, rot: &DVRotation) {
-        self.0.rotation = nalgebra::Rotation3::from_matrix(rot);
+        self.0.rotation = nalgebra::Rotation3::from_matrix_unchecked(**rot);
     }
 
     pub fn inverse(&self) -> Pose {

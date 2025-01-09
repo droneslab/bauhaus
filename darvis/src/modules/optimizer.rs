@@ -1752,27 +1752,27 @@ pub fn add_vertex_pose_keyframe(optimizer: &mut UniquePtr<BridgeSparseOptimizer>
 
     let imu_calib = ImuCalib::new();
 
-    let rot = kf.get_pose().get_quaternion();
-    let imu_rot = nalgebra::geometry::UnitQuaternion::from_rotation_matrix(
-        & nalgebra::Rotation3::from_matrix(& *kf.get_imu_rotation())
-    ); // lol whateverrr
-    let tcb_rot = imu_calib.tcb.get_quaternion();
+    // let rot = kf.get_pose().get_quaternion();
+    // let imu_rot = nalgebra::geometry::UnitQuaternion::from_rotation_matrix(
+    //     & nalgebra::Rotation3::from_matrix(& *kf.get_imu_rotation())
+    // ); // lol whateverrr
+    // let tcb_rot = imu_calib.tcb.get_quaternion();
 
-    println!("translation: {:?}", kf.get_pose().get_translation());
-    println!("rotation: {:?}", rot);
-    println!("imu position: {:?}", kf.get_imu_position());
-    println!("imu rotation: {:?}", imu_rot);
+    // println!("translation: {:?}", kf.get_pose().get_translation());
+    // println!("rotation: {:?}", rot);
+    // println!("imu position: {:?}", kf.get_imu_position());
+    // println!("imu rotation: {:?}", imu_rot);
 
     optimizer.pin_mut().add_vertex_pose(
         vertex_id,
         fixed,
         1, // TODO (Stereo... num cams shouldn't be 1)
         kf.get_imu_position().into(), // imu position
-        [imu_rot.i, imu_rot.j, imu_rot.k, imu_rot.w], // imu rotation
+        (&kf.get_imu_rotation()).into(), // imu rotation
         kf.get_pose().get_translation().into(), // translation
-        [rot.i, rot.j, rot.k, rot.w], // rotation
+        (&kf.get_pose().get_rotation()).into(), // rotation
         imu_calib.tcb.translation.into(), //tcb translation
-        [tcb_rot.i, tcb_rot.j, tcb_rot.k, tcb_rot.w], // tcb rotation
+        (&imu_calib.tcb.get_rotation()).into(), // tcb rotation
         imu_calib.tbc.translation.into(), // tbc translation
         CAMERA_MODULE.stereo_baseline as f32
     );
@@ -1784,27 +1784,28 @@ pub fn add_vertex_pose_frame(optimizer: &mut UniquePtr<BridgeSparseOptimizer>, f
 
     let imu_calib = ImuCalib::new();
 
-    let rot = frame.pose.unwrap().get_quaternion();
-    let imu_rot = nalgebra::geometry::UnitQuaternion::from_rotation_matrix(
-        & nalgebra::Rotation3::from_matrix(& *frame.get_imu_rotation())
-    ); // lol whateverrr
-    let tcb_rot = imu_calib.tcb.get_quaternion();
+    // let rot = frame.pose.unwrap().get_quaternion();
+    // let imu_rot = nalgebra::geometry::UnitQuaternion::from_rotation_matrix(
+    //     & nalgebra::Rotation3::from_matrix(& *frame.get_imu_rotation())
+    // ); // lol whateverrr
+    // let tcb_rot = imu_calib.tcb.get_quaternion();
 
-    println!("translation: {:?}", frame.pose.unwrap().get_translation());
-    println!("rotation: {:?}", frame.pose.unwrap().get_rotation());
-    println!("imu position: {:?}", frame.get_imu_position());
-    println!("imu rotation: {:?}", imu_rot);
+    // println!("translation: {:?}", frame.pose.unwrap().get_translation());
+    println!("rotation in add_vertex_pose_frame: {:?}", frame.pose.unwrap().get_rotation());
+
+    // println!("imu position: {:?}", frame.get_imu_position());
+    // println!("imu rotation: {:?}", imu_rot);
 
     optimizer.pin_mut().add_vertex_pose(
         vertex_id,
         fixed,
         1, // TODO (Stereo... num cams shouldn't be 1)
         frame.get_imu_position().into(), // imu position
-        [imu_rot.i, imu_rot.j, imu_rot.k, imu_rot.w], // imu rotation
+        (&frame.get_imu_rotation()).into(), // imu rotation
         frame.pose.unwrap().get_translation().into(), // translation
-        [rot.i, rot.j, rot.k, rot.w], // rotation
+        (&frame.pose.unwrap().get_rotation()).into(), // rotation
         imu_calib.tcb.translation.into(), //tcb translation
-        [tcb_rot.i, tcb_rot.j, tcb_rot.k, tcb_rot.w], // tcb rotation
+        (&imu_calib.tcb.get_rotation()).into(), // tcb rotation
         imu_calib.tbc.translation.into(), // tbc translation
         CAMERA_MODULE.stereo_baseline as f32
     );

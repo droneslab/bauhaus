@@ -36,6 +36,7 @@ namespace ORB_SLAM3 {
         Eigen::Vector2d res;
         res[0] = mvParameters[0] * v3D[0] / v3D[2] + mvParameters[2];
         res[1] = mvParameters[1] * v3D[1] / v3D[2] + mvParameters[3];
+        std::cout << "mvParameters: " << mvParameters[0] << ", " << mvParameters[1] << ", " << mvParameters[2] << ", " << mvParameters[3] << std::endl;
 
         return res;
     }

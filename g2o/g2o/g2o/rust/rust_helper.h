@@ -21,6 +21,7 @@
 namespace g2o {
     // struct EdgeMono;
     // using Edge = OptimizableGraph::Edge;
+    struct PoseQuat;
     struct Pose;
     struct Position;
     struct RustSim3;
@@ -45,18 +46,18 @@ namespace g2o {
         bool has_vertex(int id) const;
         void remove_vertex(int vertex_id);
         void add_vertex_sim3expmap(int vertex_id, RustSim3 sim3, bool fix_scale, bool set_fixed, bool set_camera_params);
-        void add_vertex_se3expmap(int vertex_id, Pose pose, bool set_fixed);
-        void update_estimate_vertex_se3xpmap(int vertex_id, Pose pose);
+        void add_vertex_se3expmap(int vertex_id, PoseQuat pose, bool set_fixed);
+        void update_estimate_vertex_se3xpmap(int vertex_id, PoseQuat pose);
         void add_vertex_pose(int vertex_id, bool set_fixed, int num_cams,
-                             array<double, 3> imu_position, array<double, 4> imu_rotation,
-                             array<double, 3> translation, array<double, 4> rotation,
-                             array<double, 3> tcb_translation, array<double, 4> tcb_rotation,
+                             array<double, 3> imu_position, array<array<double, 3>, 3> imu_rotation,
+                             array<double, 3> translation, array<array<double, 3>, 3> rotation,
+                             array<double, 3> tcb_translation, array<array<double, 3>, 3> tcb_rotation,
                              array<double, 3> tbc_translation,
                              float bf);
         void add_vertex_velocity(int vertex_id, bool set_fixed, array<double, 3> velocity);
         void add_vertex_gyrobias(int vertex_id, bool set_fixed, array<double, 3> gyro_bias);
         void add_vertex_accbias(int vertex_id, bool set_fixed, array<double, 3> acc_bias);
-        void add_vertex_sbapointxyz(int vertex_id, Pose pose, bool set_fixed, bool set_marginalized);
+        void add_vertex_sbapointxyz(int vertex_id, Position pose, bool set_fixed, bool set_marginalized);
         void add_vertex_gdir(
             int vertex_id, bool set_fixed, array<array<double, 3>, 3> rwg);
         void add_vertex_scale(
@@ -131,6 +132,8 @@ namespace g2o {
         array<double, 3>
             recover_optimized_vertex_velocity(int vertex_id) const;
 
+        void print_optimized_vertex_pose(int vertex_id, VertexPoseRecoverType recover_type) const;
+        
         array<array<double, 24>, 24>
             get_hessian_from_edge_inertial(int edge_idx) const;
         array<array<double, 9>, 9>
@@ -190,7 +193,7 @@ namespace g2o {
             vnIndexEdgeMono;
         bool stopFlag;
 
-        SE3Quat format_pose(Pose pose) const;
+        SE3Quat format_pose(PoseQuat pose) const;
         Sim3 format_sim3(RustSim3 sim3) const;
 
         // Camera Parameters for Optimization

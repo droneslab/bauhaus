@@ -877,6 +877,8 @@ impl Into<g2o::ffi::RustImuPreintegrated> for & ImuPreIntegrated {
         // println!("JRG IN RUST: {:?}", self.jrg);
         // println!("JRG IN RUST AFTER CONVERT: {:?}", matrix_into_vec(self.jrg));
 
+        println!("INTO Bias: {}", self.b);
+
         g2o::ffi::RustImuPreintegrated {
             jrg: (&DVMatrix3::new(self.jrg)).into(),
             jvg: (&DVMatrix3::new(self.jvg)).into(),
