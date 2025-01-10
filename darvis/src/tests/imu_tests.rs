@@ -70,8 +70,6 @@ mod sim3solver_tests {
             measurements: vec![],
         });
 
-        println!("ugh2 {}", frame.imu_data.imu_preintegrated.as_ref().unwrap().b);
-
         // Tracking data setup
         let tracked_mappoint_data: HashMap<i32, bool> = HashMap::from([
             (2, false),
@@ -575,8 +573,6 @@ mod sim3solver_tests {
             prev_kf_imu_bias.get_acc_bias().into()
         );
 
-        println!("ugh {}", frame.imu_data.imu_preintegrated.as_ref().unwrap().b);
-
         optimizer.pin_mut().add_edge_inertial(
             vpk, vvk, vgk, vak, vp, vv,
             frame.imu_data.imu_preintegrated.as_ref().unwrap().into(),
@@ -659,41 +655,41 @@ mod sim3solver_tests {
 
 
 
-        // let recovered_pose: Pose = optimizer.recover_optimized_vertex_pose(vp, VertexPoseRecoverType::Wb).into();
-        // let recovered_velocity = optimizer.recover_optimized_vertex_velocity(vv);
-        // frame.set_imu_pose_velocity(recovered_pose, recovered_velocity.into());
+        let recovered_pose: Pose = optimizer.recover_optimized_vertex_pose(vp, VertexPoseRecoverType::Wb).into();
+        let recovered_velocity = optimizer.recover_optimized_vertex_velocity(vv);
+        frame.set_imu_pose_velocity(recovered_pose, recovered_velocity.into());
 
-        // let recovered_bias_estimate = optimizer.recover_optimized_inertial(
-        //     vg, va, -1, -1
-        // );
-        // let recovered_bias = ImuBias {
-        //     bax: recovered_bias_estimate.vb[3],
-        //     bay: recovered_bias_estimate.vb[4],
-        //     baz: recovered_bias_estimate.vb[5],
-        //     bwx: recovered_bias_estimate.vb[0],
-        //     bwy: recovered_bias_estimate.vb[1],
-        //     bwz: recovered_bias_estimate.vb[2],
-        // };
-        // println!("POSE OPT RESULT... pose... rotation: {:?}, translation: {:?},", recovered_pose.get_rotation(), recovered_pose.get_translation());
-        // println!("POSE OPT RESULT... velocity {:?}", recovered_velocity);
-        // println!("POSE OPT RESULT... biases: {:?}", recovered_bias);
+        let recovered_bias_estimate = optimizer.recover_optimized_inertial(
+            vg, va, -1, -1
+        );
+        let recovered_bias = ImuBias {
+            bax: recovered_bias_estimate.vb[3],
+            bay: recovered_bias_estimate.vb[4],
+            baz: recovered_bias_estimate.vb[5],
+            bwx: recovered_bias_estimate.vb[0],
+            bwy: recovered_bias_estimate.vb[1],
+            bwz: recovered_bias_estimate.vb[2],
+        };
+        println!("POSE OPT RESULT... pose... rotation: {:?}, translation: {:?},", recovered_pose.get_rotation(), recovered_pose.get_translation());
+        println!("POSE OPT RESULT... velocity {:?}", recovered_velocity);
+        println!("POSE OPT RESULT... biases: {:?}", recovered_bias);
 
-        // // Recover Hessian, marginalize keyFframe states and generate new prior for frame
-        // let mut h = nalgebra::SMatrix::<f64, 15, 15>::zeros();
-        // h.view_mut((0, 0), (9, 9)).add_assign(&optimizer.get_hessian2_from_edge_inertial(0).into());
-        // h.view_mut((9, 9), (3, 3)).add_assign(&optimizer.get_hessian2_from_edge_gyro().into());
-        // h.view_mut((12, 12), (3, 3)).add_assign(&optimizer.get_hessian2_from_edge_acc().into());
-        // println!("H is: {:?}", h);
+        // Recover Hessian, marginalize keyFframe states and generate new prior for frame
+        let mut h = nalgebra::SMatrix::<f64, 15, 15>::zeros();
+        h.view_mut((0, 0), (9, 9)).add_assign(&optimizer.get_hessian2_from_edge_inertial(0).into());
+        h.view_mut((9, 9), (3, 3)).add_assign(&optimizer.get_hessian2_from_edge_gyro().into());
+        h.view_mut((12, 12), (3, 3)).add_assign(&optimizer.get_hessian2_from_edge_acc().into());
+        println!("H is: {:?}", h);
 
-        // let mut i = 0;
-        // for mut edge in optimizer.pin_mut().get_mut_mono_onlypose_edges().iter_mut() {
-        //     let idx = mp_indexes[i];
-        //     if !frame.mappoint_matches.is_outlier(&idx) {
-        //         h.view_mut((0, 0), (6, 6)).add_assign(&edge.inner.pin_mut().get_hessian().into());
-        //     }
-        //     i += 1;
-        // }
-        // println!("new H is: {:?}", h);
+        let mut i = 0;
+        for mut edge in optimizer.pin_mut().get_mut_mono_onlypose_edges().iter_mut() {
+            let idx = mp_indexes[i];
+            if !frame.mappoint_matches.is_outlier(&idx) {
+                h.view_mut((0, 0), (6, 6)).add_assign(&edge.inner.pin_mut().get_hessian().into());
+            }
+            i += 1;
+        }
+        println!("new H is: {:?}", h);
 
 
         assert_eq!(1, -1); // just to get output

@@ -212,7 +212,8 @@ impl LocalMapping {
                             if !lock.imu_ba2 {
                                 if self.imu_module.as_ref().unwrap().timestamp_init < 10.0 && dist < 0.02 {
                                     warn!("Not enough motion for IMU initialization. Resetting...");
-                                    todo!("Multi-maps");
+                                    return Ok(());
+                                    // todo!("Multi-maps");
                                     // mbResetRequestedActiveMap = true;
                                     // mpMapToReset = mpCurrentKeyFrame->GetMap();
                                     // mbBadImu = true;
@@ -375,7 +376,7 @@ impl LocalMapping {
 
             drop(_span);
             let _span = tracy_client::span!("create_new_mappoints: loop");
-            println!("Create_new_mappoints neighbor_kfs: {:?}", neighbor_kfs);
+            // println!("Create_new_mappoints neighbor_kfs: {:?}", neighbor_kfs);
 
             // Search matches with epipolar restriction and triangulate
             for neighbor_id in neighbor_kfs {

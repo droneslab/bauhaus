@@ -8,15 +8,10 @@ pub mod ffi {
     }
 
     //* Pose types */
-    struct PoseQuat {
-        translation: [f64; 3], // in C++: array<double, 3>,
-        rotation: [f64; 4] // in C++: array<double, 4>
-    }
     struct Pose {
         translation: [f64; 3], // in C++: array<double, 3>,
-        rotation: [[f64; 3];3] // in C++: array<array<double, 3>, 3>
+        rotation: [f64; 4] // in C++: array<double, 4> 
     }
-
     struct Position {
         translation: [f64; 3],
     }
@@ -130,7 +125,7 @@ pub mod ffi {
         fn add_vertex_se3expmap(
             self: Pin<&mut BridgeSparseOptimizer>,
             vertex_id: i32,
-            pose: PoseQuat,
+            pose: Pose,
             set_fixed: bool
         );
         fn add_vertex_pose(
@@ -180,14 +175,14 @@ pub mod ffi {
         fn add_vertex_sbapointxyz(
             self: Pin<&mut BridgeSparseOptimizer>,
             vertex_id: i32,
-            pose: Position,
+            pose: Pose,
             set_fixed: bool,
             set_marginalized: bool
         );
         fn update_estimate_vertex_se3xpmap(
             self: Pin<&mut BridgeSparseOptimizer>,
             vertex: i32,
-            pose: PoseQuat,
+            pose: Pose,
         );
 
         //* Adding and modifying edges */

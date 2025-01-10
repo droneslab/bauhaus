@@ -133,7 +133,7 @@ Preintegrated::Preintegrated(g2o::RustImuPreintegrated * pre)
 
     b = IMU::Bias(pre->bias.b_acc_x, pre->bias.b_acc_y, pre->bias.b_acc_z, pre->bias.b_ang_vel_x, pre->bias.b_ang_vel_y, pre->bias.b_ang_vel_z);
 
-    std::cout << "set imupreintegrated, b is: " << b << std::endl;
+    // std::cout << "set imupreintegrated, b is: " << b << std::endl;
 
     // Nga = calib.Cov;
     // NgaWalk = calib.CovWalk;
@@ -344,10 +344,10 @@ Eigen::Matrix3f Preintegrated::GetDeltaRotation(const Bias &b_)
         dbg = Eigen::Vector3f(0,0,0);
     }
 
-    std::cout << "Get delta rotation.... " << std::endl;
-    std::cout << "...b: " << b << std::endl;
-    std::cout << "...Jrg: " << JRg << std::endl;
-    std::cout << "...dbg: " << dbg << std::endl;
+    // std::cout << "Get delta rotation.... " << std::endl;
+    // std::cout << "...b: " << b << std::endl;
+    // std::cout << "...Jrg: " << JRg << std::endl;
+    // std::cout << "...dbg: " << dbg << std::endl;
 
     return NormalizeRotation(dR * Sophus::SO3f::exp(JRg * dbg).matrix());
 }

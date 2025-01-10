@@ -425,12 +425,12 @@ public:
         auto estimate = VPose->estimate();
         auto vposeestimateproject = estimate.Project(Xw, cam_idx);
         _error = obs - vposeestimateproject;
-        std::cout << std::setprecision(15) << "error edgemonoonlypose: " << _error << std::endl;
-        std::cout << std::setprecision(15) << "(obs: " << obs << ")" << std::endl;
+        // std::cout << std::setprecision(15) << "error edgemonoonlypose: " << _error << std::endl;
+        // std::cout << std::setprecision(15) << "(obs: " << obs << ")" << std::endl;
         // std::cout << "(Vpose estimate: " << estimate << ")" << std::endl;
-        std::cout << std::setprecision(15) << "(Vpose estimate project: " << vposeestimateproject << ")" << std::endl;
+        // std::cout << std::setprecision(15) << "(Vpose estimate project: " << vposeestimateproject << ")" << std::endl;
 
-        std::cout << std::setprecision(15) << "(Xw: " << Xw << ")" << std::endl;
+        // std::cout << std::setprecision(15) << "(Xw: " << Xw << ")" << std::endl;
     }
 
     virtual void linearizeOplus();

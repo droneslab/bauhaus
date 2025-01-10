@@ -476,12 +476,12 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
         if let Some(prev_kf_id) = last_opt_kf.prev_kf_id {
             fixed_keyframes.push(prev_kf_id);
             ba_fixed_for_kf.insert(prev_kf_id, curr_kf_id);
-            println!("LI_BA, add fixed keyframe #1: {}", prev_kf_id);
+            // println!("LI_BA, add fixed keyframe #1: {}", prev_kf_id);
         } else {
             ba_local_for_kf.insert(* optimizable_kfs.back().unwrap(), 0);
             ba_fixed_for_kf.insert(* optimizable_kfs.back().unwrap(), curr_kf_id);
             fixed_keyframes.push(* optimizable_kfs.back().unwrap());
-            println!("LI_BA, add fixed keyframe #2: {}", optimizable_kfs.back().unwrap());
+            // println!("LI_BA, add fixed keyframe #2: {}", optimizable_kfs.back().unwrap());
             optimizable_kfs.pop_back();
         }
     }
@@ -539,8 +539,8 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
                 break;
             }
         }
-        println!("LI_BA, fixed keyframes which are not covisible: {:?}", fixed_keyframes);
-        println!("LI_BA, optimizable keyframes: {:?}", optimizable_kfs);
+        // println!("LI_BA, fixed keyframes which are not covisible: {:?}", fixed_keyframes);
+        // println!("LI_BA, optimizable keyframes: {:?}", optimizable_kfs);
     }
 
     let non_fixed = fixed_keyframes.len() == 0;
@@ -567,7 +567,7 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
         for kf_id in &optimizable_kfs {
             let kf = lock.get_keyframe(*kf_id);
 
-            debug!("Sofiya Add vertex: {}", kf.id);
+            // debug!("Sofiya Add vertex: {}", kf.id);
             super::optimizer::add_vertex_pose_keyframe(&mut optimizer, kf, false, kf.id);
 
             if kf.imu_data.is_imu_initialized {
@@ -592,14 +592,14 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
         // Set Local visual KeyFrame vertices
         for kf_id in &opt_vis_kfs {
             let kf = lock.get_keyframe(*kf_id);
-            debug!("Sofiya Add vertex: {}", kf.id);
+            // debug!("Sofiya Add vertex: {}", kf.id);
             super::optimizer::add_vertex_pose_keyframe(&mut optimizer, kf, false, kf.id);
         }
 
         // Set Fixed KeyFrame vertices
         for kf_id in &fixed_keyframes {
             let kf = lock.get_keyframe(*kf_id);
-            debug!("Sofiya Add vertex: {}", kf.id);
+            // debug!("Sofiya Add vertex: {}", kf.id);
             super::optimizer::add_vertex_pose_keyframe(&mut optimizer, kf, true, kf.id);
 
             // This should be done only for keyframe just before temporal window
@@ -641,7 +641,7 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
                 prev_kf.imu_data.imu_preintegrated.is_none() ||
                 !prev_kf.imu_data.is_imu_initialized {
                     warn!("Error building inertial edge... for kf {}: {} {} {} {}", kf.id, kf.imu_data.imu_preintegrated.is_none(), !kf.imu_data.is_imu_initialized, prev_kf.imu_data.imu_preintegrated.is_none(), !prev_kf.imu_data.is_imu_initialized);
-                    println!("Kf ID is {}", kf.id);
+                    // println!("Kf ID is {}", kf.id);
                     continue;
             }
             let mut imu_preintegrated = kf.imu_data.imu_preintegrated.as_ref().unwrap().clone();
@@ -735,7 +735,7 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
             let mp = lock.mappoints.get(mp_id).unwrap();
 
             let vertex_id = mp.id + ini_mp_id + 1;
-            debug!("Sofiya Add vertex: {}", vertex_id);
+            // debug!("Sofiya Add vertex: {}", vertex_id);
             optimizer.pin_mut().add_vertex_sbapointxyz(
                 vertex_id,
                 Pose::new(*mp.position, Matrix3::identity()).into(), // create pose out of translation only

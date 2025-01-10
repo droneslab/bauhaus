@@ -417,7 +417,7 @@ void SparseOptimizer::printStats() {
 
       bool errorComputed = false;
       if (_computeBatchStatistics) {
-          std::cout << "SOFIYA! Compute active errors batch statistics" << std::endl;
+        //   std::cout << "SOFIYA! Compute active errors batch statistics" << std::endl;
           computeActiveErrors();
           errorComputed = true;
           _batchStatistics[i].chi2 = activeRobustChi2();
@@ -428,7 +428,7 @@ void SparseOptimizer::printStats() {
         double dts = get_monotonic_time()-ts;
         cumTime += dts;
         if (! errorComputed) {
-            std::cout << "SOFIYA! Compute active errors not error computed" << std::endl;
+            // std::cout << "SOFIYA! Compute active errors not error computed" << std::endl;
             computeActiveErrors();
         }
         std::cout << "iteration= " << i

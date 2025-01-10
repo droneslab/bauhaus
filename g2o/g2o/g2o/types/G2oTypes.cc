@@ -72,16 +72,16 @@ ImuCamPose::ImuCamPose(
     Rwb0 = Rwb;
     DR.setIdentity();
 
-    std::cout << "ImuCamPose imu position: " << twb << std::endl;
-    std::cout << "ImuCamPose imu rotation: " << Rwb << std::endl;
-    std::cout << "ImuCamPose position: " << tcw[0] << std::endl;
-    std::cout << "ImuCamPose rotation: " << std::setprecision(15) << Rcw[0] << std::endl;
+    // std::cout << "ImuCamPose imu position: " << twb << std::endl;
+    // std::cout << "ImuCamPose imu rotation: " << Rwb << std::endl;
+    // std::cout << "ImuCamPose position: " << tcw[0] << std::endl;
+    // std::cout << "ImuCamPose rotation: " << std::setprecision(15) << Rcw[0] << std::endl;
 
-    std::cout << "(constants) ImuCamPose mImuCalib.mTcb translation: " << tcb[0] << std::endl;
-    std::cout << "(constants) ImuCamPose mImuCalib.mTcb rotation: " << Rcb[0] << std::endl;
-    std::cout << "(constants) ImuCamPose Rbc[0]: " << Rbc[0] << std::endl;
-    std::cout << "(constants) ImuCamPose tbc[0]: " << tbc[0] << std::endl;
-    std::cout << "(constants) ImuCamPose bf: " << bf << std::endl;
+    // std::cout << "(constants) ImuCamPose mImuCalib.mTcb translation: " << tcb[0] << std::endl;
+    // std::cout << "(constants) ImuCamPose mImuCalib.mTcb rotation: " << Rcb[0] << std::endl;
+    // std::cout << "(constants) ImuCamPose Rbc[0]: " << Rbc[0] << std::endl;
+    // std::cout << "(constants) ImuCamPose tbc[0]: " << tbc[0] << std::endl;
+    // std::cout << "(constants) ImuCamPose bf: " << bf << std::endl;
 }
 
 
@@ -116,18 +116,16 @@ ImuCamPose::ImuCamPose(
     Rwb0 = Rwb;
     DR.setIdentity();
 
-    std::cout << " What's this?" << std::endl;
+    // std::cout << "ImuCamPose imu position: " << twb << std::endl;
+    // std::cout << "ImuCamPose imu rotation: " << Rwb << std::endl;
+    // std::cout << "ImuCamPose position: " << tcw[0] << std::endl;
+    // std::cout << "ImuCamPose rotation: " << Rcw[0] << std::endl;
 
-    std::cout << "ImuCamPose imu position: " << twb << std::endl;
-    std::cout << "ImuCamPose imu rotation: " << Rwb << std::endl;
-    std::cout << "ImuCamPose position: " << tcw[0] << std::endl;
-    std::cout << "ImuCamPose rotation: " << Rcw[0] << std::endl;
-
-    std::cout << "(constants) ImuCamPose mImuCalib.mTcb translation: " << tcb[0] << std::endl;
-    std::cout << "(constants) ImuCamPose mImuCalib.mTcb rotation: " << Rcb[0] << std::endl;
-    std::cout << "(constants) ImuCamPose Rbc[0]: " << Rbc[0] << std::endl;
-    std::cout << "(constants) ImuCamPose tbc[0]: " << tbc[0] << std::endl;
-    std::cout << "(constants) ImuCamPose bf: " << bf << std::endl;
+    // std::cout << "(constants) ImuCamPose mImuCalib.mTcb translation: " << tcb[0] << std::endl;
+    // std::cout << "(constants) ImuCamPose mImuCalib.mTcb rotation: " << Rcb[0] << std::endl;
+    // std::cout << "(constants) ImuCamPose Rbc[0]: " << Rbc[0] << std::endl;
+    // std::cout << "(constants) ImuCamPose tbc[0]: " << tbc[0] << std::endl;
+    // std::cout << "(constants) ImuCamPose bf: " << bf << std::endl;
 }
 
 void ImuCamPose::SetParam(const std::vector<Eigen::Matrix3d> &_Rcw, const std::vector<Eigen::Vector3d> &_tcw, const std::vector<Eigen::Matrix3d> &_Rbc,
@@ -156,12 +154,12 @@ Eigen::Vector2d ImuCamPose::Project(const Eigen::Vector3d &Xw, int cam_idx) cons
 {
     Eigen::Vector3d Xc = Rcw[cam_idx] * Xw + tcw[cam_idx];
 
-    std::cout << std::setprecision(15) << "vpose estimate.... ImuCamPose project... Rcw " << Rcw[cam_idx] << std::endl;
-    std::cout << std::setprecision(15) << "vpose estimate.... ImuCamPose project... tcw" << tcw[cam_idx] << std::endl;
-    std::cout << std::setprecision(15) << "vpose estimate.... ImuCamPose project... Xc" << Xc << std::endl;
+    // std::cout << std::setprecision(15) << "vpose estimate.... ImuCamPose project... Rcw " << Rcw[cam_idx] << std::endl;
+    // std::cout << std::setprecision(15) << "vpose estimate.... ImuCamPose project... tcw" << tcw[cam_idx] << std::endl;
+    // std::cout << std::setprecision(15) << "vpose estimate.... ImuCamPose project... Xc" << Xc << std::endl;
 
     Eigen::Vector2d result = pCamera[cam_idx]->project(Xc);
-    std::cout << std::setprecision(15) << "vpose estimate.... ImuCamPose project... result" << result << std::endl;
+    // std::cout << std::setprecision(15) << "vpose estimate.... ImuCamPose project... result" << result << std::endl;
 
     return result;
 }
@@ -492,23 +490,23 @@ EdgeInertial::EdgeInertial(IMU::Preintegrated *pInt):JRg(pInt->JRg.cast<double>(
 
     Eigen::IOFormat CommaFmt(Eigen::StreamPrecision, Eigen::DontAlignCols, ", ", ", ", "", "", "", "");
 
-    std::cout << "EdgeInertial! Jrg: " << JRg.format(CommaFmt) << std::endl;
-    std::cout << "EdgeInertial! Jvg: " << JVg.format(CommaFmt) << std::endl;
-    std::cout << "EdgeInertial! Jpg: " << JPg.format(CommaFmt) << std::endl;
-    std::cout << "EdgeInertial! Jva: " << JVa.format(CommaFmt) << std::endl;
-    std::cout << "EdgeInertial! Jpa: " << JPa.format(CommaFmt) << std::endl;
-    std::cout << "EdgeInertial! dR: " << pInt->dR.format(CommaFmt) << std::endl;
-    std::cout << "EdgeInertial! dV: " << pInt->dV.format(CommaFmt) << std::endl;
-    std::cout << "EdgeInertial! db: " << pInt->db.format(CommaFmt) << std::endl;
-    std::cout << "EdgeInertial! dP: " << pInt->dP.format(CommaFmt) << std::endl;
-    std::cout << "EdgeInertial! avgA: " << pInt->avgA.format(CommaFmt) << std::endl;
-    std::cout << "EdgeInertial! avgW: " << pInt->avgW.format(CommaFmt) << std::endl;
+    // std::cout << "EdgeInertial! Jrg: " << JRg.format(CommaFmt) << std::endl;
+    // std::cout << "EdgeInertial! Jvg: " << JVg.format(CommaFmt) << std::endl;
+    // std::cout << "EdgeInertial! Jpg: " << JPg.format(CommaFmt) << std::endl;
+    // std::cout << "EdgeInertial! Jva: " << JVa.format(CommaFmt) << std::endl;
+    // std::cout << "EdgeInertial! Jpa: " << JPa.format(CommaFmt) << std::endl;
+    // std::cout << "EdgeInertial! dR: " << pInt->dR.format(CommaFmt) << std::endl;
+    // std::cout << "EdgeInertial! dV: " << pInt->dV.format(CommaFmt) << std::endl;
+    // std::cout << "EdgeInertial! db: " << pInt->db.format(CommaFmt) << std::endl;
+    // std::cout << "EdgeInertial! dP: " << pInt->dP.format(CommaFmt) << std::endl;
+    // std::cout << "EdgeInertial! avgA: " << pInt->avgA.format(CommaFmt) << std::endl;
+    // std::cout << "EdgeInertial! avgW: " << pInt->avgW.format(CommaFmt) << std::endl;
 
-    std::cout << "EdgeInertial! dt: " << dt << std::endl;
-    std::cout << "EdgeInertial! full C: " << pInt->C.format(CommaFmt) << std::endl;
+    // std::cout << "EdgeInertial! dt: " << dt << std::endl;
+    // std::cout << "EdgeInertial! full C: " << pInt->C.format(CommaFmt) << std::endl;
 
-    std::cout << "(for ref) EdgeInertial! C block: " << pInt->C.block<9, 9>(0, 0).format(CommaFmt) << std::endl;
-    std::cout << "Info: " << Info.format(CommaFmt) << std::endl;
+    // std::cout << "(for ref) EdgeInertial! C block: " << pInt->C.block<9, 9>(0, 0).format(CommaFmt) << std::endl;
+    // std::cout << "Info: " << Info.format(CommaFmt) << std::endl;
 }
 
 void EdgeInertial::computeError()
@@ -531,35 +529,14 @@ void EdgeInertial::computeError()
 
     _error << er, ev, ep;
 
-    std::cout << "error edgeinertial: " << std::setprecision(15) << _error << std::endl;
-    std::cout << "(Vertices: " << VP1->id() << ", " << VV1->id() << ", " << VG1->id() << ", " << VA1->id() << ", " << VP2->id() << ", " << VV2->id() << ")" << std::endl;
-    std::cout << "First error: " << std::setprecision(15) << dR.transpose() * VP1->estimate().Rwb.transpose() * VP2->estimate().Rwb << std::endl;
-    std::cout << "dr transpose: " << std::setprecision(15) << dR.transpose() << std::endl;
-    std::cout << "VP1 Rwb transpose: " << std::setprecision(15) << VP1->estimate().Rwb.transpose() << std::endl;
-    std::cout << "VP2 Rwb: " << std::setprecision(15) << VP2->estimate().Rwb << std::endl;
+    // std::cout << "error edgeinertial: " << std::setprecision(15) << _error << std::endl;
+    // std::cout << "(Vertices: " << VP1->id() << ", " << VV1->id() << ", " << VG1->id() << ", " << VA1->id() << ", " << VP2->id() << ", " << VV2->id() << ")" << std::endl;
+    // std::cout << "First error: " << std::setprecision(15) << dR.transpose() * VP1->estimate().Rwb.transpose() * VP2->estimate().Rwb << std::endl;
+    // std::cout << "dr transpose: " << std::setprecision(15) << dR.transpose() << std::endl;
+    // std::cout << "VP1 Rwb transpose: " << std::setprecision(15) << VP1->estimate().Rwb.transpose() << std::endl;
+    // std::cout << "VP2 Rwb: " << std::setprecision(15) << VP2->estimate().Rwb << std::endl;
 
-    std::cout << "(b1: " << b1 << ")" << std::endl;
-
-    std::cout << "Sofiya test!!!" << std::endl;
-    Eigen::Matrix3d dR_new = Eigen::Matrix3d::Identity();
-    dR_new << 0.9969211220741272, 0.056850001215934753, 0.054002135992050171, - 0.058464948087930679, 0.99787360429763794, 0.028810344636440277, -0.052249439060688019, -0.031878873705863953, 0.99812507629394531;
-
-    Eigen::Matrix3d VP1_new = Eigen::Matrix3d::Identity();
-    VP1_new << 0.031978249549865723, 0.37264370918273926, 0.92742335796356201, 0.99457550048828125, -0.10375452041625977, 0.0073953336104750633, 0.098980173468589783, 0.92215603590011597, -0.37394022941589355;
-
-    Eigen::Matrix3d VP2_new = Eigen::Matrix3d::Identity();
-    VP2_new << 0.093766435980796814, 0.99344265460968018, 0.065417788922786713, 0.41539648175239563, - 0.09875275194644928, 0.90426433086395264, 0.90479499101638794, - 0.057615339756011963, - 0.42193219065666199;
-
-    std::cout << "First error: " << std::setprecision(15) << dR_new * VP1_new * VP2_new << std::endl;
-    std::cout << "dr transpose: " << std::setprecision(15) << dR_new << std::endl;
-    std::cout << "VP1 Rwb transpose: " << std::setprecision(15) << VP1_new << std::endl;
-    std::cout << "VP2 Rwb: " << std::setprecision(15) << VP2_new << std::endl;
-
-    std::cout << "Sofiya test2!!!" << std::endl;
-    std::cout << "First error: " << std::setprecision(15) << dR.transpose() * VP1->estimate().Rwb.transpose() * VP2_new << std::endl;
-    std::cout << "dr transpose: " << std::setprecision(15) << dR.transpose() << std::endl;
-    std::cout << "VP1 Rwb transpose: " << std::setprecision(15) << VP1->estimate().Rwb.transpose() << std::endl;
-    std::cout << "VP2 Rwb: " << std::setprecision(15) << VP2_new << std::endl;
+    // std::cout << "(b1: " << b1 << ")" << std::endl;
 }
 
 void EdgeInertial::linearizeOplus()

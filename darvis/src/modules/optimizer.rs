@@ -85,7 +85,6 @@ pub fn pose_inertial_optimization_last_frame(
         va, false, frame.imu_data.get_imu_bias().get_acc_bias().into()
     );
 
-    println!("Frame mappoint matches: {:?}", frame.mappoint_matches.matches);
     // Set MapPoint vertices
     let mut mp_indexes = vec![]; // vnIndexEdgeMono
     for i in 0..frame.mappoint_matches.matches.len() {
@@ -228,6 +227,14 @@ pub fn pose_inertial_optimization_last_frame(
 
     if previous_frame.imu_data.constraint_pose_imu.is_some() {
         let cpi = previous_frame.imu_data.constraint_pose_imu.as_ref().unwrap();
+        println!("In rust....");
+        println!("Rwb: {:?}", cpi.rwb);
+        println!("twb: {:?}", cpi.twb);
+        println!("vwb: {:?}", cpi.vwb);
+        println!("bg: {:?}", cpi.bg);
+        println!("ba: {:?}", cpi.ba);
+        println!("h: {:?}", cpi.h);
+
         optimizer.pin_mut().add_edge_prior_pose_imu(
             vpk, vvk, vgk, vak,
             (&cpi.rwb).into(), cpi.twb.into(), cpi.vwb.into(), cpi.bg.into(), cpi.ba.into(), cpi.h.into(),
@@ -494,17 +501,13 @@ pub fn pose_inertial_optimization_last_keyframe(
     let vv = 1;
     let vg = 2;
     let va = 3;
-    println!("POSE OPT! Add frame");
     add_vertex_pose_frame(&mut optimizer, frame, false, vp);
-    println!("POSE OPT! Add vertex velocity {:?}", frame.imu_data.velocity.unwrap());
     optimizer.pin_mut().add_vertex_velocity(
         vv, false, frame.imu_data.velocity.unwrap().into()
     );
-    println!("POSE OPT! Add vertex gyro bias {:?}", frame.imu_data.get_imu_bias().get_gyro_bias());
     optimizer.pin_mut().add_vertex_gyrobias(
         vg, false, frame.imu_data.get_imu_bias().get_gyro_bias().into()
     );
-    println!("POSE OPT! Add vertex acc bias {:?}", frame.imu_data.get_imu_bias().get_acc_bias());
     optimizer.pin_mut().add_vertex_accbias(
         va, false, frame.imu_data.get_imu_bias().get_acc_bias().into()
     );
@@ -616,19 +619,16 @@ pub fn pose_inertial_optimization_last_keyframe(
         let lock = map.read()?;
         let previous_keyframe = lock.get_keyframe(frame.imu_data.prev_keyframe.expect("Frame has IMU data but no prev keyframe?"));
         add_vertex_pose_keyframe(&mut optimizer, previous_keyframe, true, vpk);
-        println!("POSE OPT! Add vertex velocity {:?}", previous_keyframe.imu_data.velocity.unwrap());
         optimizer.pin_mut().add_vertex_velocity(
             vvk,
             true,
             previous_keyframe.imu_data.velocity.unwrap().into()
         );
-        println!("POSE OPT! Add vertex gyro bias {:?}", previous_keyframe.imu_data.get_imu_bias().get_gyro_bias());
         optimizer.pin_mut().add_vertex_gyrobias(
             vgk,
             true,
             previous_keyframe.imu_data.get_imu_bias().get_gyro_bias().into()
         );
-        println!("POSE OPT! Add vertex acc bias {:?}", previous_keyframe.imu_data.get_imu_bias().get_acc_bias());
         optimizer.pin_mut().add_vertex_accbias(
             vak,
             true,
@@ -636,8 +636,6 @@ pub fn pose_inertial_optimization_last_keyframe(
         );
     }
 
-    println!("POSE OPT! Add edge inertial {} {} {} {} {} {} ", vpk, vvk, vgk, vak, vp, vv);
-    println!("(imu preintegrated is: {:?}", frame.imu_data.imu_preintegrated.as_ref().unwrap());
     optimizer.pin_mut().add_edge_inertial(
         vpk, vvk, vgk, vak, vp, vv,
         frame.imu_data.imu_preintegrated.as_ref().unwrap().into(),
@@ -689,11 +687,11 @@ pub fn pose_inertial_optimization_last_keyframe(
                 frame.mappoint_matches.set_outlier(mp_idx as usize, true);
                 edge.inner.pin_mut().set_level(1);
                 num_bad += 1;
-                println!("SET LEVEL {}, CHI2 {}, IS CLOSE {}, IS DEPTH POSITIVE {}", 1, chi2, is_close, edge.inner.is_depth_positive());
+                // println!("SET LEVEL {}, CHI2 {}, IS CLOSE {}, IS DEPTH POSITIVE {}", 1, chi2, is_close, edge.inner.is_depth_positive());
             } else {
                 frame.mappoint_matches.set_outlier(mp_idx as usize, false);
                 edge.inner.pin_mut().set_level(0);
-                println!("SET LEVEL {}, CHI2 {}, IS CLOSE {}, IS DEPTH POSITIVE {}", 0, chi2, is_close, edge.inner.is_depth_positive());
+                // println!("SET LEVEL {}, CHI2 {}, IS CLOSE {}, IS DEPTH POSITIVE {}", 0, chi2, is_close, edge.inner.is_depth_positive());
             }
 
             if iteration == 2 {

@@ -55,7 +55,7 @@ namespace g2o {
     
     //here so that correct component for max-mixtures can be computed before the build structure
     double t=get_monotonic_time();
-    std::cout << "SOFIYA! Compute active errors gauss newton solve #1" << std::endl;
+    // std::cout << "SOFIYA! Compute active errors gauss newton solve #1" << std::endl;
 
     _optimizer->computeActiveErrors();
     G2OBatchStatistics* globalStats = G2OBatchStatistics::globalStats();

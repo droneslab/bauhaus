@@ -18,7 +18,6 @@ impl Pose {
         let trans = nalgebra::Translation3::from(translation);
         let rot = nalgebra::Rotation3::from_matrix_unchecked(rotation);
 
-        println!("Create pose rotation is: {:?}", rotation);
         let pose = nalgebra::IsometryMatrix3::from_parts(trans, rot);
         Pose (pose)
     }

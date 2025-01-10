@@ -694,7 +694,6 @@ impl ImuPreIntegrated {
         self.initialize(self.bu);
         for i in 0..measurements.len() {
             self.integrate_new_measurement(measurements[i].a, measurements[i].w, measurements[i].t);
-            println!("Reintegrate: t: {}", measurements[i].t)
         }
     }
 
@@ -797,7 +796,7 @@ impl ImuPreIntegrated {
         self.d_b[3] = new_bias.bax - self.b.bax;
         self.d_b[4] = new_bias.bay - self.b.bay;
         self.d_b[5] = new_bias.baz - self.b.baz;
-        debug!("Set bias for imu_preintegrated???? {:?}", self.d_b);
+        // debug!("Set bias for imu_preintegrated???? {:?}", self.d_b);
     }
 
     pub fn get_delta_bias(&self) {
@@ -876,8 +875,6 @@ impl Into<g2o::ffi::RustImuPreintegrated> for & ImuPreIntegrated {
         // println!("SELF.C: {:?}", self.c);
         // println!("JRG IN RUST: {:?}", self.jrg);
         // println!("JRG IN RUST AFTER CONVERT: {:?}", matrix_into_vec(self.jrg));
-
-        println!("INTO Bias: {}", self.b);
 
         g2o::ffi::RustImuPreintegrated {
             jrg: (&DVMatrix3::new(self.jrg)).into(),

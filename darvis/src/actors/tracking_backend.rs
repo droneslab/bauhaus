@@ -170,7 +170,7 @@ impl TrackingBackend {
         } else if message.is::<InitKeyFrameMsg>() {
             // Received from local mapping after it inserts a keyframe
             let msg = message.downcast::<InitKeyFrameMsg>().unwrap_or_else(|_| panic!("Could not downcast tracking frontend message!"));
-            
+
             if msg.map_version != self.map.read()?.version {
                 warn!("Received InitKeyFrameMsg with wrong map version. Expected: {}, Received: {}", self.map.read()?.version, msg.map_version);
                 return Ok(false);
@@ -803,7 +803,7 @@ impl TrackingBackend {
             // Note: Added constraint_pose_imu check because pose_inertial_optimization_last_keyframe 
             // should be called first to create this on the previous frame, but if the timing doesn't work out
             // then we end up here first
-            debug!("Mappoint matches: {:?}", self.current_frame.mappoint_matches.matches);
+            // debug!("Mappoint matches: {:?}", self.current_frame.mappoint_matches.matches);
             optimizer::pose_inertial_optimization_last_frame(&mut self.current_frame, &mut self.last_frame.as_mut().unwrap(), & self.track_in_view, &self.map, &self.sensor)?;
         } else {
             // println!("Current frame id: {}", self.current_frame.frame_id);
