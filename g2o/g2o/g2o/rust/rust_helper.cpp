@@ -615,9 +615,9 @@ namespace g2o {
         // Eigen::Matrix3d Rwb2(Rwb.data());
 
         Eigen::Matrix3d Rwb2;
-        Rwb2 << Rwb[0][0], Rwb[0][1], Rwb[0][2],
-                Rwb[1][0], Rwb[1][1], Rwb[1][2],
-                Rwb[2][0], Rwb[2][1], Rwb[2][2];
+        Rwb2 << Rwb[0][0], Rwb[1][0], Rwb[2][0],
+                Rwb[0][1], Rwb[1][1], Rwb[2][1],
+                Rwb[0][2], Rwb[1][2], Rwb[2][2];
 
 
         Eigen::Vector3d twb2(twb.data());
@@ -627,7 +627,7 @@ namespace g2o {
         Matrix15d H2;
         for (int i = 0; i < 15; i++) {
             for (int j = 0; j < 15; j++) {
-                H2(i,j) = H[i][j];
+                H2(i,j) = H[j][i];
             }
         }
 

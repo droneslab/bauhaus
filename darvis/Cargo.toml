@@ -21,14 +21,14 @@ lto = "fat"
 [rust]
 debuginfo-level = 1
 
-[env]
-IDL_PACKAGE_FILTER = { value = "std_msgs;r2r_minimal_node_msgs" }
+#[env]
+#IDL_PACKAGE_FILTER = { value = "std_msgs;r2r_minimal_node_msgs" }
 
 [dependencies]
 g2o = { path = "../g2o" }
 dvos3binding = { path = "../orbslam-bindings" }
 foxglove = { path = "../foxglove" }
-
+gtsam = { path = "../../depends/gtsam-rs" }
 
 once_cell = "*"
 chrono = { version = "*", features = ["serde"] }
@@ -47,9 +47,9 @@ tokio = "1.36.0"
 base64 = "0.21.7"
 
 #cc = { version = "1.0.79", features = ["parallel"] }
-opencv = "0.85.2"
+opencv = {version = "0.85.3", default-features = false, features= ["imgcodecs", "video"]}
 nalgebra = {version = "0.32.3", features = ["serde-serialize"]}
-cv-convert = {version = '0.25.0', default_features = false, features = ['opencv_0-85','nalgebra_0-32']}
+cv-convert = {version = '0.25.0', default-features = false, features = ['opencv_0-85','nalgebra_0-32']}
 cxx = "1.0"
 
 yaml-rust = "*"

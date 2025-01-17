@@ -4,6 +4,7 @@ pub mod local_mapping; // orbslam3 local mapping
 pub mod loop_closing; // orbslam3 loop closing.
 
 pub mod tracking_optical_flow; // flow tracking
+pub mod tracking_gtsam;
 
 // Darvis-defined actors
 pub mod visualizer;

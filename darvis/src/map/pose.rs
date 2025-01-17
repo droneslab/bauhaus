@@ -159,6 +159,22 @@ impl Into<Sim3> for Pose {
         }
     }
 }
+
+//* bindings with gtsam */
+impl From<Pose> for gtsam::geometry::pose3::Pose3 {
+    fn from(pose: Pose) -> Self { 
+        // let quat: nalgebra::geometry::UnitQuaternion<f64> = pose.get_quaternion();
+        // // Note: quaternion in nalgebra (here) is [w,i,j,k]
+        // // but in eigen (in C++ bindings) is [i,j,k,w] 
+        // // but eigen constructor takes [w,i,j,k]
+        // let rotation = [quat.w, quat.i, quat.j, quat.k];
+        // let translation = [pose.0.translation.x, pose.0.translation.y, pose.0.translation.z];
+        // g2o::ffi::Pose { translation, rotation }
+
+        gtsam::geometry::pose3::Pose3::from_parts((*pose.get_translation()).into(), (*pose.get_quaternion()).into())
+    }
+}
+
 //* bindings with g2o */
 impl From<Pose> for g2o::ffi::Pose {
     fn from(pose: Pose) -> Self { 

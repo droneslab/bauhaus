@@ -247,7 +247,7 @@ pub fn pose_inertial_optimization_last_frame(
     // We perform 4 optimizations, after each optimization we classify observation as inlier/outlier
     // At the next optimization, outliers are not included, but at the end they can be classified as inliers again.
     let chi2_mono = vec![5.991,5.991,5.991,5.991];
-    let _chi2_stereo = vec![7.815,7.815,7.815, 7.815];
+    let _chi2_stereo = vec![15.6, 9.8, 7.815, 7.815];
     let iterations = vec![10,10,10,10];
 
     let mut num_bad = 0;
@@ -608,7 +608,6 @@ pub fn pose_inertial_optimization_last_keyframe(
     }
 
     let num_initial_correspondences = initial_mono_correspondences + _initial_stereo_correspondences;
-    debug!("POSE OPT! Num initial correspondences: {}, bla: {}", num_initial_correspondences, bla);
 
     // Set Previous Frame Vertex
     let vpk = 4;
@@ -678,8 +677,6 @@ pub fn pose_inertial_optimization_last_keyframe(
 
             let chi2 = edge.inner.chi2();
 
-            // println!("Result mappoint... chi2 {}, chi2_mono[iteration] {}, is_close {}, chi2_close {}, edge.inner.is_depth_positive() {}", chi2, chi2_mono[iteration], is_close, chi2_close, edge.inner.is_depth_positive());
-            // Sofiya... chi2s are very high
             if (chi2 > chi2_mono[iteration] && !is_close) ||
                 (is_close && chi2 > chi2_close) ||
                 ! edge.inner.is_depth_positive()
@@ -1750,17 +1747,6 @@ pub fn add_vertex_pose_keyframe(optimizer: &mut UniquePtr<BridgeSparseOptimizer>
 
     let imu_calib = ImuCalib::new();
 
-    // let rot = kf.get_pose().get_quaternion();
-    // let imu_rot = nalgebra::geometry::UnitQuaternion::from_rotation_matrix(
-    //     & nalgebra::Rotation3::from_matrix(& *kf.get_imu_rotation())
-    // ); // lol whateverrr
-    // let tcb_rot = imu_calib.tcb.get_quaternion();
-
-    // println!("translation: {:?}", kf.get_pose().get_translation());
-    // println!("rotation: {:?}", rot);
-    // println!("imu position: {:?}", kf.get_imu_position());
-    // println!("imu rotation: {:?}", imu_rot);
-
     optimizer.pin_mut().add_vertex_pose(
         vertex_id,
         fixed,
@@ -1781,18 +1767,6 @@ pub fn add_vertex_pose_frame(optimizer: &mut UniquePtr<BridgeSparseOptimizer>, f
     // Maybe this should be in g2o crate instead of here? But I'm pretty sure g2o crate doesn't know about keyframes at all
 
     let imu_calib = ImuCalib::new();
-
-    // let rot = frame.pose.unwrap().get_quaternion();
-    // let imu_rot = nalgebra::geometry::UnitQuaternion::from_rotation_matrix(
-    //     & nalgebra::Rotation3::from_matrix(& *frame.get_imu_rotation())
-    // ); // lol whateverrr
-    // let tcb_rot = imu_calib.tcb.get_quaternion();
-
-    // println!("translation: {:?}", frame.pose.unwrap().get_translation());
-    println!("rotation in add_vertex_pose_frame: {:?}", frame.pose.unwrap().get_rotation());
-
-    // println!("imu position: {:?}", frame.get_imu_position());
-    // println!("imu rotation: {:?}", imu_rot);
 
     optimizer.pin_mut().add_vertex_pose(
         vertex_id,

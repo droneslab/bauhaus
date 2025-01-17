@@ -55,6 +55,14 @@ cd Pangolin
 cmake -B build
 cmake --build build
 
+# Install gtsam
+cd ~/darvis-home/depends
+git clone git@github.com:ssemenova/gtsam-rs.git
+cd gtsam-rs/sys/3rd/
+git clone https://github.com/borglab/gtsam.git #--branch 4.2
+cd ~/darvis-home/depends/gtsam-rs
+cargo build --release
+
 # Build darvis
 cd ~/darvis-home/darvis/darvis/
 cargo build --release

@@ -50,8 +50,7 @@ impl ImuModule for IMU {
         let gz = Vector3::new(0.0, 0.0, -GRAVITY_VALUE);
         let t12 = self.imu_preintegrated_from_last_kf.d_t;
 
-        let mut bias = kf.imu_data.get_imu_bias();
-        // bias.bwx *= -1e-1;
+        let bias = kf.imu_data.get_imu_bias();
 
         let rwb2 = *normalize_rotation(rwb1 * self.imu_preintegrated_from_last_kf.get_delta_rotation(bias));
         let twb2 = twb1 + vwb1*t12 + (0.5*t12*t12*gz) + (rwb1 * self.imu_preintegrated_from_last_kf.get_delta_position(bias));
@@ -784,8 +783,6 @@ impl ImuPreIntegrated {
         for i in 0..self.measurements.len() {
             self.integrate_new_measurement(self.measurements[i].a, self.measurements[i].w, self.measurements[i].t);
         }
-
-        println!("Merged previous measurements. Measurements len: {}", self.measurements.len());
     }
 
     pub fn set_new_bias(&mut self, new_bias: ImuBias) {
@@ -796,7 +793,6 @@ impl ImuPreIntegrated {
         self.d_b[3] = new_bias.bax - self.b.bax;
         self.d_b[4] = new_bias.bay - self.b.bay;
         self.d_b[5] = new_bias.baz - self.b.baz;
-        // debug!("Set bias for imu_preintegrated???? {:?}", self.d_b);
     }
 
     pub fn get_delta_bias(&self) {
@@ -821,17 +817,14 @@ impl ImuPreIntegrated {
         // Preintegrated::GetDeltaPosition
         let dbg = Vector3::new(b_.bwx - self.b.bwx, b_.bwy - self.b.bwy, b_.bwz - self.b.bwz);
         let dba = Vector3::new(b_.bax - self.b.bax, b_.bay - self.b.bay, b_.baz - self.b.baz);
-
-        println!("get delta position... self.d_p: {:?}, self.jpg: {:?}, self.dbg: {:?}, jpa: {:?}, dba: {:?}", self.d_p, self.jpg, dbg, self.jpa, dba);
         self.d_p + self.jpg * dbg + self.jpa * dba
     }
     pub fn get_updated_delta_rotation(&self) -> Matrix3<f64> {
         // Preintegrated::GetUpdatedDeltaRotation
+        // return NormalizeRotation(dR * Sophus::SO3f::exp(JRg*db.head(3)).matrix());
         let part2 = group_exp(& (self.jrg * self.d_b.fixed_rows::<3>(0)));
         let part2_mat = part2.to_rotation_matrix();
         * normalize_rotation(self.d_r * part2_mat)
-
-        // return NormalizeRotation(dR * Sophus::SO3f::exp(JRg*db.head(3)).matrix());
     }
     pub fn get_updated_delta_velocity(&self) -> Vector3<f64> {
         // Preintegrated::GetUpdatedDeltaVelocity
@@ -872,9 +865,6 @@ impl Into<g2o::ffi::RustImuPreintegrated> for & ImuPreIntegrated {
                 c[i][j] = self.c[(i, j)] as f32;
             }
         }
-        // println!("SELF.C: {:?}", self.c);
-        // println!("JRG IN RUST: {:?}", self.jrg);
-        // println!("JRG IN RUST AFTER CONVERT: {:?}", matrix_into_vec(self.jrg));
 
         g2o::ffi::RustImuPreintegrated {
             jrg: (&DVMatrix3::new(self.jrg)).into(),
