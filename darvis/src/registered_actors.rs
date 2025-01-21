@@ -111,6 +111,13 @@ pub fn spawn_actor(
         str if str == "optical flow tracking".to_string() => {
             crate::actors::tracking_optical_flow::TrackingOpticalFlow::spawn(system, map.expect("Tracking needs the map!"))
         },
+        str if str == "gtsam tracking frontend".to_string() => {
+            crate::actors::tracking_frontend_gtsam::TrackingFrontEndGTSAM::spawn(system, ())
+        },
+        str if str == "gtsam tracking backend".to_string() => {
+            crate::actors::tracking_backend_gtsam::TrackingBackendGTSAM::spawn(system, map.expect("Tracking needs the map!"))
+        },
+
         str if str == SHUTDOWN_ACTOR.to_string() => {
             crate::actors::shutdown::ShutdownActor::spawn(system, ())
         },

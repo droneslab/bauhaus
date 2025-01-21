@@ -189,9 +189,6 @@ impl ImuModule for IMU {
 
         }
 
-        println!("Frame {}, preintegrate. measurements len: {}, d_t: {}", current_frame.frame_id, imu_preintegrated_from_last_frame.measurements.len(), imu_preintegrated_from_last_frame.d_t);
-        println!("Last KF, preintegrate. measurements len: {}, d_t: {}", self.imu_preintegrated_from_last_kf.measurements.len(), self.imu_preintegrated_from_last_kf.d_t);
-
         current_frame.imu_data.imu_preintegrated = Some(self.imu_preintegrated_from_last_kf.clone());
         current_frame.imu_data.imu_preintegrated_frame = Some(imu_preintegrated_from_last_frame);
         current_frame.imu_data.prev_keyframe = Some(last_keyframe_id);

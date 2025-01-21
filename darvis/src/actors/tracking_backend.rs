@@ -1081,7 +1081,7 @@ impl TrackingBackend {
                     Some(mp) => {
                         // Project (this fills MapPoint variables for matching)
                         let (tracked_data_left, tracked_data_right) = self.current_frame.is_in_frustum(mp, 0.5);
-                        
+
                         if tracked_data_left.is_some() || tracked_data_right.is_some() {
                             lock.mappoints.get(&mp_id).unwrap().increase_visible(1);
                             to_match += 1;
