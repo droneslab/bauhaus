@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 pub type DVTranslation = DVVector3<f64>;
 pub type DVRotation = DVMatrix3<f64>;
 
-#[derive(Clone, Serialize, Deserialize, Copy, Default)]
+#[derive(Clone, Copy, Default)]
 // Note: I'm not sure that Isometry3 is thread safe, could be the same problem
 // as with opencv matrices pointing to the same underlying memory even though
 // it looks like different objects in Rust. I think we need to be careful here.

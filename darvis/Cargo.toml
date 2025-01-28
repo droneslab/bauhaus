@@ -48,7 +48,7 @@ base64 = "0.21.7"
 
 #cc = { version = "1.0.79", features = ["parallel"] }
 opencv = {version = "0.85.3", default-features = false, features= ["imgcodecs", "video"]}
-nalgebra = {version = "0.32.3", features = ["serde-serialize"]}
+nalgebra = {version = "0.32.3"}
 cv-convert = {version = '0.25.0', default-features = false, features = ['opencv_0-85','nalgebra_0-32']}
 cxx = "1.0"
 

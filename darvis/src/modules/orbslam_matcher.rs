@@ -146,7 +146,7 @@ impl DescriptorDistanceTrait for ORBMatcher {
         //     desc1, desc2, opencv::core::NormTypes::NORM_HAMMING as i32, &Mat::default()
         // ).unwrap() as i32;
         // But much faster!!
-        dvos3binding::ffi::descriptor_distance(
+        let orbslam = dvos3binding::ffi::descriptor_distance(
             &dvos3binding::ffi::WrapBindCVRawPtr { 
                 raw_ptr: dvos3binding::BindCVRawPtr {
                     raw_ptr: desc1.as_raw()
@@ -158,23 +158,27 @@ impl DescriptorDistanceTrait for ORBMatcher {
                 } 
             },
             false
-        )
+        );
+
 
         // let mut dist = 0;
-        // let mut pa = desc1.as_raw();
-        // let mut pb = desc2.as_raw();
+        // unsafe {
+        //     let mut pa = desc1.ptr(0).unwrap().cast::<i32>();
+        //     let mut pb = desc2.ptr(0).unwrap().cast::<i32>();
 
-        // for _ in 0..8 {
-        //     let mut v = pa ^ pb;
-        //     v = v - ((v >> 1) & 0x55555555);
-        //     v = (v & 0x33333333) + ((v >> 2) & 0x33333333);
-        //     dist += (((v + (v >> 4)) & 0xF0F0F0F) * 0x1010101) >> 24;
+        //     for _ in 0..8 {
+        //         let mut v = *pa ^ *pb;
+        //         v = v - ((v >> 1) & 0x55555555);
+        //         v = (v & 0x33333333) + ((v >> 2) & 0x33333333);
+        //         dist += (((v + (v >> 4)) & 0xF0F0F0F) * 0x1010101) >> 24;
 
-        //     pa += 1;
-        //     pb += 1;
+        //         pa.wrapping_add(1);
+        //         pb.wrapping_add(1);
+        //     }
         // }
 
-        // return dist;
+        // println!("TEST DESCRIPTOR DISTANCE! ORBSLAM: {}, OURS: {}", orbslam, dist);
+        return orbslam;
 
     }
 }

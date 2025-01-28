@@ -1,15 +1,11 @@
 extern crate g2o;
 use log::{warn, info, debug, error};
-use nalgebra::Matrix;
-use std::{collections::{BTreeMap, BTreeSet, HashMap}, sync::atomic::Ordering, thread::sleep, time::Duration};
+use nalgebra::{Isometry3, Matrix, Matrix3, Point3, Quaternion, Vector3, Vector6};
+use std::{collections::{BTreeMap, BTreeSet, HashMap, VecDeque}, sync::atomic::Ordering, thread::sleep, time::Duration};
 use opencv::{prelude::*, types::VectorOfKeyPoint,types::VectorOfPoint2f, types::VectorOfu8, types::VectorOfMat};
 use gtsam::{
-    inference::symbol::Symbol,
-    linear::noise_model::{DiagonalNoiseModel, IsotropicNoiseModel},
-    nonlinear::{
-        levenberg_marquardt_optimizer::LevenbergMarquardtOptimizer,
-        levenberg_marquardt_params::LevenbergMarquardtParams,
-        nonlinear_factor_graph::NonlinearFactorGraph, values::Values,
+    inference::symbol::Symbol, linear::noise_model::{DiagonalNoiseModel, IsotropicNoiseModel}, navigation::combined_imu_factor::{CombinedImuFactor, PreintegratedCombinedMeasurements, PreintegrationCombinedParams}, nonlinear::{
+        isam2::ISAM2, levenberg_marquardt_optimizer::LevenbergMarquardtOptimizer, levenberg_marquardt_params::LevenbergMarquardtParams, nonlinear_factor_graph::NonlinearFactorGraph, values::Values
     },
 };
 
@@ -20,46 +16,30 @@ use crate::{
     actors::{
         messages::{ImageMsg, LastKeyFrameUpdatedMsg, ShutdownMsg, UpdateFrameIMUMsg, VisFeaturesMsg},
         tracking_backend::TrackingState,
-    }, map::{features::Features, frame::Frame, keyframe::MapPointMatches, map::Id, pose::Pose, read_only_lock::ReadWriteMap}, modules::{image, imu::{ImuBias, ImuMeasurements, ImuPreIntegrated, IMU}, map_initialization::MapInitialization, module_definitions::{FeatureExtractionModule, ImuModule}, optimizer, orbslam_extractor::ORBExtractor, relocalization::Relocalization}, registered_actors::{CAMERA_MODULE, FEATURE_MATCHING_MODULE, LOCAL_MAPPING, SHUTDOWN_ACTOR, TRACKING_BACKEND, VISUALIZER}, MAP_INITIALIZED
+    }, map::{features::Features, frame::Frame, keyframe::MapPointMatches, map::Id, pose::Pose, read_only_lock::ReadWriteMap}, modules::{image, imu::{ImuBias, ImuCalib, ImuMeasurements, ImuPreIntegrated, IMU}, map_initialization::MapInitialization, module_definitions::{FeatureExtractionModule, ImuModule}, optimizer, orbslam_extractor::ORBExtractor, relocalization::Relocalization}, registered_actors::{CAMERA_MODULE, FEATURE_MATCHING_MODULE, LOCAL_MAPPING, SHUTDOWN_ACTOR, TRACKING_BACKEND, VISUALIZER}, MAP_INITIALIZED
 };
 
 use super::{local_mapping::LOCAL_MAPPING_IDLE, messages::{ImagePathMsg, InitKeyFrameMsg, NewKeyFrameMsg, TrajectoryMsg, VisTrajectoryMsg}, tracking_backend::TrackedMapPointData};
 use crate::modules::module_definitions::MapInitializationModule;
+use crate::registered_actors::IMU;
 
 pub struct TrackingBackendGTSAM {
     system: System,
     sensor: Sensor,
 
-    /// Graphs
-    graph: NonlinearFactorGraph,
-    initials: Values,
-
-    /// Factor graph optimization params
-    bias_covariance: (f32, f32),
-    max_iterations: u32,
-    lambda_upper_bound: f64,
-    lambda_lower_bound: f64,
-    diagonal_damping: f64,
-    relative_error_tol: f64,
-    absolute_error_tol: f64,
-    // IMU Param
-    accel_covariance: nalgebra::Matrix3::<f64>,
-    gyro_covariance: nalgebra::Matrix3::<f64>,
-    integration_covariance: nalgebra::Matrix3::<f64>,
-
     /// Frontend
     orb_extractor_left: Box<dyn FeatureExtractionModule>,
-    // _orb_extractor_right: Option<Box<dyn FeatureExtractionModule>>,
     orb_extractor_ini: Option<Box<dyn FeatureExtractionModule>>,
     init_id: Id,
+
+    /// Backend
+    state: TrackingState,
 
     // Frames
     last_frame: Option<Frame>,
     curr_frame_id: i32,
     current_frame: Frame,
 
-    /// Backend
-    state: TrackingState,
     // KeyFrames
     ref_kf_id: Option<Id>,
     frames_since_last_kf: i32, // used instead of mnLastKeyFrameId, don't directly copy because the logic is kind of flipped
@@ -67,7 +47,7 @@ pub struct TrackingBackendGTSAM {
 
     // Modules 
     imu: IMU,
-    // relocalization: Relocalization,
+    graph_solver: GraphSolver,
 
     // Poses in trajectory
     trajectory_poses: Vec<Pose>, //mlRelativeFramePoses
@@ -113,27 +93,10 @@ impl Actor for TrackingBackendGTSAM {
             false => None
         };
         let imu = IMU::new();
-        let i = nalgebra::Matrix3::<f64>::identity();
 
         let mut actor = TrackingBackendGTSAM {
-            graph: NonlinearFactorGraph::default(),
-            initials: Values::default(),
-
-            bias_covariance: (6.0, 0.4),
-            max_iterations: 1000,
-            lambda_upper_bound: 1.0e6,
-            lambda_lower_bound: 0.1,
-            diagonal_damping: 1000.0,
-            relative_error_tol: 1.0e-9,
-            absolute_error_tol: 1.0e-9,
-
-            // IMU preintegration parameters
-            // Default Params for a Z-up navigation frame, such as ENU: gravity points along negative Z-axis
-            accel_covariance: i * 0.2,
-            gyro_covariance: i * 0.2,
-            integration_covariance: i * 0.2,
-
             system,
+            graph_solver: GraphSolver::new(),
             orb_extractor_left: Box::new(ORBExtractor::new(false)),
             // _orb_extractor_right,
             orb_extractor_ini,
@@ -345,12 +308,10 @@ impl TrackingBackendGTSAM {
         debug!("Tracked {} mappoints", num_tracked_mappoints);
 
         // Preintegrate
-        self.imu.preintegrate(&mut imu_measurements, &mut self.current_frame, self.last_frame.as_mut().unwrap(), self.map.read()?.last_kf_id);
+        // self.imu.preintegrate(&mut imu_measurements, &mut self.current_frame, self.last_frame.as_mut().unwrap(), self.map.read()?.last_kf_id);
 
         // Solve VIO graph
-        self.add_imu_measurements(); // measured_poses, measured_acc, measured_omega, measured_vel, delta_t, 10
-        self.add_keypoints(); // vision_data, measured_poses, 10, depth, axs
-        self.estimate();
+        self.graph_solver.solve(&mut self.current_frame, &self.last_frame.as_ref().unwrap(), &mut imu_measurements)?;
 
         // Create new keyframe
         if self.need_new_keyframe()? {
@@ -455,7 +416,7 @@ impl TrackingBackendGTSAM {
         Ok(added)
     }
 
-    fn calculate_3d_points(&mut self) {
+    fn _calculate_3d_points(&mut self) {
         // Convert keypoints into array of points.
         // std::vector<cv::Point2f> left_points;
         // std::vector<cv::Point2f> right_points;
@@ -512,207 +473,9 @@ impl TrackingBackendGTSAM {
 
     }
 
-    fn add_imu_measurements(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        // measured_poses, measured_acc, measured_omega, measured_vel, delta_t, 10
-
-        // Pose prior
-        let pose_key = 0;
-        self.graph.add_prior_factor_pose3(
-            pose_key,
-            &self.last_frame.as_ref().unwrap().pose.unwrap().into(),
-            &DiagonalNoiseModel::from_sigmas(nalgebra::Vector6::new(0.2, 0.2, 0.2, 0.2, 0.2, 0.2)));
-        self.initials.insert_pose3(0, &self.last_frame.as_ref().unwrap().pose.unwrap().into());
-        //Reference:
-        // pose_key = X(0)
-        // pose_noise = gtsam.noiseModel.Diagonal.Sigmas(np.array([0.2, 0.2, 0.2, 0.2, 0.2, 0.2]))
-        // pose_0 = gtsam.Pose3(measured_poses[0])
-        // self.graph.push_back(gtsam.PriorFactorPose3(pose_key, pose_0, pose_noise))
-        // self.initial_estimate.insert(pose_key, gtsam.Pose3(measured_poses[0]))
-
-
-        // IMU prior
-        let bias_key = 1;
-        let constantbias = gtsam::imu::imu_bias::ConstantBias::default();
-        self.graph.add_prior_factor_constant_bias(
-            bias_key,
-            &constantbias,
-            &DiagonalNoiseModel::from_sigmas(nalgebra::Vector6::new(0.5, 0.5, 0.5, 0.5, 0.5, 0.5))
-        );
-        self.initials.insert_constant_bias(bias_key, &constantbias);
-        //Reference:
-        // bias_noise = gtsam.noiseModel.Isotropic.Sigma(6, 0.5)
-        // self.graph.push_back(gtsam.PriorFactorConstantBias(bias_key, gtsam.imuBias.ConstantBias(), bias_noise))
-        // self.initial_estimate.insert(bias_key, gtsam.imuBias.ConstantBias())
-
-
-        // Velocity prior
-        // this should update velocity in current frame but needs last frame to have imu position and rotation
-        if self.map.read()?.imu_initialized {
-            self.imu.predict_state_last_frame(&mut self.current_frame, &mut self.last_frame.as_mut().unwrap());
-        } else {
-            // but what here???
-        }
-        let velocity_key = 2;
-        let velocity = gtsam::base::vector::Vector3::new(0.0, 0.0, 0.0); // TODO update this with real velocity
-        self.graph.add_prior_factor_vector3(
-            velocity_key,
-            &velocity,
-            &IsotropicNoiseModel::from_dim_and_sigma(3, 0.5)
-        );
-        self.initials.insert_vector3(velocity_key, &velocity);
-        //Reference:
-        // velocity_key = V(0)
-        // velocity_noise = gtsam.noiseModel.Isotropic.Sigma(3, .5)
-        // velocity_0 = measured_vel[0]
-        // self.graph.push_back(gtsam.PriorFactorVector(velocity_key, velocity_0, velocity_noise))
-        // self.initial_estimate.insert(velocity_key, velocity_0)
-
-
-
-        // # Preintegrator
-
-        // curr_frame.imu_data.imu_preintegrated
-
-        // accum = gtsam.PreintegratedImuMeasurements(self.IMU_PARAMS)
-
-        // # Add measurements to factor graph
-        // for i in range(1, n_frames):
-        //     accum.integrateMeasurement(measured_acc[i], measured_omega[i], delta_t[i-1])
-        //     if i % n_skip == 0:
-        //         pose_key += 1
-        //         DELTA = gtsam.Pose3(gtsam.Rot3.Rodrigues(0, 0, 0.1 * np.random.randn()),
-        //                             gtsam.Point3(4 * np.random.randn(), 4 * np.random.randn(), 4 * np.random.randn()))
-        //         self.initial_estimate.insert(pose_key, gtsam.Pose3(measured_poses[i]).compose(DELTA))
-
-        //         velocity_key += 1
-        //         self.initial_estimate.insert(velocity_key, measured_vel[i])
-
-        //         bias_key += 1
-        //         self.graph.add(gtsam.BetweenFactorConstantBias(bias_key - 1, bias_key, gtsam.imuBias.ConstantBias(), self.BIAS_COVARIANCE))
-        //         self.initial_estimate.insert(bias_key, gtsam.imuBias.ConstantBias())
-
-        //         # Add IMU Factor
-        //         self.graph.add(gtsam.ImuFactor(pose_key - 1, velocity_key - 1, pose_key, velocity_key, bias_key, accum))
-
-        //         # Reset preintegration
-        //         accum.resetIntegration()
-
-        Ok(())
-    }
-
-    fn add_keypoints(&mut self) {
-        let mut points1: VectorOfPoint2f = self.last_frame.as_ref().unwrap().features.get_all_keypoints().iter().map(|kp| kp.pt()).collect();
-
-
-    //     // vision_data, measured_poses, args.n_skip, depth, axs
-    //     let R_rect = nalgebra::Matrix4::<f64>::new(
-    //         9.999239e-01, 9.837760e-03, -7.445048e-03, 0.0,
-    //         -9.869795e-03, 9.999421e-01, -4.278459e-03, 0.0,
-    //         7.402527e-03, 4.351614e-03, 9.999631e-01, 0.0,
-    //         0.0, 0.0, 0.0, 1.0
-    //     );
-    //     let R_cam_velo = nalgebra::Matrix3::<f64>::new(
-    //         7.533745e-03, -9.999714e-01, -6.166020e-04,
-    //         1.480249e-02, 7.280733e-04, -9.998902e-01,
-    //         9.998621e-01, 7.523790e-03, 1.480755e-02
-    //     );
-    //     let R_velo_imu = nalgebra::Matrix3::<f64>::new(
-    //         9.999976e-01, 7.553071e-04, -2.035826e-03,
-    //         -7.854027e-04, 9.998898e-01, -1.482298e-02,
-    //         2.024406e-03, 1.482454e-02, 9.998881e-01
-    //     );
-    //     let t_cam_velo = nalgebra::Vector3::<f64>::new(-4.069766e-03, -7.631618e-02, -2.717806e-01);
-    //     let t_velo_imu = nalgebra::Vector3::<f64>::new(-8.086759e-01, 3.195559e-01, -7.997231e-01);
-    //     let mut T_velo_imu = nalgebra::Matrix4::<f64>::identity();
-    //     let T_cam_velo = nalgebra::Matrix4::<f64>::identity();
-    // //   T_velo_imu[3,3] = 1.
-    // //   T_cam_velo[3,3] = 1.
-    // //   T_velo_imu[:3,:3] = R_velo_imu
-    // //   T_velo_imu[:3,3] = t_velo_imu
-    // //   T_cam_velo[:3,:3] = R_cam_velo
-    // //   T_cam_velo[:3,3] = t_cam_velo
-    // //   cam_to_imu = R_rect @ T_cam_velo @ T_velo_imu
-    // //   CAM_TO_IMU_POSE = gtsam.Pose3(cam_to_imu)
-    // //   imu_to_cam = np.linalg.inv(cam_to_imu)
-    // //   IMU_TO_CAM_POSE = gtsam.Pose3(imu_to_cam)
-
-    //     let K_np = nalgebra::Matrix3::<f64>::new(
-    //         9.895267e+02, 0.000000e+00, 7.020000e+02,
-    //         0.000000e+00, 9.878386e+02, 2.455590e+02,
-    //         0.000000e+00, 0.000000e+00, 1.000000e+00
-    //     );
-    //     // K = gtsam.Cal3_S2(K_np[0,0], K_np[1,1], 0., K_np[0,2], K_np[1,2])
-
-    //     // valid_track = np.zeros(vision_data.shape[0], dtype=bool)
-    //     // N = vision_data.shape[1]
-    //     // for i in range(vision_data.shape[0]):
-    //     //     track_length = N - np.sum(vision_data[i,:,0] == -1)
-    //     //     if track_length > 1 and track_length < 0.5*N:
-    //     //         valid_track[i] = True
-
-    //     // count = 0
-    //     // measurement_noise = gtsam.noiseModel.Isotropic.Sigma(2, 10.0) 
-    //     // for i in range(0, vision_data.shape[0], 20):
-    //     //     if not valid_track[i]:
-    //     //         continue
-    //     //     key_point_initialized=False 
-    //     //     for j in range(vision_data.shape[1]-1):
-    //     //     if vision_data[i,j,0] >= 0:
-    //     //         zp = float(depth[j * n_skip][vision_data[i,j,1], vision_data[i,j,0], 2])
-    //     //         if zp == 0:
-    //     //             continue
-    //     //         self.graph.push_back(gtsam.GenericProjectionFactorCal3_S2(
-    //     //         vision_data[i,j,:], measurement_noise, X(j), L(i), K, IMU_TO_CAM_POSE))
-    //     //         if not key_point_initialized:
-    //     //             count += 1
-
-    //     //             # Initialize landmark 3D coordinates
-    //     //             fx = K_np[0,0]
-    //     //             fy = K_np[1,1]
-    //     //             cx = K_np[0,2]
-    //     //             cy = K_np[1,2]
-
-    //     //             # Depth:
-    //     //             zp = float(depth[j * n_skip][vision_data[i,j,1], vision_data[i,j,0], 2])
-    //     //             xp = float(vision_data[i,j,0] - cx) / fx * zp
-    //     //             yp = float(vision_data[i,j,1] - cy) / fy * zp
-
-    //     //             # Convert to global
-    //     //             Xg = measured_poses[j*n_skip] @ imu_to_cam @ np.array([xp, yp, zp, 1])
-    //     //             axs.scatter(Xg[0], Xg[1], s=10)
-    //     //             self.initial_estimate.insert(L(i), Xg[:3])
-
-    //     //             key_point_initialized = True
-
-    }
-
-    fn estimate(&mut self) {
-    //     // self.optimizer = gtsam.LevenbergMarquardtOptimizer(self.graph, self.initial_estimate, SOLVER_PARAMS)
-    //     // self.result = self.optimizer.optimize()
-
-        let mut opt_param = LevenbergMarquardtParams::default();
-        opt_param.set_max_iterations(self.max_iterations);
-        opt_param.set_lambda_upper_bound(self.lambda_upper_bound);
-        opt_param.set_lambda_lower_bound(self.lambda_lower_bound);
-        opt_param.set_diagonal_damping(true);
-        opt_param.set_relative_error_to_l(self.relative_error_tol);
-        opt_param.set_absolute_error_to_l(self.absolute_error_tol);
-
-        let mut opt = LevenbergMarquardtOptimizer::new(&self.graph, &self.initials, &opt_param);
-
-        let result = opt.optimize_safely();
-        // for i in 1..=5 {
-        //     let pose: nalgebra::Isometry3<f64> = result.get_pose3(i).unwrap().into();
-        //     println!("[{i}] {pose}");
-        // }
-
-    //     // return self.result
-    }
-
-
-    // fn update_trajectory_in_logs(
-    //     &mut self, created_new_kf: bool,
-    // ) -> Result<(), Box<dyn std::error::Error>> {
+    fn update_trajectory_in_logs(
+        &mut self, created_new_kf: bool,
+    ) -> Result<(), Box<dyn std::error::Error>> {
     //     let relative_pose = {
     //         let reference_pose = if created_new_kf {
     //             // If we created a new kf this round, the relative keyframe pose is the same as the current frame pose.
@@ -755,8 +518,8 @@ impl TrackingBackendGTSAM {
     //         map_version: self.map.read()?.version
     //     }));
 
-    //     Ok(())
-    // }
+        Ok(())
+    }
 
     fn need_new_keyframe(&mut self) -> Result<bool, Box<dyn std::error::Error>> {
         let num_kfs = self.map.read()?.num_keyframes();
@@ -898,3 +661,369 @@ impl TrackingBackendGTSAM {
 
 }
 
+pub struct GraphSolver {
+    // New graph
+    graph_new: NonlinearFactorGraph, // New factors that have not been optimized yet
+    values_new: Values, // New values that have not been optimized yet
+  
+    // Main graph
+    graph_main: NonlinearFactorGraph, // Main non-linear GTSAM graph, all created factors
+    values_initial: Values, // All created nodes
+    
+    // Misc GTSAM objects
+    isam2: ISAM2, // ISAM2 solvers
+    preint_gtsam: PreintegratedCombinedMeasurements, // IMU preintegration
+
+    // IMU preintegration parameters
+    // Initialization
+    prior_q_g_to_i: Quaternion<f64>, // prior_qGtoI
+    prior_p_i_in_g: Vector3<f64>, // prior_pIinG
+    prior_v_i_in_g: [f64; 3], // prior_vIinG
+    prior_ba: [f64; 3], // prior_ba
+    prior_bg: [f64; 3], // prior_bg
+    // Noise values from dataset sensor
+    accel_noise_density: f64, // accelerometer_noise_density, sigma_a
+    gyro_noise_density: f64, // gyroscope_noise_density, sigma_g
+    accel_random_walk: f64, // accelerometer_random_walk, sigma_wa
+    gyro_random_walk: f64, // gyroscope_random_walk, sigma_wg
+    // Noise values for initialization
+    sigma_prior_rotation: [f64; 3],
+    sigma_prior_translation: [f64; 3],
+    sigma_velocity: f64,
+    sigma_bias: f64,
+    // Misc
+    sigma_camera: f64,
+
+    // Iterations of the map
+    initialized: bool,
+    ct_state: u64,
+    ct_state_lookup: HashMap<i32, u64>,
+    timestamp_lookup: HashMap<u64, i32>,
+    measurement_smart_lookup_left: HashMap<i32, gtsam::slam::projection_factor::SmartProjectionPoseFactorCal3S2>, // Smart lookup for IMU measurements
+}
+
+impl GraphSolver {
+    pub fn new() -> Self {
+
+        //           <!-- Rotation and Translation from camera frame to IMU frame -->
+        //   <rosparam param="R_C0toI">[0.9999717314190615,    -0.007438121416209933,  0.001100323844221122,
+        //                              0.00743200596269379,    0.9999574688631824,    0.005461295826837418,
+        //                             -0.0011408988276470173, -0.0054529638303831614, 0.9999844816472552]</rosparam>
+        //   <rosparam param="p_IinC0">[-0.03921656415229387,   0.00621263233002485,   0.0012210059575531885]</rosparam>
+
+        //   <!-- Initialization -->
+        //   <rosparam param="prior_qGtoI">[0.716147, 0.051158, 0.133778, 0.683096]</rosparam>       
+        //   <rosparam param="prior_pIinG">[0.925493, -6.214668, 0.422872]</rosparam>       
+        //   <rosparam param="prior_vIinG">[1.128364, -2.280640, 0.213326]</rosparam>       
+        //   <rosparam param="prior_ba">[0.00489771688759235973,  0.00800897351104824969, 0.03020588299505782420]</rosparam>       
+        //   <rosparam param="prior_bg">[-0.00041196751646696610, 0.00992948457018005999, 0.02188282212555122189]</rosparam>       
+
+        //   <param name="sigma_camera"                 type="double"   value="0.306555403" />
+        
+        //   <!-- Noise Values for ETH Dataset Sensor -->
+        //   <param name="accelerometer_noise_density"  type="double"   value="0.08" />    <!-- sigma_a -->
+        //   <param name="gyroscope_noise_density"      type="double"   value="0.004" />   <!-- sigma_g -->
+        //   <param name="accelerometer_random_walk"    type="double"   value="0.00004" /> <!-- sigma_wa -->
+        //   <param name="gyroscope_random_walk"        type="double"   value="2.0e-6" />  <!-- sigma_wg -->
+
+        //   <!-- Noise Values for Initialization -->
+        //   <param name="sigma_prior_rotation"         type="double"   value="0.1" />
+        //   <param name="sigma_prior_translation"      type="double"   value="0.3" />
+        //   <param name="sigma_velocity"               type="double"   value="0.1" />
+        //   <param name="sigma_bias"                   type="double"   value="0.15" />
+        //   <param name="sigma_pose_rotation"          type="double"   value="0.1" />
+        //   <param name="sigma_pose_translation"       type="double"   value="0.2" />
+
+        Self {
+            graph_new: NonlinearFactorGraph::default(),
+            values_new: Values::default(),
+            graph_main: NonlinearFactorGraph::default(),
+            values_initial: Values::default(),
+            isam2: ISAM2::default(),
+            preint_gtsam: PreintegratedCombinedMeasurements::default(),
+            initialized: false,
+
+            // TODO SOFIYA PARAMS
+            sigma_prior_rotation: [0.1, 0.1, 0.1],
+            sigma_prior_translation: [0.3, 0.3, 0.3],
+            sigma_velocity: 0.1,
+            sigma_bias: 0.15,
+            sigma_camera: 0.306555403,
+            accel_noise_density: SETTINGS.get::<f64>(IMU, "noise_acc"),
+            gyro_noise_density: SETTINGS.get::<f64>(IMU, "noise_gyro"),
+            accel_random_walk: SETTINGS.get::<f64>(IMU, "acc_walk"),
+            gyro_random_walk: SETTINGS.get::<f64>(IMU, "gyro_walk"),
+
+            // TODO SOFIYA IS THIS RIGHT?
+            prior_q_g_to_i: Quaternion::new(0.716147, 0.051158, 0.133778, 0.683096),
+            prior_p_i_in_g: Vector3::new(0.925493, -6.214668, 0.422872),
+            prior_ba: [0.00489771688759235973,  0.00800897351104824969, 0.03020588299505782420],
+            prior_bg: [-0.00041196751646696610, 0.00992948457018005999, 0.02188282212555122189],
+            prior_v_i_in_g: [1.128364, -2.280640, 0.213326],
+
+            ct_state: 0,
+            ct_state_lookup: HashMap::new(),
+            timestamp_lookup: HashMap::new(),
+            measurement_smart_lookup_left: HashMap::new(),
+        }
+    }
+
+    fn solve(&mut self, current_frame: &mut Frame, last_frame: &Frame, imu_measurements: &mut ImuMeasurements) -> Result<(), Box<dyn std::error::Error>> {
+        let timestamp = (current_frame.timestamp * 1e14) as i32; // Convert to int just so we can hash it
+        // Return if the node already exists in the graph
+        if self.ct_state_lookup.contains_key(&timestamp) {
+            println!("NODE WITH TIMESTAMP {} ALREADY EXISTS, {}", timestamp, current_frame.timestamp);
+            return Ok(());
+        }
+
+        if !self.initialized {
+            self.add_initials_and_priors(timestamp);
+            self.initialized = true;
+        } else {
+            println!("Add imu measurements");
+            self.process_imu_factors(imu_measurements, &current_frame, & last_frame)?;
+
+            // Original models
+            let new_state = self.get_predicted_state(&self.values_initial);
+    
+            // Move node count forward in time
+            self.ct_state += 1;
+
+            // Append to our node vectors
+            self.values_new.insert_pose3(
+                &Symbol::new(b'x', self.ct_state),
+                &new_state.pose
+            );
+            self.values_new.insert_vector3(
+                &Symbol::new(b'v', self.ct_state),
+                &new_state.velocity
+            );
+            self.values_new.insert_constant_bias(
+                &Symbol::new(b'b', self.ct_state),
+                &new_state.bias
+            );
+            self.values_initial.insert_pose3(
+                &Symbol::new(b'x', self.ct_state),
+                &new_state.pose
+            );
+            self.values_initial.insert_vector3(
+                &Symbol::new(b'v', self.ct_state),
+                &new_state.velocity
+            );
+            self.values_initial.insert_constant_bias(
+                &Symbol::new(b'b', self.ct_state),
+                &new_state.bias
+            );
+
+            let pose_nalgebra: Isometry3<f64> = (&new_state.pose).into();
+
+            println!("New pose prediction: {:?}", pose_nalgebra);
+
+            debug!("Values new insert: x{}, v{}, b{}", self.ct_state, self.ct_state, self.ct_state);
+            debug!("Values initial insert: x{}, v{}, b{}", self.ct_state, self.ct_state, self.ct_state);
+
+            // Add ct state to map
+            self.ct_state_lookup.insert(timestamp, self.ct_state);
+            self.timestamp_lookup.insert(self.ct_state, timestamp);
+        }
+
+        self.process_smart_features(& current_frame);
+
+        self.optimize();
+        Ok(())
+    }
+
+    fn add_initials_and_priors(&mut self, timestamp: i32) {
+        // Create prior factor and add it to the graph
+        let prior_state = GtsamState {
+            pose: gtsam::geometry::pose3::Pose3::from_parts(
+                gtsam::geometry::point3::Point3::new(self.prior_p_i_in_g[0], self.prior_p_i_in_g[1], self.prior_p_i_in_g[2]),
+                gtsam::geometry::rot3::Rot3::from(self.prior_q_g_to_i)
+            ),
+            velocity: gtsam::base::vector::Vector3::new(self.prior_v_i_in_g[0], self.prior_v_i_in_g[1], self.prior_v_i_in_g[2]),
+            bias: gtsam::imu::imu_bias::ConstantBias::new(
+                &gtsam::base::vector::Vector3::new(self.prior_ba[0], self.prior_ba[1], self.prior_ba[2]),
+                &gtsam::base::vector::Vector3::new(self.prior_bg[0], self.prior_bg[1], self.prior_bg[2])
+            )
+        };
+
+        let pose_noise = gtsam::linear::noise_model::DiagonalNoiseModel::from_sigmas(Vector6::new(
+            self.sigma_prior_rotation[0], self.sigma_prior_rotation[1], self.sigma_prior_rotation[2],
+            self.sigma_prior_translation[0], self.sigma_prior_translation[1], self.sigma_prior_translation[2]
+        ));
+        let v_noise = gtsam::linear::noise_model::IsotropicNoiseModel::from_dim_and_sigma(3, self.sigma_velocity);
+        let b_noise = gtsam::linear::noise_model::IsotropicNoiseModel::from_dim_and_sigma(6, self.sigma_bias);
+
+
+        self.graph_new.add_prior_factor_pose3(&Symbol::new(b'x', self.ct_state), &prior_state.pose, &pose_noise);
+        self.graph_new.add_prior_factor_vector3(&Symbol::new(b'v', self.ct_state), &prior_state.velocity, &v_noise);
+        self.graph_new.add_prior_factor_constant_bias(&Symbol::new(b'b', self.ct_state), &prior_state.bias, &b_noise);
+        self.graph_main.add_prior_factor_pose3(&Symbol::new(b'x', self.ct_state), &prior_state.pose, &pose_noise);
+        self.graph_main.add_prior_factor_vector3(&Symbol::new(b'v', self.ct_state), &prior_state.velocity, &v_noise);
+        self.graph_main.add_prior_factor_constant_bias(&Symbol::new(b'b', self.ct_state), &prior_state.bias, &b_noise);
+
+        // Add initial state to the graph
+        self.values_new.insert_pose3(&Symbol::new(b'x', self.ct_state), &prior_state.pose);
+        self.values_new.insert_vector3(&Symbol::new(b'v', self.ct_state), &prior_state.velocity);
+        self.values_new.insert_constant_bias(&Symbol::new(b'b', self.ct_state), &prior_state.bias);
+        self.values_initial.insert_pose3(&Symbol::new(b'x', self.ct_state), &prior_state.pose);
+        self.values_initial.insert_vector3(&Symbol::new(b'v', self.ct_state), &prior_state.velocity);
+        self.values_initial.insert_constant_bias(&Symbol::new(b'b', self.ct_state), &prior_state.bias);
+
+        // Add ct state to map
+        self.ct_state_lookup.insert(timestamp, self.ct_state);
+        self.timestamp_lookup.insert(self.ct_state, timestamp);
+
+        // Create GTSAM preintegration parameters for use with Foster's version
+        let mut params = PreintegrationCombinedParams::makesharedu();  // Z-up navigation frame: gravity points along negative Z-axis !!!
+        params.set_params(
+            self.accel_noise_density * self.accel_noise_density, // acc white noise in continuous
+            self.gyro_noise_density * self.gyro_noise_density, // gyro white noise in continuous
+            self.accel_random_walk * self.accel_random_walk, // acc bias in continuous
+            self.gyro_random_walk * self.gyro_random_walk, // gyro bias in continuous
+            0.1, // error committed in integrating position from velocities
+            1e-5 // error in the bias used for preintegration
+        );
+
+        // Actually create the GTSAM preintegration
+        self.preint_gtsam = PreintegratedCombinedMeasurements::new(params, &prior_state.bias);
+    }
+
+    fn process_imu_factors(&mut self, imu_measurements: &mut ImuMeasurements, current_frame: &Frame, previous_frame: &Frame) -> Result<(), Box<dyn std::error::Error>> {
+        // This function will create a discrete IMU factor using the GTSAM preintegrator class
+        // This will integrate from the current state time up to the new update time
+
+        let mut imu_from_last_frame = VecDeque::with_capacity(imu_measurements.len()); // mvImuFromLastFrame
+        let imu_per = 0.000000000001; // 0.001 in orbslam, adjusted here for different timestamp units
+
+        while !imu_measurements.is_empty() {
+            if imu_measurements.front().unwrap().timestamp < previous_frame.timestamp - imu_per {
+                imu_measurements.pop_front();
+            } else if imu_measurements.front().unwrap().timestamp < current_frame.timestamp - imu_per {
+                imu_from_last_frame.push_back(imu_measurements.pop_front().unwrap());
+            } else {
+                imu_from_last_frame.push_back(imu_measurements.pop_front().unwrap());
+                break;
+            }
+        }
+
+        for msmt in imu_from_last_frame {
+            self.preint_gtsam.integrate_measurement(&msmt.acc.into(), &msmt.ang_vel.into(), msmt.timestamp);
+        }
+
+        let imu_factor = CombinedImuFactor::new(
+            &Symbol::new(b'x', self.ct_state),
+            &Symbol::new(b'v', self.ct_state),
+            &Symbol::new(b'x', self.ct_state + 1),
+            &Symbol::new(b'v', self.ct_state + 1),
+            &Symbol::new(b'b', self.ct_state),
+            &Symbol::new(b'b', self.ct_state + 1),
+            & self.preint_gtsam
+        );
+        self.graph_new.add_combined_imu_factor(&imu_factor);
+        self.graph_main.add_combined_imu_factor(&imu_factor);
+
+        Ok(())
+    }
+
+    fn process_smart_features(&mut self, frame: &Frame) {
+        // Loop through LEFT features
+        let features: VectorOfPoint2f = frame.features.get_all_keypoints().iter().map(|kp| kp.pt()).collect();
+        for feature in features {
+            // TODO SOFIYA LOOKUP LEFT IDS
+            // Check to see if it is already in the graph
+            // if(measurement_smart_lookup_left.find(leftids.at(i)) != measurement_smart_lookup_left.end()) {
+            //     // Insert measurements to a smart factor
+            //     measurement_smart_lookup_left[leftids.at(i)]->add(gtsam::Point2(leftuv.at(i)), X(ct_state));
+            //     continue;
+            // }
+
+            // If we know it is not in the graph
+            // Create a smart factor for the new feature
+            let measurement_noise = gtsam::linear::noise_model::IsotropicNoiseModel::from_dim_and_sigma(2, self.sigma_camera);
+            let k = gtsam::geometry::cal3_s2::Cal3S2::default();
+
+            // Transformation from camera frame to imu frame, i.e., pose of imu frame in camera frame
+            let sensor_p_body = ImuCalib::new().tbc;
+
+            let mut smartfactor_left = gtsam::slam::projection_factor::SmartProjectionPoseFactorCal3S2::new(
+                &measurement_noise,
+                &k,
+                & sensor_p_body.inverse().into()
+            );
+            // self.measurement_smart_lookup_left.insert(leftids.at(i), smartfactor_left); // TODO SOFIYA LOOKUP LEFT IDS
+
+
+            // Insert measurements to a smart factor
+            smartfactor_left.add(
+                & gtsam::geometry::point2::Point2::new(feature.x as f64, feature.y  as f64),
+                &Symbol::new(b'x', self.ct_state)
+            );
+
+            // Add smart factor to FORSTER2 model
+            self.graph_new.add_smartfactor(&smartfactor_left);
+            self.graph_main.add_smartfactor(&smartfactor_left);
+        }
+
+    }
+
+    fn get_predicted_state(&self, values: &Values) -> GtsamState {
+        // This function will get the predicted state based on the IMU measurement
+
+        // Get the current state (t=k)
+        let state_k = GtsamState {
+            pose: values.get_pose3(&Symbol::new(b'x', self.ct_state)).unwrap().into(),
+            velocity: values.get_vector3(&Symbol::new(b'v', self.ct_state)).unwrap().into(),
+            bias: values.get_constantbias(&Symbol::new(b'b', self.ct_state)).unwrap().into()
+        };
+
+        // From this we should predict where we will be at the next time (t=K+1)
+        let navstate = self.preint_gtsam.predict(
+            &gtsam::navigation::navstate::NavState::new(
+                &state_k.pose,
+                &state_k.velocity
+            ),
+            &state_k.bias
+        );
+
+        return GtsamState {
+            pose: navstate.get_pose().into(),
+            velocity: navstate.get_velocity().into(),
+            bias: state_k.bias
+        };
+    }
+
+    fn optimize(&mut self) {
+        // Return if not initialized
+        if !self.initialized && self.ct_state < 2 {
+            return;
+        }
+
+        // Perform smoothing update
+        self.isam2.update_noresults(& self.graph_new, & self.values_new);
+        self.values_initial = self.isam2.calculate_estimate().into();
+
+        // Remove the used up nodes
+        self.values_new.clear();
+
+        // Remove the used up factors
+        self.graph_new.resize(0);
+
+        self.reset_imu_integration();
+    }
+
+    fn reset_imu_integration(&mut self) {
+        // Use the optimized bias to reset integration
+        if self.values_initial.exists(&Symbol::new(b'b', self.ct_state)) {
+            self.preint_gtsam.reset_integration_and_set_bias(
+                & self.values_initial.get_constantbias(&Symbol::new(b'b', self.ct_state)).unwrap().into()
+            );
+        }
+    }
+}
+
+struct GtsamState {
+    pub pose: gtsam::geometry::pose3::Pose3,
+    pub velocity: gtsam::base::vector::Vector3,
+    pub bias: gtsam::imu::imu_bias::ConstantBias,
+}
