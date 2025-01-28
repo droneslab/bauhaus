@@ -1,0 +1,51 @@
+[package]
+name = "gtsam-sys"
+
+authors = { workspace = true }
+description = { workspace = true }
+documentation = { workspace = true }
+edition = { workspace = true }
+include = { workspace = true }
+keywords = { workspace = true }
+license = { workspace = true }
+readme = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
+
+# {lib_major}.{lib_minor}.{crate_patch}
+version = "4.2.0"
+
+build = "build.rs"
+links = "gtsam-rs-sys"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[features]
+default = ["build", "build-use-system-libs"]
+
+build = ["cmake"]
+build-use-mkl = ["build"]
+build-use-openmp = ["build", "link-openmp"]
+build-use-system-eigen = ["build"]
+build-use-system-metis = ["build", "link-metis"]
+build-use-system-libs = ["build-use-system-eigen", "build-use-system-metis"]
+build-use-tbb = ["build", "link-tbb"]
+
+download = ["build", "flate2", "reqwest", "tar"]
+
+link-all = ["link-metis", "link-tbb"]
+link-metis = []
+link-openmp = []
+link-tbb = []
+
+[build-dependencies]
+cmake = { workspace = true, optional = true }
+cxx-build = { workspace = true }
+flate2 = { workspace = true, optional = true }
+fs_extra = { workspace = true }
+glob = { workspace = true }
+reqwest = { workspace = true, optional = true, features = ["blocking"] }
+tar = { workspace = true, optional = true }
+
+[dependencies]
+cxx = { workspace = true }

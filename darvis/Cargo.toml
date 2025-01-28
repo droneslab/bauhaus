@@ -28,7 +28,7 @@ debuginfo-level = 1
 g2o = { path = "../g2o" }
 dvos3binding = { path = "../orbslam-bindings" }
 foxglove = { path = "../foxglove" }
-gtsam = { path = "../../depends/gtsam-rs" }
+gtsam = { path = "../gtsam-rs" }
 
 once_cell = "*"
 chrono = { version = "*", features = ["serde"] }
