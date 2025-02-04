@@ -14,15 +14,15 @@ impl NavState {
         }
     }
 
-    pub fn get_pose(&self) -> Pose3Ref {
-        Pose3Ref {
-            inner: ::sys::pose(&self.inner)
+    pub fn get_pose(&self) -> Pose3 {
+        Pose3 {
+            inner: ::sys::get_pose(&self.inner)
         }
     }
 
     pub fn get_velocity(&self) -> Vector3Ref {
         Vector3Ref {
-            inner: ::sys::velocity(&self.inner)
+            inner: ::sys::get_velocity(&self.inner)
         }
     }
 }

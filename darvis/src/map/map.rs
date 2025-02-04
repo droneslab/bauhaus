@@ -172,6 +172,7 @@ impl Map {
             // Possible that that is faster than cloning.
             let mp_matches = self.keyframes.get(&new_kf_id).unwrap().get_mp_matches().clone();
 
+            debug!("INSERT KEYFRAME TO MAP, mp matches: {}", mp_matches.len());
             for i in 0..mp_matches.len() {
                 if let Some((mp_id, _is_outlier)) = self.keyframes.get(&new_kf_id).unwrap().get_mp_match(&(i as u32)) {
                     // Add observation for mp->kf

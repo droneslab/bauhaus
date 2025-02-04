@@ -122,6 +122,8 @@ impl ImuModule for IMU {
             return false;
         }
 
+        println!("SOFIYA! IMU MEASUREMENTS: {:?}", measurements);
+
         let mut imu_from_last_frame = VecDeque::with_capacity(measurements.len()); // mvImuFromLastFrame
         let imu_per = 0.000000000001; // 0.001 in orbslam, adjusted here for different timestamp units
 
@@ -135,6 +137,9 @@ impl ImuModule for IMU {
                 break;
             }
         }
+
+        println!("SOFIYA! IMU MEASUREMENTS AFTER CULL: {:?}", imu_from_last_frame);
+
 
         let n = imu_from_last_frame.len() - 1;
         if n == 0 {

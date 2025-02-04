@@ -1,4 +1,5 @@
 use cxx::UniquePtr;
+use std::fmt::Debug;
 
 use crate::base::vector::{Vector3, Vector3Ref};
 
@@ -24,12 +25,24 @@ impl ConstantBias {
     }
 }
 
+impl Debug for ConstantBias {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let accel_bias = Vector3Ref {
+            inner: ::sys::accel_bias(&self.inner)
+        };
+        let gyro_bias = Vector3Ref {
+            inner: ::sys::gyro_bias(&self.inner)
+        };
+        write!(f, "ConstantBias: accel_bias: {:?}, gyro_bias: {:?}", accel_bias, gyro_bias)
+    }
+}
+
 
 pub struct ConstantBiasRef<'a> {
     pub(crate) inner: &'a ::sys::ConstantBias,
 }
 
-impl ConstantBiasRef<'_> {
+impl<'a> ConstantBiasRef<'a> {
     pub fn accel_bias(&self) -> Vector3Ref {
         Vector3Ref {
             inner: ::sys::accel_bias(&self.inner)

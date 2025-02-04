@@ -16,14 +16,14 @@ impl Default for CombinedImuFactor {
 }
 impl CombinedImuFactor {
     pub fn new(
-        pose_i: impl IntoKey, pose_j: impl IntoKey, vel_i: impl IntoKey, vel_j: impl IntoKey, 
+        pose_i: impl IntoKey, vel_i: impl IntoKey, pose_j: impl IntoKey, vel_j: impl IntoKey, 
         bias_i: impl IntoKey, bias_j: impl IntoKey, measurements: &PreintegratedCombinedMeasurements
     ) -> Self {
         Self {
             inner: ::sys::new_combined_imu_factor(
                 pose_i.into_key(),
-                pose_j.into_key(),
                 vel_i.into_key(),
+                pose_j.into_key(),
                 vel_j.into_key(),
                 bias_i.into_key(),
                 bias_j.into_key(),

@@ -46,7 +46,6 @@ impl<'a> From<Point3Ref<'a>> for ::nalgebra::Vector3<f64> {
     fn from(value: Point3Ref<'a>) -> Self {
         let mut dst = [0.0; 3];
         ::sys::point3_to_raw(value.inner, &mut dst);
-
         let [x, y, z] = dst;
         ::nalgebra::Vector3::new(x, y, z)
     }
@@ -63,3 +62,11 @@ impl<'a> From<Point3Ref<'a>> for ::nalgebra::Point3<f64> {
         ::nalgebra::Vector3::from(value).into()
     }
 }
+
+
+impl<'a> From<Point3Ref<'a>> for Point3 {
+    fn from(value: Point3Ref<'a>) -> Self {
+        ::nalgebra::Vector3::from(value).into()
+    }
+}
+

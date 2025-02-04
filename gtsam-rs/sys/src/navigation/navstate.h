@@ -6,6 +6,6 @@
 namespace gtsam
 {
     std::unique_ptr<NavState> new_navstate(const Pose3 &pose, const Vector3 &v);
-    const Pose3 &pose(const NavState &navstate);
-    const Vector3 &velocity(const NavState &navstate);
+    std::unique_ptr<Pose3> get_pose(const NavState &navstate);
+    const Vector3 &get_velocity(const NavState &navstate);
 }

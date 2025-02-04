@@ -1,4 +1,5 @@
 #include "vector.h"
+#include <iostream>
 
 namespace gtsam {
 
@@ -16,8 +17,7 @@ void vector3_to_raw(const Vector3 &src, rust::Slice<double> dst)
     double *p_dst = dst.data();
 
     const size_t size = dst.size();
-    for (size_t i = 0; i < size; ++i)
-    {
+    for (size_t i = 0; i < size; i++) {
         p_dst[i] = p_src[i];
     }
 }

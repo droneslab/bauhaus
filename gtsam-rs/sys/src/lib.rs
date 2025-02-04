@@ -362,8 +362,8 @@ mod ffi {
         type NavState;
 
         fn new_navstate(pose: &Pose3, velocity: &Vector3) -> UniquePtr<NavState>;
-        fn pose(navstate: &NavState) -> &Pose3;
-        fn velocity(navstate: &NavState) -> &Vector3;
+        fn get_pose(navstate: &NavState) -> UniquePtr<Pose3>;
+        fn get_velocity(navstate: &NavState) -> &Vector3;
     }
 
     unsafe extern "C++" {

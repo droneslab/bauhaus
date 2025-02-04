@@ -55,6 +55,12 @@ impl Pose3 {
         }
     }
 }
+impl Debug for Pose3 {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        let pose_nalgebra: Isometry3<f64> = self.into();
+        write!(f, "Pose3: {:?}", pose_nalgebra)
+    }
+}
 
 pub struct Pose3Ref<'a> {
     pub(crate) inner: &'a ::sys::Pose3,
@@ -66,23 +72,29 @@ impl<'a> From<Pose3Ref<'a>> for Isometry3<f64> {
     }
 }
 
-impl Pose3Ref<'_> {
+impl<'a> Pose3Ref<'a> {
     pub fn rotation(&self) -> Rot3Ref {
         Rot3Ref {
             inner: ::sys::pose3_rotation(self.inner),
         }
     }
 
-    pub fn translation(&self) -> Point3Ref {
+    pub fn translation<'b>(&self) -> Point3Ref {
         Point3Ref {
             inner: ::sys::pose3_translation(self.inner),
         }
     }
 }
 
-impl From<Pose3Ref<'_>> for Pose3 {
-    fn from(value: Pose3Ref) -> Self {
-        let isometry3 = Isometry3::from(value);
-        Self::from_parts(isometry3.translation.into(), isometry3.rotation.into())
+impl<'a> From<Pose3Ref<'a>> for Pose3 {
+    fn from(value: Pose3Ref<'a>) -> Self {
+        let trans = Point3Ref {
+            inner: ::sys::pose3_translation(value.inner),
+        };
+
+        let rot = Rot3Ref {
+            inner: ::sys::pose3_rotation(value.inner),
+        };
+        Self::from_parts(trans.into(), rot.into())
     }
 }
