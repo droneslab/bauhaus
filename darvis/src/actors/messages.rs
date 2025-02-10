@@ -41,6 +41,16 @@ impl ActorMessage for ImageMsg {
         0
     }
 }
+pub struct FeatureTracksAndIMUMsg {
+    pub frame: Frame,
+    pub imu_measurements: ImuMeasurements,
+    pub mappoint_ids: Vec<i32>,
+}
+impl ActorMessage for FeatureTracksAndIMUMsg {
+    fn get_map_version(&self) -> u64 {
+        0
+    }
+}
 
 pub struct TrackingStateMsg{
     pub state: TrackingState, 

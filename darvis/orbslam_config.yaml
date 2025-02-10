@@ -28,7 +28,7 @@ system:
 modules:
       - 
         name: FEATURE_DETECTION
-        tag: "orbslam feature detection" # options: ["opencv feature detection", "orbslam feature detection"]
+        tag: "orbslam feature detection" # options: ["opencv feature detection", "orbslam feature detection", "good features to track"]
         settings:
           - 
             name: max_features

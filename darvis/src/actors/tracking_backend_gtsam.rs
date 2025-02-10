@@ -1,11 +1,11 @@
 extern crate g2o;
 use log::{warn, info, debug, error};
-use nalgebra::{Isometry3, Matrix, Matrix3, Point3, Quaternion, Vector3, Vector6};
-use std::{collections::{BTreeMap, BTreeSet, HashMap, VecDeque}, fmt::{self, Formatter}, sync::atomic::Ordering, thread::sleep, time::Duration};
-use opencv::{prelude::*, types::VectorOfKeyPoint,types::VectorOfPoint2f, types::VectorOfu8, types::VectorOfMat};
+use nalgebra::{Isometry3, Quaternion, Vector3, Vector6};
+use std::collections::{HashMap, VecDeque};
+use opencv::{prelude::*, types::{VectorOfKeyPoint, VectorOfMat, VectorOfPoint2f}};
 use gtsam::{
-    inference::symbol::Symbol, linear::noise_model::{DiagonalNoiseModel, IsotropicNoiseModel}, navigation::combined_imu_factor::{CombinedImuFactor, PreintegratedCombinedMeasurements, PreintegrationCombinedParams}, nonlinear::{
-        isam2::ISAM2, levenberg_marquardt_optimizer::LevenbergMarquardtOptimizer, levenberg_marquardt_params::LevenbergMarquardtParams, nonlinear_factor_graph::NonlinearFactorGraph, values::Values
+    inference::symbol::Symbol, navigation::combined_imu_factor::{CombinedImuFactor, PreintegratedCombinedMeasurements, PreintegrationCombinedParams}, nonlinear::{
+        isam2::ISAM2, nonlinear_factor_graph::NonlinearFactorGraph, values::Values
     },
 };
 use std::fmt::Debug;
@@ -13,37 +13,20 @@ use core::{
     config::*, matrix::*, sensor::{FrameSensor, ImuSensor, Sensor}, system::{Actor, MessageBox, System, Timestamp}
 };
 use crate::{
-    actors::{
-        messages::{ImageMsg, LastKeyFrameUpdatedMsg, ShutdownMsg, UpdateFrameIMUMsg, VisFeaturesMsg},
-        tracking_backend::TrackingState,
-    }, map::{features::Features, frame::Frame, keyframe::MapPointMatches, map::Id, pose::Pose, read_only_lock::ReadWriteMap}, modules::{image, imu::{ImuBias, ImuCalib, ImuMeasurements, ImuPreIntegrated, IMU}, map_initialization::MapInitialization, module_definitions::{FeatureExtractionModule, ImuModule}, optimizer, orbslam_extractor::ORBExtractor, relocalization::Relocalization}, registered_actors::{CAMERA_MODULE, FEATURE_MATCHING_MODULE, LOCAL_MAPPING, SHUTDOWN_ACTOR, TRACKING_BACKEND, VISUALIZER}, MAP_INITIALIZED
+    actors::messages::{ShutdownMsg, UpdateFrameIMUMsg, VisFeaturesMsg}, map::{features::Features, frame::Frame, keyframe::{KeyFrame, MapPointMatches}, map::Id, pose::Pose, read_only_lock::ReadWriteMap}, modules::{good_features_to_track::GoodFeaturesExtractor, image, imu::{ImuBias, ImuCalib, ImuMeasurements, ImuPreIntegrated, IMU}, map_initialization::MapInitialization, module_definitions::{FeatureExtractionModule, ImuModule}, optimizer, orbslam_extractor::ORBExtractor, relocalization::Relocalization}, registered_actors::{SHUTDOWN_ACTOR, TRACKING_BACKEND, VISUALIZER}
 };
 
-use super::{local_mapping::LOCAL_MAPPING_IDLE, messages::{ImagePathMsg, InitKeyFrameMsg, NewKeyFrameMsg, TrajectoryMsg, VisTrajectoryMsg}, tracking_backend::TrackedMapPointData};
-use crate::modules::module_definitions::MapInitializationModule;
+use super::messages::{FeatureTracksAndIMUMsg, TrajectoryMsg, VisTrajectoryMsg};
 use crate::registered_actors::IMU;
 
 pub struct TrackingBackendGTSAM {
     system: System,
+    map: ReadWriteMap,
     sensor: Sensor,
 
-    /// Frontend
-    orb_extractor_left: Box<dyn FeatureExtractionModule>,
-    orb_extractor_ini: Option<Box<dyn FeatureExtractionModule>>,
-    init_id: Id,
-
-    /// Backend
-    state: TrackingState,
-
     // Frames
-    last_frame: Option<Frame>,
-    curr_frame_id: i32,
-    current_frame: Frame,
-
-    // KeyFrames
-    ref_kf_id: Option<Id>,
-    frames_since_last_kf: i32, // used instead of mnLastKeyFrameId, don't directly copy because the logic is kind of flipped
-    last_kf_timestamp: Option<Timestamp>,
+    last_kf_id: Id,
+    current_kf_id: Id,
 
     // Modules 
     imu: IMU,
@@ -51,32 +34,6 @@ pub struct TrackingBackendGTSAM {
 
     // Poses in trajectory
     trajectory_poses: Vec<Pose>, //mlRelativeFramePoses
-
-    /// References to map
-    map_initialized: bool,
-    map: ReadWriteMap,
-    initialization: Option<MapInitialization>, // data sent to map actor to initialize new map
-    map_scale: f64,
-
-    // Local data used for different stages of tracking
-    matches_inliers : i32, // mnMatchesInliers ... Current matches in frame
-    // local_keyframes: BTreeSet<Id>, //mvpLocalKeyFrames 
-    // local_mappoints: BTreeSet<Id>, //mvpLocalMapPoints
-    track_in_view: HashMap::<Id, TrackedMapPointData>, // mbTrackInView , member variable in Mappoint
-    // track_in_view_r: HashMap::<Id, TrackedMapPointData>, // mbTrackInViewR, member variable in Mappoint
-    // kf_track_reference_for_frame: HashMap::<Id, Id>, // mnTrackReferenceForFrame, member variable in Keyframe
-    // mp_track_reference_for_frame: HashMap::<Id, Id>,  // mnTrackReferenceForFrame, member variable in Mappoint
-    // last_frame_seen: HashMap::<Id, Id>, // mnLastFrameSeen, member variable in Mappoint
-    // non_tracked_mappoints: HashMap<Id, i32>, // just for testing
-
-
-    // Specific to optical flow module
-    last_keyframe_mappoint_matches: Option<MapPointMatches>, // mnLastFrameMatches
-
-    /// Global defaults
-    // localization_only_mode: bool,
-    max_frames_to_insert_kf : i32 , //mMaxFrames , Max Frames to insert keyframes and to check relocalisation
-    min_frames_to_insert_kf: i32, // mMinFrames, Min Frames to insert keyframes and to check relocalisation
 }
 
 impl Actor for TrackingBackendGTSAM {
@@ -84,54 +41,19 @@ impl Actor for TrackingBackendGTSAM {
 
     fn spawn(system: System, map: Self::MapRef) {
         let sensor = SETTINGS.get::<Sensor>(SYSTEM, "sensor");
-        let _orb_extractor_right: Option<Box<dyn FeatureExtractionModule>> = match sensor.frame() {
-            FrameSensor::Stereo => Some(Box::new(ORBExtractor::new(false))),
-            FrameSensor::Mono | FrameSensor::Rgbd => None,
-        };
-        let orb_extractor_ini: Option<Box<dyn FeatureExtractionModule>> = match sensor.is_mono() {
-            true => Some(Box::new(ORBExtractor::new(true))),
-            false => None
-        };
         let imu = IMU::new();
 
         let mut actor = TrackingBackendGTSAM {
             system,
             graph_solver: GraphSolver::new(),
-            orb_extractor_left: Box::new(ORBExtractor::new(false)),
-            // _orb_extractor_right,
-            orb_extractor_ini,
-            map_initialized: false,
-            init_id: 0,
             sensor,
             map,
-            initialization: Some(MapInitialization::new()),
-            map_scale: 1.0,
-            // localization_only_mode: SETTINGS.get::<bool>(SYSTEM, "localization_only_mode"),
-            max_frames_to_insert_kf: SETTINGS.get::<i32>(TRACKING_BACKEND, "max_frames_to_insert_kf"),
-            min_frames_to_insert_kf: SETTINGS.get::<i32>(TRACKING_BACKEND, "min_frames_to_insert_kf"),
-            state: TrackingState::NotInitialized,
-            ref_kf_id: None,
-            frames_since_last_kf: 0,
-            last_kf_timestamp: None,
             imu,
-            // relocalization: Relocalization{last_reloc_frame_id: 0, timestamp_lost: None},
             trajectory_poses: Vec::new(),
-            // min_num_features: SETTINGS.get::<i32>(TRACKING_BACKEND, "min_num_features")  as u32,
-            matches_inliers: 0,
-            // local_keyframes: BTreeSet::new(),
-            // local_mappoints: BTreeSet::new(),
-            track_in_view: HashMap::new(),
-            // track_in_view_r: HashMap::new(),
-            // kf_track_reference_for_frame: HashMap::new(),
-            // mp_track_reference_for_frame: HashMap::new(),
-            // last_frame_seen: HashMap::new(),
-            // non_tracked_mappoints: HashMap::new(),
-            last_keyframe_mappoint_matches: None,
-            last_frame: None,
-            current_frame: Frame::new_no_features(-1, None, 0.0, None).expect("Should be able to make dummy frame"),
-            curr_frame_id: -1
+            last_kf_id: -1,
+            current_kf_id: -1,
         };
-        tracy_client::set_thread_name!("tracking gtsam");
+        tracy_client::set_thread_name!("tracking backend gtsam");
 
         loop {
             let message = actor.system.receive().unwrap();
@@ -146,57 +68,17 @@ impl Actor for TrackingBackendGTSAM {
 
 impl TrackingBackendGTSAM {
     fn handle_message(&mut self, message: MessageBox) -> bool {
-        if message.is::<ImagePathMsg>() || message.is::<ImageMsg>() {
+        if message.is::<FeatureTracksAndIMUMsg>() {
             if self.system.queue_full() {
                 // Abort additional work if there are too many frames in the msg queue.
                 info!("Tracking gtsam dropped 1 frame");
                 return false;
             }
 
-            let (image, timestamp, imu_measurements) = if message.is::<ImagePathMsg>() {
-                let msg = message.downcast::<ImagePathMsg>().unwrap_or_else(|_| panic!("Could not downcast tracking message!"));
-                (image::read_image_file(&msg.image_path), msg.timestamp, msg.imu_measurements)
-            } else {
-                let msg = message.downcast::<ImageMsg>().unwrap_or_else(|_| panic!("Could not downcast tracking message!"));
-                (msg.image, msg.timestamp, msg.imu_measurements)
-            };
+            let msg = message.downcast::<FeatureTracksAndIMUMsg>().unwrap_or_else(|_| panic!("Could not downcast tracking message!"));
+            self.handle_regular_message(*msg).unwrap();
+        // } else if message.is::<UpdateFrameIMUMsg>() {
 
-            let created_kf = if matches!(self.state, TrackingState::NotInitialized) {
-                // If map is not initialized yet, just extract features and try to initialize
-                self.initialize_map(&image, timestamp).unwrap();
-                false
-            } else {
-                // If this is not the first image, track features from the last image
-                self.track(&image, timestamp, imu_measurements).unwrap()
-            };
-
-            self.system.send(VISUALIZER, Box::new(VisFeaturesMsg {
-                keypoints: DVVectorOfKeyPoint::empty(),
-                image,
-                timestamp,
-            }));
-
-            self.current_frame.ref_kf_id = self.ref_kf_id;
-
-            match self.state {
-                TrackingState::Ok | TrackingState::RecentlyLost => {
-                    self.update_trajectory_in_logs(created_kf).expect("Could not save trajectory")
-                },
-                _ => {},
-            };
-            self.last_frame = Some(self.current_frame.clone());
-            self.curr_frame_id += 1;
-            self.frames_since_last_kf = if created_kf { 0 } else { self.frames_since_last_kf + 1 };
-        } else if message.is::<InitKeyFrameMsg>() {
-            // Received from local mapping after it inserts a keyframe
-            let msg = message.downcast::<InitKeyFrameMsg>().unwrap_or_else(|_| panic!("Could not downcast tracking frontend message!"));
-
-            self.ref_kf_id = Some(msg.kf_id);
-        } else if message.is::<LastKeyFrameUpdatedMsg>() {
-            // Received from local mapping after it culls and creates new MPs for the last inserted KF
-            self.state = TrackingState::Ok;
-        } else if message.is::<UpdateFrameIMUMsg>() {
-            todo!("IMU ... process message from local mapping!");
         } else if message.is::<ShutdownMsg>() {
             return true;
         } else {
@@ -205,493 +87,420 @@ impl TrackingBackendGTSAM {
         return false;
     }
 
-    fn initialize_map(&mut self, curr_img: &opencv::core::Mat, timestamp: Timestamp) -> Result<(), Box<dyn std::error::Error>> {
-        let (keypoints, descriptors) = self.extract_features(curr_img.clone(), self.curr_frame_id);
-
-        self.current_frame = Frame::new(
-            self.curr_frame_id, 
-            keypoints,
-            descriptors,
-            curr_img.cols() as u32,
-            curr_img.rows() as u32,
-            Some(curr_img.clone()),
-            self.last_frame.as_ref(),
-            self.map.read()?.imu_initialized,
-            timestamp,
-        ).expect("Could not create frame!");
-
-        if self.initialization.is_none() {
-            self.initialization = Some(MapInitialization::new());
-        }
-        let init_success = self.initialization.as_mut().unwrap().try_initialize(&self.current_frame, &mut self.imu.imu_preintegrated_from_last_kf)?;
-        if init_success {
-            let (ini_kf_id, curr_kf_id);
-            {
-                (ini_kf_id, curr_kf_id) = match self.initialization.as_mut().unwrap().create_initial_map_monocular(&mut self.map,  &mut self.imu.imu_preintegrated_from_last_kf)? {
-                    Some((curr_kf_pose, curr_kf_id, ini_kf_id, local_mappoints, curr_kf_timestamp, map_scale)) => {
-                        // Map needs to be initialized before tracking can begin. Received from map actor
-                        self.frames_since_last_kf = 0;
-                        // self.local_keyframes.insert(curr_kf_id);
-                        // self.local_keyframes.insert(ini_kf_id);
-                        // self.local_mappoints = local_mappoints;
-                        self.ref_kf_id = Some(curr_kf_id);
-                        self.last_kf_timestamp = Some(curr_kf_timestamp);
-                        self.map_scale = map_scale;
-                        if self.sensor.is_imu() {
-                            self.imu.imu_preintegrated_from_last_kf = ImuPreIntegrated::new(self.map.read()?.get_keyframe( curr_kf_id).imu_data.imu_preintegrated.as_ref().unwrap().get_updated_bias());
-                        }
-
-                        {
-                            // Set current frame's updated info from map initialization
-                            self.current_frame.pose = Some(curr_kf_pose);
-                            self.current_frame.ref_kf_id = Some(curr_kf_id);
-                            self.last_keyframe_mappoint_matches = Some(self.map.read()?.get_keyframe(curr_kf_id).clone_matches());
-                        }
-                        self.state = TrackingState::Ok;
-
-                        // Log initial pose in shutdown actor
-                        self.system.send(SHUTDOWN_ACTOR, 
-                        Box::new(TrajectoryMsg{
-                                pose: self.map.read()?.get_keyframe(ini_kf_id).get_pose(),
-                                ref_kf_id: ini_kf_id,
-                                timestamp: self.map.read()?.get_keyframe(ini_kf_id).timestamp,
-                                map_version: self.map.read()?.version
-                            })
-                        );
-
-                        (ini_kf_id, curr_kf_id)
-                    },
-                    None => {
-                        panic!("Could not create initial map");
-                    }
-                };
-            }
-
-            MAP_INITIALIZED.store(true, Ordering::SeqCst);
-            self.map_initialized = true;
-
-            // Send first two keyframes to local mapping
-            self.system.send(LOCAL_MAPPING, Box::new(
-                InitKeyFrameMsg { kf_id: ini_kf_id, map_version: self.map.read()?.version }
-            ));
-            self.system.send(LOCAL_MAPPING,Box::new(
-                InitKeyFrameMsg { kf_id: curr_kf_id, map_version: self.map.read()?.version }
-            ));
-
-            self.state = TrackingState::Ok;
-            sleep(Duration::from_millis(50)); // Sleep just a little to allow local mapping to process first keyframe
-        } else {
-            self.state = TrackingState::NotInitialized;
-        }
-        Ok(())
-    }
-
-    fn track(
-        &mut self,
-        curr_img: & opencv::core::Mat, timestamp: Timestamp,
-        mut imu_measurements: ImuMeasurements,
-    ) -> Result<bool, Box<dyn std::error::Error>> {
+    fn handle_regular_message(&mut self, mut msg: FeatureTracksAndIMUMsg) -> Result<(), Box<dyn std::error::Error>> {
         let _span = tracy_client::span!("track");
 
-        let mut created_keyframe = false;
-        self.current_frame = Frame::new_no_features(
-            self.curr_frame_id, 
-            Some(curr_img.clone()),
-            timestamp,
-            Some(& self.last_frame.as_mut().unwrap())
-        ).expect("Could not create frame!");
-
-        // Track features
-        let (tracked_kp, total_kp) = self.optical_flow()?;
-        debug!("Optical flow, tracked {} from original {}", tracked_kp, total_kp);
-
-        let num_tracked_mappoints = self.map_feature_tracks_to_mappoints()?;
-        debug!("Tracked {} mappoints", num_tracked_mappoints);
-
-        // Solve VIO graph. Includes preintegration
-        let optimized = self.graph_solver.solve(&mut self.current_frame, &self.last_frame.as_ref().unwrap(), &mut imu_measurements)?;
-
-        if optimized {
-            // Create new keyframe
-            if self.need_new_keyframe()? {
-                created_keyframe = true;
-                self.extract_features_and_add_to_existing()?;
-                self.create_new_keyframe()?;
-                println!("Created new keyframe");
-            }
-            Ok(created_keyframe)
+        if self.last_kf_id == -1 {
+            // If this is the first frame, don't do anything
+            // If we are receiving it here, it was already put into the map as the latest keyframe
+            self.last_kf_id = 1;
         } else {
-            self.state = TrackingState::NotInitialized;
-            return Ok(false);
-        }
-    }
+            // If we have previous frames already, can track normally
+            let mut current_frame = msg.frame;
 
-    fn extract_features(&mut self, image: opencv::core::Mat, curr_frame_id: i32) -> (DVVectorOfKeyPoint, DVMatrix) {
-        let _span = tracy_client::span!("extract features");
+            // if !self.map.read()?.imu_initialized {
+            //     let (prior_g, prior_a, fiba) = match self.sensor.frame() {
+            //         FrameSensor::Mono => (1e2, 1e10, true),
+            //         FrameSensor::Stereo | FrameSensor::Rgbd => (1e2, 1e5, true),
+            //     };
 
-        let (keypoints, descriptors) = if !self.map_initialized || (curr_frame_id - self.init_id < self.max_frames_to_insert_kf) {
-            self.orb_extractor_ini.as_mut().unwrap().extract(DVMatrix::new(image)).unwrap()
-        } else if self.sensor.is_mono() {
-            self.orb_extractor_left.extract(DVMatrix::new(image)).unwrap()
-        } else {
-            todo!("Stereo, RGBD")
-        };
-        (keypoints, descriptors)
-    }
+            //     self.imu.initialize(&mut self.map, 1, prior_g, prior_a, fiba, Some(self.system.find_actor(TRACKING_BACKEND)))?;
+            // }
 
-    fn optical_flow(&mut self) -> Result<(u32, usize), Box<dyn std::error::Error>> {
-        let _span = tracy_client::span!("optical_flow");
+            // At this point we only have feature matches from front end, not the matches to mappoints. Add the matches here
+            self.map_feature_tracks_to_mappoints(&mut current_frame, & msg.mappoint_ids)?;
 
-        let mut status = VectorOfu8::new();
-
-        let frame1 = self.last_frame.as_mut().unwrap();
-
-        let mut points1: VectorOfPoint2f = frame1.features.get_all_keypoints().iter().map(|kp| kp.pt()).collect();
-        let mut points2 = VectorOfPoint2f::new();
-
-        //this function automatically gets rid of points for which tracking fails
-        let mut err = opencv::types::VectorOff32::default();
-        let win_size = opencv::core::Size::new(24, 24);
-        let termcrit = opencv::core::TermCriteria {
-          typ: 3,
-          max_count: 30,
-          epsilon: 0.1,
-        };
-        let max_level = 3;
-        opencv::video::calc_optical_flow_pyr_lk(
-          & frame1.image.as_ref().unwrap(), & self.current_frame.image.as_ref().unwrap(), &mut points1, &mut points2, &mut status, &mut err, win_size, max_level, termcrit, 0, 0.001,
-        )?;
-
-        //getting rid of points for which the KLT tracking failed or those who have gone outside the framed
-        let mut indez_correction = 0;
-        let mut new_descriptors = VectorOfMat::new();
-        let mut new_keypoints = VectorOfKeyPoint::new();
-
-        for i in 0..status.len() {
-          let pt = points2.get(i - indez_correction)?;
-          if (status.get(i)? == 0) || pt.x < 0.0 || pt.y < 0.0 {
-            if pt.x < 0.0 || pt.y < 0.0 {
-              status.set(i, 0)?;
+            // Solve VIO graph. Includes preintegration
+            let optimized = self.graph_solver.solve(&mut current_frame, self.last_kf_id, &mut msg.imu_measurements, & self.map)?;
+            if !optimized {
+                warn!("Could not optimize graph");
             }
-            points1.remove(i - indez_correction)?;
-            points2.remove(i - indez_correction)?;
-            frame1.features.remove_keypoint_and_descriptor(i - indez_correction)?;
 
-            indez_correction = indez_correction + 1;
-            } else {
-                let curr_kp = frame1.features.get_keypoint(i - indez_correction).0;
-                new_keypoints.push(opencv::core::KeyPoint::new_coords(pt.x, pt.y, curr_kp.size(), curr_kp.angle(), curr_kp.response(), curr_kp.octave(), curr_kp.class_id()).expect("Failed to create keypoint"));
+            // Create new keyframe! Forget the old frame.
+            self.current_kf_id = self.create_new_keyframe(current_frame).unwrap();
 
-                new_descriptors.push((* frame1.features.descriptors.row(i as u32)).clone());
-            }
+            self.update_trajectory_in_logs().expect("Could not save trajectory");
+            self.last_kf_id = self.current_kf_id;
         }
 
-        let mut new_descs_as_mat = opencv::core::Mat::default();
-        opencv::core::vconcat(&new_descriptors, &mut new_descs_as_mat).expect("Failed to concatenate");
-
-        self.current_frame.replace_features(DVVectorOfKeyPoint::new(new_keypoints), DVMatrix::new(new_descs_as_mat))?;
-
-        Ok((self.current_frame.features.num_keypoints, status.len()))
-    }
-
-    fn map_feature_tracks_to_mappoints(&mut self) -> Result<i32, Box<dyn std::error::Error> > {
-        let _span = tracy_client::span!("map_feature_tracks_to_mappoints");
-
-        let map = self.map.read()?;
-        let ref_kf = map.get_keyframe(self.ref_kf_id.unwrap());
-        let mut added = 0;
-
-        println!("CURRENT FRAME KEYPOINTS LEN: {}", self.current_frame.features.get_all_keypoints().len());
-        println!("REF KF KEYPOINTS LEN: {}", ref_kf.features.get_all_keypoints().len());
-        println!("REF KF MAPPOINT MATCHES LEN: {}", ref_kf.get_mp_matches().len());
-
-        for idx1 in 0..self.current_frame.features.get_all_keypoints().len() - 1 {
-            if let Some((mp_id, is_outlier)) = ref_kf.get_mp_match(&(idx1 as u32)) {
-                if !is_outlier {
-                    self.current_frame.mappoint_matches.add(idx1 as u32, mp_id, false);
-                    added += 1;
-
-                    // Adds depth to track_in_view, needed for local bundle adjustment
-                    // let mp = map.get_mappoint(mp_id);
-                    // let (tracked_data_left, _tracked_data_right) = self.current_frame.is_in_frustum(mp, 0.5);
-                    // if tracked_data_left.is_some() {
-                    //     map.mappoints.get(&mp_id).unwrap().increase_visible(1);
-                    //     self.track_in_view.insert(mp_id, tracked_data_left.unwrap());
-                    // } else {
-                    //     self.track_in_view.remove(&mp_id);
-                    // }
-
-                }
-            }
-        }
-
-        Ok(added)
-    }
-
-    fn _calculate_3d_points(&mut self) {
-        // Convert keypoints into array of points.
-        // std::vector<cv::Point2f> left_points;
-        // std::vector<cv::Point2f> right_points;
-        // // The reason we pass in right frame first is because we don't want to modify
-        // // the left frames is_initial_ book-keeping.
-        // // This means right will be the 'initial' and the left_frame
-        // // will be the 'current' frame.
-        // VisionFactor* matches;
-        // // Assure that every point has a match.
-        // float best_percent = config_.best_percent_;
-        // config_.best_percent_ = 1.0;
-        // matches = GetFeatureMatches(right_frame, left_frame);
-        // config_.best_percent_ = best_percent;
-        // if (matches->feature_matches.size() == 0) {
-        //     return;
-        // }
-        // for (FeatureMatch match : matches->feature_matches) {
-        //     const auto& left_pt = left_frame->keypoints_[match.feature_idx_current].pt;
-        //     const auto& right_pt =
-        //         right_frame->keypoints_[match.feature_idx_initial].pt;
-        //     // if (fabs(left_pt.y - right_pt.y) > 5) continue;
-        //     right_points.push_back(right_pt);
-        //     left_points.push_back(left_pt);
-        //     if (false) {
-        //     printf("[%6.1f %6.1f] [%6.1f %6.1f]\n",
-        //             left_pt.x,
-        //             left_pt.y,
-        //             right_pt.x,
-        //             right_pt.y);
-        //     }
-        // }
-        // cv::Mat triangulated_points;
-        // cv::triangulatePoints(config_.projection_left,
-        //                         config_.projection_right,
-        //                         left_points,
-        //                         right_points,
-        //                         triangulated_points);
-        // // Make sure all keypoints are matched to something.
-        // CHECK_EQ(triangulated_points.cols, matches->feature_matches.size());
-        // for (int64_t c = 0; c < triangulated_points.cols; ++c) {
-        //     cv::Mat col = triangulated_points.col(c);
-        //     points->push_back(
-        //     Vector3f(col.at<float>(0, 0),
-        //             col.at<float>(1, 0),
-        //             col.at<float>(2, 0)) /col.at<float>(3, 0));
-        // }
-        // // Generate Debug Images if needed
-        // if (config_.debug_images_) {
-        //     debug_stereo_images_.push_back(CreateStereoDebugImage(*left_frame,
-        //                                                         *right_frame,
-        //                                                         *matches));
-        // }
-        // free(matches);
-
+        return Ok(());
     }
 
     fn update_trajectory_in_logs(
-        &mut self, created_new_kf: bool,
+        &mut self,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let relative_pose = {
-            let reference_pose = if created_new_kf {
-                // If we created a new kf this round, the relative keyframe pose is the same as the current frame pose.
-                self.current_frame.pose.unwrap()
-            } else if self.last_frame.as_ref().unwrap().pose.is_none() {
-                // This condition should only happen for the first frame after initialization
-                self.map.read()?.get_keyframe(self.ref_kf_id.unwrap()).get_pose().inverse()
-            } else {
-                self.last_frame.as_ref().unwrap().pose.unwrap()
-            };
+        let map = self.map.read()?;
+        let curr_kf = map.get_keyframe(self.current_kf_id);
+        let last_kf = map.get_keyframe(self.last_kf_id);
 
-            self.current_frame.pose.unwrap() * reference_pose.inverse()
-        };
+        let relative_pose = curr_kf.get_pose() * last_kf.get_pose();
 
         self.trajectory_poses.push(relative_pose);
 
-        info!("Frame {} pose: {:?}", self.current_frame.frame_id, self.current_frame.pose);
+        println!("Sanity check... curr kf is {}, ref kf is {}, last kf is {}", curr_kf.id, curr_kf.ref_kf_id.unwrap(), last_kf.id);
 
         self.system.send(
             SHUTDOWN_ACTOR, 
             Box::new(TrajectoryMsg{
-                pose: self.current_frame.pose.unwrap().inverse(),
-                ref_kf_id: self.current_frame.ref_kf_id.unwrap(),
-                timestamp: self.current_frame.timestamp,
+                pose: curr_kf.get_pose().inverse(),
+                ref_kf_id: curr_kf.ref_kf_id.unwrap(),
+                timestamp: curr_kf.timestamp,
                 map_version: self.map.read()?.version
             })
         );
 
         let map = self.map.read()?;
-        let bla = map.get_keyframe(self.ref_kf_id.unwrap()).get_mp_matches().iter().filter_map(|v| match v { 
+        let bla = last_kf.get_mp_matches().iter().filter_map(|v| match v { 
            Some((id, _is_outlier)) => Some(*id),
            None => None
         });
         self.system.try_send(VISUALIZER, Box::new(VisTrajectoryMsg{
-            pose: self.current_frame.pose.unwrap(),
+            pose: curr_kf.get_pose(),
             mappoint_matches: vec![],
             nontracked_mappoints: HashMap::new(),
             mappoints_in_tracking: bla.collect(),
-            timestamp: self.current_frame.timestamp,
+            timestamp: curr_kf.timestamp,
             map_version: map.version
         }));
 
         Ok(())
     }
 
-    fn need_new_keyframe(&mut self) -> Result<bool, Box<dyn std::error::Error>> {
-        let num_kfs = self.map.read()?.num_keyframes();
-
-        if self.sensor.is_imu() && !self.map.read()?.imu_initialized {
-            if (self.current_frame.timestamp - self.last_kf_timestamp.unwrap()) * 1e9 >= 0.25 { // 250 milliseconds
-                debug!("Need new keyframe... IMU not initialized");
-                return Ok(true);
-            } else {
-                return Ok(false);
-            }
-        }
-
-        // Tracked MapPoints in the reference keyframe
-        let min_observations = match num_kfs <= 2 {
-            true => 2,
-            false => 3
-        };
-
-        let map_lock = self.map.read()?;
-        let tracked_mappoints = map_lock.get_keyframe(self.ref_kf_id.unwrap()).get_tracked_mappoints(&*map_lock, min_observations) as f32;
-
-        // Check how many "close" points are being tracked and how many could be potentially created.
-        let (tracked_close, non_tracked_close) = self.current_frame.check_close_tracked_mappoints();
-        let need_to_insert_close = (tracked_close<100) && (non_tracked_close>70);
-
-        // Thresholds
-        let th_ref_ratio = match self.sensor {
-            Sensor(FrameSensor::Mono, ImuSensor::None) => 0.9,
-            Sensor(FrameSensor::Mono, ImuSensor::Some) => {
-                // Points tracked from the local map
-                if self.matches_inliers > 350 { 0.75 } else { 0.90 }
-            },
-            Sensor(FrameSensor::Stereo, _) | Sensor(FrameSensor::Rgbd, ImuSensor::Some) => 0.75,
-            Sensor(FrameSensor::Rgbd, ImuSensor::None) => { if num_kfs < 2 { 0.4 } else { 0.75 } }
-        };
-
-        // Condition 1a: More than "MaxFrames" have passed from last keyframe insertion
-        let c1a = self.frames_since_last_kf >= (self.max_frames_to_insert_kf as i32);
-        // Condition 1b: More than "MinFrames" have passed and Local Mapping is idle
-        let c1b = self.frames_since_last_kf >= (self.min_frames_to_insert_kf as i32) && LOCAL_MAPPING_IDLE.load(Ordering::SeqCst);
-        //Condition 1c: tracking is weak
-        let sensor_is_right = match self.sensor {
-            Sensor(FrameSensor::Mono, _) | Sensor(FrameSensor::Stereo, ImuSensor::Some) | Sensor(FrameSensor::Rgbd, ImuSensor::Some) => false,
-            _ => true
-        }; // I do not know why they just select for RGBD or Stereo without IMU
-        let c1c = sensor_is_right && ((self.matches_inliers as f32) < tracked_mappoints * 0.25 || need_to_insert_close) ;
-        // Condition 2: Few tracked points compared to reference keyframe. Lots of visual odometry compared to map matches.
-        let c2 = (((self.matches_inliers as f32) < tracked_mappoints * th_ref_ratio || need_to_insert_close)) && self.matches_inliers > 15;
-
-        // println!("c2: {}, inliers: {}, tracked mappoints: {}, th ref ratio: {}", c2, self.matches_inliers, tracked_mappoints, th_ref_ratio);
-
-        // Temporal condition for Inertial cases
-        let close_to_last_kf = match self.last_kf_timestamp {
-            Some(timestamp) => self.current_frame.timestamp - timestamp >= 0.5 * 1e-9, // 500 milliseconds
-            None => false
-        };
-
-        let c3 = self.sensor.is_imu() && close_to_last_kf;
-
-        let recently_lost = match self.state {
-            TrackingState::RecentlyLost => true,
-            _ => false
-        };
-        let sensor_is_imumono = match self.sensor {
-            Sensor(FrameSensor::Rgbd, ImuSensor::Some) => true,
-            _ => false
-        };
-        let c4 = ((self.matches_inliers < 75 && self.matches_inliers > 15) || recently_lost) && sensor_is_imumono;
-
-        // Note: removed code here about checking for idle local mapping and/or interrupting bundle adjustment
-        let create_new_kf =  ((c1a||c1b||c1c) && c2)||c3 ||c4;
-
-        tracy_client::Client::running()
-            .expect("message! without a running Client")
-            .message(format!("need new kf: {} {}", create_new_kf, LOCAL_MAPPING_IDLE.load(Ordering::SeqCst)).as_str(), 2);
-
-        if LOCAL_MAPPING_IDLE.load(Ordering::SeqCst) && create_new_kf {
-            self.frames_since_last_kf = 0;
-            return Ok(true);
-        } else {
-            self.frames_since_last_kf += 1;
-            return Ok(false);
-        }
-    }
-
-    fn extract_features_and_add_to_existing(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        let _span = tracy_client::span!("extract features");
-
-        let (keypoints, descriptors) = self.extract_features(self.current_frame.image.as_ref().unwrap().clone(), self.curr_frame_id);
-
-        let mut new_keypoints = VectorOfKeyPoint::new();
-        let mut new_descriptor = Mat::default();
-        let mut new_descriptor_vec = VectorOfMat::new();
-
-        for i in 0..self.current_frame.features.num_keypoints {
-            new_keypoints.push(self.current_frame.features.get_keypoint(i as usize).0);
-            new_descriptor_vec.push((* self.current_frame.features.descriptors.row(i as u32)).clone());
-        }
-
-        for i in 0..keypoints.len() {
-            new_keypoints.push(keypoints.get(i as usize)?);
-            new_descriptor_vec.push((*descriptors).row(i as i32)?);
-        }
-
-        opencv::core::vconcat(&new_descriptor_vec, &mut new_descriptor).expect("Failed to concatenate");
-
-        // println!("Re-extracting features, before: {}, after: {}", frame.features.num_keypoints, new_keypoints.len());
-
-        self.current_frame.replace_features(DVVectorOfKeyPoint::new(new_keypoints), DVMatrix::new(new_descriptor))?;
-        Ok(())
-    }
-
-    fn create_new_keyframe(&mut self) -> Result<(), Box<dyn std::error::Error>>{
+    fn create_new_keyframe(&mut self, mut current_frame: Frame) -> Result<i32, Box<dyn std::error::Error>>{
         let _span = tracy_client::span!("create_new_keyframe");
 
         self.imu.imu_preintegrated_from_last_kf = ImuPreIntegrated::new(ImuBias::new());
 
-        self.last_kf_timestamp = Some(self.current_frame.timestamp);
+        debug!("SOFIYA FEATURES. In backend, frame has N {}, features {}, mappoint matches {}", current_frame.features.num_keypoints, current_frame.features.get_all_keypoints().len(), current_frame.mappoint_matches.len(), );
+
+        debug!("SOFIYA FEATURES. After mapping feature tracks, frame has N {}, features {}, mappoint matches {}", current_frame.features.num_keypoints, current_frame.features.get_all_keypoints().len(), current_frame.mappoint_matches.len());
+
+        current_frame.ref_kf_id = Some(self.last_kf_id);
+
+        let kf_id = self.map.write()?.insert_keyframe_to_map(current_frame, false);
+
+        let map = self.map.read()?;
+        let curr_kf = map.get_keyframe(kf_id);
+
+        debug!("SOFIYA FEATURES. After inserting keyframe, frame has N {}, features {}, mappoint matches {}", curr_kf.features.num_keypoints, curr_kf.features.get_all_keypoints().len(), curr_kf.get_mp_matches().len());
 
         tracy_client::Client::running()
         .expect("message! without a running Client")
         .message("create new keyframe", 2);
 
-        // KeyFrame created here and inserted into map
-        self.system.send(
-            LOCAL_MAPPING,
-            Box::new( NewKeyFrameMsg{
-                keyframe: self.current_frame.clone(),
-                tracking_state: self.state,
-                matches_in_tracking: self.matches_inliers,
-                tracked_mappoint_depths: HashMap::new(), // Todo (Sofiya): can get away without sending this? In regular tracking this is updated during search_local_points, which only searches/updates local MPs that haven't already been matched... so it shouldn't be unusual for local BA to not have a depth value for a particular MP
-                map_version: self.map.read()?.version
-            } )
-        );
+        // TODO SOFIYA probably want to create new mappoints here somehow
 
-        Ok(())
+        Ok(kf_id)
     }
 
+    fn map_feature_tracks_to_mappoints(&mut self, current_frame: &mut Frame, tracked_mappoint_ids: & Vec<i32>) -> Result<i32, Box<dyn std::error::Error> > {
+        let _span = tracy_client::span!("map_feature_tracks_to_mappoints");
 
+        let map = self.map.read()?;
+        let ref_kf = map.get_keyframe(self.last_kf_id);
+        let mut added = 0;
+
+        println!("Current frame features: {:?}", current_frame.features.get_all_keypoints().len());
+        println!("Tracked mappoint ids: {:?}", tracked_mappoint_ids.len());
+        println!("Ref kf mappoint matches: {:?}", ref_kf.get_mp_matches().len());
+        // println!("Ref kf matches: {:?}", ref_kf.get_mp_matches());
+
+        for idx1 in 0..current_frame.features.get_all_keypoints().len() - 1 {
+            if tracked_mappoint_ids[idx1 as usize] != -1 {
+                // Most times the id will be a real mappoint
+                // But when new features are extracted for this frame, there is no associated mappoint yet
+                // We can create them later when we create the keyframe, but for now ignore.
+                current_frame.mappoint_matches.add(idx1 as u32, tracked_mappoint_ids[idx1 as usize], false);
+                added += 1;
+            }
+        }
+        println!("Added {} mappoints", added);
+
+        Ok(added)
+    }
+
+    // fn create_new_mappoints(&mut self) -> Result<i32, Box<dyn std::error::Error>> {
+    //     let _span = tracy_client::span!("create_new_mappoints");
+
+    //     // Retrieve neighbor keyframes in covisibility graph
+    //     let nn = match self.sensor.is_mono() {
+    //         true => 30,
+    //         false => 10
+    //     };
+    //     let ratio_factor = 1.5 * SETTINGS.get::<f64>(FEATURE_DETECTION, "scale_factor");
+    //     let fpt = SETTINGS.get::<f64>(FEATURE_MATCHER, "far_points_threshold");
+    //     let far_points_th = if fpt == 0.0 { INFINITY } else { fpt };
+
+    //     let mut mps_to_insert = vec![];
+    //     let mut mps_created = 0;
+    //     {
+    //         let _span = tracy_client::span!("create_new_mappoints: before loop");
+    //         let lock = self.map.read()?;
+
+    //         let current_kf = lock.get_keyframe(self.current_keyframe_id);
+    //         let mut neighbor_kfs = current_kf.get_covisibility_keyframes(nn);
+    //         if self.sensor.is_imu() {
+    //             let mut count = 0;
+    //             let mut pkf = current_kf;
+    //             while (neighbor_kfs.len() as i32) < nn && pkf.prev_kf_id.is_some() && count < nn {
+    //                 let prev_kf = current_kf.prev_kf_id.unwrap();
+    //                 if !neighbor_kfs.contains(&prev_kf) {
+    //                     neighbor_kfs.push(prev_kf);
+    //                 }
+    //                 pkf = lock.get_keyframe(prev_kf);
+    //                 count += 1;
+    //             }
+    //         }
+
+    //         let mut pose1 = current_kf.get_pose(); // sophTcw1
+    //         let translation1 = pose1.get_translation(); // tcw1
+    //         let rotation1 = pose1.get_rotation(); // Rcw1
+    //         let rotation_transpose1 = rotation1.transpose(); // Rwc1
+    //         let mut ow1 = current_kf.get_camera_center();
+
+    //         drop(_span);
+    //         let _span = tracy_client::span!("create_new_mappoints: loop");
+    //         // println!("Create_new_mappoints neighbor_kfs: {:?}", neighbor_kfs);
+
+    //         // Search matches with epipolar restriction and triangulate
+    //         for neighbor_id in neighbor_kfs {
+    //             if self.system.queue_len() > 1 {
+    //                 // Abort additional work if there are too many keyframes in the msg queue.
+    //                 return Ok(0);
+    //             }
+    //             let neighbor_kf = lock.get_keyframe(neighbor_id);
+
+    //             // Check first that baseline is not too short
+    //             let mut ow2 = neighbor_kf.get_camera_center();
+    //             let baseline = (*ow2 - *ow1).norm();
+    //             match self.sensor.is_mono() {
+    //                 true => {
+    //                     let median_depth_neigh = neighbor_kf.compute_scene_median_depth(&lock.mappoints, 2);
+    //                     if baseline / median_depth_neigh < 0.01 {
+    //                         debug!("Local mapping create new mappoints, continuing bc baseline.. baseline {} median scene depth {}", baseline, median_depth_neigh);
+    //                         continue
+    //                     }
+    //                 },
+    //                 false => {
+    //                     if baseline < CAMERA_MODULE.stereo_baseline {
+    //                         continue
+    //                     }
+    //                 }
+    //             }
+
+    //             // Search matches that fullfil epipolar constraint
+    //             let course = match self.sensor.is_imu() {
+    //                 true => lock.imu_ba2 && matches!(self.current_tracking_state, TrackingState::RecentlyLost),
+    //                 false => false
+    //             };
+
+    //             let matches = match FEATURE_MATCHING_MODULE.search_for_triangulation(
+    //                 current_kf,
+    //                 neighbor_kf,
+    //                 false, false, course,
+    //                 self.sensor
+    //             ) {
+    //                 Ok(matches) => matches,
+    //                 Err(err) => panic!("Problem with search_for_triangulation {}", err)
+    //             };
+
+    //             let mut pose2 = neighbor_kf.get_pose();
+    //             let translation2 = pose2.get_translation(); // tcw2
+    //             let rotation2 = pose2.get_rotation(); // Rcw2
+    //             let rotation_transpose2 = rotation2.transpose(); // Rwc2
+
+    //             // Triangulate each match
+    //             for (idx1, idx2) in matches {
+    //                 let (kp1, right1, kp2, right2) = {
+    //                     let (kp1, right1) = current_kf.features.get_keypoint(idx1);
+    //                     let (kp2, right2) = neighbor_kf.features.get_keypoint(idx2);
+    //                     (kp1, right1, kp2, right2)
+    //                 };
+
+    //                 if right1 {
+    //                     let _kp1_ur = current_kf.features.get_mv_right(idx1);
+    //                     pose1 = current_kf.get_right_pose();
+    //                     ow1 = current_kf.get_right_camera_center();
+    //                     // camera1 = mpCurrentKeyFrame->mpCamera2 TODO (STEREO) .. right now just using global CAMERA
+    //                 } else {
+    //                     pose1 = current_kf.get_pose();
+    //                     ow1 = current_kf.get_camera_center();
+    //                     // camera1 = mpCurrentKeyFrame->mpCamera TODO (STEREO)
+    //                 }
+    //                 if right2 {
+    //                     let _kp2_ur = neighbor_kf.features.get_mv_right(idx2);
+    //                     pose2 = neighbor_kf.get_right_pose();
+    //                     ow2 = neighbor_kf.get_right_camera_center();
+    //                     // camera2 = neighbor_kf->mpCamera2 TODO (STEREO)
+    //                 } else {
+    //                     pose2 = neighbor_kf.get_pose();
+    //                     ow2 = neighbor_kf.get_camera_center();
+    //                     // camera2 = neighbor_kf->mpCamera TODO (STEREO)
+    //                 }
+
+    //                 // Check parallax between rays
+    //                 let xn1 = CAMERA_MODULE.unproject_eig(&kp1.pt());
+    //                 let xn2 = CAMERA_MODULE.unproject_eig(&kp2.pt());
+    //                 let ray1 = rotation_transpose1 * (*xn1);
+    //                 let ray2 = rotation_transpose2 * (*xn2);
+    //                 let cos_parallax_rays = ray1.dot(&ray2) / (ray1.norm() * ray2.norm());
+    //                 let (cos_parallax_stereo1, cos_parallax_stereo2) = (cos_parallax_rays + 1.0, cos_parallax_rays + 1.0);
+    //                 if right1 {
+    //                     todo!("Stereo");
+    //                     // cosParallaxStereo1 = cos(2*atan2(mpCurrentKeyFrame->mb/2,mpCurrentKeyFrame->mvDepth[idx1]));
+    //                 } else if right2 {
+    //                     todo!("Stereo");
+    //                     //cosParallaxStereo2 = cos(2*atan2(neighbor_kf->mb/2,neighbor_kf->mvDepth[idx2]));
+    //                 }
+    //                 let cos_parallax_stereo = cos_parallax_stereo1.min(cos_parallax_stereo2);
+
+    //                 let x3_d;
+    //                 {
+    //                     let good_parallax_with_imu = cos_parallax_rays < 0.9996 && self.sensor.is_imu();
+    //                     let good_parallax_wo_imu = cos_parallax_rays < 0.9998 && !self.sensor.is_imu();
+    //                     if cos_parallax_rays < cos_parallax_stereo && cos_parallax_rays > 0.0 && (right1 || right2 || good_parallax_with_imu || good_parallax_wo_imu) {
+    //                         x3_d = geometric_tools::triangulate(xn1, xn2, pose1, pose2);
+    //                     } else if right1 && cos_parallax_stereo1 < cos_parallax_stereo2 {
+    //                         x3_d = CAMERA_MODULE.unproject_stereo(lock.get_keyframe(self.current_keyframe_id), idx1);
+    //                     } else if right2 && cos_parallax_stereo2 < cos_parallax_stereo1 {
+    //                         x3_d = CAMERA_MODULE.unproject_stereo(lock.get_keyframe(neighbor_id), idx2);
+    //                     } else {
+    //                         continue // No stereo and very low parallax
+    //                     }
+    //                     if x3_d.is_none() {
+    //                         continue
+    //                     }
+    //                 }
+
+
+    //                 //Check triangulation in front of cameras
+    //                 let x3_d_nalg = *x3_d.unwrap();
+    //                 let z1 = rotation1.row(2).transpose().dot(&x3_d_nalg) + (*translation1)[2];
+    //                 if z1 <= 0.0 {
+    //                     continue;
+    //                 }
+    //                 let z2 = rotation2.row(2).transpose().dot(&x3_d_nalg) + (*translation2)[2];
+    //                 if z2 <= 0.0 {
+    //                     continue;
+    //                 }
+
+    //                 //Check reprojection error in first keyframe
+    //                 let sigma_square1 = LEVEL_SIGMA2[kp1.octave() as usize];
+    //                 let x1 = rotation1.row(0).transpose().dot(&x3_d_nalg) + (*translation1)[0];
+    //                 let y1 = rotation1.row(1).transpose().dot(&x3_d_nalg) + (*translation1)[1];
+
+    //                 if right1 {
+    //                     todo!("Stereo");
+    //                     // let invz1 = 1.0 / z1;
+    //                     // let u1 = CAMERA_MODULE.fx * x1 * invz1 + CAMERA_MODULE.cx;
+    //                     // let u1_r = u1 - CAMERA_MODULE.stereo_baseline_times_fx * invz1;
+    //                     // let v1 = CAMERA_MODULE.fy * y1 * invz1 + CAMERA_MODULE.cy;
+    //                     // let err_x1 = u1 as f32 - kp1.pt().x;
+    //                     // let err_y1 = v1 as f32 - kp1.pt().y;
+    //                     // let err_x1_r = u1_r as f32 - kp1_ur.unwrap();
+    //                     // if (err_x1 * err_x1  + err_y1 * err_y1 + err_x1_r * err_x1_r) > 7.8 * sigma_square1 {
+    //                     //     continue
+    //                     // }
+    //                 } else {
+    //                     let uv1 = CAMERA_MODULE.project(DVVector3::new_with(x1, y1, z1));
+    //                     let err_x1 = uv1.0 as f32 - kp1.pt().x;
+    //                     let err_y1 = uv1.1 as f32 - kp1.pt().y;
+    //                     if (err_x1 * err_x1  + err_y1 * err_y1) > 5.991 * sigma_square1 {
+    //                         continue
+    //                     }
+    //                 }
+
+    //                 //Check reprojection error in second keyframe
+    //                 let sigma_square2 = LEVEL_SIGMA2[kp2.octave() as usize];
+    //                 let x2 = rotation2.row(0).transpose().dot(&x3_d_nalg) + (*translation2)[0];
+    //                 let y2 = rotation2.row(1).transpose().dot(&x3_d_nalg) + (*translation2)[1];
+
+    //                 if right2 {
+    //                     todo!("Stereo");
+    //                     // let invz2 = 1.0 / z2;
+    //                     // let u2 = CAMERA_MODULE.fx * x2 * invz2 + CAMERA_MODULE.cx;// This should be camera2, not camera
+    //                     // let u2_r = u2 - CAMERA_MODULE.stereo_baseline_times_fx * invz2;
+    //                     // let v2 = CAMERA_MODULE.fy * y2 * invz2 + CAMERA_MODULE.cy;// This should be camera2, not camera
+    //                     // let err_x2 = u2 as f32 - kp2.pt().x;
+    //                     // let err_y2 = v2 as f32 - kp2.pt().y;
+    //                     // let err_x2_r = u2_r as f32 - kp2_ur.unwrap();
+    //                     // if (err_x2 * err_x2  + err_y2 * err_y2 + err_x2_r * err_x2_r) > 7.8 * sigma_square2 {
+    //                     //     continue
+    //                     // }
+    //                 } else {
+    //                     let uv2 = CAMERA_MODULE.project(DVVector3::new_with(x2, y2, z2));
+    //                     let err_x2 = uv2.0 as f32 - kp2.pt().x;
+    //                     let err_y2 = uv2.1 as f32 - kp2.pt().y;
+    //                     if (err_x2 * err_x2  + err_y2 * err_y2) > 5.991 * sigma_square2 {
+    //                         continue
+    //                     }
+    //                 }
+
+    //                 //Check scale consistency
+    //                 let normal1 = *x3_d.unwrap() - *ow1;
+    //                 let dist1 = normal1.norm();
+
+    //                 let normal2 = *x3_d.unwrap() - *ow2;
+    //                 let dist2 = normal2.norm();
+
+    //                 if dist1 == 0.0 || dist2 == 0.0 {
+    //                     continue;
+    //                 }
+
+    //                 if dist1 >= far_points_th || dist2 >= far_points_th {
+    //                     continue;
+    //                 }
+
+    //                 let ratio_dist = dist2 / dist1;
+    //                 let ratio_octave = (SCALE_FACTORS[kp1.octave() as usize] / SCALE_FACTORS[kp2.octave() as usize]) as f64;
+    //                 if ratio_dist * ratio_factor < ratio_octave || ratio_dist > ratio_octave * ratio_factor {
+    //                     continue;
+    //                 }
+
+    //                 // Triangulation is successful
+    //                 let origin_map_id = lock.id;
+    //                 let observations = vec![
+    //                     (self.current_keyframe_id, lock.get_keyframe(self.current_keyframe_id).features.num_keypoints, idx1),
+    //                     (neighbor_id, neighbor_kf.features.num_keypoints, idx2)
+    //                 ];
+
+    //                 mps_to_insert.push((x3_d.unwrap(), self.current_keyframe_id, origin_map_id, observations));
+
+    //             }
+    //         }
+    //     }
+
+    //     let _span = tracy_client::span!("create_new_mappoints::insert_mappoints");
+    //     let mut lock = self.map.write()?;
+    //     for (x3_d, ref_kf_id, origin_map_id, observations) in mps_to_insert {
+    //         let mp_id = lock.insert_mappoint_to_map(x3_d, ref_kf_id, origin_map_id, observations)
+    //         ;
+    //         self.recently_added_mappoints.insert(mp_id);
+    //         mps_created += 1;
+    //     }
+
+    //     Ok(mps_created)
+    // }
 }
 
 pub struct GraphSolver {
     // New graph
     graph_new: NonlinearFactorGraph, // New factors that have not been optimized yet
     values_new: Values, // New values that have not been optimized yet
-  
+
     // Main graph
     graph_main: NonlinearFactorGraph, // Main non-linear GTSAM graph, all created factors
     values_initial: Values, // All created nodes
-    
+
     // Misc GTSAM objects
     isam2: ISAM2, // ISAM2 solvers
     preint_gtsam: PreintegratedCombinedMeasurements, // IMU preintegration
 
     // IMU preintegration parameters
     // Initialization
-    prior_q_g_to_i: Quaternion<f64>, // prior_qGtoI
-    prior_p_i_in_g: Vector3<f64>, // prior_pIinG
-    prior_v_i_in_g: [f64; 3], // prior_vIinG
+    // prior_q_g_to_i: Quaternion<f64>, // prior_qGtoI
+    // prior_p_i_in_g: Vector3<f64>, // prior_pIinG
+    // prior_v_i_in_g: [f64; 3], // prior_vIinG
     prior_ba: [f64; 3], // prior_ba
     prior_bg: [f64; 3], // prior_bg
     // Noise values from dataset sensor
@@ -717,7 +526,6 @@ pub struct GraphSolver {
 
 impl GraphSolver {
     pub fn new() -> Self {
-
         //           <!-- Rotation and Translation from camera frame to IMU frame -->
         //   <rosparam param="R_C0toI">[0.9999717314190615,    -0.007438121416209933,  0.001100323844221122,
         //                              0.00743200596269379,    0.9999574688631824,    0.005461295826837418,
@@ -768,16 +576,11 @@ impl GraphSolver {
             gyro_random_walk: SETTINGS.get::<f64>(IMU, "gyro_walk"),
 
             // TODO SOFIYA IS THIS RIGHT?
-            // prior_q_g_to_i: Quaternion::new(0.716147, 0.051158, 0.133778, 0.683096),
-            // prior_p_i_in_g: Vector3::new(0.925493, -6.214668, 0.422872),
-            // prior_ba: [0.00489771688759235973,  0.00800897351104824969, 0.03020588299505782420],
-            // prior_bg: [-0.00041196751646696610, 0.00992948457018005999, 0.02188282212555122189],
-            // prior_v_i_in_g: [1.128364, -2.280640, 0.213326],
-            prior_q_g_to_i: Quaternion::new(1.0, 0.0, 0.0, 0.0),
-            prior_p_i_in_g: Vector3::new(0.0, 0.0, 0.0),
-            prior_ba: [0.0, 0.0, 0.0],
-            prior_bg: [0.0, 0.0, 0.0],
-            prior_v_i_in_g: [0.0 ,0.0, 0.0],
+            // prior_q_g_to_i: Quaternion::new(1.0, 0.0, 0.0, 0.0),
+            // prior_p_i_in_g: Vector3::new(0.0, 0.0, 0.0),
+            prior_ba: [1e-3, 1e-3, 1e-3],
+            prior_bg: [1e-5, 1e-3, 1e-3],
+            // prior_v_i_in_g: [0.0 ,0.0, 0.0],
 
             ct_state: 0,
             ct_state_lookup: HashMap::new(),
@@ -786,25 +589,28 @@ impl GraphSolver {
         }
     }
 
-    fn solve(&mut self, current_frame: &mut Frame, last_frame: &Frame, imu_measurements: &mut ImuMeasurements) -> Result<bool, Box<dyn std::error::Error>> {
+    fn solve(&mut self, current_frame: &mut Frame, last_kf_id: Id, imu_measurements: &mut ImuMeasurements, map: &ReadWriteMap) -> Result<bool, Box<dyn std::error::Error>> {
         let _span = tracy_client::span!("solve");
 
         let timestamp = (current_frame.timestamp * 1e14) as i64; // Convert to int just so we can hash it
+
         // Return if the node already exists in the graph
         if self.ct_state_lookup.contains_key(&timestamp) {
-            println!("NODE WITH TIMESTAMP {} ALREADY EXISTS, {}", timestamp, current_frame.timestamp);
+            println!("NODE WITH TIMESTAMP {} ALREADY EXISTS", timestamp);
             return Ok(false);
         }
 
         if !self.initialized {
-            self.add_initials_and_priors(timestamp);
+            self.add_initials_and_priors(timestamp, map)?;
             self.initialized = true;
+            println!("GTSAM optimize... Added initials and priors");
         } else {
-            self.create_imu_factor(imu_measurements, &current_frame, & last_frame)?;
+            println!("GTSAM optimize... Regular");
+            self.create_imu_factor(imu_measurements, current_frame, last_kf_id, map)?;
 
             // Original models
             let new_state = self.get_predicted_state();
-     
+
             // Move node count forward in time
             self.ct_state += 1;
 
@@ -839,7 +645,7 @@ impl GraphSolver {
             self.timestamp_lookup.insert(self.ct_state, timestamp);
         }
 
-        self.process_smart_features(& current_frame);
+        self.process_smart_features(current_frame);
 
         let optimized_pose = self.optimize();
 
@@ -866,29 +672,37 @@ impl GraphSolver {
             };
 
             println!("!!!!!! FINAL FRAME POSE: {:?}", current_frame.pose);
+        } else {
+            error!("Could not optimize pose!");
         }
 
 
         Ok(optimized_pose)
     }
 
-    fn add_initials_and_priors(&mut self, timestamp: i64) {
+    fn add_initials_and_priors(&mut self, timestamp: i64, map: &ReadWriteMap) -> Result<(), Box<dyn std::error::Error>> {
         let _span = tracy_client::span!("add_initials_and_priors");
 
         // Create prior factor and add it to the graph
-        let prior_state = GtsamState {
-            pose: gtsam::geometry::pose3::Pose3::from_parts(
-                gtsam::geometry::point3::Point3::new(self.prior_p_i_in_g[0], self.prior_p_i_in_g[1], self.prior_p_i_in_g[2]),
-                gtsam::geometry::rot3::Rot3::from(self.prior_q_g_to_i)
-            ),
-            velocity: gtsam::base::vector::Vector3::new(self.prior_v_i_in_g[0], self.prior_v_i_in_g[1], self.prior_v_i_in_g[2]),
-            bias: gtsam::imu::imu_bias::ConstantBias::new(
-                &gtsam::base::vector::Vector3::new(self.prior_ba[0], self.prior_ba[1], self.prior_ba[2]),
-                &gtsam::base::vector::Vector3::new(self.prior_bg[0], self.prior_bg[1], self.prior_bg[2])
-            )
+        let prior_state = {
+            let map = map.read()?;
+            let first_kf = map.get_keyframe(1);
+            let trans = first_kf.get_pose().translation;
+            let rot = first_kf.get_pose().get_quaternion();
+            // let vel = first_kf.imu_data.velocity.unwrap();
+            let vel = [0.0, 0.0, 0.0];
+            GtsamState {
+                pose: gtsam::geometry::pose3::Pose3::from_parts(
+                    gtsam::geometry::point3::Point3::new(trans.x, trans.y, trans.z),
+                    gtsam::geometry::rot3::Rot3::from(rot)
+                ),
+                velocity: gtsam::base::vector::Vector3::new(vel[0], vel[1], vel[2]),
+                bias: gtsam::imu::imu_bias::ConstantBias::new(
+                    &gtsam::base::vector::Vector3::new(self.prior_ba[0], self.prior_ba[1], self.prior_ba[2]),
+                    &gtsam::base::vector::Vector3::new(self.prior_bg[0], self.prior_bg[1], self.prior_bg[2])
+                )
+            }
         };
-
-        debug!("Add initials and priors, prior state: {:?}", prior_state);
 
         let pose_noise = gtsam::linear::noise_model::DiagonalNoiseModel::from_sigmas(Vector6::new(
             self.sigma_prior_rotation[0], self.sigma_prior_rotation[1], self.sigma_prior_rotation[2],
@@ -929,6 +743,8 @@ impl GraphSolver {
 
         // Actually create the GTSAM preintegration
         self.preint_gtsam = PreintegratedCombinedMeasurements::new(params, &prior_state.bias);
+
+        Ok(())
     }
 
     fn get_predicted_state(&self) -> GtsamState {
@@ -942,7 +758,7 @@ impl GraphSolver {
             bias: self.values_initial.get_constantbias(&Symbol::new(b'b', self.ct_state)).unwrap().into()
         };
 
-        // debug!("... current state: {:?}", state_k);
+        debug!("... current state: {:?}", state_k);
 
         // From this we should predict where we will be at the next time (t=K+1)
         let state_k1 = self.preint_gtsam.predict(
@@ -958,31 +774,42 @@ impl GraphSolver {
             velocity: state_k1.get_velocity().into(),
             bias: state_k.bias
         };
-        
+
         println!("... predicted pose: {:?}", predicted.pose);
 
         return predicted;
     }
 
-    fn create_imu_factor(&mut self, imu_measurements: &mut ImuMeasurements, current_frame: &Frame, previous_frame: &Frame) -> Result<(), Box<dyn std::error::Error>> {
+    fn create_imu_factor(&mut self, imu_measurements: &mut ImuMeasurements, current_frame: &Frame, last_kf_id: Id, map: &ReadWriteMap) -> Result<(), Box<dyn std::error::Error>> {
         // This function will create a discrete IMU factor using the GTSAM preintegrator class
         // This will integrate from the current state time up to the new update time
         let _span = tracy_client::span!("create_imu_factor");
 
         let mut imu_from_last_frame = VecDeque::with_capacity(imu_measurements.len()); // mvImuFromLastFrame
-        let imu_per = 0.000000000001; // 0.001 in orbslam, adjusted here for different timestamp units
+        let imu_per = 0.000000000001; // Used to be 0.000000000001 to adjust for different timestamp units, not sure why it needs to be reverted now. 0.001 in orbslam. 
+
+        let prev_ts = {
+            let map = map.read()?;
+            let previous_kf = map.get_keyframe(last_kf_id);
+            previous_kf.timestamp
+        };
 
         while !imu_measurements.is_empty() {
-            if imu_measurements.front().unwrap().timestamp < previous_frame.timestamp - imu_per {
+            if imu_measurements.front().unwrap().timestamp < prev_ts - imu_per {
                 imu_measurements.pop_front();
             } else if imu_measurements.front().unwrap().timestamp < current_frame.timestamp - imu_per {
-                imu_from_last_frame.push_back(imu_measurements.pop_front().unwrap());
+                let msmt = imu_measurements.pop_front().unwrap();
+                imu_from_last_frame.push_back(msmt);
             } else {
-                imu_from_last_frame.push_back(imu_measurements.pop_front().unwrap());
+                let msmt = imu_measurements.pop_front().unwrap();
+                imu_from_last_frame.push_back(msmt);
                 break;
             }
         }
         let n = imu_from_last_frame.len() - 1;
+
+        // let other_imu = IMU::new();
+        // let mut imu_preintegrated_from_last_frame = ImuPreIntegrated::new(previous_frame.imu_data.imu_bias);
 
         for i in 0..n {
             let mut tstep = 0.0;
@@ -991,7 +818,7 @@ impl GraphSolver {
 
             if i == 0 && i < (n - 1) {
                 let tab = imu_from_last_frame[i + 1].timestamp - imu_from_last_frame[i].timestamp;
-                let tini = imu_from_last_frame[i].timestamp - previous_frame.timestamp;
+                let tini = imu_from_last_frame[i].timestamp - prev_ts;
                 acc = (
                     imu_from_last_frame[i].acc + imu_from_last_frame[i + 1].acc -
                     (imu_from_last_frame[i + 1].acc - imu_from_last_frame[i].acc) * (tini/tab)
@@ -1000,7 +827,7 @@ impl GraphSolver {
                     imu_from_last_frame[i].ang_vel + imu_from_last_frame[i + 1].ang_vel -
                     (imu_from_last_frame[i + 1].ang_vel - imu_from_last_frame[i].ang_vel) * (tini/tab)
                 ) * 0.5;
-                tstep = imu_from_last_frame[i + 1].timestamp - previous_frame.timestamp;
+                tstep = imu_from_last_frame[i + 1].timestamp - prev_ts;
             } else if i < (n - 1) {
                 acc = (imu_from_last_frame[i].acc + imu_from_last_frame[i + 1].acc) * 0.5;
                 ang_vel = (imu_from_last_frame[i].ang_vel + imu_from_last_frame[i + 1].ang_vel) * 0.5;
@@ -1020,11 +847,15 @@ impl GraphSolver {
             } else if i == 0 && i == (n - 1) {
                 acc = imu_from_last_frame[i].acc;
                 ang_vel = imu_from_last_frame[i].ang_vel;
-                tstep = current_frame.timestamp - previous_frame.timestamp;
+                tstep = current_frame.timestamp - prev_ts;
             }
-            tstep = tstep * 1e9; 
+            tstep = tstep * 1e9;
 
             self.preint_gtsam.integrate_measurement(&acc.into(), &ang_vel.into(), tstep);
+
+            // other_imu.imu_preintegrated_from_last_kf.integrate_new_measurement(acc, ang_vel, tstep);
+
+            // imu_preintegrated_from_last_frame.integrate_new_measurement(acc, ang_vel, tstep);
         }
 
         let imu_factor = CombinedImuFactor::new(
@@ -1039,64 +870,67 @@ impl GraphSolver {
         self.graph_new.add_combined_imu_factor(&imu_factor);
         self.graph_main.add_combined_imu_factor(&imu_factor);
 
+        // current_frame.imu_data.imu_preintegrated = Some(other_imu.imu_preintegrated_from_last_kf.clone());
+        // current_frame.imu_data.imu_preintegrated_frame = Some(imu_preintegrated_from_last_frame);
+        // current_frame.imu_data.prev_keyframe = Some(1);
+
+        // let state = other_imu.predict_state_last_frame(current_frame, previous_frame);
+
         Ok(())
     }
 
-    fn process_smart_features(&mut self, frame: &Frame) {
+    fn process_smart_features(&mut self, current_frame: &Frame) {
         let _span = tracy_client::span!("process_smart_features");
-        // Loop through LEFT features
+
         // let features: VectorOfPoint2f = frame.features.get_all_keypoints().iter().map(|kp| kp.pt()).collect();
-        let matches = & frame.mappoint_matches.matches;
-        for index in 0..matches.len() - 1 {
-            let mappoint = matches[index];
-            match mappoint {
-                Some((mp_id, _is_outlier)) => {
-                    // Check to see if it is already in the graph
-                    match self.measurement_smart_lookup_left.get_mut(&mp_id) {
-                        Some(smartfactor) => {
-                            // Insert measurements to a smart factor
-                            let kp = frame.features.get_keypoint(index).0;
-                            smartfactor.add(
-                                & gtsam::geometry::point2::Point2::new(kp.pt().x as f64, kp.pt().y as f64),
-                                &Symbol::new(b'x', self.ct_state)
-                            );
-                            continue;
-                        },
-                        None => {
-                            // If we know it is not in the graph
-                            // Create a smart factor for the new feature
-                            let measurement_noise = gtsam::linear::noise_model::IsotropicNoiseModel::from_dim_and_sigma(2, self.sigma_camera);
-                            let k = gtsam::geometry::cal3_s2::Cal3S2::default();
+        let features = current_frame.features.get_all_keypoints();
+        for i in 0..features.len() - 1 {
+            let mp_match = current_frame.mappoint_matches.get(i as usize);
+            if mp_match.is_none() {
+                continue;
+            }
+            let (mp_id, _is_outlier) = mp_match.unwrap();
+            let (kp, _is_outlier) = current_frame.features.get_keypoint(i as usize);
 
-                            // Transformation from camera frame to imu frame, i.e., pose of imu frame in camera frame
-                            let sensor_p_body = ImuCalib::new().tbc;
-
-                            let mut smartfactor_left = gtsam::slam::projection_factor::SmartProjectionPoseFactorCal3S2::new(
-                                &measurement_noise,
-                                &k,
-                                & sensor_p_body.inverse().into()
-                            );
-
-                            let kp = frame.features.get_keypoint(index).0;
-
-                            // Insert measurements to a smart factor
-                            smartfactor_left.add(
-                                & gtsam::geometry::point2::Point2::new(kp.pt().x as f64, kp.pt().y  as f64),
-                                &Symbol::new(b'x', self.ct_state)
-                            );
-
-                            // Add smart factor to FORSTER2 model
-                            self.graph_new.add_smartfactor(&smartfactor_left);
-                            self.graph_main.add_smartfactor(&smartfactor_left);
-
-                            self.measurement_smart_lookup_left.insert(mp_id, smartfactor_left);
-                        }
-                    }
+            // Check to see if it is already in the graph
+            match self.measurement_smart_lookup_left.get_mut(&mp_id) {
+                Some(smartfactor) => {
+                    // Insert measurements to a smart factor
+                    smartfactor.add(
+                        & gtsam::geometry::point2::Point2::new(kp.pt().x as f64, kp.pt().y as f64),
+                        &Symbol::new(b'x', self.ct_state)
+                    );
+                    continue;
                 },
-                None => {}
+                None => {
+                    // If we know it is not in the graph
+                    // Create a smart factor for the new feature
+                    let measurement_noise = gtsam::linear::noise_model::IsotropicNoiseModel::from_dim_and_sigma(2, self.sigma_camera);
+                    let k = gtsam::geometry::cal3_s2::Cal3S2::default();
+
+                    // Transformation from camera frame to imu frame, i.e., pose of imu frame in camera frame
+                    let sensor_p_body = ImuCalib::new().tbc;
+
+                    let mut smartfactor_left = gtsam::slam::projection_factor::SmartProjectionPoseFactorCal3S2::new(
+                        &measurement_noise,
+                        &k,
+                        & sensor_p_body.inverse().into()
+                    );
+
+                    // Insert measurements to a smart factor
+                    smartfactor_left.add(
+                        & gtsam::geometry::point2::Point2::new(kp.pt().x as f64, kp.pt().y as f64),
+                        &Symbol::new(b'x', self.ct_state)
+                    );
+
+                    // Add smart factor to FORSTER2 model
+                    self.graph_new.add_smartfactor(&smartfactor_left);
+                    self.graph_main.add_smartfactor(&smartfactor_left);
+
+                    self.measurement_smart_lookup_left.insert(mp_id, smartfactor_left);
+                }
             }
         }
-
     }
 
     fn optimize(&mut self) -> bool {

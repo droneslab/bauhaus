@@ -190,6 +190,8 @@ impl MapInitialization {
             }
             info!("Monocular initialization created new map with {} mappoints", count);
 
+            debug!("SOFIYA FEATURES. After init, frame has N {}, features {}, mappoint matches {}", lock.get_keyframe(curr_kf_id).features.num_keypoints, lock.get_keyframe(curr_kf_id).features.get_all_keypoints().len(), lock.get_keyframe(curr_kf_id).get_mp_matches().len());
+
             // Update Connections
             lock.update_connections(initial_kf_id);
             lock.update_connections(curr_kf_id);
@@ -256,7 +258,6 @@ impl MapInitialization {
                     let curr_kf = lock.get_keyframe_mut(curr_kf_id);
                     curr_kf.prev_kf_id = Some(initial_kf_id);
                     curr_kf.imu_data.imu_preintegrated = Some(imu_preintegrated_from_last_kf.clone());
-                    debug!("Initialization preintegrated: {}", imu_preintegrated_from_last_kf.measurements.len());
                     *imu_preintegrated_from_last_kf = ImuPreIntegrated::new(ImuBias::new());
                 }
                 {

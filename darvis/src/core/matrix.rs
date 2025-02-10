@@ -100,7 +100,6 @@ impl DVMatrix {
     pub fn at_2d(&self, row: i32, col: i32) -> f64 {
         *self.0.at_2d::<f64>(row, col).unwrap()
     }
-
 }
 impl Deref for DVMatrix {
     type Target = opencv::core::Mat;
@@ -117,6 +116,13 @@ impl std::ops::Mul<&DVMatrix> for DVMatrix {
 }
 
 // For interop with custom C++ bindings to ORBSLAM
+pub fn mat_to_wrapbindcvmat(mat: &Mat) -> dvos3binding::ffi::WrapBindCVMat {
+    dvos3binding::ffi::WrapBindCVMat { 
+        mat_ptr: dvos3binding::BindCVMat {
+            mat_ptr: mat.clone()
+        } 
+    }
+}
 impl From<&DVMatrix> for dvos3binding::ffi::WrapBindCVMat {
     fn from(mat: &DVMatrix) -> dvos3binding::ffi::WrapBindCVMat {
         dvos3binding::ffi::WrapBindCVMat { 

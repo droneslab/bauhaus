@@ -10,10 +10,10 @@ system:
       vocabulary_file: "../Vocabulary/ORBvoc.txt"
       framesensor: Mono
       imusensor: Some
-      first_actor_name: TRACKING_BACKEND # Name of actor to kick off pipeline
+      first_actor_name: TRACKING_FRONTEND # Name of actor to kick off pipeline
 
       # FPS
-      fps: 1.0
+      fps: 20.0
 
       # RESULTS
       results_folder: "results"
@@ -26,9 +26,15 @@ system:
       # To turn on visualizer, uncomment visualizer actor below
 
 modules:
+      # - 
+      #   name: FEATURE_DETECTION
+      #   tag: "good features to track" # options: ["opencv feature detection", "orbslam feature detection", "good features to track"]
+      #   settings:
+      #     - 
+
       - 
         name: FEATURE_DETECTION
-        tag: "orbslam feature detection" # options: ["opencv feature detection", "orbslam feature detection"]
+        tag: "orbslam feature detection" # options: ["opencv feature detection", "orbslam feature detection", "good features to track"]
         settings:
           - 
             name: max_features
@@ -50,6 +56,7 @@ modules:
             name: min_th_fast
             value: 7
             type: i32
+
 
       -
         name: FEATURE_MATCHER
@@ -92,11 +99,6 @@ modules:
           - 
 
       - 
-        name: LOCAL_MAP_OPTIMIZATION
-        tag: "bundle adjustment"
-        settings:
-          - 
-      - 
         name: FULL_MAP_OPTIMIZATION
         tag: "bundle adjustment"
         settings:
@@ -137,39 +139,27 @@ actors:
             type: bool
   
       -
-       name: TRACKING_BACKEND
-       tag: "gtsam tracking backend"
+       name: TRACKING_FRONTEND
+       tag: "gtsam tracking frontend"
        receiver_bound: 10
        settings:
           - 
-            name: recently_lost_cutoff
-            value: 5
-            type: i32
+            name: publish_frequency # frequence (Hz) of publish tracking result. At least 10Hz for good estimation
+            value: 10.0
+            type: f64
           - 
-            name: frames_to_reset_IMU
-            value: 30
-            type: i32
-          - 
-            name: insert_KFs_when_lost
-            value: true
-            type: bool
-          - 
-            name: min_num_features
-            value: 2000
-            type: i32
-          - 
-            name: min_frames_to_insert_kf
-            value: 0
+            name: max_features # max feature number in feature tracking
+            value: 200
             type: i32
           -
-            name: max_frames_to_insert_kf
-            value: 10
-            type: i32
+            name: min_distance # min distance between two features 
+            value: 10.0
+            type: f64
 
       -
-       name: LOCAL_MAPPING
-       tag: "orbslam local mapping"
-       receiver_bound: 3
+       name: TRACKING_BACKEND
+       tag: "gtsam tracking backend"
+       receiver_bound: 10
        settings:
           - 
 

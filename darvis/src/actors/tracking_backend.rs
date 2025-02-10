@@ -142,6 +142,10 @@ impl TrackingBackend {
                 self.map.read()?.imu_initialized,
                 msg.timestamp,
             ).expect("Could not create frame!");
+
+            debug!("SOFIYA FEATURES. In backend, frame has N {}, features {}, mappoint matches {}, ref kf is {:?}", self.current_frame.features.num_keypoints, self.current_frame.features.get_all_keypoints().len(), self.current_frame.mappoint_matches.len(), self.ref_kf_id);
+
+
             let mut imu_measurements = msg.imu_measurements;
             match self.track(&mut imu_measurements) {
                 Ok((created_kf, reset_map)) => {
@@ -659,6 +663,9 @@ impl TrackingBackend {
             self.sensor
         )?;
         debug!("Tracking search by projection with previous frame: {} matches / {} mappoints in last frame. ({} total mappoints in map)", matches, self.last_frame.as_ref().unwrap().mappoint_matches.debug_count, self.map.read()?.mappoints.len());
+
+
+        debug!("SOFIYA FEATURES. In track with motion model, frame has N {}, features {}, mappoint matches {}, ref kf is {:?}", self.current_frame.features.num_keypoints, self.current_frame.features.get_all_keypoints().len(), self.current_frame.mappoint_matches.len(), self.ref_kf_id);
 
         // If few matches, uses a wider window search
         if matches < 20 {

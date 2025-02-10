@@ -1,7 +1,8 @@
-use core::{config::SETTINGS, matrix::{DVMatrix, DVVectorOfKeyPoint}, system::Module};
+use core::{config::SETTINGS, matrix::{mat_to_wrapbindcvmat, DVMatrix, DVVectorOfKeyPoint}, system::Module};
 use std::{fmt, fmt::Debug};
 
 use cxx::UniquePtr;
+use opencv::{core::Mat, types::VectorOfPoint2f};
 
 use crate::registered_actors::{CAMERA, FEATURE_DETECTION};
 
@@ -14,14 +15,18 @@ pub struct ORBExtractor {
 }
 impl Module for ORBExtractor { }
 impl FeatureExtractionModule for ORBExtractor {
-    fn extract(&mut self, image: DVMatrix) -> Result<(DVVectorOfKeyPoint, DVMatrix), Box<dyn std::error::Error>> {
-        let image_dv: dvos3binding::ffi::WrapBindCVMat = (&image).into();
+    fn extract(&mut self, image: & Mat) -> Result<(DVVectorOfKeyPoint, DVMatrix), Box<dyn std::error::Error>> {
+        let image_dv: dvos3binding::ffi::WrapBindCVMat = mat_to_wrapbindcvmat(image);
         let mut descriptors: dvos3binding::ffi::WrapBindCVMat = (&DVMatrix::default()).into();
         let mut keypoints: dvos3binding::ffi::WrapBindCVKeyPoints = DVVectorOfKeyPoint::empty().into();
 
         self.extractor.pin_mut().extract(&image_dv, &mut keypoints, &mut descriptors);
 
         Ok((DVVectorOfKeyPoint::new(keypoints.kp_ptr.kp_ptr), DVMatrix::new(descriptors.mat_ptr.mat_ptr)))
+    }
+
+    fn extract_amount(&mut self, image: & Mat, max_features: i32, min_distance: f64) -> Result<(VectorOfPoint2f), Box<dyn std::error::Error>> {
+        todo!("Not implemented")
     }
 }
 

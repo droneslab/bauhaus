@@ -1,6 +1,8 @@
 use core::{matrix::{DVMatrix, DVMatrix3, DVVector3, DVVectorOfKeyPoint, DVVectorOfPoint2f}, sensor::Sensor, system::{Module, Sender}};
 use std::{collections::{BTreeSet, HashMap}, fmt::Debug};
 
+use opencv::{core::Mat, types::VectorOfPoint2f};
+
 use crate::{actors::tracking_backend::TrackedMapPointData, map::{frame::Frame, keyframe::KeyFrame, map::Id, pose::Sim3, read_only_lock::ReadWriteMap}};
 
 use super::imu::{ImuMeasurements, ImuPreIntegrated};
@@ -71,7 +73,9 @@ pub trait ImuModule: Send + Sync {
 
 /// *** Feature Extraction *** //
 pub trait FeatureExtractionModule {
-    fn extract(&mut self, image: DVMatrix) -> Result<(DVVectorOfKeyPoint, DVMatrix), Box<dyn std::error::Error>>;
+    // TODO Sofiya these should probably be the same function that takes a Self::FeatureExtractionSettings variable
+    fn extract(&mut self, image: & Mat) -> Result<(DVVectorOfKeyPoint, DVMatrix), Box<dyn std::error::Error>>;
+    fn extract_amount(&mut self, image: & Mat, max_features: i32, min_distance: f64) -> Result<(VectorOfPoint2f), Box<dyn std::error::Error>>;
 }
 
 impl Module for dyn FeatureExtractionModule { }
@@ -80,7 +84,6 @@ impl Debug for dyn FeatureExtractionModule {
         todo!()
     }
 }
-
 
 /// *** Feature Matching. This consists of several traits, which are combined into a supertrait. See ORBMatcherTrait for an example. *** //
 

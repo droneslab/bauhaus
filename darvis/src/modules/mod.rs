@@ -12,6 +12,7 @@ pub mod sim3solver;
 pub mod bow;
 pub mod orbslam_extractor; // orb extractor from orbslam3, using bindings to C++ code
 pub mod opencv_extractor; // orb extractor using opencv feature detection 
+pub mod good_features_to_track; // good features to track using opencv feature detection
 pub mod orbslam3_loop_detection;
 pub mod local_bundle_adjustment; 
 pub mod global_bundle_adjustment;

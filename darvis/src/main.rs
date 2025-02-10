@@ -86,7 +86,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut sent_map_init = false;
     for (image_path, imu_measurements, timestamp, frame_id) in loop_manager.into_iter() {
         if sent_map_init && !MAP_INITIALIZED.load(std::sync::atomic::Ordering::SeqCst) {
-            sleep(Duration::from_millis(500));
+            sleep(Duration::from_millis(200));
         }
 
         if *shutdown_flag.lock().unwrap() { break; }
@@ -289,7 +289,7 @@ impl Iterator for LoopManager {
                 });
                 imu.first_imu_idx += 1;
             }
-            imu.first_imu_idx -= 1;
+            // imu.first_imu_idx -= 1;
         };
 
         // Start next loop

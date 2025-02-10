@@ -1,5 +1,5 @@
 extern crate g2o;
-use log::{warn, info};
+use log::{debug, info, warn};
 use opencv::prelude::*;
 
 use core::{
@@ -82,12 +82,12 @@ impl TrackingFrontEnd {
             // TODO (timing) ... cloned if visualizer running. maybe make global shared object?
             let (keypoints, descriptors) = match self.system.actors.get(VISUALIZER).is_some() {
                 true => {
-                    let (keypoints, descriptors) = self.extract_features(image.clone());
+                    let (keypoints, descriptors) = self.extract_features(& image);
                     self.send_to_visualizer(keypoints.clone(), image, msg.timestamp);
                     (keypoints, descriptors)
                 },
                 false => {
-                    let (keypoints, descriptors) = self.extract_features(image);
+                    let (keypoints, descriptors) = self.extract_features(& image);
                     (keypoints, descriptors)
                 }
             };
@@ -109,12 +109,12 @@ impl TrackingFrontEnd {
             // TODO (timing) ... cloned if visualizer running. maybe make global shared object?
             let (keypoints, descriptors) = match self.system.actors.get(VISUALIZER).is_some() {
                 true => {
-                    let (keypoints, descriptors) = self.extract_features(msg.image.clone());
+                    let (keypoints, descriptors) = self.extract_features(& msg.image);
                     self.send_to_visualizer(keypoints.clone(), msg.image, msg.timestamp);
                     (keypoints, descriptors)
                 },
                 false => {
-                    let (keypoints, descriptors) = self.extract_features(msg.image);
+                    let (keypoints, descriptors) = self.extract_features(& msg.image);
                     (keypoints, descriptors)
                 }
             };
@@ -140,15 +140,15 @@ impl TrackingFrontEnd {
         return false;
     }
 
-    fn extract_features(&mut self, image: opencv::core::Mat) -> (DVVectorOfKeyPoint, DVMatrix) {
+    fn extract_features(&mut self, image: & opencv::core::Mat) -> (DVVectorOfKeyPoint, DVMatrix) {
         let _span = tracy_client::span!("extract_features");
 
         let (keypoints, descriptors) = match self.sensor {
             Sensor(FrameSensor::Mono, _) => {
                 if !self.map_initialized || (self.last_id - self.init_id < self.max_frames) {
-                    self.orb_extractor_ini.as_mut().unwrap().extract(DVMatrix::new(image)).unwrap()
+                    self.orb_extractor_ini.as_mut().unwrap().extract(& image).unwrap()
                 } else {
-                    self.orb_extractor_left.extract(DVMatrix::new(image)).unwrap()
+                    self.orb_extractor_left.extract(& image).unwrap()
                 }
             },
             _ => { 

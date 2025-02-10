@@ -1,7 +1,7 @@
 use core::{config::SETTINGS, matrix::{DVMatrix, DVVectorOfKeyPoint}, system::Module};
 use std::{fmt, fmt::Debug};
 
-use opencv::features2d::Feature2DTrait;
+use opencv::{core::Mat, features2d::Feature2DTrait, types::VectorOfPoint2f};
 
 use crate::registered_actors::FEATURE_DETECTION;
 
@@ -14,7 +14,7 @@ pub struct OpenCVExtractor {
 }
 impl Module for OpenCVExtractor { }
 impl FeatureExtractionModule for OpenCVExtractor {
-    fn extract(&mut self, image: DVMatrix) -> Result<(DVVectorOfKeyPoint, DVMatrix), Box<dyn std::error::Error>> {
+    fn extract(&mut self, image: & Mat) -> Result<(DVVectorOfKeyPoint, DVMatrix), Box<dyn std::error::Error>> {
         let mut descriptors = opencv::core::Mat::default();
         let mut keypoints= opencv::types::VectorOfKeyPoint::new();
 
@@ -22,6 +22,10 @@ impl FeatureExtractionModule for OpenCVExtractor {
         self.extractor.compute(& *image, &mut keypoints, &mut descriptors)?;
 
         Ok((DVVectorOfKeyPoint::new(keypoints), DVMatrix::new(descriptors)))
+    }
+
+    fn extract_amount(&mut self, image: & Mat, max_features: i32, min_distance: f64) -> Result<(VectorOfPoint2f), Box<dyn std::error::Error>> {
+        todo!("Not implemented")
     }
 }
 

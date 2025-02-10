@@ -109,7 +109,7 @@ impl FullMapOptimizationModule for GlobalBundleAdjustment {
 
         // Optimize!
         {
-            let _ = tracy_client::span!("global_bundle_adjustment::optimize");
+            // let _ = tracy_client::span!("global_bundle_adjustment::optimize");
             optimizer.pin_mut().optimize(iterations, false, false);
         }
 

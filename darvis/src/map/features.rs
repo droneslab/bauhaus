@@ -288,7 +288,8 @@ impl Features {
         };
     }
 
-    pub fn remove_keypoint_and_descriptor(&mut self, index: usize) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn remove_keypoint(&mut self, index: usize) -> Result<(), Box<dyn std::error::Error>> {
+        // NOTE: THIS DOES NOT REMOVE THE DESCRIPTOR!
         match self.keypoints {
             KeyPoints::Mono{ref mut keypoints_un, ..} => {
                 keypoints_un.remove(index)?;

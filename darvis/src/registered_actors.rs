@@ -108,11 +108,11 @@ pub fn spawn_actor(
         str if str == "visualizer".to_string() => {
             crate::actors::visualizer::DarvisVisualizer::spawn(system, map.expect("Visualizer needs the map!"))
         },
-        str if str == "optical flow tracking".to_string() => {
-            crate::actors::tracking_optical_flow::TrackingOpticalFlow::spawn(system, map.expect("Tracking needs the map!"))
-        },
+        // str if str == "optical flow tracking".to_string() => {
+        //     crate::actors::tracking_optical_flow::TrackingOpticalFlow::spawn(system, map.expect("Tracking needs the map!"))
+        // },
         str if str == "gtsam tracking frontend".to_string() => {
-            crate::actors::tracking_frontend_gtsam::TrackingFrontEndGTSAM::spawn(system, ())
+            crate::actors::tracking_frontend_gtsam::TrackingFrontendGTSAM::spawn(system, map.expect("Tracking needs the map!"))
         },
         str if str == "gtsam tracking backend".to_string() => {
             crate::actors::tracking_backend_gtsam::TrackingBackendGTSAM::spawn(system, map.expect("Tracking needs the map!"))
@@ -137,6 +137,9 @@ pub fn new_feature_extraction_module(is_ini: bool) -> Box<dyn FeatureExtractionM
         str if str == "opencv feature detection".to_string() => {
             Box::new(crate::modules::opencv_extractor::OpenCVExtractor::new(is_ini))
         },
+        str if str == "good features to track".to_string() => {
+            Box::new(crate::modules::good_features_to_track::GoodFeaturesExtractor::new())
+        }
         _ => {
             error!("Module not implemented: {}", module_tag);
             panic!();
