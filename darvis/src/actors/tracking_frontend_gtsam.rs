@@ -3,7 +3,7 @@ use gtsam::navigation::combined_imu_factor::{PreintegratedCombinedMeasurements, 
 use log::{warn, info, debug, error};
 use nalgebra::Vector3;
 use std::{collections::{BTreeMap, BTreeSet, HashMap, VecDeque}, fmt::{self, Formatter}, mem, sync::atomic::Ordering, thread::sleep, time::Duration};
-use opencv::{core::{no_array, Point2f, Scalar, CV_8UC1}, prelude::*, types::{VectorOfKeyPoint, VectorOfMat, VectorOfPoint2f, VectorOfu8}};
+use opencv::{core::{no_array, KeyPoint, Point, Point2f, Scalar, CV_8U, CV_8UC1}, imgproc::circle, prelude::*, types::{VectorOfKeyPoint, VectorOfMat, VectorOfPoint2f, VectorOfu8}};
 use core::{
     config::*, matrix::*, sensor::{FrameSensor, ImuSensor, Sensor}, system::{Actor, MessageBox, System, Timestamp}
 };
@@ -11,7 +11,7 @@ use crate::{
     actors::{
         messages::{ImageMsg, LastKeyFrameUpdatedMsg, ShutdownMsg, UpdateFrameIMUMsg, VisFeaturesMsg},
         tracking_backend::TrackingState,
-    }, map::{features::Features, frame::Frame, keyframe::MapPointMatches, map::Id, pose::Pose, read_only_lock::ReadWriteMap}, modules::{good_features_to_track::GoodFeaturesExtractor, image, imu::{ImuBias, ImuCalib, ImuMeasurements, ImuPreIntegrated, IMU}, map_initialization::MapInitialization, module_definitions::{FeatureExtractionModule, ImuModule}, optimizer, orbslam_extractor::ORBExtractor, relocalization::Relocalization}, registered_actors::{new_feature_extraction_module, CAMERA_MODULE, FEATURE_MATCHING_MODULE, LOCAL_MAPPING, SHUTDOWN_ACTOR, TRACKING_BACKEND, TRACKING_FRONTEND, VISUALIZER}, MAP_INITIALIZED
+    }, map::{features::Features, frame::Frame, keyframe::MapPointMatches, map::Id, pose::Pose, read_only_lock::ReadWriteMap}, modules::{good_features_to_track::GoodFeaturesExtractor, image, imu::{ImuBias, ImuCalib, ImuMeasurements, ImuPreIntegrated, IMU}, map_initialization::MapInitialization, module_definitions::{FeatureExtractionModule, ImuModule}, optimizer, orbslam_extractor::ORBExtractor, relocalization::Relocalization}, registered_actors::{new_feature_extraction_module, CAMERA_MODULE, FEATURE_DETECTION, FEATURE_MATCHING_MODULE, LOCAL_MAPPING, SHUTDOWN_ACTOR, TRACKING_BACKEND, TRACKING_FRONTEND, VISUALIZER}, MAP_INITIALIZED
 };
 use crate::registered_actors::IMU;
 
@@ -175,7 +175,7 @@ impl TrackingFrontendGTSAM {
                 if pub_this_frame {
                     if (total_kp as i32) < 500 { // TODO SOFIYA PUT THIS INTO CONFIG FILE
                         debug!("PUB THIS FRAME! Extracting new features! Total kp {}", total_kp);
-                        // self.extract_features_and_add_to_existing().unwrap();
+                        self.extract_features_and_add_to_existing().unwrap();
                     } else {
                         debug!("PUB THIS FRAME! Not extracting new features! Total kp {}", total_kp);
                     }
@@ -361,32 +361,30 @@ impl TrackingFrontendGTSAM {
     fn extract_features_and_add_to_existing(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         let _span = tracy_client::span!("extract features");
 
-        // let mut corners = opencv::types::VectorOfPoint2f::new();
-        // opencv::imgproc::good_features_to_track(
-        //     & self.current_frame.image.as_ref().unwrap(), &mut corners, self.max_features, 0.01, self.min_distance, & no_array(), 3, false, 0.00
-        // ).unwrap();
+        let mut num_features_to_find = 200 - self.current_frame.features.num_keypoints as i32;
 
-        // println!("Tracked features NEW: {}", corners.len());
+        if num_features_to_find < 0 {
+            warn!("Already have enough features ({}), not extracting more", self.current_frame.features.num_keypoints);
+            return Ok(());
+        }
 
-        // self.prev_points = corners;
+        let mut keypoints = opencv::types::VectorOfPoint2f::new();
 
+        let mut mask = opencv::core::Mat::new_rows_cols_with_default(
+            self.current_frame.image.as_ref().unwrap().rows(),
+            self.current_frame.image.as_ref().unwrap().cols(),
+            CV_8U,
+            Scalar::all(255.0)
+        ).unwrap();
+        for i in 0..self.current_frame.features.num_keypoints {
+            let (kp, _) = self.current_frame.features.get_keypoint(i as usize);
+            circle(&mut mask, Point::new(kp.pt().x as i32, kp.pt().y as i32), 20, Scalar::all(0.0), -1, 8, 0).unwrap();
+        }
 
-        // OLD:
-
-        let (keypoints, descriptors) = //match self.sensor {
-            // Sensor(FrameSensor::Mono, _) => {
-            //     if !self.map_initialized || (self.current_frame.frame_id < SETTINGS.get::<f64>(SYSTEM, "fps") as i32) {
-            //         self.orb_extractor_ini.as_mut().unwrap().extract(& self.current_frame.image.as_ref().unwrap()).unwrap()
-            //     } else {
-                    self.orb_extractor_left.extract(& self.current_frame.image.as_ref().unwrap()).unwrap();
-        //         }
-        //     },
-        //     _ => { 
-        //         // See GrabImageMonocular, GrabImageStereo, GrabImageRGBD in Tracking.cc
-        //         todo!("Stereo, RGBD")
-        //     }
-        // };
-
+        opencv::imgproc::good_features_to_track(
+            & self.current_frame.image.as_ref().unwrap(), &mut keypoints, num_features_to_find as i32, 0.01, self.min_distance, &mut mask, 3, false, 0.04
+        ).unwrap();
+        println!("Tracked features NEW: {}", keypoints.len());
 
         let mut new_keypoints = VectorOfKeyPoint::new();
         let mut new_descriptor = Mat::default();
@@ -398,9 +396,11 @@ impl TrackingFrontendGTSAM {
         }
 
         for i in 0..keypoints.len() {
-            new_keypoints.push(keypoints.get(i as usize)?);
-            new_descriptor_vec.push((*descriptors).row(i as i32)?);
-            self.prev_points.push(keypoints.get(i as usize)?.pt());
+            let kp = keypoints.get(i)?;
+            new_keypoints.push(KeyPoint::new_coords(kp.x, kp.y, 31.0, -1.0, 0.0, 0, -1).expect("Failed to create keypoint"));
+            // Note... creating a fake descriptor here because good features to track doesn't give descriptors back
+            new_descriptor_vec.push(Mat::new_rows_cols_with_default(1, 32, CV_8UC1, Scalar::all(0.0)).expect("Failed to create descriptor"));
+            self.prev_points.push(kp);
             self.prev_points_ids.push(-1);
         }
 
@@ -409,6 +409,108 @@ impl TrackingFrontendGTSAM {
         println!("Re-extracting features, before: {}, after: {}", self.current_frame.features.num_keypoints, new_keypoints.len());
 
         self.current_frame.replace_features(DVVectorOfKeyPoint::new(new_keypoints), DVMatrix::new(new_descriptor))?;
+
+
+        // From Kimera:
+        // // TODO(TONI): an alternative approach is to find all features,
+        // // do max-suppression, and then remove those detections that are close to
+        // // the already found ones, even you could cut feature tracks that are no
+        // // longer good quality or visible early on if they don't have detected
+        // // keypoints nearby by! The mask is interpreted as: 255 -> consider, 0 ->
+        // // don't consider.
+        // let mask = Mat::new_rows_cols_with_default(self.current_frame.image.unwrap().rows(), self.current_frame.image.unwrap().cols(), CV_8U, Scalar::all(255.0)).unwrap();
+
+        // for i in 0..self.current_frame.features.num_keypoints {
+        //     let (kp, _) = self.current_frame.features.get_keypoint(i as usize);
+        //     circle(&mut mask, kp.pt(), 20, Scalar::all(0.0), -1, 8, 0).unwrap();
+        // }
+
+        // // Actual raw feature detection
+        // let mut descriptors = opencv::core::Mat::default();
+        // let mut keypoints= opencv::types::VectorOfKeyPoint::new();
+        // let extractor = opencv::features2d::ORB::create(
+        //         2000,
+        //         SETTINGS.get::<f64>(FEATURE_DETECTION, "scale_factor") as f32,
+        //         SETTINGS.get::<i32>(FEATURE_DETECTION, "n_levels"),
+        //         31,
+        //         0,
+        //         2,
+        //         opencv::features2d::ORB_ScoreType::HARRIS_SCORE,
+        //         31,
+        //         SETTINGS.get::<i32>(FEATURE_DETECTION, "min_th_fast")
+        // ).unwrap();
+        // extractor.detect(& self.current_frame.image.unwrap(), &mut  keypoints, & mask)?;
+        // println!("Number of points detected: {}", keypoints.len());
+
+        // let need_n_corners = self.max_features - self.current_frame.features.num_keypoints as i32;
+
+        // // Tolerance of the number of returned points in percentage.
+        // std::vector<cv::KeyPoint>& max_keypoints = keypoints;
+        // max_keypoints = non_max_suppression_->suppressNonMax(
+        //         keypoints,
+        //         need_n_corners,
+        //         0.1,
+        //         cur_frame.img_.cols,
+        //         cur_frame.img_.rows,
+        //         feature_detector_params_.nr_horizontal_bins_,
+        //         feature_detector_params_.nr_vertical_bins_,
+        //         feature_detector_params_.binning_mask_);
+
+        // // TODO(Toni): we should be using cv::KeyPoint... not cv::Point2f...
+        // KeypointsCV new_corners;
+        // cv::KeyPoint::convert(max_keypoints, new_corners);
+
+        // // TODO(Toni) this takes a ton of time 27ms each time...
+        // // Change window_size, and term_criteria to improve timing
+        // if (new_corners.size() > 0) {
+        //     if (feature_detector_params_.enable_subpixel_corner_refinement_) {
+        //     const auto& subpixel_params =
+        //         feature_detector_params_.subpixel_corner_finder_params_;
+        //     cv::cornerSubPix(cur_frame.img_,
+        //                     new_corners,
+        //                     subpixel_params.window_size_,
+        //                     subpixel_params.zero_zone_,
+        //                     subpixel_params.term_criteria_);
+        //     }
+        // }
+
+
+        // OLD:
+        // let (keypoints, descriptors) = //match self.sensor {
+        //     // Sensor(FrameSensor::Mono, _) => {
+        //     //     if !self.map_initialized || (self.current_frame.frame_id < SETTINGS.get::<f64>(SYSTEM, "fps") as i32) {
+        //     //         self.orb_extractor_ini.as_mut().unwrap().extract(& self.current_frame.image.as_ref().unwrap()).unwrap()
+        //     //     } else {
+        //             self.orb_extractor_left.extract(& self.current_frame.image.as_ref().unwrap()).unwrap();
+        // //         }
+        // //     },
+        // //     _ => { 
+        // //         // See GrabImageMonocular, GrabImageStereo, GrabImageRGBD in Tracking.cc
+        // //         todo!("Stereo, RGBD")
+        // //     }
+        // // };
+
+        // let mut new_keypoints = VectorOfKeyPoint::new();
+        // let mut new_descriptor = Mat::default();
+        // let mut new_descriptor_vec = VectorOfMat::new();
+
+        // for i in 0..self.current_frame.features.num_keypoints {
+        //     new_keypoints.push(self.current_frame.features.get_keypoint(i as usize).0);
+        //     new_descriptor_vec.push((* self.current_frame.features.descriptors.row(i as u32)).clone());
+        // }
+
+        // for i in 0..keypoints.len() {
+        //     new_keypoints.push(keypoints.get(i as usize)?);
+        //     new_descriptor_vec.push((*descriptors).row(i as i32)?);
+        //     self.prev_points.push(keypoints.get(i as usize)?.pt());
+        //     self.prev_points_ids.push(-1);
+        // }
+
+        // opencv::core::vconcat(&new_descriptor_vec, &mut new_descriptor).expect("Failed to concatenate");
+
+        // println!("Re-extracting features, before: {}, after: {}", self.current_frame.features.num_keypoints, new_keypoints.len());
+
+        // self.current_frame.replace_features(DVVectorOfKeyPoint::new(new_keypoints), DVMatrix::new(new_descriptor))?;
         Ok(())
     }
 
