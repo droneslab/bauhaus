@@ -1,5 +1,6 @@
 use cxx::{UniquePtr, SharedPtr};
 use crate::{base::vector::Vector3, imu::imu_bias::ConstantBias, inference::key::IntoKey};
+use crate::sys::DoubleVec;
 
 use super::navstate::NavState;
 
@@ -78,9 +79,12 @@ impl PreintegratedCombinedMeasurements {
 
     pub fn reset_integration_and_set_bias(
         &mut self,
-        bias: &ConstantBias,
-    ) {
-        ::sys::reset_integration_and_set_bias(self.inner.pin_mut(), &bias.inner)
+        bias : &ConstantBias, ){
+        ::sys::reset_integration_and_set_bias(self.inner.pin_mut(), &bias.inner)}
+
+    pub fn create_fake_copy_of_preintegrated_measurements(&self) -> FakePreintegratedCombinedMeasurements
+    {
+        ::sys::create_fake_copy_of_preintegrated_measurements(&self.inner)
     }
 }
 

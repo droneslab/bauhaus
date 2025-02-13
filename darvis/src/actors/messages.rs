@@ -8,6 +8,8 @@ use crate::{
     actors::tracking_backend::TrackingState, map::{frame::Frame, map::Id, pose::Pose}, modules::imu::{ImuBias, ImuMeasurements}
 };
 
+use super::tracking_frontend_gtsam::PreintegratedCombinedMeasurementsResults;
+
 pub struct Reset {
     pub map_version: u64
 }
@@ -43,7 +45,7 @@ impl ActorMessage for ImageMsg {
 }
 pub struct FeatureTracksAndIMUMsg {
     pub frame: Frame,
-    pub imu_measurements: ImuMeasurements,
+    pub preintegration_results: PreintegratedCombinedMeasurementsResults,
     pub mappoint_ids: Vec<i32>,
 }
 impl ActorMessage for FeatureTracksAndIMUMsg {

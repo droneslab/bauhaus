@@ -1,7 +1,7 @@
 extern crate g2o;
-use gtsam::navigation::combined_imu_factor::{PreintegratedCombinedMeasurements, PreintegrationCombinedParams};
+use gtsam::{imu::imu_bias::ConstantBias, navigation::combined_imu_factor::{PreintegratedCombinedMeasurements, PreintegrationCombinedParams}};
 use log::{warn, info, debug, error};
-use nalgebra::Vector3;
+use nalgebra::{Matrix3, Matrix6, SMatrix, Vector3};
 use std::{collections::{BTreeMap, BTreeSet, HashMap, VecDeque}, fmt::{self, Formatter}, mem, sync::atomic::Ordering, thread::sleep, time::Duration};
 use opencv::{core::{no_array, KeyPoint, Point, Point2f, Scalar, CV_8U, CV_8UC1}, imgproc::circle, prelude::*, types::{VectorOfKeyPoint, VectorOfMat, VectorOfPoint2f, VectorOfu8}};
 use core::{
@@ -10,7 +10,6 @@ use core::{
 use crate::{
     actors::{
         messages::{ImageMsg, LastKeyFrameUpdatedMsg, ShutdownMsg, UpdateFrameIMUMsg, VisFeaturesMsg},
-        tracking_backend::TrackingState,
     }, map::{features::Features, frame::Frame, keyframe::MapPointMatches, map::Id, pose::Pose, read_only_lock::ReadWriteMap}, modules::{good_features_to_track::GoodFeaturesExtractor, image, imu::{ImuBias, ImuCalib, ImuMeasurements, ImuPreIntegrated, IMU}, map_initialization::MapInitialization, module_definitions::{FeatureExtractionModule, ImuModule}, optimizer, orbslam_extractor::ORBExtractor, relocalization::Relocalization}, registered_actors::{new_feature_extraction_module, CAMERA_MODULE, FEATURE_DETECTION, FEATURE_MATCHING_MODULE, LOCAL_MAPPING, SHUTDOWN_ACTOR, TRACKING_BACKEND, TRACKING_FRONTEND, VISUALIZER}, MAP_INITIALIZED
 };
 use crate::registered_actors::IMU;
@@ -21,7 +20,7 @@ use crate::modules::module_definitions::MapInitializationModule;
 pub struct TrackingFrontendGTSAM {
     system: System,
     sensor: Sensor,
-    state: TrackingState,
+    state: GtsamFrontendTrackingState,
 
     /// Frontend
     orb_extractor_left: Box<dyn FeatureExtractionModule>,
@@ -29,18 +28,18 @@ pub struct TrackingFrontendGTSAM {
     imu_measurements_since_last_kf: ImuMeasurements,
     prev_points: VectorOfPoint2f,
     prev_points_ids: Vec<Id>,
-    // ids: Vec<i32>,
 
     // Frames
     last_frame: Option<Frame>,
     curr_frame_id: i32,
     current_frame: Frame,
 
-    // KeyFrames
-    frames_since_last_kf: i32,
-
-    // Modules 
-    imu: IMU,
+    // IMU 
+    // I know this is hacky but I dont' want to figure out how to merge the gtsam imu preintegration object with the orbslam imu object
+    // Imu_for_init object needed for map initialization but that's it, otherwise should use the GtsamIMUModule
+    imu: GtsamIMUModule,
+    imu_for_init: IMU,
+    current_bias: ImuBias, // TODO SOFIYA NEED TO READ THIS VALUE FROM BACKEND AFTER IT IS OPTIMIZED
 
     /// References to map
     // map_initialized: bool,
@@ -49,13 +48,9 @@ pub struct TrackingFrontendGTSAM {
     map_scale: f64,
 
     /// Global defaults
-    // localization_only_mode: bool,
     first_image_time: f64,
-    publish_frequency: f64,
     max_features: i32,
     min_distance: f64,
-
-    // preint_gtsam: PreintegratedCombinedMeasurements,
 }
 
 impl Actor for TrackingFrontendGTSAM {
@@ -63,12 +58,6 @@ impl Actor for TrackingFrontendGTSAM {
 
     fn spawn(system: System, map: Self::MapRef) {
         let sensor = SETTINGS.get::<Sensor>(SYSTEM, "sensor");
-        let imu = IMU::new();
-        // let preint_gtsam = initialize_preintegration(
-        //     SETTINGS.get::<f64>(IMU, "noise_gyro"), SETTINGS.get::<f64>(IMU, "gyro_walk"),
-        //     SETTINGS.get::<f64>(IMU, "noise_acc"), SETTINGS.get::<f64>(IMU, "acc_walk"),
-        //     [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]
-        // );
         let orb_extractor_ini = match sensor.is_mono() {
             true => Some(new_feature_extraction_module(true)),
             false => None
@@ -81,21 +70,24 @@ impl Actor for TrackingFrontendGTSAM {
             sensor,
             map,
             initialization: Some(MapInitialization::new()),
-            state: TrackingState::NotInitialized,
-            imu,
+            state: GtsamFrontendTrackingState::NotInitialized,
+            imu: GtsamIMUModule::new(
+                SETTINGS.get::<f64>(IMU, "noise_gyro"), SETTINGS.get::<f64>(IMU, "gyro_walk"),
+                SETTINGS.get::<f64>(IMU, "noise_acc"), SETTINGS.get::<f64>(IMU, "acc_walk"),
+                [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]
+            ),
+            imu_for_init: IMU::new(),
             last_frame: None,
             current_frame: Frame::new_no_features(-1, None, 0.0, None).expect("Should be able to make dummy frame"),
             curr_frame_id: 0,
-            // preint_gtsam,
             prev_points_ids: vec![],
-            frames_since_last_kf: 0,
             first_image_time: 0.0,
-            publish_frequency: SETTINGS.get::<f64>(TRACKING_FRONTEND, "publish_frequency"),
             max_features: SETTINGS.get::<i32>(TRACKING_FRONTEND, "max_features"),
             min_distance: SETTINGS.get::<f64>(TRACKING_FRONTEND, "min_distance"),
             imu_measurements_since_last_kf: ImuMeasurements::new(),
             prev_points: VectorOfPoint2f::new(),
             map_scale: 1.0,
+            current_bias: ImuBias::new(),
         };
         tracy_client::set_thread_name!("tracking frontend gtsam");
 
@@ -132,24 +124,17 @@ impl TrackingFrontendGTSAM {
             debug!("Tracking frontend working on frame {}", self.curr_frame_id);
 
             let mut pub_this_frame = false;
-            if matches!(self.state, TrackingState::NotInitialized) {
+            if matches!(self.state, GtsamFrontendTrackingState::NotInitialized) {
                 // If map is not initialized yet, just extract features and try to initialize
                 self.initialize_map(&image, timestamp).unwrap();
 
-                if matches!(self.state, TrackingState::Ok) {
+                if matches!(self.state, GtsamFrontendTrackingState::Ok) {
                     // If initialized successsfully,
                     // publish this frame so backend has a reference to the frame associated with the initialization
                     pub_this_frame = true;
                 }
             } else {
                 // If this is not the first image, track features from the last image
-                let min_kfs = 3;
-                let max_kfs = 6;
-                if self.frames_since_last_kf >= min_kfs && self.frames_since_last_kf <= max_kfs {
-                    pub_this_frame = true;
-                    self.frames_since_last_kf = 0;
-                    // self.first_image_time = timestamp;
-                }
                 self.current_frame = Frame::new_no_features(
                     self.curr_frame_id, 
                     Some(image.clone()),
@@ -157,29 +142,28 @@ impl TrackingFrontendGTSAM {
                     Some(& self.last_frame.as_mut().unwrap())
                 ).expect("Could not create frame!");
 
-                // Track features
+                // Preintegration
+                self.imu.preintegrate(&mut self.imu_measurements_since_last_kf, &mut self.current_frame, & self.last_frame.as_ref().unwrap());
+
+                // Tracking
                 let (tracked_kp, total_kp) = self.optical_flow().unwrap();
 
-                let transform = self.calculate_transform().unwrap();
-                let new_trans = *transform.get_translation() * (self.map_scale);
-                let new_pose = Pose::new(new_trans, * transform.get_rotation()) * self.last_frame.as_ref().unwrap().pose.unwrap();
+                // determine if frame should be a keyframe
+                let need_new_kf = self.need_new_keyframe();
 
-                self.current_frame.pose = Some(new_pose);
-                debug!("Optical flow tracked {} from original {}... pose prediction: {:?}", tracked_kp, total_kp, new_pose);
+                if need_new_kf {
+                    // If we need a new keyframe, publish this frame
+                    pub_this_frame = true;
+                }
+
+                // let transform = self.calculate_transform().unwrap();
+                // let new_trans = *transform.get_translation() * (self.map_scale);
+                // let new_pose = Pose::new(new_trans, * transform.get_rotation()) * self.last_frame.as_ref().unwrap().pose.unwrap();
+
+                // self.current_frame.pose = Some(new_pose);
+                // debug!("Optical flow tracked {} from original {}... pose prediction: {:?}", tracked_kp, total_kp, new_pose);
 
                 debug!("SOFIYA FEATURES. After optical flow, frame has N {}, features {}, mappoint matches {}", self.current_frame.features.num_keypoints, self.current_frame.features.get_all_keypoints().len(), self.current_frame.mappoint_matches.len());
-
-                // let num_tracked_mappoints = self.map_feature_tracks_to_mappoints().unwrap();
-                // debug!("Tracked {} mappoints", num_tracked_mappoints);
-
-                if pub_this_frame {
-                    if (total_kp as i32) < 500 { // TODO SOFIYA PUT THIS INTO CONFIG FILE
-                        debug!("PUB THIS FRAME! Extracting new features! Total kp {}", total_kp);
-                        self.extract_features_and_add_to_existing().unwrap();
-                    } else {
-                        debug!("PUB THIS FRAME! Not extracting new features! Total kp {}", total_kp);
-                    }
-                }
             }
 
             self.system.send(VISUALIZER, Box::new(VisFeaturesMsg {
@@ -189,23 +173,30 @@ impl TrackingFrontendGTSAM {
             }));
 
             if pub_this_frame {
+                // TODO SOFIYA double check that these commented out portions are ok...
+                // self.outlier_rejection_mono(); // Can get away without doing this?
+                self.extract_features_and_add_to_existing();
+                // self.undistort_keypoints(); // Is this even used?
+                // self.get_smart_mono_measurements(); // THIS IS THE SAME AS the feature vectors matching to mappoint IDs in the current frame
+
                 tracy_client::Client::running()
                     .expect("message! without a running Client")
                     .message("Publish frame!", 2);
 
-                let mut old_imu_msmts = ImuMeasurements::new();
-                mem::swap(&mut old_imu_msmts, &mut self.imu_measurements_since_last_kf);
+                self.imu_measurements_since_last_kf = ImuMeasurements::new();
+                let preintegration_results = self.imu.reset_preintegration(self.current_bias);
 
                 self.system.send(TRACKING_BACKEND, Box::new(FeatureTracksAndIMUMsg {
                     frame: self.current_frame.clone(),
-                    imu_measurements: old_imu_msmts,
+                    preintegration_results,
                     mappoint_ids: self.prev_points_ids.clone()
                 }));
             }
 
-            self.last_frame = Some(self.current_frame.clone()); // TODO SOFIYA AVOID THE CLONE?
+            // Swap current and last frame to avoid cloning current frame into last frame
+            // At next iteration, current frame will be immediately overwritten with the real current frame
+            std::mem::swap(&mut self.last_frame, &mut Some(self.current_frame));
             self.curr_frame_id += 1;
-            self.frames_since_last_kf += 1;
         } else if message.is::<ShutdownMsg>() {
             return true;
         } else {
@@ -218,7 +209,7 @@ impl TrackingFrontendGTSAM {
         let _span = tracy_client::span!("initialize_map");
         let (keypoints, descriptors) = match self.sensor {
             Sensor(FrameSensor::Mono, _) => {
-                if !matches!(self.state, TrackingState::NotInitialized) || (self.current_frame.frame_id < SETTINGS.get::<f64>(SYSTEM, "fps") as i32) {
+                if !matches!(self.state, GtsamFrontendTrackingState::NotInitialized) || (self.current_frame.frame_id < SETTINGS.get::<f64>(SYSTEM, "fps") as i32) {
                     self.orb_extractor_ini.as_mut().unwrap().extract(& curr_img).unwrap()
                 } else {
                     self.orb_extractor_left.extract(& curr_img).unwrap()
@@ -245,14 +236,14 @@ impl TrackingFrontendGTSAM {
         if self.initialization.is_none() {
             self.initialization = Some(MapInitialization::new());
         }
-        let init_success = self.initialization.as_mut().unwrap().try_initialize(&self.current_frame, &mut self.imu.imu_preintegrated_from_last_kf)?;
+        let init_success = self.initialization.as_mut().unwrap().try_initialize(&self.current_frame, &mut self.imu_for_init.imu_preintegrated_from_last_kf)?;
         if init_success {
             {
-                let _ = match self.initialization.as_mut().unwrap().create_initial_map_monocular(&mut self.map,  &mut self.imu.imu_preintegrated_from_last_kf)? {
+                let _ = match self.initialization.as_mut().unwrap().create_initial_map_monocular(&mut self.map,  &mut self.imu_for_init.imu_preintegrated_from_last_kf)? {
                     Some((curr_kf_pose, curr_kf_id, ini_kf_id, local_mappoints, _curr_kf_timestamp, map_scale)) => {
                         // Map needs to be initialized before tracking can begin. Received from map actor
                         if self.sensor.is_imu() {
-                            self.imu.imu_preintegrated_from_last_kf = ImuPreIntegrated::new(self.map.read()?.get_keyframe( curr_kf_id).imu_data.imu_preintegrated.as_ref().unwrap().get_updated_bias());
+                            self.imu.bias = self.map.read()?.get_keyframe( curr_kf_id).imu_data.imu_preintegrated.as_ref().unwrap().get_updated_bias();
                         }
 
                         {
@@ -261,7 +252,7 @@ impl TrackingFrontendGTSAM {
                             self.current_frame.ref_kf_id = Some(curr_kf_id);
                             self.map_scale = map_scale;
                         }
-                        self.state = TrackingState::Ok;
+                        self.state = GtsamFrontendTrackingState::Ok;
 
                         {
                             let map = self.map.read()?;
@@ -294,9 +285,9 @@ impl TrackingFrontendGTSAM {
 
             // self.map_initialized = true;
 
-            self.state = TrackingState::Ok;
+            self.state = GtsamFrontendTrackingState::Ok;
         } else {
-            self.state = TrackingState::NotInitialized;
+            self.state = GtsamFrontendTrackingState::NotInitialized;
         }
         Ok(())
     }
@@ -318,7 +309,7 @@ impl TrackingFrontendGTSAM {
         let termcrit = opencv::core::TermCriteria {
           typ: 3,
           max_count: 30,
-          epsilon: 0.1,
+          epsilon: 0.01,
         };
         let max_level = 3;
         opencv::video::calc_optical_flow_pyr_lk(
@@ -358,10 +349,192 @@ impl TrackingFrontendGTSAM {
         Ok((self.current_frame.features.num_keypoints, status.len()))
     }
 
+    fn need_new_keyframe(&mut self) -> bool {
+        let kf_diff_ns = (self.current_frame.timestamp - self.last_frame.as_ref().unwrap().timestamp) * 1e9;
+        let nr_valid_features = self.current_frame.features.num_keypoints;
+
+        let max_time_elapsed = kf_diff_ns >= (10.0 * 10e6);
+        let min_time_elapsed = kf_diff_ns >= (0.2 * 10e6);
+        let nr_features_low = nr_valid_features <= 0;
+
+        let matches_ref_cur = self.find_matching_keypoints();
+
+        // check for large enough disparity
+        let disparity = self.compute_median_disparity(matches_ref_cur);
+
+        let is_disparity_low = disparity < 0.5;
+        let disparity_low_first_time = is_disparity_low && !matches!(self.state, GtsamFrontendTrackingState::LowDisparity);
+        let enough_disparity = !is_disparity_low;
+
+        let max_disparity_reached = disparity > 200.0;
+        let disparity_flipped = (enough_disparity || disparity_low_first_time) && min_time_elapsed;
+
+        max_time_elapsed || max_disparity_reached || disparity_flipped || nr_features_low
+    }
+
+    fn find_matching_keypoints(&mut self) -> Vec<(i32, i32)> {
+        // Find keypoints that observe the same landmarks in both frames
+
+        let mut curr_frame_map: HashMap<Id, i32> = HashMap::new();
+        for idx1 in 0..self.current_frame.features.get_all_keypoints().len() - 1 {
+            let mp_id = * self.prev_points_ids.get(idx1 as usize).unwrap();
+            curr_frame_map.insert(mp_id, idx1);
+            // While we're here, add the mappoint to the frame's mappoint matches. Backend will need this
+            self.current_frame.mappoint_matches.add(idx1 as u32, mp_id, false);
+
+        }
+
+        // Map of position of landmark j in ref frame to position of landmark j in cur_frame
+        let last_frame = self.last_frame.as_ref().unwrap();
+        let mut matches = vec![];
+        for idx_in_last_frame in 0..last_frame.mappoint_matches.len() - 1 {
+            let mp_id = last_frame.mappoint_matches.get(idx_in_last_frame as usize);
+            match mp_id {
+                None => continue,
+                Some((mp_id, _is_outlier)) => {
+                    match curr_frame_map.get(&mp_id) {
+                        None => continue,
+                        Some(idx_in_curr_frame) => {
+                            matches.push((idx_in_last_frame as i32, * idx_in_curr_frame as i32));
+                        }
+                    }
+                }
+            }
+        }
+        return matches;
+    }
+
+    fn compute_median_disparity(&mut self, matches: Vec<(i32, i32)>) -> f32 {
+        // Compute disparity
+        let mut disparity_sq: Vec<f32> = vec![];
+        for (idx_in_last_frame, idx_in_curr_frame) in matches {
+            let px_diff = self.current_frame.features.get_keypoint(idx_in_curr_frame as usize).0.pt() - self.last_frame.as_ref().unwrap().features.get_keypoint(idx_in_last_frame as usize).0.pt();
+            let px_dist = px_diff.x * px_diff.x + px_diff.y * px_diff.y;
+            disparity_sq.push(px_dist);
+        }
+
+        if disparity_sq.is_empty() {
+            warn!("Have no matches for disparity computation.");
+            return 0.0;
+        }
+
+        // Compute median:
+        let center = disparity_sq.len() / 2;
+        // nth element sorts the array partially until it finds the median.
+        pdqselect::select_by(&mut disparity_sq, center, |a, b| a.partial_cmp(b).unwrap());
+        return disparity_sq[center].sqrt();
+    }
+
+    fn outlier_rejection_mono(&mut self) {
+        let matches_ref_cur = self.find_matching_keypoints();
+
+        // NOTE: versors are already in the rectified left camera frame.
+        // No further rectification needed.
+        //* Get bearing vectors for opengv.
+
+        // BearingVectors f_ref;
+        // BearingVectors f_cur;
+        // const size_t& n_matches = matches_ref_cur.size();
+        // f_ref.reserve(n_matches);
+        // f_cur.reserve(n_matches);
+        // for (const KeypointMatch& it : matches_ref_cur) {
+        //     //! Reference bearing vector
+        //     CHECK_LT(it.first, ref_bearings.size());
+        //     const auto& ref_bearing = ref_bearings.at(it.first);
+        //     f_ref.push_back(ref_bearing);
+
+        //     //! Current bearing vector
+        //     CHECK_LT(it.second, cur_bearings.size());
+        //     const auto& cur_bearing = cur_bearings.at(it.second);
+        //     f_cur.push_back(cur_bearing);
+        // }
+
+        // //! Setup adapter.
+        // CHECK_GT(f_ref.size(), 0);
+        // CHECK_EQ(f_ref.size(), f_cur.size());
+        // CHECK_EQ(f_ref.size(), n_matches);
+        // Adapter2d2d adapter(f_ref, f_cur);
+        // if (tracker_params_.ransac_use_2point_mono_) {
+        //     adapter.setR12(cam_lkf_Pose_cam_kf.rotation().matrix());
+        //     adapter.sett12(cam_lkf_Pose_cam_kf.translation().matrix());
+        // }
+
+        // //! Solve problem.
+        // gtsam::Pose3 best_pose = gtsam::Pose3();
+        // bool success = false;
+        // if (tracker_params_.ransac_use_2point_mono_) {
+        //     success = runRansac(std::make_shared<Problem2d2dGivenRot>(
+        //                             adapter, tracker_params_.ransac_randomize_),
+        //                         tracker_params_.ransac_threshold_mono_,
+        //                         tracker_params_.ransac_max_iterations_,
+        //                         tracker_params_.ransac_probability_,
+        //                         tracker_params_.optimize_2d2d_pose_from_inliers_,
+        //                         &best_pose,
+        //                         inliers);
+        // } else {
+        //     success = runRansac(
+        //         std::make_shared<Problem2d2d>(adapter,
+        //                                     tracker_params_.pose_2d2d_algorithm_,
+        //                                     tracker_params_.ransac_randomize_),
+        //         tracker_params_.ransac_threshold_mono_,
+        //         tracker_params_.ransac_max_iterations_,
+        //         tracker_params_.ransac_probability_,
+        //         tracker_params_.optimize_2d2d_pose_from_inliers_,
+        //         &best_pose,
+        //         inliers);
+        // }
+
+        // if (!success) {
+        //     status_pose = std::make_pair(TrackingStatus::INVALID, gtsam::Pose3());
+        // } else {
+        //     // TODO(Toni): it seems we are not removing outliers if we send an invalid
+        //     // tracking status (above), but the backend calls addLandmarksToGraph even
+        //     // when we have an invalid status!
+
+        //     // TODO(Toni): check quality of tracking
+        //     //! Check enough inliers.
+        //     TrackingStatus status = TrackingStatus::VALID;
+        //     if (inliers->size() <
+        //         static_cast<size_t>(tracker_params_.minNrMonoInliers_)) {
+        //     CHECK(!inliers->empty());
+        //     status = TrackingStatus::FEW_MATCHES;
+        //     }
+
+        //     // NOTE: 2-point always returns the identity rotation, hence we have to
+        //     // substitute it:
+        //     if (tracker_params_.ransac_use_2point_mono_) {
+        //     CHECK(cam_lkf_Pose_cam_kf.rotation().equals(best_pose.rotation()));
+        //     }
+
+        //     //! Fill debug info.
+        //     debug_info_.nrMonoPutatives_ = adapter.getNumberCorrespondences();
+        //     debug_info_.nrMonoInliers_ = inliers->size();
+        //     debug_info_.monoRansacIters_ = 0;  // no access to ransac from here
+        //     // debug_info_.monoRansacIters_ = ransac->iterations_;
+
+        //     status_pose = std::make_pair(status, best_pose);
+        // }
+
+        // VLOG(5) << "2D2D tracking " << (success ? " success " : " failure ") << ":\n"
+        //         << "- Tracking Status: "
+        //         << TrackerStatusSummary::asString(status_pose.first) << '\n'
+        //         << "- Total Correspondences: " << f_ref.size() << '\n'
+        //         << "\t- # inliers: " << inliers->size() << '\n'
+        //         << "\t- # outliers: " << f_ref.size() - inliers->size() << '\n'
+        //         << "- Best pose: \n"
+        //         << status_pose.second;
+
+        // return status_pose;
+
+    
+
+    }
+
+
     fn extract_features_and_add_to_existing(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         let _span = tracy_client::span!("extract features");
 
-        let mut num_features_to_find = 200 - self.current_frame.features.num_keypoints as i32;
+        let num_features_to_find = 200 - self.current_frame.features.num_keypoints as i32;
 
         if num_features_to_find < 0 {
             warn!("Already have enough features ({}), not extracting more", self.current_frame.features.num_keypoints);
@@ -410,110 +583,8 @@ impl TrackingFrontendGTSAM {
 
         self.current_frame.replace_features(DVVectorOfKeyPoint::new(new_keypoints), DVMatrix::new(new_descriptor))?;
 
-
-        // From Kimera:
-        // // TODO(TONI): an alternative approach is to find all features,
-        // // do max-suppression, and then remove those detections that are close to
-        // // the already found ones, even you could cut feature tracks that are no
-        // // longer good quality or visible early on if they don't have detected
-        // // keypoints nearby by! The mask is interpreted as: 255 -> consider, 0 ->
-        // // don't consider.
-        // let mask = Mat::new_rows_cols_with_default(self.current_frame.image.unwrap().rows(), self.current_frame.image.unwrap().cols(), CV_8U, Scalar::all(255.0)).unwrap();
-
-        // for i in 0..self.current_frame.features.num_keypoints {
-        //     let (kp, _) = self.current_frame.features.get_keypoint(i as usize);
-        //     circle(&mut mask, kp.pt(), 20, Scalar::all(0.0), -1, 8, 0).unwrap();
-        // }
-
-        // // Actual raw feature detection
-        // let mut descriptors = opencv::core::Mat::default();
-        // let mut keypoints= opencv::types::VectorOfKeyPoint::new();
-        // let extractor = opencv::features2d::ORB::create(
-        //         2000,
-        //         SETTINGS.get::<f64>(FEATURE_DETECTION, "scale_factor") as f32,
-        //         SETTINGS.get::<i32>(FEATURE_DETECTION, "n_levels"),
-        //         31,
-        //         0,
-        //         2,
-        //         opencv::features2d::ORB_ScoreType::HARRIS_SCORE,
-        //         31,
-        //         SETTINGS.get::<i32>(FEATURE_DETECTION, "min_th_fast")
-        // ).unwrap();
-        // extractor.detect(& self.current_frame.image.unwrap(), &mut  keypoints, & mask)?;
-        // println!("Number of points detected: {}", keypoints.len());
-
-        // let need_n_corners = self.max_features - self.current_frame.features.num_keypoints as i32;
-
-        // // Tolerance of the number of returned points in percentage.
-        // std::vector<cv::KeyPoint>& max_keypoints = keypoints;
-        // max_keypoints = non_max_suppression_->suppressNonMax(
-        //         keypoints,
-        //         need_n_corners,
-        //         0.1,
-        //         cur_frame.img_.cols,
-        //         cur_frame.img_.rows,
-        //         feature_detector_params_.nr_horizontal_bins_,
-        //         feature_detector_params_.nr_vertical_bins_,
-        //         feature_detector_params_.binning_mask_);
-
-        // // TODO(Toni): we should be using cv::KeyPoint... not cv::Point2f...
-        // KeypointsCV new_corners;
-        // cv::KeyPoint::convert(max_keypoints, new_corners);
-
-        // // TODO(Toni) this takes a ton of time 27ms each time...
-        // // Change window_size, and term_criteria to improve timing
-        // if (new_corners.size() > 0) {
-        //     if (feature_detector_params_.enable_subpixel_corner_refinement_) {
-        //     const auto& subpixel_params =
-        //         feature_detector_params_.subpixel_corner_finder_params_;
-        //     cv::cornerSubPix(cur_frame.img_,
-        //                     new_corners,
-        //                     subpixel_params.window_size_,
-        //                     subpixel_params.zero_zone_,
-        //                     subpixel_params.term_criteria_);
-        //     }
-        // }
-
-
-        // OLD:
-        // let (keypoints, descriptors) = //match self.sensor {
-        //     // Sensor(FrameSensor::Mono, _) => {
-        //     //     if !self.map_initialized || (self.current_frame.frame_id < SETTINGS.get::<f64>(SYSTEM, "fps") as i32) {
-        //     //         self.orb_extractor_ini.as_mut().unwrap().extract(& self.current_frame.image.as_ref().unwrap()).unwrap()
-        //     //     } else {
-        //             self.orb_extractor_left.extract(& self.current_frame.image.as_ref().unwrap()).unwrap();
-        // //         }
-        // //     },
-        // //     _ => { 
-        // //         // See GrabImageMonocular, GrabImageStereo, GrabImageRGBD in Tracking.cc
-        // //         todo!("Stereo, RGBD")
-        // //     }
-        // // };
-
-        // let mut new_keypoints = VectorOfKeyPoint::new();
-        // let mut new_descriptor = Mat::default();
-        // let mut new_descriptor_vec = VectorOfMat::new();
-
-        // for i in 0..self.current_frame.features.num_keypoints {
-        //     new_keypoints.push(self.current_frame.features.get_keypoint(i as usize).0);
-        //     new_descriptor_vec.push((* self.current_frame.features.descriptors.row(i as u32)).clone());
-        // }
-
-        // for i in 0..keypoints.len() {
-        //     new_keypoints.push(keypoints.get(i as usize)?);
-        //     new_descriptor_vec.push((*descriptors).row(i as i32)?);
-        //     self.prev_points.push(keypoints.get(i as usize)?.pt());
-        //     self.prev_points_ids.push(-1);
-        // }
-
-        // opencv::core::vconcat(&new_descriptor_vec, &mut new_descriptor).expect("Failed to concatenate");
-
-        // println!("Re-extracting features, before: {}, after: {}", self.current_frame.features.num_keypoints, new_keypoints.len());
-
-        // self.current_frame.replace_features(DVVectorOfKeyPoint::new(new_keypoints), DVMatrix::new(new_descriptor))?;
         Ok(())
     }
-
 
     fn calculate_transform(&self) -> Result<Pose, Box<dyn std::error::Error>> {
         let _span = tracy_client::span!("calculate_transform");
@@ -556,175 +627,156 @@ impl TrackingFrontendGTSAM {
         Ok(Pose::new(recover_t,recover_r))
     }
 
-    // fn need_new_keyframe(&mut self) -> Result<bool, Box<dyn std::error::Error>> {
-    //     // if self.sensor.is_imu() && !self.map.read()?.imu_initialized {
-    //     //     if (self.current_frame.timestamp - self.last_kf_timestamp.unwrap()) * 1e9 >= 0.25 { // 250 milliseconds
-    //     //         return Ok(true);
-    //     //     } else {
-    //     //         return Ok(false);
-    //     //     }
-    //     // }
-
-    //     // Tracked MapPoints in the reference keyframe
-    //     let min_observations = match num_kfs <= 2 {
-    //         true => 2,
-    //         false => 3
-    //     };
-
-    //     let map_lock = self.map.read()?;
-    //     let tracked_mappoints = map_lock.get_keyframe(self.ref_kf_id.unwrap()).get_tracked_mappoints(&*map_lock, min_observations) as f32;
-
-    //     // Check how many "close" points are being tracked and how many could be potentially created.
-    //     let (tracked_close, non_tracked_close) = self.current_frame.check_close_tracked_mappoints();
-    //     let need_to_insert_close = (tracked_close<100) && (non_tracked_close>70);
-
-    //     // Thresholds
-    //     let th_ref_ratio = match self.sensor {
-    //         Sensor(FrameSensor::Mono, ImuSensor::None) => 0.9,
-    //         Sensor(FrameSensor::Mono, ImuSensor::Some) => {
-    //             // Points tracked from the local map
-    //             if self.matches_inliers > 350 { 0.75 } else { 0.90 }
-    //         },
-    //         Sensor(FrameSensor::Stereo, _) | Sensor(FrameSensor::Rgbd, ImuSensor::Some) => 0.75,
-    //         Sensor(FrameSensor::Rgbd, ImuSensor::None) => { if num_kfs < 2 { 0.4 } else { 0.75 } }
-    //     };
-
-    //     // Condition 1a: More than "MaxFrames" have passed from last keyframe insertion
-    //     let c1a = self.frames_since_last_kf >= (self.max_frames_to_insert_kf as i32);
-    //     // Condition 1b: More than "MinFrames" have passed and Local Mapping is idle
-    //     let c1b = self.frames_since_last_kf >= (self.min_frames_to_insert_kf as i32) && LOCAL_MAPPING_IDLE.load(Ordering::SeqCst);
-    //     //Condition 1c: tracking is weak
-    //     let sensor_is_right = match self.sensor {
-    //         Sensor(FrameSensor::Mono, _) | Sensor(FrameSensor::Stereo, ImuSensor::Some) | Sensor(FrameSensor::Rgbd, ImuSensor::Some) => false,
-    //         _ => true
-    //     }; // I do not know why they just select for RGBD or Stereo without IMU
-    //     let c1c = sensor_is_right && ((self.matches_inliers as f32) < tracked_mappoints * 0.25 || need_to_insert_close) ;
-    //     // Condition 2: Few tracked points compared to reference keyframe. Lots of visual odometry compared to map matches.
-    //     let c2 = (((self.matches_inliers as f32) < tracked_mappoints * th_ref_ratio || need_to_insert_close)) && self.matches_inliers > 15;
-
-    //     // println!("c2: {}, inliers: {}, tracked mappoints: {}, th ref ratio: {}", c2, self.matches_inliers, tracked_mappoints, th_ref_ratio);
-
-    //     // Temporal condition for Inertial cases
-    //     let close_to_last_kf = match self.last_kf_timestamp {
-    //         Some(timestamp) => self.current_frame.timestamp - timestamp >= 0.5 * 1e-9, // 500 milliseconds
-    //         None => false
-    //     };
-
-    //     let c3 = self.sensor.is_imu() && close_to_last_kf;
-
-    //     let recently_lost = match self.state {
-    //         TrackingState::RecentlyLost => true,
-    //         _ => false
-    //     };
-    //     let sensor_is_imumono = match self.sensor {
-    //         Sensor(FrameSensor::Rgbd, ImuSensor::Some) => true,
-    //         _ => false
-    //     };
-    //     let c4 = ((self.matches_inliers < 75 && self.matches_inliers > 15) || recently_lost) && sensor_is_imumono;
-
-    //     // Note: removed code here about checking for idle local mapping and/or interrupting bundle adjustment
-    //     let create_new_kf =  ((c1a||c1b||c1c) && c2)||c3 ||c4;
-
-    //     tracy_client::Client::running()
-    //         .expect("message! without a running Client")
-    //         .message(format!("need new kf: {} {}", create_new_kf, LOCAL_MAPPING_IDLE.load(Ordering::SeqCst)).as_str(), 2);
-
-    //     if LOCAL_MAPPING_IDLE.load(Ordering::SeqCst) && create_new_kf {
-    //         self.frames_since_last_kf = 0;
-    //         return Ok(true);
-    //     } else {
-    //         self.frames_since_last_kf += 1;
-    //         return Ok(false);
-    //     }
-    // }
-
-    // fn preintegrate(&mut self, imu_measurements: &mut ImuMeasurements) {
-    //     // This function will create a discrete IMU factor using the GTSAM preintegrator class
-    //     // This will integrate from the current state time up to the new update time
-    //     let _span = tracy_client::span!("create_imu_factor");
-
-    //     let last_frame_timestamp = self.last_frame.as_ref().unwrap().timestamp;
-    //     let mut imu_from_last_frame = VecDeque::with_capacity(imu_measurements.len()); // mvImuFromLastFrame
-    //     let imu_per = 0.000000000001; // 0.001 in orbslam, adjusted here for different timestamp units
-
-    //     while !imu_measurements.is_empty() {
-    //         if imu_measurements.front().unwrap().timestamp < last_frame_timestamp - imu_per {
-    //             imu_measurements.pop_front();
-    //         } else if imu_measurements.front().unwrap().timestamp < self.current_frame.timestamp - imu_per {
-    //             imu_from_last_frame.push_back(imu_measurements.pop_front().unwrap());
-    //         } else {
-    //             imu_from_last_frame.push_back(imu_measurements.pop_front().unwrap());
-    //             break;
-    //         }
-    //     }
-    //     let n = imu_from_last_frame.len() - 1;
-
-    //     for i in 0..n {
-    //         let mut tstep = 0.0;
-    //         let mut acc: Vector3<f64> = Vector3::zeros(); // acc
-    //         let mut ang_vel: Vector3<f64> = Vector3::zeros(); // angVel
-
-    //         if i == 0 && i < (n - 1) {
-    //             let tab = imu_from_last_frame[i + 1].timestamp - imu_from_last_frame[i].timestamp;
-    //             let tini = imu_from_last_frame[i].timestamp - last_frame_timestamp;
-    //             acc = (
-    //                 imu_from_last_frame[i].acc + imu_from_last_frame[i + 1].acc -
-    //                 (imu_from_last_frame[i + 1].acc - imu_from_last_frame[i].acc) * (tini/tab)
-    //             ) * 0.5;
-    //             ang_vel = (
-    //                 imu_from_last_frame[i].ang_vel + imu_from_last_frame[i + 1].ang_vel -
-    //                 (imu_from_last_frame[i + 1].ang_vel - imu_from_last_frame[i].ang_vel) * (tini/tab)
-    //             ) * 0.5;
-    //             tstep = imu_from_last_frame[i + 1].timestamp - last_frame_timestamp;
-    //         } else if i < (n - 1) {
-    //             acc = (imu_from_last_frame[i].acc + imu_from_last_frame[i + 1].acc) * 0.5;
-    //             ang_vel = (imu_from_last_frame[i].ang_vel + imu_from_last_frame[i + 1].ang_vel) * 0.5;
-    //             tstep = imu_from_last_frame[i + 1].timestamp - imu_from_last_frame[i].timestamp;
-    //         } else if i > 0 && i == (n - 1) {
-    //             let tab = imu_from_last_frame[i + 1].timestamp - imu_from_last_frame[i].timestamp;
-    //             let tend = imu_from_last_frame[i + 1].timestamp - self.current_frame.timestamp;
-    //             acc = (
-    //                 imu_from_last_frame[i].acc + imu_from_last_frame[i + 1].acc -
-    //                 (imu_from_last_frame[i + 1].acc - imu_from_last_frame[i].acc) * (tend/tab)
-    //             ) * 0.5;
-    //             ang_vel = (
-    //                 imu_from_last_frame[i].ang_vel + imu_from_last_frame[i + 1].ang_vel -
-    //                 (imu_from_last_frame[i + 1].ang_vel - imu_from_last_frame[i].ang_vel) * (tend/tab)
-    //             ) * 0.5;
-    //             tstep = self.current_frame.timestamp - imu_from_last_frame[i].timestamp;
-    //         } else if i == 0 && i == (n - 1) {
-    //             acc = imu_from_last_frame[i].acc;
-    //             ang_vel = imu_from_last_frame[i].ang_vel;
-    //             tstep = self.current_frame.timestamp - last_frame_timestamp;
-    //         }
-    //         tstep = tstep * 1e9; 
-
-    //         self.preint_gtsam.integrate_measurement(&acc.into(), &ang_vel.into(), tstep);
-    //     }
-    // }
 }
 
-// fn initialize_preintegration(
-//     gyro_noise_density: f64, gyro_random_walk: f64,
-//     accel_noise_density: f64, accel_random_walk: f64, 
-//     prior_ba: [f64; 3], prior_bg: [f64; 3],
 
-// ) -> PreintegratedCombinedMeasurements {
-//     // Create GTSAM preintegration parameters for use with Foster's version
-//     let prior_state_bias = gtsam::imu::imu_bias::ConstantBias::new(
-//         &gtsam::base::vector::Vector3::new(prior_ba[0], prior_ba[1], prior_ba[2]),
-//         &gtsam::base::vector::Vector3::new(prior_bg[0], prior_bg[1], prior_bg[2])
-//     );
-//     let mut params = PreintegrationCombinedParams::makesharedu();  // Z-up navigation frame: gravity points along negative Z-axis !!!
-//     params.set_params(
-//         accel_noise_density * accel_noise_density, // acc white noise in continuous
-//         gyro_noise_density * gyro_noise_density, // gyro white noise in continuous
-//         accel_random_walk * accel_random_walk, // acc bias in continuous
-//         gyro_random_walk * gyro_random_walk, // gyro bias in continuous
-//         0.1, // error committed in integrating position from velocities
-//         1e-5 // error in the bias used for preintegration
-//     );
 
-//     // Actually create the GTSAM preintegration
-//     PreintegratedCombinedMeasurements::new(params, &prior_state_bias)
-// }
+struct GtsamIMUModule {
+    preint_gtsam: PreintegratedCombinedMeasurements, // IMU preintegration
+    bias: ImuBias,
+}
+impl GtsamIMUModule {
+
+    fn new(
+        gyro_noise_density: f64, gyro_random_walk: f64,
+        accel_noise_density: f64, accel_random_walk: f64, 
+        prior_ba: [f64; 3], prior_bg: [f64; 3],
+    ) -> GtsamIMUModule {
+        // Create GTSAM preintegration parameters for use with Foster's version
+        let prior_state_bias = gtsam::imu::imu_bias::ConstantBias::new(
+            &gtsam::base::vector::Vector3::new(prior_ba[0], prior_ba[1], prior_ba[2]),
+            &gtsam::base::vector::Vector3::new(prior_bg[0], prior_bg[1], prior_bg[2])
+        );
+        let mut params = PreintegrationCombinedParams::makesharedu();  // Z-up navigation frame: gravity points along negative Z-axis !!!
+        params.set_params(
+            accel_noise_density * accel_noise_density, // acc white noise in continuous
+            gyro_noise_density * gyro_noise_density, // gyro white noise in continuous
+            accel_random_walk * accel_random_walk, // acc bias in continuous
+            gyro_random_walk * gyro_random_walk, // gyro bias in continuous
+            0.1, // error committed in integrating position from velocities
+            1e-5 // error in the bias used for preintegration
+        );
+
+
+        Self {
+            preint_gtsam: PreintegratedCombinedMeasurements::new(params, &prior_state_bias),
+            bias: ImuBias::new(),
+        }
+    }
+
+    fn reset_preintegration(&mut self, new_bias: ImuBias) -> PreintegratedCombinedMeasurementsResults {
+        let bias_convert = ConstantBias::new(
+            &gtsam::base::vector::Vector3::new(new_bias.bax, new_bias.bay, new_bias.baz),
+            &gtsam::base::vector::Vector3::new(new_bias.bwx, new_bias.bwy, new_bias.bwz)
+        );
+        let old_preint_gtsam: PreintegratedCombinedMeasurementsResults = self.preint_gtsam.into();
+        self.preint_gtsam.reset_integration_and_set_bias(& bias_convert);
+        old_preint_gtsam
+    }
+
+    fn preintegrate(&mut self, imu_measurements: &mut ImuMeasurements, current_frame: &Frame, last_frame: &Frame) -> Result<(), Box<dyn std::error::Error>> {
+        // This function will create a discrete IMU factor using the GTSAM preintegrator class
+        // This will integrate from the current state time up to the new update time
+        let _span = tracy_client::span!("create_imu_factor");
+
+        let mut imu_from_last_frame = VecDeque::with_capacity(imu_measurements.len()); // mvImuFromLastFrame
+        let imu_per = 0.000000000001; // Used to be 0.000000000001 to adjust for different timestamp units, not sure why it needs to be reverted now. 0.001 in orbslam. 
+
+        while !imu_measurements.is_empty() {
+            if imu_measurements.front().unwrap().timestamp < last_frame.timestamp - imu_per {
+                imu_measurements.pop_front();
+            } else if imu_measurements.front().unwrap().timestamp < current_frame.timestamp - imu_per {
+                let msmt = imu_measurements.pop_front().unwrap();
+                imu_from_last_frame.push_back(msmt);
+            } else {
+                let msmt = imu_measurements.pop_front().unwrap();
+                imu_from_last_frame.push_back(msmt);
+                break;
+            }
+        }
+        let n = imu_from_last_frame.len() - 1;
+
+        // let other_imu = IMU::new();
+        // let mut imu_preintegrated_from_last_frame = ImuPreIntegrated::new(previous_frame.imu_data.imu_bias);
+
+        for i in 0..n {
+            let mut tstep = 0.0;
+            let mut acc: Vector3<f64> = Vector3::zeros(); // acc
+            let mut ang_vel: Vector3<f64> = Vector3::zeros(); // angVel
+
+            if i == 0 && i < (n - 1) {
+                let tab = imu_from_last_frame[i + 1].timestamp - imu_from_last_frame[i].timestamp;
+                let tini = imu_from_last_frame[i].timestamp - last_frame.timestamp;
+                acc = (
+                    imu_from_last_frame[i].acc + imu_from_last_frame[i + 1].acc -
+                    (imu_from_last_frame[i + 1].acc - imu_from_last_frame[i].acc) * (tini/tab)
+                ) * 0.5;
+                ang_vel = (
+                    imu_from_last_frame[i].ang_vel + imu_from_last_frame[i + 1].ang_vel -
+                    (imu_from_last_frame[i + 1].ang_vel - imu_from_last_frame[i].ang_vel) * (tini/tab)
+                ) * 0.5;
+                tstep = imu_from_last_frame[i + 1].timestamp - last_frame.timestamp;
+            } else if i < (n - 1) {
+                acc = (imu_from_last_frame[i].acc + imu_from_last_frame[i + 1].acc) * 0.5;
+                ang_vel = (imu_from_last_frame[i].ang_vel + imu_from_last_frame[i + 1].ang_vel) * 0.5;
+                tstep = imu_from_last_frame[i + 1].timestamp - imu_from_last_frame[i].timestamp;
+            } else if i > 0 && i == (n - 1) {
+                let tab = imu_from_last_frame[i + 1].timestamp - imu_from_last_frame[i].timestamp;
+                let tend = imu_from_last_frame[i + 1].timestamp - current_frame.timestamp;
+                acc = (
+                    imu_from_last_frame[i].acc + imu_from_last_frame[i + 1].acc -
+                    (imu_from_last_frame[i + 1].acc - imu_from_last_frame[i].acc) * (tend/tab)
+                ) * 0.5;
+                ang_vel = (
+                    imu_from_last_frame[i].ang_vel + imu_from_last_frame[i + 1].ang_vel -
+                    (imu_from_last_frame[i + 1].ang_vel - imu_from_last_frame[i].ang_vel) * (tend/tab)
+                ) * 0.5;
+                tstep = current_frame.timestamp - imu_from_last_frame[i].timestamp;
+            } else if i == 0 && i == (n - 1) {
+                acc = imu_from_last_frame[i].acc;
+                ang_vel = imu_from_last_frame[i].ang_vel;
+                tstep = current_frame.timestamp - last_frame.timestamp;
+            }
+            tstep = tstep * 1e9;
+
+            self.preint_gtsam.integrate_measurement(&acc.into(), &ang_vel.into(), tstep);
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub enum GtsamFrontendTrackingState {
+    #[default] NotInitialized,
+    LowDisparity,
+    Ok,
+}
+
+
+// We need to be able to send the results from preintegrating in PreintegratedCombinedMeasurements
+// to the backend, but cannot send pointer in a message. So, pull out necessary data and reconstruct
+// the new PreintegratedCombinedMeasurements object on the backend.
+pub struct PreintegratedCombinedMeasurementsResults {
+    pub bias_acc_covariance: Matrix3<f64>,
+    pub bias_omega_covariance: Matrix3<f64>,
+    pub bias_acc_omega_int_covariance: Matrix6<f64>,
+    pub preint_meas_cov: SMatrix<f64, 15, 15>,
+}
+
+impl Into<PreintegratedCombinedMeasurementsResults> for PreintegratedCombinedMeasurements {
+    fn into(self) -> PreintegratedCombinedMeasurementsResults {
+        let preint_meas_cov = self.get_preint_meas_cov();
+        
+        let bias_acc_covariance = self.get_bias_acc_covariance();
+        let bias_omega_covariance = self.get_bias_omega_covariance();
+        let bias_acc_omega_int_covariance = self.get_bias_acc_omega_int_covariance();
+        let preint_meas_cov = self.get_preint_meas_covariance();
+        PreintegratedCombinedMeasurementsResults {
+            bias_acc_covariance,
+            bias_omega_covariance,
+            bias_acc_omega_int_covariance,
+            preint_meas_cov,
+        }
+    }
+}

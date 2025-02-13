@@ -5,7 +5,39 @@ pub type Key = u64;
 
 #[cxx::bridge(namespace = "gtsam")]
 mod ffi {
-    unsafe extern "C++" {
+
+    // DoubleVec is the same thing in the orbslam bindings crate, but I don't want to link
+    // that as a dependency here so I guess we will just have two DoubleVecs
+    // extern "C++"
+    // {
+    //     type DoubleVec = orb_slam3::DoubleVec;
+    // }
+
+    struct DoubleVec
+    {
+        vec: Vec<f64>,
+    }
+
+    // Note: PreintegratedCombinedMeasurements cannot be passed between threads safely.
+    // If it is ok to have two copies of this object, then you can clone the
+    // PreintegratedCombinedMeasurements object by creating FakePreintegratedCombinedMeasurements,
+    // sending that to a thread, and reconstructing a new object on the other side.
+    // See create_fake_copy_of_preintegrated_measurements and reconstruct_preintegrated_measurements_object
+    struct FakePreintegratedCombinedMeasurements {
+        // PreintegrationBase
+        bias_acc: [f64; 3],
+        bias_gyro: [f64; 3],
+        delta_tij: f64,
+        // TangentPreintegration
+        preintegrated: Vec<DoubleVec>,
+        preintegrated_H_biasAcc: Vec<DoubleVec>,
+        preintegrated_H_biasOmega: Vec<DoubleVec>,
+        // PreintegratedCombinedMeasurements
+        preint_meas_cov: Vec<DoubleVec>,
+    }
+
+    unsafe extern "C++"
+    {
         include!("base/vector.h");
 
         type Vector3;
@@ -16,7 +48,6 @@ mod ffi {
 
         fn vector3_to_raw(src: &Vector3, dst: &mut [f64]);
     }
-
 
     unsafe extern "C++" {
         include!("geometry/point3.h");
@@ -354,6 +385,8 @@ mod ffi {
             preintegrated_measurements: Pin<&mut PreintegratedCombinedMeasurements>,
             bias: &ConstantBias,
         );
+
+        fn create_fake_copy_of_preintegrated_measurements(preintegrated_measurements : &PreintegratedCombinedMeasurements)->FakePreintegratedCombinedMeasurements;
     }
 
     unsafe extern "C++" {

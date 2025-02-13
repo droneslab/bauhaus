@@ -1,5 +1,7 @@
 #include <boost/smart_ptr/shared_ptr.hpp>
 #include <memory>
+#include "rust/cxx.h"
+#include <gtsam/base/Matrix.h>
 
 namespace {
 template <class SharedPointer> struct Holder {
@@ -43,3 +45,10 @@ std::shared_ptr<Parent> downcast(const std::shared_ptr<Child> &p) {
   boost::shared_ptr<Parent> p_casted = p_boost;
   return to_std_ptr(p_casted);
 }
+
+namespace gtsam {
+    struct DoubleVec;
+    Eigen::MatrixXd rustvec_to_eigenmat(rust::Vec<DoubleVec> mat);
+    rust::Vec<DoubleVec> eigenmat_to_rustvec(Eigen::MatrixXd mat);
+    rust::Vec<double> row_eigenmat_to_rustvec(Eigen::MatrixXd mat);
+} // namespace gtsam

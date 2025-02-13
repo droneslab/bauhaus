@@ -2,9 +2,14 @@
 #include <memory>
 #include <gtsam/navigation/CombinedImuFactor.h>
 
+
 namespace gtsam
 {
-    std::shared_ptr<CombinedImuFactor> default_combined_imu_factor();
+    struct DoubleVec;
+    struct FakePreintegratedCombinedMeasurements;
+
+    std::shared_ptr<CombinedImuFactor>
+    default_combined_imu_factor();
     std::shared_ptr<CombinedImuFactor> new_combined_imu_factor(
         Key pose_i, Key vel_i, Key pose_j, Key vel_j, Key bias_i, Key bias_j,
         const PreintegratedCombinedMeasurements & preintegratedMeasurements);
@@ -46,4 +51,8 @@ namespace gtsam
     void reset_integration_and_set_bias(
         PreintegratedCombinedMeasurements &preintegrated_measurements,
         const imuBias::ConstantBias &bias);
+
+    FakePreintegratedCombinedMeasurements create_fake_copy_of_preintegrated_measurements(
+        const PreintegratedCombinedMeasurements &preintegrated_measurements);
+
 }

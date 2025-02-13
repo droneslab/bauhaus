@@ -1,5 +1,6 @@
 #include "combined_imu_factor.h"
 #include "../base/rust.hpp"
+#include "../../target/cxxbridge/gtsam-sys/src/lib.rs.h"
 
 namespace gtsam
 {
@@ -103,4 +104,84 @@ namespace gtsam
     {
             preintegrated_measurements.resetIntegrationAndSetBias(bias);
     }
+
+
+
+    FakePreintegratedCombinedMeasurements create_fake_copy_of_preintegrated_measurements(const PreintegratedCombinedMeasurements &preintegrated_measurements)
+    {
+        // PreintegrationBase
+        imuBias::ConstantBias bias = preintegrated_measurements.biasHat();
+        Vector3 accel_bias = bias.accelerometer();
+        Vector3 gyro_bias = bias.gyroscope();
+        double deltaTij = preintegrated_measurements.deltaTij();
+        // WARNING: Skipping params! Reconstruct it yourself
+
+        // TangentPreintegration
+        rust::Vec<DoubleVec> preintegrated = eigenmat_to_rustvec(preintegrated_measurements.preintegrated());
+        rust::Vec<DoubleVec> preintegrated_H_biasAcc = eigenmat_to_rustvec(preintegrated_measurements.preintegrated_H_biasAcc());
+        rust::Vec<DoubleVec> preintegrated_H_biasOmega = eigenmat_to_rustvec(preintegrated_measurements.preintegrated_H_biasOmega());
+
+        // PreintegratedCombinedMeasurements
+        rust::Vec<DoubleVec> preint_meas_cov = eigenmat_to_rustvec(preintegrated_measurements.preintMeasCov());
+
+        FakePreintegratedCombinedMeasurements fake;
+        fake.bias_acc = {
+            (double)accel_bias[0],
+            (double)accel_bias[1],
+            (double)accel_bias[2]};
+        fake.bias_gyro = {
+            (double)gyro_bias[0],
+            (double)gyro_bias[1],
+            (double)gyro_bias[2]};
+        fake.delta_tij = deltaTij;
+        fake.preintegrated = preintegrated;
+        fake.preintegrated_H_biasAcc = preintegrated_H_biasAcc;
+        fake.preintegrated_H_biasOmega = preintegrated_H_biasOmega;
+        fake.preint_meas_cov = preint_meas_cov;
+
+        return fake;
+    }
+
+    // Eigen::MatrixXd rustvec_to_eigenmat(rust::Vec<DoubleVec> mat)
+    // {
+    //     std::size_t rows = mat.size();
+    //     std::size_t cols = mat[0].vec.size();
+    //     Eigen::MatrixXd mat_c = Eigen::MatrixXd::Zero(rows, cols);
+
+    //     for (int i = 0; i < mat.size(); i++)
+    //     {
+    //         rust::Vec<double> row = mat[i].vec;
+    //         for (int j = 0; j < row.size(); j++)
+    //         {
+    //             mat_c(i, j) = row[j];
+    //         }
+    //     }
+    //     return mat_c;
+    // }
+
+    // rust::Vec<DoubleVec> eigenmat_to_rustvec(Eigen::MatrixXd mat)
+    // {
+    //     rust::Vec<DoubleVec> mat_rust;
+
+    //     for (int i = 0; i < mat.rows(); i++)
+    //     {
+    //         rust::Vec<double> row_rust;
+    //         for (int j = 0; j < mat.cols(); j++)
+    //         {
+    //             row_rust.push_back(mat(i, j));
+    //         }
+    //         mat_rust.push_back(DoubleVec{row_rust});
+    //     }
+    //     return mat_rust;
+    // }
+    // rust::Vec<double> row_eigenmat_to_rustvec(Eigen::MatrixXd mat)
+    // {
+    //     rust::Vec<double> vec_rust;
+
+    //     for (int i = 0; i < mat.rows(); i++)
+    //     {
+    //         vec_rust.push_back(mat(i, 0));
+    //     }
+    //     return vec_rust;
+    // }
 }
