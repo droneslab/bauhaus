@@ -33,6 +33,7 @@ pub struct TrackingFrontendGTSAM {
     last_frame: Option<Frame>,
     curr_frame_id: i32,
     current_frame: Frame,
+    frames_since_last_kf: i32,
 
     // IMU 
     // I know this is hacky but I dont' want to figure out how to merge the gtsam imu preintegration object with the orbslam imu object
@@ -88,6 +89,7 @@ impl Actor for TrackingFrontendGTSAM {
             prev_points: VectorOfPoint2f::new(),
             map_scale: 1.0,
             current_bias: ImuBias::new(),
+            frames_since_last_kf: 0,
         };
         tracy_client::set_thread_name!("tracking frontend gtsam");
 
@@ -142,18 +144,24 @@ impl TrackingFrontendGTSAM {
                     Some(& self.last_frame.as_mut().unwrap())
                 ).expect("Could not create frame!");
 
+                // TODO SOFIYA Preintegration on front end?
                 // Preintegration
-                self.imu.preintegrate(&mut self.imu_measurements_since_last_kf, &mut self.current_frame, & self.last_frame.as_ref().unwrap());
+                // self.imu.preintegrate(&mut self.imu_measurements_since_last_kf, &mut self.current_frame, & self.last_frame.as_ref().unwrap());
 
                 // Tracking
                 let (tracked_kp, total_kp) = self.optical_flow().unwrap();
+                debug!("Optical flow tracked {} from original {}", tracked_kp, total_kp);
 
-                // determine if frame should be a keyframe
-                let need_new_kf = self.need_new_keyframe();
+                // Determine if frame should be a keyframe
+                let need_new_kf = self.frames_since_last_kf == 3;
+                        //self.need_new_keyframe();
 
                 if need_new_kf {
                     // If we need a new keyframe, publish this frame
                     pub_this_frame = true;
+                    self.frames_since_last_kf = 0;
+                } else {
+                    self.frames_since_last_kf += 1;
                 }
 
                 // let transform = self.calculate_transform().unwrap();
@@ -183,19 +191,23 @@ impl TrackingFrontendGTSAM {
                     .expect("message! without a running Client")
                     .message("Publish frame!", 2);
 
-                self.imu_measurements_since_last_kf = ImuMeasurements::new();
-                let preintegration_results = self.imu.reset_preintegration(self.current_bias);
+                // Send current imu measurements to backend, replace with empty ones
+                let mut empty_imu_measurements = ImuMeasurements::new();
+                std::mem::swap(&mut self.imu_measurements_since_last_kf, &mut empty_imu_measurements);
+                // let preintegration_results = self.imu.reset_preintegration(self.current_bias);
 
                 self.system.send(TRACKING_BACKEND, Box::new(FeatureTracksAndIMUMsg {
                     frame: self.current_frame.clone(),
-                    preintegration_results,
+                    imu_measurements: empty_imu_measurements,
+                    // preintegration_results,
                     mappoint_ids: self.prev_points_ids.clone()
                 }));
             }
 
             // Swap current and last frame to avoid cloning current frame into last frame
             // At next iteration, current frame will be immediately overwritten with the real current frame
-            std::mem::swap(&mut self.last_frame, &mut Some(self.current_frame));
+            // std::mem::swap(&mut self.last_frame, &mut Some(self.current_frame));
+            self.last_frame = Some(self.current_frame.clone()); // TODO SOFIYA avoid this clone? Above line doesn't compile
             self.curr_frame_id += 1;
         } else if message.is::<ShutdownMsg>() {
             return true;
@@ -664,15 +676,15 @@ impl GtsamIMUModule {
         }
     }
 
-    fn reset_preintegration(&mut self, new_bias: ImuBias) -> PreintegratedCombinedMeasurementsResults {
-        let bias_convert = ConstantBias::new(
-            &gtsam::base::vector::Vector3::new(new_bias.bax, new_bias.bay, new_bias.baz),
-            &gtsam::base::vector::Vector3::new(new_bias.bwx, new_bias.bwy, new_bias.bwz)
-        );
-        let old_preint_gtsam: PreintegratedCombinedMeasurementsResults = self.preint_gtsam.into();
-        self.preint_gtsam.reset_integration_and_set_bias(& bias_convert);
-        old_preint_gtsam
-    }
+    // fn reset_preintegration(&mut self, new_bias: ImuBias) -> PreintegratedCombinedMeasurementsResults {
+    //     let bias_convert = ConstantBias::new(
+    //         &gtsam::base::vector::Vector3::new(new_bias.bax, new_bias.bay, new_bias.baz),
+    //         &gtsam::base::vector::Vector3::new(new_bias.bwx, new_bias.bwy, new_bias.bwz)
+    //     );
+    //     let old_preint_gtsam: PreintegratedCombinedMeasurementsResults = self.preint_gtsam.into();
+    //     self.preint_gtsam.reset_integration_and_set_bias(& bias_convert);
+    //     old_preint_gtsam
+    // }
 
     fn preintegrate(&mut self, imu_measurements: &mut ImuMeasurements, current_frame: &Frame, last_frame: &Frame) -> Result<(), Box<dyn std::error::Error>> {
         // This function will create a discrete IMU factor using the GTSAM preintegrator class
@@ -764,19 +776,20 @@ pub struct PreintegratedCombinedMeasurementsResults {
     pub preint_meas_cov: SMatrix<f64, 15, 15>,
 }
 
-impl Into<PreintegratedCombinedMeasurementsResults> for PreintegratedCombinedMeasurements {
-    fn into(self) -> PreintegratedCombinedMeasurementsResults {
-        let preint_meas_cov = self.get_preint_meas_cov();
+// impl Into<PreintegratedCombinedMeasurementsResults> for PreintegratedCombinedMeasurements {
+//     fn into(self) -> PreintegratedCombinedMeasurementsResults {
+//         let preint_meas_cov = self.get_preint_meas_cov();
         
-        let bias_acc_covariance = self.get_bias_acc_covariance();
-        let bias_omega_covariance = self.get_bias_omega_covariance();
-        let bias_acc_omega_int_covariance = self.get_bias_acc_omega_int_covariance();
-        let preint_meas_cov = self.get_preint_meas_covariance();
-        PreintegratedCombinedMeasurementsResults {
-            bias_acc_covariance,
-            bias_omega_covariance,
-            bias_acc_omega_int_covariance,
-            preint_meas_cov,
-        }
-    }
-}
+//         let bias_acc_covariance = self.get_bias_acc_covariance();
+//         let bias_omega_covariance = self.get_bias_omega_covariance();
+//         let bias_acc_omega_int_covariance = self.get_bias_acc_omega_int_covariance();
+//         let preint_meas_cov = self.get_preint_meas_covariance();
+//         PreintegratedCombinedMeasurementsResults {
+//             bias_acc_covariance,
+//             bias_omega_covariance,
+//             bias_acc_omega_int_covariance,
+//             preint_meas_cov,
+//         }
+//     }
+// }
+

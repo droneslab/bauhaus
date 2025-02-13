@@ -164,6 +164,13 @@ actors:
           - 
 
       -
+       name: LOCAL_MAPPING
+       tag: "orbslam local mapping"
+       receiver_bound: 3
+       settings:
+          - 
+
+      -
        name: LOOP_CLOSING
        tag: "orbslam3 loop closing"
        receiver_bound: -1

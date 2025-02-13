@@ -13,10 +13,10 @@ use core::{
     config::*, matrix::*, sensor::{FrameSensor, ImuSensor, Sensor}, system::{Actor, MessageBox, System, Timestamp}
 };
 use crate::{
-    actors::messages::{ShutdownMsg, UpdateFrameIMUMsg, VisFeaturesMsg}, map::{features::Features, frame::Frame, keyframe::{KeyFrame, MapPointMatches}, map::Id, pose::Pose, read_only_lock::ReadWriteMap}, modules::{geometric_tools, good_features_to_track::GoodFeaturesExtractor, image, imu::{ImuBias, ImuCalib, ImuMeasurements, ImuPreIntegrated, IMU}, map_initialization::MapInitialization, module_definitions::{CameraModule, FeatureExtractionModule, ImuModule}, optimizer::{self, LEVEL_SIGMA2}, orbslam_extractor::ORBExtractor, orbslam_matcher::SCALE_FACTORS, relocalization::Relocalization}, registered_actors::{CAMERA_MODULE, FEATURE_DETECTION, FEATURE_MATCHER, FEATURE_MATCHING_MODULE, SHUTDOWN_ACTOR, TRACKING_BACKEND, VISUALIZER}
+    actors::messages::{ShutdownMsg, UpdateFrameIMUMsg, VisFeaturesMsg}, map::{features::Features, frame::Frame, keyframe::{KeyFrame, MapPointMatches}, map::Id, pose::Pose, read_only_lock::ReadWriteMap}, modules::{geometric_tools, good_features_to_track::GoodFeaturesExtractor, image, imu::{ImuBias, ImuCalib, ImuMeasurements, ImuPreIntegrated, IMU}, map_initialization::MapInitialization, module_definitions::{CameraModule, FeatureExtractionModule, ImuModule}, optimizer::{self, LEVEL_SIGMA2}, orbslam_extractor::ORBExtractor, orbslam_matcher::SCALE_FACTORS, relocalization::Relocalization}, registered_actors::{CAMERA_MODULE, FEATURE_DETECTION, FEATURE_MATCHER, FEATURE_MATCHING_MODULE, LOCAL_MAPPING, SHUTDOWN_ACTOR, TRACKING_BACKEND, VISUALIZER}
 };
 
-use super::messages::{FeatureTracksAndIMUMsg, TrajectoryMsg, VisTrajectoryMsg};
+use super::{messages::{FeatureTracksAndIMUMsg, NewKeyFrameMsg, TrajectoryMsg, VisTrajectoryMsg}, tracking_backend::TrackingState};
 use crate::registered_actors::IMU;
 
 pub struct TrackingBackendGTSAM {
@@ -117,37 +117,52 @@ impl TrackingBackendGTSAM {
             }
 
             // Create new keyframe! Forget the old frame.
-            self.current_kf_id = self.create_new_keyframe(current_frame).unwrap();
+            // self.current_kf_id = self.create_new_keyframe(current_frame).unwrap();
             // Create new mappoints and cull existing
-            let created_mps = self.create_new_mappoints().unwrap();
-            println!("Created {} mps", created_mps);
+            // let created_mps = self.create_new_mappoints().unwrap();
+            // println!("Created {} mps", created_mps);
 
-            self.update_trajectory_in_logs().expect("Could not save trajectory");
-            self.last_kf_id = self.current_kf_id;
+            current_frame.ref_kf_id = Some(self.last_kf_id);
+            self.update_trajectory_in_logs(& current_frame).expect("Could not save trajectory");
+            self.last_kf_id += 1;
+
+            // KeyFrame created here and inserted into map
+            self.system.send(
+                LOCAL_MAPPING,
+                Box::new( NewKeyFrameMsg{
+                    tracking_state: TrackingState::Ok,
+                    matches_in_tracking: current_frame.mappoint_matches.matches.iter().filter_map(|v| match v { 
+                        Some((id, _is_outlier)) => Some(*id),
+                        None => None
+                    }).count() as i32,
+                    keyframe: current_frame,
+                    tracked_mappoint_depths: HashMap::new(), //self.track_in_view.iter().map(|(k, v)| (*k, v.track_depth)).collect(),
+                    map_version: self.map.read()?.version
+                } )
+            );
         }
 
         return Ok(());
     }
 
     fn update_trajectory_in_logs(
-        &mut self,
+        &mut self, current_frame: &Frame,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let map = self.map.read()?;
-        let curr_kf = map.get_keyframe(self.current_kf_id);
         let last_kf = map.get_keyframe(self.last_kf_id);
 
-        let relative_pose = curr_kf.get_pose() * last_kf.get_pose();
+        let relative_pose = current_frame.pose.unwrap() * last_kf.get_pose();
 
         self.trajectory_poses.push(relative_pose);
 
-        println!("Sanity check... curr kf is {}, ref kf is {}, last kf is {}", curr_kf.id, curr_kf.ref_kf_id.unwrap(), last_kf.id);
+        println!("Sanity check... curr frame is {}, ref kf is {:?}, last kf is {}", current_frame.frame_id, current_frame.ref_kf_id, last_kf.id);
 
         self.system.send(
             SHUTDOWN_ACTOR, 
             Box::new(TrajectoryMsg{
-                pose: curr_kf.get_pose().inverse(),
-                ref_kf_id: curr_kf.ref_kf_id.unwrap(),
-                timestamp: curr_kf.timestamp,
+                pose: current_frame.pose.unwrap().inverse(),
+                ref_kf_id: current_frame.ref_kf_id.unwrap(),
+                timestamp: current_frame.timestamp,
                 map_version: self.map.read()?.version
             })
         );
@@ -158,11 +173,11 @@ impl TrackingBackendGTSAM {
            None => None
         });
         self.system.try_send(VISUALIZER, Box::new(VisTrajectoryMsg{
-            pose: curr_kf.get_pose(),
+            pose: current_frame.pose.unwrap(),
             mappoint_matches: vec![],
             nontracked_mappoints: HashMap::new(),
             mappoints_in_tracking: bla.collect(),
-            timestamp: curr_kf.timestamp,
+            timestamp: current_frame.timestamp,
             map_version: map.version
         }));
 

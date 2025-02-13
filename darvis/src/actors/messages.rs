@@ -45,7 +45,8 @@ impl ActorMessage for ImageMsg {
 }
 pub struct FeatureTracksAndIMUMsg {
     pub frame: Frame,
-    pub preintegration_results: PreintegratedCombinedMeasurementsResults,
+    // pub preintegration_results: PreintegratedCombinedMeasurementsResults,
+    pub imu_measurements: ImuMeasurements,
     pub mappoint_ids: Vec<i32>,
 }
 impl ActorMessage for FeatureTracksAndIMUMsg {
