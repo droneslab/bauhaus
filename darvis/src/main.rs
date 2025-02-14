@@ -82,7 +82,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 
     // Process images
-    let loop_manager = LoopManager::new(dataset_name, dataset_dir);
+    let read_imu = matches!(SETTINGS.get::<Sensor>(SYSTEM, "sensor"), Sensor::Imu);
+
+    let loop_manager = LoopManager::new(dataset_name, dataset_dir, read_imu);
     let mut sent_map_init = false;
     for (image_path, imu_measurements, timestamp, frame_id) in loop_manager.into_iter() {
         if sent_map_init && !MAP_INITIALIZED.load(std::sync::atomic::Ordering::SeqCst) {
@@ -131,7 +133,7 @@ struct LoopManager {
 }
 
 impl LoopManager {
-    pub fn new(dataset: String, dataset_dir: String) -> Self {
+    pub fn new(dataset: String, dataset_dir: String, read_imu: bool) -> Self {
         let (timestamps, img_dir);
         if dataset == "kitti" {
             img_dir = dataset_dir.clone() + "/image_0";
@@ -150,6 +152,9 @@ impl LoopManager {
         };
 
         let imu = {
+            if !read_imu {
+                None
+            }
             if dataset == "kitti" {
                 warn!("KITTI dataset does not have IMU data.");
                 None

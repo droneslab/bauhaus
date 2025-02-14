@@ -864,8 +864,8 @@ impl TrackingBackend {
 
         // Decide if the tracking was succesful
         // More restrictive if there was a relocalization recently
-        if self.current_frame.frame_id < self.relocalization.last_reloc_frame_id + (self.max_frames_to_insert_kf as i32) && self.matches_inliers<50 {
-            warn!("track_local_map unsuccessful; matches in frame < 50 : {}",self.matches_inliers);
+        if self.current_frame.frame_id < self.relocalization.last_reloc_frame_id + (self.max_frames_to_insert_kf as i32) && self.matches_inliers<40 {
+            warn!("track_local_map unsuccessful; matches in frame < 40 : {}",self.matches_inliers);
             return Ok((false, self.matches_inliers));
         }
 
