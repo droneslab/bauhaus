@@ -1104,13 +1104,13 @@ impl SearchForTriangulationTrait for ORBMatcher {
         should_check_orientation: bool, _only_stereo: bool, course: bool,
         sensor: Sensor
     ) -> Result<Vec<(usize, usize)>, Box<dyn std::error::Error>> {
-        let _span = tracy_client::span!("search_for_triangulation");
+        // let _span = tracy_client::span!("search_for_triangulation");
         // Testing local mapping ... this function return slightly different results than ORB-SLAM. Could be because the optimized pose is slightly different but could also be an error. Uncomment the println lines (and same lines in ORB-SLAM3), then compare the strings.
         //int ORBmatcher::SearchForTriangulation(KeyFrame *pKF1, KeyFrame *pKF2, vector<pair<size_t, size_t> > &vMatchedPairs, const bool bOnlyStereo, const bool bCoarse)
         // Some math based on ORB-SLAM2 to avoid some confusion with Sophus.
         // Look here: https://github.com/raulmur/ORB_SLAM2/blob/master/src/ORBmatcher.cc#L657
 
-        let _span2 = tracy_client::span!("search_for_triangulation::pre");
+        // let _span2 = tracy_client::span!("search_for_triangulation::pre");
 
         //Compute epipole in second image
         let cw = *kf_1.get_camera_center(); //Cw
@@ -1158,7 +1158,7 @@ impl SearchForTriangulationTrait for ORBMatcher {
         let mut i = 0;
         let mut j = 0;
 
-        drop(_span2);
+        // drop(_span2);
 
         while i < kf1_featvec.len() && j < kf2_featvec.len() {
             let kf1_node_id = kf1_featvec[i];

@@ -206,7 +206,6 @@ impl Map {
             .remove(id)
             .map(|mappoint| {
                 let obs = mappoint.get_observations();
-                // debug!("Discard mp {} with matches {:?}", id, obs);
                 for (kf_id, indexes) in obs {
                     self.keyframes.get_mut(&kf_id).unwrap().mappoint_matches.delete_at_indices(*indexes);
                 }

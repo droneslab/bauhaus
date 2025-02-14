@@ -5,7 +5,7 @@ Distributed, modulAR Visual SLAM
 ```bash
 # Install system dependencies 
 sudo apt-get update
-sudo apt-get install wget git cmake vim clang libclang-dev pkg-config libc6-dbg gdb valgrind libgtk2.0-dev libboost-all-dev
+sudo apt-get install wget git cmake vim clang libclang-dev pkg-config libc6-dbg gdb valgrind libgtk2.0-dev libboost-all-dev libmetis-dev
 
 # Install Rust
 wget https://raw.githubusercontent.com/rust-lang/rustup/master/rustup-init.sh
@@ -56,11 +56,11 @@ cmake -B build
 cmake --build build
 
 # Install gtsam
-cd ~/darvis-home/depends
-git clone git@github.com:ssemenova/gtsam-rs.git
-cd gtsam-rs/sys/3rd/
-git clone https://github.com/borglab/gtsam.git #--branch 4.2
-cd ~/darvis-home/depends/gtsam-rs
+# cd ~/darvis-home/depends
+# git clone git@github.com:ssemenova/gtsam-rs.git
+cd ~/darvis-home/darvis/gtsam-rs/sys/3rd/
+git clone https://github.com/borglab/gtsam.git --branch 4.2
+cd ../../
 cargo build --release
 
 # Build darvis

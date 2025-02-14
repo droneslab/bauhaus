@@ -350,7 +350,7 @@ impl LocalMapping {
         let mut mps_to_insert = vec![];
         let mut mps_created = 0;
         {
-            let _span = tracy_client::span!("create_new_mappoints: before loop");
+            // let _span = tracy_client::span!("create_new_mappoints: before loop");
             let lock = self.map.read()?;
 
             let current_kf = lock.get_keyframe(self.current_keyframe_id);
@@ -374,8 +374,8 @@ impl LocalMapping {
             let rotation_transpose1 = rotation1.transpose(); // Rwc1
             let mut ow1 = current_kf.get_camera_center();
 
-            drop(_span);
-            let _span = tracy_client::span!("create_new_mappoints: loop");
+            // drop(_span);
+            // let _span = tracy_client::span!("create_new_mappoints: loop");
             // println!("Create_new_mappoints neighbor_kfs: {:?}", neighbor_kfs);
 
             // Search matches with epipolar restriction and triangulate
@@ -586,7 +586,7 @@ impl LocalMapping {
             }
         }
 
-        let _span = tracy_client::span!("create_new_mappoints::insert_mappoints");
+        // let _span = tracy_client::span!("create_new_mappoints::insert_mappoints");
         let mut lock = self.map.write()?;
         for (x3_d, ref_kf_id, origin_map_id, observations) in mps_to_insert {
             let mp_id = lock.insert_mappoint_to_map(x3_d, ref_kf_id, origin_map_id, observations)

@@ -9,7 +9,7 @@ system:
       localization_only_mode: false
       vocabulary_file: "../Vocabulary/ORBvoc.txt"
       framesensor: Mono
-      imusensor: Some
+      imusensor: None
       first_actor_name: TRACKING_FRONTEND # Name of actor to kick off pipeline
 
       # FPS
@@ -21,7 +21,7 @@ system:
 
       # DEBUGGING
       log_level: debug # options are [trace, debug, info, warn, error]
-      check_deadlocks: true # Spawns a new thread to check for deadlocks every 2 secs, but slows stuff down.
+      check_deadlocks: false # Spawns a new thread to check for deadlocks every 2 secs, but slows stuff down.
       # To enable profiling, set features = ["enable"] for tracy-client in Cargo.toml
       # To turn on visualizer, uncomment visualizer actor below
 
@@ -103,50 +103,50 @@ modules:
           - 
 
 actors:
-      -
-       name: VISUALIZER
-       tag: visualizer
-       receiver_bound: -1
-       settings:
-          -
-            name: stream # if true, stream to websocket. if false, save to mcap file
-            value: true
-            type: bool
-          - name: port # port used if streaming
-            value: 8765
-            type: i32
-          - 
-            name: image_draw_type
-            value: plain # options are [none, plain, features, featuresandmatches]
-            type: string
-          -
-            name: mcap_file_path
-            value: "results/out.mcap"
-            type: string
-          - name: draw_all_mappoints # Not sure this works right now... If true, draws all mappoints in the map. If false, only draws matches and recently created mappoints. Set to false to save space.
-            value: false
-            type: bool
-          - name: draw_local_mappoints # Whether to draw local mappoints (not tracked, but in local map based on local keyframes)
-            value: true
-            type: bool
-          - name: draw_connected_kfs # Works but doesn't look good. Need to figure out some nicer way to distribute the points so it's actually readable
-            value: false
-            type: bool
-          - name: draw_only_trajectory
-            value: false
-            type: bool
+      # -
+      #  name: VISUALIZER
+      #  tag: visualizer
+      #  receiver_bound: -1
+      #  settings:
+      #     -
+      #       name: stream # if true, stream to websocket. if false, save to mcap file
+      #       value: true
+      #       type: bool
+      #     - name: port # port used if streaming
+      #       value: 8765
+      #       type: i32
+      #     - 
+      #       name: image_draw_type
+      #       value: plain # options are [none, plain, features, featuresandmatches]
+      #       type: string
+      #     -
+      #       name: mcap_file_path
+      #       value: "results/out.mcap"
+      #       type: string
+      #     - name: draw_all_mappoints # Not sure this works right now... If true, draws all mappoints in the map. If false, only draws matches and recently created mappoints. Set to false to save space.
+      #       value: false
+      #       type: bool
+      #     - name: draw_local_mappoints # Whether to draw local mappoints (not tracked, but in local map based on local keyframes)
+      #       value: true
+      #       type: bool
+      #     - name: draw_connected_kfs # Works but doesn't look good. Need to figure out some nicer way to distribute the points so it's actually readable
+      #       value: false
+      #       type: bool
+      #     - name: draw_only_trajectory
+      #       value: false
+      #       type: bool
 
       -
        name: TRACKING_FRONTEND
        tag: "orbslam tracking frontend"
-       receiver_bound: 10
+       receiver_bound: 1
        settings:
           - 
 
       -
        name: TRACKING_BACKEND
        tag: "orbslam tracking backend"
-       receiver_bound: 10
+       receiver_bound: 1
        settings:
           - 
             name: recently_lost_cutoff
@@ -176,7 +176,7 @@ actors:
       -
        name: LOCAL_MAPPING
        tag: "orbslam local mapping"
-       receiver_bound: 3
+       receiver_bound: 2
        settings:
           - 
 

@@ -118,9 +118,9 @@ impl Actor for TrackingBackend {
 impl TrackingBackend {
     fn handle_message(&mut self, message: MessageBox) -> Result<bool, Box<dyn std::error::Error>> {
         if message.is::<FeatureMsg>() {
-            tracy_client::Client::running()
-            .expect("message! without a running Client")
-            .message("Regular tracking", 2);
+            // tracy_client::Client::running()
+            // .expect("message! without a running Client")
+            // .message("Regular tracking", 2);
 
             // Regular tracking. Received from tracking frontend
             if self.system.queue_full() {
@@ -143,7 +143,7 @@ impl TrackingBackend {
                 msg.timestamp,
             ).expect("Could not create frame!");
 
-            debug!("SOFIYA FEATURES. In backend, frame has N {}, features {}, mappoint matches {}, ref kf is {:?}", self.current_frame.features.num_keypoints, self.current_frame.features.get_all_keypoints().len(), self.current_frame.mappoint_matches.len(), self.ref_kf_id);
+            // debug!("SOFIYA FEATURES. In backend, frame has N {}, features {}, mappoint matches {}, ref kf is {:?}", self.current_frame.features.num_keypoints, self.current_frame.features.get_all_keypoints().len(), self.current_frame.mappoint_matches.len(), self.ref_kf_id);
 
 
             let mut imu_measurements = msg.imu_measurements;
@@ -536,6 +536,7 @@ impl TrackingBackend {
         // We perform first an ORB matching with the reference keyframe
         // If enough matches are found we setup a PnP solver
 
+        println!("TRACK REFERENCe KEYFRAME");
         self.current_frame.compute_bow();
         let nmatches;
         {
@@ -583,6 +584,7 @@ impl TrackingBackend {
         // Create "visual odometry" points if in Localization Mode
         // println!("TRACK MOTION MODEL");
 
+        println!("TRACK MOTION MODEL");
         self.update_last_frame()?;
 
         let enough_frames_to_reset_imu = self.current_frame.frame_id > self.relocalization.last_reloc_frame_id + (self.frames_to_reset_imu as i32);
@@ -639,9 +641,9 @@ impl TrackingBackend {
 
             return Ok(true);
         } else {
-            tracy_client::Client::running()
-            .expect("message! without a running Client")
-            .message("Predict state constant velocity", 2);
+            // tracy_client::Client::running()
+            // .expect("message! without a running Client")
+            // .message("Predict state constant velocity", 2);
 
             self.current_frame.pose = Some(self.imu.velocity.unwrap() * self.last_frame.as_ref().unwrap().pose.unwrap());
         }
@@ -900,7 +902,7 @@ impl TrackingBackend {
             Sensor(FrameSensor::Stereo, ImuSensor::Some) | Sensor(FrameSensor::Rgbd, ImuSensor::Some) => {
                 return Ok((self.matches_inliers >= 15, self.matches_inliers));
             },
-            _ => { return Ok((self.matches_inliers >= 30, self.matches_inliers)) }
+            _ => { return Ok((self.matches_inliers >= 25, self.matches_inliers)) }
         }
     }
 
@@ -1107,7 +1109,7 @@ impl TrackingBackend {
                         }
                     },
                     None => {
-                        println!("Continuing because np mp");
+                        debug!("Tracking backend has local mappoint {} but it is not in map", mp_id);
                         continue;
                     }
                 };
@@ -1273,9 +1275,9 @@ impl TrackingBackend {
 
         self.last_kf_timestamp = Some(new_kf.timestamp);
 
-        // tracy_client::Client::running()
-        // .expect("message! without a running Client")
-        // .message("create new keyframe", 2);
+        tracy_client::Client::running()
+        .expect("message! without a running Client")
+        .message("create new keyframe", 2);
 
         // KeyFrame created here and inserted into map
         self.system.send(
@@ -1344,9 +1346,9 @@ impl TrackingBackend {
             Sensor(FrameSensor::Mono, _) | Sensor(FrameSensor::Stereo, ImuSensor::Some) | Sensor(FrameSensor::Rgbd, ImuSensor::Some) => false,
             _ => true
         }; // I do not know why they just select for RGBD or Stereo without IMU
-        let c1c = sensor_is_right && ((self.matches_inliers as f32) < tracked_mappoints * 0.25 || need_to_insert_close) ;
+        let c1c = sensor_is_right && ((self.matches_inliers as f32) < tracked_mappoints * 0.5 || need_to_insert_close) ;
         // Condition 2: Few tracked points compared to reference keyframe. Lots of visual odometry compared to map matches.
-        let c2 = (((self.matches_inliers as f32) < tracked_mappoints * th_ref_ratio || need_to_insert_close)) && self.matches_inliers > 15;
+        let c2 = (((self.matches_inliers as f32) < (tracked_mappoints * th_ref_ratio) || need_to_insert_close)) && self.matches_inliers > 15;
 
         // println!("c2: {}, inliers: {}, tracked mappoints: {}, th ref ratio: {}", c2, self.matches_inliers, tracked_mappoints, th_ref_ratio);
 
@@ -1368,12 +1370,22 @@ impl TrackingBackend {
         };
         let c4 = ((self.matches_inliers < 75 && self.matches_inliers > 15) || recently_lost) && sensor_is_imumono;
 
-        // Note: removed code here about checking for idle local mapping and/or interrupting bundle adjustment
-        let create_new_kf =  ((c1a||c1b||c1c) && c2)||c3 ||c4;
+        // Condition c5 (ADDED IN BAUHAUS!): Tracking is extremely weak so should insert even if local mapping is busy
+        let c5 = matches!(self.state, TrackingState::RecentlyLost);
 
-        tracy_client::Client::running()
-            .expect("message! without a running Client")
-            .message(format!("need new kf: {} {}", create_new_kf, LOCAL_MAPPING_IDLE.load(Ordering::SeqCst)).as_str(), 2);
+        // Note: removed code here about checking for idle local mapping and/or interrupting bundle adjustment
+        let create_new_kf =  ((c1a||c1b||c1c) && c2)||c3 ||c4 || c5;
+
+        println!("NEED NEW KF? {}", create_new_kf);
+        println!("More than maxkeyframes passed: {}", c1a);
+        println!("More than minkeyframes passed and local mapping idle: {}", c1b);
+        println!("Tracking is weak: {} (matches inliers: {}, tracked_mappoints: {}, tracked close: {}, tracked non close: {}", c1c, self.matches_inliers, tracked_mappoints, tracked_close, non_tracked_close);
+        println!("Few tracked points compared to reference keyframe: {}", c2);
+        println!("Recently lost! {}", c5);
+
+        // tracy_client::Client::running()
+        //     .expect("message! without a running Client")
+        //     .message(format!("need new kf: {} {}", create_new_kf, LOCAL_MAPPING_IDLE.load(Ordering::SeqCst)).as_str(), 2);
 
         if LOCAL_MAPPING_IDLE.load(Ordering::SeqCst) && create_new_kf {
             self.frames_since_last_kf = 0;

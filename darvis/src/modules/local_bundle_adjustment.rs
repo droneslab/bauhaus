@@ -298,20 +298,30 @@ impl LocalMapOptimizationModule for LocalBundleAdjustment {
             optimizer.pin_mut().optimize(10, false, false);
         }
 
-        // Check inlier observations
-        let mut mps_to_discard = Vec::new(); // vToErase
-        let mut i = 0;
-        for edge in optimizer.pin_mut().get_mut_xyz_edges().iter() {
-            if edge.inner.chi2() > 5.991 || !edge.inner.is_depth_positive() {
-                mps_to_discard.push((edges_kf_body[i], edge.mappoint_id));
-            }
-            i += 1;
-        }
 
         {
             let _span = tracy_client::span!("local_bundle_adjustment::post_process");
 
             let mut lock = map.write()?;
+
+            // Check inlier observations
+            let mut i = 0;
+            for edge in optimizer.pin_mut().get_mut_xyz_edges().iter() {
+                if edge.inner.chi2() > 5.991 || !edge.inner.is_depth_positive() {
+                    // Note: map.delete_observation can have side effect of deleting the mappoint itself,
+                    // if deleting the observation causes it to not be observed by enough keyframes.
+                    // This is ok, but if we end up calling delete_observation again on one of these mappoints,
+                    // we get a false warning that the mappoint doesn't exist. 
+                    // Despite the warning, it is still ok to call this function... but it will clog up the 
+                    // log with warnings that aren't real issues. So in this case let's check for the mappoint
+                    // existence first.
+                    if lock.has_mappoint(edge.mappoint_id) {
+                        lock.delete_observation(edges_kf_body[i], edge.mappoint_id);
+                    }
+                }
+                i += 1;
+            }
+
 
             if matches!(sensor.frame(), FrameSensor::Stereo) {
                 todo!("Stereo");
@@ -345,14 +355,6 @@ impl LocalMapOptimizationModule for LocalBundleAdjustment {
                     //     vToErase.push_back(make_pair(pKFi,pMP));
                     // }
                 // }
-            }
-
-            {
-                let _span = tracy_client::span!("lba::post_process::delete_obs");
-
-                for (kf_id, mp_id) in mps_to_discard {
-                    lock.delete_observation(kf_id, mp_id);
-                }
             }
 
             {
