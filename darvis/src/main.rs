@@ -7,7 +7,7 @@ use opencv::core::Point3f;
 use spin_sleep::LoopHelper;
 #[macro_use] extern crate lazy_static;
 
-use core::{*, config::*, system::System};
+use core::{config::*, sensor::Sensor, system::System, *};
 use crate::{actors::messages::{ImageMsg, ShutdownMsg}, modules::image};
 use crate::map::map::Id;
 
@@ -82,7 +82,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 
     // Process images
-    let read_imu = matches!(SETTINGS.get::<Sensor>(SYSTEM, "sensor"), Sensor::Imu);
+    let read_imu = SETTINGS.get::<Sensor>(SYSTEM, "sensor").is_imu();
 
     let loop_manager = LoopManager::new(dataset_name, dataset_dir, read_imu);
     let mut sent_map_init = false;
@@ -154,18 +154,19 @@ impl LoopManager {
         let imu = {
             if !read_imu {
                 None
-            }
-            if dataset == "kitti" {
-                warn!("KITTI dataset does not have IMU data.");
-                None
-            } else if dataset == "euroc" {
-                let imu_file = dataset_dir.clone() + "/mav0/imu0/data.csv";
-                Some(Self::read_imu_file(imu_file, &timestamps).expect("Could not read IMU file!"))
-            } else if dataset == "tum-vi" {
-                let imu_file = dataset_dir.clone() + "/mav0/imu0/data.csv";
-                Some(Self::read_imu_file(imu_file, &timestamps).expect("Could not read IMU file!"))
             } else {
-                panic!("Invalid dataset name");
+                if dataset == "kitti" {
+                    warn!("KITTI dataset does not have IMU data.");
+                    None
+                } else if dataset == "euroc" {
+                    let imu_file = dataset_dir.clone() + "/mav0/imu0/data.csv";
+                    Some(Self::read_imu_file(imu_file, &timestamps).expect("Could not read IMU file!"))
+                } else if dataset == "tum-vi" {
+                    let imu_file = dataset_dir.clone() + "/mav0/imu0/data.csv";
+                    Some(Self::read_imu_file(imu_file, &timestamps).expect("Could not read IMU file!"))
+                } else {
+                    panic!("Invalid dataset name");
+                }
             }
         };
 
