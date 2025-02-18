@@ -1260,6 +1260,7 @@ pub fn optimize_pose(
                 frame.mappoint_matches.set_outlier(mp_indexes[index] as usize, true);
                 edge.inner.pin_mut().set_level(1);
                 num_bad += 1;
+                // println!("Outlier chi2 mono: {}", chi2);
 
             } else {
                 frame.mappoint_matches.set_outlier(mp_indexes[index] as usize, false);

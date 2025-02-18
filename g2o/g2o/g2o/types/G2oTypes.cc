@@ -490,23 +490,23 @@ EdgeInertial::EdgeInertial(IMU::Preintegrated *pInt):JRg(pInt->JRg.cast<double>(
 
     Eigen::IOFormat CommaFmt(Eigen::StreamPrecision, Eigen::DontAlignCols, ", ", ", ", "", "", "", "");
 
-    // std::cout << "EdgeInertial! Jrg: " << JRg.format(CommaFmt) << std::endl;
-    // std::cout << "EdgeInertial! Jvg: " << JVg.format(CommaFmt) << std::endl;
-    // std::cout << "EdgeInertial! Jpg: " << JPg.format(CommaFmt) << std::endl;
-    // std::cout << "EdgeInertial! Jva: " << JVa.format(CommaFmt) << std::endl;
-    // std::cout << "EdgeInertial! Jpa: " << JPa.format(CommaFmt) << std::endl;
-    // std::cout << "EdgeInertial! dR: " << pInt->dR.format(CommaFmt) << std::endl;
-    // std::cout << "EdgeInertial! dV: " << pInt->dV.format(CommaFmt) << std::endl;
-    // std::cout << "EdgeInertial! db: " << pInt->db.format(CommaFmt) << std::endl;
-    // std::cout << "EdgeInertial! dP: " << pInt->dP.format(CommaFmt) << std::endl;
-    // std::cout << "EdgeInertial! avgA: " << pInt->avgA.format(CommaFmt) << std::endl;
-    // std::cout << "EdgeInertial! avgW: " << pInt->avgW.format(CommaFmt) << std::endl;
+    std::cout << "EdgeInertial! Jrg: " << JRg.format(CommaFmt) << std::endl;
+    std::cout << "EdgeInertial! Jvg: " << JVg.format(CommaFmt) << std::endl;
+    std::cout << "EdgeInertial! Jpg: " << JPg.format(CommaFmt) << std::endl;
+    std::cout << "EdgeInertial! Jva: " << JVa.format(CommaFmt) << std::endl;
+    std::cout << "EdgeInertial! Jpa: " << JPa.format(CommaFmt) << std::endl;
+    std::cout << "EdgeInertial! dR: " << pInt->dR.format(CommaFmt) << std::endl;
+    std::cout << "EdgeInertial! dV: " << pInt->dV.format(CommaFmt) << std::endl;
+    std::cout << "EdgeInertial! db: " << pInt->db.format(CommaFmt) << std::endl;
+    std::cout << "EdgeInertial! dP: " << pInt->dP.format(CommaFmt) << std::endl;
+    std::cout << "EdgeInertial! avgA: " << pInt->avgA.format(CommaFmt) << std::endl;
+    std::cout << "EdgeInertial! avgW: " << pInt->avgW.format(CommaFmt) << std::endl;
 
-    // std::cout << "EdgeInertial! dt: " << dt << std::endl;
-    // std::cout << "EdgeInertial! full C: " << pInt->C.format(CommaFmt) << std::endl;
+    std::cout << "EdgeInertial! dt: " << dt << std::endl;
+    std::cout << "EdgeInertial! full C: " << pInt->C.format(CommaFmt) << std::endl;
 
-    // std::cout << "(for ref) EdgeInertial! C block: " << pInt->C.block<9, 9>(0, 0).format(CommaFmt) << std::endl;
-    // std::cout << "Info: " << Info.format(CommaFmt) << std::endl;
+    std::cout << "(for ref) EdgeInertial! C block: " << pInt->C.block<9, 9>(0, 0).format(CommaFmt) << std::endl;
+    std::cout << "Info: " << Info.format(CommaFmt) << std::endl;
 }
 
 void EdgeInertial::computeError()

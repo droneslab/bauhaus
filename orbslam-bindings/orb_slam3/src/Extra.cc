@@ -50,6 +50,7 @@ namespace orb_slam3 {
         return result;
     }
 
+
     Eigen::MatrixXd rustvec_to_eigenmat(rust::Vec<DoubleVec> mat){
         std::size_t rows = mat.size();
         std::size_t cols = mat[0].vec.size();

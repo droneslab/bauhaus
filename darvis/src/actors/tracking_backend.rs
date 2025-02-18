@@ -455,7 +455,7 @@ impl TrackingBackend {
             // Check if we need to insert a new keyframe
             let insert_if_lost_anyway = self.insert_kfs_when_lost && matches!(self.state, TrackingState::RecentlyLost) && self.sensor.is_imu();
             let need_new_kf = self.need_new_keyframe()?;
-            if need_new_kf && (matches!(self.state, TrackingState::Ok) || insert_if_lost_anyway) {
+            if need_new_kf { //&& (matches!(self.state, TrackingState::Ok) || insert_if_lost_anyway) {
                 self.create_new_keyframe()?;
                 created_new_kf = true;
             }
@@ -635,9 +635,9 @@ impl TrackingBackend {
 
                 println!("PREDICT STATE LAST FRAME!!!!!!!!");
             }
-        println!("Track motion model, initial pose prediction: {:?}", self.current_frame.pose.unwrap());
-        println!("Last frame pose is: {:?}", self.last_frame.as_ref().unwrap().pose.unwrap());
-        println!("Ref kf id is {}, pose is: {:?}", self.ref_kf_id.unwrap(), self.map.read()?.get_keyframe(self.ref_kf_id.unwrap()).get_pose());
+            println!("Track motion model, initial pose prediction: {:?}", self.current_frame.pose.unwrap());
+            println!("Last frame pose is: {:?}", self.last_frame.as_ref().unwrap().pose.unwrap());
+            println!("Ref kf id is {}, pose is: {:?}", self.ref_kf_id.unwrap(), self.map.read()?.get_keyframe(self.ref_kf_id.unwrap()).get_pose());
 
             return Ok(true);
         } else {
@@ -667,7 +667,7 @@ impl TrackingBackend {
         debug!("Tracking search by projection with previous frame: {} matches / {} mappoints in last frame. ({} total mappoints in map)", matches, self.last_frame.as_ref().unwrap().mappoint_matches.debug_count, self.map.read()?.mappoints.len());
 
 
-        debug!("SOFIYA FEATURES. In track with motion model, frame has N {}, features {}, mappoint matches {}, ref kf is {:?}", self.current_frame.features.num_keypoints, self.current_frame.features.get_all_keypoints().len(), self.current_frame.mappoint_matches.len(), self.ref_kf_id);
+        // debug!("SOFIYA FEATURES. In track with motion model, frame has N {}, features {}, mappoint matches {}, ref kf is {:?}", self.current_frame.features.num_keypoints, self.current_frame.features.get_all_keypoints().len(), self.current_frame.mappoint_matches.len(), self.ref_kf_id);
 
         // If few matches, uses a wider window search
         if matches < 20 {
@@ -948,14 +948,14 @@ impl TrackingBackend {
 
         // All keyframes that observe a map point are included in the local map. Also check which keyframe shares most points
         for (kf_id, count) in kf_counter {
-            if count > max {
+            // Note: Added kf_id > max_kf_id so that we choose the latest keyframe in case of a tie
+            if count >= max && kf_id > max_kf_id {
                 max = count;
                 max_kf_id = kf_id;
             }
             local_kf_vec.push(kf_id);
             self.kf_track_reference_for_frame.insert(kf_id, self.current_frame.frame_id);
         }
-
         // Also include some keyframes that are neighbors to already-included keyframes
         let mut i = 0;
         while local_kf_vec.len() <= 80 && i < local_kf_vec.len() { // Limit the number of keyframes
@@ -1028,6 +1028,7 @@ impl TrackingBackend {
         self.local_mappoints.clear();
         let lock = self.map.read()?;
         let mut kfs_to_remove = vec![];
+
         for kf_id in self.local_keyframes.iter().rev() {
             if lock.has_keyframe(*kf_id) {
                 let kf = lock.get_keyframe(*kf_id);
@@ -1346,7 +1347,7 @@ impl TrackingBackend {
             Sensor(FrameSensor::Mono, _) | Sensor(FrameSensor::Stereo, ImuSensor::Some) | Sensor(FrameSensor::Rgbd, ImuSensor::Some) => false,
             _ => true
         }; // I do not know why they just select for RGBD or Stereo without IMU
-        let c1c = sensor_is_right && ((self.matches_inliers as f32) < tracked_mappoints * 0.5 || need_to_insert_close) ;
+        let c1c = ((self.matches_inliers as f32) < tracked_mappoints * 0.5 || need_to_insert_close) ;
         // Condition 2: Few tracked points compared to reference keyframe. Lots of visual odometry compared to map matches.
         let c2 = (((self.matches_inliers as f32) < (tracked_mappoints * th_ref_ratio) || need_to_insert_close)) && self.matches_inliers > 15;
 

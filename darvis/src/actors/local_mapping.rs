@@ -142,6 +142,8 @@ impl LocalMapping {
             let msg = message.downcast::<NewKeyFrameMsg>().unwrap_or_else(|_| panic!("Could not downcast local mapping message!"));
             let kf_id = self.map.write()?.insert_keyframe_to_map(msg.keyframe, false);
 
+            info!("Local mapping working on keyframe {}. Queue length: {}", kf_id, self.system.queue_len());
+
             // Send the new keyframe ID directly back to the sender so they can use the ID 
             self.system.find_actor(TRACKING_BACKEND).send(Box::new(InitKeyFrameMsg{kf_id, map_version: self.map.get_version()})).unwrap();
 
@@ -233,6 +235,8 @@ impl LocalMapping {
                     LOCAL_MAP_OPTIMIZATION_MODULE.optimize(&self.map, self.current_keyframe_id)?;
                 }
             }
+        } else {
+            warn!("Optimization aborted: too many keyframes in queue");
         }
 
         // Initialize IMU
@@ -771,6 +775,10 @@ impl LocalMapping {
                 let kf_id = local_keyframes[i];
 
                 if kf_id == read_lock.initial_kf_id {
+                    continue
+                }
+
+                if kf_id > self.current_keyframe_id - 5 {
                     continue
                 }
 

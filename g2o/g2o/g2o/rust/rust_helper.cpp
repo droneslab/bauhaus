@@ -244,7 +244,7 @@ namespace g2o {
         VV->setFixed(set_fixed);
         // std::cout << "Add vertex velocity" << std::endl;
         optimizer->addVertex(VV);
-        // std::cout << "POST OPT! ADD VELOCITY. Vertex id: " << vertex_id << " with velocity: " << vel.transpose() << ", fixed: " << set_fixed << std::endl;
+        std::cout << "POST OPT! ADD VELOCITY. Vertex id: " << vertex_id << " with velocity: " << vel.transpose() << ", fixed: " << set_fixed << std::endl;
     }
 
     void BridgeSparseOptimizer::add_vertex_gyrobias(
@@ -257,7 +257,7 @@ namespace g2o {
         VG->setFixed(set_fixed);
         // std::cout << "Add vertex gyrobias" << std::endl;
         optimizer->addVertex(VG);
-        // std::cout << "POSE OPT! ADD GYRO BIAS. Vertex id: " << vertex_id << " with bias: " << bias.transpose() << ", fixed: " << set_fixed << std::endl;
+        std::cout << "POSE OPT! ADD GYRO BIAS. Vertex id: " << vertex_id << " with bias: " << bias.transpose() << ", fixed: " << set_fixed << std::endl;
     }
 
     void BridgeSparseOptimizer::add_vertex_accbias(
@@ -270,7 +270,7 @@ namespace g2o {
         VA->setFixed(set_fixed);
         // std::cout << "Add vertex acc bias" << std::endl;
         optimizer->addVertex(VA);
-        // std::cout << "11/14 ACC BIAS. Vertex id: " << vertex_id << " with bias: " << bias.transpose() << ", fixed: " << set_fixed << std::endl;
+        std::cout << "11/14 ACC BIAS. Vertex id: " << vertex_id << " with bias: " << bias.transpose() << ", fixed: " << set_fixed << std::endl;
     }
 
     void BridgeSparseOptimizer::add_vertex_gdir(

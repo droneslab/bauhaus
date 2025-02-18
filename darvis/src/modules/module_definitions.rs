@@ -186,7 +186,7 @@ pub trait RelocalizationModule {
     type Timestamp;
     type Map;
 
-    fn run(&self, current_frame: &mut Self::Frame, map: &Self::Map) -> Result<bool, Box<dyn std::error::Error>>;
+    fn run(&self, current_frame: &mut Frame, map: &Self::Map) -> Result<bool, Box<dyn std::error::Error>>;
     fn sec_since_lost(&self, current_frame: &Self::Frame) -> Self::Timestamp;
     fn frames_since_lost(&self, current_frame: &Self::Frame) -> i32;
 }

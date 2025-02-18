@@ -94,6 +94,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if *shutdown_flag.lock().unwrap() { break; }
         tracy_client::frame_mark();
 
+        debug!("Read image {}", image_path);
+
         let image = image::read_image_file(&image_path);
 
         first_actor_tx.send(Box::new(
@@ -134,7 +136,7 @@ struct LoopManager {
 
 impl LoopManager {
     pub fn new(dataset: String, dataset_dir: String, read_imu: bool) -> Self {
-        let (timestamps, img_dir);
+        let (mut timestamps, img_dir);
         if dataset == "kitti" {
             img_dir = dataset_dir.clone() + "/image_0";
             timestamps = Self::read_timestamps_file_kitti(&dataset_dir);
@@ -151,6 +153,8 @@ impl LoopManager {
             panic!("Invalid dataset name");
         };
 
+        let mut image_paths = Self::generate_image_paths(img_dir);
+
         let imu = {
             if !read_imu {
                 None
@@ -160,10 +164,10 @@ impl LoopManager {
                     None
                 } else if dataset == "euroc" {
                     let imu_file = dataset_dir.clone() + "/mav0/imu0/data.csv";
-                    Some(Self::read_imu_file(imu_file, &timestamps).expect("Could not read IMU file!"))
+                    Some(Self::read_imu_file(imu_file, &mut timestamps, &mut image_paths).expect("Could not read IMU file!"))
                 } else if dataset == "tum-vi" {
                     let imu_file = dataset_dir.clone() + "/mav0/imu0/data.csv";
-                    Some(Self::read_imu_file(imu_file, &timestamps).expect("Could not read IMU file!"))
+                    Some(Self::read_imu_file(imu_file, &mut timestamps, &mut image_paths).expect("Could not read IMU file!"))
                 } else {
                     panic!("Invalid dataset name");
                 }
@@ -172,14 +176,14 @@ impl LoopManager {
 
         LoopManager { 
             loop_helper: LoopHelper::builder().build_with_target_rate(SETTINGS.get::<f64>(SYSTEM, "fps")),
-            image_paths: Self::generate_image_paths(img_dir),
+            image_paths,
             timestamps,
             imu,
             current_index: 0
         }
     }
 
-    fn read_imu_file(filename: String, camera_timestamps: &Vec<f64>) -> Result<ImuData, Box<dyn std::error::Error>>{
+    fn read_imu_file(filename: String, camera_timestamps: &mut Vec<f64>, image_paths: &mut Vec<String>) -> Result<ImuData, Box<dyn std::error::Error>>{
         let file = File::open(filename)?;
         let mut rdr = csv::Reader::from_reader(file);
         let mut imu_data = ImuData {
@@ -209,7 +213,15 @@ impl LoopManager {
 
         // Find first imu to be considered, supposing imu measurements start first
         let mut index = 0;
+        if imu_data.timestamps[index] > camera_timestamps[0] {
+            // Note: for some reason some euroc sequences have one camera image/timestamp
+            // that is earlier than the IMU data, so just skip that image
+            warn!("IMU data starts after camera data! Starting with second camera image instead");
+            camera_timestamps.remove(0);
+            image_paths.remove(0);
+        }
         let first_timestamp_in_camera = camera_timestamps[0];
+
         while imu_data.timestamps[index] < first_timestamp_in_camera {
             index += 1;
         }

@@ -506,7 +506,7 @@ impl Map {
         self.keyframe_database._detect_candidates_above_score(&self, &kf_id, min_score)
     }
 
-    pub fn  _detect_relocalization_candidates(&self, frame: &Frame) -> Vec<Id> {
+    pub fn  detect_relocalization_candidates(&self, frame: &Frame) -> Vec<Id> {
         self.keyframe_database._detect_relocalization_candidates(&self, frame)
     }
 

@@ -1074,6 +1074,11 @@ impl ConstraintPoseImu {
         //     if(eigs[i]<1e-12)
         //         eigs[i]=0;
         // H = es.eigenvectors()*eigs.asDiagonal()*es.eigenvectors().transpose();
+
+        println!("H after eigen stuff: {:?}", constraint_pose_imu.h);
+        println!("Eigenvalues: {:?}", eigenvalues);
+        println!("Eigenvectors: {:?}", decomp.eigenvectors);
+        
         Some(constraint_pose_imu)
     }
 }
