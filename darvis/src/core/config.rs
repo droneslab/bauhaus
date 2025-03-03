@@ -211,7 +211,8 @@ fn load_system_settings(system_fn: &String) -> (Vec<ActorConf>, Vec<ModuleConf>,
     let system_settings = &yaml::YamlLoader::load_from_str(&config_string).unwrap()[0]["system"];
     add_setting_bool(SYSTEM, "localization_only_mode", &system_settings["localization_only_mode"]);
     add_setting_string(SYSTEM, "vocabulary_file", &system_settings["vocabulary_file"]);
-    add_setting_string(SYSTEM, "trajectory_file_name", &system_settings["trajectory_file_name"]);
+    add_setting_string(SYSTEM, "keyframe_trajectory_file_name", &system_settings["keyframe_trajectory_file_name"]);
+    add_setting_string(SYSTEM, "camera_trajectory_file_name", &system_settings["camera_trajectory_file_name"]);
     add_setting_string(SYSTEM, "results_folder", &system_settings["results_folder"]);
     add_setting_string(SYSTEM, "first_actor_name", &system_settings["first_actor_name"]);
     add_setting_f64(SYSTEM, "fps", &system_settings["fps"]);

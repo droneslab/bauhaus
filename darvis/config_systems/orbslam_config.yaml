@@ -13,11 +13,12 @@ system:
       first_actor_name: TRACKING_FRONTEND # Name of actor to kick off pipeline
 
       # FPS
-      fps: 20.0
+      fps: 10.0
 
       # RESULTS
       results_folder: "results"
-      trajectory_file_name: "trajectory.txt"
+      camera_trajectory_file_name: "camera_trajectory.txt"
+      keyframe_trajectory_file_name: "keyframe_trajectory.txt"
 
       # DEBUGGING
       log_level: debug # options are [trace, debug, info, warn, error]
@@ -32,7 +33,7 @@ modules:
         settings:
           - 
             name: max_features
-            value: 2000
+            value: 1000
             type: i32
           - 
             name: scale_factor
@@ -103,38 +104,38 @@ modules:
           - 
 
 actors:
-      # -
-      #  name: VISUALIZER
-      #  tag: visualizer
-      #  receiver_bound: -1
-      #  settings:
-      #     -
-      #       name: stream # if true, stream to websocket. if false, save to mcap file
-      #       value: true
-      #       type: bool
-      #     - name: port # port used if streaming
-      #       value: 8765
-      #       type: i32
-      #     - 
-      #       name: image_draw_type
-      #       value: plain # options are [none, plain, features, featuresandmatches]
-      #       type: string
-      #     -
-      #       name: mcap_file_path
-      #       value: "results/out.mcap"
-      #       type: string
-      #     - name: draw_all_mappoints # Not sure this works right now... If true, draws all mappoints in the map. If false, only draws matches and recently created mappoints. Set to false to save space.
-      #       value: false
-      #       type: bool
-      #     - name: draw_local_mappoints # Whether to draw local mappoints (not tracked, but in local map based on local keyframes)
-      #       value: true
-      #       type: bool
-      #     - name: draw_connected_kfs # Works but doesn't look good. Need to figure out some nicer way to distribute the points so it's actually readable
-      #       value: false
-      #       type: bool
-      #     - name: draw_only_trajectory
-      #       value: false
-      #       type: bool
+      -
+       name: VISUALIZER
+       tag: visualizer
+       receiver_bound: -1
+       settings:
+          -
+            name: stream # if true, stream to websocket. if false, save to mcap file
+            value: true
+            type: bool
+          - name: port # port used if streaming
+            value: 8765
+            type: i32
+          - 
+            name: image_draw_type
+            value: plain # options are [none, plain, features, featuresandmatches]
+            type: string
+          -
+            name: mcap_file_path
+            value: "results/out.mcap"
+            type: string
+          - name: draw_all_mappoints # Not sure this works right now... If true, draws all mappoints in the map. If false, only draws matches and recently created mappoints. Set to false to save space.
+            value: false
+            type: bool
+          - name: draw_local_mappoints # Whether to draw local mappoints (not tracked, but in local map based on local keyframes)
+            value: false
+            type: bool
+          - name: draw_connected_kfs # Works but doesn't look good. Need to figure out some nicer way to distribute the points so it's actually readable
+            value: false
+            type: bool
+          - name: draw_only_trajectory
+            value: false
+            type: bool
 
       -
        name: TRACKING_FRONTEND

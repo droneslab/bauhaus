@@ -16,11 +16,13 @@ pub struct ORBExtractor {
 impl Module for ORBExtractor { }
 impl FeatureExtractionModule for ORBExtractor {
     fn extract(&mut self, image: & Mat) -> Result<(DVVectorOfKeyPoint, DVMatrix), Box<dyn std::error::Error>> {
-        let image_dv: dvos3binding::ffi::WrapBindCVMat = mat_to_wrapbindcvmat(image);
+        let image_dv: dvos3binding::ffi::WrapBindCVMat = (&DVMatrix::new(image.clone())).into();
         let mut descriptors: dvos3binding::ffi::WrapBindCVMat = (&DVMatrix::default()).into();
         let mut keypoints: dvos3binding::ffi::WrapBindCVKeyPoints = DVVectorOfKeyPoint::empty().into();
 
-        self.extractor.pin_mut().extract(&image_dv, &mut keypoints, &mut descriptors);
+        let num_extracted = self.extractor.pin_mut().extract(&image_dv, &mut keypoints, &mut descriptors);
+
+        println !("Extracted {}", num_extracted);
 
         Ok((DVVectorOfKeyPoint::new(keypoints.kp_ptr.kp_ptr), DVMatrix::new(descriptors.mat_ptr.mat_ptr)))
     }

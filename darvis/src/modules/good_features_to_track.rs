@@ -16,7 +16,7 @@ pub struct FeatureExtractionSettings {
 pub struct GoodFeaturesExtractor { }
 impl Module for GoodFeaturesExtractor { }
 impl FeatureExtractionModule for GoodFeaturesExtractor {
-    fn extract(&mut self, _image: & Mat) -> Result<(DVVectorOfKeyPoint, DVMatrix), Box<dyn std::error::Error>> {
+    fn extract(&mut self, _image: &Mat) -> Result<(DVVectorOfKeyPoint, DVMatrix), Box<dyn std::error::Error>> {
         todo!("Not implemented")
     }
 

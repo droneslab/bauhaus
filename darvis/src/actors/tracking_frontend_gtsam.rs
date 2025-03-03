@@ -210,6 +210,8 @@ impl TrackingFrontendGTSAM {
             self.last_frame = Some(self.current_frame.clone()); // TODO SOFIYA avoid this clone? Above line doesn't compile
             self.curr_frame_id += 1;
         } else if message.is::<ShutdownMsg>() {
+            // Sleep a little to allow other threads to finish
+            sleep(Duration::from_millis(100));
             return true;
         } else {
             warn!("Tracking backend received unknown message type!");

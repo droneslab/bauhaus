@@ -5,6 +5,7 @@ use opencv::prelude::*;
 use core::{
     config::*, matrix::*, sensor::{FrameSensor, Sensor}, system::{Actor, MessageBox, Timestamp}
 };
+use std::{thread::sleep, time::Duration};
 use crate::{
     actors::{
         messages::{FeatureMsg, ImageMsg, ImagePathMsg, ShutdownMsg, TrackingStateMsg, VisFeaturesMsg},
@@ -133,6 +134,8 @@ impl TrackingFrontEnd {
                 _ => {}
             };
         } else if message.is::<ShutdownMsg>() {
+            // Sleep a little to allow other threads to finish
+            sleep(Duration::from_millis(100));
             return true;
         } else {
             warn!("Tracking frontend received unknown message type!");
@@ -140,13 +143,13 @@ impl TrackingFrontEnd {
         return false;
     }
 
-    fn extract_features(&mut self, image: & opencv::core::Mat) -> (DVVectorOfKeyPoint, DVMatrix) {
+    fn extract_features(&mut self, image: & Mat) -> (DVVectorOfKeyPoint, DVMatrix) {
         let _span = tracy_client::span!("extract_features");
 
         let (keypoints, descriptors) = match self.sensor {
             Sensor(FrameSensor::Mono, _) => {
                 if !self.map_initialized || (self.last_id - self.init_id < self.max_frames) {
-                    self.orb_extractor_ini.as_mut().unwrap().extract(& image).unwrap()
+                    self.orb_extractor_ini.as_mut().unwrap().extract(image).unwrap()
                 } else {
                     self.orb_extractor_left.extract(& image).unwrap()
                 }

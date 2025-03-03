@@ -1,7 +1,7 @@
 extern crate g2o;
 use log::{warn, info, debug, error};
 use nalgebra::{Isometry3, Quaternion, Vector3, Vector6};
-use std::{collections::{HashMap, VecDeque}, f64::INFINITY};
+use std::{collections::{HashMap, VecDeque}, f64::INFINITY, thread::sleep, time::Duration};
 use opencv::{prelude::*, types::{VectorOfKeyPoint, VectorOfMat, VectorOfPoint2f}};
 use gtsam::{
     inference::symbol::Symbol, navigation::combined_imu_factor::{CombinedImuFactor, PreintegratedCombinedMeasurements, PreintegrationCombinedParams}, nonlinear::{
@@ -80,6 +80,8 @@ impl TrackingBackendGTSAM {
         // } else if message.is::<UpdateFrameIMUMsg>() {
 
         } else if message.is::<ShutdownMsg>() {
+            // Sleep a little to allow other threads to finish
+            sleep(Duration::from_millis(100));
             return true;
         } else {
             warn!("Tracking backend received unknown message type!");

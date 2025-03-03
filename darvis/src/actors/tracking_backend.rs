@@ -203,6 +203,8 @@ impl TrackingBackend {
 
             self.update_frame_imu(*msg)?;
         } else if message.is::<ShutdownMsg>() {
+            // Sleep a little to allow other threads to finish
+            sleep(Duration::from_millis(100));
             return Ok(true);
         } else {
             warn!("Tracking backend received unknown message type!");
@@ -507,7 +509,8 @@ impl TrackingBackend {
         self.trajectory_poses.push(relative_pose);
         self.reference_kfs_for_trajectory.push((last_frame.ref_kf_id.unwrap(), self.map.read()?.get_keyframe(last_frame.ref_kf_id.unwrap()).parent));
 
-        info!("Frame {} pose: {:?}", last_frame.frame_id, last_frame.pose.unwrap());
+        debug!("SOFIYA TRAJ: FOR TIMESTAMP {}, TRACKING BACKEND POSE IS {:?}", last_frame.timestamp, last_frame.pose);
+        debug!("SOFIYA TRAJ: FOR TIMESTAMP {}, TRACKING BACKEND RELATIVE POSE IS: {:?}", last_frame.timestamp, relative_pose);
 
         self.system.send(
             SHUTDOWN_ACTOR, 

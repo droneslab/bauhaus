@@ -18,7 +18,7 @@ impl FeatureExtractionModule for OpenCVExtractor {
         let mut descriptors = opencv::core::Mat::default();
         let mut keypoints= opencv::types::VectorOfKeyPoint::new();
 
-        self.extractor.detect(& *image, &mut  keypoints, & opencv::core::no_array())?;
+        self.extractor.detect(& *image, &mut keypoints, & opencv::core::no_array())?;
         self.extractor.compute(& *image, &mut keypoints, &mut descriptors)?;
 
         Ok((DVVectorOfKeyPoint::new(keypoints), DVMatrix::new(descriptors)))

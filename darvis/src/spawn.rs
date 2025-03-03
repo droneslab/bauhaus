@@ -52,7 +52,7 @@ pub fn launch_system(actor_config: Vec<ActorConf>, module_config: Vec<ModuleConf
 
     // * SPAWN DARVIS SYSTEM ACTORS *//
     // Ctrl+c shutdown actor
-    let (shutdown_join, shutdown_flag) = spawn_shutdown_actor(&transmitters, shutdown_rx);
+    let (shutdown_join, shutdown_flag) = spawn_shutdown_actor(&transmitters, shutdown_rx, &writeable_map);
 
     //* Return transmitters for the shutdown actor and first actor in the pipeline, and the ctrl+c handler flag */
     let first_actor_tx = transmitters.get(&first_actor_name).unwrap().clone();
@@ -94,7 +94,7 @@ fn spawn_actor(
 }
 
 
-fn spawn_shutdown_actor(transmitters: &HashMap<String, Sender>, receiver: Receiver) -> (JoinHandle<()>, Arc<Mutex<bool>>) {
+fn spawn_shutdown_actor(transmitters: &HashMap<String, Sender>, receiver: Receiver, writeable_map: &ReadWriteMap) -> (JoinHandle<()>, Arc<Mutex<bool>>) {
     let shutdown_flag = Arc::new(Mutex::new(false));
     let flag_clone = shutdown_flag.clone();
 
@@ -110,8 +110,10 @@ fn spawn_shutdown_actor(transmitters: &HashMap<String, Sender>, receiver: Receiv
         actors: txs,
         my_name: SHUTDOWN_ACTOR.to_string()};
 
+    let map_clone = writeable_map.clone();
+
     let join_handle = thread::spawn(move || { 
-        registered_actors::spawn_actor(SHUTDOWN_ACTOR.to_string(), system, None);
+        registered_actors::spawn_actor(SHUTDOWN_ACTOR.to_string(), system, Some(map_clone));
     } );
 
     let shutdown_transmitter = transmitters.get(SHUTDOWN_ACTOR).unwrap().clone();

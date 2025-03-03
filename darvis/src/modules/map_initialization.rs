@@ -91,6 +91,8 @@ impl MapInitialization {
                 return Ok(false);
             }
 
+            println!("MONO INIT... initial frame matches {}", self.initial_frame.as_ref().unwrap().features.num_keypoints);
+
             // Find correspondences
             let (mut num_matches, mp_matches) = FEATURE_MATCHING_MODULE.search_for_initialization(
                 &self.initial_frame.as_ref().unwrap(), 

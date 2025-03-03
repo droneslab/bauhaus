@@ -97,6 +97,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         debug!("Read image {}", image_path);
 
         let image = image::read_image_file(&image_path);
+        // let resized_image = image::resize_image(&image, SETTINGS.get::<f64>(SYSTEM, "image_scale")).expect("Could not resize image!");
 
         first_actor_tx.send(Box::new(
             ImageMsg{

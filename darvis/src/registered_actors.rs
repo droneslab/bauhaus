@@ -119,7 +119,7 @@ pub fn spawn_actor(
         },
 
         str if str == SHUTDOWN_ACTOR.to_string() => {
-            crate::actors::shutdown::ShutdownActor::spawn(system, ())
+            crate::actors::shutdown::ShutdownActor::spawn(system, map.expect("Shutdown needs the map!"))
         },
         _ => {
             error!("Actor not implemented: {}", actor_tag);

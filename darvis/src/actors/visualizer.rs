@@ -1,5 +1,5 @@
-use std::{borrow::Cow, collections::{BTreeMap, BTreeSet, HashMap, HashSet}, fs::{self, File}, io::BufWriter, sync::Arc};
-use log::warn;
+use std::{borrow::Cow, collections::{BTreeMap, BTreeSet, HashMap, HashSet}, fs::{self, File}, io::BufWriter, sync::Arc, thread::sleep, time::Duration};
+use log::{debug, warn};
 use mcap::{Schema, Channel, records::MessageHeader, Writer};
 use opencv::prelude::{Mat, MatTraitConst, MatTraitConstManual};
 use foxglove::{foxglove::items::{line_primitive, scene_entity_deletion, ArrowPrimitive, Color, FrameTransform, LinePrimitive, MapInfo, Point3, Quaternion, RawImage, SceneEntity, SceneEntityDeletion, SceneUpdate, SpherePrimitive, Vector3}, get_file_descriptor_set_bytes, make_pose};
@@ -165,6 +165,8 @@ impl DarvisVisualizer {
             // self.update_loop_closure_essential_graph(&mut writer,*msg).await;
         } else if message.is::<ShutdownMsg>() {
             // SHUTDOWN
+            // Sleep a little to allow other threads to finish
+            sleep(Duration::from_millis(100));
             warn!("Closing mcap file");
             self.writer.finish().expect("Could not close file");
             return Ok(true);
@@ -406,6 +408,8 @@ impl DarvisVisualizer {
 
         };
         self.writer.write(TRANSFORM_CHANNEL, transform, timestamp, 0).await.expect("Could not write transform");
+
+        debug!("SOFIYA TRAJ: FOR TIMESTAMP {}, VISUALIZER POSE IS {:?}", timestamp, inverse_frame_pose);
 
         let map = self.map.read()?;
 

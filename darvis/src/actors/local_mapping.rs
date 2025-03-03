@@ -10,6 +10,8 @@ use core::{
     config::{SETTINGS, SYSTEM},
     matrix::DVVector3
 };
+use std::thread::sleep;
+use std::time::Duration;
 use log::{debug, warn, info};
 use opencv::prelude::KeyPointTraitConst;
 use crate::map::pose::Pose;
@@ -151,6 +153,8 @@ impl LocalMapping {
             self.current_tracking_state = msg.tracking_state;
             self.local_mapping(msg.matches_in_tracking, msg.tracked_mappoint_depths)?;
         } else if message.is::<ShutdownMsg>() {
+            // Sleep a little to allow other threads to finish
+            sleep(Duration::from_millis(100));
             return Ok(true);
         } else {
             warn!("Local Mapping received unknown message type!");
@@ -192,8 +196,8 @@ impl LocalMapping {
 
         // ORBSLAM will abort additional work if there are too many keyframes in the msg queue (CheckNewKeyFrames)
         // Additionally it will abort if a stop or reset is requested (stopRequested)
-        let kfs_in_map = self.map.read()?.num_keyframes();
-        if kfs_in_map > 2 && self.system.queue_len() < 1 {
+        let kfs_processed = self.map.read()?.num_keyframes();
+        if kfs_processed > 2 && self.system.queue_len() < 1 {
             match self.sensor.is_imu() {
                 true => {
                     if self.map.read()?.imu_initialized {
@@ -236,7 +240,7 @@ impl LocalMapping {
                 }
             }
         } else {
-            warn!("Optimization aborted: too many keyframes in queue");
+            warn!("Optimization aborted: too many keyframes in queue: {}", self.system.queue_len());
         }
 
         // Initialize IMU

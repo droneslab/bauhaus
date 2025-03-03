@@ -3,7 +3,7 @@ use core::config::{SETTINGS, SYSTEM};
 use core::sensor::{ImuSensor, Sensor};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::thread;
+use std::thread::{self, sleep};
 use std::time::Duration;
 use log::{debug, error, info, warn};
 use crate::actors::local_mapping::LOCAL_MAPPING_IDLE;
@@ -96,6 +96,8 @@ impl LoopClosing {
             // Does this even need to happen?
             todo!("IMU: Process message from local mapping");
         } else if message.is::<ShutdownMsg>() {
+            // Sleep a little to allow other threads to finish
+            sleep(Duration::from_millis(100));
             return Ok(true);
         } else {
             warn!("Loop Closing received unknown message type!");
