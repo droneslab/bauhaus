@@ -22,8 +22,6 @@ impl FeatureExtractionModule for ORBExtractor {
 
         let num_extracted = self.extractor.pin_mut().extract(&image_dv, &mut keypoints, &mut descriptors);
 
-        println !("Extracted {}", num_extracted);
-
         Ok((DVVectorOfKeyPoint::new(keypoints.kp_ptr.kp_ptr), DVMatrix::new(descriptors.mat_ptr.mat_ptr)))
     }
 
@@ -37,7 +35,7 @@ impl ORBExtractor {
         let max_features = match is_ini {
             true => {
                 // sofiya orbslam2 loop closing
-                SETTINGS.get::<i32>(FEATURE_DETECTION, "max_features") * 5
+                SETTINGS.get::<i32>(FEATURE_DETECTION, "ini_features")
             },
             false => SETTINGS.get::<i32>(FEATURE_DETECTION, "max_features")
         };

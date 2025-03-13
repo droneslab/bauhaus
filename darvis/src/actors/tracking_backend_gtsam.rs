@@ -16,8 +16,9 @@ use crate::{
     actors::messages::{ShutdownMsg, UpdateFrameIMUMsg, VisFeaturesMsg}, map::{features::Features, frame::Frame, keyframe::{KeyFrame, MapPointMatches}, map::Id, pose::Pose, read_only_lock::ReadWriteMap}, modules::{geometric_tools, good_features_to_track::GoodFeaturesExtractor, image, imu::{ImuBias, ImuCalib, ImuMeasurements, ImuPreIntegrated, IMU}, map_initialization::MapInitialization, module_definitions::{CameraModule, FeatureExtractionModule, ImuModule}, optimizer::{self, LEVEL_SIGMA2}, orbslam_extractor::ORBExtractor, orbslam_matcher::SCALE_FACTORS, relocalization::Relocalization}, registered_actors::{CAMERA_MODULE, FEATURE_DETECTION, FEATURE_MATCHER, FEATURE_MATCHING_MODULE, LOCAL_MAPPING, SHUTDOWN_ACTOR, TRACKING_BACKEND, VISUALIZER}
 };
 
-use super::{messages::{FeatureTracksAndIMUMsg, NewKeyFrameMsg, TrajectoryMsg, VisTrajectoryMsg}, tracking_backend::TrackingState};
+use super::{messages::{FeatureTracksAndIMUMsg, NewKeyFrameGTSAMMsg, NewKeyFrameMsg, TrajectoryMsg, VisTrajectoryMsg}, tracking_backend::TrackingState};
 use crate::registered_actors::IMU;
+use std::collections::BTreeSet;
 
 pub struct TrackingBackendGTSAM {
     system: System,
@@ -26,7 +27,9 @@ pub struct TrackingBackendGTSAM {
 
     // Frames
     last_kf_id: Id,
+    last_kf_pose: Pose,
     current_kf_id: Id,
+    prev_timestamp: Timestamp,
 
     // Modules 
     imu: IMU,
@@ -52,6 +55,8 @@ impl Actor for TrackingBackendGTSAM {
             trajectory_poses: Vec::new(),
             last_kf_id: -1,
             current_kf_id: -1,
+            prev_timestamp: 0.0,
+            last_kf_pose: Pose::default(),
         };
         tracy_client::set_thread_name!("tracking backend gtsam");
 
@@ -96,6 +101,7 @@ impl TrackingBackendGTSAM {
             // If this is the first frame, don't do anything
             // If we are receiving it here, it was already put into the map as the latest keyframe
             self.last_kf_id = 1;
+            self.last_kf_pose = msg.frame.pose.unwrap();
         } else {
             // If we have previous frames already, can track normally
             let mut current_frame = msg.frame;
@@ -110,10 +116,10 @@ impl TrackingBackendGTSAM {
             // }
 
             // At this point we only have feature matches from front end, not the matches to mappoints. Add the matches here
-            self.map_feature_tracks_to_mappoints(&mut current_frame, & msg.mappoint_ids)?;
+            // self.map_feature_tracks_to_mappoints(&mut current_frame, & msg.feature_ids)?;
 
             // Solve VIO graph. Includes preintegration
-            let optimized = self.graph_solver.solve(&mut current_frame, self.last_kf_id, &mut msg.imu_measurements, & self.map)?;
+            let optimized = self.graph_solver.solve(&mut current_frame, self.last_kf_id, &mut msg.imu_measurements, & msg.feature_ids, & self.map)?;
             if !optimized {
                 warn!("Could not optimize graph");
             }
@@ -122,17 +128,20 @@ impl TrackingBackendGTSAM {
             // self.current_kf_id = self.create_new_keyframe(current_frame).unwrap();
             // Create new mappoints and cull existing
             // let created_mps = self.create_new_mappoints().unwrap();
-            // println!("Created {} mps", created_mps);
+            // debug!("Created {} mps", created_mps);
 
             current_frame.ref_kf_id = Some(self.last_kf_id);
             self.update_trajectory_in_logs(& current_frame).expect("Could not save trajectory");
             self.last_kf_id += 1;
+            self.prev_timestamp = current_frame.timestamp;
+            self.last_kf_pose = current_frame.pose.unwrap();
 
             // KeyFrame created here and inserted into map
             self.system.send(
                 LOCAL_MAPPING,
-                Box::new( NewKeyFrameMsg{
+                Box::new( NewKeyFrameGTSAMMsg{
                     tracking_state: TrackingState::Ok,
+                    feature_tracks: vec![],// todo sofiya map mappoints
                     matches_in_tracking: current_frame.mappoint_matches.matches.iter().filter_map(|v| match v { 
                         Some((id, _is_outlier)) => Some(*id),
                         None => None
@@ -157,7 +166,7 @@ impl TrackingBackendGTSAM {
 
         self.trajectory_poses.push(relative_pose);
 
-        println!("Sanity check... curr frame is {}, ref kf is {:?}, last kf is {}", current_frame.frame_id, current_frame.ref_kf_id, last_kf.id);
+        // debug!("Sanity check... curr frame is {}, ref kf is {:?}, last kf is {}", current_frame.frame_id, current_frame.ref_kf_id, last_kf.id);
 
         self.system.send(
             SHUTDOWN_ACTOR, 
@@ -186,6 +195,7 @@ impl TrackingBackendGTSAM {
         Ok(())
     }
 
+
     fn create_new_keyframe(&mut self, mut current_frame: Frame) -> Result<i32, Box<dyn std::error::Error>>{
         let _span = tracy_client::span!("create_new_keyframe");
 
@@ -213,31 +223,31 @@ impl TrackingBackendGTSAM {
         Ok(kf_id)
     }
 
-    fn map_feature_tracks_to_mappoints(&mut self, current_frame: &mut Frame, tracked_mappoint_ids: & Vec<i32>) -> Result<i32, Box<dyn std::error::Error> > {
-        let _span = tracy_client::span!("map_feature_tracks_to_mappoints");
+    // fn map_feature_tracks_to_mappoints(&mut self, current_frame: &mut Frame, feature_ids: & Vec<i32>) -> Result<i32, Box<dyn std::error::Error> > {
+    //     let _span = tracy_client::span!("map_feature_tracks_to_mappoints");
 
-        let map = self.map.read()?;
-        let ref_kf = map.get_keyframe(self.last_kf_id);
-        let mut added = 0;
+    //     let map = self.map.read()?;
+    //     let ref_kf = map.get_keyframe(self.last_kf_id);
+    //     let mut added = 0;
 
-        println!("Current frame features: {:?}", current_frame.features.get_all_keypoints().len());
-        println!("Tracked mappoint ids: {:?}", tracked_mappoint_ids.len());
-        println!("Ref kf mappoint matches: {:?}", ref_kf.get_mp_matches().len());
-        // println!("Ref kf matches: {:?}", ref_kf.get_mp_matches());
+    //     debug!("Current frame features: {:?}", current_frame.features.get_all_keypoints().len());
+    //     debug!("Tracked feature ids: {:?}", feature_ids.len());
+    //     debug!("Ref kf mappoint matches: {:?}", ref_kf.get_mp_matches().len());
+    //     // println!("Ref kf matches: {:?}", ref_kf.get_mp_matches());
 
-        for idx1 in 0..current_frame.features.get_all_keypoints().len() - 1 {
-            if tracked_mappoint_ids[idx1 as usize] != -1 {
-                // Most times the id will be a real mappoint
-                // But when new features are extracted for this frame, there is no associated mappoint yet
-                // We can create them later when we create the keyframe, but for now ignore.
-                current_frame.mappoint_matches.add(idx1 as u32, tracked_mappoint_ids[idx1 as usize], false);
-                added += 1;
-            }
-        }
-        println!("Added {} mappoints", added);
+    //     for idx1 in 0..current_frame.features.get_all_keypoints().len() - 1 {
+    //         if feature_ids[idx1 as usize] != -1 {
+    //             // Most times the id will be a real mappoint
+    //             // But when new features are extracted for this frame, there is no associated mappoint yet
+    //             // We can create them later when we create the keyframe, but for now ignore.
+    //             current_frame.mappoint_matches.add(idx1 as u32, feature_ids[idx1 as usize], false);
+    //             added += 1;
+    //         }
+    //     }
+    //     debug!("Added {} mappoints", added);
 
-        Ok(added)
-    }
+    //     Ok(added)
+    // }
 
     fn create_new_mappoints(&mut self) -> Result<i32, Box<dyn std::error::Error>> {
         let _span = tracy_client::span!("create_new_mappoints");
@@ -490,8 +500,7 @@ impl TrackingBackendGTSAM {
         let _span = tracy_client::span!("create_new_mappoints::insert_mappoints");
         let mut lock = self.map.write()?;
         for (x3_d, ref_kf_id, origin_map_id, observations) in mps_to_insert {
-            let mp_id = lock.insert_mappoint_to_map(x3_d, ref_kf_id, origin_map_id, observations)
-            ;
+            let mp_id = lock.insert_mappoint_to_map(x3_d, ref_kf_id, origin_map_id, observations);
             // self.recently_added_mappoints.insert(mp_id);
             mps_created += 1;
         }
@@ -606,23 +615,21 @@ impl GraphSolver {
         }
     }
 
-    fn solve(&mut self, current_frame: &mut Frame, last_kf_id: Id, imu_measurements: &mut ImuMeasurements, map: &ReadWriteMap) -> Result<bool, Box<dyn std::error::Error>> {
+    fn solve(&mut self, current_frame: &mut Frame, last_kf_id: Id, imu_measurements: &mut ImuMeasurements, feature_ids: & Vec<i32>, map: &ReadWriteMap) -> Result<bool, Box<dyn std::error::Error>> {
         let _span = tracy_client::span!("solve");
 
-        let timestamp = (current_frame.timestamp * 1e14) as i64; // Convert to int just so we can hash it
+        let timestamp = (current_frame.timestamp * 1e9) as i64; // Convert to int just so we can hash it
 
         // Return if the node already exists in the graph
         if self.ct_state_lookup.contains_key(&timestamp) {
-            println!("NODE WITH TIMESTAMP {} ALREADY EXISTS", timestamp);
+            warn!("NODE WITH TIMESTAMP {} ALREADY EXISTS", timestamp);
             return Ok(false);
         }
 
         if !self.initialized {
             self.add_initials_and_priors(timestamp, map)?;
             self.initialized = true;
-            println!("GTSAM optimize... Added initials and priors");
         } else {
-            println!("GTSAM optimize... Regular");
             self.create_imu_factor(imu_measurements, current_frame, last_kf_id, map)?;
 
             // Original models
@@ -662,7 +669,7 @@ impl GraphSolver {
             self.timestamp_lookup.insert(self.ct_state, timestamp);
         }
 
-        self.process_smart_features(current_frame);
+        self.process_smart_features(current_frame, feature_ids);
 
         let optimized_pose = self.optimize();
 
@@ -688,7 +695,7 @@ impl GraphSolver {
                 bwz: gyro_bias[2]
             };
 
-            println!("!!!!!! FINAL FRAME POSE: {:?}", current_frame.pose);
+            debug!("!!!!!! FINAL FRAME POSE: {:?}", current_frame.pose);
         } else {
             error!("Could not optimize pose!");
         }
@@ -721,6 +728,7 @@ impl GraphSolver {
             }
         };
 
+        // TODO SOFIYA  where are these coming from
         let pose_noise = gtsam::linear::noise_model::DiagonalNoiseModel::from_sigmas(Vector6::new(
             self.sigma_prior_rotation[0], self.sigma_prior_rotation[1], self.sigma_prior_rotation[2],
             self.sigma_prior_translation[0], self.sigma_prior_translation[1], self.sigma_prior_translation[2]
@@ -792,19 +800,18 @@ impl GraphSolver {
             bias: state_k.bias
         };
 
-        println!("... predicted pose: {:?}", predicted.pose);
+        debug!("IMU PREDICTED POSE USING GTSAM: {:?}", predicted.pose);
 
         return predicted;
     }
 
-    fn create_imu_factor(&mut self, imu_measurements: &mut ImuMeasurements, current_frame: &Frame, last_kf_id: Id, map: &ReadWriteMap) -> Result<(), Box<dyn std::error::Error>> {
+    fn create_imu_factor(&mut self, imu_measurements: &mut ImuMeasurements, current_frame: &mut Frame, last_kf_id: Id, map: &ReadWriteMap) -> Result<(), Box<dyn std::error::Error>> {
         // This function will create a discrete IMU factor using the GTSAM preintegrator class
         // This will integrate from the current state time up to the new update time
         let _span = tracy_client::span!("create_imu_factor");
 
         let mut imu_from_last_frame = VecDeque::with_capacity(imu_measurements.len()); // mvImuFromLastFrame
-        let imu_per = 0.000000000001; // Used to be 0.000000000001 to adjust for different timestamp units, not sure why it needs to be reverted now. 0.001 in orbslam. 
-
+        let imu_per = 0.001; // Used to be 0.000000000001 to adjust for different timestamp units, not sure why it needs to be reverted now. 0.001 in orbslam. 
         let prev_ts = {
             let map = map.read()?;
             let previous_kf = map.get_keyframe(last_kf_id);
@@ -825,54 +832,59 @@ impl GraphSolver {
         }
         let n = imu_from_last_frame.len() - 1;
 
-        // let other_imu = IMU::new();
-        // let mut imu_preintegrated_from_last_frame = ImuPreIntegrated::new(previous_frame.imu_data.imu_bias);
+        let mut other_imu = IMU::new();
+        let mut imu_preintegrated_from_last_frame;
+        {
+            let map = map.read()?;
+            let previous_frame = map.get_keyframe(last_kf_id);
+            imu_preintegrated_from_last_frame = ImuPreIntegrated::new(previous_frame.imu_data.imu_bias);
 
-        for i in 0..n {
-            let mut tstep = 0.0;
-            let mut acc: Vector3<f64> = Vector3::zeros(); // acc
-            let mut ang_vel: Vector3<f64> = Vector3::zeros(); // angVel
+            for i in 0..n {
+                let mut tstep = 0.0;
+                let mut acc: Vector3<f64> = Vector3::zeros(); // acc
+                let mut ang_vel: Vector3<f64> = Vector3::zeros(); // angVel
 
-            if i == 0 && i < (n - 1) {
-                let tab = imu_from_last_frame[i + 1].timestamp - imu_from_last_frame[i].timestamp;
-                let tini = imu_from_last_frame[i].timestamp - prev_ts;
-                acc = (
-                    imu_from_last_frame[i].acc + imu_from_last_frame[i + 1].acc -
-                    (imu_from_last_frame[i + 1].acc - imu_from_last_frame[i].acc) * (tini/tab)
-                ) * 0.5;
-                ang_vel = (
-                    imu_from_last_frame[i].ang_vel + imu_from_last_frame[i + 1].ang_vel -
-                    (imu_from_last_frame[i + 1].ang_vel - imu_from_last_frame[i].ang_vel) * (tini/tab)
-                ) * 0.5;
-                tstep = imu_from_last_frame[i + 1].timestamp - prev_ts;
-            } else if i < (n - 1) {
-                acc = (imu_from_last_frame[i].acc + imu_from_last_frame[i + 1].acc) * 0.5;
-                ang_vel = (imu_from_last_frame[i].ang_vel + imu_from_last_frame[i + 1].ang_vel) * 0.5;
-                tstep = imu_from_last_frame[i + 1].timestamp - imu_from_last_frame[i].timestamp;
-            } else if i > 0 && i == (n - 1) {
-                let tab = imu_from_last_frame[i + 1].timestamp - imu_from_last_frame[i].timestamp;
-                let tend = imu_from_last_frame[i + 1].timestamp - current_frame.timestamp;
-                acc = (
-                    imu_from_last_frame[i].acc + imu_from_last_frame[i + 1].acc -
-                    (imu_from_last_frame[i + 1].acc - imu_from_last_frame[i].acc) * (tend/tab)
-                ) * 0.5;
-                ang_vel = (
-                    imu_from_last_frame[i].ang_vel + imu_from_last_frame[i + 1].ang_vel -
-                    (imu_from_last_frame[i + 1].ang_vel - imu_from_last_frame[i].ang_vel) * (tend/tab)
-                ) * 0.5;
-                tstep = current_frame.timestamp - imu_from_last_frame[i].timestamp;
-            } else if i == 0 && i == (n - 1) {
-                acc = imu_from_last_frame[i].acc;
-                ang_vel = imu_from_last_frame[i].ang_vel;
-                tstep = current_frame.timestamp - prev_ts;
+                if i == 0 && i < (n - 1) {
+                    let tab = imu_from_last_frame[i + 1].timestamp - imu_from_last_frame[i].timestamp;
+                    let tini = imu_from_last_frame[i].timestamp - prev_ts;
+                    acc = (
+                        imu_from_last_frame[i].acc + imu_from_last_frame[i + 1].acc -
+                        (imu_from_last_frame[i + 1].acc - imu_from_last_frame[i].acc) * (tini/tab)
+                    ) * 0.5;
+                    ang_vel = (
+                        imu_from_last_frame[i].ang_vel + imu_from_last_frame[i + 1].ang_vel -
+                        (imu_from_last_frame[i + 1].ang_vel - imu_from_last_frame[i].ang_vel) * (tini/tab)
+                    ) * 0.5;
+                    tstep = imu_from_last_frame[i + 1].timestamp - prev_ts;
+                } else if i < (n - 1) {
+                    acc = (imu_from_last_frame[i].acc + imu_from_last_frame[i + 1].acc) * 0.5;
+                    ang_vel = (imu_from_last_frame[i].ang_vel + imu_from_last_frame[i + 1].ang_vel) * 0.5;
+                    tstep = imu_from_last_frame[i + 1].timestamp - imu_from_last_frame[i].timestamp;
+                } else if i > 0 && i == (n - 1) {
+                    let tab = imu_from_last_frame[i + 1].timestamp - imu_from_last_frame[i].timestamp;
+                    let tend = imu_from_last_frame[i + 1].timestamp - current_frame.timestamp;
+                    acc = (
+                        imu_from_last_frame[i].acc + imu_from_last_frame[i + 1].acc -
+                        (imu_from_last_frame[i + 1].acc - imu_from_last_frame[i].acc) * (tend/tab)
+                    ) * 0.5;
+                    ang_vel = (
+                        imu_from_last_frame[i].ang_vel + imu_from_last_frame[i + 1].ang_vel -
+                        (imu_from_last_frame[i + 1].ang_vel - imu_from_last_frame[i].ang_vel) * (tend/tab)
+                    ) * 0.5;
+                    tstep = current_frame.timestamp - imu_from_last_frame[i].timestamp;
+                } else if i == 0 && i == (n - 1) {
+                    acc = imu_from_last_frame[i].acc;
+                    ang_vel = imu_from_last_frame[i].ang_vel;
+                    tstep = current_frame.timestamp - prev_ts;
+                }
+                // tstep = tstep * 1e9;
+
+                self.preint_gtsam.integrate_measurement(&acc.into(), &ang_vel.into(), tstep);
+
+                // ORBSLAM3 imu preintegrated object
+                other_imu.imu_preintegrated_from_last_kf.integrate_new_measurement(acc, ang_vel, tstep);
+                imu_preintegrated_from_last_frame.integrate_new_measurement(acc, ang_vel, tstep);
             }
-            tstep = tstep * 1e9;
-
-            self.preint_gtsam.integrate_measurement(&acc.into(), &ang_vel.into(), tstep);
-
-            // other_imu.imu_preintegrated_from_last_kf.integrate_new_measurement(acc, ang_vel, tstep);
-
-            // imu_preintegrated_from_last_frame.integrate_new_measurement(acc, ang_vel, tstep);
         }
 
         let imu_factor = CombinedImuFactor::new(
@@ -887,30 +899,37 @@ impl GraphSolver {
         self.graph_new.add_combined_imu_factor(&imu_factor);
         self.graph_main.add_combined_imu_factor(&imu_factor);
 
-        // current_frame.imu_data.imu_preintegrated = Some(other_imu.imu_preintegrated_from_last_kf.clone());
-        // current_frame.imu_data.imu_preintegrated_frame = Some(imu_preintegrated_from_last_frame);
-        // current_frame.imu_data.prev_keyframe = Some(1);
-
-        // let state = other_imu.predict_state_last_frame(current_frame, previous_frame);
+        // ORBSLAM3 imu preintegrated object
+        current_frame.imu_data.imu_preintegrated = Some(other_imu.imu_preintegrated_from_last_kf.clone());
+        current_frame.imu_data.imu_preintegrated_frame = Some(imu_preintegrated_from_last_frame);
+        current_frame.imu_data.prev_keyframe = Some(last_kf_id);
+        other_imu.predict_state_last_keyframe(&map, current_frame, last_kf_id)?;
 
         Ok(())
     }
 
-    fn process_smart_features(&mut self, current_frame: &Frame) {
+    fn process_smart_features(&mut self, current_frame: &Frame, feature_ids: & Vec<i32>) {
         let _span = tracy_client::span!("process_smart_features");
 
         // let features: VectorOfPoint2f = frame.features.get_all_keypoints().iter().map(|kp| kp.pt()).collect();
         let features = current_frame.features.get_all_keypoints();
         for i in 0..features.len() - 1 {
-            let mp_match = current_frame.mappoint_matches.get(i as usize);
-            if mp_match.is_none() {
+            // let mp_match = current_frame.mappoint_matches.get(i as usize);
+            // if mp_match.is_none() {
+            //     continue;
+            // }
+            // let (mp_id, _is_outlier) = mp_match.unwrap();
+            // let (kp, _is_outlier) = current_frame.features.get_keypoint(i as usize);
+
+
+            let feature_id = feature_ids[i as usize];
+            if feature_id == -1 {
                 continue;
             }
-            let (mp_id, _is_outlier) = mp_match.unwrap();
             let (kp, _is_outlier) = current_frame.features.get_keypoint(i as usize);
 
             // Check to see if it is already in the graph
-            match self.measurement_smart_lookup_left.get_mut(&mp_id) {
+            match self.measurement_smart_lookup_left.get_mut(&feature_id) {
                 Some(smartfactor) => {
                     // Insert measurements to a smart factor
                     smartfactor.add(
@@ -944,7 +963,7 @@ impl GraphSolver {
                     self.graph_new.add_smartfactor(&smartfactor_left);
                     self.graph_main.add_smartfactor(&smartfactor_left);
 
-                    self.measurement_smart_lookup_left.insert(mp_id, smartfactor_left);
+                    self.measurement_smart_lookup_left.insert(feature_id, smartfactor_left);
                 }
             }
         }

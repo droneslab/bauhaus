@@ -289,11 +289,17 @@ fn load_camera_settings(camera_fn: &String, module_info: &mut Vec<ModuleConf>) {
     add_setting_i32("CAMERA", "height", &yaml_document["height"]);
     add_setting_i32("CAMERA", "stereo_overlapping_begin", &yaml_document["stereo_overlapping_begin"]);
     add_setting_i32("CAMERA", "stereo_overlapping_end", &yaml_document["stereo_overlapping_end"]);
+
     add_setting_f64("CAMERA", "k1", &yaml_document["k1"]);
     add_setting_f64("CAMERA", "k2", &yaml_document["k2"]);
     add_setting_f64("CAMERA", "p1", &yaml_document["p1"]);
     add_setting_f64("CAMERA", "p2", &yaml_document["p2"]);
     add_setting_f64("CAMERA", "k3", &yaml_document["k3"]);
+    if yaml_document["k1"].as_f64().unwrap() != 0.0 {
+        SETTINGS.insert(&"CAMERA", &"need_to_undistort", true);
+    }
+
+
     match SETTINGS.get::<Sensor>(SYSTEM, "sensor") {
         Sensor(FrameSensor::Stereo, _) | Sensor(FrameSensor::Rgbd, _) => {
             add_setting_f64("CAMERA", "stereo_baseline_times_fx", &yaml_document["stereo_baseline_times_fx"]);
@@ -326,6 +332,9 @@ fn load_camera_settings(camera_fn: &String, module_info: &mut Vec<ModuleConf>) {
         SETTINGS.insert(&"CAMERA", &"fx", yaml_document["fx"].as_f64().unwrap() * scale_col_factor as f64);
         SETTINGS.insert(&"CAMERA", &"cx", yaml_document["cx"].as_f64().unwrap() * scale_col_factor as f64);
         add_setting_i32("CAMERA", "width", &yaml_document["new_width"]);
+        SETTINGS.insert(&"CAMERA", &"need_to_resize", true);
+    } else {
+        SETTINGS.insert(&"CAMERA", &"need_to_resize", false);
     }
 
 

@@ -4,6 +4,7 @@ use glob::glob;
 use log::{debug, info, warn};
 use modules::imu::{ImuMeasurements, ImuPoint};
 use opencv::core::Point3f;
+use registered_actors::CAMERA;
 use spin_sleep::LoopHelper;
 #[macro_use] extern crate lazy_static;
 
@@ -94,10 +95,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if *shutdown_flag.lock().unwrap() { break; }
         tracy_client::frame_mark();
 
-        debug!("Read image {}", image_path);
+        debug!("Read image {} at timestamp {}", image_path, timestamp);
 
-        let image = image::read_image_file(&image_path);
-        // let resized_image = image::resize_image(&image, SETTINGS.get::<f64>(SYSTEM, "image_scale")).expect("Could not resize image!");
+        let mut image = image::read_image_file(&image_path);
+        if SETTINGS.get::<bool>(CAMERA, "need_to_resize") {
+            let new_height = SETTINGS.get::<i32>(CAMERA, "height");
+            let new_width = SETTINGS.get::<i32>(CAMERA, "width");
+            // debug!("Resizing image to {}x{}", new_width, new_height);
+            image = image::resize_image(&image, new_width, new_height).expect("Could not resize image!");
+        }
 
         first_actor_tx.send(Box::new(
             ImageMsg{
@@ -137,24 +143,28 @@ struct LoopManager {
 
 impl LoopManager {
     pub fn new(dataset: String, dataset_dir: String, read_imu: bool) -> Self {
-        let (mut timestamps, img_dir);
+        let (mut timestamps, img_dir, mut image_paths);
         if dataset == "kitti" {
             img_dir = dataset_dir.clone() + "/image_0";
             timestamps = Self::read_timestamps_file_kitti(&dataset_dir);
+            image_paths = Self::generate_image_paths(img_dir);
         } else if dataset == "euroc" {
             img_dir = dataset_dir.clone() + "/mav0/cam0/data";
-            timestamps = Self::read_timestamps_file_euroc(&dataset_dir);
+            (timestamps, image_paths) = Self::read_timestamps_file_euroc(&dataset_dir, img_dir);
         } else if dataset == "tum" {
             img_dir = dataset_dir.clone() + "/rgb";
             timestamps = Self::read_timestamps_file_tum(&dataset_dir);
+            image_paths = Self::generate_image_paths(img_dir);
         } else if dataset == "tum-vi" {
             img_dir = dataset_dir.clone() + "/mav0/cam0/data";
             timestamps = Self::read_timestamps_file_tum(&dataset_dir);
+            image_paths = Self::generate_image_paths(img_dir);
         }  else {
             panic!("Invalid dataset name");
         };
 
-        let mut image_paths = Self::generate_image_paths(img_dir);
+
+        println!("TIMESTAMPS: {:?}", timestamps);
 
         let imu = {
             if !read_imu {
@@ -209,7 +219,7 @@ impl LoopManager {
                 record[6].parse::<f32>().unwrap()
             ));
 
-            imu_data.timestamps.push(record[0].parse::<f64>().unwrap() / 1000000000000000000.0);
+            imu_data.timestamps.push(record[0].parse::<f64>().unwrap() / 1000000000.0);
         }
 
         // Find first imu to be considered, supposing imu measurements start first
@@ -236,16 +246,24 @@ impl LoopManager {
             .expect("Could not open timestamps file");
         io::BufReader::new(file).lines()
             .map(|x| x.unwrap().parse::<f64>().unwrap())
-            .collect::<Vec<f64>>()
+            .collect::<Vec<f64>>() // *1e16
     }
 
-    fn read_timestamps_file_euroc(time_stamp_dir: &String) -> Vec<f64> {
+    fn read_timestamps_file_euroc(time_stamp_dir: &String, image_dir: String) -> (Vec<f64>, Vec<String>) {
         info!("Reading timestamps file {}", time_stamp_dir.clone());
         let file = File::open(time_stamp_dir.clone() + "/mav0/cam0/data.csv")
             .expect("Could not open timestamps file");
-        io::BufReader::new(file).lines().skip(1)
-            .map(|x| x.unwrap().split(',').next().unwrap().parse::<f64>().unwrap() / 1000000000000000000.0)
-            .collect::<Vec<f64>>()
+        let data = io::BufReader::new(file).lines().skip(1)
+            .map(|x| {
+                let x2 = x.unwrap();
+                let mut x3 = x2.split(",");
+                let timestamp = x3.next().unwrap().parse::<f64>().unwrap() * 1e-9;
+                let filename = x3.next().unwrap().to_string();
+                let filepath = format!("{}/{}", image_dir, filename);
+                (timestamp, filepath)
+            })
+            .collect::<Vec<(f64, String)>>();
+        data.into_iter().map(|(a, b)| (a, b)).unzip()
     }
 
     fn read_timestamps_file_tum(time_stamp_dir: &String) -> Vec<f64> {

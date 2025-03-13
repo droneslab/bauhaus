@@ -130,7 +130,7 @@ impl LocalMapOptimizationModule for LocalBundleAdjustment {
             for kf_id in &local_keyframes {
                 let kf = lock.get_keyframe(*kf_id);
                 let set_fixed = *kf_id == lock.initial_kf_id;
-                optimizer.pin_mut().add_vertex_se3expmap(kf.id, (kf.get_pose()).into(), false);
+                optimizer.pin_mut().add_vertex_se3expmap(kf.id, (kf.get_pose()).into(), set_fixed);
                 kf_vertex_ids.insert(*kf_id, kf.id);
                 if kf.id > max_kf_id {
                     max_kf_id = kf.id;
@@ -279,7 +279,7 @@ impl LocalMapOptimizationModule for LocalBundleAdjustment {
             }
         }
 
-        println!("LBA: KFs to optimize: {}, Fixed KFs: {}, MPs to optimize: {}, Edges: {}", kfs_to_optimize, fixed_kfs, mps_to_optimize, edges);
+        debug!("LBA: KFs to optimize: {}, Fixed KFs: {}, MPs to optimize: {}, Edges: {}", kfs_to_optimize, fixed_kfs, mps_to_optimize, edges);
         
         tracy_client::plot!("LBA: KFs to Optimize", kfs_to_optimize as f64);
         tracy_client::plot!("LBA: Fixed KFs", fixed_kfs as f64);
@@ -370,7 +370,6 @@ impl LocalMapOptimizationModule for LocalBundleAdjustment {
                 let _span = tracy_client::span!("lba::post_process::recover_mps");
 
                 //Points
-                println!("lLocalMapPoints: {:?}", mp_vertex_ids.len());
                 for (mp_id, vertex_id) in mp_vertex_ids {
                     let _span = tracy_client::span!("lba::post_process::recover_mps::bindings");
 
@@ -492,11 +491,10 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
     // const int maxCovKF = 0;
     let opt_vis_kfs: Vec<Id> = vec![]; // lpOptVisKFs
     for _ in neighbor_kfs {
-        // todo sofiya what is this?
         if opt_vis_kfs.len() >= 0 {
             break;
         }
-        todo!("Huh?");
+        todo!("What is this? Isn't opt_vis_kfs.len() always 0?");
         
         // KeyFrame* pKFi = vpNeighsKFs[i];
         // if(pKFi->mnBALocalForKF == pKF->mnId || pKFi->mnBAFixedForKF == pKF->mnId)
@@ -643,7 +641,6 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
                 prev_kf.imu_data.imu_preintegrated.is_none() ||
                 !prev_kf.imu_data.is_imu_initialized {
                     warn!("Error building inertial edge... for kf {}: {} {} {} {}", kf.id, kf.imu_data.imu_preintegrated.is_none(), !kf.imu_data.is_imu_initialized, prev_kf.imu_data.imu_preintegrated.is_none(), !prev_kf.imu_data.is_imu_initialized);
-                    // println!("Kf ID is {}", kf.id);
                     continue;
             }
             let mut imu_preintegrated = kf.imu_data.imu_preintegrated.as_ref().unwrap().clone();

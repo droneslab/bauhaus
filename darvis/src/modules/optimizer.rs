@@ -863,13 +863,9 @@ pub fn inertial_optimization_initialization(
     let cy= SETTINGS.get::<f64>(CAMERA, "cy");
     let camera_param = [fx, fy, cx,cy];
 
-    println!("11/14 IMU init.... initial rwg: {:?}", rwg);
-
     let mut optimizer = if prior_g != 0.0 {
-        println!("11/14 SET LAMBDA INIT = 1e3");
         g2o::ffi::new_sparse_optimizer(5, camera_param, 1e3)
     } else {
-        println!("11/14 SET LAMBDA INIT = 0");
         g2o::ffi::new_sparse_optimizer(5, camera_param, 0.0)
     };
 
@@ -887,8 +883,6 @@ pub fn inertial_optimization_initialization(
                 }
             };
 
-
-            println!("KF {} velocity in rust: {:?}", kf.id, velocity);
             optimizer.pin_mut().add_vertex_velocity(
                 max_kf_id + kf_id + 1,
                 false,
@@ -996,7 +990,7 @@ pub fn inertial_optimization_initialization(
     *scale = estimate.scale;
     *rwg = estimate.rwg.into();
 
-    println!("Rust RWG: {:?}", rwg);
+    debug!("Rust RWG: {:?}", rwg);
     // todo sofiya should this be flipped?
 
     let b = ImuBias {
@@ -1008,7 +1002,7 @@ pub fn inertial_optimization_initialization(
         bwz: vb[2],
     };
 
-    println!("IMU init.... RESULT bias: {:?}", b);
+    debug!("IMU init.... RESULT bias: {:?}", b);
 
     //Keyframes velocities and biases
     let mut lock = map.write()?;
@@ -1030,8 +1024,8 @@ pub fn inertial_optimization_initialization(
             kf.imu_data.set_new_bias(b);
         }
         
-        println!("INERTIAL OPTIMIZATION RESULTS.... KF bias {} {:?}", kf.id, kf.imu_data.get_imu_bias());
-        println!("INERTIAL OPTIMIZATION RESULTS.... KF velocity {} {:?}", kf.id, kf.imu_data.velocity.unwrap());
+        debug!("INERTIAL OPTIMIZATION RESULTS.... KF bias {} {:?}", kf.id, kf.imu_data.get_imu_bias());
+        debug!("INERTIAL OPTIMIZATION RESULTS.... KF velocity {} {:?}", kf.id, kf.imu_data.velocity.unwrap());
 
     }
     Ok(())
@@ -1260,7 +1254,6 @@ pub fn optimize_pose(
                 frame.mappoint_matches.set_outlier(mp_indexes[index] as usize, true);
                 edge.inner.pin_mut().set_level(1);
                 num_bad += 1;
-                // println!("Outlier chi2 mono: {}", chi2);
 
             } else {
                 frame.mappoint_matches.set_outlier(mp_indexes[index] as usize, false);

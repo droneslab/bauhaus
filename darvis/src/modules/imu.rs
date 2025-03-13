@@ -59,31 +59,7 @@ impl ImuModule for IMU {
 
         current_frame.imu_data.set_new_bias(bias);
 
-
-        // println!("Last kf id: {}", last_keyframe_id);
-        println!("twb1: {:.3}", twb1);
-        println!("rwb1: {:.3}", rwb1);
-        println!("vwb1: {:.3}", vwb1);
-        println!("t12: {:.3}", t12);
-        println!("kf delta rotation: {:?}", self.imu_preintegrated_from_last_kf.get_delta_rotation(bias));
-        println!("kf delta position: {:.3}", self.imu_preintegrated_from_last_kf.get_delta_position(bias));
-        println!("kf delta velocity: {:?}", self.imu_preintegrated_from_last_kf.get_delta_velocity(bias));
-        println!("twb2: {:?}", twb2);
-        println!("vwb2: {:?}", vwb2);
-        println!("imu bias: {:?}", bias);
-
         debug!("PREDICT STATE LAST KEYFRAME NEW POSE = {:?}", current_frame.pose);
-
-
-        for (_kf_id, kf) in lock.get_keyframes_iter() {
-            if kf.imu_data.velocity.is_some() {
-                println!("KF {} velocity: {:?}", kf.id, kf.imu_data.velocity.unwrap());
-            } else {
-                println!("KF {} has no velocity", kf.id);
-            }
-
-            println!("KF {} imu position: {:?}", kf.id, kf.get_imu_position());
-        }
         // Predbias is never used anywhere??
         // mCurrentFrame.mPredBias = mCurrentFrame.mImuBias;
         return Ok(true);
@@ -123,7 +99,7 @@ impl ImuModule for IMU {
         }
 
         let mut imu_from_last_frame = VecDeque::with_capacity(measurements.len()); // mvImuFromLastFrame
-        let imu_per = 0.000000000001; // 0.001 in orbslam, adjusted here for different timestamp units
+        let imu_per = 0.001; // 0.001 in orbslam, adjusted here for different timestamp units
 
         while !measurements.is_empty() {
             if measurements.front().unwrap().timestamp < previous_frame.timestamp - imu_per {
@@ -182,7 +158,7 @@ impl ImuModule for IMU {
                 ang_vel = imu_from_last_frame[i].ang_vel;
                 tstep = current_frame.timestamp - previous_frame.timestamp;
             }
-            tstep = tstep * 1e9; 
+            // tstep = tstep * 1e9; 
 
             self.imu_preintegrated_from_last_kf.integrate_new_measurement(acc, ang_vel, tstep);
             imu_preintegrated_from_last_frame.integrate_new_measurement(acc, ang_vel, tstep);
@@ -232,8 +208,8 @@ impl ImuModule for IMU {
 
             let first_timestamp = lock.get_keyframe( keyframes[0]).timestamp; // mFirstTs
             let current_timestamp = lock.get_keyframe(current_keyframe_id).timestamp; // mpCurrentKeyFrame->mTimeStamp
-            if (current_timestamp - first_timestamp) * 1e9 < min_time {
-                debug!("IMU:  Early return timestamps ({})... current keyframe is {}, first keyframe is {}", (current_timestamp - first_timestamp) * 1e9, current_keyframe_id, keyframes[0]);
+            if (current_timestamp - first_timestamp) < min_time {
+                debug!("IMU:  Early return timestamps ({})... current keyframe is {}, first keyframe is {}", (current_timestamp - first_timestamp), current_keyframe_id, keyframes[0]);
                 return Ok(());
             }
         }
@@ -307,7 +283,7 @@ impl ImuModule for IMU {
             mba = map.read()?.get_keyframe(current_keyframe_id).imu_data.imu_bias.get_acc_bias();
         }
 
-        println!("IMU: Begin initialization optimization");
+        debug!("IMU: Begin initialization optimization");
 
         let mut scale = 1.0; // mScale
         optimizer::inertial_optimization_initialization(
@@ -334,11 +310,6 @@ impl ImuModule for IMU {
                 let twg = Pose::new(nalgebra::Vector3::zeros(), *rwg);
                 map.write()?.apply_scaled_rotation(&twg, scale, true);
 
-                // println!("Current kf ts: {}", map.read()?.get_keyframe(current_keyframe_id).timestamp);
-                // if map.read()?.get_keyframe(current_keyframe_id).timestamp > 1.40363662 {
-                //     println!("PAUSED IN INITIALIZE");
-                //     std::thread::sleep(std::time::Duration::from_millis(100000));
-                // }
                 tracking_backend.unwrap().send(Box::new(
                     UpdateFrameIMUMsg{
                         scale,
@@ -381,10 +352,10 @@ impl ImuModule for IMU {
 
         if fiba {
             if prior_a != 0.0 {
-                println!("FULL INERTIAL BA TYPE 1");
+                debug!("FULL INERTIAL BA TYPE 1");
                 full_inertial_ba(map, 100, false, current_keyframe_id, true, prior_g, prior_a)?;
             } else {
-                println!("FULL INERTIAL BA TYPE 2");
+                debug!("FULL INERTIAL BA TYPE 2");
                 full_inertial_ba(map, 100, false, current_keyframe_id, false, 0.0, 0.0)?;
             }
         }
@@ -410,7 +381,7 @@ impl ImuModule for IMU {
 
                 let (curr_kf_pose_inverse, curr_kf_gba_pose) = {
                     let curr_kf = lock.get_keyframe(curr_kf_id);
-                    (curr_kf.get_pose().group_inverse(), curr_kf.gba_pose.clone())
+                    (curr_kf.get_pose().inverse(), curr_kf.gba_pose.clone())
                 };
 
                 for child_id in & children {
@@ -430,7 +401,6 @@ impl ImuModule for IMU {
                         // }
                         child.ba_global_for_kf = current_keyframe_id;
                         child.bias_gba = Some(child.imu_data.imu_bias.clone());
-                        println!("Add pose for child kf {}", child_id);
                     }
                     kfs_to_check.push(*child_id);
                 }
@@ -442,13 +412,13 @@ impl ImuModule for IMU {
                 kf.set_pose(kf.gba_pose.unwrap().clone());
 
                 i += 1;
-                println!("IMU: post-fiba, KF {} translation: {:?}, old translation: {:?}", kf.id, kf.get_pose().get_translation(),  kf.tcw_bef_gba.unwrap().get_translation());
+                debug!("IMU: post-fiba, KF {} translation: {:?}, old translation: {:?}", kf.id, kf.get_pose().get_translation(),  kf.tcw_bef_gba.unwrap().get_translation());
 
                 if kf.imu_data.is_imu_initialized {
                     kf.vwb_bef_gba = Some(kf.imu_data.velocity.unwrap());
                     kf.imu_data.velocity = kf.vwb_gba.clone();
                     kf.imu_data.set_new_bias(kf.bias_gba.unwrap().clone());
-                    println!("IMU: post-fiba, kf {} velocity: {:?}", kf.id, kf.imu_data.velocity.unwrap());
+                    debug!("IMU: post-fiba, kf {} velocity: {:?}", kf.id, kf.imu_data.velocity.unwrap());
                 } else {
                     warn!("KF {} not set to inertial!!", curr_kf_id);
                 }
@@ -591,7 +561,7 @@ impl ImuCalib {
         ]);
 
         Self {
-            tcb: tbc.group_inverse(),
+            tcb: tbc.inverse(),
             tbc,
             cov,
             cov_walk,
@@ -1075,9 +1045,9 @@ impl ConstraintPoseImu {
         //         eigs[i]=0;
         // H = es.eigenvectors()*eigs.asDiagonal()*es.eigenvectors().transpose();
 
-        println!("H after eigen stuff: {:?}", constraint_pose_imu.h);
-        println!("Eigenvalues: {:?}", eigenvalues);
-        println!("Eigenvectors: {:?}", decomp.eigenvectors);
+        debug!("H after eigen stuff: {:?}", constraint_pose_imu.h);
+        debug!("Eigenvalues: {:?}", eigenvalues);
+        debug!("Eigenvectors: {:?}", decomp.eigenvectors);
         
         Some(constraint_pose_imu)
     }

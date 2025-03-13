@@ -85,13 +85,13 @@ impl MapInitialization {
             self.ready_to_initialize = true;
             return Ok(false);
         } else {
-            if current_frame.features.num_keypoints <=100 || self.sensor.is_imu() && (self.last_frame.as_ref().unwrap().timestamp - self.initial_frame.as_ref().unwrap().timestamp) * 1e9 > 1.0 {
+            if current_frame.features.num_keypoints <=100 || self.sensor.is_imu() && (self.last_frame.as_ref().unwrap().timestamp - self.initial_frame.as_ref().unwrap().timestamp) > 1.0 {
                 debug!("QUIT: Timestamp too high?");
                 self.ready_to_initialize = false;
                 return Ok(false);
             }
 
-            println!("MONO INIT... initial frame matches {}", self.initial_frame.as_ref().unwrap().features.num_keypoints);
+            println!("MONO INIT... initial frame matches {}, current frame matches {}", self.initial_frame.as_ref().unwrap().features.num_keypoints, self.current_frame.as_ref().unwrap().features.num_keypoints);
 
             // Find correspondences
             let (mut num_matches, mp_matches) = FEATURE_MATCHING_MODULE.search_for_initialization(
@@ -101,6 +101,12 @@ impl MapInitialization {
                 100
             );
             self.mp_matches = mp_matches;
+
+            // println!("Initialization matches: {}", num_matches);
+            // for i in 0..self.mp_matches.len() {
+            //     print!("{}, ", self.mp_matches[i]);
+            // }
+            // println!();
 
             // Check if there are enough correspondences
             if num_matches < 100 {
@@ -125,6 +131,8 @@ impl MapInitialization {
 
                 self.initial_frame.as_mut().unwrap().pose = Some(Pose::default());
                 self.current_frame.as_mut().unwrap().pose = Some(tcw);
+
+                println!("Map initialization... after reconstruct with two views, current frame pose is {:?}", tcw);
 
                 return Ok(true);
             } else {
@@ -203,10 +211,13 @@ impl MapInitialization {
         // Bundle Adjustment
         FULL_MAP_OPTIMIZATION_MODULE.optimize(map, 20, true, 0)?;
 
+        println!("Map initialization... after gba, current frame pose is {:?}", map.read()?.get_keyframe(curr_kf_id).get_pose());
+
         let median_depth = {
             let lock = map.read()?;
             lock.get_keyframe(initial_kf_id).compute_scene_median_depth(& lock.mappoints, 2)
         };
+        println!("Median depth? {}", median_depth);
         let inverse_median_depth = match self.sensor {
             Sensor(FrameSensor::Mono, ImuSensor::Some) => 4.0 / median_depth,
             _ => 1.0 / median_depth
@@ -232,6 +243,8 @@ impl MapInitialization {
             curr_kf.set_pose(new_pose);
         }
 
+        println!("Map initialization... after scaling, current frame pose is {:?}", map.read()?.get_keyframe(curr_kf_id).get_pose());
+        println!("Map initialization... scale by inverse median depth {}", inverse_median_depth);
 
         // Scale points
         let mp_matches = map.write()?.get_keyframe_mut(initial_kf_id).get_mp_matches().clone();

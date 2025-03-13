@@ -14,6 +14,7 @@ use std::thread::sleep;
 use std::time::Duration;
 use log::{debug, warn, info};
 use opencv::prelude::KeyPointTraitConst;
+use crate::map::frame::Frame;
 use crate::map::pose::Pose;
 use crate::map::read_only_lock::ReadWriteMap;
 use crate::modules::local_bundle_adjustment::local_inertial_ba;
@@ -28,14 +29,16 @@ use crate::{
 };
 use crate::modules::module_definitions::CameraModule;
 use crate::modules::module_definitions::ImuModule;
-use super::messages::{ShutdownMsg, InitKeyFrameMsg, KeyFrameIdMsg, NewKeyFrameMsg};
+use super::messages::{InitKeyFrameMsg, KeyFrameIdMsg, NewKeyFrameGTSAMMsg, NewKeyFrameMsg, ShutdownMsg};
 use super::tracking_backend::TrackingState;
+use crate::modules::module_definitions::BoWModule;
+
 
 // TODO (design, variable locations): It would be nice for this to be a member of LocalMapping instead of floating around in the global namespace, but we can't do that easily because then Tracking would need a reference to the localmapping object.
 pub static LOCAL_MAPPING_IDLE: AtomicBool = AtomicBool::new(true);
 pub static LOCAL_MAPPING_PAUSE_SWITCH: AtomicBool = AtomicBool::new(false); // sent from loop closing to stop until gba is done, equivalent to calling RequestStop and isStopped
 
-pub struct LocalMapping {
+pub struct LocalMappingGTSAM {
     system: System,
     map: ReadWriteMap,
     sensor: Sensor,
@@ -52,7 +55,7 @@ pub struct LocalMapping {
     imu_module: Option<IMU>,
 }
 
-impl Actor for LocalMapping {
+impl Actor for LocalMappingGTSAM {
     type MapRef = ReadWriteMap;
 
     fn spawn(system: System, map: Self::MapRef) {
@@ -62,7 +65,7 @@ impl Actor for LocalMapping {
             false => None
         };
 
-        let mut actor = LocalMapping {
+        let mut actor = LocalMappingGTSAM {
             system,
             map,
             sensor,
@@ -95,7 +98,7 @@ impl Actor for LocalMapping {
     }
 }
 
-impl LocalMapping {
+impl LocalMappingGTSAM {
     fn handle_message(&mut self, message: MessageBox) -> Result<bool, Box<dyn std::error::Error>> {
         if message.is::<InitKeyFrameMsg>() {
             LOCAL_MAPPING_IDLE.store(false, std::sync::atomic::Ordering::SeqCst);
@@ -125,7 +128,7 @@ impl LocalMapping {
                 self.local_mapping(0, HashMap::new())?;
             }
 
-        } else if message.is::<NewKeyFrameMsg>() {
+        } else if message.is::<NewKeyFrameGTSAMMsg>() {
             if LOCAL_MAPPING_PAUSE_SWITCH.load(std::sync::atomic::Ordering::SeqCst) {
                 LOCAL_MAPPING_IDLE.store(true, std::sync::atomic::Ordering::SeqCst);
                 tracy_client::Client::running()
@@ -141,7 +144,8 @@ impl LocalMapping {
                 return Ok(false);
             }
 
-            let msg = message.downcast::<NewKeyFrameMsg>().unwrap_or_else(|_| panic!("Could not downcast local mapping message!"));
+            let mut msg = message.downcast::<NewKeyFrameGTSAMMsg>().unwrap_or_else(|_| panic!("Could not downcast local mapping message!"));
+            self.map_feature_tracks_to_mappoints(&mut msg.keyframe, msg.feature_tracks).unwrap();
             let kf_id = self.map.write()?.insert_keyframe_to_map(msg.keyframe, false);
 
             info!("Local mapping working on keyframe {}. Queue length: {}", kf_id, self.system.queue_len());
@@ -163,7 +167,36 @@ impl LocalMapping {
         Ok(false)
     }
 
-   fn local_mapping(&mut self, matches_in_tracking: i32, tracked_mappoint_depths: HashMap<Id, f64>) -> Result<(), Box<dyn std::error::Error>> {
+    fn map_feature_tracks_to_mappoints(&mut self, frame: &mut Frame, feature_tracks: Vec<(i32, i32)>) -> Result<(), Box<dyn std::error::Error>> {
+        // todo sofiya map mappoints
+        // let map = self.map.read()?;
+        // let last_kf = map.get_keyframe(self.current_keyframe_id - 1);
+
+        // let frame_featvec = frame.bow.as_ref().unwrap().get_feat_vec().get_all_nodes();
+        // let mut i = 0;
+
+        // while i < frame_featvec.len() {
+        //     let frame_node_id = frame_featvec[i];
+        //     let frame_indices_size = frame.bow.as_ref().unwrap().get_feat_vec().vec_size(frame_node_id);
+        //     let real_idx_frame = frame.bow.as_ref().unwrap().get_feat_vec().vec_get(frame_node_id, index_frame);
+
+        //     frame.mappoint_matches.add(real_idx_frame, *mp_id, false);
+
+        // }
+
+
+        // for (idx_in_curr_frame, idx_in_last_frame) in feature_tracks {
+        //     if let Some((mp_id, _is_outlier)) = last_kf.get_mp_matches()[idx_in_last_frame as usize] {
+        //         frame.mappoint_matches.add(idx_in_curr_frame as u32, mp_id, false);
+        //     } else {
+        //         warn!("Sofiya... can this happen? Current frame has a feature that is not in the previous frame");
+        //     }
+        // }
+        Ok(())
+    }
+
+
+    fn local_mapping(&mut self, matches_in_tracking: i32, tracked_mappoint_depths: HashMap<Id, f64>) -> Result<(), Box<dyn std::error::Error>> {
         let _span = tracy_client::span!("local_mapping");
 
         match self.sensor.frame() {
@@ -255,6 +288,8 @@ impl LocalMapping {
 
         // Check redundant local Keyframes
         let kfs_culled = self.keyframe_culling()?;
+        // let kfs_culled = 0;
+        // warn!("SOFIYA TURNED OFF KF CULLING");
 
         if self.sensor.is_imu() && self.imu_module.as_ref().unwrap().timestamp_init < 50.0 && matches!(self.current_tracking_state, TrackingState::Ok) {
             // Enter here everytime local-mapping is called

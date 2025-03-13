@@ -47,7 +47,7 @@ pub struct FeatureTracksAndIMUMsg {
     pub frame: Frame,
     // pub preintegration_results: PreintegratedCombinedMeasurementsResults,
     pub imu_measurements: ImuMeasurements,
-    pub mappoint_ids: Vec<i32>,
+    pub feature_ids: Vec<i32>,
 }
 impl ActorMessage for FeatureTracksAndIMUMsg {
     fn get_map_version(&self) -> u64 {
@@ -142,6 +142,20 @@ impl ActorMessage for NewKeyFrameMsg {
     }
 }
 
+pub struct NewKeyFrameGTSAMMsg {
+    pub keyframe: Frame,
+    pub feature_tracks: Vec<(i32, i32)>,
+    pub tracking_state: TrackingState,
+    pub matches_in_tracking: i32,
+    pub tracked_mappoint_depths: HashMap<Id, f64>,
+    pub map_version: u64
+}
+impl ActorMessage for NewKeyFrameGTSAMMsg {
+    fn get_map_version(&self) -> u64 {
+        self.map_version
+    }
+}
+
 // * LOOP CLOSING */
 pub struct KeyFrameIdMsg { 
     pub kf_id: Id,
@@ -218,6 +232,17 @@ pub struct VisTrajectoryMsg {
     pub map_version: u64
 }
 impl ActorMessage for VisTrajectoryMsg {
+    fn get_map_version(&self) -> u64 {
+        self.map_version
+    }
+}
+
+pub struct VisTrajectoryTrackingMsg { 
+    pub pose: Pose, 
+    pub timestamp: Timestamp,
+    pub map_version: u64
+}
+impl ActorMessage for VisTrajectoryTrackingMsg {
     fn get_map_version(&self) -> u64 {
         self.map_version
     }

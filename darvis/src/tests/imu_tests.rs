@@ -1504,7 +1504,7 @@ MapPointDummy { id: 1006, position: DVVector3::new_with(0.96421003341674805, 1.5
         println!("Vwb2: {:?}", vwb2);
 
 
-        let new_pose = Pose::new(twb2, rwb2).group_inverse();
+        let new_pose = Pose::new(twb2, rwb2).inverse();
 
         println!();
         println!("RESULT velocity: {:?}", vwb2);
@@ -1629,11 +1629,11 @@ MapPointDummy { id: 1006, position: DVVector3::new_with(0.96421003341674805, 1.5
             )
         );
 
-        let mut twc = old_pose.group_inverse().clone();
+        let mut twc = old_pose.inverse().clone();
         let twc_trans = twc.get_translation();
         twc.set_translation(nalgebra::Vector3::new(twc_trans[0] * s, twc_trans[1] * s, twc_trans[2] * s)); // just scaling translation by s
         let tyc = t * twc;
-        let tcy = tyc.group_inverse();
+        let tcy = tyc.inverse();
         let new_pose = tcy;
         let new_velocity = DVVector3::new(*t.get_rotation() * old_velocity * s);
 

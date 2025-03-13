@@ -17,22 +17,26 @@ pub type MapItems<T> = BTreeMap<Id, T>;
 pub struct Map {
     pub id: Id,
 
-    keyframes: MapItems<KeyFrame>, // = mspKeyFrames
-    pub mappoints: MapItems<MapPoint>, // = mspMapPoints
-
-    keyframe_database: KeyFrameDatabase, // = mpKeyFrameDB
-
     // KeyFrames
+    keyframes: MapItems<KeyFrame>, // = mspKeyFrames
+    keyframe_database: KeyFrameDatabase, // = mpKeyFrameDB
     pub last_kf_id: Id, // = mnMaxKFid
     pub initial_kf_id: Id, // TODO (multimaps): this is the initial kf id that was added to this map, when this map is made. should tie together map versioning better, maybe in a single struct
+    // If a keyframe is deleted, we may still need to access its old parent and pose when reporting the final trajectory:
+    deleted_keyframe_info: MapItems<(Id, Pose)>, // (parent_id, pose_relative_to_parent)
 
     // MapPoints
+    pub mappoints: MapItems<MapPoint>, // = mspMapPoints
     last_mp_id: Id,
 
+    // IMU
     pub imu_initialized: bool, // mbImuInitialized
     pub imu_ba2: bool, // mbIMU_BA2 
+
+    // Versioning
     pub map_change_index: i32, // mnMapChange
     pub version: u64,
+
     _sensor: Sensor,
 
     // Following are in orbslam3, not sure if we need:
@@ -62,7 +66,8 @@ impl Map {
             keyframe_database: KeyFrameDatabase::new(),
             imu_initialized: false,
             map_change_index: 0,
-            version: 0
+            version: 0,
+            deleted_keyframe_info: MapItems::<(Id, Pose)>::default(),
         }
     }
 
@@ -241,15 +246,15 @@ impl Map {
             next_kf_id = kf.next_kf_id;
         }
         for conn_kf in connections1 {
-            self.keyframes.get_mut(&conn_kf).unwrap().delete_connection(kf_id);
+            self.keyframes.get_mut(&conn_kf).expect(&format!("Current kf {} has connection to connected kf {}, but it is deleted", kf_id, conn_kf)).delete_connection(kf_id);
         }
 
         // Update prev_kf_id and next_kf_id of the prev and next kf (used for IMU)
         if let Some(prev_kf_id) = prev_kf_id {
-            self.keyframes.get_mut(&prev_kf_id).unwrap().next_kf_id = next_kf_id;
+            self.keyframes.get_mut(&prev_kf_id).expect(&format!("Current kf {} has connection to previous kf kf {}, but it is deleted", kf_id, prev_kf_id)).next_kf_id = next_kf_id;
         }
         if let Some(next_kf_id) = next_kf_id {
-            self.keyframes.get_mut(&next_kf_id).unwrap().prev_kf_id = prev_kf_id;
+            self.keyframes.get_mut(&next_kf_id).expect(&format!("Current kf {} has connection to next kf {}, but it is deleted", kf_id, next_kf_id)).prev_kf_id = prev_kf_id;
         }
 
         let mut test_just_mp_ids = Vec::new();
@@ -273,6 +278,7 @@ impl Map {
         // Include that children as new parent candidate for the rest
         let mut continue_loop = false;
 
+        // Nitin ... something here could be wrong?
         while !children1.is_empty() {
             let (mut max, mut child_id, mut parent_id) = (-1, -1, -1);
 
@@ -316,6 +322,12 @@ impl Map {
 
         if parent1.is_some() {
             self.keyframes.get_mut(&parent1.unwrap()).unwrap().children.remove(&kf_id);
+
+            // Save keyframe info for trajectory retrieval later
+            let pose_relative_to_parent = self.keyframes.get(&kf_id).unwrap().get_pose() * self.keyframes.get(&parent1.unwrap()).unwrap().get_pose().inverse();
+
+            // Nitin ... after keyframe is deleted, its data is saved here
+            self.deleted_keyframe_info.insert(kf_id, (parent1.unwrap(), pose_relative_to_parent));
         }
         self.keyframes.remove(&kf_id);
 
@@ -432,7 +444,6 @@ impl Map {
                             error!("KF ({})'s old MP match ({}) should be the same as the one that is replaced ({}).", kf_id, old_mp_id, mp_to_replace_id);
                         }
                     }
-                    // println!("Add observation to replaced mappoint for kf {}", kf_id);
                 }
                 if index_right != -1 {
                     // TODO (STEREO)
@@ -489,6 +500,11 @@ impl Map {
             kf2.loop_edges.insert(kf1_id);
             kf2.dont_delete = true;
         }
+    }
+
+    pub fn get_deleted_keyframe_info(&self, kf: Id) -> (Id, Pose) {
+        // Nitin ... after keyframe is deleted,  access its data here
+        * self.deleted_keyframe_info.get(&kf).expect(&format!("Keyframe {} deleted, but its `deleted_keyframe_info` was not saved into the map", kf))
     }
 
     ////* keyframe database */////////////////////////////////////////////////////

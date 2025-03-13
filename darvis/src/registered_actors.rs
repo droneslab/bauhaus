@@ -117,7 +117,9 @@ pub fn spawn_actor(
         str if str == "gtsam tracking backend".to_string() => {
             crate::actors::tracking_backend_gtsam::TrackingBackendGTSAM::spawn(system, map.expect("Tracking needs the map!"))
         },
-
+        str if str == "gtsam local mapping".to_string() => {
+            crate::actors::local_mapping_gtsam::LocalMappingGTSAM::spawn(system, map.expect("Local mapping needs the map!"))
+        },
         str if str == SHUTDOWN_ACTOR.to_string() => {
             crate::actors::shutdown::ShutdownActor::spawn(system, map.expect("Shutdown needs the map!"))
         },

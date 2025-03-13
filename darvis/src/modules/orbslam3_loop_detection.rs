@@ -46,7 +46,7 @@ impl ORBSLAM3LoopDetection {
 
         if num_proj_matches >= 30 {
             let mut scm = {
-                let twm = map.read()?.get_keyframe(current_kf_id).get_pose().group_inverse();
+                let twm = map.read()?.get_keyframe(current_kf_id).get_pose().inverse();
                 let twm_as_sim3 = Sim3::new(twm.get_translation(), twm.get_rotation(), 1.0);
                 *scw * twm_as_sim3
             };
@@ -57,7 +57,7 @@ impl ORBSLAM3LoopDetection {
                     fixed_scale = false;
                 }
             }
-            println!("Fixed scale is {}", fixed_scale);
+            debug!("Fixed scale is {}", fixed_scale);
 
             let num_opt_matches = optimizer::optimize_sim3(
                 &map, current_kf_id, loop_kf, &mut matched_mappoints, &mut scm, 10, fixed_scale
@@ -202,7 +202,7 @@ impl ORBSLAM3LoopDetection {
                         true,
                         0.9
                     )?;
-                    // println!("...Matches between {} (frame {}) and {} (frame {}): {}", current_kf_id, read.get_keyframe(current_kf_id).frame_id, cov_kf[j], read.get_keyframe(cov_kf[j]).frame_id, matches.len());
+                    // debug!("...Matches between {} (frame {}) and {} (frame {}): {}", current_kf_id, read.get_keyframe(current_kf_id).frame_id, cov_kf[j], read.get_keyframe(cov_kf[j]).frame_id, matches.len());
                     if matches.len() > most_bow_num_matches {
                         most_bow_num_matches = matches.len();
                     }
@@ -229,7 +229,7 @@ impl ORBSLAM3LoopDetection {
                         fixed_scale = false;
                     }
                 }
-                println!("Fixed scale is {}", fixed_scale);
+                debug!("Fixed scale is {}", fixed_scale);
 
                 let mut solver = Sim3Solver::new(
                     &map,
@@ -290,7 +290,7 @@ impl ORBSLAM3LoopDetection {
                                     fixed_scale = false;
                                 }
                             }
-                            println!("Fixed scale is {}", fixed_scale);
+                            debug!("Fixed scale is {}", fixed_scale);
 
 
                             let num_opt_matches = optimizer::optimize_sim3(
@@ -350,7 +350,7 @@ impl ORBSLAM3LoopDetection {
                                         let mut sjw = {
                                             let kf_j_pose = map.read()?.get_keyframe(current_cov_kfs[j]).get_pose();
                                             let sjc = Sim3 {
-                                                pose: kf_j_pose * current_kf_pose.group_inverse(),
+                                                pose: kf_j_pose * current_kf_pose.inverse(),
                                                 scale: 1.0
                                             };
 
@@ -452,7 +452,7 @@ impl LoopDetectionModule for ORBSLAM3LoopDetection {
         if self.num_coincidences > 0 {
             // Find from the last KF candidates
             let mut scw = {
-                let tcl = map.read()?.get_keyframe(current_kf_id).get_pose() * map.read()?.get_keyframe(self.last_current_kf).get_pose().group_inverse();
+                let tcl = map.read()?.get_keyframe(current_kf_id).get_pose() * map.read()?.get_keyframe(self.last_current_kf).get_pose().inverse();
                 let tcl_as_sim3: Sim3 = tcl.into();
                 tcl_as_sim3 * self.loop_slw
             };

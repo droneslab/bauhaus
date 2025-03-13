@@ -112,42 +112,42 @@ impl LoopClosing {
 
         debug!("Loop closing working on kf {} (frame {})", current_kf_id, self.map.read()?.get_keyframe(current_kf_id).frame_id);
 
-        // // Detect loop candidates and check covisibility consistency
-        // match self.loop_detection.detect_loop(& self.map, current_kf_id) {
-        //     Ok((merge_kf, loop_kf, scw, loop_mappoints, current_matched_points)) => {
-        //         if merge_kf.is_some() {
-        //             info!("KF {}: Merge detected!", current_kf_id);
-        //         }
+        // Detect loop candidates and check covisibility consistency
+        match self.loop_detection.detect_loop(& self.map, current_kf_id) {
+            Ok((merge_kf, loop_kf, scw, loop_mappoints, current_matched_points)) => {
+                if merge_kf.is_some() {
+                    info!("KF {}: Merge detected!", current_kf_id);
+                }
 
-        //         match (loop_kf, scw) {
-        //             (Some(loop_kf), Some(scw)) => {
-        //                 info!("KF {}: Loop detected! with KF {}", current_kf_id, loop_kf);
+                match (loop_kf, scw) {
+                    (Some(loop_kf), Some(scw)) => {
+                        info!("KF {}: Loop detected! with KF {}", current_kf_id, loop_kf);
 
-        //                 match self.sensor.is_imu() {
-        //                     true => {
-        //                         todo!("IMU");
-        //                         // Lines 235-258
-        //                     },
-        //                     false => {}
-        //                 };
+                        match self.sensor.is_imu() {
+                            true => {
+                                todo!("IMU");
+                                // Lines 235-258
+                            },
+                            false => {}
+                        };
 
-        //                 match self.correct_loop(current_kf_id, loop_kf, scw, loop_mappoints, current_matched_points) {
-        //                     Ok(_) => {},
-        //                     Err(e) => {
-        //                         warn!("Loop correction failed: {}", e);
-        //                     }
-        //                 }
+                        match self.correct_loop(current_kf_id, loop_kf, scw, loop_mappoints, current_matched_points) {
+                            Ok(_) => {},
+                            Err(e) => {
+                                warn!("Loop correction failed: {}", e);
+                            }
+                        }
 
-        //                 // Reset all variables
-        //                 self.map.write()?.get_keyframe_mut(loop_kf).dont_delete = false;
-        //             },
-        //             _ => ()
-        //         }
-        //     },
-        //     Err(e) => {
-        //         warn!("Loop detection failed: {}", e);
-        //     }
-        // }
+                        // Reset all variables
+                        self.map.write()?.get_keyframe_mut(loop_kf).dont_delete = false;
+                    },
+                    _ => ()
+                }
+            },
+            Err(e) => {
+                warn!("Loop detection failed: {}", e);
+            }
+        }
 
         self.map.write()?.get_keyframe_mut(current_kf_id).dont_delete = false;
         thread::sleep(Duration::from_micros(5000));
@@ -158,7 +158,7 @@ impl LoopClosing {
     fn correct_loop(&mut self, current_kf_id: Id, loop_kf: Id, loop_scw: Sim3, loop_mappoints: Vec<Id>, current_matched_points: Vec<Option<Id>>) -> Result<(), Box<dyn std::error::Error>> {
         let _span = tracy_client::span!("correct_loop");
 
-        println!("CORRECT LOOP, Sim3: {:?}", loop_scw);
+        debug!("CORRECT LOOP, Sim3: {:?}", loop_scw);
 
         set_switches(Switches::CorrectLoopBeginning);
 
@@ -191,7 +191,7 @@ impl LoopClosing {
             // Update keyframe pose with corrected Sim3. First transform Sim3 to SE3 (scale translation)
             let current_kf = lock.get_keyframe_mut(current_kf_id);
             current_kf.set_pose(loop_scw.into());
-            println!("Corrected current kf {} (frame {}): {:?}", current_kf.id, current_kf.frame_id, current_kf.get_pose());
+            debug!("Corrected current kf {} (frame {}): {:?}", current_kf.id, current_kf.frame_id, current_kf.get_pose());
 
             for connected_kf_id in &current_connected_kfs {
                 let connected_kf = lock.get_keyframe_mut(*connected_kf_id);
@@ -211,7 +211,7 @@ impl LoopClosing {
                     // Pose without correction
                     let original_siw: Sim3 = tiw.into();
                     non_corrected_sim3.insert(*connected_kf_id, original_siw);
-                    println!("...corrected pose for kf {} (frame {}): {:?}", connected_kf_id, connected_kf.frame_id, connected_kf.get_pose());
+                    debug!("...corrected pose for kf {} (frame {}): {:?}", connected_kf_id, connected_kf.frame_id, connected_kf.get_pose());
                 }
             }
 
@@ -284,7 +284,7 @@ impl LoopClosing {
                     };
                 }
             }
-            println!("Loop fusion, mappoints replaced {}, added {}", num_replaced, num_added);
+            debug!("Loop fusion, mappoints replaced {}, added {}", num_replaced, num_added);
         }
 
         // This is for testing the outcome of essential graph optimization
@@ -438,7 +438,7 @@ fn run_gba(map: &mut ReadWriteMap, loop_kf: Id) -> Result<(), Box<dyn std::error
                     let tchildc = child.get_pose() * curr_kf_pose_inverse;
                     child.gba_pose = Some(tchildc * curr_kf_gba_pose.unwrap());
                     child.ba_global_for_kf = loop_kf;
-                    println!("Add pose for child kf {}", child_id);
+                    debug!("Add pose for child kf {}", child_id);
 
                     todo!("SOFIYA mVwbGBA");
                         //                     Sophus::SO3f Rcor = pChild->mTcwGBA.so3().inverse() * pChild->GetPose().so3();
@@ -455,7 +455,7 @@ fn run_gba(map: &mut ReadWriteMap, loop_kf: Id) -> Result<(), Box<dyn std::error
             let kf = lock.get_keyframe_mut(curr_kf_id);
             tcw_bef_gba.insert(curr_kf_id, kf.get_pose());
             kf.set_pose(kf.gba_pose.unwrap().clone());
-            println!("Update kf {} with pose {:?}", curr_kf_id, kf.get_pose());
+            debug!("Update kf {} with pose {:?}", curr_kf_id, kf.get_pose());
             i += 1;
 
             todo!("SOFIYA mVwbGBA");

@@ -90,7 +90,7 @@ impl Pose {
         Pose(self.0.inverse())
     }
 
-    pub fn group_inverse(&self) -> Pose {
+    fn group_inverse(&self) -> Pose {
         // Note: idk about this, but it seems like a different function from the regular inverse() above.
         // See Sophus:
             // / Returns group inverse.

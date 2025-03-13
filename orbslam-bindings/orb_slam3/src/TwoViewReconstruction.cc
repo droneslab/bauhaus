@@ -83,7 +83,9 @@ namespace orb_slam3
     TwoViewReconstruction::TwoViewReconstruction(float fx, float cx, float fy, float cy, float sigma, int iterations) {
         Eigen::Matrix3f K;
         K << fx, 0.f, cx, 0.f, fy, cy, 0.f, 0.f, 1.f;
-        mK = K; 
+        mK = K;
+
+        // std::cout << "TVR K: " << K << std::endl;
 
         mSigma = sigma;
         mSigma2 = sigma*sigma;
@@ -106,14 +108,19 @@ namespace orb_slam3
         mvMatches12.clear();
         mvMatches12.reserve(mvKeys2.size());
         mvbMatched1.resize(mvKeys1.size());
-        for(size_t i=0, iend=vMatches12.size();i<iend; i++) {
+
+        // std::cout << "TVR C++: mvbMatched1: ";
+        for (size_t i = 0, iend = vMatches12.size(); i < iend; i++)
+        {
             if(vMatches12[i]>=0) {
                 mvMatches12.push_back(make_pair(i,vMatches12[i]));
                 mvbMatched1[i]=true;
             } else {
                 mvbMatched1[i]=false;
             }
+            // std::cout << mvbMatched1[i] << " ";
         }
+        // std::cout << std::endl;
 
         const int N = mvMatches12.size();
 
@@ -157,13 +164,14 @@ namespace orb_slam3
         threadH.join();
         threadF.join();
 
+        // std::cout << "Tvr C++: homography score: " << SH << " fundamental: " << SF << std::endl;
         // Compute ratio of scores
         if(SH+SF == 0.f) return false;
         float RH = SH/(SH+SF);
 
         float minParallax = 1.0;
 
-        // Don't delete this
+        // Sofiya: Don't delete this
         // Code to print out an image showing the homography, so we can test if the homography makes sense
         // If you want to use this you'll need to manually change the image pngs below to whatever you're testing 
         // cv::Mat F_mat(3, 3, CV_64FC1);

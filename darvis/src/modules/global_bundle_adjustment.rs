@@ -41,7 +41,6 @@ impl FullMapOptimizationModule for GlobalBundleAdjustment {
                 );
                 kf_vertex_ids.insert(*kf_id, id_count);
                 id_count += 1;
-                // println!("ADD KF {} with pose {:?}", kf.id, kf.pose);
             }
 
             let mut mp_vertex_ids = HashMap::new();
@@ -55,7 +54,6 @@ impl FullMapOptimizationModule for GlobalBundleAdjustment {
                     false, true
                 );
                 mp_vertex_ids.insert(*mp_id, id_count);
-                // println!("ADD MAPPOINT {} with pose {:?}", mp_id, mappoint.position);
 
                 let mut n_edges = 0;
 
@@ -83,7 +81,6 @@ impl FullMapOptimizationModule for GlobalBundleAdjustment {
                                         * TH_HUBER_2D
                                     )
                                 );
-                                // println!("ADD EDGE KF {} <-> MP {}", kf_id, mp_id);
                             }
                         }
                     };
@@ -119,15 +116,12 @@ impl FullMapOptimizationModule for GlobalBundleAdjustment {
             for (kf_id, vertex_id) in kf_vertex_ids {
                 let kf = lock.get_keyframe_mut(kf_id);
                 let pose: Pose = optimizer.recover_optimized_frame_pose(vertex_id).into();
-                // println!("GBA: loop kf {}, initial kf {}", loop_kf, initial_kf_id);
 
                 if loop_kf == initial_kf_id {
                     kf.set_pose(pose.into());
                 } else {
-                    // println!("GBA: Set kf {} pose: {:?}. Old pose: {:?}", kf.id, pose, kf.pose);
                     kf.gba_pose = Some(pose);
                     kf.ba_global_for_kf = loop_kf;
-                    // debug!("(baglobal) set in gba, for kf {}: {}", kf.id, loop_kf);
                 }
                 // // Possible that map actor deleted mappoint after local BA has finished but before
                 // // this message is processed
@@ -157,7 +151,6 @@ impl FullMapOptimizationModule for GlobalBundleAdjustment {
                         } else {
                             mp.gba_pose = Some(pos);
                             mp.ba_global_for_kf = loop_kf;
-                            // debug!("(baglobal) set in gba, for mp {}: {}", mp.id, loop_kf);
                         }
                     },
                     None => continue,
@@ -179,7 +172,7 @@ pub fn full_inertial_ba(
         .max_by(|a, b| a.1.id.cmp(&b.1.id))
         .map(|(k, _v)| k).unwrap();
 
-    println!("BEGIN FULL INERTIAL BA... max kf id: {}, fix local: {}, loop id: {}", max_kf_id, fix_local, loop_id);
+    debug!("BEGIN FULL INERTIAL BA... max kf id: {}, fix local: {}, loop id: {}", max_kf_id, fix_local, loop_id);
 
     // Setup optimizer
     // ... Note... pretty sure camera params aren't necessary for this optimization but throwing them in here anyway just in case
@@ -235,7 +228,7 @@ pub fn full_inertial_ba(
                 );
             }
         } else {
-            println!("KF {} imu is not initialized", kf.id);
+            debug!("KF {} imu is not initialized", kf.id);
         }
     }
 
@@ -298,7 +291,7 @@ pub fn full_inertial_ba(
             let vp2_id = kf.id;
             let vv2_id = max_kf_id + 3 * kf.id + 1;
 
-            // println!("(all of them) {} {} {} {} {} {} ", vp1_id, vv1_id, vg1_id, va1_id, vp2_id, vv2_id);
+            // debug!("(all of them) {} {} {} {} {} {} ", vp1_id, vv1_id, vg1_id, va1_id, vp2_id, vv2_id);
             optimizer.pin_mut().add_edge_inertial(
                 vp1_id,
                 vv1_id,
@@ -450,7 +443,6 @@ pub fn full_inertial_ba(
             if all_fixed {
                 optimizer.pin_mut().remove_vertex(id);
                 mps_not_included.insert(* mp_id);
-                println!("FIBA remove vertex");
             } else {
                 mps_included.insert(* mp_id);
             }
@@ -473,10 +465,8 @@ pub fn full_inertial_ba(
                 kf.set_pose(pose.into());
                 debug!("FIBA result, KF {} pose: {:?} ", kf.id, pose);
             } else {
-                // println!("GBA: Set kf {} pose: {:?}. Old pose: {:?}", kf.id, pose, kf.pose);
                 kf.gba_pose = Some(pose);
                 kf.ba_global_for_kf = loop_id;
-                // debug!("(baglobal) set in fiba, for kf {}: {}", kf.id, loop_id);
                 debug!("FIBA result, KF {} gba pose: {:?} ", kf.id, pose.get_rotation());
             }
 

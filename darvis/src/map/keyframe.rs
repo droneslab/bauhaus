@@ -22,6 +22,7 @@ pub struct KeyFrame {
     pub(super) loop_edges: HashSet<Id>, // mvpLoopEdges
     pub prev_kf_id: Option<Id>, // mpPrevKF
     pub next_kf_id: Option<Id>, // mpNextKF
+    // pub pose_relative_to_parent: Option<Pose>, // mTcp. Pose relative to parent (this is computed when KF is deleted)
 
     // Vision //
     pub features: Features, // KeyPoints, stereo coordinate and descriptors (all associated by an index)
@@ -122,13 +123,6 @@ impl KeyFrame {
                     *pose_inverse.get_rotation() * *ImuCalib::new().tcb.get_translation() + *pose_inverse.get_translation()
                 )
             );
-            // println!("Regular pose: {:?}", self.pose.get_translation());
-            // println!("Regular rotation: {:?}", self.pose.get_rotation());
-            // println!("mRwc: {:?}", pose_inverse.get_rotation());
-            // println!("mTcb: {:?}", ImuCalib::new().tcb.get_translation());
-            // println!("mTwc: {:?}", pose_inverse.get_translation());
-
-            // println!("SET KF IMU POSITION: {} {:?}. backtrace: {}", self.id, self.imu_position, Backtrace::capture());
         }
     }
 
@@ -211,12 +205,12 @@ impl KeyFrame {
         // vector<KeyFrame*> KeyFrame::GetVectorCovisibleKeyFrames(), KeyFrame::GetBestCovisibilityKeyFrames
         // To get all connections, pass in i32::MAX as `num`
         // num is the target number of keyframes to return
-       let max_len = min(self.connections.ordered_connected_keyframes.len(), num as usize);
+        let max_len = min(self.connections.ordered_connected_keyframes.len(), num as usize);
 
-    tracy_client::plot!("Connected KFs {}", self.connections.ordered_connected_keyframes.len() as f64);
+        tracy_client::plot!("Connected KFs {}", self.connections.ordered_connected_keyframes.len() as f64);
 
-       let (connections, _) : (Vec<i32>, Vec<i32>) = self.connections.ordered_connected_keyframes[0..max_len].iter().cloned().unzip();
-       connections
+        let (connections, _) : (Vec<i32>, Vec<i32>) = self.connections.ordered_connected_keyframes[0..max_len].iter().cloned().unzip();
+        connections
     }
 
     pub fn get_covisibles_by_weight(&self, weight: i32) -> Vec<Id> {
@@ -245,6 +239,10 @@ impl KeyFrame {
     pub fn get_imu_position(&self) -> DVVector3<f64> {
         // Eigen::Vector3f KeyFrame::GetImuPosition()
         self.imu_position.expect("IMU position not set")
+    }
+    pub fn get_imu_pose(&self) -> Pose {
+        // Sophus::SE3f KeyFrame::GetImuPose()
+        self.pose.inverse() * ImuCalib::new().tcb
     }
 
 }

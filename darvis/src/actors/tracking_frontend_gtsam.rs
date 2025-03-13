@@ -8,14 +8,13 @@ use core::{
     config::*, matrix::*, sensor::{FrameSensor, ImuSensor, Sensor}, system::{Actor, MessageBox, System, Timestamp}
 };
 use crate::{
-    actors::{
-        messages::{ImageMsg, LastKeyFrameUpdatedMsg, ShutdownMsg, UpdateFrameIMUMsg, VisFeaturesMsg},
-    }, map::{features::Features, frame::Frame, keyframe::MapPointMatches, map::Id, pose::Pose, read_only_lock::ReadWriteMap}, modules::{good_features_to_track::GoodFeaturesExtractor, image, imu::{ImuBias, ImuCalib, ImuMeasurements, ImuPreIntegrated, IMU}, map_initialization::MapInitialization, module_definitions::{FeatureExtractionModule, ImuModule}, optimizer, orbslam_extractor::ORBExtractor, relocalization::Relocalization}, registered_actors::{new_feature_extraction_module, CAMERA_MODULE, FEATURE_DETECTION, FEATURE_MATCHING_MODULE, LOCAL_MAPPING, SHUTDOWN_ACTOR, TRACKING_BACKEND, TRACKING_FRONTEND, VISUALIZER}, MAP_INITIALIZED
+    actors::messages::{ImageMsg, LastKeyFrameUpdatedMsg, ShutdownMsg, UpdateFrameIMUMsg, VisFeaturesMsg, VisTrajectoryTrackingMsg}, map::{features::Features, frame::Frame, keyframe::MapPointMatches, map::Id, pose::Pose, read_only_lock::ReadWriteMap}, modules::{good_features_to_track::GoodFeaturesExtractor, image, imu::{ImuBias, ImuCalib, ImuMeasurements, ImuPreIntegrated, IMU}, map_initialization::MapInitialization, module_definitions::{FeatureExtractionModule, ImuModule}, optimizer, orbslam_extractor::ORBExtractor, relocalization::Relocalization}, registered_actors::{new_feature_extraction_module, CAMERA_MODULE, FEATURE_DETECTION, FEATURE_MATCHING_MODULE, LOCAL_MAPPING, SHUTDOWN_ACTOR, TRACKING_BACKEND, TRACKING_FRONTEND, VISUALIZER}, MAP_INITIALIZED
 };
 use crate::registered_actors::IMU;
 
 use super::{local_mapping::LOCAL_MAPPING_IDLE, messages::{FeatureTracksAndIMUMsg, ImagePathMsg, InitKeyFrameMsg, NewKeyFrameMsg, TrajectoryMsg, VisTrajectoryMsg}, tracking_backend::TrackedMapPointData};
 use crate::modules::module_definitions::MapInitializationModule;
+use opencv::core::Point_;
 
 pub struct TrackingFrontendGTSAM {
     system: System,
@@ -26,8 +25,12 @@ pub struct TrackingFrontendGTSAM {
     orb_extractor_left: Box<dyn FeatureExtractionModule>,
     orb_extractor_ini: Option<Box<dyn FeatureExtractionModule>>,
     imu_measurements_since_last_kf: ImuMeasurements,
+
+    // Feature IDs
+    current_points_ids: Vec<Id>,
     prev_points: VectorOfPoint2f,
     prev_points_ids: Vec<Id>,
+    max_feature_id: i32,
 
     // Frames
     last_frame: Option<Frame>,
@@ -35,17 +38,18 @@ pub struct TrackingFrontendGTSAM {
     current_frame: Frame,
     frames_since_last_kf: i32,
 
-    // IMU 
+    // Initialization 
     // I know this is hacky but I dont' want to figure out how to merge the gtsam imu preintegration object with the orbslam imu object
     // Imu_for_init object needed for map initialization but that's it, otherwise should use the GtsamIMUModule
     imu: GtsamIMUModule,
     imu_for_init: IMU,
+    initialization: Option<MapInitialization>, // data sent to map actor to initialize new map
+
+
     current_bias: ImuBias, // TODO SOFIYA NEED TO READ THIS VALUE FROM BACKEND AFTER IT IS OPTIMIZED
 
     /// References to map
-    // map_initialized: bool,
     map: ReadWriteMap,
-    initialization: Option<MapInitialization>, // data sent to map actor to initialize new map
     map_scale: f64,
 
     /// Global defaults
@@ -59,15 +63,15 @@ impl Actor for TrackingFrontendGTSAM {
 
     fn spawn(system: System, map: Self::MapRef) {
         let sensor = SETTINGS.get::<Sensor>(SYSTEM, "sensor");
-        let orb_extractor_ini = match sensor.is_mono() {
-            true => Some(new_feature_extraction_module(true)),
-            false => None
-        };
+        // let orb_extractor_ini = match sensor.is_mono() {
+        //     true => Some(new_feature_extraction_module(true)),
+        //     false => None
+        // };
 
         let mut actor = TrackingFrontendGTSAM {
             system,
             orb_extractor_left: new_feature_extraction_module(false),
-            orb_extractor_ini,
+            orb_extractor_ini: Some(new_feature_extraction_module(true)),
             sensor,
             map,
             initialization: Some(MapInitialization::new()),
@@ -90,6 +94,8 @@ impl Actor for TrackingFrontendGTSAM {
             map_scale: 1.0,
             current_bias: ImuBias::new(),
             frames_since_last_kf: 0,
+            max_feature_id: 0,
+            current_points_ids: vec![],
         };
         tracy_client::set_thread_name!("tracking frontend gtsam");
 
@@ -153,25 +159,37 @@ impl TrackingFrontendGTSAM {
                 debug!("Optical flow tracked {} from original {}", tracked_kp, total_kp);
 
                 // Determine if frame should be a keyframe
-                let need_new_kf = self.frames_since_last_kf == 3;
-                        //self.need_new_keyframe();
+                let need_new_kf = self.need_new_keyframe();
 
                 if need_new_kf {
                     // If we need a new keyframe, publish this frame
                     pub_this_frame = true;
                     self.frames_since_last_kf = 0;
+
+                    // TODO SOFIYA double check that these commented out portions are ok...
+                    // self.outlier_rejection_mono(); // Can get away without doing this?
+                    self.extract_features_and_add_to_existing_regular().expect("Could not extract features?");
+                    self.current_frame.compute_bow();
+                    // self.undistort_keypoints(); // Is this even used?
+                    // self.get_smart_mono_measurements(); // THIS IS THE SAME AS the feature vectors matching to mappoint IDs in the current frame
                 } else {
                     self.frames_since_last_kf += 1;
                 }
 
-                // let transform = self.calculate_transform().unwrap();
-                // let new_trans = *transform.get_translation() * (self.map_scale);
-                // let new_pose = Pose::new(new_trans, * transform.get_rotation()) * self.last_frame.as_ref().unwrap().pose.unwrap();
+                let transform = self.calculate_transform().unwrap();
+                let new_trans = *transform.get_translation() * (self.map_scale);
+                let new_pose = Pose::new(new_trans, * transform.get_rotation()) * self.last_frame.as_ref().unwrap().pose.unwrap();
 
-                // self.current_frame.pose = Some(new_pose);
-                // debug!("Optical flow tracked {} from original {}... pose prediction: {:?}", tracked_kp, total_kp, new_pose);
+                self.current_frame.pose = Some(new_pose);
+                debug!("OLD STRATEGY: Pose prediction from pure optical flow: {:?}", new_pose);
 
                 debug!("SOFIYA FEATURES. After optical flow, frame has N {}, features {}, mappoint matches {}", self.current_frame.features.num_keypoints, self.current_frame.features.get_all_keypoints().len(), self.current_frame.mappoint_matches.len());
+
+                self.system.send(VISUALIZER, Box::new(VisTrajectoryTrackingMsg {
+                    pose: self.current_frame.pose.unwrap(),
+                    timestamp,
+                    map_version: self.map.read().unwrap().version
+                }));
             }
 
             self.system.send(VISUALIZER, Box::new(VisFeaturesMsg {
@@ -180,27 +198,23 @@ impl TrackingFrontendGTSAM {
                 timestamp,
             }));
 
-            if pub_this_frame {
-                // TODO SOFIYA double check that these commented out portions are ok...
-                // self.outlier_rejection_mono(); // Can get away without doing this?
-                self.extract_features_and_add_to_existing();
-                // self.undistort_keypoints(); // Is this even used?
-                // self.get_smart_mono_measurements(); // THIS IS THE SAME AS the feature vectors matching to mappoint IDs in the current frame
 
+            if pub_this_frame {
                 tracy_client::Client::running()
                     .expect("message! without a running Client")
                     .message("Publish frame!", 2);
 
                 // Send current imu measurements to backend, replace with empty ones
-                let mut empty_imu_measurements = ImuMeasurements::new();
-                std::mem::swap(&mut self.imu_measurements_since_last_kf, &mut empty_imu_measurements);
+                let mut imu_measurements = ImuMeasurements::new();
+                std::mem::swap(&mut self.imu_measurements_since_last_kf, &mut imu_measurements);
                 // let preintegration_results = self.imu.reset_preintegration(self.current_bias);
 
+                debug!("GRANT: self.current_points_ids: {:?}", self.current_points_ids);
                 self.system.send(TRACKING_BACKEND, Box::new(FeatureTracksAndIMUMsg {
                     frame: self.current_frame.clone(),
-                    imu_measurements: empty_imu_measurements,
+                    imu_measurements,
                     // preintegration_results,
-                    mappoint_ids: self.prev_points_ids.clone()
+                    feature_ids: self.current_points_ids.clone(),
                 }));
             }
 
@@ -214,7 +228,7 @@ impl TrackingFrontendGTSAM {
             sleep(Duration::from_millis(100));
             return true;
         } else {
-            warn!("Tracking backend received unknown message type!");
+            warn!("Tracking frontend GTSAM received unknown message type!");
         }
         return false;
     }
@@ -223,7 +237,7 @@ impl TrackingFrontendGTSAM {
         let _span = tracy_client::span!("initialize_map");
         let (keypoints, descriptors) = match self.sensor {
             Sensor(FrameSensor::Mono, _) => {
-                if !matches!(self.state, GtsamFrontendTrackingState::NotInitialized) || (self.current_frame.frame_id < SETTINGS.get::<f64>(SYSTEM, "fps") as i32) {
+                if matches!(self.state, GtsamFrontendTrackingState::NotInitialized) || (self.current_frame.frame_id < SETTINGS.get::<f64>(SYSTEM, "fps") as i32) {
                     self.orb_extractor_ini.as_mut().unwrap().extract(& curr_img).unwrap()
                 } else {
                     self.orb_extractor_left.extract(& curr_img).unwrap()
@@ -257,7 +271,7 @@ impl TrackingFrontendGTSAM {
                     Some((curr_kf_pose, curr_kf_id, ini_kf_id, local_mappoints, _curr_kf_timestamp, map_scale)) => {
                         // Map needs to be initialized before tracking can begin. Received from map actor
                         if self.sensor.is_imu() {
-                            self.imu.bias = self.map.read()?.get_keyframe( curr_kf_id).imu_data.imu_preintegrated.as_ref().unwrap().get_updated_bias();
+                            self.imu.bias = self.map.read()?.get_keyframe(curr_kf_id).imu_data.imu_preintegrated.as_ref().unwrap().get_updated_bias();
                         }
 
                         {
@@ -271,12 +285,22 @@ impl TrackingFrontendGTSAM {
                         {
                             let map = self.map.read()?;
                             let curr_kf = map.get_keyframe(curr_kf_id);
-                            for mp_id in local_mappoints {
-                                let index = curr_kf.get_mp_match_index(&mp_id).unwrap();
-                                let kp = curr_kf.features.get_keypoint(index).0;
+                            // for mp_id in local_mappoints {
+                            //     let index = curr_kf.get_mp_match_index(&mp_id).unwrap();
+                            //     let kp = curr_kf.features.get_keypoint(index).0;
+                            //     self.prev_points.push(kp.pt());
+                            //     self.prev_points_ids.push(self.max_feature_id);
+                            //     self.max_feature_id += 1;
+                            // }
+
+                            // Tracking all prev keypoints, not just mappoints:
+                            for kp in curr_kf.features.get_all_keypoints().iter() {
                                 self.prev_points.push(kp.pt());
-                                self.prev_points_ids.push(mp_id);
+                                self.prev_points_ids.push(self.max_feature_id);
+                                self.current_points_ids.push(self.max_feature_id);
+                                self.max_feature_id += 1;
                             }
+
                         }
 
                         // Log initial pose in shutdown actor
@@ -330,41 +354,225 @@ impl TrackingFrontendGTSAM {
           & frame1.image.as_ref().unwrap(), & self.current_frame.image.as_ref().unwrap(), &mut self.prev_points, &mut points2, &mut status, &mut err, win_size, max_level, termcrit, 0, 0.001,
         )?;
 
-        //getting rid of points for which the KLT tracking failed or those who have gone outside the framed
-        let mut indez_correction = 0;
+        //getting rid of points for which the KLT tracking failed or those who have gone outside the frame
+        let mut index_correction = 0;
         let mut new_descriptors = VectorOfMat::new();
         let mut new_keypoints = VectorOfKeyPoint::new();
+        let mut new_current_points_ids = vec![];
 
         for i in 0..status.len() {
-          let pt = points2.get(i - indez_correction)?;
-          if (status.get(i)? == 0) || pt.x < 0.0 || pt.y < 0.0 {
-            if pt.x < 0.0 || pt.y < 0.0 {
-              status.set(i, 0)?;
-            }
-            self.prev_points.remove(i - indez_correction)?;
-            self.prev_points_ids.remove(i - indez_correction);
-            points2.remove(i - indez_correction)?;
-            frame1.features.remove_keypoint(i - indez_correction)?;
+            let index = i - index_correction;
+            let pt = points2.get(index)?;
+            if (status.get(i)? == 0) || pt.x < 0.0 || pt.y < 0.0 {
+                if pt.x < 0.0 || pt.y < 0.0 {
+                    status.set(i, 0)?;
+                }
+                self.prev_points.remove(index)?;
+                self.prev_points_ids.remove(index);
+                points2.remove(index)?;
+                frame1.features.remove_keypoint(index)?;
 
-            indez_correction = indez_correction + 1;
+                index_correction = index_correction + 1;
             } else {
-                let curr_kp = frame1.features.get_keypoint(i - indez_correction).0;
+                let curr_kp = frame1.features.get_keypoint(index).0;
                 new_keypoints.push(opencv::core::KeyPoint::new_coords(pt.x, pt.y, curr_kp.size(), curr_kp.angle(), curr_kp.response(), curr_kp.octave(), curr_kp.class_id()).expect("Failed to create keypoint"));
-
                 new_descriptors.push((* frame1.features.descriptors.row(i as u32)).clone());
+                new_current_points_ids.push(self.prev_points_ids[index]);
             }
         }
+        // prev_points = vec[Point1 (x,y), Point2, Point3]
+        // prev_points_ids = vec[0, 1, 2]
+
+        // todo sofiya map mappoints ??
 
         let mut new_descs_as_mat = opencv::core::Mat::default();
         opencv::core::vconcat(&new_descriptors, &mut new_descs_as_mat).expect("Failed to concatenate");
 
         self.current_frame.replace_features(DVVectorOfKeyPoint::new(new_keypoints), DVMatrix::new(new_descs_as_mat))?;
+        self.current_points_ids = new_current_points_ids;
 
         Ok((self.current_frame.features.num_keypoints, status.len()))
     }
 
+
+    fn extract_features_and_add_to_existing_goodfeaturestotrack(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        let _span = tracy_client::span!("extract features");
+
+        let num_features_to_find = 200 - self.current_frame.features.num_keypoints as i32;
+
+        if num_features_to_find < 0 {
+            warn!("Already have enough features ({}), not extracting more", self.current_frame.features.num_keypoints);
+            return Ok(());
+        }
+
+        let mut keypoints = opencv::types::VectorOfPoint2f::new();
+
+        let mut mask = opencv::core::Mat::new_rows_cols_with_default(
+            self.current_frame.image.as_ref().unwrap().rows(),
+            self.current_frame.image.as_ref().unwrap().cols(),
+            CV_8U,
+            Scalar::all(255.0)
+        ).unwrap();
+        for i in 0..self.current_frame.features.num_keypoints {
+            let (kp, _) = self.current_frame.features.get_keypoint(i as usize);
+            circle(&mut mask, Point::new(kp.pt().x as i32, kp.pt().y as i32), 20, Scalar::all(0.0), -1, 8, 0).unwrap();
+        }
+
+        opencv::imgproc::good_features_to_track(
+            & self.current_frame.image.as_ref().unwrap(), &mut keypoints, num_features_to_find as i32, 0.01, self.min_distance, &mut mask, 3, false, 0.04
+        ).unwrap();
+
+        let mut new_keypoints = VectorOfKeyPoint::new();
+        let mut new_descriptor = Mat::default();
+        let mut new_descriptor_vec = VectorOfMat::new();
+
+        for i in 0..self.current_frame.features.num_keypoints {
+            new_keypoints.push(self.current_frame.features.get_keypoint(i as usize).0);
+            new_descriptor_vec.push((* self.current_frame.features.descriptors.row(i as u32)).clone());
+        }
+
+        for i in 0..keypoints.len() {
+            let kp = keypoints.get(i)?;
+            new_keypoints.push(KeyPoint::new_coords(kp.x, kp.y, 31.0, -1.0, 0.0, 0, -1).expect("Failed to create keypoint"));
+            // Note... creating a fake descriptor here because good features to track doesn't give descriptors back
+            new_descriptor_vec.push(Mat::new_rows_cols_with_default(1, 32, CV_8UC1, Scalar::all(0.0)).expect("Failed to create descriptor"));
+            self.prev_points.push(kp);
+            self.prev_points_ids.push(-1);
+        }
+
+        opencv::core::vconcat(&new_descriptor_vec, &mut new_descriptor).expect("Failed to concatenate");
+
+        debug!("Re-extracting features, before: {}, after: {}", self.current_frame.features.num_keypoints, new_keypoints.len());
+
+        self.current_frame.replace_features(DVVectorOfKeyPoint::new(new_keypoints), DVMatrix::new(new_descriptor))?;
+
+        Ok(())
+    }
+
+    fn extract_features_and_add_to_existing_regular(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        let _span = tracy_client::span!("extract features");
+
+        // current_frame.features = features tracked through optical flow
+        // length of self.prev_points == length of current_frame.features
+
+        let (keypoints, descriptors) = self.orb_extractor_left.as_mut().extract(& self.current_frame.image.as_ref().unwrap()).unwrap();
+
+        // keypoints, descriptors = longer-length vector, some overlap with current_frame.features
+
+        let mut new_keypoints = VectorOfKeyPoint::new();
+        let mut new_descriptor = Mat::default();
+        let mut new_descriptor_vec = VectorOfMat::new();
+        let mut new_ids = vec![];
+
+        for i in 0..keypoints.len() {
+            let kp = keypoints.get(i as usize)?;
+
+            let mask_thresh = SETTINGS.get::<i32>(TRACKING_FRONTEND, "mask_thresh") as f32;
+            let mut best_dist = f32::INFINITY;
+            let mut best_idx = 0usize;
+
+            for (i, kp2) in self.current_frame.features.get_all_keypoints().iter().enumerate() {
+                let dx = kp2.pt().x - kp.pt().x;
+                let dy = kp2.pt().y - kp.pt().y;
+                let dist = dx*dx + dy*dy;
+                if dist < best_dist {
+                    best_dist = dist;
+                    best_idx = i;
+                }
+            }
+
+            new_keypoints.push(keypoints.get(i as usize)?);
+            new_descriptor_vec.push((*descriptors).row(i as i32)?);
+
+            // New feature!
+            if best_dist > mask_thresh*mask_thresh {
+                new_ids.push(self.max_feature_id);
+                self.max_feature_id += 1;
+            } else {
+                new_ids.push(self.current_points_ids[best_idx]);
+            }
+        }
+
+        opencv::core::vconcat(&new_descriptor_vec, &mut new_descriptor).expect("Failed to concatenate");
+
+        debug!("Re-extracting features, before: {}, after: {}", self.current_frame.features.num_keypoints, new_keypoints.len());
+
+        // All vecs should be equal now
+        self.current_points_ids = new_ids;
+        self.prev_points = new_keypoints.iter().map(|kp| kp.pt()).collect();
+        self.prev_points_ids = self.current_points_ids.clone();
+
+        // replacing current_frame's features with the new ones
+        self.current_frame.replace_features(DVVectorOfKeyPoint::new(new_keypoints), DVMatrix::new(new_descriptor))?;
+        Ok(())
+    }
+
+
     fn need_new_keyframe(&mut self) -> bool {
-        let kf_diff_ns = (self.current_frame.timestamp - self.last_frame.as_ref().unwrap().timestamp) * 1e9;
+        // Condition 1a: More than "MaxFrames" have passed from last keyframe insertion
+        let c1a = self.frames_since_last_kf >= (SETTINGS.get::<i32>(TRACKING_FRONTEND, "max_frames_to_insert_kf") as i32);
+        // Condition 1b: More than "MinFrames" have passed and Local Mapping is idle
+        let c1b = self.frames_since_last_kf >= (SETTINGS.get::<i32>(TRACKING_FRONTEND, "min_frames_to_insert_kf") as i32) && LOCAL_MAPPING_IDLE.load(Ordering::SeqCst);
+        //Condition 1c: tracking is weak
+        let c1c = self.current_frame.features.num_keypoints < (SETTINGS.get::<i32>(TRACKING_FRONTEND, "min_num_features") as u32);
+
+        // let c1c = ((self.matches_inliers as f32) < tracked_mappoints * 0.5 || need_to_insert_close) ;
+        // // Condition 2: Few tracked points compared to reference keyframe. Lots of visual odometry compared to map matches.
+        // let c2 = (((self.matches_inliers as f32) < (tracked_mappoints * th_ref_ratio) || need_to_insert_close)) && self.matches_inliers > 15;
+        // (c1a||c1b||c1c) && c2
+
+        debug!("Need new keyframe? {} {} {}", c1a, c1b, c1c);
+
+        c1a || c1b || c1c
+    }
+
+
+    fn calculate_transform(&self) -> Result<Pose, Box<dyn std::error::Error>> {
+        let _span = tracy_client::span!("calculate_transform");
+        // recovering the pose and the essential matrix
+        let prev_features: VectorOfPoint2f = self.prev_points.clone();
+        let curr_features: VectorOfPoint2f = self.current_frame.features.get_all_keypoints().iter().map(|kp| kp.pt()).collect();
+
+        debug!("Prev points length: {}, curr points length: {}", prev_features.len(), curr_features.len());
+
+        let (mut recover_r, mut recover_t, mut mask) = (Mat::default(), Mat::default(), Mat::default());
+        let essential_mat = opencv::calib3d::find_essential_mat(
+          &prev_features,
+          &curr_features,
+          &CAMERA_MODULE.k_matrix.mat(),
+          opencv::calib3d::RANSAC,
+          0.999,
+          1.0,
+          1000,
+          &mut mask,
+        )?;
+        opencv::calib3d::recover_pose_estimated(
+          &essential_mat,
+          &prev_features,
+          &curr_features,
+          &CAMERA_MODULE.k_matrix.mat(),
+          &mut recover_r,
+          &mut recover_t,
+          &mut mask,
+        )?;
+
+        let recover_t = nalgebra::Vector3::<f64>::new(
+            *recover_t.at_2d::<f64>(0, 0)?,
+            *recover_t.at_2d::<f64>(1, 0)?,
+            *recover_t.at_2d::<f64>(2, 0)?
+        );
+        let recover_r = nalgebra::Matrix3::<f64>::new(
+            *recover_r.at_2d::<f64>(0, 0)?, *recover_r.at_2d::<f64>(0, 1)?, *recover_r.at_2d::<f64>(0, 2)?,
+            *recover_r.at_2d::<f64>(1, 0)?, *recover_r.at_2d::<f64>(1, 1)?, *recover_r.at_2d::<f64>(1, 2)?,
+            *recover_r.at_2d::<f64>(2, 0)?, *recover_r.at_2d::<f64>(2, 1)?, *recover_r.at_2d::<f64>(2, 2)?
+        );
+
+        Ok(Pose::new(recover_t,recover_r))
+    }
+
+    //* KIMERA */
+    fn need_new_keyframe_kimera(&mut self) -> bool {
+        let kf_diff_ns = (self.current_frame.timestamp - self.last_frame.as_ref().unwrap().timestamp);
         let nr_valid_features = self.current_frame.features.num_keypoints;
 
         let max_time_elapsed = kf_diff_ns >= (10.0 * 10e6);
@@ -544,103 +752,6 @@ impl TrackingFrontendGTSAM {
 
     }
 
-
-    fn extract_features_and_add_to_existing(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        let _span = tracy_client::span!("extract features");
-
-        let num_features_to_find = 200 - self.current_frame.features.num_keypoints as i32;
-
-        if num_features_to_find < 0 {
-            warn!("Already have enough features ({}), not extracting more", self.current_frame.features.num_keypoints);
-            return Ok(());
-        }
-
-        let mut keypoints = opencv::types::VectorOfPoint2f::new();
-
-        let mut mask = opencv::core::Mat::new_rows_cols_with_default(
-            self.current_frame.image.as_ref().unwrap().rows(),
-            self.current_frame.image.as_ref().unwrap().cols(),
-            CV_8U,
-            Scalar::all(255.0)
-        ).unwrap();
-        for i in 0..self.current_frame.features.num_keypoints {
-            let (kp, _) = self.current_frame.features.get_keypoint(i as usize);
-            circle(&mut mask, Point::new(kp.pt().x as i32, kp.pt().y as i32), 20, Scalar::all(0.0), -1, 8, 0).unwrap();
-        }
-
-        opencv::imgproc::good_features_to_track(
-            & self.current_frame.image.as_ref().unwrap(), &mut keypoints, num_features_to_find as i32, 0.01, self.min_distance, &mut mask, 3, false, 0.04
-        ).unwrap();
-        println!("Tracked features NEW: {}", keypoints.len());
-
-        let mut new_keypoints = VectorOfKeyPoint::new();
-        let mut new_descriptor = Mat::default();
-        let mut new_descriptor_vec = VectorOfMat::new();
-
-        for i in 0..self.current_frame.features.num_keypoints {
-            new_keypoints.push(self.current_frame.features.get_keypoint(i as usize).0);
-            new_descriptor_vec.push((* self.current_frame.features.descriptors.row(i as u32)).clone());
-        }
-
-        for i in 0..keypoints.len() {
-            let kp = keypoints.get(i)?;
-            new_keypoints.push(KeyPoint::new_coords(kp.x, kp.y, 31.0, -1.0, 0.0, 0, -1).expect("Failed to create keypoint"));
-            // Note... creating a fake descriptor here because good features to track doesn't give descriptors back
-            new_descriptor_vec.push(Mat::new_rows_cols_with_default(1, 32, CV_8UC1, Scalar::all(0.0)).expect("Failed to create descriptor"));
-            self.prev_points.push(kp);
-            self.prev_points_ids.push(-1);
-        }
-
-        opencv::core::vconcat(&new_descriptor_vec, &mut new_descriptor).expect("Failed to concatenate");
-
-        println!("Re-extracting features, before: {}, after: {}", self.current_frame.features.num_keypoints, new_keypoints.len());
-
-        self.current_frame.replace_features(DVVectorOfKeyPoint::new(new_keypoints), DVMatrix::new(new_descriptor))?;
-
-        Ok(())
-    }
-
-    fn calculate_transform(&self) -> Result<Pose, Box<dyn std::error::Error>> {
-        let _span = tracy_client::span!("calculate_transform");
-        // recovering the pose and the essential matrix
-        let prev_features: VectorOfPoint2f = self.prev_points.clone();
-        let curr_features: VectorOfPoint2f = self.current_frame.features.get_all_keypoints().iter().map(|kp| kp.pt()).collect();
-
-        let (mut recover_r, mut recover_t, mut mask) = (Mat::default(), Mat::default(), Mat::default());
-        let essential_mat = opencv::calib3d::find_essential_mat(
-          &prev_features,
-          &curr_features,
-          &CAMERA_MODULE.k_matrix.mat(),
-          opencv::calib3d::RANSAC,
-          0.999,
-          1.0,
-          1000,
-          &mut mask,
-        )?;
-        opencv::calib3d::recover_pose_estimated(
-          &essential_mat,
-          &prev_features,
-          &curr_features,
-          &CAMERA_MODULE.k_matrix.mat(),
-          &mut recover_r,
-          &mut recover_t,
-          &mut mask,
-        )?;
-
-        let recover_t = nalgebra::Vector3::<f64>::new(
-            *recover_t.at_2d::<f64>(0, 0)?,
-            *recover_t.at_2d::<f64>(1, 0)?,
-            *recover_t.at_2d::<f64>(2, 0)?
-        );
-        let recover_r = nalgebra::Matrix3::<f64>::new(
-            *recover_r.at_2d::<f64>(0, 0)?, *recover_r.at_2d::<f64>(0, 1)?, *recover_r.at_2d::<f64>(0, 2)?,
-            *recover_r.at_2d::<f64>(1, 0)?, *recover_r.at_2d::<f64>(1, 1)?, *recover_r.at_2d::<f64>(1, 2)?,
-            *recover_r.at_2d::<f64>(2, 0)?, *recover_r.at_2d::<f64>(2, 1)?, *recover_r.at_2d::<f64>(2, 2)?
-        );
-
-        Ok(Pose::new(recover_t,recover_r))
-    }
-
 }
 
 
@@ -694,7 +805,7 @@ impl GtsamIMUModule {
         let _span = tracy_client::span!("create_imu_factor");
 
         let mut imu_from_last_frame = VecDeque::with_capacity(imu_measurements.len()); // mvImuFromLastFrame
-        let imu_per = 0.000000000001; // Used to be 0.000000000001 to adjust for different timestamp units, not sure why it needs to be reverted now. 0.001 in orbslam. 
+        let imu_per = 0.001; // Used to be 0.000000000001 to adjust for different timestamp units, not sure why it needs to be reverted now. 0.001 in orbslam. 
 
         while !imu_measurements.is_empty() {
             if imu_measurements.front().unwrap().timestamp < last_frame.timestamp - imu_per {
@@ -751,7 +862,7 @@ impl GtsamIMUModule {
                 ang_vel = imu_from_last_frame[i].ang_vel;
                 tstep = current_frame.timestamp - last_frame.timestamp;
             }
-            tstep = tstep * 1e9;
+            // tstep = tstep * 1e9;
 
             self.preint_gtsam.integrate_measurement(&acc.into(), &ang_vel.into(), tstep);
         }

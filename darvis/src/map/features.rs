@@ -18,6 +18,24 @@ use crate::{
     matrix::{DVMatrix, DVVectorOfKeyPoint},
     map::map::Id,
 };
+use std::sync::atomic::{AtomicI32, AtomicBool, Ordering};
+use atomic_float::AtomicF32;
+
+// Equal to:
+//   bool Frame::mbInitialComputations=true;
+//   float Frame::mnMinX, Frame::mnMinY, Frame::mnMaxX, Frame::mnMaxY;
+//   float Frame::mfGridElementWidthInv, Frame::mfGridElementHeightInv;
+// TODO: Would like to refactor these so they are not globals... maybe they can be computed for the first features/frame
+// object, returned to tracking backend, and passed into subsequent frames from there? Or could always be put in the map,
+// but it would be nice if the frame/features object didn't need to use the map.
+static SHOULD_COMPUTE_IMAGE_BOUNDS: AtomicBool = AtomicBool::new(true); // mbInitialComputations
+static IMAGE_MIN_X: AtomicF32 = AtomicF32::new(0.0);
+static IMAGE_MIN_Y: AtomicF32 = AtomicF32::new(0.0);
+static IMAGE_MAX_X: AtomicF32 = AtomicF32::new(0.0);
+static IMAGE_MAX_Y: AtomicF32 = AtomicF32::new(0.0);
+static IMAGE_GRID_ELEMENT_WIDTH_INV: AtomicF32 = AtomicF32::new(0.0);
+static IMAGE_GRID_ELEMENT_HEIGHT_INV: AtomicF32 = AtomicF32::new(0.0);
+
 
 
 #[derive(Clone, Debug, Default)]
@@ -51,15 +69,7 @@ pub struct Features {
     pub image_height: u32,
 
     // Keypoints are assigned to cells in a grid to reduce matching complexity when projecting MapPoints.
-    grid_element_width_inv: f64,
-    grid_element_height_inv: f64,
     grid: Vec<Vec<Vec<usize>>>, // mGrid
-
-    // Image Bounds
-    min_x: f64,//static float mnMinX;
-    max_x: f64,//static float mnMaxX;
-    min_y: f64,//static float mnMinY;
-    max_y: f64,//static float mnMaxY;
 
     // Settings
     frame_grid_cols: i32, 
@@ -94,13 +104,7 @@ impl Features {
             descriptors: DVMatrix::empty(),
             image_width: 0,
             image_height: 0,
-            grid_element_width_inv: 0.0,
-            grid_element_height_inv: 0.0,
             grid: vec![],
-            min_x: 0.0,
-            max_x: 0.0,
-            min_y: 0.0,
-            max_y: 0.0,
             frame_grid_cols: 0,
             frame_grid_rows: 0
         }
@@ -116,111 +120,39 @@ impl Features {
         let frame_grid_cols = SETTINGS.get::<i32>(FEATURES, "frame_grid_cols");
         let frame_grid_rows = SETTINGS.get::<i32>(FEATURES, "frame_grid_rows");
 
-        let mut grid = Vec::new();
-        for _ in 0..frame_grid_cols  {
-            let mut row = Vec::new();
-            for _ in 0..frame_grid_rows {
-                row.push(Vec::new());
-            }
-            grid.push(row);
-        }
-
-        // Image Bounds
-        let (min_x, max_x, min_y, max_y) = match &CAMERA_MODULE.dist_coef {
-            Some(_vec) => {
-
-                let points = vec![
-                    Point2f::new(0.0, 0.0),
-                    Point2f::new(im_width as f32, 0.0),
-                    Point2f::new(0.0, im_height as f32),
-                    Point2f::new(im_width as f32, im_height as f32),
-                ];
-
-                // keypoints for point2f
-
-                // Reshape points
-                let mut mat = Mat::from_slice_2d(&points.iter().map(|p| vec![p.x, p.y]).collect::<Vec<_>>()).unwrap();
-
-                mat = mat.reshape(2, 0).unwrap();
-
-                let mut undistorted_points = mat.clone();
-                // Undistort points
-                // let mut undistorted_points = Mat::default();
-                let dist_coefs = VectorOff32::from_iter((*_vec).clone());
-                opencv::calib3d::undistort_points(
-                    &mat,
-                    &mut undistorted_points,
-                    &CAMERA_MODULE.k_matrix.mat(),
-                    &dist_coefs,
-                    &Mat::eye(3, 3, opencv::core::CV_32F)?,
-                    &CAMERA_MODULE.k_matrix.mat(),
-                )?;
-                let undistorted_points = undistorted_points.reshape(1, 0).unwrap();
-
-                // Get the min and max values
-                let mn_min_x = min_float(
-                    *undistorted_points.at_2d::<f32>(0, 0).unwrap(),
-                    *undistorted_points.at_2d::<f32>(2, 0).unwrap(),
-                );
-                let mn_max_x = max_float(
-                    *undistorted_points.at_2d::<f32>(1, 0).unwrap(),
-                    *undistorted_points.at_2d::<f32>(3, 0).unwrap(),
-                );
-                let mn_min_y = min_float(
-                    *undistorted_points.at_2d::<f32>(0, 1).unwrap(),
-                    *undistorted_points.at_2d::<f32>(1, 1).unwrap(),
-                );
-                let mn_max_y = max_float(
-                    *undistorted_points.at_2d::<f32>(2, 1).unwrap(),
-                    *undistorted_points.at_2d::<f32>(3, 1).unwrap(),
-                );
-
-                let mn_max_x_f64 = mn_max_x as f64;
-                let mn_max_y_f64 = mn_max_y as f64;
-                let mn_min_x_f64 = mn_min_x as f64;
-                let mn_min_y_f64 = mn_min_y as f64;
-
-                (mn_min_x_f64, mn_max_x_f64, mn_min_y_f64, mn_max_y_f64)
-            },
-            None => {
-                (0.0 as f64 , im_width as f64, 0.0 as f64, im_height as f64)
-            }
-        };
-
+        let mut grid = vec![vec![Vec::new(); frame_grid_rows as usize]; frame_grid_cols as usize];
 
         match sensor.frame() {
             FrameSensor::Mono => {
-                let keypoints_un = Self::undistort_keypoints(&keypoints)?;
-                let num_keypoints = keypoints.len() as u32;
-                // assign features to grid
-                let grid_element_width_inv =  frame_grid_cols as f64/(max_x - min_x) as f64;
-                let grid_element_height_inv = frame_grid_rows as f64/(max_y - min_y) as f64;
-                for i in 0..keypoints_un.len() as usize {
-                    let kp = &keypoints_un.get(i).unwrap();
-                    let pos_x = ((kp.pt().x-(min_x as f32))*grid_element_width_inv as f32).round() as i32;
-                    let pos_y = ((kp.pt().y-(min_y as f32))*grid_element_height_inv as f32).round() as i32;
+                let keypoints_un = if let Some(dist_coef) = &CAMERA_MODULE.dist_coef {
+                    Self::undistort_keypoints(&keypoints, dist_coef)?
+                } else {
+                    keypoints
+                };
+                let num_keypoints = keypoints_un.len() as u32;
 
-                    let not_in_bounds = pos_x<0 || pos_x>=frame_grid_cols as i32 || pos_y<0 || pos_y>=frame_grid_rows as i32;
-
-                    //Keypoint's coordinates are undistorted, which could cause to go out of the image
-                    if not_in_bounds {
-                        continue;
-                    } else {
-                        grid[pos_x as usize][pos_y as usize].push(i);
-                    }
+                if SHOULD_COMPUTE_IMAGE_BOUNDS.load(Ordering::SeqCst) {
+                    // This is done only for the first Frame (or after a change in the calibration)
+                    Self::compute_image_bounds(im_width, im_height)?;
+                    IMAGE_GRID_ELEMENT_WIDTH_INV.store(
+                        (frame_grid_cols as f32)
+                        / (IMAGE_MAX_X.load(Ordering::SeqCst) - IMAGE_MIN_X.load(Ordering::SeqCst))
+                    , Ordering::SeqCst);
+                    IMAGE_GRID_ELEMENT_HEIGHT_INV.store(
+                        (frame_grid_rows as f32)
+                        / (IMAGE_MAX_Y.load(Ordering::SeqCst) - IMAGE_MIN_Y.load(Ordering::SeqCst))
+                    , Ordering::SeqCst);
+                    SHOULD_COMPUTE_IMAGE_BOUNDS.store(false, Ordering::SeqCst);
                 }
+
+                // assign features to grid
+                Self::assign_features_to_grid(&mut grid, & keypoints_un, frame_grid_rows, frame_grid_cols);
 
                 let features = Features {
                     num_keypoints,
                     keypoints: KeyPoints::Mono { keypoints_un },
                     descriptors,
-                    grid_element_width_inv,
-                    grid_element_height_inv,
                     grid,
-                    min_x,
-                    max_x,
-                    min_y,
-                    max_y,
                     frame_grid_cols,
                     frame_grid_rows,
                     image_width: im_width,
@@ -350,64 +282,23 @@ impl Features {
         }
     }
 
-    fn undistort_keypoints(keypoints: &DVVectorOfKeyPoint) -> Result<DVVectorOfKeyPoint, Box<dyn std::error::Error>> {
-        // void Frame::UndistortKeyPoints()
-        if let Some(dist_coef) = &CAMERA_MODULE.dist_coef {
-
-            let num_keypoints = keypoints.len();
-            // Fill matrix with points
-            let mut mat = Mat::new_rows_cols_with_default(num_keypoints,2, CV_32F, Scalar::all(0.0))?;
-            for i in 0..num_keypoints {
-                *mat.at_2d_mut::<f32>(i, 0)? = keypoints.get(i as usize)?.pt().x;
-                *mat.at_2d_mut::<f32>(i, 1)? = keypoints.get(i as usize)?.pt().y;
-            }
-
-            // TODO (timing) ... can we do this in place? Then we don't have to construct and return keypoints_un
-
-            // Undistort points
-            mat = mat.reshape(2, 0)?;
-            let mut undistorted = mat.clone();
-            let dist_coefs = VectorOff32::from_iter((*dist_coef).clone());
-            opencv::calib3d::undistort_points(
-                &mat,
-                &mut undistorted,
-                &CAMERA_MODULE.k_matrix.mat(),
-                &dist_coefs,
-                &Mat::eye(3, 3, opencv::core::CV_32F)?,
-                &CAMERA_MODULE.k_matrix.mat(),
-            )?;
-
-            mat = mat.reshape(1, 0)?;
-
-            // Fill undistorted keypoint vector
-            let mut keypoints_un = opencv::types::VectorOfKeyPoint::new();
-            for i in 0..num_keypoints {
-                let kp = keypoints.get(i as usize)?;
-                kp.pt().x = *mat.at_2d::<f32>(i, 0)?;
-                kp.pt().y = *mat.at_2d::<f32>(i, 1)?;
-                keypoints_un.push(kp);
-            }
-
-            Ok(DVVectorOfKeyPoint::new(keypoints_un))
-        } else {
-            return Ok(keypoints.clone());
-        }
-    }
-
     pub fn get_features_in_area(&self, x: &f64, y: &f64, r: f64, levels: Option<(i32, i32)>,) -> Vec<u32> {
         //GetFeaturesInArea
         let mut indices = vec![];
 
-        let grid_element_width_inv = self.grid_element_width_inv;
-        let grid_element_height_inv = self.grid_element_height_inv;
+        let grid_element_width_inv = IMAGE_GRID_ELEMENT_WIDTH_INV.load(Ordering::SeqCst) as f64;
+        let grid_element_height_inv = IMAGE_GRID_ELEMENT_HEIGHT_INV.load(Ordering::SeqCst) as f64;
+        let min_x = IMAGE_MIN_X.load(Ordering::SeqCst) as f64;
+        let min_y = IMAGE_MIN_Y.load(Ordering::SeqCst) as f64;
+
 
         let factor_x = r;
         let factor_y = r;
 
-        let min_cell_x = i64::max(0, ((x-self.min_x-factor_x)*grid_element_width_inv).floor() as i64);
-        let max_cell_x = i64::min((self.frame_grid_cols-1) as i64, ((x-self.min_x+factor_x)*grid_element_width_inv).ceil() as i64);
-        let min_cell_y = i64::max(0, ((y-self.min_y-factor_y)*grid_element_height_inv).floor() as i64);
-        let max_cell_y = i64::min((self.frame_grid_rows-1) as i64, ((y-self.min_y+factor_y)*grid_element_height_inv).ceil() as i64);
+        let min_cell_x = i64::max(0, ((x-min_x-factor_x)*grid_element_width_inv).floor() as i64);
+        let max_cell_x = i64::min((self.frame_grid_cols-1) as i64, ((x-min_x+factor_x)*grid_element_width_inv).ceil() as i64);
+        let min_cell_y = i64::max(0, ((y-min_y-factor_y)*grid_element_height_inv).floor() as i64);
+        let max_cell_y = i64::min((self.frame_grid_rows-1) as i64, ((y-min_y+factor_y)*grid_element_height_inv).ceil() as i64);
 
         if !self.is_in_image(min_cell_x as f64, min_cell_y as f64) || !self.is_in_image(max_cell_x as f64, max_cell_y as f64) {
             return indices;
@@ -415,7 +306,7 @@ impl Features {
 
         let check_levels = levels.is_some() && (levels.unwrap().0>0 || levels.unwrap().1>=0);
 
-        // println!("Get features in area... min cell x: {}, max cell x: {}, min cell y: {}, max cell y: {}", min_cell_x, max_cell_x, min_cell_y, max_cell_y);
+        // debug!("Get features in area... min cell x: {}, max cell x: {}, min cell y: {}, max cell y: {}", min_cell_x, max_cell_x, min_cell_y, max_cell_y);
         for ix in min_cell_x..max_cell_x + 1 {
             for iy in min_cell_y..max_cell_y + 1 {
                 let v_cell  =&self.grid[ix as usize][iy as usize];
@@ -454,7 +345,128 @@ impl Features {
 
     pub fn is_in_image(&self, x: f64, y: f64) -> bool {
         // bool KeyFrame::IsInImage(const float &x, const float &y) const
-        return x >= self.min_x && x < self.max_x && y >= self.min_y && y < self.max_y;
+        let min_x = IMAGE_MIN_X.load(Ordering::SeqCst) as f64;
+        let max_x = IMAGE_MAX_X.load(Ordering::SeqCst) as f64;
+        let min_y = IMAGE_MIN_Y.load(Ordering::SeqCst) as f64;
+        let max_y = IMAGE_MAX_Y.load(Ordering::SeqCst) as f64;
+        return x >= min_x && x < max_x && y >= min_y && y < max_y;
     }
+
+
+    fn undistort_keypoints(keypoints: &DVVectorOfKeyPoint, dist_coef: & Vec<f32>) -> Result<DVVectorOfKeyPoint, Box<dyn std::error::Error>> {
+        // void Frame::UndistortKeyPoints()
+
+        let num_keypoints = keypoints.len();
+        // Fill matrix with points
+        let mut mat = Mat::new_rows_cols_with_default(num_keypoints, 2, CV_32F, Scalar::all(0.0))?;
+        for i in 0..num_keypoints {
+            *mat.at_2d_mut::<f32>(i, 0)? = keypoints.get(i as usize)?.pt().x;
+            *mat.at_2d_mut::<f32>(i, 1)? = keypoints.get(i as usize)?.pt().y;
+        }
+
+        // Undistort points
+        mat = mat.reshape(2, 0)?;
+
+        let mut undistorted = mat.clone(); // TODO (timing) ... trying to avoid clone, but can't have &mat and &mut mat at the same time
+        let dist_coefs = VectorOff32::from_iter((*dist_coef).clone());
+        opencv::calib3d::undistort_points(
+            &mat,
+            &mut undistorted,
+            &CAMERA_MODULE.k_matrix.mat(),
+            &dist_coefs,
+            &Mat::default(),
+            &CAMERA_MODULE.k_matrix.mat(),
+        )?;
+
+        undistorted = undistorted.reshape(1, 0)?;
+
+        // Fill undistorted keypoint vector
+        let mut keypoints_un = opencv::types::VectorOfKeyPoint::new();
+        for i in 0..num_keypoints {
+            let kp_orig = keypoints.get(i as usize)?;
+            let kp_new = KeyPoint::new_point(
+                Point2f::new(*undistorted.at_2d::<f32>(i, 0)?,  *undistorted.at_2d::<f32>(i, 1)?),
+                kp_orig.size(), kp_orig.angle(), kp_orig.response(), kp_orig.octave(), kp_orig.class_id())?;
+            keypoints_un.push(kp_new);
+        }
+
+        Ok(DVVectorOfKeyPoint::new(keypoints_un))
+    }
+
+    fn compute_image_bounds(im_width: u32, im_height: u32) -> Result<(), Box<dyn std::error::Error>> {
+        if let Some(dist_coeffs) = &CAMERA_MODULE.dist_coef {
+            let points = vec![
+                Point2f::new(0.0, 0.0),
+                Point2f::new(im_width as f32, 0.0),
+                Point2f::new(0.0, im_height as f32),
+                Point2f::new(im_width as f32, im_height as f32),
+            ];
+
+            // Reshape points
+            let mut mat = Mat::from_slice_2d(&points.iter().map(|p| vec![p.x, p.y]).collect::<Vec<_>>()).unwrap();
+            mat = mat.reshape(2, 0).unwrap();
+
+            // Undistort points
+            let mut undistorted_points = mat.clone();
+            let dist_coefs = VectorOff32::from_iter((*dist_coeffs).clone());
+            opencv::calib3d::undistort_points(
+                &mat,
+                &mut undistorted_points,
+                &CAMERA_MODULE.k_matrix.mat(),
+                &dist_coefs,
+                &Mat::eye(3, 3, opencv::core::CV_32F)?,
+                &CAMERA_MODULE.k_matrix.mat(),
+            )?;
+            let undistorted_points = undistorted_points.reshape(1, 0).unwrap();
+
+            // Get the min and max values
+            let mn_min_x = min_float(
+                *undistorted_points.at_2d::<f32>(0, 0).unwrap(),
+                *undistorted_points.at_2d::<f32>(2, 0).unwrap(),
+            );
+            let mn_max_x = max_float(
+                *undistorted_points.at_2d::<f32>(1, 0).unwrap(),
+                *undistorted_points.at_2d::<f32>(3, 0).unwrap(),
+            );
+            let mn_min_y = min_float(
+                *undistorted_points.at_2d::<f32>(0, 1).unwrap(),
+                *undistorted_points.at_2d::<f32>(1, 1).unwrap(),
+            );
+            let mn_max_y = max_float(
+                *undistorted_points.at_2d::<f32>(2, 1).unwrap(),
+                *undistorted_points.at_2d::<f32>(3, 1).unwrap(),
+            );
+
+            IMAGE_MAX_X.store(mn_max_x, Ordering::SeqCst);
+            IMAGE_MAX_Y.store(mn_max_y, Ordering::SeqCst);
+            IMAGE_MIN_X.store(mn_min_x, Ordering::SeqCst);
+            IMAGE_MIN_Y.store(mn_min_y, Ordering::SeqCst);
+        }
+        Ok(())
+    }
+
+    fn assign_features_to_grid(grid: &mut Vec<Vec<Vec<usize>>>, keypoints_un: & DVVectorOfKeyPoint, frame_grid_rows: i32, frame_grid_cols: i32) {
+        let min_x = IMAGE_MIN_X.load(Ordering::SeqCst);
+        let min_y = IMAGE_MIN_Y.load(Ordering::SeqCst);
+        let grid_element_width_inv =  IMAGE_GRID_ELEMENT_WIDTH_INV.load(Ordering::SeqCst) as f64;
+        let grid_element_height_inv = IMAGE_GRID_ELEMENT_HEIGHT_INV.load(Ordering::SeqCst) as f64;
+
+        for i in 0..keypoints_un.len() as usize {
+            let kp = &keypoints_un.get(i).unwrap();
+            let pos_x = ((kp.pt().x-(min_x as f32))*grid_element_width_inv as f32).round() as i32;
+            let pos_y = ((kp.pt().y-(min_y as f32))*grid_element_height_inv as f32).round() as i32;
+
+            let not_in_bounds = pos_x<0 || pos_x>=frame_grid_cols as i32 || pos_y<0 || pos_y>=frame_grid_rows as i32;
+
+            //Keypoint's coordinates are undistorted, which could cause to go out of the image
+            if not_in_bounds {
+                continue;
+            } else {
+                grid[pos_x as usize][pos_y as usize].push(i);
+            }
+        }
+
+    }
+    
 }
 

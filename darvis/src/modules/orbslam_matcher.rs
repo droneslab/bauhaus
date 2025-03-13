@@ -177,7 +177,7 @@ impl DescriptorDistanceTrait for ORBMatcher {
         //     }
         // }
 
-        // println!("TEST DESCRIPTOR DISTANCE! ORBSLAM: {}, OURS: {}", orbslam, dist);
+        // debug!("TEST DESCRIPTOR DISTANCE! ORBSLAM: {}, OURS: {}", orbslam, dist);
         return orbslam;
 
     }
@@ -523,7 +523,7 @@ impl FeatureMatchingModule for ORBMatcher {
                 let mut r = self.radius_by_viewing_cos(mp_data.view_cos);
                 if th != 1 { r *= th as f64; }
 
-                // println!("get features in area: {}, {}, {}, {:?}", mp_data.proj_x, mp_data.proj_y, r, (mp_data.predicted_level-1, mp_data.predicted_level));
+                // debug!("get features in area: {}, {}, {}, {:?}", mp_data.proj_x, mp_data.proj_y, r, (mp_data.predicted_level-1, mp_data.predicted_level));
                 let indices = frame.features.get_features_in_area(
                     &mp_data.proj_x,
                     &mp_data.proj_y,
@@ -676,7 +676,7 @@ impl FeatureMatchingModule for ORBMatcher {
                 // }
             }
         }
-            // println!("Indices empty: {}, level1: {}, level2: {}, track_in_view_c: {}", indices_empty, level, level2, track_in_view_c);
+            // debug!("Indices empty: {}, level1: {}, level2: {}, track_in_view_c: {}", indices_empty, level, level2, track_in_view_c);
 
         mappoints.retain(|mp_id| !local_mps_to_remove.contains(&mp_id));
         return Ok((non_tracked_points, num_matches));

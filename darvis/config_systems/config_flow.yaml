@@ -13,11 +13,12 @@ system:
       first_actor_name: TRACKING_FRONTEND # Name of actor to kick off pipeline
 
       # FPS
-      fps: 20.0
+      fps: 10.0
 
       # RESULTS
       results_folder: "results"
-      trajectory_file_name: "trajectory.txt"
+      camera_trajectory_file_name: "camera_trajectory.txt"
+      keyframe_trajectory_file_name: "keyframe_trajectory.txt"
 
       # DEBUGGING
       log_level: debug # options are [trace, debug, info, warn, error]
@@ -38,7 +39,11 @@ modules:
         settings:
           - 
             name: max_features
-            value: 2000
+            value: 100
+            type: i32
+          - 
+            name: ini_features
+            value: 5000
             type: i32
           - 
             name: scale_factor
@@ -131,7 +136,7 @@ actors:
           - name: draw_local_mappoints # Whether to draw local mappoints (not tracked, but in local map based on local keyframes)
             value: true
             type: bool
-          - name: draw_connected_kfs # Works but doesn't look good. Need to figure out some nicer way to distribute the points so it's actually readable
+          - name: draw_graph # Works but doesn't look good. Need to figure out some nicer way to distribute the points so it's actually readable
             value: false
             type: bool
           - name: draw_only_trajectory
@@ -143,10 +148,9 @@ actors:
        tag: "gtsam tracking frontend"
        receiver_bound: 10
        settings:
-          - 
-            name: publish_frequency # frequence (Hz) of publish tracking result. At least 10Hz for good estimation
-            value: 10.0
-            type: f64
+          - name: mask_thresh
+            value: 1
+            type: i32
           - 
             name: max_features # max feature number in feature tracking
             value: 200
@@ -155,6 +159,18 @@ actors:
             name: min_distance # min distance between two features 
             value: 10.0
             type: f64
+          - 
+            name: min_num_features
+            value: 300
+            type: i32
+          - 
+            name: min_frames_to_insert_kf
+            value: 1
+            type: i32
+          -
+            name: max_frames_to_insert_kf
+            value: 10
+            type: i32
 
       -
        name: TRACKING_BACKEND
@@ -165,7 +181,7 @@ actors:
 
       -
        name: LOCAL_MAPPING
-       tag: "orbslam local mapping"
+       tag: "gtsam local mapping"
        receiver_bound: 3
        settings:
           - 

@@ -36,7 +36,7 @@ impl Frame {
     pub fn new(
         frame_id: Id, keypoints_vec: DVVectorOfKeyPoint, descriptors_vec: DVMatrix,
         im_width: u32, im_height: u32, image: Option<opencv::core::Mat>,
-        prev_frame: Option<& Frame>, map_imu_initialized: bool,
+        prev_frame: Option<& Frame>, map_imu_initialized: bool, 
         timestamp: Timestamp
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let sensor = SETTINGS.get::<Sensor>(SYSTEM, "sensor");
@@ -243,7 +243,7 @@ impl Frame {
         // mRwc * mImuCalib.mTcb.translation() + mOw;
         // where mOw = twc (inverse of pose translation)
 
-        let inverse = self.pose.unwrap().old_inverse();
+        let inverse = self.pose.unwrap().inverse(); // todo should this be old_inverse?
 
         let res = DVVector3::new(
             *inverse.get_rotation() * *ImuCalib::new().tcb.get_translation() + *inverse.get_translation()

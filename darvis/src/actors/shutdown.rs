@@ -1,7 +1,7 @@
 use std::{fs::File, path::Path, io::{Write, BufWriter}};
-use log::warn;
+use log::{debug, warn};
 
-use crate::map::{map::Id, pose::Pose, read_only_lock::ReadWriteMap};
+use crate::{map::{map::Id, pose::Pose, read_only_lock::ReadWriteMap}, modules::imu::ImuCalib};
 use core::{config::{SETTINGS, SYSTEM}, sensor::Sensor, system::{Actor, MessageBox, System, Timestamp}};
 use super::{messages::{ShutdownMsg, TrajectoryMsg, TrackingStateMsg}, tracking_backend::TrackingState};
 
@@ -82,44 +82,117 @@ impl ShutdownActor {
 
             let map = self.map.read().unwrap();
 
+            let imu_calib = match self.sensor.is_imu() {
+                true => Some(ImuCalib::new()),
+                false => None
+            };
+
             match file_camera {
                 Ok(file) => {
+                    // Nitin ... printing trajectory
+                    // Look at void System::SaveTrajectoryEuRoC(const string &filename) in System.cc
                     let mut f = BufWriter::new(file);
+                    let lock = self.map.read().unwrap();
+
+                    // Transform all keyframes so that the first keyframe is at the origin.
+                    // After a loop closure the first keyframe might not be at the origin.
+                    let first_keyframe = lock.get_first_keyframe();
+                    let twb;  // Can be word to cam0 or world to b depending on IMU or not.
+                    if self.sensor.is_imu() {
+                        twb = first_keyframe.get_imu_pose();
+                    } else {
+                        twb = first_keyframe.get_pose().inverse();
+                    }
+
+                    // Frame pose is stored relative to its reference keyframe (which is optimized by BA and pose graph).
+                    // We need to get first the keyframe pose and then concatenate the relative transformation.
+                    // Frames not localized (tracking failure) are not saved.
+
+                    // For each frame we have a reference keyframe (lRit), the timestamp (lT) and a flag
+                    // which is true when tracking failed (lbL).
+                    // list<ORB_SLAM3::KeyFrame*>::iterator lRit = mpTracker->mlpReferences.begin();
+                    // list<double>::iterator lT = mpTracker->mlFrameTimes.begin();
+                    // list<bool>::iterator lbL = mpTracker->mlbLost.begin();
+
 
                     for i in 0..self.trajectory_poses.len() {
-                        // Frame pose is stored relative to its reference keyframe (which is optimized by BA and pose graph).
-                        // We need to get first the keyframe pose and then concatenate the relative transformation.
-                        // Frames not localized (tracking failure) are not saved.
+                        let mut ref_kf = self.trajectory_keyframes[i];
+                        let mut trw = Pose::default();
 
-                        // For each frame we have a reference keyframe (lRit), the timestamp (lT) and a flag
-                        // which is true when tracking failed (lbL).
+                        debug!("Trajectory pose {} with ref kf {}!!", i, ref_kf);
 
-                        let pose = self.trajectory_poses[i];
-                        let trans = pose.get_translation();
-                        let rot = pose.get_quaternion();
-                        let string = format!(
-                            "{} {:.6} {:.7} {:.7} {:.7} {:.7} {:.7} {:.7}\n", 
-                            self.trajectory_times[i], 
-                            trans[0], trans[1], trans[2],
-                            rot[0], rot[1], rot[2], rot[3]
-                        );
-                        write!(f, "{}", string).expect("unable to write");
+                        // If the reference keyframe was culled, traverse the spanning tree to get a suitable keyframe.
+                        while !lock.has_keyframe(ref_kf) {
+                            let (parent_id, pose_relative_to_parent) = lock.get_deleted_keyframe_info(ref_kf);
+                            trw = trw * pose_relative_to_parent;
+                            ref_kf = parent_id;
+                            debug!("..don't have ref kf, looking at parent {}", ref_kf);
+                        }
+
+                        trw = trw * lock.get_keyframe(ref_kf).get_pose() * twb; // Tcp*Tpw*Twb0=Tcb0 where b0 is the new world reference
+
+                        if self.sensor.is_imu() {
+                            let twc = (imu_calib.as_ref().unwrap().tbc * self.trajectory_poses[i] * trw).inverse();
+                            let rot = twc.get_quaternion();
+                            let trans = twc.get_translation();
+
+                            let string = format!(
+                                "{} {:.6} {:.7} {:.7} {:.7} {:.7} {:.7} {:.7}\n", 
+                                self.trajectory_times[i] * 1e9, 
+                                trans[0], trans[1], trans[2],
+                                rot[0], rot[1], rot[2], rot[3]
+                            );
+                            write!(f, "{}", string).expect("unable to write");
+                        } else {
+                            let twc = (self.trajectory_poses[i] * trw).inverse();
+                            let rot = twc.get_quaternion();
+                            let trans = twc.get_translation();
+
+                            let string = format!(
+                                "{} {:.6} {:.7} {:.7} {:.7} {:.7} {:.7} {:.7}\n", 
+                                self.trajectory_times[i] * 1e9, 
+                                trans[0], trans[1], trans[2],
+                                rot[0], rot[1], rot[2], rot[3]
+                            );
+                            write!(f, "{}", string).expect("unable to write");
+
+                        }
+
                     }
+
+
+
+                //     for i in 0..self.trajectory_poses.len() {
+
+                //         let trw = Pose::default();
+                //         let ref_kf_id = self.trajectory_keyframes[i];
+                //         while !lock.has_keyframe(ref_kf_id) {
+
+                //         }
+
+                //         if !lock.has_keyframe(self.trajectory_keyframes[i] as i32) {
+                //             trw = trw * pkf.mtcp;
+                //             pkf = pkf.get_parent();
+                //         }
+
+                //         trw = trw * pkf.get_pose() * twb;  // Tcp*Tpw*Twb0=Tcb0 where b0 is the new world reference
+
+
+
+                //         let pose = self.trajectory_poses[i];
+                //         let trans = pose.get_translation();
+                //         let rot = pose.get_quaternion();
+                //         let string = format!(
+                //             "{} {:.6} {:.7} {:.7} {:.7} {:.7} {:.7} {:.7}\n", 
+                //             self.trajectory_times[i] * 1e9, 
+                //             trans[0], trans[1], trans[2],
+                //             rot[0], rot[1], rot[2], rot[3]
+                //         );
+                //         write!(f, "{}", string).expect("unable to write");
+                //     }
                 },
                 Err(_) => {
                     warn!("Could not create trajectory file {:?}", Path::new(&self.results_folder).join(&self.camera_trajectory_filename));
-                    println!("Here is the trajectory: ");
-                    for i in 0..self.trajectory_poses.len() {
-                        let pose = self.trajectory_poses[i];
-                        let trans = pose.get_translation();
-                        let rot = pose.get_quaternion();
-                        println!(
-                            "{} {:.4} {:.4} {:.4} {:.4} {:.4} {:.4} {:.4}\n", 
-                            self.trajectory_times[i], 
-                            trans[0], trans[1], trans[2],
-                            rot[0], rot[1], rot[2], rot[3]
-                        );
-                    }
                 }
             };
 
@@ -138,22 +211,22 @@ impl ShutdownActor {
                                 // f << setprecision(6) << 1e9*pKF->mTimeStamp  << " " <<  setprecision(9) << twb(0) << " " << twb(1) << " " << twb(2) << " " << q.x() << " " << q.y() << " " << q.z() << " " << q.w() << endl;
 
                             } else {
-                                let pose = kf.get_pose().group_inverse();
+                                let pose = kf.get_pose().inverse();
                                 let trans = pose.get_translation();
                                 let rot = pose.get_quaternion();
 
-                                println!("Keyframe {} pose: {:?}", id, pose);
+                                debug!("Keyframe {} pose: {:?}", id, pose);
 
                                 let string = format!(
                                     "{} {:.6} {:.7} {:.7} {:.7} {:.7} {:.7} {:.7}\n", 
-                                    kf.timestamp * 1e18,
+                                    kf.timestamp * 1e9,
                                     trans[0], trans[1], trans[2],
                                     rot[0], rot[1], rot[2], rot[3]
                                 );
                                 write!(f, "{}", string).expect("unable to write");
                             }
                         } else {
-                            println!("SKIP KEYFRAME {}", id);
+                            debug!("SKIP KEYFRAME {}", id);
                         }
                     }
                 },

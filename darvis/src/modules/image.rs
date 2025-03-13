@@ -6,21 +6,20 @@ pub fn read_image_file(path: &String) -> Mat {
     let _span = tracy_client::span!("read image");
     let image = imgcodecs::imread(path, imgcodecs::IMREAD_UNCHANGED).expect("Could not read image.");
 
-    println!("IMAGE READ: ");
-    for i in 0..image.rows() {
-        for j in 0..image.cols() {
-            let pixel = image.at_2d::<u8>(i, j).unwrap();
-            print!("{:?}, ", pixel);
-        }
-        println!(";");
-    }
+    // println!("Image size: {}x{}", image.cols(), image.rows());
+    // println!("IMAGE READ: ");
+    // for i in 0..image.rows() {
+    //     for j in 0..image.cols() {
+    //         let pixel = image.at_2d::<u8>(i, j).unwrap();
+    //         print!("{:?}, ", pixel);
+    //     }
+    //     println!(";");
+    // }
     image
 }
 
-pub fn resize_image(image: & Mat, image_scale: f64) -> Result<Mat, opencv::Error> {
+pub fn resize_image(image: & Mat, width: i32, height: i32) -> Result<Mat, opencv::Error> {
     let mut resized_img = Mat::default();
-    let width = (image.cols() as f64 * image_scale) as i32;
-    let height = (image.rows() as f64 * image_scale) as i32;
     resize(image, &mut resized_img, opencv::core::Size::new(width, height), 0.0, 0.0, 1)?;
     Ok(resized_img)
 }
