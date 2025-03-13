@@ -164,8 +164,6 @@ impl LoopManager {
         };
 
 
-        println!("TIMESTAMPS: {:?}", timestamps);
-
         let imu = {
             if !read_imu {
                 None
