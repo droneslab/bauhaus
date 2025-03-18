@@ -81,7 +81,7 @@ impl Actor for LocalMapping {
             // see read() in read_only_lock.rs for more info
             if !actor.handle_message(message).is_ok() {
                 debug!("LOCAL MAPPING RESET !");
-                actor.current_keyframe_id= -1;
+                actor.current_keyframe_id = -1;
                 actor.recently_added_mappoints.clear();
                 actor.discarded_kfs.clear();
                 actor.current_tracking_state = TrackingState::NotInitialized;

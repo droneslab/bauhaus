@@ -144,9 +144,8 @@ impl ActorMessage for NewKeyFrameMsg {
 
 pub struct NewKeyFrameGTSAMMsg {
     pub keyframe: Frame,
-    pub feature_tracks: Vec<(i32, i32)>,
+    pub feature_tracks: Vec<i32>,
     pub tracking_state: TrackingState,
-    pub matches_in_tracking: i32,
     pub tracked_mappoint_depths: HashMap<Id, f64>,
     pub map_version: u64
 }

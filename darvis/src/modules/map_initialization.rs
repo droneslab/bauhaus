@@ -211,13 +211,10 @@ impl MapInitialization {
         // Bundle Adjustment
         FULL_MAP_OPTIMIZATION_MODULE.optimize(map, 20, true, 0)?;
 
-        println!("Map initialization... after gba, current frame pose is {:?}", map.read()?.get_keyframe(curr_kf_id).get_pose());
-
         let median_depth = {
             let lock = map.read()?;
             lock.get_keyframe(initial_kf_id).compute_scene_median_depth(& lock.mappoints, 2)
         };
-        println!("Median depth? {}", median_depth);
         let inverse_median_depth = match self.sensor {
             Sensor(FrameSensor::Mono, ImuSensor::Some) => 4.0 / median_depth,
             _ => 1.0 / median_depth
@@ -242,9 +239,6 @@ impl MapInitialization {
             new_pose.set_translation(new_trans);
             curr_kf.set_pose(new_pose);
         }
-
-        println!("Map initialization... after scaling, current frame pose is {:?}", map.read()?.get_keyframe(curr_kf_id).get_pose());
-        println!("Map initialization... scale by inverse median depth {}", inverse_median_depth);
 
         // Scale points
         let mp_matches = map.write()?.get_keyframe_mut(initial_kf_id).get_mp_matches().clone();

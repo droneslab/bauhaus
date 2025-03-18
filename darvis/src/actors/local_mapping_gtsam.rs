@@ -104,6 +104,8 @@ impl LocalMappingGTSAM {
             LOCAL_MAPPING_IDLE.store(false, std::sync::atomic::Ordering::SeqCst);
             let msg = message.downcast::<InitKeyFrameMsg>().unwrap_or_else(|_| panic!("Could not downcast local mapping message!"));
 
+            println!("Local mapping received InitKeyFrameMsg");
+
             // keyframe may have been deleted in map reset by tracking
             if self.map.read()?.has_keyframe(msg.kf_id) {
                 self.current_keyframe_id = msg.kf_id
@@ -151,11 +153,11 @@ impl LocalMappingGTSAM {
             info!("Local mapping working on keyframe {}. Queue length: {}", kf_id, self.system.queue_len());
 
             // Send the new keyframe ID directly back to the sender so they can use the ID 
-            self.system.find_actor(TRACKING_BACKEND).send(Box::new(InitKeyFrameMsg{kf_id, map_version: self.map.get_version()})).unwrap();
+            // self.system.find_actor(TRACKING_BACKEND).send(Box::new(InitKeyFrameMsg{kf_id, map_version: self.map.get_version()})).unwrap();
 
             self.current_keyframe_id = kf_id;
             self.current_tracking_state = msg.tracking_state;
-            self.local_mapping(msg.matches_in_tracking, msg.tracked_mappoint_depths)?;
+            self.local_mapping(0, msg.tracked_mappoint_depths)?;
         } else if message.is::<ShutdownMsg>() {
             // Sleep a little to allow other threads to finish
             sleep(Duration::from_millis(100));
@@ -167,31 +169,12 @@ impl LocalMappingGTSAM {
         Ok(false)
     }
 
-    fn map_feature_tracks_to_mappoints(&mut self, frame: &mut Frame, feature_tracks: Vec<(i32, i32)>) -> Result<(), Box<dyn std::error::Error>> {
-        // todo sofiya map mappoints
-        // let map = self.map.read()?;
-        // let last_kf = map.get_keyframe(self.current_keyframe_id - 1);
-
-        // let frame_featvec = frame.bow.as_ref().unwrap().get_feat_vec().get_all_nodes();
-        // let mut i = 0;
-
-        // while i < frame_featvec.len() {
-        //     let frame_node_id = frame_featvec[i];
-        //     let frame_indices_size = frame.bow.as_ref().unwrap().get_feat_vec().vec_size(frame_node_id);
-        //     let real_idx_frame = frame.bow.as_ref().unwrap().get_feat_vec().vec_get(frame_node_id, index_frame);
-
-        //     frame.mappoint_matches.add(real_idx_frame, *mp_id, false);
-
-        // }
-
-
-        // for (idx_in_curr_frame, idx_in_last_frame) in feature_tracks {
-        //     if let Some((mp_id, _is_outlier)) = last_kf.get_mp_matches()[idx_in_last_frame as usize] {
-        //         frame.mappoint_matches.add(idx_in_curr_frame as u32, mp_id, false);
-        //     } else {
-        //         warn!("Sofiya... can this happen? Current frame has a feature that is not in the previous frame");
-        //     }
-        // }
+    fn map_feature_tracks_to_mappoints(&mut self, frame: &mut Frame, feature_ids: Vec<i32>) -> Result<(), Box<dyn std::error::Error>> {
+        frame.compute_bow();
+        let map = self.map.read()?;
+        let ref_kf = map.get_keyframe(self.current_keyframe_id - 1);
+        let nmatches = FEATURE_MATCHING_MODULE.search_by_bow_with_frame(ref_kf, frame, true, 0.7)?;
+        println!("MATCHES IN LOCAL MAPPING: {}", nmatches);
         Ok(())
     }
 
