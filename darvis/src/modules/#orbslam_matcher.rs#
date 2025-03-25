@@ -144,9 +144,9 @@ impl DescriptorDistanceTrait for ORBMatcher {
         let mut dist = 0;
         let mut pa = desc1.ptr(0).unwrap();
         let mut pb = desc2.ptr(0).unwrap();
-	unsafe{
-          println!("Value required {}", *pa);
-          println!("Value required {}", *pb); }
+
+        println!()
+kkk
 /*        for _ in 0..8 {
              let temppa = i32::from(*pa);
              let mut v = *pa ^ *pb;

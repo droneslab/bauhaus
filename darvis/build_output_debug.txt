@@ -1,0 +1,1189 @@
+[paste 1.0.15] cargo:rerun-if-changed=build.rs
+[serde 1.0.203] cargo:rerun-if-changed=build.rs
+[parking_lot_core 0.9.10] cargo:rerun-if-changed=build.rs
+[serde 1.0.203] cargo:rustc-check-cfg=cfg(no_core_cstr)
+[serde 1.0.203] cargo:rustc-check-cfg=cfg(no_core_num_saturating)
+[serde 1.0.203] cargo:rustc-check-cfg=cfg(no_core_try_from)
+[serde 1.0.203] cargo:rustc-check-cfg=cfg(no_float_copysign)
+[serde 1.0.203] cargo:rustc-check-cfg=cfg(no_num_nonzero_signed)
+[serde 1.0.203] cargo:rustc-check-cfg=cfg(no_relaxed_trait_bounds)
+[serde 1.0.203] cargo:rustc-check-cfg=cfg(no_serde_derive)
+[serde 1.0.203] cargo:rustc-check-cfg=cfg(no_std_atomic)
+[serde 1.0.203] cargo:rustc-check-cfg=cfg(no_std_atomic64)
+[serde 1.0.203] cargo:rustc-check-cfg=cfg(no_systemtime_checked_add)
+[serde 1.0.203] cargo:rustc-check-cfg=cfg(no_target_has_atomic)
+[anyhow 1.0.86] cargo:rerun-if-changed=build/probe.rs
+[libc 0.2.155] cargo:rerun-if-changed=build.rs
+[proc-macro2 1.0.85] cargo:rustc-cfg=span_locations
+[proc-macro2 1.0.85] cargo:rustc-cfg=no_literal_byte_character
+[proc-macro2 1.0.85] cargo:rustc-cfg=no_literal_c_string
+[proc-macro2 1.0.85] cargo:rerun-if-changed=build/probe.rs
+[syn 1.0.109] cargo:rustc-cfg=syn_disable_nightly_tests
+[libc 0.2.155] cargo:rustc-cfg=freebsd11
+[libc 0.2.155] cargo:rustc-cfg=libc_priv_mod_use
+[libc 0.2.155] cargo:rustc-cfg=libc_union
+[libc 0.2.155] cargo:rustc-cfg=libc_const_size_of
+[libc 0.2.155] cargo:rustc-cfg=libc_align
+[libc 0.2.155] cargo:rustc-cfg=libc_int128
+[libc 0.2.155] cargo:rustc-cfg=libc_core_cvoid
+[libc 0.2.155] cargo:rustc-cfg=libc_packedN
+[libc 0.2.155] cargo:rustc-cfg=libc_cfg_target_vendor
+[libc 0.2.155] cargo:rustc-cfg=libc_non_exhaustive
+[libc 0.2.155] cargo:rustc-cfg=libc_long_array
+[libc 0.2.155] cargo:rustc-cfg=libc_ptr_addr_of
+[libc 0.2.155] cargo:rustc-cfg=libc_underscore_const_names
+[libc 0.2.155] cargo:rustc-cfg=libc_const_extern_fn
+[anyhow 1.0.86] cargo:rerun-if-env-changed=RUSTC_BOOTSTRAP
+[anyhow 1.0.86] cargo:rustc-cfg=std_backtrace
+[proc-macro2 1.0.85] cargo:rustc-cfg=wrap_proc_macro
+[proc-macro2 1.0.85] cargo:rerun-if-env-changed=RUSTC_BOOTSTRAP
+[libc 0.2.155] cargo:rerun-if-changed=build.rs
+[libc 0.2.155] cargo:rustc-cfg=freebsd11
+[libc 0.2.155] cargo:rustc-cfg=libc_priv_mod_use
+[libc 0.2.155] cargo:rustc-cfg=libc_union
+[libc 0.2.155] cargo:rustc-cfg=libc_const_size_of
+[libc 0.2.155] cargo:rustc-cfg=libc_align
+[libc 0.2.155] cargo:rustc-cfg=libc_int128
+[libc 0.2.155] cargo:rustc-cfg=libc_core_cvoid
+[libc 0.2.155] cargo:rustc-cfg=libc_packedN
+[libc 0.2.155] cargo:rustc-cfg=libc_cfg_target_vendor
+[libc 0.2.155] cargo:rustc-cfg=libc_non_exhaustive
+[libc 0.2.155] cargo:rustc-cfg=libc_long_array
+[libc 0.2.155] cargo:rustc-cfg=libc_ptr_addr_of
+[libc 0.2.155] cargo:rustc-cfg=libc_underscore_const_names
+[libc 0.2.155] cargo:rustc-cfg=libc_const_extern_fn
+[typenum 1.17.0] cargo:rerun-if-changed=build/main.rs
+[thiserror 1.0.61] cargo:rerun-if-changed=build/probe.rs
+[thiserror 1.0.61] cargo:rustc-check-cfg=cfg(error_generic_member_access)
+[thiserror 1.0.61] cargo:rustc-check-cfg=cfg(thiserror_nightly_testing)
+[generic-array 0.14.7] cargo:rustc-cfg=relaxed_coherence
+[httparse 1.8.0] cargo:rustc-cfg=httparse_simd
+[unicase 2.7.0] cargo:rustc-cfg=__unicase__iter_cmp
+[thiserror 1.0.61] cargo:rerun-if-env-changed=RUSTC_BOOTSTRAP
+[unicase 2.7.0] cargo:rustc-cfg=__unicase__default_hasher
+[unicase 2.7.0] cargo:rustc-cfg=__unicase__const_fns
+[unicase 2.7.0] cargo:rustc-cfg=__unicase__core_and_alloc
+[semver 1.0.23] cargo:rerun-if-changed=build.rs
+[lock_api 0.4.12] cargo:rustc-cfg=has_const_fn_trait_bound
+[rustix 0.38.34] cargo:rerun-if-changed=build.rs
+[rustix 0.38.34] cargo:rustc-cfg=static_assertions
+[rustix 0.38.34] cargo:rustc-cfg=linux_raw
+[rustix 0.38.34] cargo:rustc-cfg=linux_like
+[rustix 0.38.34] cargo:rustc-cfg=linux_kernel
+[rustix 0.38.34] cargo:rerun-if-env-changed=CARGO_CFG_RUSTIX_USE_EXPERIMENTAL_ASM
+[rustix 0.38.34] cargo:rerun-if-env-changed=CARGO_CFG_RUSTIX_USE_LIBC
+[rustix 0.38.34] cargo:rerun-if-env-changed=CARGO_FEATURE_USE_LIBC
+[rustix 0.38.34] cargo:rerun-if-env-changed=CARGO_FEATURE_RUSTC_DEP_OF_STD
+[rustix 0.38.34] cargo:rerun-if-env-changed=CARGO_CFG_MIRI
+[num-traits 0.2.19] cargo:rustc-cfg=has_total_cmp
+[num-traits 0.2.19] cargo:rerun-if-changed=build.rs
+[prettyplease 0.2.20] cargo:rerun-if-changed=build.rs
+[prettyplease 0.2.20] cargo:rustc-check-cfg=cfg(exhaustive)
+[prettyplease 0.2.20] cargo:rustc-check-cfg=cfg(prettyplease_debug)
+[prettyplease 0.2.20] cargo:rustc-check-cfg=cfg(prettyplease_debug_indent)
+[prettyplease 0.2.20] cargo:VERSION=0.2.20
+[matrixmultiply 0.3.8] cargo:rerun-if-changed=build.rs
+[serde_json 1.0.117] cargo:rerun-if-changed=build.rs
+[serde_json 1.0.117] cargo:rustc-check-cfg=cfg(limb_width_32)
+[serde_json 1.0.117] cargo:rustc-check-cfg=cfg(limb_width_64)
+[serde_json 1.0.117] cargo:rustc-cfg=limb_width_64
+[crossbeam-utils 0.8.20] cargo:rerun-if-changed=no_atomic.rs
+[crossbeam-utils 0.8.20] cargo:rustc-check-cfg=cfg(crossbeam_no_atomic,crossbeam_sanitize_thread)
+[nix 0.28.0] cargo:rustc-cfg=linux
+[nix 0.28.0] cargo:rustc-cfg=linux_android
+[ahash 0.8.11] cargo:rerun-if-changed=build.rs
+[ahash 0.8.11] cargo:rustc-cfg=feature="folded_multiply"
+[error-chain 0.12.4] cargo:rustc-cfg=has_error_source
+[error-chain 0.12.4] cargo:rustc-cfg=has_error_description_deprecated
+[error-chain 0.12.4] cargo:rustc-cfg=build="debug"
+[link-cplusplus 1.0.9] cargo:rerun-if-changed=build.rs
+[link-cplusplus 1.0.9] TARGET = Some("x86_64-unknown-linux-gnu")
+[link-cplusplus 1.0.9] OPT_LEVEL = Some("0")
+[link-cplusplus 1.0.9] HOST = Some("x86_64-unknown-linux-gnu")
+[link-cplusplus 1.0.9] cargo:rerun-if-env-changed=CXX_x86_64-unknown-linux-gnu
+[link-cplusplus 1.0.9] CXX_x86_64-unknown-linux-gnu = None
+[link-cplusplus 1.0.9] cargo:rerun-if-env-changed=CXX_x86_64_unknown_linux_gnu
+[link-cplusplus 1.0.9] CXX_x86_64_unknown_linux_gnu = None
+[link-cplusplus 1.0.9] cargo:rerun-if-env-changed=HOST_CXX
+[link-cplusplus 1.0.9] HOST_CXX = None
+[link-cplusplus 1.0.9] cargo:rerun-if-env-changed=CXX
+[link-cplusplus 1.0.9] CXX = None
+[link-cplusplus 1.0.9] cargo:rerun-if-env-changed=CXXFLAGS_x86_64-unknown-linux-gnu
+[link-cplusplus 1.0.9] CXXFLAGS_x86_64-unknown-linux-gnu = None
+[link-cplusplus 1.0.9] cargo:rerun-if-env-changed=CXXFLAGS_x86_64_unknown_linux_gnu
+[link-cplusplus 1.0.9] CXXFLAGS_x86_64_unknown_linux_gnu = None
+[link-cplusplus 1.0.9] cargo:rerun-if-env-changed=HOST_CXXFLAGS
+[link-cplusplus 1.0.9] HOST_CXXFLAGS = None
+[link-cplusplus 1.0.9] cargo:rerun-if-env-changed=CXXFLAGS
+[link-cplusplus 1.0.9] CXXFLAGS = None
+[link-cplusplus 1.0.9] cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+[link-cplusplus 1.0.9] CRATE_CC_NO_DEFAULTS = None
+[link-cplusplus 1.0.9] DEBUG = Some("true")
+[link-cplusplus 1.0.9] CARGO_CFG_TARGET_FEATURE = Some("fxsr,sse,sse2")
+[link-cplusplus 1.0.9] running: "c++" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-Wall" "-Wextra" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/link-cplusplus-89125655376bff21/out/cf13df53420e4d6f-dummy.o" "-c" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/link-cplusplus-89125655376bff21/out/dummy.cc"
+[link-cplusplus 1.0.9] exit status: 0
+[link-cplusplus 1.0.9] cargo:rerun-if-env-changed=AR_x86_64-unknown-linux-gnu
+[link-cplusplus 1.0.9] AR_x86_64-unknown-linux-gnu = None
+[link-cplusplus 1.0.9] cargo:rerun-if-env-changed=AR_x86_64_unknown_linux_gnu
+[link-cplusplus 1.0.9] AR_x86_64_unknown_linux_gnu = None
+[link-cplusplus 1.0.9] cargo:rerun-if-env-changed=HOST_AR
+[link-cplusplus 1.0.9] HOST_AR = None
+[link-cplusplus 1.0.9] cargo:rerun-if-env-changed=AR
+[link-cplusplus 1.0.9] AR = None
+[link-cplusplus 1.0.9] cargo:rerun-if-env-changed=ARFLAGS_x86_64-unknown-linux-gnu
+[link-cplusplus 1.0.9] ARFLAGS_x86_64-unknown-linux-gnu = None
+[link-cplusplus 1.0.9] cargo:rerun-if-env-changed=ARFLAGS_x86_64_unknown_linux_gnu
+[link-cplusplus 1.0.9] ARFLAGS_x86_64_unknown_linux_gnu = None
+[link-cplusplus 1.0.9] cargo:rerun-if-env-changed=HOST_ARFLAGS
+[link-cplusplus 1.0.9] HOST_ARFLAGS = None
+[link-cplusplus 1.0.9] cargo:rerun-if-env-changed=ARFLAGS
+[link-cplusplus 1.0.9] ARFLAGS = None
+[link-cplusplus 1.0.9] running: ZERO_AR_DATE="1" "ar" "cq" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/link-cplusplus-89125655376bff21/out/liblink-cplusplus.a" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/link-cplusplus-89125655376bff21/out/cf13df53420e4d6f-dummy.o"
+[link-cplusplus 1.0.9] exit status: 0
+[link-cplusplus 1.0.9] running: "ar" "s" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/link-cplusplus-89125655376bff21/out/liblink-cplusplus.a"
+[link-cplusplus 1.0.9] exit status: 0
+[link-cplusplus 1.0.9] cargo:rustc-link-lib=static=link-cplusplus
+[link-cplusplus 1.0.9] cargo:rustc-link-search=native=/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/link-cplusplus-89125655376bff21/out
+[link-cplusplus 1.0.9] cargo:rerun-if-env-changed=CXXSTDLIB_x86_64-unknown-linux-gnu
+[link-cplusplus 1.0.9] CXXSTDLIB_x86_64-unknown-linux-gnu = None
+[link-cplusplus 1.0.9] cargo:rerun-if-env-changed=CXXSTDLIB_x86_64_unknown_linux_gnu
+[link-cplusplus 1.0.9] CXXSTDLIB_x86_64_unknown_linux_gnu = None
+[link-cplusplus 1.0.9] cargo:rerun-if-env-changed=HOST_CXXSTDLIB
+[link-cplusplus 1.0.9] HOST_CXXSTDLIB = None
+[link-cplusplus 1.0.9] cargo:rerun-if-env-changed=CXXSTDLIB
+[link-cplusplus 1.0.9] CXXSTDLIB = None
+[link-cplusplus 1.0.9] cargo:rustc-link-lib=stdc++
+[cxx 1.0.118] TARGET = Some("x86_64-unknown-linux-gnu")
+[cxx 1.0.118] OPT_LEVEL = Some("0")
+[cxx 1.0.118] HOST = Some("x86_64-unknown-linux-gnu")
+[cxx 1.0.118] cargo:rerun-if-env-changed=CXX_x86_64-unknown-linux-gnu
+[cxx 1.0.118] CXX_x86_64-unknown-linux-gnu = None
+[cxx 1.0.118] cargo:rerun-if-env-changed=CXX_x86_64_unknown_linux_gnu
+[cxx 1.0.118] CXX_x86_64_unknown_linux_gnu = None
+[cxx 1.0.118] cargo:rerun-if-env-changed=HOST_CXX
+[cxx 1.0.118] HOST_CXX = None
+[cxx 1.0.118] cargo:rerun-if-env-changed=CXX
+[cxx 1.0.118] CXX = None
+[cxx 1.0.118] cargo:rerun-if-env-changed=CXXFLAGS_x86_64-unknown-linux-gnu
+[cxx 1.0.118] CXXFLAGS_x86_64-unknown-linux-gnu = None
+[cxx 1.0.118] cargo:rerun-if-env-changed=CXXFLAGS_x86_64_unknown_linux_gnu
+[cxx 1.0.118] CXXFLAGS_x86_64_unknown_linux_gnu = None
+[cxx 1.0.118] cargo:rerun-if-env-changed=HOST_CXXFLAGS
+[cxx 1.0.118] HOST_CXXFLAGS = None
+[cxx 1.0.118] cargo:rerun-if-env-changed=CXXFLAGS
+[cxx 1.0.118] CXXFLAGS = None
+[cxx 1.0.118] cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+[cxx 1.0.118] CRATE_CC_NO_DEFAULTS = None
+[cxx 1.0.118] DEBUG = Some("true")
+[cxx 1.0.118] CARGO_CFG_TARGET_FEATURE = Some("fxsr,sse,sse2")
+[cxx 1.0.118] cargo:rerun-if-env-changed=CXX_x86_64-unknown-linux-gnu
+[cxx 1.0.118] CXX_x86_64-unknown-linux-gnu = None
+[cxx 1.0.118] cargo:rerun-if-env-changed=CXX_x86_64_unknown_linux_gnu
+[cxx 1.0.118] CXX_x86_64_unknown_linux_gnu = None
+[cxx 1.0.118] cargo:rerun-if-env-changed=HOST_CXX
+[cxx 1.0.118] HOST_CXX = None
+[cxx 1.0.118] cargo:rerun-if-env-changed=CXX
+[cxx 1.0.118] CXX = None
+[cxx 1.0.118] cargo:rerun-if-env-changed=CXXFLAGS_x86_64-unknown-linux-gnu
+[cxx 1.0.118] CXXFLAGS_x86_64-unknown-linux-gnu = None
+[cxx 1.0.118] cargo:rerun-if-env-changed=CXXFLAGS_x86_64_unknown_linux_gnu
+[cxx 1.0.118] CXXFLAGS_x86_64_unknown_linux_gnu = None
+[cxx 1.0.118] cargo:rerun-if-env-changed=HOST_CXXFLAGS
+[cxx 1.0.118] HOST_CXXFLAGS = None
+[cxx 1.0.118] cargo:rerun-if-env-changed=CXXFLAGS
+[cxx 1.0.118] CXXFLAGS = None
+[cxx 1.0.118] cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+[cxx 1.0.118] CRATE_CC_NO_DEFAULTS = None
+[cxx 1.0.118] CARGO_CFG_TARGET_FEATURE = Some("fxsr,sse,sse2")
+[zstd-sys 2.0.10+zstd.1.5.6] cargo:rerun-if-env-changed=ZSTD_SYS_USE_PKG_CONFIG
+[zstd-sys 2.0.10+zstd.1.5.6] TARGET = Some("x86_64-unknown-linux-gnu")
+[zstd-sys 2.0.10+zstd.1.5.6] OPT_LEVEL = Some("0")
+[zstd-sys 2.0.10+zstd.1.5.6] HOST = Some("x86_64-unknown-linux-gnu")
+[zstd-sys 2.0.10+zstd.1.5.6] cargo:rerun-if-env-changed=CC_x86_64-unknown-linux-gnu
+[zstd-sys 2.0.10+zstd.1.5.6] CC_x86_64-unknown-linux-gnu = None
+[zstd-sys 2.0.10+zstd.1.5.6] cargo:rerun-if-env-changed=CC_x86_64_unknown_linux_gnu
+[zstd-sys 2.0.10+zstd.1.5.6] CC_x86_64_unknown_linux_gnu = None
+[zstd-sys 2.0.10+zstd.1.5.6] cargo:rerun-if-env-changed=HOST_CC
+[zstd-sys 2.0.10+zstd.1.5.6] HOST_CC = None
+[zstd-sys 2.0.10+zstd.1.5.6] cargo:rerun-if-env-changed=CC
+[zstd-sys 2.0.10+zstd.1.5.6] CC = None
+[zstd-sys 2.0.10+zstd.1.5.6] cargo:rerun-if-env-changed=CFLAGS_x86_64-unknown-linux-gnu
+[zstd-sys 2.0.10+zstd.1.5.6] CFLAGS_x86_64-unknown-linux-gnu = None
+[zstd-sys 2.0.10+zstd.1.5.6] cargo:rerun-if-env-changed=CFLAGS_x86_64_unknown_linux_gnu
+[zstd-sys 2.0.10+zstd.1.5.6] CFLAGS_x86_64_unknown_linux_gnu = None
+[zstd-sys 2.0.10+zstd.1.5.6] cargo:rerun-if-env-changed=HOST_CFLAGS
+[zstd-sys 2.0.10+zstd.1.5.6] HOST_CFLAGS = None
+[zstd-sys 2.0.10+zstd.1.5.6] cargo:rerun-if-env-changed=CFLAGS
+[zstd-sys 2.0.10+zstd.1.5.6] CFLAGS = None
+[zstd-sys 2.0.10+zstd.1.5.6] cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+[zstd-sys 2.0.10+zstd.1.5.6] CRATE_CC_NO_DEFAULTS = None
+[zstd-sys 2.0.10+zstd.1.5.6] DEBUG = Some("true")
+[zstd-sys 2.0.10+zstd.1.5.6] CARGO_CFG_TARGET_FEATURE = Some("fxsr,sse,sse2")
+[zstd-sys 2.0.10+zstd.1.5.6] cargo:rerun-if-env-changed=CC_x86_64-unknown-linux-gnu
+[zstd-sys 2.0.10+zstd.1.5.6] CC_x86_64-unknown-linux-gnu = None
+[zstd-sys 2.0.10+zstd.1.5.6] cargo:rerun-if-env-changed=CC_x86_64_unknown_linux_gnu
+[zstd-sys 2.0.10+zstd.1.5.6] CC_x86_64_unknown_linux_gnu = None
+[zstd-sys 2.0.10+zstd.1.5.6] cargo:rerun-if-env-changed=HOST_CC
+[zstd-sys 2.0.10+zstd.1.5.6] HOST_CC = None
+[zstd-sys 2.0.10+zstd.1.5.6] cargo:rerun-if-env-changed=CC
+[zstd-sys 2.0.10+zstd.1.5.6] CC = None
+[zstd-sys 2.0.10+zstd.1.5.6] cargo:rerun-if-env-changed=CFLAGS_x86_64-unknown-linux-gnu
+[zstd-sys 2.0.10+zstd.1.5.6] CFLAGS_x86_64-unknown-linux-gnu = None
+[zstd-sys 2.0.10+zstd.1.5.6] cargo:rerun-if-env-changed=CFLAGS_x86_64_unknown_linux_gnu
+[zstd-sys 2.0.10+zstd.1.5.6] CFLAGS_x86_64_unknown_linux_gnu = None
+[zstd-sys 2.0.10+zstd.1.5.6] cargo:rerun-if-env-changed=HOST_CFLAGS
+[zstd-sys 2.0.10+zstd.1.5.6] HOST_CFLAGS = None
+[zstd-sys 2.0.10+zstd.1.5.6] cargo:rerun-if-env-changed=CFLAGS
+[zstd-sys 2.0.10+zstd.1.5.6] CFLAGS = None
+[zstd-sys 2.0.10+zstd.1.5.6] cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+[zstd-sys 2.0.10+zstd.1.5.6] CRATE_CC_NO_DEFAULTS = None
+[zstd-sys 2.0.10+zstd.1.5.6] CARGO_CFG_TARGET_FEATURE = Some("fxsr,sse,sse2")
+[zstd-sys 2.0.10+zstd.1.5.6] cargo:rerun-if-env-changed=CC_x86_64-unknown-linux-gnu
+[zstd-sys 2.0.10+zstd.1.5.6] CC_x86_64-unknown-linux-gnu = None
+[zstd-sys 2.0.10+zstd.1.5.6] cargo:rerun-if-env-changed=CC_x86_64_unknown_linux_gnu
+[zstd-sys 2.0.10+zstd.1.5.6] CC_x86_64_unknown_linux_gnu = None
+[zstd-sys 2.0.10+zstd.1.5.6] cargo:rerun-if-env-changed=HOST_CC
+[zstd-sys 2.0.10+zstd.1.5.6] HOST_CC = None
+[zstd-sys 2.0.10+zstd.1.5.6] cargo:rerun-if-env-changed=CC
+[zstd-sys 2.0.10+zstd.1.5.6] CC = None
+[zstd-sys 2.0.10+zstd.1.5.6] cargo:rerun-if-env-changed=CFLAGS_x86_64-unknown-linux-gnu
+[zstd-sys 2.0.10+zstd.1.5.6] CFLAGS_x86_64-unknown-linux-gnu = None
+[zstd-sys 2.0.10+zstd.1.5.6] cargo:rerun-if-env-changed=CFLAGS_x86_64_unknown_linux_gnu
+[zstd-sys 2.0.10+zstd.1.5.6] CFLAGS_x86_64_unknown_linux_gnu = None
+[zstd-sys 2.0.10+zstd.1.5.6] cargo:rerun-if-env-changed=HOST_CFLAGS
+[zstd-sys 2.0.10+zstd.1.5.6] HOST_CFLAGS = None
+[zstd-sys 2.0.10+zstd.1.5.6] cargo:rerun-if-env-changed=CFLAGS
+[zstd-sys 2.0.10+zstd.1.5.6] CFLAGS = None
+[zstd-sys 2.0.10+zstd.1.5.6] cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+[zstd-sys 2.0.10+zstd.1.5.6] CRATE_CC_NO_DEFAULTS = None
+[zstd-sys 2.0.10+zstd.1.5.6] CARGO_CFG_TARGET_FEATURE = Some("fxsr,sse,sse2")
+[cxx 1.0.118] running: "c++" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-Wall" "-Wextra" "-std=c++11" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/cxx-18ddd3909c0e4d3e/out/ba8b6160d18619ac-cxx.o" "-c" "/home/darvis/.cargo/registry/src/index.crates.io-6f17d22bba15001f/cxx-1.0.118/src/cxx.cc"
+[tracy-client-sys 0.21.0] TARGET = Some("x86_64-unknown-linux-gnu")
+[tracy-client-sys 0.21.0] OPT_LEVEL = Some("0")
+[tracy-client-sys 0.21.0] HOST = Some("x86_64-unknown-linux-gnu")
+[tracy-client-sys 0.21.0] cargo:rerun-if-env-changed=CXX_x86_64-unknown-linux-gnu
+[tracy-client-sys 0.21.0] CXX_x86_64-unknown-linux-gnu = None
+[tracy-client-sys 0.21.0] cargo:rerun-if-env-changed=CXX_x86_64_unknown_linux_gnu
+[tracy-client-sys 0.21.0] CXX_x86_64_unknown_linux_gnu = None
+[tracy-client-sys 0.21.0] cargo:rerun-if-env-changed=HOST_CXX
+[tracy-client-sys 0.21.0] HOST_CXX = None
+[tracy-client-sys 0.21.0] cargo:rerun-if-env-changed=CXX
+[tracy-client-sys 0.21.0] CXX = None
+[tracy-client-sys 0.21.0] cargo:rerun-if-env-changed=CXXFLAGS_x86_64-unknown-linux-gnu
+[tracy-client-sys 0.21.0] CXXFLAGS_x86_64-unknown-linux-gnu = None
+[tracy-client-sys 0.21.0] cargo:rerun-if-env-changed=CXXFLAGS_x86_64_unknown_linux_gnu
+[tracy-client-sys 0.21.0] CXXFLAGS_x86_64_unknown_linux_gnu = None
+[tracy-client-sys 0.21.0] cargo:rerun-if-env-changed=HOST_CXXFLAGS
+[tracy-client-sys 0.21.0] HOST_CXXFLAGS = None
+[tracy-client-sys 0.21.0] cargo:rerun-if-env-changed=CXXFLAGS
+[tracy-client-sys 0.21.0] CXXFLAGS = None
+[tracy-client-sys 0.21.0] cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+[tracy-client-sys 0.21.0] CRATE_CC_NO_DEFAULTS = None
+[tracy-client-sys 0.21.0] DEBUG = Some("true")
+[tracy-client-sys 0.21.0] CARGO_CFG_TARGET_FEATURE = Some("fxsr,sse,sse2")
+[tracy-client-sys 0.21.0] cargo:rerun-if-env-changed=CXX_x86_64-unknown-linux-gnu
+[tracy-client-sys 0.21.0] CXX_x86_64-unknown-linux-gnu = None
+[tracy-client-sys 0.21.0] cargo:rerun-if-env-changed=CXX_x86_64_unknown_linux_gnu
+[tracy-client-sys 0.21.0] CXX_x86_64_unknown_linux_gnu = None
+[tracy-client-sys 0.21.0] cargo:rerun-if-env-changed=HOST_CXX
+[tracy-client-sys 0.21.0] HOST_CXX = None
+[tracy-client-sys 0.21.0] cargo:rerun-if-env-changed=CXX
+[tracy-client-sys 0.21.0] CXX = None
+[tracy-client-sys 0.21.0] cargo:rerun-if-env-changed=CXXFLAGS_x86_64-unknown-linux-gnu
+[tracy-client-sys 0.21.0] CXXFLAGS_x86_64-unknown-linux-gnu = None
+[tracy-client-sys 0.21.0] cargo:rerun-if-env-changed=CXXFLAGS_x86_64_unknown_linux_gnu
+[tracy-client-sys 0.21.0] CXXFLAGS_x86_64_unknown_linux_gnu = None
+[tracy-client-sys 0.21.0] cargo:rerun-if-env-changed=HOST_CXXFLAGS
+[tracy-client-sys 0.21.0] HOST_CXXFLAGS = None
+[tracy-client-sys 0.21.0] cargo:rerun-if-env-changed=CXXFLAGS
+[tracy-client-sys 0.21.0] CXXFLAGS = None
+[tracy-client-sys 0.21.0] cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+[tracy-client-sys 0.21.0] CRATE_CC_NO_DEFAULTS = None
+[tracy-client-sys 0.21.0] CARGO_CFG_TARGET_FEATURE = Some("fxsr,sse,sse2")
+[zstd-sys 2.0.10+zstd.1.5.6] cargo:rerun-if-env-changed=CC_x86_64-unknown-linux-gnu
+[zstd-sys 2.0.10+zstd.1.5.6] CC_x86_64-unknown-linux-gnu = None
+[zstd-sys 2.0.10+zstd.1.5.6] cargo:rerun-if-env-changed=CC_x86_64_unknown_linux_gnu
+[zstd-sys 2.0.10+zstd.1.5.6] CC_x86_64_unknown_linux_gnu = None
+[zstd-sys 2.0.10+zstd.1.5.6] cargo:rerun-if-env-changed=HOST_CC
+[zstd-sys 2.0.10+zstd.1.5.6] HOST_CC = None
+[zstd-sys 2.0.10+zstd.1.5.6] cargo:rerun-if-env-changed=CC
+[zstd-sys 2.0.10+zstd.1.5.6] CC = None
+[zstd-sys 2.0.10+zstd.1.5.6] cargo:rerun-if-env-changed=CFLAGS_x86_64-unknown-linux-gnu
+[zstd-sys 2.0.10+zstd.1.5.6] CFLAGS_x86_64-unknown-linux-gnu = None
+[zstd-sys 2.0.10+zstd.1.5.6] cargo:rerun-if-env-changed=CFLAGS_x86_64_unknown_linux_gnu
+[zstd-sys 2.0.10+zstd.1.5.6] CFLAGS_x86_64_unknown_linux_gnu = None
+[zstd-sys 2.0.10+zstd.1.5.6] cargo:rerun-if-env-changed=HOST_CFLAGS
+[zstd-sys 2.0.10+zstd.1.5.6] HOST_CFLAGS = None
+[zstd-sys 2.0.10+zstd.1.5.6] cargo:rerun-if-env-changed=CFLAGS
+[zstd-sys 2.0.10+zstd.1.5.6] CFLAGS = None
+[zstd-sys 2.0.10+zstd.1.5.6] cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+[zstd-sys 2.0.10+zstd.1.5.6] CRATE_CC_NO_DEFAULTS = None
+[zstd-sys 2.0.10+zstd.1.5.6] CARGO_CFG_TARGET_FEATURE = Some("fxsr,sse,sse2")
+[zstd-sys 2.0.10+zstd.1.5.6] running: "cc" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "zstd/lib/" "-I" "zstd/lib/common" "-I" "zstd/lib/legacy" "-fvisibility=hidden" "-pthread" "-ffunction-sections" "-fdata-sections" "-fmerge-all-constants" "-DZSTD_LIB_DEPRECATED=0" "-DXXH_PRIVATE_API=" "-DZSTDLIB_VISIBILITY=" "-DZDICTLIB_VISIBILITY=" "-DZSTDERRORLIB_VISIBILITY=" "-DZSTD_LEGACY_SUPPORT=1" "-DZSTD_MULTITHREAD=" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/common/debug.o" "-c" "zstd/lib/common/debug.c"
+[tracy-client-sys 0.21.0] running: "c++" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-std=c++11" "-DTRACY_ENABLE" "-DTRACY_MANUAL_LIFETIME" "-DTRACY_DELAYED_INIT" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/tracy-client-sys-24c64175d1db204b/out/tracy/TracyClient.o" "-c" "tracy/TracyClient.cpp"
+[zstd-sys 2.0.10+zstd.1.5.6] running: "cc" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "zstd/lib/" "-I" "zstd/lib/common" "-I" "zstd/lib/legacy" "-fvisibility=hidden" "-pthread" "-ffunction-sections" "-fdata-sections" "-fmerge-all-constants" "-DZSTD_LIB_DEPRECATED=0" "-DXXH_PRIVATE_API=" "-DZSTDLIB_VISIBILITY=" "-DZDICTLIB_VISIBILITY=" "-DZSTDERRORLIB_VISIBILITY=" "-DZSTD_LEGACY_SUPPORT=1" "-DZSTD_MULTITHREAD=" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/common/entropy_common.o" "-c" "zstd/lib/common/entropy_common.c"
+[zstd-sys 2.0.10+zstd.1.5.6] exit status: 0
+[zstd-sys 2.0.10+zstd.1.5.6] running: "cc" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "zstd/lib/" "-I" "zstd/lib/common" "-I" "zstd/lib/legacy" "-fvisibility=hidden" "-pthread" "-ffunction-sections" "-fdata-sections" "-fmerge-all-constants" "-DZSTD_LIB_DEPRECATED=0" "-DXXH_PRIVATE_API=" "-DZSTDLIB_VISIBILITY=" "-DZDICTLIB_VISIBILITY=" "-DZSTDERRORLIB_VISIBILITY=" "-DZSTD_LEGACY_SUPPORT=1" "-DZSTD_MULTITHREAD=" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/common/error_private.o" "-c" "zstd/lib/common/error_private.c"
+[zstd-sys 2.0.10+zstd.1.5.6] exit status: 0
+[zstd-sys 2.0.10+zstd.1.5.6] exit status: 0
+[zstd-sys 2.0.10+zstd.1.5.6] running: "cc" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "zstd/lib/" "-I" "zstd/lib/common" "-I" "zstd/lib/legacy" "-fvisibility=hidden" "-pthread" "-ffunction-sections" "-fdata-sections" "-fmerge-all-constants" "-DZSTD_LIB_DEPRECATED=0" "-DXXH_PRIVATE_API=" "-DZSTDLIB_VISIBILITY=" "-DZDICTLIB_VISIBILITY=" "-DZSTDERRORLIB_VISIBILITY=" "-DZSTD_LEGACY_SUPPORT=1" "-DZSTD_MULTITHREAD=" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/common/fse_decompress.o" "-c" "zstd/lib/common/fse_decompress.c"
+[zstd-sys 2.0.10+zstd.1.5.6] running: "cc" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "zstd/lib/" "-I" "zstd/lib/common" "-I" "zstd/lib/legacy" "-fvisibility=hidden" "-pthread" "-ffunction-sections" "-fdata-sections" "-fmerge-all-constants" "-DZSTD_LIB_DEPRECATED=0" "-DXXH_PRIVATE_API=" "-DZSTDLIB_VISIBILITY=" "-DZDICTLIB_VISIBILITY=" "-DZSTDERRORLIB_VISIBILITY=" "-DZSTD_LEGACY_SUPPORT=1" "-DZSTD_MULTITHREAD=" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/common/pool.o" "-c" "zstd/lib/common/pool.c"
+[zstd-sys 2.0.10+zstd.1.5.6] running: "cc" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "zstd/lib/" "-I" "zstd/lib/common" "-I" "zstd/lib/legacy" "-fvisibility=hidden" "-pthread" "-ffunction-sections" "-fdata-sections" "-fmerge-all-constants" "-DZSTD_LIB_DEPRECATED=0" "-DXXH_PRIVATE_API=" "-DZSTDLIB_VISIBILITY=" "-DZDICTLIB_VISIBILITY=" "-DZSTDERRORLIB_VISIBILITY=" "-DZSTD_LEGACY_SUPPORT=1" "-DZSTD_MULTITHREAD=" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/common/threading.o" "-c" "zstd/lib/common/threading.c"
+[zstd-sys 2.0.10+zstd.1.5.6] running: "cc" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "zstd/lib/" "-I" "zstd/lib/common" "-I" "zstd/lib/legacy" "-fvisibility=hidden" "-pthread" "-ffunction-sections" "-fdata-sections" "-fmerge-all-constants" "-DZSTD_LIB_DEPRECATED=0" "-DXXH_PRIVATE_API=" "-DZSTDLIB_VISIBILITY=" "-DZDICTLIB_VISIBILITY=" "-DZSTDERRORLIB_VISIBILITY=" "-DZSTD_LEGACY_SUPPORT=1" "-DZSTD_MULTITHREAD=" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/common/zstd_common.o" "-c" "zstd/lib/common/zstd_common.c"
+[zstd-sys 2.0.10+zstd.1.5.6] exit status: 0
+[zstd-sys 2.0.10+zstd.1.5.6] exit status: 0
+[zstd-sys 2.0.10+zstd.1.5.6] running: "cc" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "zstd/lib/" "-I" "zstd/lib/common" "-I" "zstd/lib/legacy" "-fvisibility=hidden" "-pthread" "-ffunction-sections" "-fdata-sections" "-fmerge-all-constants" "-DZSTD_LIB_DEPRECATED=0" "-DXXH_PRIVATE_API=" "-DZSTDLIB_VISIBILITY=" "-DZDICTLIB_VISIBILITY=" "-DZSTDERRORLIB_VISIBILITY=" "-DZSTD_LEGACY_SUPPORT=1" "-DZSTD_MULTITHREAD=" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/compress/fse_compress.o" "-c" "zstd/lib/compress/fse_compress.c"
+[zstd-sys 2.0.10+zstd.1.5.6] running: "cc" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "zstd/lib/" "-I" "zstd/lib/common" "-I" "zstd/lib/legacy" "-fvisibility=hidden" "-pthread" "-ffunction-sections" "-fdata-sections" "-fmerge-all-constants" "-DZSTD_LIB_DEPRECATED=0" "-DXXH_PRIVATE_API=" "-DZSTDLIB_VISIBILITY=" "-DZDICTLIB_VISIBILITY=" "-DZSTDERRORLIB_VISIBILITY=" "-DZSTD_LEGACY_SUPPORT=1" "-DZSTD_MULTITHREAD=" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/compress/hist.o" "-c" "zstd/lib/compress/hist.c"
+[zstd-sys 2.0.10+zstd.1.5.6] exit status: 0
+[zstd-sys 2.0.10+zstd.1.5.6] exit status: 0
+[zstd-sys 2.0.10+zstd.1.5.6] running: "cc" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "zstd/lib/" "-I" "zstd/lib/common" "-I" "zstd/lib/legacy" "-fvisibility=hidden" "-pthread" "-ffunction-sections" "-fdata-sections" "-fmerge-all-constants" "-DZSTD_LIB_DEPRECATED=0" "-DXXH_PRIVATE_API=" "-DZSTDLIB_VISIBILITY=" "-DZDICTLIB_VISIBILITY=" "-DZSTDERRORLIB_VISIBILITY=" "-DZSTD_LEGACY_SUPPORT=1" "-DZSTD_MULTITHREAD=" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/compress/huf_compress.o" "-c" "zstd/lib/compress/huf_compress.c"
+[zstd-sys 2.0.10+zstd.1.5.6] running: "cc" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "zstd/lib/" "-I" "zstd/lib/common" "-I" "zstd/lib/legacy" "-fvisibility=hidden" "-pthread" "-ffunction-sections" "-fdata-sections" "-fmerge-all-constants" "-DZSTD_LIB_DEPRECATED=0" "-DXXH_PRIVATE_API=" "-DZSTDLIB_VISIBILITY=" "-DZDICTLIB_VISIBILITY=" "-DZSTDERRORLIB_VISIBILITY=" "-DZSTD_LEGACY_SUPPORT=1" "-DZSTD_MULTITHREAD=" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/compress/zstd_compress.o" "-c" "zstd/lib/compress/zstd_compress.c"
+[zstd-sys 2.0.10+zstd.1.5.6] running: "cc" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "zstd/lib/" "-I" "zstd/lib/common" "-I" "zstd/lib/legacy" "-fvisibility=hidden" "-pthread" "-ffunction-sections" "-fdata-sections" "-fmerge-all-constants" "-DZSTD_LIB_DEPRECATED=0" "-DXXH_PRIVATE_API=" "-DZSTDLIB_VISIBILITY=" "-DZDICTLIB_VISIBILITY=" "-DZSTDERRORLIB_VISIBILITY=" "-DZSTD_LEGACY_SUPPORT=1" "-DZSTD_MULTITHREAD=" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/compress/zstd_compress_literals.o" "-c" "zstd/lib/compress/zstd_compress_literals.c"
+[zstd-sys 2.0.10+zstd.1.5.6] running: "cc" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "zstd/lib/" "-I" "zstd/lib/common" "-I" "zstd/lib/legacy" "-fvisibility=hidden" "-pthread" "-ffunction-sections" "-fdata-sections" "-fmerge-all-constants" "-DZSTD_LIB_DEPRECATED=0" "-DXXH_PRIVATE_API=" "-DZSTDLIB_VISIBILITY=" "-DZDICTLIB_VISIBILITY=" "-DZSTDERRORLIB_VISIBILITY=" "-DZSTD_LEGACY_SUPPORT=1" "-DZSTD_MULTITHREAD=" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/compress/zstd_compress_sequences.o" "-c" "zstd/lib/compress/zstd_compress_sequences.c"
+[zstd-sys 2.0.10+zstd.1.5.6] exit status: 0
+[zstd-sys 2.0.10+zstd.1.5.6] running: "cc" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "zstd/lib/" "-I" "zstd/lib/common" "-I" "zstd/lib/legacy" "-fvisibility=hidden" "-pthread" "-ffunction-sections" "-fdata-sections" "-fmerge-all-constants" "-DZSTD_LIB_DEPRECATED=0" "-DXXH_PRIVATE_API=" "-DZSTDLIB_VISIBILITY=" "-DZDICTLIB_VISIBILITY=" "-DZSTDERRORLIB_VISIBILITY=" "-DZSTD_LEGACY_SUPPORT=1" "-DZSTD_MULTITHREAD=" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/compress/zstd_compress_superblock.o" "-c" "zstd/lib/compress/zstd_compress_superblock.c"
+[zstd-sys 2.0.10+zstd.1.5.6] exit status: 0
+[zstd-sys 2.0.10+zstd.1.5.6] running: "cc" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "zstd/lib/" "-I" "zstd/lib/common" "-I" "zstd/lib/legacy" "-fvisibility=hidden" "-pthread" "-ffunction-sections" "-fdata-sections" "-fmerge-all-constants" "-DZSTD_LIB_DEPRECATED=0" "-DXXH_PRIVATE_API=" "-DZSTDLIB_VISIBILITY=" "-DZDICTLIB_VISIBILITY=" "-DZSTDERRORLIB_VISIBILITY=" "-DZSTD_LEGACY_SUPPORT=1" "-DZSTD_MULTITHREAD=" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/compress/zstd_double_fast.o" "-c" "zstd/lib/compress/zstd_double_fast.c"
+[zstd-sys 2.0.10+zstd.1.5.6] running: "cc" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "zstd/lib/" "-I" "zstd/lib/common" "-I" "zstd/lib/legacy" "-fvisibility=hidden" "-pthread" "-ffunction-sections" "-fdata-sections" "-fmerge-all-constants" "-DZSTD_LIB_DEPRECATED=0" "-DXXH_PRIVATE_API=" "-DZSTDLIB_VISIBILITY=" "-DZDICTLIB_VISIBILITY=" "-DZSTDERRORLIB_VISIBILITY=" "-DZSTD_LEGACY_SUPPORT=1" "-DZSTD_MULTITHREAD=" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/compress/zstd_fast.o" "-c" "zstd/lib/compress/zstd_fast.c"
+[zstd-sys 2.0.10+zstd.1.5.6] running: "cc" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "zstd/lib/" "-I" "zstd/lib/common" "-I" "zstd/lib/legacy" "-fvisibility=hidden" "-pthread" "-ffunction-sections" "-fdata-sections" "-fmerge-all-constants" "-DZSTD_LIB_DEPRECATED=0" "-DXXH_PRIVATE_API=" "-DZSTDLIB_VISIBILITY=" "-DZDICTLIB_VISIBILITY=" "-DZSTDERRORLIB_VISIBILITY=" "-DZSTD_LEGACY_SUPPORT=1" "-DZSTD_MULTITHREAD=" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/compress/zstd_lazy.o" "-c" "zstd/lib/compress/zstd_lazy.c"
+[zstd-sys 2.0.10+zstd.1.5.6] running: "cc" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "zstd/lib/" "-I" "zstd/lib/common" "-I" "zstd/lib/legacy" "-fvisibility=hidden" "-pthread" "-ffunction-sections" "-fdata-sections" "-fmerge-all-constants" "-DZSTD_LIB_DEPRECATED=0" "-DXXH_PRIVATE_API=" "-DZSTDLIB_VISIBILITY=" "-DZDICTLIB_VISIBILITY=" "-DZSTDERRORLIB_VISIBILITY=" "-DZSTD_LEGACY_SUPPORT=1" "-DZSTD_MULTITHREAD=" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/compress/zstd_ldm.o" "-c" "zstd/lib/compress/zstd_ldm.c"
+[zstd-sys 2.0.10+zstd.1.5.6] running: "cc" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "zstd/lib/" "-I" "zstd/lib/common" "-I" "zstd/lib/legacy" "-fvisibility=hidden" "-pthread" "-ffunction-sections" "-fdata-sections" "-fmerge-all-constants" "-DZSTD_LIB_DEPRECATED=0" "-DXXH_PRIVATE_API=" "-DZSTDLIB_VISIBILITY=" "-DZDICTLIB_VISIBILITY=" "-DZSTDERRORLIB_VISIBILITY=" "-DZSTD_LEGACY_SUPPORT=1" "-DZSTD_MULTITHREAD=" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/compress/zstd_opt.o" "-c" "zstd/lib/compress/zstd_opt.c"
+[zstd-sys 2.0.10+zstd.1.5.6] running: "cc" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "zstd/lib/" "-I" "zstd/lib/common" "-I" "zstd/lib/legacy" "-fvisibility=hidden" "-pthread" "-ffunction-sections" "-fdata-sections" "-fmerge-all-constants" "-DZSTD_LIB_DEPRECATED=0" "-DXXH_PRIVATE_API=" "-DZSTDLIB_VISIBILITY=" "-DZDICTLIB_VISIBILITY=" "-DZSTDERRORLIB_VISIBILITY=" "-DZSTD_LEGACY_SUPPORT=1" "-DZSTD_MULTITHREAD=" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/compress/zstdmt_compress.o" "-c" "zstd/lib/compress/zstdmt_compress.c"
+[zstd-sys 2.0.10+zstd.1.5.6] exit status: 0
+[zstd-sys 2.0.10+zstd.1.5.6] running: "cc" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "zstd/lib/" "-I" "zstd/lib/common" "-I" "zstd/lib/legacy" "-fvisibility=hidden" "-pthread" "-ffunction-sections" "-fdata-sections" "-fmerge-all-constants" "-DZSTD_LIB_DEPRECATED=0" "-DXXH_PRIVATE_API=" "-DZSTDLIB_VISIBILITY=" "-DZDICTLIB_VISIBILITY=" "-DZSTDERRORLIB_VISIBILITY=" "-DZSTD_LEGACY_SUPPORT=1" "-DZSTD_MULTITHREAD=" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/decompress/huf_decompress.o" "-c" "zstd/lib/decompress/huf_decompress.c"
+[zstd-sys 2.0.10+zstd.1.5.6] running: "cc" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "zstd/lib/" "-I" "zstd/lib/common" "-I" "zstd/lib/legacy" "-fvisibility=hidden" "-pthread" "-ffunction-sections" "-fdata-sections" "-fmerge-all-constants" "-DZSTD_LIB_DEPRECATED=0" "-DXXH_PRIVATE_API=" "-DZSTDLIB_VISIBILITY=" "-DZDICTLIB_VISIBILITY=" "-DZSTDERRORLIB_VISIBILITY=" "-DZSTD_LEGACY_SUPPORT=1" "-DZSTD_MULTITHREAD=" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/decompress/zstd_ddict.o" "-c" "zstd/lib/decompress/zstd_ddict.c"
+[zstd-sys 2.0.10+zstd.1.5.6] running: "cc" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "zstd/lib/" "-I" "zstd/lib/common" "-I" "zstd/lib/legacy" "-fvisibility=hidden" "-pthread" "-ffunction-sections" "-fdata-sections" "-fmerge-all-constants" "-DZSTD_LIB_DEPRECATED=0" "-DXXH_PRIVATE_API=" "-DZSTDLIB_VISIBILITY=" "-DZDICTLIB_VISIBILITY=" "-DZSTDERRORLIB_VISIBILITY=" "-DZSTD_LEGACY_SUPPORT=1" "-DZSTD_MULTITHREAD=" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/decompress/zstd_decompress.o" "-c" "zstd/lib/decompress/zstd_decompress.c"
+[zstd-sys 2.0.10+zstd.1.5.6] exit status: 0
+[zstd-sys 2.0.10+zstd.1.5.6] running: "cc" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "zstd/lib/" "-I" "zstd/lib/common" "-I" "zstd/lib/legacy" "-fvisibility=hidden" "-pthread" "-ffunction-sections" "-fdata-sections" "-fmerge-all-constants" "-DZSTD_LIB_DEPRECATED=0" "-DXXH_PRIVATE_API=" "-DZSTDLIB_VISIBILITY=" "-DZDICTLIB_VISIBILITY=" "-DZSTDERRORLIB_VISIBILITY=" "-DZSTD_LEGACY_SUPPORT=1" "-DZSTD_MULTITHREAD=" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/decompress/zstd_decompress_block.o" "-c" "zstd/lib/decompress/zstd_decompress_block.c"
+[zstd-sys 2.0.10+zstd.1.5.6] exit status: 0
+[zstd-sys 2.0.10+zstd.1.5.6] running: "cc" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "zstd/lib/" "-I" "zstd/lib/common" "-I" "zstd/lib/legacy" "-fvisibility=hidden" "-pthread" "-ffunction-sections" "-fdata-sections" "-fmerge-all-constants" "-DZSTD_LIB_DEPRECATED=0" "-DXXH_PRIVATE_API=" "-DZSTDLIB_VISIBILITY=" "-DZDICTLIB_VISIBILITY=" "-DZSTDERRORLIB_VISIBILITY=" "-DZSTD_LEGACY_SUPPORT=1" "-DZSTD_MULTITHREAD=" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/dictBuilder/cover.o" "-c" "zstd/lib/dictBuilder/cover.c"
+[zstd-sys 2.0.10+zstd.1.5.6] running: "cc" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "zstd/lib/" "-I" "zstd/lib/common" "-I" "zstd/lib/legacy" "-fvisibility=hidden" "-pthread" "-ffunction-sections" "-fdata-sections" "-fmerge-all-constants" "-DZSTD_LIB_DEPRECATED=0" "-DXXH_PRIVATE_API=" "-DZSTDLIB_VISIBILITY=" "-DZDICTLIB_VISIBILITY=" "-DZSTDERRORLIB_VISIBILITY=" "-DZSTD_LEGACY_SUPPORT=1" "-DZSTD_MULTITHREAD=" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/dictBuilder/divsufsort.o" "-c" "zstd/lib/dictBuilder/divsufsort.c"
+[zstd-sys 2.0.10+zstd.1.5.6] running: "cc" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "zstd/lib/" "-I" "zstd/lib/common" "-I" "zstd/lib/legacy" "-fvisibility=hidden" "-pthread" "-ffunction-sections" "-fdata-sections" "-fmerge-all-constants" "-DZSTD_LIB_DEPRECATED=0" "-DXXH_PRIVATE_API=" "-DZSTDLIB_VISIBILITY=" "-DZDICTLIB_VISIBILITY=" "-DZSTDERRORLIB_VISIBILITY=" "-DZSTD_LEGACY_SUPPORT=1" "-DZSTD_MULTITHREAD=" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/dictBuilder/fastcover.o" "-c" "zstd/lib/dictBuilder/fastcover.c"
+[zstd-sys 2.0.10+zstd.1.5.6] exit status: 0
+[zstd-sys 2.0.10+zstd.1.5.6] exit status: 0
+[zstd-sys 2.0.10+zstd.1.5.6] running: "cc" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "zstd/lib/" "-I" "zstd/lib/common" "-I" "zstd/lib/legacy" "-fvisibility=hidden" "-pthread" "-ffunction-sections" "-fdata-sections" "-fmerge-all-constants" "-DZSTD_LIB_DEPRECATED=0" "-DXXH_PRIVATE_API=" "-DZSTDLIB_VISIBILITY=" "-DZDICTLIB_VISIBILITY=" "-DZSTDERRORLIB_VISIBILITY=" "-DZSTD_LEGACY_SUPPORT=1" "-DZSTD_MULTITHREAD=" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/dictBuilder/zdict.o" "-c" "zstd/lib/dictBuilder/zdict.c"
+[zstd-sys 2.0.10+zstd.1.5.6] running: "cc" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "zstd/lib/" "-I" "zstd/lib/common" "-I" "zstd/lib/legacy" "-fvisibility=hidden" "-pthread" "-ffunction-sections" "-fdata-sections" "-fmerge-all-constants" "-DZSTD_LIB_DEPRECATED=0" "-DXXH_PRIVATE_API=" "-DZSTDLIB_VISIBILITY=" "-DZDICTLIB_VISIBILITY=" "-DZSTDERRORLIB_VISIBILITY=" "-DZSTD_LEGACY_SUPPORT=1" "-DZSTD_MULTITHREAD=" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/legacy/zstd_v01.o" "-c" "zstd/lib/legacy/zstd_v01.c"
+[zstd-sys 2.0.10+zstd.1.5.6] exit status: 0
+[zstd-sys 2.0.10+zstd.1.5.6] running: "cc" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "zstd/lib/" "-I" "zstd/lib/common" "-I" "zstd/lib/legacy" "-fvisibility=hidden" "-pthread" "-ffunction-sections" "-fdata-sections" "-fmerge-all-constants" "-DZSTD_LIB_DEPRECATED=0" "-DXXH_PRIVATE_API=" "-DZSTDLIB_VISIBILITY=" "-DZDICTLIB_VISIBILITY=" "-DZSTDERRORLIB_VISIBILITY=" "-DZSTD_LEGACY_SUPPORT=1" "-DZSTD_MULTITHREAD=" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/legacy/zstd_v02.o" "-c" "zstd/lib/legacy/zstd_v02.c"
+[zstd-sys 2.0.10+zstd.1.5.6] exit status: 0
+[zstd-sys 2.0.10+zstd.1.5.6] exit status: 0
+[zstd-sys 2.0.10+zstd.1.5.6] running: "cc" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "zstd/lib/" "-I" "zstd/lib/common" "-I" "zstd/lib/legacy" "-fvisibility=hidden" "-pthread" "-ffunction-sections" "-fdata-sections" "-fmerge-all-constants" "-DZSTD_LIB_DEPRECATED=0" "-DXXH_PRIVATE_API=" "-DZSTDLIB_VISIBILITY=" "-DZDICTLIB_VISIBILITY=" "-DZSTDERRORLIB_VISIBILITY=" "-DZSTD_LEGACY_SUPPORT=1" "-DZSTD_MULTITHREAD=" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/legacy/zstd_v03.o" "-c" "zstd/lib/legacy/zstd_v03.c"
+[zstd-sys 2.0.10+zstd.1.5.6] running: "cc" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "zstd/lib/" "-I" "zstd/lib/common" "-I" "zstd/lib/legacy" "-fvisibility=hidden" "-pthread" "-ffunction-sections" "-fdata-sections" "-fmerge-all-constants" "-DZSTD_LIB_DEPRECATED=0" "-DXXH_PRIVATE_API=" "-DZSTDLIB_VISIBILITY=" "-DZDICTLIB_VISIBILITY=" "-DZSTDERRORLIB_VISIBILITY=" "-DZSTD_LEGACY_SUPPORT=1" "-DZSTD_MULTITHREAD=" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/legacy/zstd_v04.o" "-c" "zstd/lib/legacy/zstd_v04.c"
+[zstd-sys 2.0.10+zstd.1.5.6] running: "cc" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "zstd/lib/" "-I" "zstd/lib/common" "-I" "zstd/lib/legacy" "-fvisibility=hidden" "-pthread" "-ffunction-sections" "-fdata-sections" "-fmerge-all-constants" "-DZSTD_LIB_DEPRECATED=0" "-DXXH_PRIVATE_API=" "-DZSTDLIB_VISIBILITY=" "-DZDICTLIB_VISIBILITY=" "-DZSTDERRORLIB_VISIBILITY=" "-DZSTD_LEGACY_SUPPORT=1" "-DZSTD_MULTITHREAD=" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/legacy/zstd_v05.o" "-c" "zstd/lib/legacy/zstd_v05.c"
+[zstd-sys 2.0.10+zstd.1.5.6] exit status: 0
+[zstd-sys 2.0.10+zstd.1.5.6] exit status: 0
+[zstd-sys 2.0.10+zstd.1.5.6] exit status: 0
+[zstd-sys 2.0.10+zstd.1.5.6] running: "cc" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "zstd/lib/" "-I" "zstd/lib/common" "-I" "zstd/lib/legacy" "-fvisibility=hidden" "-pthread" "-ffunction-sections" "-fdata-sections" "-fmerge-all-constants" "-DZSTD_LIB_DEPRECATED=0" "-DXXH_PRIVATE_API=" "-DZSTDLIB_VISIBILITY=" "-DZDICTLIB_VISIBILITY=" "-DZSTDERRORLIB_VISIBILITY=" "-DZSTD_LEGACY_SUPPORT=1" "-DZSTD_MULTITHREAD=" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/legacy/zstd_v06.o" "-c" "zstd/lib/legacy/zstd_v06.c"
+[zstd-sys 2.0.10+zstd.1.5.6] exit status: 0
+[zstd-sys 2.0.10+zstd.1.5.6] exit status: 0
+[zstd-sys 2.0.10+zstd.1.5.6] running: "cc" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "zstd/lib/" "-I" "zstd/lib/common" "-I" "zstd/lib/legacy" "-fvisibility=hidden" "-pthread" "-ffunction-sections" "-fdata-sections" "-fmerge-all-constants" "-DZSTD_LIB_DEPRECATED=0" "-DXXH_PRIVATE_API=" "-DZSTDLIB_VISIBILITY=" "-DZDICTLIB_VISIBILITY=" "-DZSTDERRORLIB_VISIBILITY=" "-DZSTD_LEGACY_SUPPORT=1" "-DZSTD_MULTITHREAD=" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/legacy/zstd_v07.o" "-c" "zstd/lib/legacy/zstd_v07.c"
+[zstd-sys 2.0.10+zstd.1.5.6] exit status: 0
+[zstd-sys 2.0.10+zstd.1.5.6] running: "cc" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "zstd/lib/" "-I" "zstd/lib/common" "-I" "zstd/lib/legacy" "-fvisibility=hidden" "-pthread" "-ffunction-sections" "-fdata-sections" "-fmerge-all-constants" "-DZSTD_LIB_DEPRECATED=0" "-DXXH_PRIVATE_API=" "-DZSTDLIB_VISIBILITY=" "-DZDICTLIB_VISIBILITY=" "-DZSTDERRORLIB_VISIBILITY=" "-DZSTD_LEGACY_SUPPORT=1" "-DZSTD_MULTITHREAD=" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/decompress/huf_decompress_amd64.o" "-c" "zstd/lib/decompress/huf_decompress_amd64.S"
+[zstd-sys 2.0.10+zstd.1.5.6] exit status: 0
+[zstd-sys 2.0.10+zstd.1.5.6] exit status: 0
+[zstd-sys 2.0.10+zstd.1.5.6] exit status: 0
+[zstd-sys 2.0.10+zstd.1.5.6] exit status: 0
+[zstd-sys 2.0.10+zstd.1.5.6] exit status: 0
+[zstd-sys 2.0.10+zstd.1.5.6] exit status: 0
+[zstd-sys 2.0.10+zstd.1.5.6] exit status: 0
+[zstd-sys 2.0.10+zstd.1.5.6] exit status: 0
+[zstd-sys 2.0.10+zstd.1.5.6] exit status: 0
+[zstd-sys 2.0.10+zstd.1.5.6] exit status: 0
+[zstd-sys 2.0.10+zstd.1.5.6] exit status: 0
+[zstd-sys 2.0.10+zstd.1.5.6] exit status: 0
+[zstd-sys 2.0.10+zstd.1.5.6] exit status: 0
+[zstd-sys 2.0.10+zstd.1.5.6] cargo:rerun-if-env-changed=AR_x86_64-unknown-linux-gnu
+[zstd-sys 2.0.10+zstd.1.5.6] AR_x86_64-unknown-linux-gnu = None
+[zstd-sys 2.0.10+zstd.1.5.6] cargo:rerun-if-env-changed=AR_x86_64_unknown_linux_gnu
+[zstd-sys 2.0.10+zstd.1.5.6] AR_x86_64_unknown_linux_gnu = None
+[zstd-sys 2.0.10+zstd.1.5.6] cargo:rerun-if-env-changed=HOST_AR
+[zstd-sys 2.0.10+zstd.1.5.6] HOST_AR = None
+[zstd-sys 2.0.10+zstd.1.5.6] cargo:rerun-if-env-changed=AR
+[zstd-sys 2.0.10+zstd.1.5.6] AR = None
+[zstd-sys 2.0.10+zstd.1.5.6] cargo:rerun-if-env-changed=ARFLAGS_x86_64-unknown-linux-gnu
+[zstd-sys 2.0.10+zstd.1.5.6] ARFLAGS_x86_64-unknown-linux-gnu = None
+[zstd-sys 2.0.10+zstd.1.5.6] cargo:rerun-if-env-changed=ARFLAGS_x86_64_unknown_linux_gnu
+[zstd-sys 2.0.10+zstd.1.5.6] ARFLAGS_x86_64_unknown_linux_gnu = None
+[zstd-sys 2.0.10+zstd.1.5.6] cargo:rerun-if-env-changed=HOST_ARFLAGS
+[zstd-sys 2.0.10+zstd.1.5.6] HOST_ARFLAGS = None
+[zstd-sys 2.0.10+zstd.1.5.6] cargo:rerun-if-env-changed=ARFLAGS
+[zstd-sys 2.0.10+zstd.1.5.6] ARFLAGS = None
+[zstd-sys 2.0.10+zstd.1.5.6] running: ZERO_AR_DATE="1" "ar" "cq" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/libzstd.a" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/common/debug.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/common/entropy_common.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/common/error_private.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/common/fse_decompress.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/common/pool.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/common/threading.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/common/zstd_common.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/compress/fse_compress.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/compress/hist.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/compress/huf_compress.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/compress/zstd_compress.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/compress/zstd_compress_literals.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/compress/zstd_compress_sequences.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/compress/zstd_compress_superblock.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/compress/zstd_double_fast.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/compress/zstd_fast.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/compress/zstd_lazy.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/compress/zstd_ldm.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/compress/zstd_opt.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/compress/zstdmt_compress.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/decompress/huf_decompress.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/decompress/zstd_ddict.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/decompress/zstd_decompress.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/decompress/zstd_decompress_block.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/dictBuilder/cover.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/dictBuilder/divsufsort.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/dictBuilder/fastcover.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/dictBuilder/zdict.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/legacy/zstd_v01.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/legacy/zstd_v02.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/legacy/zstd_v03.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/legacy/zstd_v04.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/legacy/zstd_v05.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/legacy/zstd_v06.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/legacy/zstd_v07.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/zstd/lib/decompress/huf_decompress_amd64.o"
+[zstd-sys 2.0.10+zstd.1.5.6] exit status: 0
+[zstd-sys 2.0.10+zstd.1.5.6] running: "ar" "s" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out/libzstd.a"
+[cxx 1.0.118] exit status: 0
+[cxx 1.0.118] cargo:rerun-if-env-changed=AR_x86_64-unknown-linux-gnu
+[cxx 1.0.118] AR_x86_64-unknown-linux-gnu = None
+[cxx 1.0.118] cargo:rerun-if-env-changed=AR_x86_64_unknown_linux_gnu
+[cxx 1.0.118] AR_x86_64_unknown_linux_gnu = None
+[cxx 1.0.118] cargo:rerun-if-env-changed=HOST_AR
+[cxx 1.0.118] HOST_AR = None
+[cxx 1.0.118] cargo:rerun-if-env-changed=AR
+[cxx 1.0.118] AR = None
+[cxx 1.0.118] cargo:rerun-if-env-changed=ARFLAGS_x86_64-unknown-linux-gnu
+[cxx 1.0.118] ARFLAGS_x86_64-unknown-linux-gnu = None
+[cxx 1.0.118] cargo:rerun-if-env-changed=ARFLAGS_x86_64_unknown_linux_gnu
+[cxx 1.0.118] ARFLAGS_x86_64_unknown_linux_gnu = None
+[cxx 1.0.118] cargo:rerun-if-env-changed=HOST_ARFLAGS
+[cxx 1.0.118] HOST_ARFLAGS = None
+[cxx 1.0.118] cargo:rerun-if-env-changed=ARFLAGS
+[cxx 1.0.118] ARFLAGS = None
+[cxx 1.0.118] running: ZERO_AR_DATE="1" "ar" "cq" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/cxx-18ddd3909c0e4d3e/out/libcxxbridge1.a" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/cxx-18ddd3909c0e4d3e/out/ba8b6160d18619ac-cxx.o"
+[cxx 1.0.118] exit status: 0
+[cxx 1.0.118] running: "ar" "s" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/cxx-18ddd3909c0e4d3e/out/libcxxbridge1.a"
+[zstd-sys 2.0.10+zstd.1.5.6] exit status: 0
+[zstd-sys 2.0.10+zstd.1.5.6] cargo:rustc-link-lib=static=zstd
+[zstd-sys 2.0.10+zstd.1.5.6] cargo:rustc-link-search=native=/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out
+[zstd-sys 2.0.10+zstd.1.5.6] cargo:root=/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/zstd-sys-90e626286bb5944c/out
+[zstd-sys 2.0.10+zstd.1.5.6] cargo:include=/home/darvis/.cargo/registry/src/index.crates.io-6f17d22bba15001f/zstd-sys-2.0.10+zstd.1.5.6/zstd/lib
+[cxx 1.0.118] exit status: 0
+[cxx 1.0.118] cargo:rustc-link-lib=static=cxxbridge1
+[cxx 1.0.118] cargo:rustc-link-search=native=/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/cxx-18ddd3909c0e4d3e/out
+[cxx 1.0.118] cargo:rerun-if-changed=src/cxx.cc
+[cxx 1.0.118] cargo:rerun-if-changed=include/cxx.h
+[cxx 1.0.118] cargo:rustc-cfg=built_with_cargo
+[cxx 1.0.118] cargo:HEADER=/home/darvis/.cargo/registry/src/index.crates.io-6f17d22bba15001f/cxx-1.0.118/include/cxx.h
+[tracy-client-sys 0.21.0] exit status: 0
+[tracy-client-sys 0.21.0] cargo:rerun-if-env-changed=AR_x86_64-unknown-linux-gnu
+[tracy-client-sys 0.21.0] AR_x86_64-unknown-linux-gnu = None
+[tracy-client-sys 0.21.0] cargo:rerun-if-env-changed=AR_x86_64_unknown_linux_gnu
+[tracy-client-sys 0.21.0] AR_x86_64_unknown_linux_gnu = None
+[tracy-client-sys 0.21.0] cargo:rerun-if-env-changed=HOST_AR
+[tracy-client-sys 0.21.0] HOST_AR = None
+[tracy-client-sys 0.21.0] cargo:rerun-if-env-changed=AR
+[tracy-client-sys 0.21.0] AR = None
+[tracy-client-sys 0.21.0] cargo:rerun-if-env-changed=ARFLAGS_x86_64-unknown-linux-gnu
+[tracy-client-sys 0.21.0] ARFLAGS_x86_64-unknown-linux-gnu = None
+[tracy-client-sys 0.21.0] cargo:rerun-if-env-changed=ARFLAGS_x86_64_unknown_linux_gnu
+[tracy-client-sys 0.21.0] ARFLAGS_x86_64_unknown_linux_gnu = None
+[tracy-client-sys 0.21.0] cargo:rerun-if-env-changed=HOST_ARFLAGS
+[tracy-client-sys 0.21.0] HOST_ARFLAGS = None
+[tracy-client-sys 0.21.0] cargo:rerun-if-env-changed=ARFLAGS
+[tracy-client-sys 0.21.0] ARFLAGS = None
+[tracy-client-sys 0.21.0] running: ZERO_AR_DATE="1" "ar" "cq" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/tracy-client-sys-24c64175d1db204b/out/libtracy-client.a" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/tracy-client-sys-24c64175d1db204b/out/tracy/TracyClient.o"
+[tracy-client-sys 0.21.0] exit status: 0
+[tracy-client-sys 0.21.0] running: "ar" "s" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/tracy-client-sys-24c64175d1db204b/out/libtracy-client.a"
+[tracy-client-sys 0.21.0] exit status: 0
+[tracy-client-sys 0.21.0] cargo:rustc-link-lib=static=tracy-client
+[tracy-client-sys 0.21.0] cargo:rustc-link-search=native=/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/tracy-client-sys-24c64175d1db204b/out
+[tracy-client-sys 0.21.0] cargo:rerun-if-env-changed=CXXSTDLIB_x86_64-unknown-linux-gnu
+[tracy-client-sys 0.21.0] CXXSTDLIB_x86_64-unknown-linux-gnu = None
+[tracy-client-sys 0.21.0] cargo:rerun-if-env-changed=CXXSTDLIB_x86_64_unknown_linux_gnu
+[tracy-client-sys 0.21.0] CXXSTDLIB_x86_64_unknown_linux_gnu = None
+[tracy-client-sys 0.21.0] cargo:rerun-if-env-changed=HOST_CXXSTDLIB
+[tracy-client-sys 0.21.0] HOST_CXXSTDLIB = None
+[tracy-client-sys 0.21.0] cargo:rerun-if-env-changed=CXXSTDLIB
+[tracy-client-sys 0.21.0] CXXSTDLIB = None
+[tracy-client-sys 0.21.0] cargo:rustc-link-lib=stdc++
+[tracy-client-sys 0.21.0] cargo:rustc-link-lib=dl
+[dvos3binding 0.1.0] cargo:CXXBRIDGE_PREFIX=dvos3binding
+[dvos3binding 0.1.0] cargo:CXXBRIDGE_DIR0=/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/dvos3binding-02063dbb2cbed49e/out/cxxbridge/include
+[dvos3binding 0.1.0] cargo:CXXBRIDGE_DIR1=/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/dvos3binding-02063dbb2cbed49e/out/cxxbridge/crate
+[dvos3binding 0.1.0] CMAKE_TOOLCHAIN_FILE_x86_64-unknown-linux-gnu = None
+[dvos3binding 0.1.0] CMAKE_TOOLCHAIN_FILE_x86_64_unknown_linux_gnu = None
+[dvos3binding 0.1.0] HOST_CMAKE_TOOLCHAIN_FILE = None
+[dvos3binding 0.1.0] CMAKE_TOOLCHAIN_FILE = None
+[dvos3binding 0.1.0] CMAKE_GENERATOR_x86_64-unknown-linux-gnu = None
+[dvos3binding 0.1.0] CMAKE_GENERATOR_x86_64_unknown_linux_gnu = None
+[dvos3binding 0.1.0] HOST_CMAKE_GENERATOR = None
+[dvos3binding 0.1.0] CMAKE_GENERATOR = None
+[dvos3binding 0.1.0] CMAKE_PREFIX_PATH_x86_64-unknown-linux-gnu = None
+[dvos3binding 0.1.0] CMAKE_PREFIX_PATH_x86_64_unknown_linux_gnu = None
+[dvos3binding 0.1.0] HOST_CMAKE_PREFIX_PATH = None
+[dvos3binding 0.1.0] CMAKE_PREFIX_PATH = None
+[dvos3binding 0.1.0] CMAKE_x86_64-unknown-linux-gnu = None
+[dvos3binding 0.1.0] CMAKE_x86_64_unknown_linux_gnu = None
+[dvos3binding 0.1.0] HOST_CMAKE = None
+[dvos3binding 0.1.0] CMAKE = None
+[dvos3binding 0.1.0] running: cd "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/dvos3binding-02063dbb2cbed49e/out/build" && CMAKE_PREFIX_PATH="" "cmake" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/orbslam-bindings/orb_slam3" "-DCMAKE_INSTALL_PREFIX=/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/dvos3binding-02063dbb2cbed49e/out" "-DCMAKE_C_FLAGS= -ffunction-sections -fdata-sections -fPIC -m64" "-DCMAKE_C_COMPILER=/usr/bin/cc" "-DCMAKE_CXX_FLAGS=  -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/orbslam-bindings/orb_slam3/Sophus/ -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/orbslam-bindings/orb_slam3/DBoW2/DBoW2/ -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/orbslam-bindings/   -I /usr/local/include/ -DCMAKE_CXX_COMPILER=/usr/bin/clang-cpp-14 -ffunction-sections -fdata-sections -fPIC -m64" "-DCMAKE_CXX_COMPILER=/usr/bin/c++" "-DCMAKE_ASM_FLAGS= -ffunction-sections -fdata-sections -fPIC -m64" "-DCMAKE_ASM_COMPILER=/usr/bin/cc" "-DCMAKE_BUILD_TYPE=RelWithDebInfo"
+[dvos3binding 0.1.0] -- The C compiler identification is GNU 11.4.0
+[g2o 0.1.0] cargo:CXXBRIDGE_PREFIX=g2o
+[g2o 0.1.0] cargo:CXXBRIDGE_DIR0=/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/g2o-3d8c5fb9f7b25d85/out/cxxbridge/include
+[g2o 0.1.0] cargo:CXXBRIDGE_DIR1=/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/g2o-3d8c5fb9f7b25d85/out/cxxbridge/crate
+[g2o 0.1.0] CMAKE_TOOLCHAIN_FILE_x86_64-unknown-linux-gnu = None
+[g2o 0.1.0] CMAKE_TOOLCHAIN_FILE_x86_64_unknown_linux_gnu = None
+[g2o 0.1.0] HOST_CMAKE_TOOLCHAIN_FILE = None
+[g2o 0.1.0] CMAKE_TOOLCHAIN_FILE = None
+[g2o 0.1.0] CMAKE_GENERATOR_x86_64-unknown-linux-gnu = None
+[g2o 0.1.0] CMAKE_GENERATOR_x86_64_unknown_linux_gnu = None
+[g2o 0.1.0] HOST_CMAKE_GENERATOR = None
+[g2o 0.1.0] CMAKE_GENERATOR = None
+[g2o 0.1.0] CMAKE_PREFIX_PATH_x86_64-unknown-linux-gnu = None
+[g2o 0.1.0] CMAKE_PREFIX_PATH_x86_64_unknown_linux_gnu = None
+[g2o 0.1.0] HOST_CMAKE_PREFIX_PATH = None
+[g2o 0.1.0] CMAKE_PREFIX_PATH = None
+[g2o 0.1.0] CMAKE_x86_64-unknown-linux-gnu = None
+[g2o 0.1.0] CMAKE_x86_64_unknown_linux_gnu = None
+[g2o 0.1.0] HOST_CMAKE = None
+[g2o 0.1.0] CMAKE = None
+[g2o 0.1.0] running: cd "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/g2o-3d8c5fb9f7b25d85/out/build" && CMAKE_PREFIX_PATH="" "cmake" "-Wdev" "--debug-output" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o" "-DCMAKE_INSTALL_PREFIX=/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/g2o-3d8c5fb9f7b25d85/out" "-DCMAKE_C_FLAGS= -ffunction-sections -fdata-sections -fPIC -m64" "-DCMAKE_C_COMPILER=/usr/bin/cc" "-DCMAKE_CXX_FLAGS= -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -ffunction-sections -fdata-sections -fPIC -m64" "-DCMAKE_CXX_COMPILER=/usr/bin/c++" "-DCMAKE_ASM_FLAGS= -ffunction-sections -fdata-sections -fPIC -m64" "-DCMAKE_ASM_COMPILER=/usr/bin/cc" "-DCMAKE_BUILD_TYPE=RelWithDebInfo" "-DCMAKE_VERBOSE_MAKEFILE:BOOL=ON"
+[g2o 0.1.0] Running with debug output on.
+[dvos3binding 0.1.0] -- The CXX compiler identification is GNU 11.4.0
+[dvos3binding 0.1.0] -- Detecting C compiler ABI info
+[g2o 0.1.0] -- The C compiler identification is GNU 11.4.0
+[g2o 0.1.0]    Called from: [3]	/usr/share/cmake-3.22/Modules/CMakeDetermineCompilerId.cmake
+[g2o 0.1.0]                 [2]	/usr/share/cmake-3.22/Modules/CMakeDetermineCCompiler.cmake
+[g2o 0.1.0]                 [1]	/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/CMakeLists.txt
+[dvos3binding 0.1.0] -- Detecting C compiler ABI info - done
+[dvos3binding 0.1.0] -- Check for working C compiler: /usr/bin/cc - skipped
+[dvos3binding 0.1.0] -- Detecting C compile features
+[dvos3binding 0.1.0] -- Detecting C compile features - done
+[g2o 0.1.0] -- The CXX compiler identification is GNU 11.4.0
+[g2o 0.1.0]    Called from: [3]	/usr/share/cmake-3.22/Modules/CMakeDetermineCompilerId.cmake
+[g2o 0.1.0]                 [2]	/usr/share/cmake-3.22/Modules/CMakeDetermineCXXCompiler.cmake
+[g2o 0.1.0]                 [1]	/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/CMakeLists.txt
+[dvos3binding 0.1.0] -- Detecting CXX compiler ABI info
+[g2o 0.1.0] -- Detecting C compiler ABI info
+[g2o 0.1.0]    Called from: [3]	/usr/share/cmake-3.22/Modules/CMakeDetermineCompilerABI.cmake
+[g2o 0.1.0]                 [2]	/usr/share/cmake-3.22/Modules/CMakeTestCCompiler.cmake
+[g2o 0.1.0]                 [1]	/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/CMakeLists.txt
+[dvos3binding 0.1.0] -- Detecting CXX compiler ABI info - done
+[g2o 0.1.0] -- Detecting C compiler ABI info - done
+[g2o 0.1.0]    Called from: [3]	/usr/share/cmake-3.22/Modules/CMakeDetermineCompilerABI.cmake
+[g2o 0.1.0]                 [2]	/usr/share/cmake-3.22/Modules/CMakeTestCCompiler.cmake
+[g2o 0.1.0]                 [1]	/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/CMakeLists.txt
+[dvos3binding 0.1.0] -- Check for working CXX compiler: /usr/bin/c++ - skipped
+[g2o 0.1.0] -- Check for working C compiler: /usr/bin/cc - skipped
+[g2o 0.1.0]    Called from: [2]	/usr/share/cmake-3.22/Modules/CMakeTestCCompiler.cmake
+[g2o 0.1.0]                 [1]	/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/CMakeLists.txt
+[dvos3binding 0.1.0] -- Detecting CXX compile features
+[g2o 0.1.0] -- Detecting C compile features
+[g2o 0.1.0]    Called from: [3]	/usr/share/cmake-3.22/Modules/CMakeDetermineCompileFeatures.cmake
+[g2o 0.1.0]                 [2]	/usr/share/cmake-3.22/Modules/CMakeTestCCompiler.cmake
+[g2o 0.1.0]                 [1]	/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/CMakeLists.txt
+[dvos3binding 0.1.0] -- Detecting CXX compile features - done
+[g2o 0.1.0] -- Detecting C compile features - done
+[g2o 0.1.0]    Called from: [3]	/usr/share/cmake-3.22/Modules/CMakeDetermineCompileFeatures.cmake
+[g2o 0.1.0]                 [2]	/usr/share/cmake-3.22/Modules/CMakeTestCCompiler.cmake
+[g2o 0.1.0]                 [1]	/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/CMakeLists.txt
+[g2o 0.1.0] -- Detecting CXX compiler ABI info
+[g2o 0.1.0]    Called from: [3]	/usr/share/cmake-3.22/Modules/CMakeDetermineCompilerABI.cmake
+[g2o 0.1.0]                 [2]	/usr/share/cmake-3.22/Modules/CMakeTestCXXCompiler.cmake
+[g2o 0.1.0]                 [1]	/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/CMakeLists.txt
+[dvos3binding 0.1.0] -- Found OpenCV: /usr/local (found suitable version "4.5.4", minimum required is "4.5") 
+[dvos3binding 0.1.0] -- Looking for pthread.h
+[g2o 0.1.0] -- Detecting CXX compiler ABI info - done
+[g2o 0.1.0]    Called from: [3]	/usr/share/cmake-3.22/Modules/CMakeDetermineCompilerABI.cmake
+[g2o 0.1.0]                 [2]	/usr/share/cmake-3.22/Modules/CMakeTestCXXCompiler.cmake
+[g2o 0.1.0]                 [1]	/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/CMakeLists.txt
+[g2o 0.1.0] -- Check for working CXX compiler: /usr/bin/c++ - skipped
+[g2o 0.1.0]    Called from: [2]	/usr/share/cmake-3.22/Modules/CMakeTestCXXCompiler.cmake
+[g2o 0.1.0]                 [1]	/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/CMakeLists.txt
+[g2o 0.1.0] -- Detecting CXX compile features
+[g2o 0.1.0]    Called from: [3]	/usr/share/cmake-3.22/Modules/CMakeDetermineCompileFeatures.cmake
+[g2o 0.1.0]                 [2]	/usr/share/cmake-3.22/Modules/CMakeTestCXXCompiler.cmake
+[g2o 0.1.0]                 [1]	/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/CMakeLists.txt
+[g2o 0.1.0] -- Detecting CXX compile features - done
+[g2o 0.1.0]    Called from: [3]	/usr/share/cmake-3.22/Modules/CMakeDetermineCompileFeatures.cmake
+[g2o 0.1.0]                 [2]	/usr/share/cmake-3.22/Modules/CMakeTestCXXCompiler.cmake
+[g2o 0.1.0]                 [1]	/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/CMakeLists.txt
+[g2o 0.1.0] -- g2o_CXX_FLAGS:-I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/
+[g2o 0.1.0]    Called from: [1]	/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/CMakeLists.txt
+[g2o 0.1.0] -- BUILD TYPE:RelWithDebInfo
+[g2o 0.1.0]    Called from: [1]	/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/CMakeLists.txt
+[g2o 0.1.0] -- Compiling on Unix
+[g2o 0.1.0]    Called from: [1]	/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/CMakeLists.txt
+[dvos3binding 0.1.0] -- Looking for pthread.h - found
+[dvos3binding 0.1.0] -- Performing Test CMAKE_HAVE_LIBC_PTHREAD
+[dvos3binding 0.1.0] -- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Success
+[dvos3binding 0.1.0] -- Found Threads: TRUE  
+[dvos3binding 0.1.0] -- Configuring done
+[dvos3binding 0.1.0] -- Generating done
+[dvos3binding 0.1.0] -- Build files have been written to: /home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/dvos3binding-02063dbb2cbed49e/out/build
+[dvos3binding 0.1.0] running: cd "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/dvos3binding-02063dbb2cbed49e/out/build" && MAKEFLAGS="-j --jobserver-fds=8,9 --jobserver-auth=8,9" "cmake" "--build" "." "--target" "orb_slam3" "--config" "RelWithDebInfo"
+[dvos3binding 0.1.0] [  6%] Building CXX object CMakeFiles/orb_slam3.dir/src/CVConvert.cc.o
+[dvos3binding 0.1.0] [ 12%] Building CXX object CMakeFiles/orb_slam3.dir/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/cxxbridge/dvos3binding/src/lib.rs.cc.o
+[dvos3binding 0.1.0] [ 25%] Building CXX object CMakeFiles/orb_slam3.dir/DBoW2/DBoW2/FORB.cpp.o
+[dvos3binding 0.1.0] [ 25%] Building CXX object CMakeFiles/orb_slam3.dir/src/Extra.cc.o
+[dvos3binding 0.1.0] [ 31%] Building CXX object CMakeFiles/orb_slam3.dir/DBoW2/DBoW2/ScoringObject.cpp.o
+[dvos3binding 0.1.0] [ 37%] Building CXX object CMakeFiles/orb_slam3.dir/DBoW2/DBoW2/BowVector.cpp.o
+[dvos3binding 0.1.0] [ 56%] Building CXX object CMakeFiles/orb_slam3.dir/src/ORBextractor.cc.o
+[dvos3binding 0.1.0] [ 56%] Building CXX object CMakeFiles/orb_slam3.dir/src/TwoViewReconstruction.cc.o
+[dvos3binding 0.1.0] [ 68%] Building CXX object CMakeFiles/orb_slam3.dir/src/Converter.cc.o
+[dvos3binding 0.1.0] [ 56%] Building CXX object CMakeFiles/orb_slam3.dir/src/ORBmatcher.cc.o
+[dvos3binding 0.1.0] [ 68%] Building CXX object CMakeFiles/orb_slam3.dir/src/GeometricTools.cc.o
+[dvos3binding 0.1.0] [ 75%] Building CXX object CMakeFiles/orb_slam3.dir/DBoW2/DUtils/Random.cpp.o
+[dvos3binding 0.1.0] [ 81%] Building CXX object CMakeFiles/orb_slam3.dir/DBoW2/DBoW2/FeatureVector.cpp.o
+[dvos3binding 0.1.0] [ 87%] Building CXX object CMakeFiles/orb_slam3.dir/DBoW2/DUtils/Timestamp.cpp.o
+[dvos3binding 0.1.0] [ 93%] Building CXX object CMakeFiles/orb_slam3.dir/DBoW2/DBoW2/ORBVocabulary.cpp.o
+[g2o 0.1.0] -- Found OpenMP_C: -fopenmp (found version "4.5") 
+[g2o 0.1.0]    Called from: [4]	/usr/share/cmake-3.22/Modules/FindPackageMessage.cmake
+[g2o 0.1.0]                 [3]	/usr/share/cmake-3.22/Modules/FindPackageHandleStandardArgs.cmake
+[g2o 0.1.0]                 [2]	/usr/share/cmake-3.22/Modules/FindOpenMP.cmake
+[g2o 0.1.0]                 [1]	/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/CMakeLists.txt
+[g2o 0.1.0] -- Found OpenMP_CXX: -fopenmp (found version "4.5") 
+[g2o 0.1.0]    Called from: [4]	/usr/share/cmake-3.22/Modules/FindPackageMessage.cmake
+[g2o 0.1.0]                 [3]	/usr/share/cmake-3.22/Modules/FindPackageHandleStandardArgs.cmake
+[g2o 0.1.0]                 [2]	/usr/share/cmake-3.22/Modules/FindOpenMP.cmake
+[g2o 0.1.0]                 [1]	/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/CMakeLists.txt
+[g2o 0.1.0] -- Found OpenMP: TRUE (found version "4.5")  
+[g2o 0.1.0]    Called from: [4]	/usr/share/cmake-3.22/Modules/FindPackageMessage.cmake
+[g2o 0.1.0]                 [3]	/usr/share/cmake-3.22/Modules/FindPackageHandleStandardArgs.cmake
+[g2o 0.1.0]                 [2]	/usr/share/cmake-3.22/Modules/FindOpenMP.cmake
+[g2o 0.1.0]                 [1]	/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/CMakeLists.txt
+[g2o 0.1.0] -- Found OpenCV: /usr/local (found suitable version "4.5.4", minimum required is "4.5") 
+[g2o 0.1.0]    Called from: [4]	/usr/share/cmake-3.22/Modules/FindPackageMessage.cmake
+[g2o 0.1.0]                 [3]	/usr/share/cmake-3.22/Modules/FindPackageHandleStandardArgs.cmake
+[g2o 0.1.0]                 [2]	/usr/local/lib/cmake/opencv4/OpenCVConfig.cmake
+[g2o 0.1.0]                 [1]	/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/CMakeLists.txt
+[g2o 0.1.0] -- Configuring done
+[g2o 0.1.0] -- Generating /home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/g2o-3d8c5fb9f7b25d85/out/build
+[g2o 0.1.0]    Called from: [1]	/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/CMakeLists.txt
+[g2o 0.1.0] -- Generating done
+[g2o 0.1.0] -- Build files have been written to: /home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/g2o-3d8c5fb9f7b25d85/out/build
+[g2o 0.1.0] running: cd "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/g2o-3d8c5fb9f7b25d85/out/build" && MAKEFLAGS="-j --jobserver-fds=8,9 --jobserver-auth=8,9" "cmake" "--build" "." "--target" "g2o" "--config" "RelWithDebInfo"
+[g2o 0.1.0] /usr/bin/cmake -S/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o -B/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/g2o-3d8c5fb9f7b25d85/out/build --check-build-system CMakeFiles/Makefile.cmake 0
+[g2o 0.1.0] /usr/bin/gmake  -f CMakeFiles/Makefile2 g2o
+[g2o 0.1.0] gmake[1]: Entering directory '/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/g2o-3d8c5fb9f7b25d85/out/build'
+[g2o 0.1.0] /usr/bin/cmake -S/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o -B/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/g2o-3d8c5fb9f7b25d85/out/build --check-build-system CMakeFiles/Makefile.cmake 0
+[g2o 0.1.0] /usr/bin/cmake -E cmake_progress_start /home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/g2o-3d8c5fb9f7b25d85/out/build/CMakeFiles 38
+[g2o 0.1.0] /usr/bin/gmake  -f CMakeFiles/Makefile2 CMakeFiles/g2o.dir/all
+[g2o 0.1.0] gmake[2]: Entering directory '/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/g2o-3d8c5fb9f7b25d85/out/build'
+[g2o 0.1.0] /usr/bin/gmake  -f CMakeFiles/g2o.dir/build.make CMakeFiles/g2o.dir/depend
+[g2o 0.1.0] gmake[3]: Entering directory '/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/g2o-3d8c5fb9f7b25d85/out/build'
+[g2o 0.1.0] cd /home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/g2o-3d8c5fb9f7b25d85/out/build && /usr/bin/cmake -E cmake_depends "Unix Makefiles" /home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o /home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o /home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/g2o-3d8c5fb9f7b25d85/out/build /home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/g2o-3d8c5fb9f7b25d85/out/build /home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/g2o-3d8c5fb9f7b25d85/out/build/CMakeFiles/g2o.dir/DependInfo.cmake --color=
+[g2o 0.1.0] gmake[3]: Leaving directory '/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/g2o-3d8c5fb9f7b25d85/out/build'
+[g2o 0.1.0] /usr/bin/gmake  -f CMakeFiles/g2o.dir/build.make CMakeFiles/g2o.dir/build
+[g2o 0.1.0] gmake[3]: Entering directory '/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/g2o-3d8c5fb9f7b25d85/out/build'
+[g2o 0.1.0] [  5%] Building CXX object CMakeFiles/g2o.dir/g2o/types/types_sba.cpp.o
+[g2o 0.1.0] [  5%] Building CXX object CMakeFiles/g2o.dir/g2o/types/types_seven_dof_expmap.cpp.o
+[g2o 0.1.0] /usr/bin/c++ -DEIGEN_DONT_ALIGN -DUNIX -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/core -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/types -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/stuff -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/rust -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/Sophus -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/../target/cxxbridge -isystem /usr/include/eigen3 -isystem /usr/local/include/opencv4 -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -ffunction-sections -fdata-sections -fPIC -m64 -g -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -Wall -W -O2 -g -DNDEBUG -MD -MT CMakeFiles/g2o.dir/g2o/types/types_sba.cpp.o -MF CMakeFiles/g2o.dir/g2o/types/types_sba.cpp.o.d -o CMakeFiles/g2o.dir/g2o/types/types_sba.cpp.o -c /home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/types/types_sba.cpp
+[g2o 0.1.0] /usr/bin/c++ -DEIGEN_DONT_ALIGN -DUNIX -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/core -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/types -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/stuff -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/rust -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/Sophus -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/../target/cxxbridge -isystem /usr/include/eigen3 -isystem /usr/local/include/opencv4 -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -ffunction-sections -fdata-sections -fPIC -m64 -g -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -Wall -W -O2 -g -DNDEBUG -MD -MT CMakeFiles/g2o.dir/g2o/types/types_seven_dof_expmap.cpp.o -MF CMakeFiles/g2o.dir/g2o/types/types_seven_dof_expmap.cpp.o.d -o CMakeFiles/g2o.dir/g2o/types/types_seven_dof_expmap.cpp.o -c /home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/types/types_seven_dof_expmap.cpp
+[g2o 0.1.0] [  7%] Building CXX object CMakeFiles/g2o.dir/g2o/types/types_six_dof_expmap.cpp.o
+[g2o 0.1.0] /usr/bin/c++ -DEIGEN_DONT_ALIGN -DUNIX -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/core -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/types -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/stuff -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/rust -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/Sophus -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/../target/cxxbridge -isystem /usr/include/eigen3 -isystem /usr/local/include/opencv4 -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -ffunction-sections -fdata-sections -fPIC -m64 -g -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -Wall -W -O2 -g -DNDEBUG -MD -MT CMakeFiles/g2o.dir/g2o/types/types_six_dof_expmap.cpp.o -MF CMakeFiles/g2o.dir/g2o/types/types_six_dof_expmap.cpp.o.d -o CMakeFiles/g2o.dir/g2o/types/types_six_dof_expmap.cpp.o -c /home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/types/types_six_dof_expmap.cpp
+[g2o 0.1.0] [ 10%] Building CXX object CMakeFiles/g2o.dir/g2o/core/hyper_graph_action.cpp.o
+[g2o 0.1.0] /usr/bin/c++ -DEIGEN_DONT_ALIGN -DUNIX -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/core -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/types -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/stuff -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/rust -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/Sophus -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/../target/cxxbridge -isystem /usr/include/eigen3 -isystem /usr/local/include/opencv4 -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -ffunction-sections -fdata-sections -fPIC -m64 -g -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -Wall -W -O2 -g -DNDEBUG -MD -MT CMakeFiles/g2o.dir/g2o/core/hyper_graph_action.cpp.o -MF CMakeFiles/g2o.dir/g2o/core/hyper_graph_action.cpp.o.d -o CMakeFiles/g2o.dir/g2o/core/hyper_graph_action.cpp.o -c /home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/core/hyper_graph_action.cpp
+[g2o 0.1.0] [ 13%] Building CXX object CMakeFiles/g2o.dir/g2o/core/hyper_graph.cpp.o
+[g2o 0.1.0] /usr/bin/c++ -DEIGEN_DONT_ALIGN -DUNIX -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/core -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/types -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/stuff -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/rust -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/Sophus -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/../target/cxxbridge -isystem /usr/include/eigen3 -isystem /usr/local/include/opencv4 -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -ffunction-sections -fdata-sections -fPIC -m64 -g -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -Wall -W -O2 -g -DNDEBUG -MD -MT CMakeFiles/g2o.dir/g2o/core/hyper_graph.cpp.o -MF CMakeFiles/g2o.dir/g2o/core/hyper_graph.cpp.o.d -o CMakeFiles/g2o.dir/g2o/core/hyper_graph.cpp.o -c /home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/core/hyper_graph.cpp
+[g2o 0.1.0] [ 15%] Building CXX object CMakeFiles/g2o.dir/g2o/core/marginal_covariance_cholesky.cpp.o
+[g2o 0.1.0] /usr/bin/c++ -DEIGEN_DONT_ALIGN -DUNIX -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/core -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/types -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/stuff -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/rust -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/Sophus -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/../target/cxxbridge -isystem /usr/include/eigen3 -isystem /usr/local/include/opencv4 -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -ffunction-sections -fdata-sections -fPIC -m64 -g -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -Wall -W -O2 -g -DNDEBUG -MD -MT CMakeFiles/g2o.dir/g2o/core/marginal_covariance_cholesky.cpp.o -MF CMakeFiles/g2o.dir/g2o/core/marginal_covariance_cholesky.cpp.o.d -o CMakeFiles/g2o.dir/g2o/core/marginal_covariance_cholesky.cpp.o -c /home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/core/marginal_covariance_cholesky.cpp
+[g2o 0.1.0] [ 18%] Building CXX object CMakeFiles/g2o.dir/g2o/core/matrix_structure.cpp.o
+[g2o 0.1.0] /usr/bin/c++ -DEIGEN_DONT_ALIGN -DUNIX -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/core -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/types -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/stuff -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/rust -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/Sophus -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/../target/cxxbridge -isystem /usr/include/eigen3 -isystem /usr/local/include/opencv4 -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -ffunction-sections -fdata-sections -fPIC -m64 -g -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -Wall -W -O2 -g -DNDEBUG -MD -MT CMakeFiles/g2o.dir/g2o/core/matrix_structure.cpp.o -MF CMakeFiles/g2o.dir/g2o/core/matrix_structure.cpp.o.d -o CMakeFiles/g2o.dir/g2o/core/matrix_structure.cpp.o -c /home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/core/matrix_structure.cpp
+[g2o 0.1.0] [ 21%] Building CXX object CMakeFiles/g2o.dir/g2o/core/batch_stats.cpp.o
+[g2o 0.1.0] /usr/bin/c++ -DEIGEN_DONT_ALIGN -DUNIX -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/core -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/types -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/stuff -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/rust -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/Sophus -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/../target/cxxbridge -isystem /usr/include/eigen3 -isystem /usr/local/include/opencv4 -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -ffunction-sections -fdata-sections -fPIC -m64 -g -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -Wall -W -O2 -g -DNDEBUG -MD -MT CMakeFiles/g2o.dir/g2o/core/batch_stats.cpp.o -MF CMakeFiles/g2o.dir/g2o/core/batch_stats.cpp.o.d -o CMakeFiles/g2o.dir/g2o/core/batch_stats.cpp.o -c /home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/core/batch_stats.cpp
+[g2o 0.1.0] [ 23%] Building CXX object CMakeFiles/g2o.dir/g2o/core/parameter.cpp.o
+[g2o 0.1.0] /usr/bin/c++ -DEIGEN_DONT_ALIGN -DUNIX -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/core -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/types -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/stuff -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/rust -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/Sophus -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/../target/cxxbridge -isystem /usr/include/eigen3 -isystem /usr/local/include/opencv4 -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -ffunction-sections -fdata-sections -fPIC -m64 -g -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -Wall -W -O2 -g -DNDEBUG -MD -MT CMakeFiles/g2o.dir/g2o/core/parameter.cpp.o -MF CMakeFiles/g2o.dir/g2o/core/parameter.cpp.o.d -o CMakeFiles/g2o.dir/g2o/core/parameter.cpp.o -c /home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/core/parameter.cpp
+[g2o 0.1.0] [ 26%] Building CXX object CMakeFiles/g2o.dir/g2o/core/cache.cpp.o
+[g2o 0.1.0] /usr/bin/c++ -DEIGEN_DONT_ALIGN -DUNIX -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/core -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/types -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/stuff -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/rust -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/Sophus -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/../target/cxxbridge -isystem /usr/include/eigen3 -isystem /usr/local/include/opencv4 -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -ffunction-sections -fdata-sections -fPIC -m64 -g -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -Wall -W -O2 -g -DNDEBUG -MD -MT CMakeFiles/g2o.dir/g2o/core/cache.cpp.o -MF CMakeFiles/g2o.dir/g2o/core/cache.cpp.o.d -o CMakeFiles/g2o.dir/g2o/core/cache.cpp.o -c /home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/core/cache.cpp
+[g2o 0.1.0] [ 28%] Building CXX object CMakeFiles/g2o.dir/g2o/core/optimizable_graph.cpp.o
+[g2o 0.1.0] /usr/bin/c++ -DEIGEN_DONT_ALIGN -DUNIX -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/core -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/types -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/stuff -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/rust -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/Sophus -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/../target/cxxbridge -isystem /usr/include/eigen3 -isystem /usr/local/include/opencv4 -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -ffunction-sections -fdata-sections -fPIC -m64 -g -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -Wall -W -O2 -g -DNDEBUG -MD -MT CMakeFiles/g2o.dir/g2o/core/optimizable_graph.cpp.o -MF CMakeFiles/g2o.dir/g2o/core/optimizable_graph.cpp.o.d -o CMakeFiles/g2o.dir/g2o/core/optimizable_graph.cpp.o -c /home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/core/optimizable_graph.cpp
+[g2o 0.1.0] [ 31%] Building CXX object CMakeFiles/g2o.dir/g2o/core/solver.cpp.o
+[g2o 0.1.0] /usr/bin/c++ -DEIGEN_DONT_ALIGN -DUNIX -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/core -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/types -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/stuff -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/rust -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/Sophus -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/../target/cxxbridge -isystem /usr/include/eigen3 -isystem /usr/local/include/opencv4 -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -ffunction-sections -fdata-sections -fPIC -m64 -g -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -Wall -W -O2 -g -DNDEBUG -MD -MT CMakeFiles/g2o.dir/g2o/core/solver.cpp.o -MF CMakeFiles/g2o.dir/g2o/core/solver.cpp.o.d -o CMakeFiles/g2o.dir/g2o/core/solver.cpp.o -c /home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/core/solver.cpp
+[g2o 0.1.0] [ 34%] Building CXX object CMakeFiles/g2o.dir/g2o/core/optimization_algorithm_factory.cpp.o
+[g2o 0.1.0] /usr/bin/c++ -DEIGEN_DONT_ALIGN -DUNIX -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/core -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/types -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/stuff -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/rust -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/Sophus -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/../target/cxxbridge -isystem /usr/include/eigen3 -isystem /usr/local/include/opencv4 -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -ffunction-sections -fdata-sections -fPIC -m64 -g -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -Wall -W -O2 -g -DNDEBUG -MD -MT CMakeFiles/g2o.dir/g2o/core/optimization_algorithm_factory.cpp.o -MF CMakeFiles/g2o.dir/g2o/core/optimization_algorithm_factory.cpp.o.d -o CMakeFiles/g2o.dir/g2o/core/optimization_algorithm_factory.cpp.o -c /home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/core/optimization_algorithm_factory.cpp
+[g2o 0.1.0] [ 36%] Building CXX object CMakeFiles/g2o.dir/g2o/core/estimate_propagator.cpp.o
+[g2o 0.1.0] /usr/bin/c++ -DEIGEN_DONT_ALIGN -DUNIX -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/core -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/types -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/stuff -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/rust -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/Sophus -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/../target/cxxbridge -isystem /usr/include/eigen3 -isystem /usr/local/include/opencv4 -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -ffunction-sections -fdata-sections -fPIC -m64 -g -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -Wall -W -O2 -g -DNDEBUG -MD -MT CMakeFiles/g2o.dir/g2o/core/estimate_propagator.cpp.o -MF CMakeFiles/g2o.dir/g2o/core/estimate_propagator.cpp.o.d -o CMakeFiles/g2o.dir/g2o/core/estimate_propagator.cpp.o -c /home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/core/estimate_propagator.cpp
+[g2o 0.1.0] [ 39%] Building CXX object CMakeFiles/g2o.dir/g2o/core/factory.cpp.o
+[g2o 0.1.0] /usr/bin/c++ -DEIGEN_DONT_ALIGN -DUNIX -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/core -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/types -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/stuff -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/rust -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/Sophus -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/../target/cxxbridge -isystem /usr/include/eigen3 -isystem /usr/local/include/opencv4 -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -ffunction-sections -fdata-sections -fPIC -m64 -g -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -Wall -W -O2 -g -DNDEBUG -MD -MT CMakeFiles/g2o.dir/g2o/core/factory.cpp.o -MF CMakeFiles/g2o.dir/g2o/core/factory.cpp.o.d -o CMakeFiles/g2o.dir/g2o/core/factory.cpp.o -c /home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/core/factory.cpp
+[g2o 0.1.0] [ 42%] Building CXX object CMakeFiles/g2o.dir/g2o/core/sparse_optimizer.cpp.o
+[g2o 0.1.0] /usr/bin/c++ -DEIGEN_DONT_ALIGN -DUNIX -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/core -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/types -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/stuff -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/rust -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/Sophus -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/../target/cxxbridge -isystem /usr/include/eigen3 -isystem /usr/local/include/opencv4 -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -ffunction-sections -fdata-sections -fPIC -m64 -g -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -Wall -W -O2 -g -DNDEBUG -MD -MT CMakeFiles/g2o.dir/g2o/core/sparse_optimizer.cpp.o -MF CMakeFiles/g2o.dir/g2o/core/sparse_optimizer.cpp.o.d -o CMakeFiles/g2o.dir/g2o/core/sparse_optimizer.cpp.o -c /home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/core/sparse_optimizer.cpp
+[g2o 0.1.0] [ 44%] Building CXX object CMakeFiles/g2o.dir/g2o/core/hyper_dijkstra.cpp.o
+[g2o 0.1.0] /usr/bin/c++ -DEIGEN_DONT_ALIGN -DUNIX -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/core -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/types -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/stuff -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/rust -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/Sophus -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/../target/cxxbridge -isystem /usr/include/eigen3 -isystem /usr/local/include/opencv4 -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -ffunction-sections -fdata-sections -fPIC -m64 -g -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -Wall -W -O2 -g -DNDEBUG -MD -MT CMakeFiles/g2o.dir/g2o/core/hyper_dijkstra.cpp.o -MF CMakeFiles/g2o.dir/g2o/core/hyper_dijkstra.cpp.o.d -o CMakeFiles/g2o.dir/g2o/core/hyper_dijkstra.cpp.o -c /home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/core/hyper_dijkstra.cpp
+[g2o 0.1.0] [ 47%] Building CXX object CMakeFiles/g2o.dir/g2o/core/parameter_container.cpp.o
+[g2o 0.1.0] /usr/bin/c++ -DEIGEN_DONT_ALIGN -DUNIX -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/core -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/types -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/stuff -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/rust -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/Sophus -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/../target/cxxbridge -isystem /usr/include/eigen3 -isystem /usr/local/include/opencv4 -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -ffunction-sections -fdata-sections -fPIC -m64 -g -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -Wall -W -O2 -g -DNDEBUG -MD -MT CMakeFiles/g2o.dir/g2o/core/parameter_container.cpp.o -MF CMakeFiles/g2o.dir/g2o/core/parameter_container.cpp.o.d -o CMakeFiles/g2o.dir/g2o/core/parameter_container.cpp.o -c /home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/core/parameter_container.cpp
+[g2o 0.1.0] [ 50%] Building CXX object CMakeFiles/g2o.dir/g2o/core/optimization_algorithm.cpp.o
+[g2o 0.1.0] /usr/bin/c++ -DEIGEN_DONT_ALIGN -DUNIX -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/core -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/types -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/stuff -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/rust -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/Sophus -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/../target/cxxbridge -isystem /usr/include/eigen3 -isystem /usr/local/include/opencv4 -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -ffunction-sections -fdata-sections -fPIC -m64 -g -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -Wall -W -O2 -g -DNDEBUG -MD -MT CMakeFiles/g2o.dir/g2o/core/optimization_algorithm.cpp.o -MF CMakeFiles/g2o.dir/g2o/core/optimization_algorithm.cpp.o.d -o CMakeFiles/g2o.dir/g2o/core/optimization_algorithm.cpp.o -c /home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/core/optimization_algorithm.cpp
+[g2o 0.1.0] [ 52%] Building CXX object CMakeFiles/g2o.dir/g2o/core/optimization_algorithm_with_hessian.cpp.o
+[g2o 0.1.0] /usr/bin/c++ -DEIGEN_DONT_ALIGN -DUNIX -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/core -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/types -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/stuff -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/rust -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/Sophus -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/../target/cxxbridge -isystem /usr/include/eigen3 -isystem /usr/local/include/opencv4 -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -ffunction-sections -fdata-sections -fPIC -m64 -g -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -Wall -W -O2 -g -DNDEBUG -MD -MT CMakeFiles/g2o.dir/g2o/core/optimization_algorithm_with_hessian.cpp.o -MF CMakeFiles/g2o.dir/g2o/core/optimization_algorithm_with_hessian.cpp.o.d -o CMakeFiles/g2o.dir/g2o/core/optimization_algorithm_with_hessian.cpp.o -c /home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/core/optimization_algorithm_with_hessian.cpp
+[g2o 0.1.0] [ 55%] Building CXX object CMakeFiles/g2o.dir/g2o/core/optimization_algorithm_levenberg.cpp.o
+[g2o 0.1.0] /usr/bin/c++ -DEIGEN_DONT_ALIGN -DUNIX -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/core -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/types -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/stuff -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/rust -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/Sophus -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/../target/cxxbridge -isystem /usr/include/eigen3 -isystem /usr/local/include/opencv4 -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -ffunction-sections -fdata-sections -fPIC -m64 -g -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -Wall -W -O2 -g -DNDEBUG -MD -MT CMakeFiles/g2o.dir/g2o/core/optimization_algorithm_levenberg.cpp.o -MF CMakeFiles/g2o.dir/g2o/core/optimization_algorithm_levenberg.cpp.o.d -o CMakeFiles/g2o.dir/g2o/core/optimization_algorithm_levenberg.cpp.o -c /home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/core/optimization_algorithm_levenberg.cpp
+[g2o 0.1.0] [ 57%] Building CXX object CMakeFiles/g2o.dir/g2o/core/optimization_algorithm_gauss_newton.cpp.o
+[g2o 0.1.0] /usr/bin/c++ -DEIGEN_DONT_ALIGN -DUNIX -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/core -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/types -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/stuff -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/rust -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/Sophus -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/../target/cxxbridge -isystem /usr/include/eigen3 -isystem /usr/local/include/opencv4 -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -ffunction-sections -fdata-sections -fPIC -m64 -g -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -Wall -W -O2 -g -DNDEBUG -MD -MT CMakeFiles/g2o.dir/g2o/core/optimization_algorithm_gauss_newton.cpp.o -MF CMakeFiles/g2o.dir/g2o/core/optimization_algorithm_gauss_newton.cpp.o.d -o CMakeFiles/g2o.dir/g2o/core/optimization_algorithm_gauss_newton.cpp.o -c /home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/core/optimization_algorithm_gauss_newton.cpp
+[g2o 0.1.0] [ 60%] Building CXX object CMakeFiles/g2o.dir/g2o/core/jacobian_workspace.cpp.o
+[g2o 0.1.0] /usr/bin/c++ -DEIGEN_DONT_ALIGN -DUNIX -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/core -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/types -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/stuff -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/rust -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/Sophus -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/../target/cxxbridge -isystem /usr/include/eigen3 -isystem /usr/local/include/opencv4 -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -ffunction-sections -fdata-sections -fPIC -m64 -g -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -Wall -W -O2 -g -DNDEBUG -MD -MT CMakeFiles/g2o.dir/g2o/core/jacobian_workspace.cpp.o -MF CMakeFiles/g2o.dir/g2o/core/jacobian_workspace.cpp.o.d -o CMakeFiles/g2o.dir/g2o/core/jacobian_workspace.cpp.o -c /home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/core/jacobian_workspace.cpp
+[g2o 0.1.0] [ 63%] Building CXX object CMakeFiles/g2o.dir/g2o/core/robust_kernel.cpp.o
+[g2o 0.1.0] /usr/bin/c++ -DEIGEN_DONT_ALIGN -DUNIX -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/core -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/types -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/stuff -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/rust -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/Sophus -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/../target/cxxbridge -isystem /usr/include/eigen3 -isystem /usr/local/include/opencv4 -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -ffunction-sections -fdata-sections -fPIC -m64 -g -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -Wall -W -O2 -g -DNDEBUG -MD -MT CMakeFiles/g2o.dir/g2o/core/robust_kernel.cpp.o -MF CMakeFiles/g2o.dir/g2o/core/robust_kernel.cpp.o.d -o CMakeFiles/g2o.dir/g2o/core/robust_kernel.cpp.o -c /home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/core/robust_kernel.cpp
+[g2o 0.1.0] [ 65%] Building CXX object CMakeFiles/g2o.dir/g2o/core/robust_kernel_factory.cpp.o
+[g2o 0.1.0] /usr/bin/c++ -DEIGEN_DONT_ALIGN -DUNIX -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/core -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/types -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/stuff -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/rust -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/Sophus -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/../target/cxxbridge -isystem /usr/include/eigen3 -isystem /usr/local/include/opencv4 -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -ffunction-sections -fdata-sections -fPIC -m64 -g -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -Wall -W -O2 -g -DNDEBUG -MD -MT CMakeFiles/g2o.dir/g2o/core/robust_kernel_factory.cpp.o -MF CMakeFiles/g2o.dir/g2o/core/robust_kernel_factory.cpp.o.d -o CMakeFiles/g2o.dir/g2o/core/robust_kernel_factory.cpp.o -c /home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/core/robust_kernel_factory.cpp
+[g2o 0.1.0] [ 68%] Building CXX object CMakeFiles/g2o.dir/g2o/core/robust_kernel_impl.cpp.o
+[g2o 0.1.0] /usr/bin/c++ -DEIGEN_DONT_ALIGN -DUNIX -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/core -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/types -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/stuff -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/rust -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/Sophus -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/../target/cxxbridge -isystem /usr/include/eigen3 -isystem /usr/local/include/opencv4 -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -ffunction-sections -fdata-sections -fPIC -m64 -g -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -Wall -W -O2 -g -DNDEBUG -MD -MT CMakeFiles/g2o.dir/g2o/core/robust_kernel_impl.cpp.o -MF CMakeFiles/g2o.dir/g2o/core/robust_kernel_impl.cpp.o.d -o CMakeFiles/g2o.dir/g2o/core/robust_kernel_impl.cpp.o -c /home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/core/robust_kernel_impl.cpp
+[opencv 0.85.3] cargo:rerun-if-env-changed=OPENCV4_NO_PKG_CONFIG
+[opencv 0.85.3] cargo:rerun-if-env-changed=PKG_CONFIG_x86_64-unknown-linux-gnu
+[opencv 0.85.3] cargo:rerun-if-env-changed=PKG_CONFIG_x86_64_unknown_linux_gnu
+[opencv 0.85.3] cargo:rerun-if-env-changed=HOST_PKG_CONFIG
+[opencv 0.85.3] cargo:rerun-if-env-changed=PKG_CONFIG
+[opencv 0.85.3] cargo:rerun-if-env-changed=OPENCV4_STATIC
+[opencv 0.85.3] cargo:rerun-if-env-changed=OPENCV4_DYNAMIC
+[opencv 0.85.3] cargo:rerun-if-env-changed=PKG_CONFIG_ALL_STATIC
+[opencv 0.85.3] cargo:rerun-if-env-changed=PKG_CONFIG_ALL_DYNAMIC
+[opencv 0.85.3] cargo:rerun-if-env-changed=PKG_CONFIG_PATH_x86_64-unknown-linux-gnu
+[opencv 0.85.3] cargo:rerun-if-env-changed=PKG_CONFIG_PATH_x86_64_unknown_linux_gnu
+[opencv 0.85.3] cargo:rerun-if-env-changed=HOST_PKG_CONFIG_PATH
+[opencv 0.85.3] cargo:rerun-if-env-changed=PKG_CONFIG_PATH
+[opencv 0.85.3] cargo:rerun-if-env-changed=PKG_CONFIG_LIBDIR_x86_64-unknown-linux-gnu
+[opencv 0.85.3] cargo:rerun-if-env-changed=PKG_CONFIG_LIBDIR_x86_64_unknown_linux_gnu
+[opencv 0.85.3] cargo:rerun-if-env-changed=HOST_PKG_CONFIG_LIBDIR
+[opencv 0.85.3] cargo:rerun-if-env-changed=PKG_CONFIG_LIBDIR
+[opencv 0.85.3] cargo:rerun-if-env-changed=PKG_CONFIG_SYSROOT_DIR_x86_64-unknown-linux-gnu
+[opencv 0.85.3] cargo:rerun-if-env-changed=PKG_CONFIG_SYSROOT_DIR_x86_64_unknown_linux_gnu
+[opencv 0.85.3] cargo:rerun-if-env-changed=HOST_PKG_CONFIG_SYSROOT_DIR
+[opencv 0.85.3] cargo:rerun-if-env-changed=PKG_CONFIG_SYSROOT_DIR
+[opencv 0.85.3] cargo:rerun-if-env-changed=PKG_CONFIG_SYSROOT_DIR
+[opencv 0.85.3] cargo:rerun-if-env-changed=SYSROOT
+[opencv 0.85.3] cargo:rerun-if-env-changed=OPENCV4_STATIC
+[opencv 0.85.3] cargo:rerun-if-env-changed=OPENCV4_DYNAMIC
+[opencv 0.85.3] cargo:rerun-if-env-changed=PKG_CONFIG_ALL_STATIC
+[opencv 0.85.3] cargo:rerun-if-env-changed=PKG_CONFIG_ALL_DYNAMIC
+[opencv 0.85.3] cargo:rerun-if-env-changed=PKG_CONFIG_x86_64-unknown-linux-gnu
+[opencv 0.85.3] cargo:rerun-if-env-changed=PKG_CONFIG_x86_64_unknown_linux_gnu
+[opencv 0.85.3] cargo:rerun-if-env-changed=HOST_PKG_CONFIG
+[opencv 0.85.3] cargo:rerun-if-env-changed=PKG_CONFIG
+[opencv 0.85.3] cargo:rerun-if-env-changed=OPENCV4_STATIC
+[opencv 0.85.3] cargo:rerun-if-env-changed=OPENCV4_DYNAMIC
+[opencv 0.85.3] cargo:rerun-if-env-changed=PKG_CONFIG_ALL_STATIC
+[opencv 0.85.3] cargo:rerun-if-env-changed=PKG_CONFIG_ALL_DYNAMIC
+[opencv 0.85.3] cargo:rerun-if-env-changed=PKG_CONFIG_PATH_x86_64-unknown-linux-gnu
+[opencv 0.85.3] cargo:rerun-if-env-changed=PKG_CONFIG_PATH_x86_64_unknown_linux_gnu
+[opencv 0.85.3] cargo:rerun-if-env-changed=HOST_PKG_CONFIG_PATH
+[opencv 0.85.3] cargo:rerun-if-env-changed=PKG_CONFIG_PATH
+[opencv 0.85.3] cargo:rerun-if-env-changed=PKG_CONFIG_LIBDIR_x86_64-unknown-linux-gnu
+[opencv 0.85.3] cargo:rerun-if-env-changed=PKG_CONFIG_LIBDIR_x86_64_unknown_linux_gnu
+[opencv 0.85.3] cargo:rerun-if-env-changed=HOST_PKG_CONFIG_LIBDIR
+[opencv 0.85.3] cargo:rerun-if-env-changed=PKG_CONFIG_LIBDIR
+[opencv 0.85.3] cargo:rerun-if-env-changed=PKG_CONFIG_SYSROOT_DIR_x86_64-unknown-linux-gnu
+[opencv 0.85.3] cargo:rerun-if-env-changed=PKG_CONFIG_SYSROOT_DIR_x86_64_unknown_linux_gnu
+[opencv 0.85.3] cargo:rerun-if-env-changed=HOST_PKG_CONFIG_SYSROOT_DIR
+[opencv 0.85.3] cargo:rerun-if-env-changed=PKG_CONFIG_SYSROOT_DIR
+[opencv 0.85.3] cargo:rustc-cfg=ocvrs_opencv_branch_4
+[opencv 0.85.3] cargo:rerun-if-env-changed=OPENCV_PACKAGE_NAME
+[opencv 0.85.3] cargo:rerun-if-env-changed=OPENCV_PKGCONFIG_NAME
+[opencv 0.85.3] cargo:rerun-if-env-changed=OPENCV_CMAKE_NAME
+[opencv 0.85.3] cargo:rerun-if-env-changed=OPENCV_CMAKE_BIN
+[opencv 0.85.3] cargo:rerun-if-env-changed=OPENCV_VCPKG_NAME
+[opencv 0.85.3] cargo:rerun-if-env-changed=OPENCV_LINK_LIBS
+[opencv 0.85.3] cargo:rerun-if-env-changed=OPENCV_LINK_PATHS
+[opencv 0.85.3] cargo:rerun-if-env-changed=OPENCV_INCLUDE_PATHS
+[opencv 0.85.3] cargo:rerun-if-env-changed=OPENCV_DISABLE_PROBES
+[opencv 0.85.3] cargo:rerun-if-env-changed=OPENCV_MSVC_CRT
+[opencv 0.85.3] cargo:rerun-if-env-changed=CMAKE_PREFIX_PATH
+[opencv 0.85.3] cargo:rerun-if-env-changed=OpenCV_DIR
+[opencv 0.85.3] cargo:rerun-if-env-changed=PKG_CONFIG_PATH
+[opencv 0.85.3] cargo:rerun-if-env-changed=VCPKG_ROOT
+[opencv 0.85.3] cargo:rerun-if-env-changed=VCPKGRS_DYNAMIC
+[opencv 0.85.3] cargo:rerun-if-env-changed=VCPKGRS_TRIPLET
+[opencv 0.85.3] cargo:rerun-if-env-changed=OCVRS_DOCS_GENERATE_DIR
+[opencv 0.85.3] cargo:rerun-if-env-changed=DOCS_RS
+[opencv 0.85.3] cargo:rerun-if-changed=/home/darvis/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp/videoio.hpp
+[opencv 0.85.3] cargo:rerun-if-changed=/home/darvis/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp/gapi.hpp
+[opencv 0.85.3] cargo:rerun-if-changed=/home/darvis/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp/hdf.hpp
+[opencv 0.85.3] cargo:rerun-if-changed=/home/darvis/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp/xfeatures2d.hpp
+[opencv 0.85.3] cargo:rerun-if-changed=/home/darvis/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp/ccalib.hpp
+[opencv 0.85.3] cargo:rerun-if-changed=/home/darvis/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp/sfm.hpp
+[opencv 0.85.3] cargo:rerun-if-changed=/home/darvis/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp/ocvrs_common.hpp
+[opencv 0.85.3] cargo:rerun-if-changed=/home/darvis/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp/manual-core.cpp
+[opencv 0.85.3] cargo:rerun-if-changed=/home/darvis/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp/face.hpp
+[opencv 0.85.3] cargo:rerun-if-changed=/home/darvis/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp/aruco.hpp
+[opencv 0.85.3] cargo:rerun-if-changed=/home/darvis/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp/photo.hpp
+[opencv 0.85.3] cargo:rerun-if-changed=/home/darvis/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp/alphamat.hpp
+[opencv 0.85.3] cargo:rerun-if-changed=/home/darvis/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp/bioinspired.hpp
+[opencv 0.85.3] cargo:rerun-if-changed=/home/darvis/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp/dnn.hpp
+[opencv 0.85.3] cargo:rerun-if-changed=/home/darvis/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp/core.hpp
+[opencv 0.85.3] cargo:rerun-if-changed=Cargo.toml
+[g2o 0.1.0] [ 71%] Building CXX object CMakeFiles/g2o.dir/g2o/stuff/timeutil.cpp.o
+[g2o 0.1.0] /usr/bin/c++ -DEIGEN_DONT_ALIGN -DUNIX -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/core -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/types -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/stuff -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/rust -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/Sophus -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/../target/cxxbridge -isystem /usr/include/eigen3 -isystem /usr/local/include/opencv4 -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -ffunction-sections -fdata-sections -fPIC -m64 -g -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -Wall -W -O2 -g -DNDEBUG -MD -MT CMakeFiles/g2o.dir/g2o/stuff/timeutil.cpp.o -MF CMakeFiles/g2o.dir/g2o/stuff/timeutil.cpp.o.d -o CMakeFiles/g2o.dir/g2o/stuff/timeutil.cpp.o -c /home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/stuff/timeutil.cpp
+[g2o 0.1.0] [ 73%] Building C object CMakeFiles/g2o.dir/g2o/stuff/os_specific.c.o
+[g2o 0.1.0] /usr/bin/cc -DEIGEN_DONT_ALIGN -DUNIX -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/core -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/types -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/stuff -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/rust -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/Sophus -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/../target/cxxbridge -isystem /usr/include/eigen3 -isystem /usr/local/include/opencv4 -ffunction-sections -fdata-sections -fPIC -m64 -g  -Wall -W -O2 -g -DNDEBUG -MD -MT CMakeFiles/g2o.dir/g2o/stuff/os_specific.c.o -MF CMakeFiles/g2o.dir/g2o/stuff/os_specific.c.o.d -o CMakeFiles/g2o.dir/g2o/stuff/os_specific.c.o -c /home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/stuff/os_specific.c
+[g2o 0.1.0] [ 76%] Building CXX object CMakeFiles/g2o.dir/g2o/stuff/string_tools.cpp.o
+[g2o 0.1.0] /usr/bin/c++ -DEIGEN_DONT_ALIGN -DUNIX -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/core -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/types -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/stuff -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/rust -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/Sophus -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/../target/cxxbridge -isystem /usr/include/eigen3 -isystem /usr/local/include/opencv4 -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -ffunction-sections -fdata-sections -fPIC -m64 -g -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -Wall -W -O2 -g -DNDEBUG -MD -MT CMakeFiles/g2o.dir/g2o/stuff/string_tools.cpp.o -MF CMakeFiles/g2o.dir/g2o/stuff/string_tools.cpp.o.d -o CMakeFiles/g2o.dir/g2o/stuff/string_tools.cpp.o -c /home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/stuff/string_tools.cpp
+[g2o 0.1.0] [ 78%] Building CXX object CMakeFiles/g2o.dir/g2o/stuff/property.cpp.o
+[g2o 0.1.0] /usr/bin/c++ -DEIGEN_DONT_ALIGN -DUNIX -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/core -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/types -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/stuff -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/rust -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/Sophus -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/../target/cxxbridge -isystem /usr/include/eigen3 -isystem /usr/local/include/opencv4 -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -ffunction-sections -fdata-sections -fPIC -m64 -g -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -Wall -W -O2 -g -DNDEBUG -MD -MT CMakeFiles/g2o.dir/g2o/stuff/property.cpp.o -MF CMakeFiles/g2o.dir/g2o/stuff/property.cpp.o.d -o CMakeFiles/g2o.dir/g2o/stuff/property.cpp.o -c /home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/stuff/property.cpp
+[g2o 0.1.0] [ 81%] Building CXX object CMakeFiles/g2o.dir/g2o/types/G2oTypes.cc.o
+[g2o 0.1.0] /usr/bin/c++ -DEIGEN_DONT_ALIGN -DUNIX -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/core -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/types -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/stuff -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/rust -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/Sophus -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/../target/cxxbridge -isystem /usr/include/eigen3 -isystem /usr/local/include/opencv4 -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -ffunction-sections -fdata-sections -fPIC -m64 -g -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -Wall -W -O2 -g -DNDEBUG -MD -MT CMakeFiles/g2o.dir/g2o/types/G2oTypes.cc.o -MF CMakeFiles/g2o.dir/g2o/types/G2oTypes.cc.o.d -o CMakeFiles/g2o.dir/g2o/types/G2oTypes.cc.o -c /home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/types/G2oTypes.cc
+[g2o 0.1.0] [ 84%] Building CXX object CMakeFiles/g2o.dir/g2o/types/ImuTypes.cc.o
+[g2o 0.1.0] /usr/bin/c++ -DEIGEN_DONT_ALIGN -DUNIX -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/core -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/types -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/stuff -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/rust -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/Sophus -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/../target/cxxbridge -isystem /usr/include/eigen3 -isystem /usr/local/include/opencv4 -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -ffunction-sections -fdata-sections -fPIC -m64 -g -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -Wall -W -O2 -g -DNDEBUG -MD -MT CMakeFiles/g2o.dir/g2o/types/ImuTypes.cc.o -MF CMakeFiles/g2o.dir/g2o/types/ImuTypes.cc.o.d -o CMakeFiles/g2o.dir/g2o/types/ImuTypes.cc.o -c /home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/types/ImuTypes.cc
+[g2o 0.1.0] [ 86%] Building CXX object CMakeFiles/g2o.dir/g2o/orbslam_types/GeometricTools.cc.o
+[g2o 0.1.0] /usr/bin/c++ -DEIGEN_DONT_ALIGN -DUNIX -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/core -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/types -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/stuff -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/rust -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/Sophus -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/../target/cxxbridge -isystem /usr/include/eigen3 -isystem /usr/local/include/opencv4 -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -ffunction-sections -fdata-sections -fPIC -m64 -g -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -Wall -W -O2 -g -DNDEBUG -MD -MT CMakeFiles/g2o.dir/g2o/orbslam_types/GeometricTools.cc.o -MF CMakeFiles/g2o.dir/g2o/orbslam_types/GeometricTools.cc.o.d -o CMakeFiles/g2o.dir/g2o/orbslam_types/GeometricTools.cc.o -c /home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/orbslam_types/GeometricTools.cc
+[g2o 0.1.0] [ 89%] Building CXX object CMakeFiles/g2o.dir/g2o/orbslam_types/Converter.cc.o
+[g2o 0.1.0] /usr/bin/c++ -DEIGEN_DONT_ALIGN -DUNIX -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/core -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/types -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/stuff -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/rust -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/Sophus -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/../target/cxxbridge -isystem /usr/include/eigen3 -isystem /usr/local/include/opencv4 -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -ffunction-sections -fdata-sections -fPIC -m64 -g -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -Wall -W -O2 -g -DNDEBUG -MD -MT CMakeFiles/g2o.dir/g2o/orbslam_types/Converter.cc.o -MF CMakeFiles/g2o.dir/g2o/orbslam_types/Converter.cc.o.d -o CMakeFiles/g2o.dir/g2o/orbslam_types/Converter.cc.o -c /home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/orbslam_types/Converter.cc
+[g2o 0.1.0] [ 92%] Building CXX object CMakeFiles/g2o.dir/g2o/orbslam_types/Pinhole.cc.o
+[g2o 0.1.0] /usr/bin/c++ -DEIGEN_DONT_ALIGN -DUNIX -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/core -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/types -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/stuff -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/rust -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/Sophus -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/../target/cxxbridge -isystem /usr/include/eigen3 -isystem /usr/local/include/opencv4 -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -ffunction-sections -fdata-sections -fPIC -m64 -g -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -Wall -W -O2 -g -DNDEBUG -MD -MT CMakeFiles/g2o.dir/g2o/orbslam_types/Pinhole.cc.o -MF CMakeFiles/g2o.dir/g2o/orbslam_types/Pinhole.cc.o.d -o CMakeFiles/g2o.dir/g2o/orbslam_types/Pinhole.cc.o -c /home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/orbslam_types/Pinhole.cc
+[g2o 0.1.0] [ 94%] Building CXX object CMakeFiles/g2o.dir/g2o/rust/rust_helper.cpp.o
+[g2o 0.1.0] /usr/bin/c++ -DEIGEN_DONT_ALIGN -DUNIX -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/core -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/types -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/stuff -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/rust -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/Sophus -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/../target/cxxbridge -isystem /usr/include/eigen3 -isystem /usr/local/include/opencv4 -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -ffunction-sections -fdata-sections -fPIC -m64 -g -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -Wall -W -O2 -g -DNDEBUG -MD -MT CMakeFiles/g2o.dir/g2o/rust/rust_helper.cpp.o -MF CMakeFiles/g2o.dir/g2o/rust/rust_helper.cpp.o.d -o CMakeFiles/g2o.dir/g2o/rust/rust_helper.cpp.o -c /home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/rust_helper.cpp
+[g2o 0.1.0] [ 97%] Building CXX object CMakeFiles/g2o.dir/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/cxxbridge/g2o/src/lib.rs.cc.o
+[g2o 0.1.0] /usr/bin/c++ -DEIGEN_DONT_ALIGN -DUNIX -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/core -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/types -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/stuff -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/rust -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/Sophus -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/../target/cxxbridge -isystem /usr/include/eigen3 -isystem /usr/local/include/opencv4 -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -ffunction-sections -fdata-sections -fPIC -m64 -g -I/home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/g2o/rust/ -Wall -W -O2 -g -DNDEBUG -MD -MT CMakeFiles/g2o.dir/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/cxxbridge/g2o/src/lib.rs.cc.o -MF CMakeFiles/g2o.dir/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/cxxbridge/g2o/src/lib.rs.cc.o.d -o CMakeFiles/g2o.dir/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/cxxbridge/g2o/src/lib.rs.cc.o -c /home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/cxxbridge/g2o/src/lib.rs.cc
+[opencv 0.85.3] OPT_LEVEL = Some("0")
+[opencv 0.85.3] TARGET = Some("x86_64-unknown-linux-gnu")
+[opencv 0.85.3] HOST = Some("x86_64-unknown-linux-gnu")
+[opencv 0.85.3] cargo:rerun-if-env-changed=CXX_x86_64-unknown-linux-gnu
+[opencv 0.85.3] CXX_x86_64-unknown-linux-gnu = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=CXX_x86_64_unknown_linux_gnu
+[opencv 0.85.3] CXX_x86_64_unknown_linux_gnu = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=HOST_CXX
+[opencv 0.85.3] HOST_CXX = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=CXX
+[opencv 0.85.3] CXX = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=CXXFLAGS_x86_64-unknown-linux-gnu
+[opencv 0.85.3] CXXFLAGS_x86_64-unknown-linux-gnu = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=CXXFLAGS_x86_64_unknown_linux_gnu
+[opencv 0.85.3] CXXFLAGS_x86_64_unknown_linux_gnu = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=HOST_CXXFLAGS
+[opencv 0.85.3] HOST_CXXFLAGS = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=CXXFLAGS
+[opencv 0.85.3] CXXFLAGS = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+[opencv 0.85.3] CRATE_CC_NO_DEFAULTS = None
+[opencv 0.85.3] DEBUG = Some("true")
+[opencv 0.85.3] CARGO_CFG_TARGET_FEATURE = Some("fxsr,sse,sse2")
+[opencv 0.85.3] cargo:rerun-if-env-changed=CXX_x86_64-unknown-linux-gnu
+[opencv 0.85.3] CXX_x86_64-unknown-linux-gnu = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=CXX_x86_64_unknown_linux_gnu
+[opencv 0.85.3] CXX_x86_64_unknown_linux_gnu = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=HOST_CXX
+[opencv 0.85.3] HOST_CXX = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=CXX
+[opencv 0.85.3] CXX = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=CXXFLAGS_x86_64-unknown-linux-gnu
+[opencv 0.85.3] CXXFLAGS_x86_64-unknown-linux-gnu = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=CXXFLAGS_x86_64_unknown_linux_gnu
+[opencv 0.85.3] CXXFLAGS_x86_64_unknown_linux_gnu = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=HOST_CXXFLAGS
+[opencv 0.85.3] HOST_CXXFLAGS = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=CXXFLAGS
+[opencv 0.85.3] CXXFLAGS = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+[opencv 0.85.3] CRATE_CC_NO_DEFAULTS = None
+[opencv 0.85.3] CARGO_CFG_TARGET_FEATURE = Some("fxsr,sse,sse2")
+[opencv 0.85.3] cargo:rerun-if-env-changed=CXX_x86_64-unknown-linux-gnu
+[opencv 0.85.3] CXX_x86_64-unknown-linux-gnu = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=CXX_x86_64_unknown_linux_gnu
+[opencv 0.85.3] CXX_x86_64_unknown_linux_gnu = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=HOST_CXX
+[opencv 0.85.3] HOST_CXX = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=CXX
+[opencv 0.85.3] CXX = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=CXXFLAGS_x86_64-unknown-linux-gnu
+[opencv 0.85.3] CXXFLAGS_x86_64-unknown-linux-gnu = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=CXXFLAGS_x86_64_unknown_linux_gnu
+[opencv 0.85.3] CXXFLAGS_x86_64_unknown_linux_gnu = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=HOST_CXXFLAGS
+[opencv 0.85.3] HOST_CXXFLAGS = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=CXXFLAGS
+[opencv 0.85.3] CXXFLAGS = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+[opencv 0.85.3] CRATE_CC_NO_DEFAULTS = None
+[opencv 0.85.3] CARGO_CFG_TARGET_FEATURE = Some("fxsr,sse,sse2")
+[opencv 0.85.3] cargo:rerun-if-env-changed=CXX_x86_64-unknown-linux-gnu
+[opencv 0.85.3] CXX_x86_64-unknown-linux-gnu = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=CXX_x86_64_unknown_linux_gnu
+[opencv 0.85.3] CXX_x86_64_unknown_linux_gnu = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=HOST_CXX
+[opencv 0.85.3] HOST_CXX = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=CXX
+[opencv 0.85.3] CXX = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=CXXFLAGS_x86_64-unknown-linux-gnu
+[opencv 0.85.3] CXXFLAGS_x86_64-unknown-linux-gnu = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=CXXFLAGS_x86_64_unknown_linux_gnu
+[opencv 0.85.3] CXXFLAGS_x86_64_unknown_linux_gnu = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=HOST_CXXFLAGS
+[opencv 0.85.3] HOST_CXXFLAGS = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=CXXFLAGS
+[opencv 0.85.3] CXXFLAGS = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+[opencv 0.85.3] CRATE_CC_NO_DEFAULTS = None
+[opencv 0.85.3] CARGO_CFG_TARGET_FEATURE = Some("fxsr,sse,sse2")
+[opencv 0.85.3] cargo:rerun-if-env-changed=CXX_x86_64-unknown-linux-gnu
+[opencv 0.85.3] CXX_x86_64-unknown-linux-gnu = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=CXX_x86_64_unknown_linux_gnu
+[opencv 0.85.3] CXX_x86_64_unknown_linux_gnu = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=HOST_CXX
+[opencv 0.85.3] HOST_CXX = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=CXX
+[opencv 0.85.3] CXX = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=CXXFLAGS_x86_64-unknown-linux-gnu
+[opencv 0.85.3] CXXFLAGS_x86_64-unknown-linux-gnu = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=CXXFLAGS_x86_64_unknown_linux_gnu
+[opencv 0.85.3] CXXFLAGS_x86_64_unknown_linux_gnu = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=HOST_CXXFLAGS
+[opencv 0.85.3] HOST_CXXFLAGS = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=CXXFLAGS
+[opencv 0.85.3] CXXFLAGS = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+[opencv 0.85.3] CRATE_CC_NO_DEFAULTS = None
+[opencv 0.85.3] CARGO_CFG_TARGET_FEATURE = Some("fxsr,sse,sse2")
+[opencv 0.85.3] cargo:rerun-if-env-changed=CXX_x86_64-unknown-linux-gnu
+[opencv 0.85.3] CXX_x86_64-unknown-linux-gnu = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=CXX_x86_64_unknown_linux_gnu
+[opencv 0.85.3] CXX_x86_64_unknown_linux_gnu = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=HOST_CXX
+[opencv 0.85.3] HOST_CXX = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=CXX
+[opencv 0.85.3] CXX = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=CXXFLAGS_x86_64-unknown-linux-gnu
+[opencv 0.85.3] CXXFLAGS_x86_64-unknown-linux-gnu = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=CXXFLAGS_x86_64_unknown_linux_gnu
+[opencv 0.85.3] CXXFLAGS_x86_64_unknown_linux_gnu = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=HOST_CXXFLAGS
+[opencv 0.85.3] HOST_CXXFLAGS = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=CXXFLAGS
+[opencv 0.85.3] CXXFLAGS = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+[opencv 0.85.3] CRATE_CC_NO_DEFAULTS = None
+[opencv 0.85.3] CARGO_CFG_TARGET_FEATURE = Some("fxsr,sse,sse2")
+[opencv 0.85.3] cargo:rerun-if-env-changed=CXX_x86_64-unknown-linux-gnu
+[opencv 0.85.3] CXX_x86_64-unknown-linux-gnu = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=CXX_x86_64_unknown_linux_gnu
+[opencv 0.85.3] CXX_x86_64_unknown_linux_gnu = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=HOST_CXX
+[opencv 0.85.3] HOST_CXX = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=CXX
+[opencv 0.85.3] CXX = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=CXXFLAGS_x86_64-unknown-linux-gnu
+[opencv 0.85.3] CXXFLAGS_x86_64-unknown-linux-gnu = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=CXXFLAGS_x86_64_unknown_linux_gnu
+[opencv 0.85.3] CXXFLAGS_x86_64_unknown_linux_gnu = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=HOST_CXXFLAGS
+[opencv 0.85.3] HOST_CXXFLAGS = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=CXXFLAGS
+[opencv 0.85.3] CXXFLAGS = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+[opencv 0.85.3] CRATE_CC_NO_DEFAULTS = None
+[opencv 0.85.3] CARGO_CFG_TARGET_FEATURE = Some("fxsr,sse,sse2")
+[opencv 0.85.3] cargo:rerun-if-env-changed=CXX_x86_64-unknown-linux-gnu
+[opencv 0.85.3] CXX_x86_64-unknown-linux-gnu = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=CXX_x86_64_unknown_linux_gnu
+[opencv 0.85.3] CXX_x86_64_unknown_linux_gnu = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=HOST_CXX
+[opencv 0.85.3] HOST_CXX = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=CXX
+[opencv 0.85.3] CXX = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=CXXFLAGS_x86_64-unknown-linux-gnu
+[opencv 0.85.3] CXXFLAGS_x86_64-unknown-linux-gnu = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=CXXFLAGS_x86_64_unknown_linux_gnu
+[opencv 0.85.3] CXXFLAGS_x86_64_unknown_linux_gnu = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=HOST_CXXFLAGS
+[opencv 0.85.3] HOST_CXXFLAGS = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=CXXFLAGS
+[opencv 0.85.3] CXXFLAGS = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+[opencv 0.85.3] CRATE_CC_NO_DEFAULTS = None
+[opencv 0.85.3] CARGO_CFG_TARGET_FEATURE = Some("fxsr,sse,sse2")
+[opencv 0.85.3] cargo:rerun-if-env-changed=CXX_x86_64-unknown-linux-gnu
+[opencv 0.85.3] CXX_x86_64-unknown-linux-gnu = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=CXX_x86_64_unknown_linux_gnu
+[opencv 0.85.3] CXX_x86_64_unknown_linux_gnu = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=HOST_CXX
+[opencv 0.85.3] HOST_CXX = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=CXX
+[opencv 0.85.3] CXX = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=CXXFLAGS_x86_64-unknown-linux-gnu
+[opencv 0.85.3] CXXFLAGS_x86_64-unknown-linux-gnu = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=CXXFLAGS_x86_64_unknown_linux_gnu
+[opencv 0.85.3] CXXFLAGS_x86_64_unknown_linux_gnu = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=HOST_CXXFLAGS
+[opencv 0.85.3] HOST_CXXFLAGS = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=CXXFLAGS
+[opencv 0.85.3] CXXFLAGS = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+[opencv 0.85.3] CRATE_CC_NO_DEFAULTS = None
+[opencv 0.85.3] CARGO_CFG_TARGET_FEATURE = Some("fxsr,sse,sse2")
+[opencv 0.85.3] cargo:rerun-if-env-changed=CXX_x86_64-unknown-linux-gnu
+[opencv 0.85.3] CXX_x86_64-unknown-linux-gnu = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=CXX_x86_64_unknown_linux_gnu
+[opencv 0.85.3] CXX_x86_64_unknown_linux_gnu = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=HOST_CXX
+[opencv 0.85.3] HOST_CXX = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=CXX
+[opencv 0.85.3] CXX = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=CXXFLAGS_x86_64-unknown-linux-gnu
+[opencv 0.85.3] CXXFLAGS_x86_64-unknown-linux-gnu = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=CXXFLAGS_x86_64_unknown_linux_gnu
+[opencv 0.85.3] CXXFLAGS_x86_64_unknown_linux_gnu = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=HOST_CXXFLAGS
+[opencv 0.85.3] HOST_CXXFLAGS = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=CXXFLAGS
+[opencv 0.85.3] CXXFLAGS = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+[opencv 0.85.3] CRATE_CC_NO_DEFAULTS = None
+[opencv 0.85.3] CARGO_CFG_TARGET_FEATURE = Some("fxsr,sse,sse2")
+[opencv 0.85.3] cargo:rustc-cfg=ocvrs_has_module_aruco
+[opencv 0.85.3] cargo:rustc-cfg=ocvrs_has_module_bgsegm
+[opencv 0.85.3] cargo:rustc-cfg=ocvrs_has_module_calib3d
+[opencv 0.85.3] cargo:rustc-cfg=ocvrs_has_module_ccalib
+[opencv 0.85.3] cargo:rustc-cfg=ocvrs_has_module_core
+[opencv 0.85.3] cargo:rustc-cfg=ocvrs_has_module_face
+[opencv 0.85.3] cargo:rustc-cfg=ocvrs_has_module_features2d
+[opencv 0.85.3] cargo:rustc-cfg=ocvrs_has_module_flann
+[opencv 0.85.3] cargo:rustc-cfg=ocvrs_has_module_gapi
+[opencv 0.85.3] cargo:rustc-cfg=ocvrs_has_module_highgui
+[opencv 0.85.3] cargo:rustc-cfg=ocvrs_has_module_img_hash
+[opencv 0.85.3] cargo:rustc-cfg=ocvrs_has_module_imgcodecs
+[opencv 0.85.3] cargo:rustc-cfg=ocvrs_has_module_imgproc
+[opencv 0.85.3] cargo:rustc-cfg=ocvrs_has_module_line_descriptor
+[opencv 0.85.3] cargo:rustc-cfg=ocvrs_has_module_objdetect
+[opencv 0.85.3] cargo:rustc-cfg=ocvrs_has_module_photo
+[opencv 0.85.3] cargo:rustc-cfg=ocvrs_has_module_rapid
+[opencv 0.85.3] cargo:rustc-cfg=ocvrs_has_module_rgbd
+[opencv 0.85.3] cargo:rustc-cfg=ocvrs_has_module_stereo
+[opencv 0.85.3] cargo:rustc-cfg=ocvrs_has_module_stitching
+[opencv 0.85.3] cargo:rustc-cfg=ocvrs_has_module_surface_matching
+[opencv 0.85.3] cargo:rustc-cfg=ocvrs_has_module_tracking
+[opencv 0.85.3] cargo:rustc-cfg=ocvrs_has_module_video
+[opencv 0.85.3] cargo:rustc-cfg=ocvrs_has_module_videoio
+[opencv 0.85.3] cargo:rustc-cfg=ocvrs_has_module_videostab
+[opencv 0.85.3] cargo:rustc-cfg=ocvrs_has_module_xfeatures2d
+[opencv 0.85.3] cargo:rustc-cfg=ocvrs_has_module_ximgproc
+[opencv 0.85.3] cargo:rustc-cfg=ocvrs_has_module_xobjdetect
+[opencv 0.85.3] cargo:rustc-cfg=ocvrs_has_module_xphoto
+[opencv 0.85.3] running: "c++" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "/home/darvis/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp" "-I" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out" "-I" "." "-I" "/usr/local/include/opencv4" "-Wall" "-Wextra" "-std=c++11" "-Wno-deprecated-declarations" "-Wno-deprecated-copy" "-Wno-unused-parameter" "-Wno-sign-compare" "-Wno-comment" "-Wno-unused-variable" "-Wno-ignored-qualifiers" "-Wno-return-type-c-linkage" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/eb1a2432bed0fcbf-calib3d.o" "-c" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/calib3d.cpp"
+[opencv 0.85.3] running: "c++" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "/home/darvis/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp" "-I" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out" "-I" "." "-I" "/usr/local/include/opencv4" "-Wall" "-Wextra" "-std=c++11" "-Wno-deprecated-declarations" "-Wno-deprecated-copy" "-Wno-unused-parameter" "-Wno-sign-compare" "-Wno-comment" "-Wno-unused-variable" "-Wno-ignored-qualifiers" "-Wno-return-type-c-linkage" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/eb1a2432bed0fcbf-aruco.o" "-c" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/aruco.cpp"
+[opencv 0.85.3] running: "c++" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "/home/darvis/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp" "-I" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out" "-I" "." "-I" "/usr/local/include/opencv4" "-Wall" "-Wextra" "-std=c++11" "-Wno-deprecated-declarations" "-Wno-deprecated-copy" "-Wno-unused-parameter" "-Wno-sign-compare" "-Wno-comment" "-Wno-unused-variable" "-Wno-ignored-qualifiers" "-Wno-return-type-c-linkage" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/eb1a2432bed0fcbf-bgsegm.o" "-c" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/bgsegm.cpp"
+[opencv 0.85.3] running: "c++" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "/home/darvis/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp" "-I" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out" "-I" "." "-I" "/usr/local/include/opencv4" "-Wall" "-Wextra" "-std=c++11" "-Wno-deprecated-declarations" "-Wno-deprecated-copy" "-Wno-unused-parameter" "-Wno-sign-compare" "-Wno-comment" "-Wno-unused-variable" "-Wno-ignored-qualifiers" "-Wno-return-type-c-linkage" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/eb1a2432bed0fcbf-ccalib.o" "-c" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/ccalib.cpp"
+[opencv 0.85.3] running: "c++" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "/home/darvis/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp" "-I" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out" "-I" "." "-I" "/usr/local/include/opencv4" "-Wall" "-Wextra" "-std=c++11" "-Wno-deprecated-declarations" "-Wno-deprecated-copy" "-Wno-unused-parameter" "-Wno-sign-compare" "-Wno-comment" "-Wno-unused-variable" "-Wno-ignored-qualifiers" "-Wno-return-type-c-linkage" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/eb1a2432bed0fcbf-flann.o" "-c" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/flann.cpp"
+[opencv 0.85.3] running: "c++" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "/home/darvis/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp" "-I" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out" "-I" "." "-I" "/usr/local/include/opencv4" "-Wall" "-Wextra" "-std=c++11" "-Wno-deprecated-declarations" "-Wno-deprecated-copy" "-Wno-unused-parameter" "-Wno-sign-compare" "-Wno-comment" "-Wno-unused-variable" "-Wno-ignored-qualifiers" "-Wno-return-type-c-linkage" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/eb1a2432bed0fcbf-face.o" "-c" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/face.cpp"
+[opencv 0.85.3] running: "c++" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "/home/darvis/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp" "-I" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out" "-I" "." "-I" "/usr/local/include/opencv4" "-Wall" "-Wextra" "-std=c++11" "-Wno-deprecated-declarations" "-Wno-deprecated-copy" "-Wno-unused-parameter" "-Wno-sign-compare" "-Wno-comment" "-Wno-unused-variable" "-Wno-ignored-qualifiers" "-Wno-return-type-c-linkage" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/eb1a2432bed0fcbf-surface_matching.o" "-c" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/surface_matching.cpp"
+[opencv 0.85.3] running: "c++" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "/home/darvis/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp" "-I" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out" "-I" "." "-I" "/usr/local/include/opencv4" "-Wall" "-Wextra" "-std=c++11" "-Wno-deprecated-declarations" "-Wno-deprecated-copy" "-Wno-unused-parameter" "-Wno-sign-compare" "-Wno-comment" "-Wno-unused-variable" "-Wno-ignored-qualifiers" "-Wno-return-type-c-linkage" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/eb1a2432bed0fcbf-gapi.o" "-c" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/gapi.cpp"
+[opencv 0.85.3] running: "c++" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "/home/darvis/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp" "-I" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out" "-I" "." "-I" "/usr/local/include/opencv4" "-Wall" "-Wextra" "-std=c++11" "-Wno-deprecated-declarations" "-Wno-deprecated-copy" "-Wno-unused-parameter" "-Wno-sign-compare" "-Wno-comment" "-Wno-unused-variable" "-Wno-ignored-qualifiers" "-Wno-return-type-c-linkage" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/eb1a2432bed0fcbf-features2d.o" "-c" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/features2d.cpp"
+[opencv 0.85.3] running: "c++" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "/home/darvis/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp" "-I" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out" "-I" "." "-I" "/usr/local/include/opencv4" "-Wall" "-Wextra" "-std=c++11" "-Wno-deprecated-declarations" "-Wno-deprecated-copy" "-Wno-unused-parameter" "-Wno-sign-compare" "-Wno-comment" "-Wno-unused-variable" "-Wno-ignored-qualifiers" "-Wno-return-type-c-linkage" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/eb1a2432bed0fcbf-core.o" "-c" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/core.cpp"
+[opencv 0.85.3] running: "c++" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "/home/darvis/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp" "-I" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out" "-I" "." "-I" "/usr/local/include/opencv4" "-Wall" "-Wextra" "-std=c++11" "-Wno-deprecated-declarations" "-Wno-deprecated-copy" "-Wno-unused-parameter" "-Wno-sign-compare" "-Wno-comment" "-Wno-unused-variable" "-Wno-ignored-qualifiers" "-Wno-return-type-c-linkage" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/eb1a2432bed0fcbf-img_hash.o" "-c" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/img_hash.cpp"
+[opencv 0.85.3] running: "c++" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "/home/darvis/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp" "-I" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out" "-I" "." "-I" "/usr/local/include/opencv4" "-Wall" "-Wextra" "-std=c++11" "-Wno-deprecated-declarations" "-Wno-deprecated-copy" "-Wno-unused-parameter" "-Wno-sign-compare" "-Wno-comment" "-Wno-unused-variable" "-Wno-ignored-qualifiers" "-Wno-return-type-c-linkage" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/eb1a2432bed0fcbf-rapid.o" "-c" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/rapid.cpp"
+[opencv 0.85.3] running: "c++" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "/home/darvis/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp" "-I" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out" "-I" "." "-I" "/usr/local/include/opencv4" "-Wall" "-Wextra" "-std=c++11" "-Wno-deprecated-declarations" "-Wno-deprecated-copy" "-Wno-unused-parameter" "-Wno-sign-compare" "-Wno-comment" "-Wno-unused-variable" "-Wno-ignored-qualifiers" "-Wno-return-type-c-linkage" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/126f600bdc241d49-manual-core.o" "-c" "/home/darvis/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp/manual-core.cpp"
+[opencv 0.85.3] running: "c++" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "/home/darvis/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp" "-I" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out" "-I" "." "-I" "/usr/local/include/opencv4" "-Wall" "-Wextra" "-std=c++11" "-Wno-deprecated-declarations" "-Wno-deprecated-copy" "-Wno-unused-parameter" "-Wno-sign-compare" "-Wno-comment" "-Wno-unused-variable" "-Wno-ignored-qualifiers" "-Wno-return-type-c-linkage" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/eb1a2432bed0fcbf-videostab.o" "-c" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/videostab.cpp"
+[opencv 0.85.3] running: "c++" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "/home/darvis/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp" "-I" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out" "-I" "." "-I" "/usr/local/include/opencv4" "-Wall" "-Wextra" "-std=c++11" "-Wno-deprecated-declarations" "-Wno-deprecated-copy" "-Wno-unused-parameter" "-Wno-sign-compare" "-Wno-comment" "-Wno-unused-variable" "-Wno-ignored-qualifiers" "-Wno-return-type-c-linkage" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/eb1a2432bed0fcbf-objdetect.o" "-c" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/objdetect.cpp"
+[opencv 0.85.3] running: "c++" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "/home/darvis/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp" "-I" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out" "-I" "." "-I" "/usr/local/include/opencv4" "-Wall" "-Wextra" "-std=c++11" "-Wno-deprecated-declarations" "-Wno-deprecated-copy" "-Wno-unused-parameter" "-Wno-sign-compare" "-Wno-comment" "-Wno-unused-variable" "-Wno-ignored-qualifiers" "-Wno-return-type-c-linkage" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/eb1a2432bed0fcbf-stereo.o" "-c" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/stereo.cpp"
+[opencv 0.85.3] running: "c++" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "/home/darvis/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp" "-I" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out" "-I" "." "-I" "/usr/local/include/opencv4" "-Wall" "-Wextra" "-std=c++11" "-Wno-deprecated-declarations" "-Wno-deprecated-copy" "-Wno-unused-parameter" "-Wno-sign-compare" "-Wno-comment" "-Wno-unused-variable" "-Wno-ignored-qualifiers" "-Wno-return-type-c-linkage" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/eb1a2432bed0fcbf-stitching.o" "-c" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/stitching.cpp"
+[opencv 0.85.3] running: "c++" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "/home/darvis/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp" "-I" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out" "-I" "." "-I" "/usr/local/include/opencv4" "-Wall" "-Wextra" "-std=c++11" "-Wno-deprecated-declarations" "-Wno-deprecated-copy" "-Wno-unused-parameter" "-Wno-sign-compare" "-Wno-comment" "-Wno-unused-variable" "-Wno-ignored-qualifiers" "-Wno-return-type-c-linkage" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/eb1a2432bed0fcbf-xphoto.o" "-c" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/xphoto.cpp"
+[opencv 0.85.3] running: "c++" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "/home/darvis/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp" "-I" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out" "-I" "." "-I" "/usr/local/include/opencv4" "-Wall" "-Wextra" "-std=c++11" "-Wno-deprecated-declarations" "-Wno-deprecated-copy" "-Wno-unused-parameter" "-Wno-sign-compare" "-Wno-comment" "-Wno-unused-variable" "-Wno-ignored-qualifiers" "-Wno-return-type-c-linkage" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/eb1a2432bed0fcbf-imgcodecs.o" "-c" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/imgcodecs.cpp"
+[opencv 0.85.3] running: "c++" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "/home/darvis/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp" "-I" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out" "-I" "." "-I" "/usr/local/include/opencv4" "-Wall" "-Wextra" "-std=c++11" "-Wno-deprecated-declarations" "-Wno-deprecated-copy" "-Wno-unused-parameter" "-Wno-sign-compare" "-Wno-comment" "-Wno-unused-variable" "-Wno-ignored-qualifiers" "-Wno-return-type-c-linkage" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/eb1a2432bed0fcbf-video.o" "-c" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/video.cpp"
+[opencv 0.85.3] running: "c++" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "/home/darvis/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp" "-I" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out" "-I" "." "-I" "/usr/local/include/opencv4" "-Wall" "-Wextra" "-std=c++11" "-Wno-deprecated-declarations" "-Wno-deprecated-copy" "-Wno-unused-parameter" "-Wno-sign-compare" "-Wno-comment" "-Wno-unused-variable" "-Wno-ignored-qualifiers" "-Wno-return-type-c-linkage" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/eb1a2432bed0fcbf-line_descriptor.o" "-c" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/line_descriptor.cpp"
+[opencv 0.85.3] running: "c++" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "/home/darvis/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp" "-I" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out" "-I" "." "-I" "/usr/local/include/opencv4" "-Wall" "-Wextra" "-std=c++11" "-Wno-deprecated-declarations" "-Wno-deprecated-copy" "-Wno-unused-parameter" "-Wno-sign-compare" "-Wno-comment" "-Wno-unused-variable" "-Wno-ignored-qualifiers" "-Wno-return-type-c-linkage" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/eb1a2432bed0fcbf-imgproc.o" "-c" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/imgproc.cpp"
+[opencv 0.85.3] running: "c++" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "/home/darvis/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp" "-I" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out" "-I" "." "-I" "/usr/local/include/opencv4" "-Wall" "-Wextra" "-std=c++11" "-Wno-deprecated-declarations" "-Wno-deprecated-copy" "-Wno-unused-parameter" "-Wno-sign-compare" "-Wno-comment" "-Wno-unused-variable" "-Wno-ignored-qualifiers" "-Wno-return-type-c-linkage" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/eb1a2432bed0fcbf-xobjdetect.o" "-c" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/xobjdetect.cpp"
+[opencv 0.85.3] running: "c++" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "/home/darvis/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp" "-I" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out" "-I" "." "-I" "/usr/local/include/opencv4" "-Wall" "-Wextra" "-std=c++11" "-Wno-deprecated-declarations" "-Wno-deprecated-copy" "-Wno-unused-parameter" "-Wno-sign-compare" "-Wno-comment" "-Wno-unused-variable" "-Wno-ignored-qualifiers" "-Wno-return-type-c-linkage" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/eb1a2432bed0fcbf-ximgproc.o" "-c" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/ximgproc.cpp"
+[opencv 0.85.3] running: "c++" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "/home/darvis/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp" "-I" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out" "-I" "." "-I" "/usr/local/include/opencv4" "-Wall" "-Wextra" "-std=c++11" "-Wno-deprecated-declarations" "-Wno-deprecated-copy" "-Wno-unused-parameter" "-Wno-sign-compare" "-Wno-comment" "-Wno-unused-variable" "-Wno-ignored-qualifiers" "-Wno-return-type-c-linkage" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/eb1a2432bed0fcbf-photo.o" "-c" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/photo.cpp"
+[opencv 0.85.3] running: "c++" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "/home/darvis/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp" "-I" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out" "-I" "." "-I" "/usr/local/include/opencv4" "-Wall" "-Wextra" "-std=c++11" "-Wno-deprecated-declarations" "-Wno-deprecated-copy" "-Wno-unused-parameter" "-Wno-sign-compare" "-Wno-comment" "-Wno-unused-variable" "-Wno-ignored-qualifiers" "-Wno-return-type-c-linkage" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/eb1a2432bed0fcbf-rgbd.o" "-c" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/rgbd.cpp"
+[opencv 0.85.3] running: "c++" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "/home/darvis/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp" "-I" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out" "-I" "." "-I" "/usr/local/include/opencv4" "-Wall" "-Wextra" "-std=c++11" "-Wno-deprecated-declarations" "-Wno-deprecated-copy" "-Wno-unused-parameter" "-Wno-sign-compare" "-Wno-comment" "-Wno-unused-variable" "-Wno-ignored-qualifiers" "-Wno-return-type-c-linkage" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/eb1a2432bed0fcbf-highgui.o" "-c" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/highgui.cpp"
+[opencv 0.85.3] running: "c++" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "/home/darvis/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp" "-I" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out" "-I" "." "-I" "/usr/local/include/opencv4" "-Wall" "-Wextra" "-std=c++11" "-Wno-deprecated-declarations" "-Wno-deprecated-copy" "-Wno-unused-parameter" "-Wno-sign-compare" "-Wno-comment" "-Wno-unused-variable" "-Wno-ignored-qualifiers" "-Wno-return-type-c-linkage" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/eb1a2432bed0fcbf-videoio.o" "-c" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/videoio.cpp"
+[opencv 0.85.3] running: "c++" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "/home/darvis/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp" "-I" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out" "-I" "." "-I" "/usr/local/include/opencv4" "-Wall" "-Wextra" "-std=c++11" "-Wno-deprecated-declarations" "-Wno-deprecated-copy" "-Wno-unused-parameter" "-Wno-sign-compare" "-Wno-comment" "-Wno-unused-variable" "-Wno-ignored-qualifiers" "-Wno-return-type-c-linkage" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/eb1a2432bed0fcbf-tracking.o" "-c" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/tracking.cpp"
+[opencv 0.85.3] running: "c++" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-gdwarf-4" "-fno-omit-frame-pointer" "-m64" "-I" "/home/darvis/.cargo/registry/src/index.crates.io-6f17d22bba15001f/opencv-0.85.3/src_cpp" "-I" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out" "-I" "." "-I" "/usr/local/include/opencv4" "-Wall" "-Wextra" "-std=c++11" "-Wno-deprecated-declarations" "-Wno-deprecated-copy" "-Wno-unused-parameter" "-Wno-sign-compare" "-Wno-comment" "-Wno-unused-variable" "-Wno-ignored-qualifiers" "-Wno-return-type-c-linkage" "-o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/eb1a2432bed0fcbf-xfeatures2d.o" "-c" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/xfeatures2d.cpp"
+[opencv 0.85.3] exit status: 0
+[opencv 0.85.3] exit status: 0
+[opencv 0.85.3] exit status: 0
+[opencv 0.85.3] exit status: 0
+[opencv 0.85.3] exit status: 0
+[opencv 0.85.3] exit status: 0
+[opencv 0.85.3] exit status: 0
+[opencv 0.85.3] exit status: 0
+[opencv 0.85.3] exit status: 0
+[opencv 0.85.3] exit status: 0
+[opencv 0.85.3] exit status: 0
+[opencv 0.85.3] exit status: 0
+[opencv 0.85.3] exit status: 0
+[opencv 0.85.3] exit status: 0
+[opencv 0.85.3] exit status: 0
+[opencv 0.85.3] exit status: 0
+[opencv 0.85.3] exit status: 0
+[opencv 0.85.3] exit status: 0
+[opencv 0.85.3] exit status: 0
+[opencv 0.85.3] exit status: 0
+[opencv 0.85.3] exit status: 0
+[opencv 0.85.3] exit status: 0
+[opencv 0.85.3] exit status: 0
+[opencv 0.85.3] exit status: 0
+[opencv 0.85.3] exit status: 0
+[opencv 0.85.3] exit status: 0
+[opencv 0.85.3] exit status: 0
+[opencv 0.85.3] exit status: 0
+[opencv 0.85.3] exit status: 0
+[opencv 0.85.3] exit status: 0
+[opencv 0.85.3] cargo:rerun-if-env-changed=AR_x86_64-unknown-linux-gnu
+[opencv 0.85.3] AR_x86_64-unknown-linux-gnu = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=AR_x86_64_unknown_linux_gnu
+[opencv 0.85.3] AR_x86_64_unknown_linux_gnu = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=HOST_AR
+[opencv 0.85.3] HOST_AR = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=AR
+[opencv 0.85.3] AR = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=ARFLAGS_x86_64-unknown-linux-gnu
+[opencv 0.85.3] ARFLAGS_x86_64-unknown-linux-gnu = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=ARFLAGS_x86_64_unknown_linux_gnu
+[opencv 0.85.3] ARFLAGS_x86_64_unknown_linux_gnu = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=HOST_ARFLAGS
+[opencv 0.85.3] HOST_ARFLAGS = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=ARFLAGS
+[opencv 0.85.3] ARFLAGS = None
+[opencv 0.85.3] running: ZERO_AR_DATE="1" "ar" "cq" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/libocvrs.a" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/eb1a2432bed0fcbf-aruco.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/eb1a2432bed0fcbf-bgsegm.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/eb1a2432bed0fcbf-calib3d.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/eb1a2432bed0fcbf-ccalib.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/eb1a2432bed0fcbf-core.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/126f600bdc241d49-manual-core.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/eb1a2432bed0fcbf-face.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/eb1a2432bed0fcbf-features2d.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/eb1a2432bed0fcbf-flann.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/eb1a2432bed0fcbf-gapi.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/eb1a2432bed0fcbf-highgui.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/eb1a2432bed0fcbf-img_hash.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/eb1a2432bed0fcbf-imgcodecs.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/eb1a2432bed0fcbf-imgproc.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/eb1a2432bed0fcbf-line_descriptor.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/eb1a2432bed0fcbf-objdetect.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/eb1a2432bed0fcbf-photo.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/eb1a2432bed0fcbf-rapid.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/eb1a2432bed0fcbf-rgbd.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/eb1a2432bed0fcbf-stereo.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/eb1a2432bed0fcbf-stitching.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/eb1a2432bed0fcbf-surface_matching.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/eb1a2432bed0fcbf-tracking.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/eb1a2432bed0fcbf-video.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/eb1a2432bed0fcbf-videoio.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/eb1a2432bed0fcbf-videostab.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/eb1a2432bed0fcbf-xfeatures2d.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/eb1a2432bed0fcbf-ximgproc.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/eb1a2432bed0fcbf-xobjdetect.o" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/eb1a2432bed0fcbf-xphoto.o"
+[opencv 0.85.3] exit status: 0
+[opencv 0.85.3] running: "ar" "s" "/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out/libocvrs.a"
+[opencv 0.85.3] exit status: 0
+[opencv 0.85.3] cargo:rustc-link-lib=static=ocvrs
+[opencv 0.85.3] cargo:rustc-link-search=native=/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/opencv-999aa379e764af6e/out
+[opencv 0.85.3] cargo:rerun-if-env-changed=CXXSTDLIB_x86_64-unknown-linux-gnu
+[opencv 0.85.3] CXXSTDLIB_x86_64-unknown-linux-gnu = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=CXXSTDLIB_x86_64_unknown_linux_gnu
+[opencv 0.85.3] CXXSTDLIB_x86_64_unknown_linux_gnu = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=HOST_CXXSTDLIB
+[opencv 0.85.3] HOST_CXXSTDLIB = None
+[opencv 0.85.3] cargo:rerun-if-env-changed=CXXSTDLIB
+[opencv 0.85.3] CXXSTDLIB = None
+[opencv 0.85.3] cargo:rustc-link-lib=stdc++
+[opencv 0.85.3] cargo:rustc-link-search=/usr/local/lib
+[opencv 0.85.3] cargo:rustc-link-lib=opencv_gapi
+[opencv 0.85.3] cargo:rustc-link-lib=opencv_stitching
+[opencv 0.85.3] cargo:rustc-link-lib=opencv_aruco
+[opencv 0.85.3] cargo:rustc-link-lib=opencv_barcode
+[opencv 0.85.3] cargo:rustc-link-lib=opencv_bgsegm
+[opencv 0.85.3] cargo:rustc-link-lib=opencv_bioinspired
+[opencv 0.85.3] cargo:rustc-link-lib=opencv_ccalib
+[opencv 0.85.3] cargo:rustc-link-lib=opencv_dnn_objdetect
+[opencv 0.85.3] cargo:rustc-link-lib=opencv_dnn_superres
+[opencv 0.85.3] cargo:rustc-link-lib=opencv_dpm
+[opencv 0.85.3] cargo:rustc-link-lib=opencv_face
+[opencv 0.85.3] cargo:rustc-link-lib=opencv_freetype
+[opencv 0.85.3] cargo:rustc-link-lib=opencv_fuzzy
+[opencv 0.85.3] cargo:rustc-link-lib=opencv_hfs
+[opencv 0.85.3] cargo:rustc-link-lib=opencv_img_hash
+[opencv 0.85.3] cargo:rustc-link-lib=opencv_intensity_transform
+[opencv 0.85.3] cargo:rustc-link-lib=opencv_line_descriptor
+[opencv 0.85.3] cargo:rustc-link-lib=opencv_mcc
+[opencv 0.85.3] cargo:rustc-link-lib=opencv_quality
+[opencv 0.85.3] cargo:rustc-link-lib=opencv_rapid
+[opencv 0.85.3] cargo:rustc-link-lib=opencv_reg
+[opencv 0.85.3] cargo:rustc-link-lib=opencv_rgbd
+[opencv 0.85.3] cargo:rustc-link-lib=opencv_saliency
+[opencv 0.85.3] cargo:rustc-link-lib=opencv_stereo
+[opencv 0.85.3] cargo:rustc-link-lib=opencv_structured_light
+[opencv 0.85.3] cargo:rustc-link-lib=opencv_phase_unwrapping
+[opencv 0.85.3] cargo:rustc-link-lib=opencv_superres
+[opencv 0.85.3] cargo:rustc-link-lib=opencv_optflow
+[opencv 0.85.3] cargo:rustc-link-lib=opencv_surface_matching
+[opencv 0.85.3] cargo:rustc-link-lib=opencv_tracking
+[opencv 0.85.3] cargo:rustc-link-lib=opencv_highgui
+[opencv 0.85.3] cargo:rustc-link-lib=opencv_datasets
+[opencv 0.85.3] cargo:rustc-link-lib=opencv_text
+[opencv 0.85.3] cargo:rustc-link-lib=opencv_plot
+[opencv 0.85.3] cargo:rustc-link-lib=opencv_videostab
+[opencv 0.85.3] cargo:rustc-link-lib=opencv_videoio
+[opencv 0.85.3] cargo:rustc-link-lib=opencv_wechat_qrcode
+[opencv 0.85.3] cargo:rustc-link-lib=opencv_xfeatures2d
+[opencv 0.85.3] cargo:rustc-link-lib=opencv_shape
+[opencv 0.85.3] cargo:rustc-link-lib=opencv_ml
+[opencv 0.85.3] cargo:rustc-link-lib=opencv_ximgproc
+[opencv 0.85.3] cargo:rustc-link-lib=opencv_video
+[opencv 0.85.3] cargo:rustc-link-lib=opencv_xobjdetect
+[opencv 0.85.3] cargo:rustc-link-lib=opencv_objdetect
+[opencv 0.85.3] cargo:rustc-link-lib=opencv_calib3d
+[opencv 0.85.3] cargo:rustc-link-lib=opencv_imgcodecs
+[opencv 0.85.3] cargo:rustc-link-lib=opencv_features2d
+[opencv 0.85.3] cargo:rustc-link-lib=opencv_dnn
+[opencv 0.85.3] cargo:rustc-link-lib=opencv_flann
+[opencv 0.85.3] cargo:rustc-link-lib=opencv_xphoto
+[opencv 0.85.3] cargo:rustc-link-lib=opencv_photo
+[opencv 0.85.3] cargo:rustc-link-lib=opencv_imgproc
+[opencv 0.85.3] cargo:rustc-link-lib=opencv_core
+[dvos3binding 0.1.0] [100%] Linking CXX static library /home/darvis/Downloads/Darvis_Git_Latest/darvis/orbslam-bindings/orb_slam3/lib/liborb_slam3.a
+[dvos3binding 0.1.0] [100%] Built target orb_slam3
+[dvos3binding 0.1.0] cargo:root=/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/dvos3binding-02063dbb2cbed49e/out
+[dvos3binding 0.1.0] cargo:rustc-link-search=native=orb_slam3/lib
+[dvos3binding 0.1.0] cargo:rustc-link-lib=static=orb_slam3
+[g2o 0.1.0] [100%] Linking CXX static library /home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/lib/libg2o.a
+[g2o 0.1.0] /usr/bin/cmake -P CMakeFiles/g2o.dir/cmake_clean_target.cmake
+[g2o 0.1.0] /usr/bin/cmake -E cmake_link_script CMakeFiles/g2o.dir/link.txt --verbose=1
+[g2o 0.1.0] /usr/bin/ar qc /home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/lib/libg2o.a CMakeFiles/g2o.dir/g2o/types/types_sba.cpp.o CMakeFiles/g2o.dir/g2o/types/types_six_dof_expmap.cpp.o CMakeFiles/g2o.dir/g2o/types/types_seven_dof_expmap.cpp.o CMakeFiles/g2o.dir/g2o/core/hyper_graph_action.cpp.o CMakeFiles/g2o.dir/g2o/core/hyper_graph.cpp.o CMakeFiles/g2o.dir/g2o/core/marginal_covariance_cholesky.cpp.o CMakeFiles/g2o.dir/g2o/core/matrix_structure.cpp.o CMakeFiles/g2o.dir/g2o/core/batch_stats.cpp.o CMakeFiles/g2o.dir/g2o/core/parameter.cpp.o CMakeFiles/g2o.dir/g2o/core/cache.cpp.o CMakeFiles/g2o.dir/g2o/core/optimizable_graph.cpp.o CMakeFiles/g2o.dir/g2o/core/solver.cpp.o CMakeFiles/g2o.dir/g2o/core/optimization_algorithm_factory.cpp.o CMakeFiles/g2o.dir/g2o/core/estimate_propagator.cpp.o CMakeFiles/g2o.dir/g2o/core/factory.cpp.o CMakeFiles/g2o.dir/g2o/core/sparse_optimizer.cpp.o CMakeFiles/g2o.dir/g2o/core/hyper_dijkstra.cpp.o CMakeFiles/g2o.dir/g2o/core/parameter_container.cpp.o CMakeFiles/g2o.dir/g2o/core/optimization_algorithm.cpp.o CMakeFiles/g2o.dir/g2o/core/optimization_algorithm_with_hessian.cpp.o CMakeFiles/g2o.dir/g2o/core/optimization_algorithm_levenberg.cpp.o CMakeFiles/g2o.dir/g2o/core/optimization_algorithm_gauss_newton.cpp.o CMakeFiles/g2o.dir/g2o/core/jacobian_workspace.cpp.o CMakeFiles/g2o.dir/g2o/core/robust_kernel.cpp.o CMakeFiles/g2o.dir/g2o/core/robust_kernel_factory.cpp.o CMakeFiles/g2o.dir/g2o/core/robust_kernel_impl.cpp.o CMakeFiles/g2o.dir/g2o/stuff/timeutil.cpp.o CMakeFiles/g2o.dir/g2o/stuff/os_specific.c.o CMakeFiles/g2o.dir/g2o/stuff/string_tools.cpp.o CMakeFiles/g2o.dir/g2o/stuff/property.cpp.o CMakeFiles/g2o.dir/g2o/types/G2oTypes.cc.o CMakeFiles/g2o.dir/g2o/types/ImuTypes.cc.o CMakeFiles/g2o.dir/g2o/orbslam_types/GeometricTools.cc.o CMakeFiles/g2o.dir/g2o/orbslam_types/Converter.cc.o CMakeFiles/g2o.dir/g2o/orbslam_types/Pinhole.cc.o CMakeFiles/g2o.dir/g2o/rust/rust_helper.cpp.o CMakeFiles/g2o.dir/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/cxxbridge/g2o/src/lib.rs.cc.o
+[g2o 0.1.0] /usr/bin/ranlib /home/darvis/Downloads/Darvis_Git_Latest/darvis/g2o/g2o/lib/libg2o.a
+[g2o 0.1.0] gmake[3]: Leaving directory '/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/g2o-3d8c5fb9f7b25d85/out/build'
+[g2o 0.1.0] [100%] Built target g2o
+[g2o 0.1.0] gmake[2]: Leaving directory '/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/g2o-3d8c5fb9f7b25d85/out/build'
+[g2o 0.1.0] /usr/bin/cmake -E cmake_progress_start /home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/g2o-3d8c5fb9f7b25d85/out/build/CMakeFiles 0
+[g2o 0.1.0] gmake[1]: Leaving directory '/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/g2o-3d8c5fb9f7b25d85/out/build'
+[g2o 0.1.0] cargo:root=/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/debug/build/g2o-3d8c5fb9f7b25d85/out
+[g2o 0.1.0] cargo:rustc-link-search=native=g2o/lib
+[g2o 0.1.0] cargo:rustc-link-lib=static=g2o
