@@ -27,7 +27,7 @@ pub static LOCAL_MAP_OPTIMIZATION: &str = "LOCAL_MAP_OPTIMIZATION";
 pub static FULL_MAP_OPTIMIZATION: &str = "FULL_MAP_OPTIMIZATION";
 pub static IMU: &str = "IMU";
 
-// DARVIS SYSTEM ACTORS
+// Bauhaus SYSTEM ACTORS
 pub static SHUTDOWN_ACTOR: &str = "SHUTDOWN";
 
 // Modules without internal state ... can have one global instance since we don't have to worry about sharing data between threads

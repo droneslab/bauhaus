@@ -68,6 +68,7 @@ using namespace std;
 
 namespace orb_slam3 {
 
+    const float HARRIS_K = 0.04; // Bauhaus
     const int PATCH_SIZE = 31;
     const int HALF_PATCH_SIZE = 15;
     const int EDGE_THRESHOLD = 19;
@@ -424,6 +425,50 @@ namespace orb_slam3 {
         return fastAtan2((float)m_01, (float)m_10);
     }
 
+    // Bauhaus: function copied from opencv, modified to only take in one keypoint
+    /**
+     * Function that computes the Harris responses in a
+     * blockSize x blockSize patch at given points in the image
+     */
+    static float
+    HarrisResponse(const Mat &img, Point2f &point, int octave, float harris_k)
+    {
+        CV_Assert(img.type() == CV_8UC1 && PATCH_SIZE * PATCH_SIZE <= 2048);
+
+        const uchar *ptr00 = img.ptr<uchar>();
+        int step = (int)(img.step / img.elemSize1());
+        int r = PATCH_SIZE / 2;
+
+        float scale = 1.f / ((1 << 2) * PATCH_SIZE * 255.f);
+        float scale_sq_sq = scale * scale * scale * scale;
+
+        AutoBuffer<int> ofsbuf(PATCH_SIZE * PATCH_SIZE);
+        int *ofs = ofsbuf.data();
+        for (int i = 0; i < PATCH_SIZE; i++)
+            for (int j = 0; j < PATCH_SIZE; j++)
+                ofs[i * PATCH_SIZE + j] = (int)(i * step + j);
+
+        int x0 = cvRound(point.x);
+        int y0 = cvRound(point.y);
+        int z = octave;
+
+        const uchar *ptr0 = ptr00 + (y0 - r) * step + x0 - r;
+        int a = 0, b = 0, c = 0;
+
+        for (int k = 0; k < PATCH_SIZE * PATCH_SIZE; k++)
+        {
+            const uchar *ptr = ptr0 + ofs[k];
+            int Ix = (ptr[1] - ptr[-1]) * 2 + (ptr[-step + 1] - ptr[-step - 1]) + (ptr[step + 1] - ptr[step - 1]);
+            int Iy = (ptr[step] - ptr[-step]) * 2 + (ptr[step - 1] - ptr[-step - 1]) + (ptr[step + 1] - ptr[-step + 1]);
+            a += Ix * Ix;
+            b += Iy * Iy;
+            c += Ix * Iy;
+        }
+
+        return ((float)a * b - (float)c * c -
+                harris_k * ((float)a + b) * ((float)a + b)) *
+                scale_sq_sq;
+    }
 
     const float factorPI = (float)(CV_PI/180.f);
     static void computeOrbDescriptor(const KeyPoint& kpt,
@@ -777,7 +822,7 @@ namespace orb_slam3 {
         return vResultKeys;
     }
 
-    void ORBextractor::ComputeKeyPointsOctTree(vector<vector<KeyPoint> >& allKeypoints)
+    void ORBextractor::ComputeKeyPointsOctTree(vector<vector<KeyPoint>> &allKeypoints, const std::vector<cv::KeyPoint> &existing_keypoints)
     {
         allKeypoints.resize(nlevels);
 
@@ -861,9 +906,20 @@ namespace orb_slam3 {
                     {
                         for(vector<cv::KeyPoint>::iterator vit=vKeysCell.begin(); vit!=vKeysCell.end();vit++)
                         {
+                            // for (auto it : existing_keypoints.begin(); it != existing_keypoints.end(); it++) {
+                            //     std::cout << "Existing keypoint at (" << (*it).pt.x << ", " << (*it).pt.y << ")" << std::endl;
+                            // }
+
+                            // std::cout << "Keypoint originally at (" << (*vit).pt.x << ", " << (*vit).pt.y << ")" << std::endl;
+
                             (*vit).pt.x+=j*wCell;
                             (*vit).pt.y+=i*hCell;
                             vToDistributeKeys.push_back(*vit);
+
+                            // std::cout << "...Keypoint changed to (" << (*vit).pt.x << ", " << (*vit).pt.y << ")" << std::endl;
+
+
+                            // existing_keypoints
                         }
                     }
 
@@ -1082,6 +1138,38 @@ namespace orb_slam3 {
             computeOrbDescriptor(keypoints[i], image, &pattern[0], descriptors.ptr((int)i));
     }
 
+    int ORBextractor::extract_with_existing_points_rust(
+        const orb_slam3::WrapBindCVMat &image,
+        const orb_slam3::BindCVVectorOfPoint2f &points,
+        orb_slam3::WrapBindCVKeyPoints &keypoints,
+        orb_slam3::WrapBindCVMat &descriptors)
+    {
+        vector<int> lapping = {overlap_begin, overlap_end};
+
+        // First convert points to keypoints!!!
+        // https://answers.opencv.org/question/232700/calculate-orb-descriptors-for-arbitrary-image-points/
+        std::vector<KeyPoint> existing_keypoints;
+        // Note: umax for 31x31 patch
+        std::vector<int>
+            umax = {15, 15, 15, 15, 14, 14, 14, 13, 13, 12, 11, 10, 9, 8, 6, 3, 0};
+        // std::vector<Point2f> * points_as_vector = points.as_ptr();
+        // for (int i = 0; i < nlevels; i++)
+        // {
+        //     existing_keypoints.push_back(std::vector<KeyPoint>());
+        // }
+        for (int i = 0; i < points.ptr->size(); i++)
+        {
+            Point2f point = (*points.ptr)[i];
+            float angle = IC_Angle(*image.mat_ptr, point, umax);
+            float response = HarrisResponse(*image.mat_ptr, point, 0, HARRIS_K);
+            existing_keypoints.push_back(KeyPoint(point, 31, angle, response)); // Initializing with an octave of 0!!!
+        }
+
+        auto num_extracted = extract(*image.mat_ptr, cv::Mat(), *keypoints.kp_ptr, *descriptors.mat_ptr, lapping, existing_keypoints);
+
+        return 0;
+    }
+
     int ORBextractor::extract_rust(const orb_slam3::WrapBindCVMat & image, orb_slam3::WrapBindCVKeyPoints & keypoints, orb_slam3::WrapBindCVMat & descriptors) {
         vector<int> lapping = {overlap_begin, overlap_end};
 
@@ -1115,7 +1203,8 @@ namespace orb_slam3 {
     }
 
     int ORBextractor::extract( InputArray _image, InputArray _mask, vector<KeyPoint>& _keypoints,
-                                  OutputArray _descriptors, std::vector<int> &vLappingArea)
+                                  OutputArray _descriptors, std::vector<int> &vLappingArea,
+                                  const std::vector<cv::KeyPoint> &existing_keypoints)
     {
         //cout << "[ORBextractor]: Max Features: " << nfeatures << endl;
         if(_image.empty())
@@ -1128,7 +1217,7 @@ namespace orb_slam3 {
         ComputePyramid(image);
 
         vector < vector<KeyPoint> > allKeypoints;
-        ComputeKeyPointsOctTree(allKeypoints);
+        ComputeKeyPointsOctTree(allKeypoints, existing_keypoints);
         //ComputeKeyPointsOld(allKeypoints);
 
         Mat descriptors;
@@ -1154,6 +1243,13 @@ namespace orb_slam3 {
         for (int level = 0; level < nlevels; ++level)
         {
             vector<KeyPoint>& keypoints = allKeypoints[level];
+
+            // if (existing_keypoints.size() > level && existing_keypoints[level].size() > 0)
+            // {
+            //     std::cout << "Inserting keypoints in C++.... total number of keypoints: " << existing_keypoints[level].size() << std::endl;
+            //     keypoints.insert(keypoints.end(), existing_keypoints[level].begin(), existing_keypoints[level].end());
+            // }
+
             int nkeypointsLevel = (int)keypoints.size();
 
             if(nkeypointsLevel==0)

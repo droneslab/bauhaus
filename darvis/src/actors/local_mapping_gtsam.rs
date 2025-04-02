@@ -1,5 +1,5 @@
 use std::cmp::min;
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 use std::f64::INFINITY;
 use std::iter::FromIterator;
 use std::sync::atomic::AtomicBool;
@@ -27,12 +27,12 @@ use crate::{
     registered_actors::{FEATURE_DETECTION, LOOP_CLOSING, CAMERA},
     Id,
 };
-use crate::modules::module_definitions::CameraModule;
+use crate::modules::module_definitions::{CameraModule, FeatureExtractionModule};
 use crate::modules::module_definitions::ImuModule;
-use super::messages::{InitKeyFrameMsg, KeyFrameIdMsg, NewKeyFrameGTSAMMsg, NewKeyFrameMsg, ShutdownMsg};
-use super::tracking_backend::TrackingState;
+use super::messages::{InitKeyFrameMsg, InitKeyFrameMsgGTSAM, KeyFrameIdMsg, NewKeyFrameGTSAMMsg, NewKeyFrameMsg, ShutdownMsg};
+use super::tracking_backend::{TrackedMapPointData, TrackingState};
 use crate::modules::module_definitions::BoWModule;
-
+use crate::actors::tracking_frontend_gtsam::{TrackedFeatures, TrackedFeaturesIndexMap};
 
 // TODO (design, variable locations): It would be nice for this to be a member of LocalMapping instead of floating around in the global namespace, but we can't do that easily because then Tracking would need a reference to the localmapping object.
 pub static LOCAL_MAPPING_IDLE: AtomicBool = AtomicBool::new(true);
@@ -43,9 +43,10 @@ pub struct LocalMappingGTSAM {
     map: ReadWriteMap,
     sensor: Sensor,
 
+    orb_extractor_left: Box<dyn FeatureExtractionModule>,
     current_keyframe_id: Id, //mpCurrentKeyFrame
     current_tracking_state: TrackingState, // mpCurrentKeyFrame->mTrackingState
-    recently_added_mappoints: HashSet<Id>, //mlpRecentAddedMapPoints
+    recently_added_mappoints: BTreeSet<Id>, //mlpRecentAddedMapPoints
 
     // list of keyframes to delete sent to map. they might not be deleted until later, so we need to 
     // keep track of them and avoid doing duplicate work with them
@@ -70,10 +71,11 @@ impl Actor for LocalMappingGTSAM {
             map,
             sensor,
             current_keyframe_id: -1,
-            recently_added_mappoints: HashSet::new(),
+            recently_added_mappoints: BTreeSet::new(),
             imu_module: imu,
             discarded_kfs: HashSet::new(),
             current_tracking_state: TrackingState::NotInitialized,
+            orb_extractor_left: crate::registered_actors::new_feature_extraction_module(false),
         };
 
         tracy_client::set_thread_name!("local mapping");
@@ -102,9 +104,7 @@ impl LocalMappingGTSAM {
     fn handle_message(&mut self, message: MessageBox) -> Result<bool, Box<dyn std::error::Error>> {
         if message.is::<InitKeyFrameMsg>() {
             LOCAL_MAPPING_IDLE.store(false, std::sync::atomic::Ordering::SeqCst);
-            let msg = message.downcast::<InitKeyFrameMsg>().unwrap_or_else(|_| panic!("Could not downcast local mapping message!"));
-
-            println!("Local mapping received InitKeyFrameMsg");
+            let msg = message.downcast::<InitKeyFrameMsg>().unwrap_or_else(| _ | panic !("Could not downcast local mapping message!"));
 
             // keyframe may have been deleted in map reset by tracking
             if self.map.read()?.has_keyframe(msg.kf_id) {
@@ -147,17 +147,15 @@ impl LocalMappingGTSAM {
             }
 
             let mut msg = message.downcast::<NewKeyFrameGTSAMMsg>().unwrap_or_else(|_| panic!("Could not downcast local mapping message!"));
-            self.map_feature_tracks_to_mappoints(&mut msg.keyframe, msg.feature_tracks).unwrap();
+            let track_in_view = self.create_features_and_mappoint_matches_for_keyframe(&mut msg.keyframe).unwrap();
             let kf_id = self.map.write()?.insert_keyframe_to_map(msg.keyframe, false);
 
             info!("Local mapping working on keyframe {}. Queue length: {}", kf_id, self.system.queue_len());
 
-            // Send the new keyframe ID directly back to the sender so they can use the ID 
-            // self.system.find_actor(TRACKING_BACKEND).send(Box::new(InitKeyFrameMsg{kf_id, map_version: self.map.get_version()})).unwrap();
-
             self.current_keyframe_id = kf_id;
             self.current_tracking_state = msg.tracking_state;
-            self.local_mapping(0, msg.tracked_mappoint_depths)?;
+            self.local_mapping(0, track_in_view)?;
+
         } else if message.is::<ShutdownMsg>() {
             // Sleep a little to allow other threads to finish
             sleep(Duration::from_millis(100));
@@ -169,13 +167,87 @@ impl LocalMappingGTSAM {
         Ok(false)
     }
 
-    fn map_feature_tracks_to_mappoints(&mut self, frame: &mut Frame, feature_ids: Vec<i32>) -> Result<(), Box<dyn std::error::Error>> {
+    fn create_features_and_mappoint_matches_for_keyframe(&mut self, frame: &mut Frame) -> Result<HashMap<Id, f64>, Box<dyn std::error::Error>> {
+        // Feature extraction
+        let (keypoints, descriptors) = self.orb_extractor_left.as_mut().extract(& frame.image.as_ref().unwrap()).unwrap();
+        frame.replace_features(keypoints, descriptors)?;
         frame.compute_bow();
-        let map = self.map.read()?;
-        let ref_kf = map.get_keyframe(self.current_keyframe_id - 1);
-        let nmatches = FEATURE_MATCHING_MODULE.search_by_bow_with_frame(ref_kf, frame, true, 0.7)?;
-        println!("MATCHES IN LOCAL MAPPING: {}", nmatches);
-        Ok(())
+
+        let lock = self.map.read()?;
+
+        // Update local points
+        let local_keyframes = {
+            let mut local_keyframes: HashSet<Id> = lock.get_keyframe(self.current_keyframe_id).get_covisibility_keyframes(10).into_iter().collect();
+            let mut count = 0;
+            let mut curr_id = self.current_keyframe_id;
+            while count <= 3 {
+                if curr_id == 0 {
+                    break;
+                }
+                if lock.has_keyframe(curr_id) {
+                    local_keyframes.insert(curr_id);
+                    count += 1;
+                }
+                curr_id -= 1;
+            }
+            local_keyframes
+        };
+        // println!("Local keyframes: {:?}", local_keyframes);
+        let mut local_mappoints = BTreeSet::new();
+        for kf_id in local_keyframes.iter() {
+            let kf = lock.get_keyframe(*kf_id);
+            let mp_ids = kf.get_mp_matches();
+            for item in mp_ids {
+                if let Some((mp_id, _)) = item {
+                    local_mappoints.insert(*mp_id);
+                }
+            }
+        }
+
+        let mut track_in_view = HashMap::new();
+        let mut track_in_view_r = HashMap::new();
+
+        for mp_id in &local_mappoints {
+            let mp = lock.mappoints.get(mp_id).unwrap();
+            // Project (this fills MapPoint variables for matching)
+            let (tracked_data_left, tracked_data_right) = frame.is_in_frustum(mp, 0.5);
+
+            if tracked_data_left.is_some() || tracked_data_right.is_some() {
+                lock.mappoints.get(&mp_id).unwrap().increase_visible(1);
+            }
+            if let Some(d) = tracked_data_left {
+                track_in_view.insert(*mp_id, d);
+            } else {
+                track_in_view.remove(mp_id);
+            }
+            if let Some(d) = tracked_data_right {
+                track_in_view_r.insert(*mp_id, d);
+            } else {
+                track_in_view_r.remove(mp_id);
+            }
+        }
+
+        let (_non_tracked_points, matches) = FEATURE_MATCHING_MODULE.search_by_projection(
+            frame,
+            &mut local_mappoints,
+            6, 0.8,
+            &track_in_view, &track_in_view_r,
+            &self.map, self.sensor
+        )?;
+
+        println!("Track in view: {:?}", track_in_view.len());
+        println!("Matches in local mapping: {}/{}.", matches, local_mappoints.len());
+
+        // let last_kf = lock.get_keyframe(self.current_keyframe_id - 1);
+
+        // for (feature_id, idx_in_frame) in curr_kf_features_map {
+        //     let index_in_prev_frame = self.prev_kf_features_map.get(feature_id).unwrap();
+        //     println!("Index in curr frame: {}, index in prev frame: {}", idx_in_frame, index_in_prev_frame);
+
+        //     let (mp_id, _is_outlier) = last_kf.get_mp_match(&(*index_in_prev_frame as u32)).unwrap();
+        //     // frame.mappoint_matches.add(*idx_in_frame as u32, mp_id, false);
+        // }
+        Ok(track_in_view.iter().map(|(k, v)| (*k, v.track_depth)).collect())
     }
 
 
@@ -198,11 +270,6 @@ impl LocalMappingGTSAM {
 
         // Triangulate new MapPoints
         let mps_created = self.create_new_mappoints()?;
-
-        self.system.find_actor(TRACKING_BACKEND).send(Box::new(
-            LastKeyFrameUpdatedMsg{map_version: self.map.get_version()}
-        )).unwrap();
-
 
         if self.system.queue_len() < 1 {
             // Abort additional work if there are too many keyframes in the msg queue.

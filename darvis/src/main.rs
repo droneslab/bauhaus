@@ -42,12 +42,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let dataset_config_file = args[3].to_owned();
     let dataset_name = args[4].to_owned();
 
-    info!("Using dataset {:?}", dataset_name);
-
     // Load config, including custom settings and actor information
     let (actor_info, module_info, log_level) = load_config(&system_config_file, &dataset_config_file).expect("Could not load config");
 
     setup_logger(&log_level)?;
+    info!("Using dataset {:?}", dataset_name);
 
     let _client = tracy_client::Client::start();
     tracy_client::set_thread_name!("main");
@@ -95,7 +94,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if *shutdown_flag.lock().unwrap() { break; }
         tracy_client::frame_mark();
 
-        debug!("Read image {} at timestamp {}", image_path, timestamp);
+        // debug!("Read image {} at timestamp {}", image_path, timestamp);
 
         let mut image = image::read_image_file(&image_path);
         if SETTINGS.get::<bool>(CAMERA, "need_to_resize") {

@@ -27,6 +27,11 @@ impl FeatureExtractionModule for OpenCVExtractor {
     fn extract_amount(&mut self, image: & Mat, max_features: i32, min_distance: f64) -> Result<(VectorOfPoint2f), Box<dyn std::error::Error>> {
         todo!("Not implemented")
     }
+
+    fn extract_with_existing_points(&mut self, image : &Mat, points : &VectorOfPoint2f) -> Result<(DVVectorOfKeyPoint, DVMatrix), Box<dyn std::error::Error>> {
+        todo!("Not implemented!")
+    }
+
 }
 
 impl OpenCVExtractor {

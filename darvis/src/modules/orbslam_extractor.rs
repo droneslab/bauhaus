@@ -25,8 +25,21 @@ impl FeatureExtractionModule for ORBExtractor {
         Ok((DVVectorOfKeyPoint::new(keypoints.kp_ptr.kp_ptr), DVMatrix::new(descriptors.mat_ptr.mat_ptr)))
     }
 
-    fn extract_amount(&mut self, image: & Mat, max_features: i32, min_distance: f64) -> Result<(VectorOfPoint2f), Box<dyn std::error::Error>> {
-        todo!("Not implemented")
+    fn extract_amount(&mut self, image : &Mat, max_features : i32, min_distance : f64) -> Result<(VectorOfPoint2f), Box<dyn std::error::Error>>{
+        todo !("Not implemented")}
+
+    fn extract_with_existing_points(&mut self, image : &Mat, points : &VectorOfPoint2f) -> Result<(DVVectorOfKeyPoint, DVMatrix), Box<dyn std::error::Error>> {
+
+        let image_dv: dvos3binding::ffi::WrapBindCVMat = (&DVMatrix::new(image.clone())).into();
+        let mut descriptors: dvos3binding::ffi::WrapBindCVMat = (&DVMatrix::default()).into();
+        let mut keypoints: dvos3binding::ffi::WrapBindCVKeyPoints = DVVectorOfKeyPoint::empty().into();
+        let mut points : dvos3binding::ffi::BindCVVectorOfPoint2f = dvos3binding::ffi::BindCVVectorOfPoint2f{
+            vec_ptr : points.clone()
+        };
+
+        let num_extracted = self.extractor.pin_mut().extract_with_existing_points(&image_dv, &points, &mut keypoints, &mut descriptors);
+
+        Ok((DVVectorOfKeyPoint::new(keypoints.kp_ptr.kp_ptr), DVMatrix::new(descriptors.mat_ptr.mat_ptr)))
     }
 }
 

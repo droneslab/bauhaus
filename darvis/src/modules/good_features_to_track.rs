@@ -33,6 +33,10 @@ impl FeatureExtractionModule for GoodFeaturesExtractor {
 
         Ok(corners)
     }
+
+    fn extract_with_existing_points(&mut self, image : &Mat, points : &VectorOfPoint2f) -> Result<(DVVectorOfKeyPoint, DVMatrix), Box<dyn std::error::Error>> {
+        todo !("Not implemented!")
+    }
 }
 
 impl GoodFeaturesExtractor {

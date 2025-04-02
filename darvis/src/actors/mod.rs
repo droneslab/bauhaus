@@ -8,7 +8,7 @@ pub mod tracking_backend_gtsam;
 pub mod tracking_frontend_gtsam;
 pub mod local_mapping_gtsam;
 
-// Darvis-defined actors
+// Bauhaus-defined actors
 pub mod visualizer;
 pub mod shutdown; // handles CTRL+C
 

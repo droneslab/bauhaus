@@ -91,8 +91,6 @@ impl MapInitialization {
                 return Ok(false);
             }
 
-            println!("MONO INIT... initial frame matches {}, current frame matches {}", self.initial_frame.as_ref().unwrap().features.num_keypoints, self.current_frame.as_ref().unwrap().features.num_keypoints);
-
             // Find correspondences
             let (mut num_matches, mp_matches) = FEATURE_MATCHING_MODULE.search_for_initialization(
                 &self.initial_frame.as_ref().unwrap(), 
@@ -102,18 +100,14 @@ impl MapInitialization {
             );
             self.mp_matches = mp_matches;
 
-            // println!("Initialization matches: {}", num_matches);
-            // for i in 0..self.mp_matches.len() {
-            //     print!("{}, ", self.mp_matches[i]);
-            // }
-            // println!();
-
             // Check if there are enough correspondences
             if num_matches < 100 {
                 println!("QUIT: Matches too low... {} matches, {} prev_matched, initial frame id {}, current frame id {}", num_matches, self.prev_matched.len(), self.initial_frame.as_ref().unwrap().frame_id, current_frame.frame_id);
                 self.ready_to_initialize = false;
                 return Ok(false);
             };
+
+            println!("Matches... {} matches, {} prev_matched, initial frame id {}, current frame id {}", num_matches, self.prev_matched.len(), self.initial_frame.as_ref().unwrap().frame_id, current_frame.frame_id);
 
             if let Some((tcw, v_p3d, vb_triangulated)) = CAMERA_MODULE.two_view_reconstruction(
                 self.initial_frame.as_ref().unwrap().features.get_all_keypoints(),
@@ -131,8 +125,6 @@ impl MapInitialization {
 
                 self.initial_frame.as_mut().unwrap().pose = Some(Pose::default());
                 self.current_frame.as_mut().unwrap().pose = Some(tcw);
-
-                println!("Map initialization... after reconstruct with two views, current frame pose is {:?}", tcw);
 
                 return Ok(true);
             } else {
@@ -199,8 +191,6 @@ impl MapInitialization {
                 );
             }
             info!("Monocular initialization created new map with {} mappoints", count);
-
-            debug!("SOFIYA FEATURES. After init, frame has N {}, features {}, mappoint matches {}", lock.get_keyframe(curr_kf_id).features.num_keypoints, lock.get_keyframe(curr_kf_id).features.get_all_keypoints().len(), lock.get_keyframe(curr_kf_id).get_mp_matches().len());
 
             // Update Connections
             lock.update_connections(initial_kf_id);
@@ -301,7 +291,7 @@ impl MapInitialization {
             (curr_kf_pose, relevant_mappoints, curr_kf_timestamp)
         };
 
-
+        println!("After initialization, pose is {:?}", curr_kf_pose);
         Ok(Some((curr_kf_pose, curr_kf_id, initial_kf_id, relevant_mappoints, curr_kf_timestamp, inverse_median_depth)))
     }
 

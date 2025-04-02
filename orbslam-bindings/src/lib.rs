@@ -198,6 +198,14 @@ pub mod ffi {
             overlap_begin: i32,
             overlap_end: i32,
         ) -> UniquePtr<ORBextractor>;
+        #[rust_name = "extract_with_existing_points"]
+        fn extract_with_existing_points_rust(
+            self: Pin<&mut ORBextractor>,
+            image: &WrapBindCVMat,
+            points: &BindCVVectorOfPoint2f,
+            keypoints: &mut WrapBindCVKeyPoints,
+            descriptors: &mut WrapBindCVMat
+        ) -> i32;
         #[rust_name = "extract"]
         fn extract_rust(
             self: Pin<&mut ORBextractor>,

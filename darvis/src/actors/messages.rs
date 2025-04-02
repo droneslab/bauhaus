@@ -5,10 +5,10 @@ use core::{
     matrix::{ DVMatrix, DVVectorOfKeyPoint}, system::{ActorMessage, Timestamp},
 };
 use crate::{
+    actors::tracking_frontend_gtsam::{TrackedFeatures, TrackedFeaturesIndexMap},
     actors::tracking_backend::TrackingState, map::{frame::Frame, map::Id, pose::Pose}, modules::imu::{ImuBias, ImuMeasurements}
 };
 
-use super::tracking_frontend_gtsam::PreintegratedCombinedMeasurementsResults;
 
 pub struct Reset {
     pub map_version: u64
@@ -47,7 +47,8 @@ pub struct FeatureTracksAndIMUMsg {
     pub frame: Frame,
     // pub preintegration_results: PreintegratedCombinedMeasurementsResults,
     pub imu_measurements: ImuMeasurements,
-    pub feature_ids: Vec<i32>,
+    pub feature_tracks: TrackedFeatures,
+    // pub curr_kf_features_map: TrackedFeaturesIndexMap,
 }
 impl ActorMessage for FeatureTracksAndIMUMsg {
     fn get_map_version(&self) -> u64 {
@@ -105,6 +106,16 @@ impl ActorMessage for InitKeyFrameMsg {
         self.map_version
     }
 }
+pub struct InitKeyFrameMsgGTSAM { 
+    pub kf_id: Id,
+    pub map_version: u64,
+    pub curr_kf_features_map: TrackedFeaturesIndexMap
+}
+impl ActorMessage for InitKeyFrameMsgGTSAM {
+    fn get_map_version(&self) -> u64 {
+        self.map_version
+    }
+}
 
 pub struct LastKeyFrameUpdatedMsg {
     pub map_version: u64
@@ -144,9 +155,10 @@ impl ActorMessage for NewKeyFrameMsg {
 
 pub struct NewKeyFrameGTSAMMsg {
     pub keyframe: Frame,
-    pub feature_tracks: Vec<i32>,
     pub tracking_state: TrackingState,
-    pub tracked_mappoint_depths: HashMap<Id, f64>,
+    // pub tracked_mappoint_depths: HashMap<Id, f64>,
+    // pub feature_tracks: TrackedFeatures,
+    // pub curr_kf_features_map: TrackedFeaturesIndexMap,
     pub map_version: u64
 }
 impl ActorMessage for NewKeyFrameGTSAMMsg {

@@ -446,7 +446,7 @@ public:
         return _jacobianOplusXi.transpose()*information()*_jacobianOplusXi;
     }
 
-    // Darvis
+    // Bauhaus
     std::array<std::array<double, 6>, 6> GetHessianRust() {
         Eigen::Matrix<double,6,6> hessian = GetHessian();
         std::array<std::array<double,6>, 6> raw_data;
@@ -455,7 +455,7 @@ public:
     }
 
 
-  void set_robust_kernel(bool reset, float delta); // Darvis
+  void set_robust_kernel(bool reset, float delta); // Bauhaus
 
 public:
     const Eigen::Vector3d Xw;

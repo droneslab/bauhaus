@@ -39,11 +39,11 @@ modules:
         settings:
           - 
             name: max_features
-            value: 1000
+            value: 1000 #1000 in euroc, 2000 in kitti
             type: i32
           - 
             name: ini_features
-            value: 5000
+            value: 5000 # 5000 in euroc, 10000 in kitti
             type: i32
           - 
             name: scale_factor
@@ -149,7 +149,7 @@ actors:
        receiver_bound: 10
        settings:
           - name: mask_thresh
-            value: 0.1
+            value: 0.5
             type: f64
           - 
             name: max_features # max feature number in feature tracking
@@ -161,7 +161,7 @@ actors:
             type: f64
           - 
             name: min_num_features
-            value: 300
+            value: 100
             type: i32
           - 
             name: min_frames_to_insert_kf
@@ -179,12 +179,12 @@ actors:
        settings:
           - 
 
-      # -
-      #  name: LOCAL_MAPPING
-      #  tag: "gtsam local mapping"
-      #  receiver_bound: 3
-      #  settings:
-      #     - 
+      -
+       name: LOCAL_MAPPING
+       tag: "gtsam local mapping"
+       receiver_bound: 3
+       settings:
+          - 
 
       # -
       #  name: LOOP_CLOSING

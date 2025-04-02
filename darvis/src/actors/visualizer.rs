@@ -27,7 +27,7 @@ static MAPPOINT_LOCAL_COLOR: Color = Color { r: 0.0, g: 0.0, b: 1.0, a: 1.0 };
 static MAPPOINT_SIZE: Vector3 = Vector3 {  x: 0.01, y: 0.01, z: 0.01 };
 static MAPPOINT_LARGE_SIZE: Vector3 = Vector3 { x: 0.1, y: 0.1, z: 0.1 };
 
-static TRACKING_TRAJECTORY_COLOR: Color = Color { r: 0.0, g: 1.0, b: 1.0, a: 1.0 };
+static TRACKING_TRAJECTORY_COLOR: Color = Color { r: 0.0, g: 0.8, b: 0.8, a: 1.0 };
 
 enum ImageDrawType {
     NONE,
@@ -158,10 +158,10 @@ impl DarvisVisualizer {
             self.update_draw_image_with_matches(*msg).await;
         } else if message.is::<VisTrajectoryMsg>() {
             let msg = message.downcast::<VisTrajectoryMsg>().unwrap_or_else(|_| panic!("Could not downcast visualizer message!"));
-            self.update_draw_map(*msg).await;
+            self.update_draw_map(*msg).await?;
         } else if message.is::<VisTrajectoryTrackingMsg>() {
             let msg = message.downcast::<VisTrajectoryTrackingMsg>().unwrap_or_else(|_| panic!("Could not downcast visualizer message!"));
-            self.draw_trajectory_tracking(msg.pose, msg.timestamp).await;
+            self.draw_frame_trajectory(msg.pose, msg.timestamp).await?;
         } else if message.is::<LoopClosureMapPointFusionMsg>() {
             let msg = message.downcast::<LoopClosureMapPointFusionMsg>().unwrap_or_else(|_| panic!("Could not downcast visualizer message!"));
             self.update_loop_closure_mappoint_fusion(*msg).await?;
@@ -366,13 +366,13 @@ impl DarvisVisualizer {
         };
     }
 
-    async fn update_draw_map(&mut self, msg: VisTrajectoryMsg) {
-        self.draw_trajectory(msg.pose, msg.timestamp, SETTINGS.get::<bool>(VISUALIZER, "draw_graph")).await;
+    async fn update_draw_map(&mut self, msg: VisTrajectoryMsg) -> Result<(), Box<dyn std::error::Error>> {
+        self.draw_trajectory(msg.pose, msg.timestamp, SETTINGS.get::<bool>(VISUALIZER, "draw_graph")).await?;
 
-        self.plot_map_info(&msg.mappoint_matches, msg.timestamp).await;
+        self.plot_map_info(&msg.mappoint_matches, msg.timestamp).await?;
 
         if !SETTINGS.get::<bool>(VISUALIZER, "draw_only_trajectory") {
-            self.draw_mappoints(&msg.mappoints_in_tracking, &msg.mappoint_matches, msg.timestamp).await;
+            self.draw_mappoints(&msg.mappoints_in_tracking, &msg.mappoint_matches, msg.timestamp).await?;
         }
 
         // if SETTINGS.get::<bool>(VISUALIZER, "draw_graph") {
@@ -380,12 +380,14 @@ impl DarvisVisualizer {
         // }
         self.current_update_id += 1;
         self.prev_pose = msg.pose.into();
+        Ok(())
     }
 
-    async fn draw_trajectory_tracking(&mut self, frame_pose: Pose, timestamp: Timestamp) -> Result<(), Box<dyn std::error::Error>> {
-        // debug!("Drawing trajectory at timestamp {} with pose {:?}", timestamp, frame_pose.inverse());
+    async fn draw_frame_trajectory(&mut self, frame_pose: Pose, timestamp: Timestamp) -> Result<(), Box<dyn std::error::Error>> {
+        // Instead of the regular draw_trajectory, which draws the current frame pose and all previous keyframes,
+        // this function draws only the trajectory of reported current frame poses
 
-        let mut entities_traj = vec![]; // keyframes, frames, and trajectory
+        let mut entities_traj = vec![];
         let inverse_frame_pose = frame_pose.inverse();
 
         // Draw current pose
@@ -400,18 +402,16 @@ impl DarvisVisualizer {
             )
         );
 
-        // // Write transform from world to camera
-        // let trans = inverse_frame_pose.get_translation();
-        // let rot = inverse_frame_pose.get_quaternion();
-        // let transform = FrameTransform {
-        //     timestamp: Some(prost_types::Timestamp { seconds: 0,  nanos: 0 }),
-        //     parent_frame_id: "world".to_string(),
-        //     child_frame_id: "camera".to_string(),
-        //     translation: Some(Vector3{ x: trans[0], y: trans[1], z: trans[2] }),
-        //     rotation: Some(Quaternion { x: rot[0], y: rot[1], z: rot[2], w: rot[3] }),
-
-        // };
-        // self.writer.write(TRANSFORM_CHANNEL, transform, timestamp, 0).await.expect("Could not write transform");
+        // Draw line from current pose to previous pose
+        let points = vec![self.prev_pose.clone(), inverse_frame_pose.into()];
+        self.create_scene_entity(
+            timestamp,
+            "world",
+            format!("line {}", timestamp),
+            vec![],
+            vec![self.create_line(points, TRAJECTORY_COLOR.clone(), 3.0),], 
+            vec![]
+        );
 
         debug!("SOFIYA TRAJ: FOR TIMESTAMP {}, VISUALIZER POSE IS {:?}", timestamp, inverse_frame_pose);
 
@@ -422,6 +422,8 @@ impl DarvisVisualizer {
 
         self.writer.write(TRACKING_TRAJECTORY_CHANNEL, sceneupdate, timestamp, 0).await.expect("Could not write trajectory to foxglove");
 
+
+        self.prev_pose = frame_pose.into();
 
         Ok(())
     }

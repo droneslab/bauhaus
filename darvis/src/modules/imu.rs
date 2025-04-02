@@ -261,8 +261,6 @@ impl ImuModule for IMU {
                 let mut lock = map.write()?;
                 lock.get_keyframe_mut(*kf_id).imu_data.velocity = Some(velocity);
                 lock.get_keyframe_mut(prev_kf_id).imu_data.velocity = Some(velocity);
-
-                debug!("KF {} velocity: {:?}", kf_id, velocity);
             }
 
             dir_g = dir_g / dir_g.norm();

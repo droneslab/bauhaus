@@ -473,7 +473,6 @@ impl TrackingBackend {
         &mut self, created_new_kf: bool
     ) -> Result<(), Box<dyn std::error::Error>> {
         // Store frame pose information to retrieve the complete camera trajectory afterwards.
-        let last_frame = self.last_frame.as_ref().expect("No last frame in tracking?");
 
         let relative_pose = {
             let ref_kf_pose = if created_new_kf {
@@ -484,19 +483,13 @@ impl TrackingBackend {
                 // implementation). The way we have it now, we are always one reference keyframe behind because local mapping
                 // will insert the kf in the middle of the tracking thread loop, and then tracking will only know about it in
                 // the next iteration.
-                last_frame.pose.unwrap()
+                self.current_frame.pose.unwrap()
             } else {
                 let map = self.map.read()?;
                 let ref_kf = map.get_keyframe(self.ref_kf_id.unwrap());
                 ref_kf.get_pose()
             };
-
-
-            // println!("Camera trajectory: ref kf pose: {:?}", ref_kf_pose);
-            // println!("Ref kf: {:?}", self.ref_kf_id.unwrap());
-            // println!("Current pose: {:?}", last_frame.pose.unwrap());
-
-            last_frame.pose.unwrap() * ref_kf_pose.inverse()
+            self.current_frame.pose.unwrap() * ref_kf_pose.inverse()
         };
         self.trajectory_poses.push(relative_pose);
 
@@ -508,8 +501,8 @@ impl TrackingBackend {
             SHUTDOWN_ACTOR, 
             Box::new(TrajectoryMsg{
                 pose: relative_pose,
-                ref_kf_id: last_frame.ref_kf_id.unwrap(),
-                timestamp: last_frame.timestamp,
+                ref_kf_id: self.current_frame.ref_kf_id.unwrap(),
+                timestamp: self.current_frame.timestamp,
                 map_version: self.map.read()?.version
             })
         );
@@ -1454,22 +1447,6 @@ impl TrackingBackend {
                 ),
                 vwb1 + gz * t12 + rwb1 * delta_vel
             );
-            // 11/14 sofiya look here next... this is similar code to predict state imu and also gives slightly large translations
-            // println!("IMU: Updateframeimu, last frame diff translation: {:?}", last_frame.pose.unwrap().get_translation().metric_distance(&last_trans));
-            // println!("IMU: Updateframeimu, last frame new translation: {:?}", last_frame.pose.unwrap().get_translation());
-            // println!("IMU: Updateframeimu, last frame old translation: {:?}", last_trans);
-
-            // println!("delta rot = {:?}", delta_rot);
-            // println!("rwb1 = {:?}", rwb1);
-
-            // println!("last_rot = {:?}", last_rot);
-            // println!("last trans = {:?}", last_trans);
-            // println!("delta pos = {:?}", delta_pos);
-            // println!("delta vel = {:?}", delta_vel);
-            // println!("twb1 = {:?}", twb1);
-            // println!("vwb1 = {:?}", vwb1);
-            // println!("t12 = {:?}", t12);
-
         }
 
         if self.current_frame.imu_data.imu_preintegrated.is_some() {

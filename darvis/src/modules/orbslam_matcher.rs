@@ -420,6 +420,7 @@ impl SearchForInitializationTrait for ORBMatcher {
             );
 
             if v_indices2.is_empty() {
+                println!("v_indices2 is empty");
                 continue;
             }
 
@@ -505,6 +506,10 @@ impl FeatureMatchingModule for ORBMatcher {
         let map = map.read()?;
         let mut local_mps_to_remove = vec![];
 
+        let mut debug_track_depth = 0;
+        let mut debug_level = 0;
+
+
         for mp_id in &*mappoints {
             let mp = match map.mappoints.get(&mp_id) {
                 Some(mp) => mp,
@@ -516,6 +521,7 @@ impl FeatureMatchingModule for ORBMatcher {
             };
             if let Some(mp_data) = track_in_view.get(&mp_id) {
                 if mp_data.track_depth > far_points_th {
+                    debug_track_depth+=1;
                     continue;
                 }
 
@@ -581,6 +587,7 @@ impl FeatureMatchingModule for ORBMatcher {
                     // Apply ratio to second match (only if best and second are in the same scale level)
                     if best_dist <= self.high_threshold {
                         if best_level == best_level2 && (best_dist as f64) > (ratio * best_dist2 as f64) {
+                            debug_level += 1;
                             continue;
                         }
                         if best_level != best_level2 || (best_dist as f64) <= (ratio * best_dist2 as f64) {
@@ -676,7 +683,7 @@ impl FeatureMatchingModule for ORBMatcher {
                 // }
             }
         }
-            // debug!("Indices empty: {}, level1: {}, level2: {}, track_in_view_c: {}", indices_empty, level, level2, track_in_view_c);
+        // debug!("debug_track_depth: {}, debug_level: {}", debug_track_depth, debug_level);
 
         mappoints.retain(|mp_id| !local_mps_to_remove.contains(&mp_id));
         return Ok((non_tracked_points, num_matches));

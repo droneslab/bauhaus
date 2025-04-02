@@ -57,11 +57,15 @@ public:
     // ORB are dispersed on the image using an octree.
     // Mask is ignored in the current implementation.
     int extract_rust(const orb_slam3::WrapBindCVMat & image, orb_slam3::WrapBindCVKeyPoints & keypoints, orb_slam3::WrapBindCVMat & descriptors);
+    int extract_with_existing_points_rust(const orb_slam3::WrapBindCVMat &image,
+                                          const orb_slam3::BindCVVectorOfPoint2f &points,
+                                          orb_slam3::WrapBindCVKeyPoints &keypoints,
+                                          orb_slam3::WrapBindCVMat &descriptors);
     int extract2(orb_slam3::WrapBindCVKeyPoints & keypoints, orb_slam3::WrapBindCVMat & descriptors);
     int extract(cv::InputArray _image, cv::InputArray _mask,
                     std::vector<cv::KeyPoint>& _keypoints,
-                    cv::OutputArray _descriptors, std::vector<int> &vLappingArea);
-
+                    cv::OutputArray _descriptors, std::vector<int> &vLappingArea,
+                    const std::vector<cv::KeyPoint> & existing_keypoints=std::vector<cv::KeyPoint>());
 
     int inline GetLevels(){
         return nlevels;}
@@ -90,7 +94,9 @@ public:
 protected:
 
     void ComputePyramid(cv::Mat image);
-    void ComputeKeyPointsOctTree(std::vector<std::vector<cv::KeyPoint> >& allKeypoints);    
+    void ComputeKeyPointsOctTree(
+        std::vector<std::vector<cv::KeyPoint>> &allKeypoints,
+        const std::vector<cv::KeyPoint> &existing_keypoints = std::vector<cv::KeyPoint>());
     std::vector<cv::KeyPoint> DistributeOctTree(const std::vector<cv::KeyPoint>& vToDistributeKeys, const int &minX,
                                            const int &maxX, const int &minY, const int &maxY, const int &nFeatures, const int &level);
 

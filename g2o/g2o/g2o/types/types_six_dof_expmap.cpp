@@ -434,7 +434,7 @@ void EdgeStereoSE3ProjectXYZOnlyPose::linearizeOplus() {
 
 void EdgeSE3ProjectXYZOnlyPose::set_robust_kernel(bool reset, float delta)
 {
-    // Darvis
+    // Bauhaus
     // Note: setRobustKernel takes a RobustKernelHuber pointer
     // ORBSLAM3 usually does this but occasionally passes in a 0 instead
     // Here is an alternative implementation that takes a boolean:

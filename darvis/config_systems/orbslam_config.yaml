@@ -13,7 +13,7 @@ system:
       first_actor_name: TRACKING_FRONTEND # Name of actor to kick off pipeline
 
       # FPS
-      fps: 20.0
+      fps: 10.0
 
       # RESULTS
       results_folder: "results"
@@ -33,11 +33,11 @@ modules:
         settings:
           - 
             name: max_features
-            value: 1000
+            value: 1000 #1000 in euroc, 2000 in kitti
             type: i32
           - 
             name: ini_features
-            value: 5000
+            value: 5000 # 5000 in euroc, 10000 in kitti
             type: i32
           - 
             name: scale_factor
