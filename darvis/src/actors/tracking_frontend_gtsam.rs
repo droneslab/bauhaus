@@ -420,6 +420,39 @@ impl TrackingFrontendGTSAM {
 
         Ok(Pose::new(recover_t,recover_r))
     }
+
+    // fn reset_active_map(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    //     println !("Reset active map!!!!!");
+
+    //     self.map.write() ?.reset_active_map();
+
+    //     self.initialization = Some(MapInitialization::new ());
+    //     self.state = TrackingState::NotInitialized;
+    //     self.ref_kf_id = None;
+
+    //     self.frames_since_last_kf = 0;
+    //     self.last_kf_timestamp = None;
+    //     self.matches_inliers = 0;
+    //     self.local_keyframes = BTreeSet::new ();
+    //     self.local_mappoints = BTreeSet::new ();
+    //     self.track_in_view = HashMap::new ();
+    //     self.track_in_view_r = HashMap::new ();
+    //     self.kf_track_reference_for_frame = HashMap::new ();
+    //     self.mp_track_reference_for_frame = HashMap::new ();
+    //     self.last_frame_seen = HashMap::new ();
+    //     self.relocalization = Relocalization{last_reloc_frame_id : 0, timestamp_lost : None};
+    //     self.map_updated = false;
+    //     self.last_map_change_index = 0;
+    //     self.trajectory_poses = Vec::new ();
+    //     self.non_tracked_mappoints = HashMap::new ();
+    //     self.imu.reset();
+
+    //     tracy_client::Client::running()
+    //         .expect("message! without a running Client")
+    //         .message("Reset active map", 2);
+
+    //     Ok(())
+    // }
 }
 
 
