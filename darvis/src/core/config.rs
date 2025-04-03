@@ -12,7 +12,6 @@
 use std::{collections::HashMap, sync::RwLock};
 use lazy_static::*;
 use linked_hash_map::LinkedHashMap;
-use log::info;
 
 use std::fs::File;
 use std::io::Read;
@@ -190,12 +189,12 @@ pub struct ModuleConf{
 }
 
 pub fn load_config(system_fn: &String, camera_fn: &String) -> Result<(Vec<ActorConf>, Vec<ModuleConf>, String), Box<dyn std::error::Error>> {
-    info!("Configs... System: {}, Camera: {}", system_fn, camera_fn);
+    println!("Configs... System: {}, Camera: {}", system_fn, camera_fn);
 
-    let (actor_info, mut module_info, log_level) = load_system_settings(system_fn);
-    load_camera_settings(camera_fn, &mut module_info);
+    let (actor_println, mut module_println, log_level) = load_system_settings(system_fn);
+    load_camera_settings(camera_fn, &mut module_println);
 
-    Ok((actor_info, module_info, log_level))
+    Ok((actor_println, module_println, log_level))
 }
 
 fn load_system_settings(system_fn: &String) -> (Vec<ActorConf>, Vec<ModuleConf>, String) {
@@ -205,7 +204,7 @@ fn load_system_settings(system_fn: &String) -> (Vec<ActorConf>, Vec<ModuleConf>,
     f.read_to_string(&mut config_string).unwrap();
     let yaml_document = &yaml::YamlLoader::load_from_str(&config_string).unwrap()[0];
 
-    info!("SYSTEM SETTINGS");
+    println!("SYSTEM SETTINGS");
 
     // Load additional custom settings from config file
     let system_settings = &yaml::YamlLoader::load_from_str(&config_string).unwrap()[0]["system"];
@@ -218,6 +217,10 @@ fn load_system_settings(system_fn: &String) -> (Vec<ActorConf>, Vec<ModuleConf>,
     add_setting_f64(SYSTEM, "fps", &system_settings["fps"]);
     add_setting_bool(SYSTEM, "check_deadlocks", &system_settings["check_deadlocks"]);
     let log_level = system_settings["log_level"].as_str().unwrap().to_owned();
+
+    // Values from Kimera-style pipeline
+    add_setting_i32(SYSTEM, "initial_k", &system_settings["initial_k"]);
+    add_setting_i32(SYSTEM, "final_k", &system_settings["final_k"]);
 
     // Load sensor settings
     let framesensor = match system_settings["framesensor"].as_str().unwrap() {
@@ -233,10 +236,10 @@ fn load_system_settings(system_fn: &String) -> (Vec<ActorConf>, Vec<ModuleConf>,
     };
     let sensor = Sensor(framesensor, imusensor);
     SETTINGS.insert(SYSTEM, "sensor", sensor);
-    info!("\t {} = {}", "SENSOR", sensor);
+    println!("\t {} = {}", "SENSOR", sensor);
 
     // Load actors
-    let mut actor_info = Vec::<ActorConf>::new();
+    let mut actor_println = Vec::<ActorConf>::new();
     for actor in yaml_document["actors"].as_vec().unwrap() {
         let h = &actor.as_hash().unwrap();
 
@@ -249,13 +252,13 @@ fn load_system_settings(system_fn: &String) -> (Vec<ActorConf>, Vec<ModuleConf>,
             }
         };
 
-        actor_info.push(a_conf.clone());
+        actor_println.push(a_conf.clone());
 
         add_settings(get_val(h, "settings").as_vec().unwrap(), &a_conf.name);
     }
 
     // Load modules
-    let mut module_info = Vec::<ModuleConf>::new();
+    let mut module_println = Vec::<ModuleConf>::new();
     for module in yaml_document["modules"].as_vec().unwrap() {
         let h = module.as_hash().unwrap();
         let m_conf = ModuleConf {
@@ -266,18 +269,18 @@ fn load_system_settings(system_fn: &String) -> (Vec<ActorConf>, Vec<ModuleConf>,
         SETTINGS.insert(&m_conf.name, "module_tag", m_conf.tag.clone());
 
         add_settings(get_val(h, "settings").as_vec().unwrap(), &m_conf.name);
-        module_info.push(m_conf);
+        module_println.push(m_conf);
     }
 
-    (actor_info, module_info, log_level)
+    (actor_println, module_println, log_level)
 }
 
-fn load_camera_settings(camera_fn: &String, module_info: &mut Vec<ModuleConf>) {
+fn load_camera_settings(camera_fn: &String, module_println: &mut Vec<ModuleConf>) {
     let mut config_string = String::new();
     let mut f = File::open(camera_fn).unwrap();
     f.read_to_string(&mut config_string).unwrap();
 
-    info!("CAMERA SETTINGS");
+    println!("CAMERA SETTINGS");
 
     // Load additional custom settings from config file
     let yaml_document = &yaml::YamlLoader::load_from_str(&config_string).unwrap()[0];
@@ -307,9 +310,9 @@ fn load_camera_settings(camera_fn: &String, module_info: &mut Vec<ModuleConf>) {
         },
         Sensor(FrameSensor::Mono, _) => {
             SETTINGS.insert(&"CAMERA", &"stereo_baseline_times_fx", 0.0);
-            info!("\t {} {} = {}", "CAMERA", "stereo_baseline_times_fx", 0.0);
+            println!("\t {} {} = {}", "CAMERA", "stereo_baseline_times_fx", 0.0);
             SETTINGS.insert(&"CAMERA", &"thdepth", 0);
-            info!("\t {} {} = {}", "CAMERA", "thdepth", 0);
+            println!("\t {} {} = {}", "CAMERA", "thdepth", 0);
 
         }
     }
@@ -337,8 +340,7 @@ fn load_camera_settings(camera_fn: &String, module_info: &mut Vec<ModuleConf>) {
         SETTINGS.insert(&"CAMERA", &"need_to_resize", false);
     }
 
-
-    // Not all datasets have imu information, but that only matters if imu is used
+    // Not all datasets have imu printlnrmation, but that only matters if imu is used
     // match SETTINGS.get::<Sensor>(SYSTEM, "sensor").imu() {
     //     ImuSensor::Some => {
             add_setting_f64("IMU", "noise_gyro", &yaml_document["imu__noise_gyro"]);
@@ -351,15 +353,25 @@ fn load_camera_settings(camera_fn: &String, module_info: &mut Vec<ModuleConf>) {
     //     _ => {}
     // };
 
-    // Add dataset name
-    add_setting_string("CAMERA", "dataset", &yaml_document["dataset"]);
+    // KIMERA
+    add_setting_f64("CAMERA", "imu_rate", &yaml_document["imu__frequency"]);
 
-    // Add camera module to module_info so it gets spawned
+    // Add dataset name
+    add_setting_f64("IMU", "initialPositionSigma", &yaml_document["initialPositionSigma"]);
+    add_setting_f64("IMU", "initialRollPitchSigma", &yaml_document["initialRollPitchSigma"]);
+    add_setting_f64("IMU", "initialYawSigma", &yaml_document["initialYawSigma"]);
+    add_setting_f64("IMU", "initialVelocitySigma", &yaml_document["initialVelocitySigma"]);
+    add_setting_f64("IMU", "initialAccBiasSigma", &yaml_document["initialAccBiasSigma"]);
+    add_setting_f64("IMU", "initialGyroBiasSigma", &yaml_document["initialGyroBiasSigma"]);
+    add_setting_f64("IMU", "imu_integration_sigma", &yaml_document["imu_integration_sigma"]);
+    add_setting_f64("IMU", "imu_bias_init_sigma", &yaml_document["imu_bias_init_sigma"]);
+
+    // Add camera module to module_println so it gets spawned
     let camera_module = ModuleConf {
         name: "CAMERA".to_string(),
         tag: "CAMERA".to_string(),
     };
-    module_info.push(camera_module);
+    module_println.push(camera_module);
 
 
 }
@@ -385,22 +397,22 @@ fn add_settings(settings: &Vec<Yaml>, namespace: &String) -> Option<()> {
 fn add_setting_bool(namespace: &str, key: &str, value: &Yaml) {
     let val = value.as_bool().unwrap();
     SETTINGS.insert(&namespace, &key, val);
-    info!("\t {} {} = {}", namespace, key, val);
+    println!("\t {} {} = {}", namespace, key, val);
 }
 fn add_setting_i32(namespace: &str, key: &str, value: &Yaml) {
     let val = value.as_i64().unwrap() as i32;
     SETTINGS.insert(&namespace, &key, val);
-    info!("\t {} {} = {}", namespace, key, val);
+    println!("\t {} {} = {}", namespace, key, val);
 }
 fn add_setting_f64(namespace: &str, key: &str, value: &Yaml) {
     let val = value.as_f64().unwrap();
     SETTINGS.insert(&namespace, &key, val);
-    info!("\t {} {} = {}", namespace, key, val);
+    println!("\t {} {} = {}", namespace, key, val);
 }
 fn add_setting_string(namespace: &str, key: &str, value: &Yaml) {
     let val = value.as_str().unwrap().to_string();
     SETTINGS.insert(&namespace, &key, val.clone());
-    info!("\t {} {} = {}", namespace, key, val);
+    println!("\t {} {} = {}", namespace, key, val);
 }
 fn add_setting_imu_matrix(namespace: &str, key: &str, matrix_rows: Vec<&Yaml>) {
     // TODO... this is so hacky ... doesn't accept different-sized matrixes than 4x4

@@ -281,51 +281,53 @@ impl LocalMappingGTSAM {
         // Additionally it will abort if a stop or reset is requested (stopRequested)
         let kfs_processed = self.map.read()?.num_keyframes();
         if kfs_processed > 2 && self.system.queue_len() < 1 {
-            match self.sensor.is_imu() {
-                true => {
-                    if self.map.read()?.imu_initialized {
-                        let rec_init = {
-                            let lock = self.map.read()?;
-                            let current_kf = lock.get_keyframe(self.current_keyframe_id);
-                            let previous_kf = lock.get_keyframe(current_kf.prev_kf_id.unwrap());
-                            let previous_previous_kf = lock.get_keyframe(previous_kf.prev_kf_id.unwrap());
-                            let dist = {
-                                let first = (*previous_kf.get_camera_center() - *current_kf.get_camera_center()).norm();
-                                let second = (*previous_previous_kf.get_camera_center() - *previous_kf.get_camera_center()).norm();
-                                first + second
-                            };
+            // SOFIYA TURN OFF IMU
+            // match self.sensor.is_imu() {
+            //     true => {
+            //         if self.map.read()?.imu_initialized {
+            //             let rec_init = {
+            //                 let lock = self.map.read()?;
+            //                 let current_kf = lock.get_keyframe(self.current_keyframe_id);
+            //                 let previous_kf = lock.get_keyframe(current_kf.prev_kf_id.unwrap());
+            //                 let previous_previous_kf = lock.get_keyframe(previous_kf.prev_kf_id.unwrap());
+            //                 let dist = {
+            //                     let first = (*previous_kf.get_camera_center() - *current_kf.get_camera_center()).norm();
+            //                     let second = (*previous_previous_kf.get_camera_center() - *previous_kf.get_camera_center()).norm();
+            //                     first + second
+            //                 };
 
-                            if dist > 0.05 {
-                                self.imu_module.as_mut().unwrap().timestamp_init += current_kf.timestamp - previous_kf.timestamp;
-                            }
-                            if !lock.imu_ba2 {
-                                if self.imu_module.as_ref().unwrap().timestamp_init < 10.0 && dist < 0.02 {
-                                    warn!("Not enough motion for IMU initialization. Resetting...");
-                                    return Ok(());
-                                    // todo!("Multi-maps");
-                                    // mbResetRequestedActiveMap = true;
-                                    // mpMapToReset = mpCurrentKeyFrame->GetMap();
-                                    // mbBadImu = true;
-                                }
-                            }
+            //                 if dist > 0.05 {
+            //                     self.imu_module.as_mut().unwrap().timestamp_init += current_kf.timestamp - previous_kf.timestamp;
+            //                 }
+            //                 if !lock.imu_ba2 {
+            //                     if self.imu_module.as_ref().unwrap().timestamp_init < 10.0 && dist < 0.02 {
+            //                         warn!("Not enough motion for IMU initialization. Resetting...");
+            //                         return Ok(());
+            //                         // todo!("Multi-maps");
+            //                         // mbResetRequestedActiveMap = true;
+            //                         // mpMapToReset = mpCurrentKeyFrame->GetMap();
+            //                         // mbBadImu = true;
+            //                     }
+            //                 }
 
-                            !lock.imu_ba2
-                        };
-                        let large = matches_in_tracking > 75 && self.sensor.is_mono() || matches_in_tracking > 100 && !self.sensor.is_mono();
+            //                 !lock.imu_ba2
+            //             };
+            //             let large = matches_in_tracking > 75 && self.sensor.is_mono() || matches_in_tracking > 100 && !self.sensor.is_mono();
 
-                        // Optimizer::LocalInertialBA(mpCurrentKeyFrame, &mbAbortBA, mpCurrentKeyFrame->GetMap(),num_FixedKF_BA,num_OptKF_BA,num_MPs_BA,num_edges_BA, bLarge, !mpCurrentKeyFrame->GetMap()->GetIniertialBA2());
-                        local_inertial_ba(&mut self.map, self.current_keyframe_id, large, rec_init, tracked_mappoint_depths, self.sensor)?;
+            //             // Optimizer::LocalInertialBA(mpCurrentKeyFrame, &mbAbortBA, mpCurrentKeyFrame->GetMap(),num_FixedKF_BA,num_OptKF_BA,num_MPs_BA,num_edges_BA, bLarge, !mpCurrentKeyFrame->GetMap()->GetIniertialBA2());
+            //             local_inertial_ba(&mut self.map, self.current_keyframe_id, large, rec_init, tracked_mappoint_depths, self.sensor)?;
 
-                    }
-                },
-                false => {
+            //         }
+            //     },
+            //     false => {
                     LOCAL_MAP_OPTIMIZATION_MODULE.optimize(&self.map, self.current_keyframe_id)?;
-                }
-            }
+            //     }
+            // }
         } else {
             warn!("Not running LBA. Either we just initialized the map or there are too many keyframes in the queue ({})", self.system.queue_len());
         }
 
+        // SOFIYA TURN OFF IMU
         // Initialize IMU
         if self.sensor.is_imu() && !self.map.read()?.imu_initialized {
             let (prior_g, prior_a, fiba) = match self.sensor.frame() {
@@ -341,36 +343,37 @@ impl LocalMappingGTSAM {
         // let kfs_culled = 0;
         // warn!("SOFIYA TURNED OFF KF CULLING");
 
-        if self.sensor.is_imu() && self.imu_module.as_ref().unwrap().timestamp_init < 50.0 && matches!(self.current_tracking_state, TrackingState::Ok) {
-            // Enter here everytime local-mapping is called
-            if self.imu_module.as_mut().unwrap().imu_ba1 {
-                if self.imu_module.as_ref().unwrap().timestamp_init > 5.0 {
-                    debug!("Start VIBA 1");
-                    self.imu_module.as_mut().unwrap().imu_ba1 = true;
-                    self.imu_module.as_mut().unwrap().initialize(&mut self.map, self.current_keyframe_id, 1.0, 1e5, true, Some(self.system.find_actor(TRACKING_BACKEND)))?;
-                }
-            } else if !self.map.read()?.imu_ba2 {
-                if self.imu_module.as_ref().unwrap().timestamp_init > 15.0 {
-                    debug!("Start VIBA 2");
-                    self.map.write()?.imu_ba2 = true;
-                    self.imu_module.as_mut().unwrap().initialize(&mut self.map, self.current_keyframe_id, 0.0, 0.0, true, Some(self.system.find_actor(TRACKING_BACKEND)))?;
-                }
-            }
+        // SOFIYA TURN OFF IMU
+        // if self.sensor.is_imu() && self.imu_module.as_ref().unwrap().timestamp_init < 50.0 && matches!(self.current_tracking_state, TrackingState::Ok) {
+        //     // Enter here everytime local-mapping is called
+        //     if self.imu_module.as_mut().unwrap().imu_ba1 {
+        //         if self.imu_module.as_ref().unwrap().timestamp_init > 5.0 {
+        //             debug!("Start VIBA 1");
+        //             self.imu_module.as_mut().unwrap().imu_ba1 = true;
+        //             self.imu_module.as_mut().unwrap().initialize(&mut self.map, self.current_keyframe_id, 1.0, 1e5, true, Some(self.system.find_actor(TRACKING_BACKEND)))?;
+        //         }
+        //     } else if !self.map.read()?.imu_ba2 {
+        //         if self.imu_module.as_ref().unwrap().timestamp_init > 15.0 {
+        //             debug!("Start VIBA 2");
+        //             self.map.write()?.imu_ba2 = true;
+        //             self.imu_module.as_mut().unwrap().initialize(&mut self.map, self.current_keyframe_id, 0.0, 0.0, true, Some(self.system.find_actor(TRACKING_BACKEND)))?;
+        //         }
+        //     }
 
-            // scale refinement
-            let timestamp_init = self.imu_module.as_ref().unwrap().timestamp_init;
-            if self.map.read()?.num_keyframes() <= 200 &&
-                (timestamp_init > 25.0 && timestamp_init < 25.5) ||
-                (timestamp_init > 35.0 && timestamp_init < 35.5) ||
-                (timestamp_init > 45.0 && timestamp_init < 45.5) ||
-                (timestamp_init > 55.0 && timestamp_init < 55.5) ||
-                (timestamp_init > 65.0 && timestamp_init < 65.5) ||
-                (timestamp_init > 75.0 && timestamp_init < 75.5) {
-                if self.sensor.is_mono() {
-                    self.scale_refinement()?;
-                }
-            }
-        }
+        //     // scale refinement
+        //     let timestamp_init = self.imu_module.as_ref().unwrap().timestamp_init;
+        //     if self.map.read()?.num_keyframes() <= 200 &&
+        //         (timestamp_init > 25.0 && timestamp_init < 25.5) ||
+        //         (timestamp_init > 35.0 && timestamp_init < 35.5) ||
+        //         (timestamp_init > 45.0 && timestamp_init < 45.5) ||
+        //         (timestamp_init > 55.0 && timestamp_init < 55.5) ||
+        //         (timestamp_init > 65.0 && timestamp_init < 65.5) ||
+        //         (timestamp_init > 75.0 && timestamp_init < 75.5) {
+        //         if self.sensor.is_mono() {
+        //             self.scale_refinement()?;
+        //         }
+        //     }
+        // }
 
         debug!("For keyframe {}, culled {} mappoints, created {} mappoints, culled {} keyframes", self.current_keyframe_id, mps_culled, mps_created, kfs_culled);
         info!("Map has {} keyframes and {} mappoints" , self.map.read()?.num_keyframes(), self.map.read()?.mappoints.len());
@@ -448,18 +451,19 @@ impl LocalMappingGTSAM {
 
             let current_kf = lock.get_keyframe(self.current_keyframe_id);
             let mut neighbor_kfs = current_kf.get_covisibility_keyframes(nn);
-            if self.sensor.is_imu() {
-                let mut count = 0;
-                let mut pkf = current_kf;
-                while (neighbor_kfs.len() as i32) < nn && pkf.prev_kf_id.is_some() && count < nn {
-                    let prev_kf = current_kf.prev_kf_id.unwrap();
-                    if !neighbor_kfs.contains(&prev_kf) {
-                        neighbor_kfs.push(prev_kf);
-                    }
-                    pkf = lock.get_keyframe(prev_kf);
-                    count += 1;
-                }
-            }
+            // SOFIYA TURN OFF IMU
+            // if self.sensor.is_imu() {
+            //     let mut count = 0;
+            //     let mut pkf = current_kf;
+            //     while (neighbor_kfs.len() as i32) < nn && pkf.prev_kf_id.is_some() && count < nn {
+            //         let prev_kf = current_kf.prev_kf_id.unwrap();
+            //         if !neighbor_kfs.contains(&prev_kf) {
+            //             neighbor_kfs.push(prev_kf);
+            //         }
+            //         pkf = lock.get_keyframe(prev_kf);
+            //         count += 1;
+            //     }
+            // }
 
             let mut pose1 = current_kf.get_pose(); // sophTcw1
             let translation1 = pose1.get_translation(); // tcw1
@@ -498,10 +502,12 @@ impl LocalMappingGTSAM {
                 }
 
                 // Search matches that fullfil epipolar constraint
-                let course = match self.sensor.is_imu() {
-                    true => lock.imu_ba2 && matches!(self.current_tracking_state, TrackingState::RecentlyLost),
-                    false => false
-                };
+                let course = false;
+                // SOFIYA TURN OFF IMU
+                // let course = match self.sensor.is_imu() {
+                //     true => lock.imu_ba2 && matches!(self.current_tracking_state, TrackingState::RecentlyLost),
+                //     false => false
+                // };
 
                 let matches = match FEATURE_MATCHING_MODULE.search_for_triangulation(
                     current_kf,
@@ -565,7 +571,8 @@ impl LocalMappingGTSAM {
 
                     let x3_d;
                     {
-                        let good_parallax_with_imu = cos_parallax_rays < 0.9996 && self.sensor.is_imu();
+                        let good_parallax_with_imu = false; // SOFIYA TURN OFF IMU
+                        // let good_parallax_with_imu = cos_parallax_rays < 0.9996 && self.sensor.is_imu();
                         let good_parallax_wo_imu = cos_parallax_rays < 0.9998 && !self.sensor.is_imu();
                         if cos_parallax_rays < cos_parallax_stereo && cos_parallax_rays > 0.0 && (right1 || right2 || good_parallax_with_imu || good_parallax_wo_imu) {
                             x3_d = geometric_tools::triangulate(xn1, xn2, pose1, pose2);
@@ -728,36 +735,37 @@ impl LocalMappingGTSAM {
             }
 
             // Extend to temporal neighbors
-            if self.sensor.is_imu() {
-                let mut fuse_targets_for_kf: HashMap<Id, Id> = HashMap::new();
-                let prev_kf_id = map.get_keyframe(self.current_keyframe_id).prev_kf_id;
-                if let Some(mut prev_kf_id) = prev_kf_id {
-                    let mut prev_kf = map.get_keyframe(prev_kf_id);
-                    while target_kfs.len() < 20 {
-                        if fuse_targets_for_kf.contains_key(&prev_kf_id) && *fuse_targets_for_kf.get(&prev_kf_id).unwrap() == self.current_keyframe_id {
-                            match prev_kf.prev_kf_id {
-                                Some(prev_kf_id2) => {
-                                    prev_kf_id = prev_kf_id2;
-                                    prev_kf = map.get_keyframe(prev_kf_id);
-                                    continue;
-                                },
-                                None => break
-                            }
-                        }
-                        target_kfs.insert(prev_kf_id);
-                        fuse_targets_for_kf.insert(prev_kf_id, self.current_keyframe_id);
+            // SOFIYA TURN OFF IMU
+            // if self.sensor.is_imu() {
+            //     let mut fuse_targets_for_kf: HashMap<Id, Id> = HashMap::new();
+            //     let prev_kf_id = map.get_keyframe(self.current_keyframe_id).prev_kf_id;
+            //     if let Some(mut prev_kf_id) = prev_kf_id {
+            //         let mut prev_kf = map.get_keyframe(prev_kf_id);
+            //         while target_kfs.len() < 20 {
+            //             if fuse_targets_for_kf.contains_key(&prev_kf_id) && *fuse_targets_for_kf.get(&prev_kf_id).unwrap() == self.current_keyframe_id {
+            //                 match prev_kf.prev_kf_id {
+            //                     Some(prev_kf_id2) => {
+            //                         prev_kf_id = prev_kf_id2;
+            //                         prev_kf = map.get_keyframe(prev_kf_id);
+            //                         continue;
+            //                     },
+            //                     None => break
+            //                 }
+            //             }
+            //             target_kfs.insert(prev_kf_id);
+            //             fuse_targets_for_kf.insert(prev_kf_id, self.current_keyframe_id);
 
-                        match prev_kf.prev_kf_id {
-                            Some(prev_kf_id2) => {
-                                prev_kf_id = prev_kf_id2;
-                                prev_kf = map.get_keyframe(prev_kf_id);
-                                continue;
-                            },
-                            None => break
-                        }
-                    }
-                }
-            }
+            //             match prev_kf.prev_kf_id {
+            //                 Some(prev_kf_id2) => {
+            //                     prev_kf_id = prev_kf_id2;
+            //                     prev_kf = map.get_keyframe(prev_kf_id);
+            //                     continue;
+            //                 },
+            //                 None => break
+            //             }
+            //         }
+            //     }
+            // }
             // Clone necessary here so we can use mappoint_matches after the lock is dropped
             // Lock needs to be dropped because orbmatcher::fuse calls write, which causes a deadlock if we keep the read lock
             mappoint_matches = current_kf.get_mp_matches().clone();
@@ -840,25 +848,29 @@ impl LocalMappingGTSAM {
             let current_kf = read_lock.get_keyframe(self.current_keyframe_id);
             let local_keyframes = current_kf.get_covisibility_keyframes(i32::MAX);
 
-            let redundant_th = match self.sensor {
-                Sensor(_, ImuSensor::None) | Sensor(FrameSensor::Mono, _) => 0.9,
-                _ => 0.5
-            };
+            // SOFIYA TURN OFF IMU
+            let redundant_th = 0.9;
+            // let redundant_th = match self.sensor {
+            //     Sensor(_, ImuSensor::None) | Sensor(FrameSensor::Mono, _) => 0.9,
+            //     _ => 0.5
+            // };
 
             // Compute last KF from optimizable window:
-            let last_id = match self.sensor.is_imu() {
-                true => {
-                    let nd = 21;
-                    let mut count = 0;
-                    let mut aux_kf = current_kf;
-                    while count < nd && aux_kf.prev_kf_id.is_some() {
-                        aux_kf = read_lock.get_keyframe(aux_kf.prev_kf_id.unwrap());
-                        count += 1;
-                    }
-                    aux_kf.id
-                }
-                false => 0
-            };
+            // SOFIYA TURN OFF IMU
+            let last_id = 0;
+            // let last_id = match self.sensor.is_imu() {
+            //     true => {
+            //         let nd = 21;
+            //         let mut count = 0;
+            //         let mut aux_kf = current_kf;
+            //         while count < nd && aux_kf.prev_kf_id.is_some() {
+            //             aux_kf = read_lock.get_keyframe(aux_kf.prev_kf_id.unwrap());
+            //             count += 1;
+            //         }
+            //         aux_kf.id
+            //     }
+            //     false => 0
+            // };
 
             for i in 0..min(100, local_keyframes.len()) {
                 let kf_id = local_keyframes[i];
@@ -929,52 +941,53 @@ impl LocalMappingGTSAM {
                 }
 
                 if (num_redundant_obs as f64) > redundant_th * (num_mps as f64) {
-                    match self.sensor.is_imu() {
-                        true => {
-                            // debug!("Keyframe culling, num redundant obs: {}, redudant_th: {}, num_mps: {}", num_redundant_obs, redundant_th, num_mps);
-                            if read_lock.num_keyframes() <= 21 {
-                                continue;
-                            }
+                    // SOFIYA TURN OFF IMU
+                    // match self.sensor.is_imu() {
+                    //     true => {
+                    //         // debug!("Keyframe culling, num redundant obs: {}, redudant_th: {}, num_mps: {}", num_redundant_obs, redundant_th, num_mps);
+                    //         if read_lock.num_keyframes() <= 21 {
+                    //             continue;
+                    //         }
 
-                            if kf_id > current_kf.id - 2 {
-                                continue;
-                            }
+                    //         if kf_id > current_kf.id - 2 {
+                    //             continue;
+                    //         }
 
-                            let kf_prev_id = keyframe.prev_kf_id;
-                            let kf_next_id = keyframe.next_kf_id;
+                    //         let kf_prev_id = keyframe.prev_kf_id;
+                    //         let kf_next_id = keyframe.next_kf_id;
 
-                            match (kf_prev_id, kf_next_id) {
-                                (Some(prev_kf_id), Some(next_kf_id)) => {
-                                    let next_kf = read_lock.get_keyframe(next_kf_id);
-                                    let prev_kf = read_lock.get_keyframe(prev_kf_id);
-                                    let t = (next_kf.timestamp - prev_kf.timestamp);
+                    //         match (kf_prev_id, kf_next_id) {
+                    //             (Some(prev_kf_id), Some(next_kf_id)) => {
+                    //                 let next_kf = read_lock.get_keyframe(next_kf_id);
+                    //                 let prev_kf = read_lock.get_keyframe(prev_kf_id);
+                    //                 let t = (next_kf.timestamp - prev_kf.timestamp);
 
-                                    if read_lock.imu_initialized && kf_id < last_id && t < 3.0 || t < 0.5 {
-                                        self.discarded_kfs.insert(kf_id);
-                                        to_delete.push((kf_id, true));
-                                        debug!("Discard kf {}, imu #1", kf_id);
-                                        debug!("... t: {}, next kf: {}, prev_kf: {}", t, next_kf_id, prev_kf_id);
-                                        // patch_imu_data_over_deleted_kf(&self.map, &mut self.discarded_kfs, kf_id, next_kf_id, prev_kf_id);
-                                    } else if !read_lock.imu_ba2 {
-                                        let kf_imu_pos = *keyframe.get_imu_position();
-                                        let prev_kf_imu_pos = *prev_kf.get_imu_position();
-                                        if (kf_imu_pos - prev_kf_imu_pos).norm() < 0.02 && t < 3.0 {
-                                            to_delete.push((kf_id, true));
-                                            self.discarded_kfs.insert(kf_id);
-                                            debug!("Discard kf {}, imu #2", kf_id);
-                                            debug!("... kf_imu_pos: {:?}, prev_kf_imu_pos: {:?}, norm: {:?}, t: {}", kf_imu_pos, prev_kf_imu_pos, (kf_imu_pos - prev_kf_imu_pos).norm(), t);
-                                            // patch_imu_data_over_deleted_kf(&self.map, &mut self.discarded_kfs, kf_id, next_kf_id, prev_kf_id);
-                                        }
-                                    }
-                                },
-                                _ => {}
-                            }
-                        },
-                        false => {
+                    //                 if read_lock.imu_initialized && kf_id < last_id && t < 3.0 || t < 0.5 {
+                    //                     self.discarded_kfs.insert(kf_id);
+                    //                     to_delete.push((kf_id, true));
+                    //                     debug!("Discard kf {}, imu #1", kf_id);
+                    //                     debug!("... t: {}, next kf: {}, prev_kf: {}", t, next_kf_id, prev_kf_id);
+                    //                     // patch_imu_data_over_deleted_kf(&self.map, &mut self.discarded_kfs, kf_id, next_kf_id, prev_kf_id);
+                    //                 } else if !read_lock.imu_ba2 {
+                    //                     let kf_imu_pos = *keyframe.get_imu_position();
+                    //                     let prev_kf_imu_pos = *prev_kf.get_imu_position();
+                    //                     if (kf_imu_pos - prev_kf_imu_pos).norm() < 0.02 && t < 3.0 {
+                    //                         to_delete.push((kf_id, true));
+                    //                         self.discarded_kfs.insert(kf_id);
+                    //                         debug!("Discard kf {}, imu #2", kf_id);
+                    //                         debug!("... kf_imu_pos: {:?}, prev_kf_imu_pos: {:?}, norm: {:?}, t: {}", kf_imu_pos, prev_kf_imu_pos, (kf_imu_pos - prev_kf_imu_pos).norm(), t);
+                    //                         // patch_imu_data_over_deleted_kf(&self.map, &mut self.discarded_kfs, kf_id, next_kf_id, prev_kf_id);
+                    //                     }
+                    //                 }
+                    //             },
+                    //             _ => {}
+                    //         }
+                    //     },
+                    //     false => {
                             to_delete.push((kf_id, false));
                             self.discarded_kfs.insert(kf_id);
-                        }
-                    }
+                    //     }
+                    // }
                 }
                 if i > 20 && self.system.queue_len() > 1 {
                     // Abort additional work if there are too many keyframes in the msg queue.

@@ -5,8 +5,8 @@ use core::{
     matrix::{ DVMatrix, DVVectorOfKeyPoint}, system::{ActorMessage, Timestamp},
 };
 use crate::{
-    actors::tracking_frontend_gtsam::{TrackedFeatures, TrackedFeaturesIndexMap},
-    actors::tracking_backend::TrackingState, map::{frame::Frame, map::Id, pose::Pose}, modules::imu::{ImuBias, ImuMeasurements}
+    actors::{tracking_backend::TrackingState, tracking_frontend_gtsam::{TrackedFeatures, TrackedFeaturesIndexMap}},
+    map::{frame::Frame, map::Id, pose::Pose}, modules::imu::{ImuBias, ImuMeasurements}, ImuInitializationData
 };
 
 
@@ -23,6 +23,7 @@ impl ActorMessage for Reset {
 pub struct ImagePathMsg{ 
     pub image_path: String,
     pub imu_measurements: ImuMeasurements,
+    pub imu_initialization: Option<ImuInitializationData>,
     pub timestamp: Timestamp,
     pub frame_id: u32,
     pub map_version: u64
@@ -35,6 +36,7 @@ impl ActorMessage for ImagePathMsg {
 pub struct ImageMsg{ 
     pub image: Mat, 
     pub imu_measurements: ImuMeasurements,
+    pub imu_initialization: Option<ImuInitializationData>,
     pub timestamp: Timestamp, 
     pub frame_id: u32,
 }
@@ -47,6 +49,7 @@ pub struct FeatureTracksAndIMUMsg {
     pub frame: Frame,
     // pub preintegration_results: PreintegratedCombinedMeasurementsResults,
     pub imu_measurements: ImuMeasurements,
+    pub imu_initialization: Option<ImuInitializationData>,
     pub feature_tracks: TrackedFeatures,
     // pub curr_kf_features_map: TrackedFeaturesIndexMap,
 }

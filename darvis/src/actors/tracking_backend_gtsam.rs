@@ -13,8 +13,8 @@ use core::{
     config::*, matrix::*, sensor::{FrameSensor, ImuSensor, Sensor}, system::{Actor, MessageBox, System, Timestamp}
 };
 use crate::{
-    actors::tracking_frontend_gtsam::{TrackedFeatures, TrackedFeaturesIndexMap},
-    actors::messages::{ShutdownMsg, UpdateFrameIMUMsg, VisFeaturesMsg}, map::{features::Features, frame::Frame, keyframe::{KeyFrame, MapPointMatches}, map::Id, pose::Pose, read_only_lock::ReadWriteMap}, modules::{geometric_tools, good_features_to_track::GoodFeaturesExtractor, image, imu::{ImuBias, ImuCalib, ImuMeasurements, ImuPreIntegrated, IMU}, map_initialization::MapInitialization, module_definitions::{CameraModule, FeatureExtractionModule, ImuModule}, optimizer::{self, LEVEL_SIGMA2}, orbslam_extractor::ORBExtractor, orbslam_matcher::SCALE_FACTORS, relocalization::Relocalization}, registered_actors::{LOCAL_MAPPING, SHUTDOWN_ACTOR, VISUALIZER}};
+    actors::{messages::{ShutdownMsg, UpdateFrameIMUMsg, VisFeaturesMsg}, tracking_frontend_gtsam::{TrackedFeatures, TrackedFeaturesIndexMap}},
+    map::{features::Features, frame::Frame, keyframe::{KeyFrame, MapPointMatches}, map::Id, pose::Pose, read_only_lock::ReadWriteMap}, modules::{geometric_tools, good_features_to_track::GoodFeaturesExtractor, image, imu::{ImuBias, ImuCalib, ImuMeasurements, ImuPreIntegrated, IMU}, map_initialization::MapInitialization, module_definitions::{CameraModule, FeatureExtractionModule, ImuModule}, optimizer::{self, LEVEL_SIGMA2}, orbslam_extractor::ORBExtractor, orbslam_matcher::SCALE_FACTORS, relocalization::Relocalization}, registered_actors::{LOCAL_MAPPING, SHUTDOWN_ACTOR, VISUALIZER}, ImuInitializationData};
 
 use super::{messages::{FeatureTracksAndIMUMsg, NewKeyFrameGTSAMMsg, TrajectoryMsg, VisTrajectoryMsg}, tracking_backend::TrackingState};
 use crate::registered_actors::IMU;
@@ -111,19 +111,45 @@ impl TrackingBackendGTSAM {
                 (*kf1_pose.get_translation() - *kf0_pose.get_translation()) / (kf1.timestamp - kf0.timestamp)
             );
 
-            println!("Backend initializing graph...");
+            println!("From map, first pose is: {:?}", kf0_pose);
+            println!("From map, second pose is: {:?}", kf1_pose);
+            println!("From map, velocity is: {:?}", velocity);
+
+
+            // let imu_init = msg.imu_initialization.expect("Msg should have imu initialization data!");
+            // println!("Backend initializing graph...");
+            // println!("From imu initialization, translation is: {:?}", imu_init.translation);
+            // println!("From imu initialization, rotation is: {:?}", imu_init.rotation);
+            // println!("From imu initialization, velocity is: {:?}", imu_init.velocity);
+            // println!("From imu initialization, acc bias is: {:?}", imu_init.acc_bias);
+            // println!("From imu initialization, gyro bias is: {:?}", imu_init.gyro_bias);
+
+
+            let imu_init = ImuInitializationData {
+                translation: kf1_pose.get_translation(),
+                rotation: kf1_pose.get_quaternion().vector(),
+                velocity: velocity,
+                acc_bias: imu_init.acc_bias,
+                gyro_bias: imu_init.gyro_bias
+            };
+
 
             self.graph_solver.initialize(
                 (msg.frame.timestamp * 1e9) as i64,
-                kf1_pose,
-                velocity,
-                kf0.imu_data.imu_bias
+                &imu_init
             )?;
             self.graph_solver.solver_state = GraphSolverState::Ok;
             self.last_timestamp = msg.frame.timestamp;
             self.last_kf_id = 1;
             self.last_kf_pose = msg.frame.pose.unwrap();
-            self.last_kf_imu_bias = kf0.imu_data.imu_bias;
+            self.last_kf_imu_bias = ImuBias {
+                bax: imu_init.acc_bias[0],
+                bay: imu_init.acc_bias[1],
+                baz: imu_init.acc_bias[2],
+                bwx: imu_init.gyro_bias[0],
+                bwy: imu_init.gyro_bias[1],
+                bwz: imu_init.gyro_bias[2]
+            };
 
         } else {
             // If we have previous frames already, can track normally
@@ -149,18 +175,18 @@ impl TrackingBackendGTSAM {
             self.last_kf_id += 1;
             self.last_kf_imu_bias = current_frame.imu_data.imu_bias;
 
-            println!("TRACKING BACKEND SEND TO LOCAL MAPPING");
 
             // SOFIYA TURN OFF LOCAL MAPPING
-            // KeyFrame created here and inserted into map
-            self.system.send(
-                LOCAL_MAPPING,
-                Box::new( NewKeyFrameGTSAMMsg{
-                    tracking_state: TrackingState::Ok,
-                    keyframe: current_frame,
-                    map_version: self.map.read()?.version
-                } )
-            );
+            // println!("TRACKING BACKEND SEND TO LOCAL MAPPING");
+            // // KeyFrame created here and inserted into map
+            // self.system.send(
+            //     LOCAL_MAPPING,
+            //     Box::new( NewKeyFrameGTSAMMsg{
+            //         tracking_state: TrackingState::Ok,
+            //         keyframe: current_frame,
+            //         map_version: self.map.read()?.version
+            //     } )
+            // );
         }
 
         self.last_feature_tracks = msg.feature_tracks;
@@ -185,14 +211,14 @@ impl TrackingBackendGTSAM {
 
         let map = self.map.read()?;
         // SOFIYA TURN OFF LOCAL MAPPING
-        self.system.try_send(VISUALIZER, Box::new(VisTrajectoryMsg{
-            pose: current_frame.pose.unwrap(),
-            mappoint_matches: vec![],
-            nontracked_mappoints: HashMap::new(),
-            mappoints_in_tracking: BTreeSet::new(),
-            timestamp: current_frame.timestamp,
-            map_version: map.version
-        }));
+        // self.system.try_send(VISUALIZER, Box::new(VisTrajectoryMsg{
+        //     pose: current_frame.pose.unwrap(),
+        //     mappoint_matches: vec![],
+        //     nontracked_mappoints: HashMap::new(),
+        //     mappoints_in_tracking: BTreeSet::new(),
+        //     timestamp: current_frame.timestamp,
+        //     map_version: map.version
+        // }));
 
         Ok(())
     }
@@ -221,12 +247,24 @@ pub struct GraphSolver {
     accel_random_walk: f64, // accelerometer_random_walk, sigma_wa
     gyro_random_walk: f64, // gyroscope_random_walk, sigma_wg
     // Noise values for initialization
-    sigma_prior_rotation: [f64; 3],
-    sigma_prior_translation: [f64; 3],
-    sigma_velocity: f64,
-    sigma_bias: f64,
+    // sigma_prior_rotation: [f64; 3],
+    // sigma_prior_translation: [f64; 3],
+    // sigma_velocity: f64,
+    // sigma_bias: f64,
     // Misc
     sigma_camera: f64,
+
+    // Kimera
+    // Noise values for initialization
+    initial_position_sigma: f64,
+    initial_roll_pitch_sigma: f64,
+    initial_yaw_sigma: f64,
+    initial_velocity_sigma: f64,
+    initial_acc_bias_sigma: f64,
+    initial_gyro_bias_sigma: f64,
+
+    imu_integration_sigma: f64,
+    init_bias_sigma: f64,
 
     // Iterations of the map
     ct_state: u64,
@@ -237,35 +275,6 @@ pub struct GraphSolver {
 
 impl GraphSolver {
     pub fn new() -> Self {
-        //           <!-- Rotation and Translation from camera frame to IMU frame -->
-        //   <rosparam param="R_C0toI">[0.9999717314190615,    -0.007438121416209933,  0.001100323844221122,
-        //                              0.00743200596269379,    0.9999574688631824,    0.005461295826837418,
-        //                             -0.0011408988276470173, -0.0054529638303831614, 0.9999844816472552]</rosparam>
-        //   <rosparam param="p_IinC0">[-0.03921656415229387,   0.00621263233002485,   0.0012210059575531885]</rosparam>
-
-        //   <!-- Initialization -->
-        //   <rosparam param="prior_qGtoI">[0.716147, 0.051158, 0.133778, 0.683096]</rosparam>       
-        //   <rosparam param="prior_pIinG">[0.925493, -6.214668, 0.422872]</rosparam>       
-        //   <rosparam param="prior_vIinG">[1.128364, -2.280640, 0.213326]</rosparam>       
-        //   <rosparam param="prior_ba">[0.00489771688759235973,  0.00800897351104824969, 0.03020588299505782420]</rosparam>       
-        //   <rosparam param="prior_bg">[-0.00041196751646696610, 0.00992948457018005999, 0.02188282212555122189]</rosparam>       
-
-        //   <param name="sigma_camera"                 type="double"   value="0.306555403" />
-        
-        //   <!-- Noise Values for ETH Dataset Sensor -->
-        //   <param name="accelerometer_noise_density"  type="double"   value="0.08" />    <!-- sigma_a -->
-        //   <param name="gyroscope_noise_density"      type="double"   value="0.004" />   <!-- sigma_g -->
-        //   <param name="accelerometer_random_walk"    type="double"   value="0.00004" /> <!-- sigma_wa -->
-        //   <param name="gyroscope_random_walk"        type="double"   value="2.0e-6" />  <!-- sigma_wg -->
-
-        //   <!-- Noise Values for Initialization -->
-        //   <param name="sigma_prior_rotation"         type="double"   value="0.1" />
-        //   <param name="sigma_prior_translation"      type="double"   value="0.3" />
-        //   <param name="sigma_velocity"               type="double"   value="0.1" />
-        //   <param name="sigma_bias"                   type="double"   value="0.15" />
-        //   <param name="sigma_pose_rotation"          type="double"   value="0.1" />
-        //   <param name="sigma_pose_translation"       type="double"   value="0.2" />
-
         Self {
             graph_new: NonlinearFactorGraph::default(),
             values_new: Values::default(),
@@ -276,15 +285,23 @@ impl GraphSolver {
             solver_state: GraphSolverState::NotInitialized,
 
             // TODO SOFIYA PARAMS
-            sigma_prior_rotation: [0.1, 0.1, 0.1],
-            sigma_prior_translation: [0.3, 0.3, 0.3],
-            sigma_velocity: 0.1,
-            sigma_bias: 0.15,
+            // sigma_prior_rotation: [0.1, 0.1, 0.1],
+            // sigma_prior_translation: [0.3, 0.3, 0.3],
+            // sigma_velocity: 0.1,
+            // sigma_bias: 0.15,
             sigma_camera: 0.306555403,
+            initial_position_sigma: SETTINGS.get::<f64>(IMU, "initialPositionSigma"),
+            initial_roll_pitch_sigma: SETTINGS.get::<f64>(IMU, "initialRollPitchSigma"),
+            initial_yaw_sigma: SETTINGS.get::<f64>(IMU, "initialYawSigma"),
+            initial_velocity_sigma: SETTINGS.get::<f64>(IMU, "initialVelocitySigma"),
+            initial_acc_bias_sigma: SETTINGS.get::<f64>(IMU, "initialAccBiasSigma"),
+            initial_gyro_bias_sigma: SETTINGS.get::<f64>(IMU, "initialGyroBiasSigma"),
             accel_noise_density: SETTINGS.get::<f64>(IMU, "noise_acc"),
             gyro_noise_density: SETTINGS.get::<f64>(IMU, "noise_gyro"),
             accel_random_walk: SETTINGS.get::<f64>(IMU, "acc_walk"),
             gyro_random_walk: SETTINGS.get::<f64>(IMU, "gyro_walk"),
+            imu_integration_sigma: SETTINGS.get::<f64>(IMU, "imu_integration_sigma"),
+            init_bias_sigma: SETTINGS.get::<f64>(IMU, "imu_bias_init_sigma"),
 
             ct_state: 0,
             ct_state_lookup: HashMap::new(),
@@ -385,37 +402,141 @@ impl GraphSolver {
         Ok(optimized_pose)
     }
 
-    fn initialize(&mut self, timestamp: i64, init_pose: Pose, init_vel: DVVector3<f64>, init_bias: ImuBias) -> Result<(), Box<dyn std::error::Error>> {
+    fn initialize(&mut self, timestamp: i64, imu_init: &ImuInitializationData) -> Result<(), Box<dyn std::error::Error>> {
         let _span = tracy_client::span!("initialize");
 
-        println!("... Initial pose: {:?}", init_pose);
-        println!("... Initial velocity: {:?}", init_vel);
-        println!("... Initial bias: {:?}", init_bias);
+        let init_pose = Pose::new_with_quaternion_convert(*imu_init.translation, imu_init.rotation);
+
+        // These two are identical in the beginning, but _from_state_ is used in
+        // the optimizer and _from_increments_ is used as a smooth output
+        let w_pose_b_lkf_from_state = init_pose;
+        let w_pose_b_lkf_from_increments = init_pose;
+        let w_vel_b_lkf = gtsam::base::vector::Vector3::new(
+            imu_init.velocity[0],
+            imu_init.velocity[1],
+            imu_init.velocity[2]
+        );
+        let imu_bias_lkf = gtsam::imu::imu_bias::ConstantBias::new(
+            &gtsam::base::vector::Vector3::new(
+                imu_init.acc_bias[0],
+                imu_init.acc_bias[1],
+                imu_init.acc_bias[2]
+            ),
+            &gtsam::base::vector::Vector3::new(
+                imu_init.gyro_bias[0],
+                imu_init.gyro_bias[1],
+                imu_init.gyro_bias[2]
+            )
+        );
+        let imu_bias_prev_kf = gtsam::imu::imu_bias::ConstantBias::new(
+            &gtsam::base::vector::Vector3::new(
+                imu_init.acc_bias[0],
+                imu_init.acc_bias[1],
+                imu_init.acc_bias[2]
+            ),
+            &gtsam::base::vector::Vector3::new(
+                imu_init.gyro_bias[0],
+                imu_init.gyro_bias[1],
+                imu_init.gyro_bias[2]
+            )
+        );
+
+        // Set initial covariance for inertial factors
+        // W_Pose_Blkf_ set by motion capture to start with
+        let b_rot_w = w_pose_b_lkf_from_state.get_rotation().transpose();
+
+        // Set initial pose uncertainty: constrain mainly position and global yaw.
+        // roll and pitch is observable, therefore low variance.
+        let mut pose_prior_covariance = nalgebra::Matrix6::zeros();
+        pose_prior_covariance[(0, 0)] = self.initial_roll_pitch_sigma * self.initial_roll_pitch_sigma;
+        pose_prior_covariance[(1, 1)] = self.initial_roll_pitch_sigma * self.initial_roll_pitch_sigma;
+        pose_prior_covariance[(2, 2)] = self.initial_yaw_sigma * self.initial_yaw_sigma;
+        pose_prior_covariance[(3, 3)] = self.initial_position_sigma * self.initial_position_sigma;
+        pose_prior_covariance[(4, 4)] = self.initial_position_sigma * self.initial_position_sigma;
+        pose_prior_covariance[(5, 5)] = self.initial_position_sigma * self.initial_position_sigma;
+
+
+        // Rotate initial uncertainty into local frame, where the uncertainty is
+        // specified.
+
+        // todo
+        let temp = b_rot_w * pose_prior_covariance[(3, 3)] * b_rot_w.transpose();
+        // pose_prior_covariance.topLeftCorner(3, 3) =
+        //     B_Rot_W * pose_prior_covariance.topLeftCorner(3, 3) * B_Rot_W.transpose();
+
+        // Add pose prior.
+        let pose_noise = gtsam::linear::noise_model::DiagonalNoiseModel::from_sigmas(Vector6::new(
+            pose_prior_covariance[(0, 0)],
+            pose_prior_covariance[(1, 1)],
+            pose_prior_covariance[(2, 2)],
+            pose_prior_covariance[(3, 3)],
+            pose_prior_covariance[(4, 4)],
+            pose_prior_covariance[(5, 5)]
+        ));
+        // new_imu_prior_and_other_factors_
+        //     .emplace_shared<gtsam::PriorFactor<gtsam::Pose3>>(
+        //         gtsam::Symbol(kPoseSymbolChar, frame_id),
+        //         W_Pose_B_lkf_from_state_,
+        //         noise_init_pose);
+
+
+        // Add initial velocity priors.
+        let v_noise = gtsam::linear::noise_model::IsotropicNoiseModel::from_dim_and_sigma(3, self.initial_velocity_sigma);
+        // new_imu_prior_and_other_factors_
+        //     .emplace_shared<gtsam::PriorFactor<gtsam::Vector3>>(
+        //         gtsam::Symbol(kVelocitySymbolChar, frame_id),
+        //         W_Vel_B_lkf_,
+        //         noise_init_vel_prior);
+
+        // Add initial bias priors:
+        let b_noise = gtsam::linear::noise_model::IsotropicNoiseModel::from_dim_and_sigma(6, self.initial_acc_bias_sigma);
+
+        // Vector6 prior_biasSigmas;
+        // prior_biasSigmas.head<3>().setConstant(backend_params_.initialAccBiasSigma_);
+        // prior_biasSigmas.tail<3>().setConstant(backend_params_.initialGyroBiasSigma_);
+        // // TODO(Toni): Make this noise model a member constant.
+        // gtsam::SharedNoiseModel imu_bias_prior_noise =
+        //     gtsam::noiseModel::Diagonal::Sigmas(prior_biasSigmas);
+        // if (VLOG_IS_ON(10))
+        // {
+        //     LOG(INFO) << "Imu bias for Backend prior:";
+        //     imu_bias_lkf_.print();
+        // }
+        // new_imu_prior_and_other_factors_
+        //     .emplace_shared<gtsam::PriorFactor<gtsam::imuBias::ConstantBias>>(
+        //         gtsam::Symbol(kImuBiasSymbolChar, frame_id),
+        //         imu_bias_lkf_,
+        //         imu_bias_prior_noise);
+
+
 
         // Create prior factor and add it to the graph
         let prior_state = {
-            let trans = init_pose.translation;
-            let rot = init_pose.get_quaternion();
+            // Some really gross conversions here...
+            let rot_gtsam: gtsam::geometry::rot3::Rot3 = init_pose.get_quaternion().into();
             GtsamState {
                 pose: gtsam::geometry::pose3::Pose3::from_parts(
-                    gtsam::geometry::point3::Point3::new(trans.x, trans.y, trans.z),
-                    gtsam::geometry::rot3::Rot3::from(rot)
+                    gtsam::geometry::point3::Point3::new(init_pose.translation.x, init_pose.translation.y, init_pose.translation.z),
+                    rot_gtsam
                 ),
-                velocity: gtsam::base::vector::Vector3::new(init_vel[0], init_vel[1], init_vel[2]),
+                velocity: gtsam::base::vector::Vector3::new(imu_init.velocity[0], imu_init.velocity[1], imu_init.velocity[2]),
                 bias: gtsam::imu::imu_bias::ConstantBias::new(
-                    &gtsam::base::vector::Vector3::new(init_bias.bax, init_bias.bay, init_bias.baz),
-                    &gtsam::base::vector::Vector3::new(init_bias.bwx, init_bias.bwy, init_bias.bwz)
+                    &gtsam::base::vector::Vector3::new(imu_init.acc_bias[0], imu_init.acc_bias[1], imu_init.acc_bias[2]),
+                    &gtsam::base::vector::Vector3::new(imu_init.gyro_bias[0], imu_init.gyro_bias[1], imu_init.gyro_bias[2]),
                 )
             }
         };
 
-        // TODO SOFIYA  where are these coming from
-        let pose_noise = gtsam::linear::noise_model::DiagonalNoiseModel::from_sigmas(Vector6::new(
-            self.sigma_prior_rotation[0], self.sigma_prior_rotation[1], self.sigma_prior_rotation[2],
-            self.sigma_prior_translation[0], self.sigma_prior_translation[1], self.sigma_prior_translation[2]
-        ));
-        let v_noise = gtsam::linear::noise_model::IsotropicNoiseModel::from_dim_and_sigma(3, self.sigma_velocity);
-        let b_noise = gtsam::linear::noise_model::IsotropicNoiseModel::from_dim_and_sigma(6, self.sigma_bias);
+
+        // OLD:
+
+        // // TODO SOFIYA  where are these coming from
+        // let pose_noise = gtsam::linear::noise_model::DiagonalNoiseModel::from_sigmas(Vector6::new(
+        //     self.sigma_prior_rotation[0], self.sigma_prior_rotation[1], self.sigma_prior_rotation[2],
+        //     self.sigma_prior_translation[0], self.sigma_prior_translation[1], self.sigma_prior_translation[2]
+        // ));
+        // let v_noise = gtsam::linear::noise_model::IsotropicNoiseModel::from_dim_and_sigma(3, self.sigma_velocity);
+        // let b_noise = gtsam::linear::noise_model::IsotropicNoiseModel::from_dim_and_sigma(6, self.sigma_bias);
 
         self.graph_new.add_prior_factor_pose3(&Symbol::new(b'x', self.ct_state), &prior_state.pose, &pose_noise);
         self.graph_new.add_prior_factor_vector3(&Symbol::new(b'v', self.ct_state), &prior_state.velocity, &v_noise);
@@ -436,17 +557,18 @@ impl GraphSolver {
         self.ct_state_lookup.insert(timestamp, self.ct_state);
         self.timestamp_lookup.insert(self.ct_state, timestamp);
 
+        // Kimera... Look at function generateCombinedPim and convertVioImuParamsToGtsam
         // Create GTSAM preintegration parameters for use with Foster's version
         let mut params = PreintegrationCombinedParams::makesharedu();  // Z-up navigation frame: gravity points along negative Z-axis !!!
-        params.set_params(
-            self.accel_noise_density * self.accel_noise_density, // acc white noise in continuous
-            self.gyro_noise_density * self.gyro_noise_density, // gyro white noise in continuous
-            self.accel_random_walk * self.accel_random_walk, // acc bias in continuous
-            self.gyro_random_walk * self.gyro_random_walk, // gyro bias in continuous
-            0.1, // error committed in integrating position from velocities
-            1e-5 // error in the bias used for preintegration
-        );
+        params.set_gyroscope_covariance(self.gyro_noise_density * self.gyro_noise_density);
+        params.set_accelerometer_covariance(self.accel_noise_density * self.accel_noise_density);
+        params.set_integration_covariance(self.imu_integration_sigma * self.imu_integration_sigma);
+        params.set_bias_acc_omega_int(self.init_bias_sigma);
+        params.set_bias_acc_covariance(self.accel_random_walk * self.accel_random_walk);
+        params.set_bias_omega_covariance(self.gyro_random_walk * self.gyro_random_walk);
 
+
+  
         // Actually create the GTSAM preintegration
         self.preint_gtsam = PreintegratedCombinedMeasurements::new(params, &prior_state.bias);
 
@@ -459,7 +581,7 @@ impl GraphSolver {
 
         // Get the current state (t=k)
         let state_k = GtsamState {
-            pose: self.values_initial.get_pose3(&Symbol::new(b'x', self.ct_state)).unwrap().into(),
+            pose: self.values_initial.get_pose3(&Symbol::new(b'x', self.ct_state)).unwrap().into(), // W_Pose_B_lkf_from_state_
             velocity: self.values_initial.get_vector3(&Symbol::new(b'v', self.ct_state)).unwrap().into(),
             bias: self.values_initial.get_constantbias(&Symbol::new(b'b', self.ct_state)).unwrap().into()
         };
@@ -571,9 +693,9 @@ impl GraphSolver {
         self.graph_main.add_combined_imu_factor(&imu_factor);
 
         // ORBSLAM3 imu preintegrated object
-        current_frame.imu_data.imu_preintegrated = Some(other_imu.imu_preintegrated_from_last_kf.clone());
-        current_frame.imu_data.imu_preintegrated_frame = Some(imu_preintegrated_from_last_frame);
-        current_frame.imu_data.prev_keyframe = Some(last_kf_id);
+        // current_frame.imu_data.imu_preintegrated = Some(other_imu.imu_preintegrated_from_last_kf.clone());
+        // current_frame.imu_data.imu_preintegrated_frame = Some(imu_preintegrated_from_last_frame);
+        // current_frame.imu_data.prev_keyframe = Some(last_kf_id);
         // other_imu.predict_state_last_keyframe(&map, current_frame, last_kf_id)?;
 
         Ok(())

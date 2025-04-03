@@ -94,12 +94,12 @@ impl TrackingFrontendGTSAM {
                 return false;
             }
 
-            let (image, timestamp, mut imu_measurements) = if message.is::<ImagePathMsg>() {
+            let (image, timestamp, mut imu_measurements, imu_initialization) = if message.is::<ImagePathMsg>() {
                 let msg = message.downcast::<ImagePathMsg>().unwrap_or_else(|_| panic!("Could not downcast tracking message!"));
-                (image::read_image_file(&msg.image_path), msg.timestamp, msg.imu_measurements)
+                (image::read_image_file(&msg.image_path), msg.timestamp, msg.imu_measurements, msg.imu_initialization)
             } else {
                 let msg = message.downcast::<ImageMsg>().unwrap_or_else(|_| panic!("Could not downcast tracking message!"));
-                (msg.image, msg.timestamp, msg.imu_measurements)
+                (msg.image, msg.timestamp, msg.imu_measurements, msg.imu_initialization)
             };
             self.imu_measurements_since_last_kf.append(&mut imu_measurements);
 
@@ -163,6 +163,7 @@ impl TrackingFrontendGTSAM {
                     frame: self.current_frame.clone(),
                     imu_measurements,
                     feature_tracks: self.tracked_features_last_kf.clone(),
+                    imu_initialization,
                 }));
 
                 self.frames_since_last_kf = 0;

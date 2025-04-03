@@ -1,14 +1,16 @@
-use std::{collections::VecDeque, env, fs::{File, OpenOptions}, io::{self, BufRead}, path::Path, sync::atomic::AtomicBool, thread::{self, sleep}, time::Duration};
+use std::{collections::{BTreeMap, HashMap, HashSet, VecDeque}, env, fs::{File, OpenOptions}, io::{self, BufRead}, path::Path, sync::atomic::AtomicBool, thread::{self, sleep}, time::Duration};
 use fern::colors::{ColoredLevelConfig, Color};
 use glob::glob;
 use log::{debug, info, warn};
+use map::pose::Pose;
 use modules::imu::{ImuMeasurements, ImuPoint};
+use nalgebra::{Matrix3, Vector3};
 use opencv::core::Point3f;
 use registered_actors::CAMERA;
 use spin_sleep::LoopHelper;
 #[macro_use] extern crate lazy_static;
 
-use core::{config::*, sensor::Sensor, system::System, *};
+use core::{config::*, matrix::DVVector3, sensor::Sensor, system::System, *};
 use crate::{actors::messages::{ImageMsg, ShutdownMsg}, modules::image};
 use crate::map::map::Id;
 
@@ -86,7 +88,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let loop_manager = LoopManager::new(dataset_name, dataset_dir, read_imu);
     let mut sent_map_init = false;
-    for (image_path, imu_measurements, timestamp, frame_id) in loop_manager.into_iter() {
+    let mut current_index = 0;
+    for (image_path, imu_measurements, imu_initialization, timestamp, frame_id) in loop_manager.into_iter() {
+        // If first_k set, loop until we are at the first frame.
+        if current_index < SETTINGS.get::<i32>(SYSTEM, "initial_k") {
+            current_index += 1;
+            continue;
+        }
+
+        // If final_k set, stop processing images after this time.
+        if SETTINGS.get::<i32>(SYSTEM, "final_k") != 0 && current_index == SETTINGS.get::<i32>(SYSTEM, "final_k") {
+            debug!("Ending early at frame {}", current_index);
+            break;
+        }
+
         if sent_map_init && !MAP_INITIALIZED.load(std::sync::atomic::Ordering::SeqCst) {
             sleep(Duration::from_millis(200));
         }
@@ -104,11 +119,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             image = image::resize_image(&image, new_width, new_height).expect("Could not resize image!");
         }
 
+        // println!("IMU INITIALIZATION VALUES: {:?}", imu_initialization);
+
         first_actor_tx.send(Box::new(
             ImageMsg{
                 image,
                 timestamp,
                 imu_measurements,
+                imu_initialization,
                 frame_id
             }
         ))?;
@@ -116,13 +134,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if frame_id > 5 && !sent_map_init {
             sent_map_init = true;
         }
+
+        current_index += 1;
     }
 
-    debug!("Done with dataset! Shutting down.");
+    info!("Done with dataset! Shutting down.");
     shutdown_tx.send(Box::new(ShutdownMsg{}))?;
     shutdown_join.join().expect("Waiting for shutdown thread");
 
     Ok(())
+}
+
+#[derive(Debug, Clone)]
+struct ImuInitializationData {
+    translation: DVVector3<f64>,
+    rotation: nalgebra::Vector4<f64>,
+    velocity: DVVector3<f64>,
+    gyro_bias: DVVector3<f64>,
+    acc_bias: DVVector3<f64>,
 }
 
 struct ImuData {
@@ -130,6 +159,7 @@ struct ImuData {
     gyro: Vec<Point3f>,
     timestamps: Vec<f64>,
     first_imu_idx: usize,
+    initialization: BTreeMap<i64, ImuInitializationData>,
 }
 
 struct LoopManager {
@@ -162,7 +192,6 @@ impl LoopManager {
             panic!("Invalid dataset name");
         };
 
-
         let imu = {
             if !read_imu {
                 None
@@ -172,10 +201,12 @@ impl LoopManager {
                     None
                 } else if dataset == "euroc" {
                     let imu_file = dataset_dir.clone() + "/mav0/imu0/data.csv";
-                    Some(Self::read_imu_file(imu_file, &mut timestamps, &mut image_paths).expect("Could not read IMU file!"))
+                    let gt_file = dataset_dir.clone() + "/mav0/state_groundtruth_estimate0/data.csv";
+                    Some(Self::read_imu(imu_file, gt_file, &mut timestamps, &mut image_paths).expect("Could not read IMU file!"))
                 } else if dataset == "tum-vi" {
                     let imu_file = dataset_dir.clone() + "/mav0/imu0/data.csv";
-                    Some(Self::read_imu_file(imu_file, &mut timestamps, &mut image_paths).expect("Could not read IMU file!"))
+                    let gt_file = dataset_dir.clone() + "/mav0/state_groundtruth_estimate0/data.csv"; // TODO This may not be the right filename
+                    Some(Self::read_imu(imu_file, gt_file, &mut timestamps, &mut image_paths).expect("Could not read IMU file!"))
                 } else {
                     panic!("Invalid dataset name");
                 }
@@ -191,14 +222,15 @@ impl LoopManager {
         }
     }
 
-    fn read_imu_file(filename: String, camera_timestamps: &mut Vec<f64>, image_paths: &mut Vec<String>) -> Result<ImuData, Box<dyn std::error::Error>>{
-        let file = File::open(filename)?;
-        let mut rdr = csv::Reader::from_reader(file);
+    fn read_imu(imu_filename: String, gt_filename: String, camera_timestamps: &mut Vec<f64>, image_paths: &mut Vec<String>) -> Result<ImuData, Box<dyn std::error::Error>>{
+        let imu_file = File::open(imu_filename)?;
+        let mut rdr = csv::Reader::from_reader(imu_file);
         let mut imu_data = ImuData {
             acceleration: Vec::new(),
             gyro: Vec::new(),
             timestamps: Vec::new(),
             first_imu_idx: 0,
+            initialization: BTreeMap::new(),
         };
 
         for result in rdr.records() {
@@ -234,6 +266,56 @@ impl LoopManager {
             index += 1;
         }
         imu_data.first_imu_idx = index - 1;
+
+
+        // KIMERA
+        let gt_file = File::open(gt_filename).unwrap();
+        rdr = csv::Reader::from_reader(gt_file);
+        let mut count = 0;
+        for result in rdr.records() {
+            let record = result?;
+
+            let timestamp = record[0].parse::<f64>().unwrap() as i64;
+
+            // let timestamp = (current_frame.timestamp * 1e9) as i64; // Convert to int just so we can hash it
+            let translation = DVVector3::new_with(
+                record[1].parse::<f64>().unwrap(),
+                record[2].parse::<f64>().unwrap(),
+                record[3].parse::<f64>().unwrap()
+            );
+            let rotation = nalgebra::Vector4::new(
+                record[4].parse::<f64>().unwrap(),
+                record[5].parse::<f64>().unwrap(),
+                record[6].parse::<f64>().unwrap(),
+                record[7].parse::<f64>().unwrap()
+            );
+            let velocity = DVVector3::new_with(
+                record[8].parse::<f64>().unwrap(),
+                record[9].parse::<f64>().unwrap(),
+                record[10].parse::<f64>().unwrap()
+            );
+            let gyro_bias = DVVector3::new_with(
+                record[11].parse::<f64>().unwrap(),
+                record[12].parse::<f64>().unwrap(),
+                record[13].parse::<f64>().unwrap()
+            );
+            let acc_bias = DVVector3::new_with(
+                record[14].parse::<f64>().unwrap(),
+                record[15].parse::<f64>().unwrap(),
+                record[16].parse::<f64>().unwrap()
+            );
+
+            imu_data.initialization.insert(
+                timestamp, 
+                ImuInitializationData {
+                    translation,
+                    rotation,
+                    velocity,
+                    gyro_bias,
+                    acc_bias
+                }
+            );
+        }
 
         Ok(imu_data)
     }
@@ -291,7 +373,7 @@ impl LoopManager {
 }
 
 impl Iterator for LoopManager {
-    type Item = (String, ImuMeasurements, f64, u32);
+    type Item = (String, ImuMeasurements, Option<ImuInitializationData>, f64, u32);
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.current_index as usize == self.image_paths.len() - 1{
@@ -305,6 +387,7 @@ impl Iterator for LoopManager {
         let image = self.image_paths[self.current_index as usize].clone();
 
         let mut imu_measurements = VecDeque::new();
+        let mut imu_initialization = None;
         if let Some(imu) = &mut self.imu {
             // Load imu measurements from previous frame
             while imu.timestamps[imu.first_imu_idx] <= timestamp {
@@ -324,13 +407,24 @@ impl Iterator for LoopManager {
                 imu.first_imu_idx += 1;
             }
             // imu.first_imu_idx -= 1;
+
+            // Kimera imu initialization values
+            let timestamp_convert = (timestamp * 1e9) as i64;
+            let it_low = imu.initialization.range(timestamp_convert..).next();  // closest, non-lesser
+            if let Some((_timestamp, data)) = it_low {
+                imu_initialization = Some(data);
+            } else {
+                println!("Can't find timestamp! {}", timestamp_convert);
+                println!("Hashmap: {:?}", imu.initialization);
+            }
         };
+
 
         // Start next loop
         self.loop_helper.loop_start(); 
         self.current_index = self.current_index + 1;
 
-        Some((image, imu_measurements, timestamp, self.current_index))
+        Some((image, imu_measurements, imu_initialization.cloned(), timestamp, self.current_index))
     }
 }
 

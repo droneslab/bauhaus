@@ -1,0 +1,520 @@
+[32m[0 src/main.rs:49 [32mINFO[0m[32m] Using dataset "euroc"[0m
+[32m[0.218 src/spawn.rs:32 [32mINFO[0m[32m] Using module 'orbslam feature detection' as FEATURE_DETECTION[0m
+[32m[0.218 src/spawn.rs:32 [32mINFO[0m[32m] Using module 'orbslam feature matching' as FEATURE_MATCHER[0m
+[32m[0.218 src/spawn.rs:32 [32mINFO[0m[32m] Using module 'features' as FEATURES[0m
+[32m[0.218 src/spawn.rs:32 [32mINFO[0m[32m] Using module 'orbslam3 loop detection' as LOOP_DETECTION[0m
+[32m[0.218 src/spawn.rs:32 [32mINFO[0m[32m] Using module 'bundle adjustment' as FULL_MAP_OPTIMIZATION[0m
+[32m[0.218 src/spawn.rs:32 [32mINFO[0m[32m] Using module 'CAMERA' as CAMERA[0m
+[32m[0.218 src/modules/bow.rs:20 [32mINFO[0m[32m] Loading vocabulary...[0m
+[32m[3.117 src/spawn.rs:69 [32mINFO[0m[32m] Spawning actor 'visualizer' with name VISUALIZER[0m
+[32m[3.117 src/spawn.rs:69 [32mINFO[0m[32m] Spawning actor 'gtsam tracking frontend' with name TRACKING_FRONTEND[0m
+[32m[3.117 src/spawn.rs:69 [32mINFO[0m[32m] Spawning actor 'gtsam tracking backend' with name TRACKING_BACKEND[0m
+[32m[3.117 src/spawn.rs:69 [32mINFO[0m[32m] Spawning actor 'gtsam local mapping' with name LOCAL_MAPPING[0m
+[32m[3.117 src/main.rs:58 [32mINFO[0m[32m] System ready to receive messages![0m
+[32m[3.117 src/main.rs:250 [32mINFO[0m[32m] Reading timestamps file /home/sofiya/euroc/MH_02_easy/[0m
+[32m[3.118 /home/sofiya/.cargo/registry/src/index.crates.io-6f17d22bba15001f/warp-0.3.7/src/server.rs:137 [32mINFO[0m[32m] Server::run; addr=127.0.0.1:8765[0m
+[32m[3.118 /home/sofiya/.cargo/registry/src/index.crates.io-6f17d22bba15001f/warp-0.3.7/src/server.rs:138 [32mINFO[0m[32m] listening on http://127.0.0.1:8765[0m
+[37m[3.242 src/actors/tracking_frontend_gtsam.rs:106 [37mDEBUG[0m[37m] Tracking frontend working on frame 0[0m
+[37m[3.337 src/actors/tracking_frontend_gtsam.rs:106 [37mDEBUG[0m[37m] Tracking frontend working on frame 1[0m
+[37m[3.425 src/modules/map_initialization.rs:129 [37mDEBUG[0m[37m] MonocularInitialization, ReconstructWithTwoViews... failure[0m
+[37m[3.428 src/actors/tracking_frontend_gtsam.rs:106 [37mDEBUG[0m[37m] Tracking frontend working on frame 2[0m
+[32m[3.484 src/map/map.rs:199 [32mINFO[0m[32m] Created keyframe 0[0m
+[32m[3.492 src/map/map.rs:199 [32mINFO[0m[32m] Created keyframe 1[0m
+[32m[3.492 src/modules/map_initialization.rs:191 [32mINFO[0m[32m] Monocular initialization created new map with 130 mappoints[0m
+[37m[3.497 src/actors/tracking_frontend_gtsam.rs:358 [37mDEBUG[0m[37m] Extracted 200 new features[0m
+Backend initializing graph...
+... Initial pose: t[-0.0955,0.0534,0.0307] r[0.0014,-0.0050,-0.0005,1.0000]
+... Initial velocity: DVVector3([[-0.9549030067863108, 0.533504904844983, 0.3069768468798599]])
+... Initial bias: ImuBias { bax: 0.0, bay: 0.0, baz: 0.0, bwx: 0.0, bwy: 0.0, bwz: 0.0 }
+[33m[3.506 src/actors/local_mapping_gtsam.rs:326 [33mWARN[0m[33m] Not running LBA. Either we just initialized the map or there are too many keyframes in the queue (1)[0m
+[37m[3.506 src/modules/imu.rs:189 [37mDEBUG[0m[37m] IMU: Early return not enough KFs (2)[0m
+[37m[3.506 src/actors/local_mapping_gtsam.rs:375 [37mDEBUG[0m[37m] For keyframe 0, culled 0 mappoints, created 108 mappoints, culled 0 keyframes[0m
+[32m[3.506 src/actors/local_mapping_gtsam.rs:376 [32mINFO[0m[32m] Map has 2 keyframes and 238 mappoints[0m
+[33m[3.517 src/actors/local_mapping_gtsam.rs:326 [33mWARN[0m[33m] Not running LBA. Either we just initialized the map or there are too many keyframes in the queue (0)[0m
+[37m[3.517 src/modules/imu.rs:189 [37mDEBUG[0m[37m] IMU: Early return not enough KFs (2)[0m
+[37m[3.517 src/actors/local_mapping_gtsam.rs:375 [37mDEBUG[0m[37m] For keyframe 1, culled 0 mappoints, created 9 mappoints, culled 0 keyframes[0m
+[32m[3.517 src/actors/local_mapping_gtsam.rs:376 [32mINFO[0m[32m] Map has 2 keyframes and 247 mappoints[0m
+[37m[3.528 src/actors/tracking_frontend_gtsam.rs:106 [37mDEBUG[0m[37m] Tracking frontend working on frame 3[0m
+[37m[3.529 src/actors/tracking_frontend_gtsam.rs:321 [37mDEBUG[0m[37m] Optical flow tracked 200 from original 200[0m
+[37m[3.532 src/actors/tracking_frontend_gtsam.rs:132 [37mDEBUG[0m[37m] Pose prediction from pure optical flow: t[-0.1485,0.0868,0.0994] r[0.0017,-0.0063,-0.0012,1.0000][0m
+[37m[3.532 src/actors/tracking_frontend_gtsam.rs:377 [37mDEBUG[0m[37m] Need new keyframe? false false false, 200[0m
+[37m[3.637 src/actors/tracking_frontend_gtsam.rs:106 [37mDEBUG[0m[37m] Tracking frontend working on frame 4[0m
+[37m[3.639 src/actors/tracking_frontend_gtsam.rs:321 [37mDEBUG[0m[37m] Optical flow tracked 199 from original 200[0m
+[37m[3.643 src/actors/tracking_frontend_gtsam.rs:132 [37mDEBUG[0m[37m] Pose prediction from pure optical flow: t[-0.2127,0.1535,0.1022] r[0.0049,-0.0051,-0.0024,1.0000][0m
+[37m[3.643 src/actors/tracking_frontend_gtsam.rs:377 [37mDEBUG[0m[37m] Need new keyframe? false true false, 199[0m
+[37m[3.654 src/actors/tracking_frontend_gtsam.rs:358 [37mDEBUG[0m[37m] Extracted 1 new features[0m
+[37m[3.655 src/actors/tracking_backend_gtsam.rs:467 [37mDEBUG[0m[37m] ... current state: GtsamState { pose: Pose3: Isometry { rotation: [0.001430897733693143, -0.0049873166232003415, -0.0004611534642917057, 0.9999864331789998], translation: [-0.09549043727860192, 0.053350566802987116, 0.03069772860137618] }, velocity: Vector3: [-0.9549030067863108, 0.533504904844983, 0.3069768468798599], bias: ConstantBias: accel_bias: Vector3Ref: [0.0, 0.0, 0.0], gyro_bias: Vector3Ref: [0.0, 0.0, 0.0] }[0m
+[37m[3.655 src/actors/tracking_backend_gtsam.rs:484 [37mDEBUG[0m[37m] IMU PREDICTED POSE USING GTSAM: Pose3: Isometry { rotation: [0.00470906389666414, -0.0032451552423047505, -0.004937054730384324, 0.9999714591803407], translation: [-0.14204476850771852, 0.10555479473510548, -0.0037343357299561217] }[0m
+[37m[3.661 src/actors/tracking_backend_gtsam.rs:379 [37mDEBUG[0m[37m] !!!!!! FINAL FRAME POSE: Some(t[-0.1417,0.1056,-0.0028] r[0.0067,-0.0040,1.0000,0.0019])[0m
+Huh? Optimized pose in frame: Some(t[-0.1417,0.1056,-0.0028] r[0.0067,-0.0040,1.0000,0.0019])
+TRACKING BACKEND SEND TO LOCAL MAPPING
+[37m[3.661 src/actors/visualizer.rs:466 [37mDEBUG[0m[37m] SOFIYA TRAJ: FOR TIMESTAMP 1403636858.8516665, VISUALIZER POSE IS t[-0.1421,0.1050,0.0055] r[0.0067,-0.0040,1.0000,-0.0019][0m
+Local keyframes: {1, 0}
+Track in view: 247
+Matches in local mapping: 60/247.
+[37m[3.692 src/map/map.rs:180 [37mDEBUG[0m[37m] INSERT KEYFRAME TO MAP, mp matches: 1007[0m
+[32m[3.692 src/map/map.rs:199 [32mINFO[0m[32m] Created keyframe 2[0m
+[32m[3.692 src/actors/local_mapping_gtsam.rs:153 [32mINFO[0m[32m] Local mapping working on keyframe 2. Queue length: 0[0m
+[37m[3.697 src/modules/imu.rs:189 [37mDEBUG[0m[37m] IMU: Early return not enough KFs (3)[0m
+[37m[3.697 src/actors/local_mapping_gtsam.rs:375 [37mDEBUG[0m[37m] For keyframe 2, culled 72 mappoints, created 1 mappoints, culled 0 keyframes[0m
+[32m[3.697 src/actors/local_mapping_gtsam.rs:376 [32mINFO[0m[32m] Map has 3 keyframes and 176 mappoints[0m
+[37m[3.735 src/actors/tracking_frontend_gtsam.rs:106 [37mDEBUG[0m[37m] Tracking frontend working on frame 5[0m
+[37m[3.741 src/actors/tracking_frontend_gtsam.rs:321 [37mDEBUG[0m[37m] Optical flow tracked 199 from original 200[0m
+[37m[3.75 src/actors/tracking_frontend_gtsam.rs:132 [37mDEBUG[0m[37m] Pose prediction from pure optical flow: t[-0.2711,0.2226,0.1229] r[0.0097,-0.0036,-0.0038,0.9999][0m
+[37m[3.75 src/actors/tracking_frontend_gtsam.rs:377 [37mDEBUG[0m[37m] Need new keyframe? false false false, 199[0m
+[37m[3.755 /home/sofiya/.cargo/registry/src/index.crates.io-6f17d22bba15001f/hyper-0.14.29/src/proto/h1/io.rs:208 [37mDEBUG[0m[37m] parsed 13 headers[0m
+[37m[3.755 /home/sofiya/.cargo/registry/src/index.crates.io-6f17d22bba15001f/hyper-0.14.29/src/proto/h1/conn.rs:224 [37mDEBUG[0m[37m] incoming body is empty[0m
+[37m[3.755 /home/sofiya/.cargo/registry/src/index.crates.io-6f17d22bba15001f/hyper-0.14.29/src/proto/h1/io.rs:318 [37mDEBUG[0m[37m] flushed 213 bytes[0m
+[37m[4.029 src/actors/tracking_frontend_gtsam.rs:106 [37mDEBUG[0m[37m] Tracking frontend working on frame 6[0m
+[37m[4.03 src/actors/tracking_frontend_gtsam.rs:321 [37mDEBUG[0m[37m] Optical flow tracked 198 from original 199[0m
+[37m[4.034 src/actors/tracking_frontend_gtsam.rs:132 [37mDEBUG[0m[37m] Pose prediction from pure optical flow: t[-0.3045,0.3077,0.1337] r[0.0148,-0.0049,-0.0034,0.9999][0m
+[37m[4.034 src/actors/tracking_frontend_gtsam.rs:377 [37mDEBUG[0m[37m] Need new keyframe? false true false, 198[0m
+[37m[4.036 src/actors/tracking_frontend_gtsam.rs:358 [37mDEBUG[0m[37m] Extracted 2 new features[0m
+[37m[4.036 src/actors/tracking_backend_gtsam.rs:467 [37mDEBUG[0m[37m] ... current state: GtsamState { pose: Pose3: Isometry { rotation: [-0.001893194561821585, -0.006738975203387996, 0.003976838991284618, 0.9999675928644871], translation: [-0.14172604740125272, 0.10555656681424905, -0.0027644854245374565] }, velocity: Vector3: [0.034002137605542264, 0.5105923410598739, -0.9729269362759216], bias: ConstantBias: accel_bias: Vector3Ref: [-7.264565064029371e-15, 2.2364440037557827e-16, 7.493949736807894e-15], gyro_bias: Vector3Ref: [-8.381013330990537e-8, -1.9666217039306675e-8, -4.0423043326143224e-10] }[0m
+[37m[4.036 src/actors/tracking_backend_gtsam.rs:484 [37mDEBUG[0m[37m] IMU PREDICTED POSE USING GTSAM: Pose3: Isometry { rotation: [0.0033029622155195206, -0.006231011042612298, -0.0008964388535139123, 0.9999747303504082], translation: [-0.08933732449155399, 0.15475688294401546, -0.16525176306936537] }[0m
+[37m[4.038 src/actors/tracking_backend_gtsam.rs:379 [37mDEBUG[0m[37m] !!!!!! FINAL FRAME POSE: Some(t[-0.0890,0.1555,-0.1639] r[0.0073,-0.0089,0.9999,0.0071])[0m
+Huh? Optimized pose in frame: Some(t[-0.0890,0.1555,-0.1639] r[0.0073,-0.0089,0.9999,0.0071])
+TRACKING BACKEND SEND TO LOCAL MAPPING
+[37m[4.038 src/actors/visualizer.rs:466 [37mDEBUG[0m[37m] SOFIYA TRAJ: FOR TIMESTAMP 1403636858.9516666, VISUALIZER POSE IS t[-0.0887,0.1513,0.1679] r[0.0073,-0.0089,0.9999,-0.0071][0m
+Local keyframes: {1, 2, 0}
+Track in view: 176
+Matches in local mapping: 33/176.
+[37m[4.05 src/map/map.rs:180 [37mDEBUG[0m[37m] INSERT KEYFRAME TO MAP, mp matches: 1005[0m
+[32m[4.05 src/map/map.rs:199 [32mINFO[0m[32m] Created keyframe 3[0m
+[32m[4.05 src/actors/local_mapping_gtsam.rs:153 [32mINFO[0m[32m] Local mapping working on keyframe 3. Queue length: 0[0m
+[37m[4.057 src/modules/imu.rs:189 [37mDEBUG[0m[37m] IMU: Early return not enough KFs (4)[0m
+[37m[4.057 src/actors/local_mapping_gtsam.rs:375 [37mDEBUG[0m[37m] For keyframe 3, culled 97 mappoints, created 18 mappoints, culled 0 keyframes[0m
+[32m[4.057 src/actors/local_mapping_gtsam.rs:376 [32mINFO[0m[32m] Map has 4 keyframes and 97 mappoints[0m
+[37m[4.233 src/actors/tracking_frontend_gtsam.rs:106 [37mDEBUG[0m[37m] Tracking frontend working on frame 7[0m
+[37m[4.233 src/actors/tracking_frontend_gtsam.rs:321 [37mDEBUG[0m[37m] Optical flow tracked 200 from original 200[0m
+[37m[4.239 src/actors/tracking_frontend_gtsam.rs:132 [37mDEBUG[0m[37m] Pose prediction from pure optical flow: t[-0.3507,0.3892,0.1297] r[0.0159,-0.0055,-0.0077,0.9998][0m
+[37m[4.239 src/actors/tracking_frontend_gtsam.rs:377 [37mDEBUG[0m[37m] Need new keyframe? false false false, 200[0m
+[37m[4.435 src/actors/tracking_frontend_gtsam.rs:106 [37mDEBUG[0m[37m] Tracking frontend working on frame 8[0m
+[37m[4.435 src/actors/tracking_frontend_gtsam.rs:321 [37mDEBUG[0m[37m] Optical flow tracked 199 from original 200[0m
+[37m[4.439 src/actors/tracking_frontend_gtsam.rs:132 [37mDEBUG[0m[37m] Pose prediction from pure optical flow: t[-0.3935,0.4683,0.1096] r[0.0198,-0.0039,-0.0128,0.9997][0m
+[37m[4.439 src/actors/tracking_frontend_gtsam.rs:377 [37mDEBUG[0m[37m] Need new keyframe? false true false, 199[0m
+[37m[4.441 src/actors/tracking_frontend_gtsam.rs:358 [37mDEBUG[0m[37m] Extracted 1 new features[0m
+[37m[4.441 src/actors/tracking_backend_gtsam.rs:467 [37mDEBUG[0m[37m] ... current state: GtsamState { pose: Pose3: Isometry { rotation: [-0.007057889701053196, -0.007251118355393251, 0.008857705634237545, 0.9999095701744539], translation: [-0.08895848463733202, 0.15546904872986939, -0.16389006162250258] }, velocity: Vector3: [1.0164258407491376, 0.4810794403852609, -2.2472342746026226], bias: ConstantBias: accel_bias: Vector3Ref: [-7.558122359802807e-16, 9.188468539399746e-15, 5.441235377596219e-14], gyro_bias: Vector3Ref: [-5.050151840977543e-7, -3.996306465276714e-8, -4.988690118951794e-9] }[0m
+[37m[4.441 src/actors/tracking_backend_gtsam.rs:484 [37mDEBUG[0m[37m] IMU PREDICTED POSE USING GTSAM: Pose3: Isometry { rotation: [-0.00179906095471561, -0.006462283270840391, 0.005128274300180784, 0.9999643509032263], translation: [0.06004768006476727, 0.2008695673941303, -0.4538346348886344] }[0m
+[37m[4.441 src/actors/tracking_backend_gtsam.rs:379 [37mDEBUG[0m[37m] !!!!!! FINAL FRAME POSE: Some(t[0.0604,0.2023,-0.4524] r[0.0080,-0.0127,0.9998,0.0122])[0m
+Huh? Optimized pose in frame: Some(t[0.0604,0.2023,-0.4524] r[0.0080,-0.0127,0.9998,0.0122])
+TRACKING BACKEND SEND TO LOCAL MAPPING
+[37m[4.441 src/actors/visualizer.rs:466 [37mDEBUG[0m[37m] SOFIYA TRAJ: FOR TIMESTAMP 1403636859.0516665, VISUALIZER POSE IS t[0.0629,0.1923,0.4564] r[0.0080,-0.0127,0.9998,-0.0122][0m
+Local keyframes: {1, 2, 0, 3}
+Track in view: 87
+Matches in local mapping: 23/97.
+[37m[4.46 src/map/map.rs:180 [37mDEBUG[0m[37m] INSERT KEYFRAME TO MAP, mp matches: 1007[0m
+[32m[4.46 src/map/map.rs:199 [32mINFO[0m[32m] Created keyframe 4[0m
+[32m[4.46 src/actors/local_mapping_gtsam.rs:153 [32mINFO[0m[32m] Local mapping working on keyframe 4. Queue length: 0[0m
+[37m[4.468 src/modules/imu.rs:189 [37mDEBUG[0m[37m] IMU: Early return not enough KFs (5)[0m
+[37m[4.468 src/actors/local_mapping_gtsam.rs:375 [37mDEBUG[0m[37m] For keyframe 4, culled 1 mappoints, created 9 mappoints, culled 0 keyframes[0m
+[32m[4.468 src/actors/local_mapping_gtsam.rs:376 [32mINFO[0m[32m] Map has 5 keyframes and 105 mappoints[0m
+[37m[4.638 src/actors/tracking_frontend_gtsam.rs:106 [37mDEBUG[0m[37m] Tracking frontend working on frame 9[0m
+[37m[4.639 src/actors/tracking_frontend_gtsam.rs:321 [37mDEBUG[0m[37m] Optical flow tracked 196 from original 200[0m
+[37m[4.644 src/actors/tracking_frontend_gtsam.rs:132 [37mDEBUG[0m[37m] Pose prediction from pure optical flow: t[-0.4506,0.5385,0.1300] r[0.0281,0.0007,-0.0131,0.9995][0m
+[37m[4.644 src/actors/tracking_frontend_gtsam.rs:377 [37mDEBUG[0m[37m] Need new keyframe? false false false, 196[0m
+[37m[4.841 src/actors/tracking_frontend_gtsam.rs:106 [37mDEBUG[0m[37m] Tracking frontend working on frame 10[0m
+[37m[4.842 src/actors/tracking_frontend_gtsam.rs:321 [37mDEBUG[0m[37m] Optical flow tracked 195 from original 196[0m
+[37m[4.848 src/actors/tracking_frontend_gtsam.rs:132 [37mDEBUG[0m[37m] Pose prediction from pure optical flow: t[-0.5011,0.6069,0.1728] r[0.0374,0.0023,-0.0111,0.9992][0m
+[37m[4.848 src/actors/tracking_frontend_gtsam.rs:377 [37mDEBUG[0m[37m] Need new keyframe? false true false, 195[0m
+[37m[4.85 src/actors/tracking_frontend_gtsam.rs:358 [37mDEBUG[0m[37m] Extracted 5 new features[0m
+[37m[4.85 src/actors/tracking_backend_gtsam.rs:467 [37mDEBUG[0m[37m] ... current state: GtsamState { pose: Pose3: Isometry { rotation: [-0.012233165918987522, -0.008034054013949068, 0.012657883983793852, 0.9998127732734524], translation: [0.0604061746731443, 0.2022826291452717, -0.45242095209655625] }, velocity: Vector3: [1.9607854923558174, 0.44651177663591324, -3.528011759599859], bias: ConstantBias: accel_bias: Vector3Ref: [-8.542861332011865e-15, 3.198078698343935e-14, -1.0592514235888126e-14], gyro_bias: Vector3Ref: [-5.087936207544395e-7, -4.523151041055901e-8, -5.101837717520281e-9] }[0m
+[37m[4.851 src/actors/tracking_backend_gtsam.rs:484 [37mDEBUG[0m[37m] IMU PREDICTED POSE USING GTSAM: Pose3: Isometry { rotation: [-0.008330598447955478, -0.00350886783859986, 0.009922824270992482, 0.9999099092090632], translation: [0.3017268573944456, 0.2440054195860894, -0.8703725716264188] }[0m
+[37m[4.851 src/actors/tracking_backend_gtsam.rs:379 [37mDEBUG[0m[37m] !!!!!! FINAL FRAME POSE: Some(t[0.3020,0.2458,-0.8689] r[0.0125,-0.0156,0.9997,0.0160])[0m
+Huh? Optimized pose in frame: Some(t[0.3020,0.2458,-0.8689] r[0.0125,-0.0156,0.9997,0.0160])
+TRACKING BACKEND SEND TO LOCAL MAPPING
+[37m[4.852 src/actors/visualizer.rs:466 [37mDEBUG[0m[37m] SOFIYA TRAJ: FOR TIMESTAMP 1403636859.1516664, VISUALIZER POSE IS t[0.3162,0.2286,0.8686] r[0.0125,-0.0156,0.9997,-0.0160][0m
+Local keyframes: {4, 2, 1, 3, 0}
+Track in view: 76
+Matches in local mapping: 22/105.
+[37m[4.871 src/map/map.rs:180 [37mDEBUG[0m[37m] INSERT KEYFRAME TO MAP, mp matches: 1008[0m
+[32m[4.871 src/map/map.rs:199 [32mINFO[0m[32m] Created keyframe 5[0m
+[32m[4.871 src/actors/local_mapping_gtsam.rs:153 [32mINFO[0m[32m] Local mapping working on keyframe 5. Queue length: 0[0m
+[37m[4.877 src/modules/imu.rs:189 [37mDEBUG[0m[37m] IMU: Early return not enough KFs (6)[0m
+[37m[4.877 src/actors/local_mapping_gtsam.rs:375 [37mDEBUG[0m[37m] For keyframe 5, culled 13 mappoints, created 7 mappoints, culled 0 keyframes[0m
+[32m[4.877 src/actors/local_mapping_gtsam.rs:376 [32mINFO[0m[32m] Map has 6 keyframes and 99 mappoints[0m
+[37m[5.044 src/actors/tracking_frontend_gtsam.rs:106 [37mDEBUG[0m[37m] Tracking frontend working on frame 11[0m
+[37m[5.045 src/actors/tracking_frontend_gtsam.rs:321 [37mDEBUG[0m[37m] Optical flow tracked 199 from original 200[0m
+[37m[5.051 src/actors/tracking_frontend_gtsam.rs:132 [37mDEBUG[0m[37m] Pose prediction from pure optical flow: t[-0.5567,0.6776,0.1955] r[0.0438,0.0055,-0.0132,0.9989][0m
+[37m[5.051 src/actors/tracking_frontend_gtsam.rs:377 [37mDEBUG[0m[37m] Need new keyframe? false false false, 199[0m
+[37m[5.25 src/actors/tracking_frontend_gtsam.rs:106 [37mDEBUG[0m[37m] Tracking frontend working on frame 12[0m
+[37m[5.251 src/actors/tracking_frontend_gtsam.rs:321 [37mDEBUG[0m[37m] Optical flow tracked 199 from original 199[0m
+[37m[5.258 src/actors/tracking_frontend_gtsam.rs:132 [37mDEBUG[0m[37m] Pose prediction from pure optical flow: t[-0.6011,0.7563,0.2177] r[0.0500,0.0066,-0.0151,0.9986][0m
+[37m[5.258 src/actors/tracking_frontend_gtsam.rs:377 [37mDEBUG[0m[37m] Need new keyframe? false true false, 199[0m
+[37m[5.263 src/actors/tracking_frontend_gtsam.rs:358 [37mDEBUG[0m[37m] Extracted 1 new features[0m
+[37m[5.264 src/actors/tracking_backend_gtsam.rs:467 [37mDEBUG[0m[37m] ... current state: GtsamState { pose: Pose3: Isometry { rotation: [-0.015988210537577402, -0.012508679101568243, 0.015569923779801438, 0.9996726902063652], translation: [0.30203411976755695, 0.245815640543028, -0.8689490014117169] }, velocity: Vector3: [2.8707621178340252, 0.4153273152584097, -4.796059035916717], bias: ConstantBias: accel_bias: Vector3Ref: [1.4477111947698845e-14, 5.5192831435743834e-14, -3.75373465384625e-14], gyro_bias: Vector3Ref: [4.75870656221179e-6, 1.1579768070150196e-6, 1.357932391969967e-7] }[0m
+[37m[5.264 src/actors/tracking_backend_gtsam.rs:484 [37mDEBUG[0m[37m] IMU PREDICTED POSE USING GTSAM: Pose3: Isometry { rotation: [-0.012138860297598322, -0.008433169450484163, 0.010878124777555296, 0.9998315838805146], translation: [0.6352077609903346, 0.28283250512139063, -1.4148122395684246] }[0m
+[37m[5.266 src/actors/tracking_backend_gtsam.rs:379 [37mDEBUG[0m[37m] !!!!!! FINAL FRAME POSE: Some(t[0.6358,0.2850,-1.4125] r[0.0165,-0.0202,0.9995,0.0200])[0m
+Huh? Optimized pose in frame: Some(t[0.6358,0.2850,-1.4125] r[0.0165,-0.0202,0.9995,0.0200])
+TRACKING BACKEND SEND TO LOCAL MAPPING
+[37m[5.266 src/actors/visualizer.rs:466 [37mDEBUG[0m[37m] SOFIYA TRAJ: FOR TIMESTAMP 1403636859.2516665, VISUALIZER POSE IS t[0.6714,0.2543,1.4018] r[0.0165,-0.0202,0.9995,-0.0200][0m
+Local keyframes: {4, 3, 0, 1, 2, 5}
+Track in view: 54
+Matches in local mapping: 13/99.
+[37m[5.288 src/map/map.rs:180 [37mDEBUG[0m[37m] INSERT KEYFRAME TO MAP, mp matches: 1005[0m
+[32m[5.288 src/map/map.rs:199 [32mINFO[0m[32m] Created keyframe 6[0m
+[32m[5.288 src/actors/local_mapping_gtsam.rs:153 [32mINFO[0m[32m] Local mapping working on keyframe 6. Queue length: 0[0m
+[37m[5.292 src/modules/imu.rs:189 [37mDEBUG[0m[37m] IMU: Early return not enough KFs (7)[0m
+[37m[5.292 src/actors/local_mapping_gtsam.rs:375 [37mDEBUG[0m[37m] For keyframe 6, culled 7 mappoints, created 3 mappoints, culled 0 keyframes[0m
+[32m[5.292 src/actors/local_mapping_gtsam.rs:376 [32mINFO[0m[32m] Map has 7 keyframes and 95 mappoints[0m
+[37m[5.453 src/actors/tracking_frontend_gtsam.rs:106 [37mDEBUG[0m[37m] Tracking frontend working on frame 13[0m
+[37m[5.454 src/actors/tracking_frontend_gtsam.rs:321 [37mDEBUG[0m[37m] Optical flow tracked 199 from original 200[0m
+[37m[5.459 src/actors/tracking_frontend_gtsam.rs:132 [37mDEBUG[0m[37m] Pose prediction from pure optical flow: t[-0.6364,0.8417,0.2280] r[0.0542,0.0066,-0.0174,0.9984][0m
+[37m[5.459 src/actors/tracking_frontend_gtsam.rs:377 [37mDEBUG[0m[37m] Need new keyframe? false false false, 199[0m
+[37m[5.655 src/actors/tracking_frontend_gtsam.rs:106 [37mDEBUG[0m[37m] Tracking frontend working on frame 14[0m
+[37m[5.655 src/actors/tracking_frontend_gtsam.rs:321 [37mDEBUG[0m[37m] Optical flow tracked 199 from original 199[0m
+[37m[5.657 src/actors/tracking_frontend_gtsam.rs:132 [37mDEBUG[0m[37m] Pose prediction from pure optical flow: t[-0.6706,0.9211,0.2588] r[0.0593,0.0055,-0.0146,0.9981][0m
+[37m[5.657 src/actors/tracking_frontend_gtsam.rs:377 [37mDEBUG[0m[37m] Need new keyframe? false true false, 199[0m
+[37m[5.659 src/actors/tracking_frontend_gtsam.rs:358 [37mDEBUG[0m[37m] Extracted 1 new features[0m
+[37m[5.659 src/actors/tracking_backend_gtsam.rs:467 [37mDEBUG[0m[37m] ... current state: GtsamState { pose: Pose3: Isometry { rotation: [-0.01996672450906768, -0.016496754852477723, 0.020196811327474855, 0.9994604923677166], translation: [0.6357626386615043, 0.28501065783012575, -1.4124884348618088] }, velocity: Vector3: [3.8320268798746984, 0.3663982253147815, -6.076330058667026], bias: ConstantBias: accel_bias: Vector3Ref: [-3.8699412753756015e-14, 1.4302047070317467e-13, -1.1565077064500612e-13], gyro_bias: Vector3Ref: [4.747539066059525e-6, 1.1333479211560388e-6, 1.3511280300876444e-7] }[0m
+[37m[5.659 src/actors/tracking_backend_gtsam.rs:484 [37mDEBUG[0m[37m] IMU PREDICTED POSE USING GTSAM: Pose3: Isometry { rotation: [-0.012746657210670554, -0.019717771809118493, 0.018439978308099233, 0.9995542503560445], translation: [1.0681584332505132, 0.3165036636436847, -2.0891777255164627] }[0m
+[37m[5.659 src/actors/tracking_backend_gtsam.rs:379 [37mDEBUG[0m[37m] !!!!!! FINAL FRAME POSE: Some(t[1.0688,0.3197,-2.0859] r[0.0136,-0.0215,0.9993,0.0274])[0m
+Huh? Optimized pose in frame: Some(t[1.0688,0.3197,-2.0859] r[0.0136,-0.0215,0.9993,0.0274])
+TRACKING BACKEND SEND TO LOCAL MAPPING
+[37m[5.66 src/actors/visualizer.rs:466 [37mDEBUG[0m[37m] SOFIYA TRAJ: FOR TIMESTAMP 1403636859.3516665, VISUALIZER POSE IS t[1.1085,0.2899,2.0695] r[0.0136,-0.0215,0.9993,-0.0274][0m
+Local keyframes: {6, 4, 3, 1, 5}
+Track in view: 31
+Matches in local mapping: 11/95.
+[37m[5.672 src/map/map.rs:180 [37mDEBUG[0m[37m] INSERT KEYFRAME TO MAP, mp matches: 1007[0m
+[32m[5.672 src/map/map.rs:199 [32mINFO[0m[32m] Created keyframe 7[0m
+[32m[5.672 src/actors/local_mapping_gtsam.rs:153 [32mINFO[0m[32m] Local mapping working on keyframe 7. Queue length: 0[0m
+[37m[5.677 src/modules/imu.rs:189 [37mDEBUG[0m[37m] IMU: Early return not enough KFs (8)[0m
+[37m[5.677 src/actors/local_mapping_gtsam.rs:375 [37mDEBUG[0m[37m] For keyframe 7, culled 7 mappoints, created 5 mappoints, culled 0 keyframes[0m
+[32m[5.677 src/actors/local_mapping_gtsam.rs:376 [32mINFO[0m[32m] Map has 8 keyframes and 93 mappoints[0m
+[37m[5.858 src/actors/tracking_frontend_gtsam.rs:106 [37mDEBUG[0m[37m] Tracking frontend working on frame 15[0m
+[37m[5.859 src/actors/tracking_frontend_gtsam.rs:321 [37mDEBUG[0m[37m] Optical flow tracked 200 from original 200[0m
+[37m[5.867 src/actors/tracking_frontend_gtsam.rs:132 [37mDEBUG[0m[37m] Pose prediction from pure optical flow: t[-0.6918,1.0092,0.2868] r[0.0650,0.0062,-0.0170,0.9977][0m
+[37m[5.867 src/actors/tracking_frontend_gtsam.rs:377 [37mDEBUG[0m[37m] Need new keyframe? false false false, 200[0m
+[37m[6.06 src/actors/tracking_frontend_gtsam.rs:106 [37mDEBUG[0m[37m] Tracking frontend working on frame 16[0m
+[37m[6.062 src/actors/tracking_frontend_gtsam.rs:321 [37mDEBUG[0m[37m] Optical flow tracked 199 from original 200[0m
+[37m[6.065 src/actors/tracking_frontend_gtsam.rs:132 [37mDEBUG[0m[37m] Pose prediction from pure optical flow: t[-0.7050,1.1020,0.3091] r[0.0703,0.0073,-0.0215,0.9973][0m
+[37m[6.065 src/actors/tracking_frontend_gtsam.rs:377 [37mDEBUG[0m[37m] Need new keyframe? false true false, 199[0m
+[37m[6.068 src/actors/tracking_frontend_gtsam.rs:358 [37mDEBUG[0m[37m] Extracted 1 new features[0m
+[37m[6.068 src/actors/tracking_backend_gtsam.rs:467 [37mDEBUG[0m[37m] ... current state: GtsamState { pose: Pose3: Isometry { rotation: [-0.027379252636014078, -0.013563839797594741, 0.021523483155661317, 0.9993013251506707], translation: [1.0688183386434469, 0.3197289965946855, -2.0858764534205707] }, velocity: Vector3: [4.845078939120119, 0.3184056721616131, -7.3828167863808405], bias: ConstantBias: accel_bias: Vector3Ref: [1.8154404784793033e-14, 1.7476668497843793e-14, -2.6251496799410624e-14], gyro_bias: Vector3Ref: [4.721977044247876e-6, 1.1017007892203478e-6, 1.34662018534923e-7] }[0m
+[37m[6.068 src/actors/tracking_backend_gtsam.rs:484 [37mDEBUG[0m[37m] IMU PREDICTED POSE USING GTSAM: Pose3: Isometry { rotation: [-0.02225250333060117, -0.015724198450005323, 0.018251554030836507, 0.9994620835499893], translation: [1.6039026051882104, 0.34767825522160056, -2.89124795189912] }[0m
+[37m[6.068 src/actors/tracking_backend_gtsam.rs:379 [37mDEBUG[0m[37m] !!!!!! FINAL FRAME POSE: Some(t[1.6039,0.3516,-2.8890] r[0.0110,-0.0253,0.9991,0.0323])[0m
+Huh? Optimized pose in frame: Some(t[1.6039,0.3516,-2.8890] r[0.0110,-0.0253,0.9991,0.0323])
+TRACKING BACKEND SEND TO LOCAL MAPPING
+[37m[6.068 src/actors/visualizer.rs:466 [37mDEBUG[0m[37m] SOFIYA TRAJ: FOR TIMESTAMP 1403636859.4516666, VISUALIZER POSE IS t[1.6457,0.3111,2.8700] r[0.0110,-0.0253,0.9991,-0.0323][0m
+Local keyframes: {6, 4, 7, 5}
+Track in view: 16
+Matches in local mapping: 6/56.
+[37m[6.086 src/map/map.rs:180 [37mDEBUG[0m[37m] INSERT KEYFRAME TO MAP, mp matches: 1005[0m
+[32m[6.086 src/map/map.rs:199 [32mINFO[0m[32m] Created keyframe 8[0m
+[32m[6.086 src/actors/local_mapping_gtsam.rs:153 [32mINFO[0m[32m] Local mapping working on keyframe 8. Queue length: 0[0m
+[37m[6.086 src/modules/imu.rs:189 [37mDEBUG[0m[37m] IMU: Early return not enough KFs (9)[0m
+[37m[6.086 src/actors/local_mapping_gtsam.rs:375 [37mDEBUG[0m[37m] For keyframe 8, culled 1 mappoints, created 1 mappoints, culled 0 keyframes[0m
+[32m[6.086 src/actors/local_mapping_gtsam.rs:376 [32mINFO[0m[32m] Map has 9 keyframes and 93 mappoints[0m
+[37m[6.263 src/actors/tracking_frontend_gtsam.rs:106 [37mDEBUG[0m[37m] Tracking frontend working on frame 17[0m
+[37m[6.264 src/actors/tracking_frontend_gtsam.rs:321 [37mDEBUG[0m[37m] Optical flow tracked 200 from original 200[0m
+[37m[6.275 src/actors/tracking_frontend_gtsam.rs:132 [37mDEBUG[0m[37m] Pose prediction from pure optical flow: t[-0.7128,1.1958,0.3360] r[0.0762,0.0082,-0.0270,0.9967][0m
+[37m[6.275 src/actors/tracking_frontend_gtsam.rs:377 [37mDEBUG[0m[37m] Need new keyframe? false false false, 200[0m
+[37m[6.468 src/actors/tracking_frontend_gtsam.rs:106 [37mDEBUG[0m[37m] Tracking frontend working on frame 18[0m
+[37m[6.47 src/actors/tracking_frontend_gtsam.rs:321 [37mDEBUG[0m[37m] Optical flow tracked 199 from original 200[0m
+[37m[6.48 src/actors/tracking_frontend_gtsam.rs:132 [37mDEBUG[0m[37m] Pose prediction from pure optical flow: t[-0.7249,1.2852,0.3767] r[0.0874,0.0112,-0.0345,0.9955][0m
+[37m[6.48 src/actors/tracking_frontend_gtsam.rs:377 [37mDEBUG[0m[37m] Need new keyframe? false true false, 199[0m
+[37m[6.482 src/actors/tracking_frontend_gtsam.rs:358 [37mDEBUG[0m[37m] Extracted 1 new features[0m
+[37m[6.482 src/actors/tracking_backend_gtsam.rs:467 [37mDEBUG[0m[37m] ... current state: GtsamState { pose: Pose3: Isometry { rotation: [-0.032345848120192526, -0.010977132123279495, 0.02526425741537776, 0.9990970753520316], translation: [1.603910441938753, 0.3515624688066644, -2.8889791365062463] }, velocity: Vector3: [5.863905463043141, 0.30097065611291685, -8.67061689697402], bias: ConstantBias: accel_bias: Vector3Ref: [7.639964470981929e-14, -1.3711008214172032e-14, -2.1889150553851597e-13], gyro_bias: Vector3Ref: [4.308638672166754e-6, 8.959378264485935e-7, 1.228952167485919e-7] }[0m
+[37m[6.482 src/actors/tracking_backend_gtsam.rs:484 [37mDEBUG[0m[37m] IMU PREDICTED POSE USING GTSAM: Pose3: Isometry { rotation: [-0.02700720455762416, -0.00547106650813431, 0.023117784505420663, 0.9993529138261454], translation: [2.240012186752969, 0.3787568038688349, -3.8224379817871874] }[0m
+[37m[6.483 src/actors/tracking_backend_gtsam.rs:379 [37mDEBUG[0m[37m] !!!!!! FINAL FRAME POSE: Some(t[2.2397,0.3828,-3.8211] r[0.0165,-0.0282,0.9988,0.0371])[0m
+Huh? Optimized pose in frame: Some(t[2.2397,0.3828,-3.8211] r[0.0165,-0.0282,0.9988,0.0371])
+TRACKING BACKEND SEND TO LOCAL MAPPING
+[37m[6.483 src/actors/visualizer.rs:466 [37mDEBUG[0m[37m] SOFIYA TRAJ: FOR TIMESTAMP 1403636859.5516665, VISUALIZER POSE IS t[2.3385,0.3386,3.7657] r[0.0165,-0.0282,0.9988,-0.0371][0m
+Local keyframes: {7, 6, 5, 8}
+Track in view: 9
+Matches in local mapping: 4/41.
+[37m[6.503 src/map/map.rs:180 [37mDEBUG[0m[37m] INSERT KEYFRAME TO MAP, mp matches: 1005[0m
+[32m[6.503 src/map/map.rs:199 [32mINFO[0m[32m] Created keyframe 9[0m
+[32m[6.503 src/actors/local_mapping_gtsam.rs:153 [32mINFO[0m[32m] Local mapping working on keyframe 9. Queue length: 0[0m
+[37m[6.505 src/modules/imu.rs:212 [37mDEBUG[0m[37m] IMU:  Early return timestamps (0.9000000953674316)... current keyframe is 9, first keyframe is 0[0m
+[37m[6.505 src/actors/local_mapping_gtsam.rs:375 [37mDEBUG[0m[37m] For keyframe 9, culled 4 mappoints, created 2 mappoints, culled 0 keyframes[0m
+[32m[6.505 src/actors/local_mapping_gtsam.rs:376 [32mINFO[0m[32m] Map has 10 keyframes and 91 mappoints[0m
+[37m[6.671 src/actors/tracking_frontend_gtsam.rs:106 [37mDEBUG[0m[37m] Tracking frontend working on frame 19[0m
+[37m[6.673 src/actors/tracking_frontend_gtsam.rs:321 [37mDEBUG[0m[37m] Optical flow tracked 198 from original 200[0m
+[37m[6.678 src/actors/tracking_frontend_gtsam.rs:132 [37mDEBUG[0m[37m] Pose prediction from pure optical flow: t[-0.7586,1.3493,0.4214] r[0.0852,0.0055,-0.0292,0.9959][0m
+[37m[6.678 src/actors/tracking_frontend_gtsam.rs:377 [37mDEBUG[0m[37m] Need new keyframe? false false false, 198[0m
+[37m[6.874 src/actors/tracking_frontend_gtsam.rs:106 [37mDEBUG[0m[37m] Tracking frontend working on frame 20[0m
+[37m[6.875 src/actors/tracking_frontend_gtsam.rs:321 [37mDEBUG[0m[37m] Optical flow tracked 198 from original 198[0m
+[37m[6.88 src/actors/tracking_frontend_gtsam.rs:132 [37mDEBUG[0m[37m] Pose prediction from pure optical flow: t[-0.7892,1.4141,0.4581] r[0.0780,-0.0005,-0.0259,0.9966][0m
+[37m[6.88 src/actors/tracking_frontend_gtsam.rs:377 [37mDEBUG[0m[37m] Need new keyframe? false true false, 198[0m
+[37m[6.883 src/actors/tracking_frontend_gtsam.rs:358 [37mDEBUG[0m[37m] Extracted 2 new features[0m
+[37m[6.884 src/actors/tracking_backend_gtsam.rs:467 [37mDEBUG[0m[37m] ... current state: GtsamState { pose: Pose3: Isometry { rotation: [-0.03705673636816433, -0.016525894090564708, 0.02818186137715851, 0.9987789924720917], translation: [2.2397246048541053, 0.3827697371493491, -3.8211131747198226] }, velocity: Vector3: [6.871454510066201, 0.3064677507500283, -9.954330718532889], bias: ConstantBias: accel_bias: Vector3Ref: [-2.894852536568469e-14, 9.649036001148142e-13, -5.608345559245084e-13], gyro_bias: Vector3Ref: [1.6666477596365291e-6, 2.395711267404258e-7, 1.509065759534457e-8] }[0m
+[37m[6.884 src/actors/tracking_backend_gtsam.rs:484 [37mDEBUG[0m[37m] IMU PREDICTED POSE USING GTSAM: Pose3: Isometry { rotation: [-0.027156647160771014, -0.019160450007835853, 0.0284765203131806, 0.9990417816394547], translation: [2.973250122163976, 0.41012822613559263, -4.8837981094686] }[0m
+[37m[6.885 src/actors/tracking_backend_gtsam.rs:379 [37mDEBUG[0m[37m] !!!!!! FINAL FRAME POSE: Some(t[2.9732,0.4136,-4.8818] r[0.0143,-0.0269,0.9984,0.0475])[0m
+Huh? Optimized pose in frame: Some(t[2.9732,0.4136,-4.8818] r[0.0143,-0.0269,0.9984,0.0475])
+TRACKING BACKEND SEND TO LOCAL MAPPING
+[37m[6.885 src/actors/visualizer.rs:466 [37mDEBUG[0m[37m] SOFIYA TRAJ: FOR TIMESTAMP 1403636859.6516664, VISUALIZER POSE IS t[3.0717,0.4402,4.8181] r[0.0143,-0.0269,0.9984,-0.0475][0m
+Local keyframes: {9, 6, 7, 8}
+Track in view: 5
+Matches in local mapping: 1/25.
+[37m[6.912 src/map/map.rs:180 [37mDEBUG[0m[37m] INSERT KEYFRAME TO MAP, mp matches: 1004[0m
+[32m[6.912 src/map/map.rs:199 [32mINFO[0m[32m] Created keyframe 10[0m
+[32m[6.912 src/actors/local_mapping_gtsam.rs:153 [32mINFO[0m[32m] Local mapping working on keyframe 10. Queue length: 0[0m
+[37m[6.914 src/modules/imu.rs:212 [37mDEBUG[0m[37m] IMU:  Early return timestamps (1)... current keyframe is 10, first keyframe is 0[0m
+[37m[6.914 src/actors/local_mapping_gtsam.rs:375 [37mDEBUG[0m[37m] For keyframe 10, culled 1 mappoints, created 4 mappoints, culled 0 keyframes[0m
+[32m[6.914 src/actors/local_mapping_gtsam.rs:376 [32mINFO[0m[32m] Map has 11 keyframes and 94 mappoints[0m
+[37m[7.078 src/actors/tracking_frontend_gtsam.rs:106 [37mDEBUG[0m[37m] Tracking frontend working on frame 21[0m
+[37m[7.079 src/actors/tracking_frontend_gtsam.rs:321 [37mDEBUG[0m[37m] Optical flow tracked 199 from original 200[0m
+[37m[7.084 src/actors/tracking_frontend_gtsam.rs:132 [37mDEBUG[0m[37m] Pose prediction from pure optical flow: t[-0.7912,1.5033,0.4871] r[0.0847,-0.0022,-0.0279,0.9960][0m
+[37m[7.084 src/actors/tracking_frontend_gtsam.rs:377 [37mDEBUG[0m[37m] Need new keyframe? false false false, 199[0m
+[37m[7.282 src/actors/tracking_frontend_gtsam.rs:106 [37mDEBUG[0m[37m] Tracking frontend working on frame 22[0m
+[37m[7.283 src/actors/tracking_frontend_gtsam.rs:321 [37mDEBUG[0m[37m] Optical flow tracked 199 from original 199[0m
+[37m[7.29 src/actors/tracking_frontend_gtsam.rs:132 [37mDEBUG[0m[37m] Pose prediction from pure optical flow: t[-0.8104,1.5841,0.5356] r[0.0937,0.0002,-0.0295,0.9952][0m
+[37m[7.29 src/actors/tracking_frontend_gtsam.rs:377 [37mDEBUG[0m[37m] Need new keyframe? false true false, 199[0m
+[37m[7.294 src/actors/tracking_frontend_gtsam.rs:358 [37mDEBUG[0m[37m] Extracted 1 new features[0m
+[37m[7.295 src/actors/tracking_backend_gtsam.rs:467 [37mDEBUG[0m[37m] ... current state: GtsamState { pose: Pose3: Isometry { rotation: [-0.04751710754678389, -0.014319437976452498, 0.026883839280373533, 0.9984058981055616], translation: [2.9732288089804615, 0.41364371242272235, -4.881777144300309] }, velocity: Vector3: [7.822692112262053, 0.29114800222830733, -11.24494571601286], bias: ConstantBias: accel_bias: Vector3Ref: [1.2963745224414154e-13, 5.166610667987203e-13, -7.299932688831878e-13], gyro_bias: Vector3Ref: [1.5875096855674773e-6, 1.7181220409020488e-7, 9.813902488388124e-9] }[0m
+[37m[7.295 src/actors/tracking_backend_gtsam.rs:484 [37mDEBUG[0m[37m] IMU PREDICTED POSE USING GTSAM: Pose3: Isometry { rotation: [-0.04063945542037774, -0.02637965685477712, 0.025006197629526584, 0.9985125129148219], translation: [3.8006845888496104, 0.4406032441862806, -6.073532047424385] }[0m
+[37m[7.297 src/actors/tracking_backend_gtsam.rs:379 [37mDEBUG[0m[37m] !!!!!! FINAL FRAME POSE: Some(t[3.8096,0.4354,-6.0640] r[0.0033,-0.0267,0.9981,0.0553])[0m
+Huh? Optimized pose in frame: Some(t[3.8096,0.4354,-6.0640] r[0.0033,-0.0267,0.9981,0.0553])
+TRACKING BACKEND SEND TO LOCAL MAPPING
+[37m[7.297 src/actors/visualizer.rs:466 [37mDEBUG[0m[37m] SOFIYA TRAJ: FOR TIMESTAMP 1403636859.7516665, VISUALIZER POSE IS t[3.7957,0.5326,6.0649] r[0.0033,-0.0267,0.9981,-0.0553][0m
+Local keyframes: {8, 7, 10, 9}
+Track in view: 4
+Matches in local mapping: 2/19.
+[37m[7.322 src/map/map.rs:180 [37mDEBUG[0m[37m] INSERT KEYFRAME TO MAP, mp matches: 1004[0m
+[32m[7.322 src/map/map.rs:199 [32mINFO[0m[32m] Created keyframe 11[0m
+[32m[7.322 src/actors/local_mapping_gtsam.rs:153 [32mINFO[0m[32m] Local mapping working on keyframe 11. Queue length: 0[0m
+[37m[7.324 src/modules/imu.rs:212 [37mDEBUG[0m[37m] IMU:  Early return timestamps (1.1000001430511475)... current keyframe is 11, first keyframe is 0[0m
+[37m[7.324 src/actors/local_mapping_gtsam.rs:375 [37mDEBUG[0m[37m] For keyframe 11, culled 2 mappoints, created 1 mappoints, culled 0 keyframes[0m
+[32m[7.324 src/actors/local_mapping_gtsam.rs:376 [32mINFO[0m[32m] Map has 12 keyframes and 93 mappoints[0m
+[37m[7.486 src/actors/tracking_frontend_gtsam.rs:106 [37mDEBUG[0m[37m] Tracking frontend working on frame 23[0m
+[37m[7.488 src/actors/tracking_frontend_gtsam.rs:321 [37mDEBUG[0m[37m] Optical flow tracked 196 from original 200[0m
+[37m[7.492 src/actors/tracking_frontend_gtsam.rs:132 [37mDEBUG[0m[37m] Pose prediction from pure optical flow: t[-0.8237,1.6654,0.5763] r[0.1033,-0.0004,-0.0297,0.9942][0m
+[37m[7.493 src/actors/tracking_frontend_gtsam.rs:377 [37mDEBUG[0m[37m] Need new keyframe? false false false, 196[0m
+[37m[7.69 src/actors/tracking_frontend_gtsam.rs:106 [37mDEBUG[0m[37m] Tracking frontend working on frame 24[0m
+[37m[7.691 src/actors/tracking_frontend_gtsam.rs:321 [37mDEBUG[0m[37m] Optical flow tracked 191 from original 196[0m
+[37m[7.698 src/actors/tracking_frontend_gtsam.rs:132 [37mDEBUG[0m[37m] Pose prediction from pure optical flow: t[-0.8470,1.7404,0.6054] r[0.0970,-0.0038,-0.0257,0.9949][0m
+[37m[7.699 src/actors/tracking_frontend_gtsam.rs:377 [37mDEBUG[0m[37m] Need new keyframe? false true false, 191[0m
+[37m[7.703 src/actors/tracking_frontend_gtsam.rs:358 [37mDEBUG[0m[37m] Extracted 9 new features[0m
+[37m[7.704 src/actors/tracking_backend_gtsam.rs:467 [37mDEBUG[0m[37m] ... current state: GtsamState { pose: Pose3: Isometry { rotation: [-0.05532056715602181, -0.003274499856258027, 0.026694392857454157, 0.9981063680240696], translation: [3.8095874267857903, 0.4354326027659907, -6.064008594204106] }, velocity: Vector3: [8.757775997889294, 0.265148546515209, -12.521459227296976], bias: ConstantBias: accel_bias: Vector3Ref: [4.4810831257023034e-14, -3.274186560311904e-13, -2.8921569214017273e-13], gyro_bias: Vector3Ref: [6.557471646968383e-6, 1.7713724055819797e-6, 2.0684160029828297e-7] }[0m
+[37m[7.704 src/actors/tracking_backend_gtsam.rs:484 [37mDEBUG[0m[37m] IMU PREDICTED POSE USING GTSAM: Pose3: Isometry { rotation: [-0.04785632965616011, -0.01394521211946157, 0.02884343439074983, 0.9983403022333268], translation: [4.7298209871072885, 0.4609391164745806, -7.382067413259127] }[0m
+[37m[7.705 src/actors/tracking_backend_gtsam.rs:379 [37mDEBUG[0m[37m] !!!!!! FINAL FRAME POSE: Some(t[4.7301,0.4660,-7.3818] r[-0.0074,-0.0260,0.9977,0.0621])[0m
+Huh? Optimized pose in frame: Some(t[4.7301,0.4660,-7.3818] r[-0.0074,-0.0260,0.9977,0.0621])
+TRACKING BACKEND SEND TO LOCAL MAPPING
+[37m[7.706 src/actors/visualizer.rs:466 [37mDEBUG[0m[37m] SOFIYA TRAJ: FOR TIMESTAMP 1403636859.8516665, VISUALIZER POSE IS t[4.5497,0.6567,7.4800] r[-0.0074,-0.0260,0.9977,-0.0621][0m
+Local keyframes: {10, 11, 8, 9}
+Track in view: 0
+Matches in local mapping: 0/11.
+[37m[7.724 src/map/map.rs:180 [37mDEBUG[0m[37m] INSERT KEYFRAME TO MAP, mp matches: 1010[0m
+[31m[7.724 src/map/map.rs:356 [31mERROR[0m[31m] map::update_connections;kf counter is empty[0m
+[32m[7.724 src/map/map.rs:199 [32mINFO[0m[32m] Created keyframe 12[0m
+[32m[7.724 src/actors/local_mapping_gtsam.rs:153 [32mINFO[0m[32m] Local mapping working on keyframe 12. Queue length: 0[0m
+[37m[7.725 src/modules/imu.rs:212 [37mDEBUG[0m[37m] IMU:  Early return timestamps (1.2000000476837158)... current keyframe is 12, first keyframe is 0[0m
+[37m[7.725 src/actors/local_mapping_gtsam.rs:375 [37mDEBUG[0m[37m] For keyframe 12, culled 2 mappoints, created 9 mappoints, culled 0 keyframes[0m
+[32m[7.725 src/actors/local_mapping_gtsam.rs:376 [32mINFO[0m[32m] Map has 13 keyframes and 100 mappoints[0m
+[37m[7.894 src/actors/tracking_frontend_gtsam.rs:106 [37mDEBUG[0m[37m] Tracking frontend working on frame 25[0m
+[37m[7.895 src/actors/tracking_frontend_gtsam.rs:321 [37mDEBUG[0m[37m] Optical flow tracked 190 from original 200[0m
+[37m[7.901 src/actors/tracking_frontend_gtsam.rs:132 [37mDEBUG[0m[37m] Pose prediction from pure optical flow: t[-0.8576,1.8194,0.6529] r[0.1062,-0.0040,-0.0252,0.9940][0m
+[37m[7.901 src/actors/tracking_frontend_gtsam.rs:377 [37mDEBUG[0m[37m] Need new keyframe? false false false, 190[0m
+[37m[8.096 src/actors/tracking_frontend_gtsam.rs:106 [37mDEBUG[0m[37m] Tracking frontend working on frame 26[0m
+[37m[8.098 src/actors/tracking_frontend_gtsam.rs:321 [37mDEBUG[0m[37m] Optical flow tracked 180 from original 190[0m
+[37m[8.104 src/actors/tracking_frontend_gtsam.rs:132 [37mDEBUG[0m[37m] Pose prediction from pure optical flow: t[-0.8594,1.9025,0.6803] r[0.1092,-0.0059,-0.0230,0.9937][0m
+[37m[8.104 src/actors/tracking_frontend_gtsam.rs:377 [37mDEBUG[0m[37m] Need new keyframe? false true false, 180[0m
+[37m[8.108 src/actors/tracking_frontend_gtsam.rs:358 [37mDEBUG[0m[37m] Extracted 20 new features[0m
+[37m[8.108 src/actors/tracking_backend_gtsam.rs:467 [37mDEBUG[0m[37m] ... current state: GtsamState { pose: Pose3: Isometry { rotation: [-0.06210835182809335, 0.0074172139072276825, 0.02598086449673343, 0.9977036294667142], translation: [4.730081927145341, 0.4660001544527117, -7.381798005186202] }, velocity: Vector3: [9.637810209246139, 0.2848843208915064, -13.82631762268904], bias: ConstantBias: accel_bias: Vector3Ref: [1.7310550051004024e-13, -3.5579043950219284e-13, 5.689674363041916e-13], gyro_bias: Vector3Ref: [2.6535331613032098e-5, -3.352941204111373e-5, -3.422757628141657e-6] }[0m
+[37m[8.109 src/actors/tracking_backend_gtsam.rs:484 [37mDEBUG[0m[37m] IMU PREDICTED POSE USING GTSAM: Pose3: Isometry { rotation: [-0.05866051821966962, 0.0023394625010463763, 0.023686396865944554, 0.9979942009455341], translation: [5.7373854920118506, 0.49456807554453625, -8.828087182238622] }[0m
+[37m[8.111 src/actors/tracking_backend_gtsam.rs:379 [37mDEBUG[0m[37m] !!!!!! FINAL FRAME POSE: Some(t[5.7359,0.4953,-8.8321] r[-0.0139,-0.0301,0.9973,0.0648])[0m
+Huh? Optimized pose in frame: Some(t[5.7359,0.4953,-8.8321] r[-0.0139,-0.0301,0.9973,0.0648])
+TRACKING BACKEND SEND TO LOCAL MAPPING
+[37m[8.111 src/actors/visualizer.rs:466 [37mDEBUG[0m[37m] SOFIYA TRAJ: FOR TIMESTAMP 1403636859.9516666, VISUALIZER POSE IS t[5.4110,0.6813,9.0227] r[-0.0139,-0.0301,0.9973,-0.0648][0m
+Local keyframes: {10, 9, 11, 12}
+Track in view: 8
+Matches in local mapping: 2/16.
+[37m[8.138 src/map/map.rs:180 [37mDEBUG[0m[37m] INSERT KEYFRAME TO MAP, mp matches: 1010[0m
+[32m[8.138 src/map/map.rs:199 [32mINFO[0m[32m] Created keyframe 13[0m
+[32m[8.138 src/actors/local_mapping_gtsam.rs:153 [32mINFO[0m[32m] Local mapping working on keyframe 13. Queue length: 0[0m
+[37m[8.139 src/modules/imu.rs:212 [37mDEBUG[0m[37m] IMU:  Early return timestamps (1.3000001907348633)... current keyframe is 13, first keyframe is 0[0m
+[37m[8.139 src/actors/local_mapping_gtsam.rs:375 [37mDEBUG[0m[37m] For keyframe 13, culled 1 mappoints, created 8 mappoints, culled 0 keyframes[0m
+[32m[8.139 src/actors/local_mapping_gtsam.rs:376 [32mINFO[0m[32m] Map has 14 keyframes and 107 mappoints[0m
+[37m[8.3 src/actors/tracking_frontend_gtsam.rs:106 [37mDEBUG[0m[37m] Tracking frontend working on frame 27[0m
+[37m[8.302 src/actors/tracking_frontend_gtsam.rs:321 [37mDEBUG[0m[37m] Optical flow tracked 190 from original 200[0m
+[37m[8.308 src/actors/tracking_frontend_gtsam.rs:132 [37mDEBUG[0m[37m] Pose prediction from pure optical flow: t[-0.8586,1.9815,0.7271] r[0.1064,-0.0071,-0.0248,0.9940][0m
+[37m[8.308 src/actors/tracking_frontend_gtsam.rs:377 [37mDEBUG[0m[37m] Need new keyframe? false false false, 190[0m
+[37m[8.504 src/actors/tracking_frontend_gtsam.rs:106 [37mDEBUG[0m[37m] Tracking frontend working on frame 28[0m
+[37m[8.506 src/actors/tracking_frontend_gtsam.rs:321 [37mDEBUG[0m[37m] Optical flow tracked 189 from original 190[0m
+[37m[8.512 src/actors/tracking_frontend_gtsam.rs:132 [37mDEBUG[0m[37m] Pose prediction from pure optical flow: t[-0.8898,2.0600,0.7642] r[0.1116,-0.0065,-0.0265,0.9934][0m
+[37m[8.512 src/actors/tracking_frontend_gtsam.rs:377 [37mDEBUG[0m[37m] Need new keyframe? false true false, 189[0m
+[37m[8.521 src/actors/tracking_frontend_gtsam.rs:358 [37mDEBUG[0m[37m] Extracted 11 new features[0m
+[37m[8.521 src/actors/tracking_backend_gtsam.rs:467 [37mDEBUG[0m[37m] ... current state: GtsamState { pose: Pose3: Isometry { rotation: [-0.06481195117937921, 0.013876567408602524, 0.030073041226231553, 0.9973477147177316], translation: [5.735917642097294, 0.4952574348123568, -8.832134693333085] }, velocity: Vector3: [10.468905966714566, 0.3219097029505457, -15.131655100001243], bias: ConstantBias: accel_bias: Vector3Ref: [4.649995644639971e-14, -1.372351654761366e-12, 1.355070907002249e-13], gyro_bias: Vector3Ref: [0.00024441436025289304, -0.00017241607679923675, -1.0921864859131316e-5] }[0m
+[37m[8.522 src/actors/tracking_backend_gtsam.rs:484 [37mDEBUG[0m[37m] IMU PREDICTED POSE USING GTSAM: Pose3: Isometry { rotation: [-0.060873405267952686, 0.013751038567972905, 0.02621918901927994, 0.9977063153035352], translation: [6.8200931953181705, 0.5292148198654562, -10.404317234906726] }[0m
+[37m[8.523 src/actors/tracking_backend_gtsam.rs:379 [37mDEBUG[0m[37m] !!!!!! FINAL FRAME POSE: Some(t[6.8172,0.5309,-10.4114] r[-0.0144,-0.0354,0.9970,0.0673])[0m
+Huh? Optimized pose in frame: Some(t[6.8172,0.5309,-10.4114] r[-0.0144,-0.0354,0.9970,0.0673])
+TRACKING BACKEND SEND TO LOCAL MAPPING
+[37m[8.523 src/actors/visualizer.rs:466 [37mDEBUG[0m[37m] SOFIYA TRAJ: FOR TIMESTAMP 1403636860.0516665, VISUALIZER POSE IS t[6.4318,0.6779,10.6454] r[-0.0144,-0.0354,0.9970,-0.0673][0m
+Local keyframes: {11, 13, 12, 10}
+Track in view: 8
+Matches in local mapping: 3/20.
+[37m[8.545 src/map/map.rs:180 [37mDEBUG[0m[37m] INSERT KEYFRAME TO MAP, mp matches: 1010[0m
+[32m[8.545 src/map/map.rs:199 [32mINFO[0m[32m] Created keyframe 14[0m
+[32m[8.545 src/actors/local_mapping_gtsam.rs:153 [32mINFO[0m[32m] Local mapping working on keyframe 14. Queue length: 0[0m
+[37m[8.547 src/modules/imu.rs:212 [37mDEBUG[0m[37m] IMU:  Early return timestamps (1.4000000953674316)... current keyframe is 14, first keyframe is 0[0m
+[37m[8.547 src/actors/local_mapping_gtsam.rs:375 [37mDEBUG[0m[37m] For keyframe 14, culled 7 mappoints, created 5 mappoints, culled 0 keyframes[0m
+[32m[8.547 src/actors/local_mapping_gtsam.rs:376 [32mINFO[0m[32m] Map has 15 keyframes and 105 mappoints[0m
+[37m[8.707 src/actors/tracking_frontend_gtsam.rs:106 [37mDEBUG[0m[37m] Tracking frontend working on frame 29[0m
+[37m[8.708 src/actors/tracking_frontend_gtsam.rs:321 [37mDEBUG[0m[37m] Optical flow tracked 200 from original 200[0m
+[37m[8.715 src/actors/tracking_frontend_gtsam.rs:132 [37mDEBUG[0m[37m] Pose prediction from pure optical flow: t[-0.9353,2.0888,0.8426] r[0.1137,-0.0082,-0.0282,0.9931][0m
+[37m[8.715 src/actors/tracking_frontend_gtsam.rs:377 [37mDEBUG[0m[37m] Need new keyframe? false false false, 200[0m
+[37m[8.909 src/actors/tracking_frontend_gtsam.rs:106 [37mDEBUG[0m[37m] Tracking frontend working on frame 30[0m
+[37m[8.91 src/actors/tracking_frontend_gtsam.rs:321 [37mDEBUG[0m[37m] Optical flow tracked 197 from original 200[0m
+[37m[8.915 src/actors/tracking_frontend_gtsam.rs:132 [37mDEBUG[0m[37m] Pose prediction from pure optical flow: t[-0.9536,2.0054,0.8183] r[0.1130,-0.0078,-0.0296,0.9931][0m
+[37m[8.915 src/actors/tracking_frontend_gtsam.rs:377 [37mDEBUG[0m[37m] Need new keyframe? false true false, 197[0m
+[37m[8.917 src/actors/tracking_frontend_gtsam.rs:358 [37mDEBUG[0m[37m] Extracted 3 new features[0m
+[37m[8.918 src/actors/tracking_backend_gtsam.rs:467 [37mDEBUG[0m[37m] ... current state: GtsamState { pose: Pose3: Isometry { rotation: [-0.06730837272236904, 0.014381458770923422, 0.035392511064417334, 0.997000565077895], translation: [6.817153828517027, 0.5309264743776184, -10.411404275776805] }, velocity: Vector3: [11.164735406837545, 0.39003364070131413, -16.3608645618254], bias: ConstantBias: accel_bias: Vector3Ref: [2.384868242553344e-13, -1.1885584511934603e-12, 2.6731661174250933e-13], gyro_bias: Vector3Ref: [-0.0007533781069347032, -0.0007571813655709405, -0.00013910051939890604] }[0m
+[37m[8.918 src/actors/tracking_backend_gtsam.rs:484 [37mDEBUG[0m[37m] IMU PREDICTED POSE USING GTSAM: Pose3: Isometry { rotation: [-0.06490956355508462, 0.019202733102774882, 0.028438447930359184, 0.9973009868037754], translation: [7.964973945047366, 0.5702048553027776, -12.104960149024924] }[0m
+[37m[8.919 src/actors/tracking_backend_gtsam.rs:379 [37mDEBUG[0m[37m] !!!!!! FINAL FRAME POSE: Some(t[7.9618,0.5769,-12.1116] r[-0.0100,-0.0431,0.9968,0.0668])[0m
+Huh? Optimized pose in frame: Some(t[7.9618,0.5769,-12.1116] r[-0.0100,-0.0431,0.9968,0.0668])
+TRACKING BACKEND SEND TO LOCAL MAPPING
+[37m[8.92 src/actors/visualizer.rs:466 [37mDEBUG[0m[37m] SOFIYA TRAJ: FOR TIMESTAMP 1403636860.1516664, VISUALIZER POSE IS t[7.6401,0.5662,12.3176] r[-0.0100,-0.0431,0.9968,-0.0668][0m
+Local keyframes: {14, 13, 12, 11}
+Track in view: 6
+Matches in local mapping: 3/17.
+[37m[8.941 src/map/map.rs:180 [37mDEBUG[0m[37m] INSERT KEYFRAME TO MAP, mp matches: 1009[0m
+[32m[8.941 src/map/map.rs:199 [32mINFO[0m[32m] Created keyframe 15[0m
+[32m[8.941 src/actors/local_mapping_gtsam.rs:153 [32mINFO[0m[32m] Local mapping working on keyframe 15. Queue length: 0[0m
+[37m[8.943 src/modules/imu.rs:212 [37mDEBUG[0m[37m] IMU:  Early return timestamps (1.5)... current keyframe is 15, first keyframe is 0[0m
+[37m[8.943 src/actors/local_mapping_gtsam.rs:375 [37mDEBUG[0m[37m] For keyframe 15, culled 5 mappoints, created 0 mappoints, culled 0 keyframes[0m
+[32m[8.943 src/actors/local_mapping_gtsam.rs:376 [32mINFO[0m[32m] Map has 16 keyframes and 100 mappoints[0m
+[37m[9.112 src/actors/tracking_frontend_gtsam.rs:106 [37mDEBUG[0m[37m] Tracking frontend working on frame 31[0m
+[37m[9.112 src/actors/tracking_frontend_gtsam.rs:321 [37mDEBUG[0m[37m] Optical flow tracked 199 from original 200[0m
+[37m[9.118 src/actors/tracking_frontend_gtsam.rs:132 [37mDEBUG[0m[37m] Pose prediction from pure optical flow: t[-0.9691,1.9226,0.7989] r[0.1120,-0.0062,-0.0314,0.9932][0m
+[37m[9.118 src/actors/tracking_frontend_gtsam.rs:377 [37mDEBUG[0m[37m] Need new keyframe? false false false, 199[0m
+[37m[9.315 src/actors/tracking_frontend_gtsam.rs:106 [37mDEBUG[0m[37m] Tracking frontend working on frame 32[0m
+[37m[9.317 src/actors/tracking_frontend_gtsam.rs:321 [37mDEBUG[0m[37m] Optical flow tracked 198 from original 199[0m
+[37m[9.325 src/actors/tracking_frontend_gtsam.rs:132 [37mDEBUG[0m[37m] Pose prediction from pure optical flow: t[-0.9593,1.8449,0.7753] r[0.1215,-0.0045,-0.0346,0.9920][0m
+[37m[9.325 src/actors/tracking_frontend_gtsam.rs:377 [37mDEBUG[0m[37m] Need new keyframe? false true false, 198[0m
+[37m[9.327 src/actors/tracking_frontend_gtsam.rs:358 [37mDEBUG[0m[37m] Extracted 2 new features[0m
+[37m[9.327 src/actors/tracking_backend_gtsam.rs:467 [37mDEBUG[0m[37m] ... current state: GtsamState { pose: Pose3: Isometry { rotation: [-0.06676503320733197, 0.010003006700330504, 0.04307728936754938, 0.996788200842346], translation: [7.961823653483523, 0.5768690185348967, -12.111595327861977] }, velocity: Vector3: [11.768665072633716, 0.4337620874750032, -17.563898440979997], bias: ConstantBias: accel_bias: Vector3Ref: [-5.201159469120953e-13, -1.4646203730647529e-12, 5.551727796425198e-13], gyro_bias: Vector3Ref: [-0.0038191045664361135, -0.001144852545680078, -0.0003992430320471946] }[0m
+[37m[9.327 src/actors/tracking_backend_gtsam.rs:484 [37mDEBUG[0m[37m] IMU PREDICTED POSE USING GTSAM: Pose3: Isometry { rotation: [-0.06834264998996317, 0.01938759807658835, 0.03561713988189686, 0.9968374103031064], translation: [9.170746684450059, 0.6184257889028644, -13.928531060010135] }[0m
+[37m[9.328 src/actors/tracking_backend_gtsam.rs:379 [37mDEBUG[0m[37m] !!!!!! FINAL FRAME POSE: Some(t[9.1695,0.6167,-13.9300] r[0.0001,-0.0505,0.9966,0.0655])[0m
+Huh? Optimized pose in frame: Some(t[9.1695,0.6167,-13.9300] r[0.0001,-0.0505,0.9966,0.0655])
+TRACKING BACKEND SEND TO LOCAL MAPPING
+[37m[9.328 src/actors/visualizer.rs:466 [37mDEBUG[0m[37m] SOFIYA TRAJ: FOR TIMESTAMP 1403636860.2516665, VISUALIZER POSE IS t[9.1049,0.4041,13.9800] r[0.0001,-0.0505,0.9966,-0.0655][0m
+Local keyframes: {13, 15, 14, 12}
+Track in view: 3
+Matches in local mapping: 1/10.
+[37m[9.345 src/map/map.rs:180 [37mDEBUG[0m[37m] INSERT KEYFRAME TO MAP, mp matches: 1009[0m
+[32m[9.345 src/map/map.rs:199 [32mINFO[0m[32m] Created keyframe 16[0m
+[32m[9.345 src/actors/local_mapping_gtsam.rs:153 [32mINFO[0m[32m] Local mapping working on keyframe 16. Queue length: 0[0m
+[37m[9.347 src/modules/imu.rs:212 [37mDEBUG[0m[37m] IMU:  Early return timestamps (1.6000001430511475)... current keyframe is 16, first keyframe is 0[0m
+[37m[9.347 src/actors/local_mapping_gtsam.rs:375 [37mDEBUG[0m[37m] For keyframe 16, culled 2 mappoints, created 3 mappoints, culled 0 keyframes[0m
+[32m[9.347 src/actors/local_mapping_gtsam.rs:376 [32mINFO[0m[32m] Map has 17 keyframes and 101 mappoints[0m
+[37m[9.519 src/actors/tracking_frontend_gtsam.rs:106 [37mDEBUG[0m[37m] Tracking frontend working on frame 33[0m
+[37m[9.521 src/actors/tracking_frontend_gtsam.rs:321 [37mDEBUG[0m[37m] Optical flow tracked 199 from original 200[0m
+[37m[9.539 src/actors/tracking_frontend_gtsam.rs:132 [37mDEBUG[0m[37m] Pose prediction from pure optical flow: t[-0.9448,1.7763,0.7286] r[0.1119,-0.0022,-0.0392,0.9929][0m
+[37m[9.539 src/actors/tracking_frontend_gtsam.rs:377 [37mDEBUG[0m[37m] Need new keyframe? false false false, 199[0m
+[37m[9.722 src/actors/tracking_frontend_gtsam.rs:106 [37mDEBUG[0m[37m] Tracking frontend working on frame 34[0m
+[37m[9.723 src/actors/tracking_frontend_gtsam.rs:321 [37mDEBUG[0m[37m] Optical flow tracked 195 from original 199[0m
+[37m[9.733 src/actors/tracking_frontend_gtsam.rs:132 [37mDEBUG[0m[37m] Pose prediction from pure optical flow: t[-0.9410,1.6919,0.6922] r[0.1073,-0.0041,-0.0391,0.9935][0m
+[37m[9.733 src/actors/tracking_frontend_gtsam.rs:377 [37mDEBUG[0m[37m] Need new keyframe? false true false, 195[0m
+[37m[9.738 src/actors/tracking_frontend_gtsam.rs:358 [37mDEBUG[0m[37m] Extracted 5 new features[0m
+[37m[9.739 src/actors/tracking_backend_gtsam.rs:467 [37mDEBUG[0m[37m] ... current state: GtsamState { pose: Pose3: Isometry { rotation: [-0.06551390915317361, -9.028289169625582e-5, 0.05048748796556478, 0.9965735964370099], translation: [9.16948718437828, 0.6167050305400985, -13.929985192158094] }, velocity: Vector3: [12.423885548868453, 0.42589126414854184, -18.8023573278803], bias: ConstantBias: accel_bias: Vector3Ref: [-6.651232355402673e-13, -1.0460724057143434e-12, -7.676774018276583e-14], gyro_bias: Vector3Ref: [-0.0035904354949067227, -0.0010565394160765543, -0.0003738580076544313] }[0m
+[37m[9.74 src/actors/tracking_backend_gtsam.rs:484 [37mDEBUG[0m[37m] IMU PREDICTED POSE USING GTSAM: Pose3: Isometry { rotation: [-0.06603981594859247, 0.017376229019817658, 0.04257342752191621, 0.9967568974647546], translation: [10.45208816406666, 0.6575144908875564, -15.87427372480242] }[0m
+[37m[9.741 src/actors/tracking_backend_gtsam.rs:379 [37mDEBUG[0m[37m] !!!!!! FINAL FRAME POSE: Some(t[10.4510,0.6639,-15.8769] r[0.0184,-0.0582,0.9961,0.0642])[0m
+Huh? Optimized pose in frame: Some(t[10.4510,0.6639,-15.8769] r[0.0184,-0.0582,0.9961,0.0642])
+TRACKING BACKEND SEND TO LOCAL MAPPING
+[37m[9.741 src/actors/visualizer.rs:466 [37mDEBUG[0m[37m] SOFIYA TRAJ: FOR TIMESTAMP 1403636860.3516665, VISUALIZER POSE IS t[10.9758,0.2093,15.5315] r[0.0184,-0.0582,0.9961,-0.0642][0m
+Local keyframes: {14, 15, 16, 13}
+Track in view: 4
+Matches in local mapping: 2/11.
+[37m[9.76 src/map/map.rs:180 [37mDEBUG[0m[37m] INSERT KEYFRAME TO MAP, mp matches: 1006[0m
+[32m[9.761 src/map/map.rs:199 [32mINFO[0m[32m] Created keyframe 17[0m
+[32m[9.761 src/actors/local_mapping_gtsam.rs:153 [32mINFO[0m[32m] Local mapping working on keyframe 17. Queue length: 0[0m
+[37m[9.762 src/modules/imu.rs:212 [37mDEBUG[0m[37m] IMU:  Early return timestamps (1.7000000476837158)... current keyframe is 17, first keyframe is 0[0m
+[37m[9.762 src/actors/local_mapping_gtsam.rs:375 [37mDEBUG[0m[37m] For keyframe 17, culled 0 mappoints, created 0 mappoints, culled 0 keyframes[0m
+[32m[9.762 src/actors/local_mapping_gtsam.rs:376 [32mINFO[0m[32m] Map has 18 keyframes and 101 mappoints[0m
+[37m[9.926 src/actors/tracking_frontend_gtsam.rs:106 [37mDEBUG[0m[37m] Tracking frontend working on frame 35[0m
+[37m[9.929 src/actors/tracking_frontend_gtsam.rs:321 [37mDEBUG[0m[37m] Optical flow tracked 193 from original 200[0m
+[37m[9.937 src/actors/tracking_frontend_gtsam.rs:132 [37mDEBUG[0m[37m] Pose prediction from pure optical flow: t[-0.9313,1.6092,0.6619] r[0.1045,-0.0050,-0.0414,0.9936][0m
+[37m[9.937 src/actors/tracking_frontend_gtsam.rs:377 [37mDEBUG[0m[37m] Need new keyframe? false false false, 193[0m
+[37m[10.129 src/actors/tracking_frontend_gtsam.rs:106 [37mDEBUG[0m[37m] Tracking frontend working on frame 36[0m
+[37m[10.129 src/actors/tracking_frontend_gtsam.rs:321 [37mDEBUG[0m[37m] Optical flow tracked 185 from original 193[0m
+[37m[10.136 src/actors/tracking_frontend_gtsam.rs:132 [37mDEBUG[0m[37m] Pose prediction from pure optical flow: t[-0.9294,1.5202,0.6328] r[0.1018,-0.0073,-0.0405,0.9940][0m
+[37m[10.136 src/actors/tracking_frontend_gtsam.rs:377 [37mDEBUG[0m[37m] Need new keyframe? false true false, 185[0m
+[37m[10.138 src/actors/tracking_frontend_gtsam.rs:358 [37mDEBUG[0m[37m] Extracted 15 new features[0m
+[37m[10.138 src/actors/tracking_backend_gtsam.rs:467 [37mDEBUG[0m[37m] ... current state: GtsamState { pose: Pose3: Isometry { rotation: [-0.06420554177370351, -0.01842782098391564, 0.05821966662729997, 0.9960665310294969], translation: [10.451009835871531, 0.6639136597775396, -15.876890484829147] }, velocity: Vector3: [13.250428139908395, 0.4662980094146604, -20.08749512789551], bias: ConstantBias: accel_bias: Vector3Ref: [-4.60341602230556e-13, -2.218017550488805e-12, 1.4808792070429206e-13], gyro_bias: Vector3Ref: [-0.0046382383090963495, -0.0012396528984624897, -0.00045519412630676547] }[0m
+[37m[10.138 src/actors/tracking_backend_gtsam.rs:484 [37mDEBUG[0m[37m] IMU PREDICTED POSE USING GTSAM: Pose3: Isometry { rotation: [-0.06250815037180724, 0.004081456343179968, 0.05055149483901354, 0.996755044743068], translation: [11.820587071562187, 0.7073053931814637, -17.955366980385143] }[0m
+[37m[10.139 src/actors/tracking_backend_gtsam.rs:379 [37mDEBUG[0m[37m] !!!!!! FINAL FRAME POSE: Some(t[11.8200,0.7100,-17.9555] r[0.0423,-0.0641,0.9948,0.0675])[0m
+Huh? Optimized pose in frame: Some(t[11.8200,0.7100,-17.9555] r[0.0423,-0.0641,0.9948,0.0675])
+TRACKING BACKEND SEND TO LOCAL MAPPING
+[37m[10.139 src/actors/visualizer.rs:466 [37mDEBUG[0m[37m] SOFIYA TRAJ: FOR TIMESTAMP 1403636860.4516666, VISUALIZER POSE IS t[13.2441,0.1616,16.9465] r[0.0423,-0.0641,0.9948,-0.0675][0m
+Local keyframes: {15, 17, 16, 14}
+Track in view: 3
+Matches in local mapping: 1/9.
+[37m[10.158 src/map/map.rs:180 [37mDEBUG[0m[37m] INSERT KEYFRAME TO MAP, mp matches: 1005[0m
+[32m[10.158 src/map/map.rs:199 [32mINFO[0m[32m] Created keyframe 18[0m
+[32m[10.158 src/actors/local_mapping_gtsam.rs:153 [32mINFO[0m[32m] Local mapping working on keyframe 18. Queue length: 0[0m
+[37m[10.16 src/modules/imu.rs:212 [37mDEBUG[0m[37m] IMU:  Early return timestamps (1.8000001907348633)... current keyframe is 18, first keyframe is 0[0m
+[37m[10.16 src/actors/local_mapping_gtsam.rs:375 [37mDEBUG[0m[37m] For keyframe 18, culled 2 mappoints, created 1 mappoints, culled 0 keyframes[0m
+[32m[10.16 src/actors/local_mapping_gtsam.rs:376 [32mINFO[0m[32m] Map has 19 keyframes and 100 mappoints[0m
+[37m[10.332 src/actors/tracking_frontend_gtsam.rs:106 [37mDEBUG[0m[37m] Tracking frontend working on frame 37[0m
+[37m[10.333 src/actors/tracking_frontend_gtsam.rs:321 [37mDEBUG[0m[37m] Optical flow tracked 183 from original 200[0m
+[37m[10.335 src/actors/tracking_frontend_gtsam.rs:132 [37mDEBUG[0m[37m] Pose prediction from pure optical flow: t[-0.9243,1.4315,0.6171] r[0.1016,-0.0074,-0.0421,0.9939][0m
+[37m[10.335 src/actors/tracking_frontend_gtsam.rs:377 [37mDEBUG[0m[37m] Need new keyframe? false false false, 183[0m
+[37m[10.543 src/actors/tracking_frontend_gtsam.rs:106 [37mDEBUG[0m[37m] Tracking frontend working on frame 38[0m
+[37m[10.545 src/actors/tracking_frontend_gtsam.rs:321 [37mDEBUG[0m[37m] Optical flow tracked 177 from original 183[0m
+[37m[10.563 src/actors/tracking_frontend_gtsam.rs:132 [37mDEBUG[0m[37m] Pose prediction from pure optical flow: t[-0.9070,1.3611,0.5688] r[0.0910,-0.0064,-0.0462,0.9948][0m
+[37m[10.563 src/actors/tracking_frontend_gtsam.rs:377 [37mDEBUG[0m[37m] Need new keyframe? false true false, 177[0m
+[37m[10.566 src/actors/tracking_frontend_gtsam.rs:358 [37mDEBUG[0m[37m] Extracted 23 new features[0m
+[37m[10.566 src/actors/tracking_backend_gtsam.rs:467 [37mDEBUG[0m[37m] ... current state: GtsamState { pose: Pose3: Isometry { rotation: [-0.06749219972951281, -0.04227428677579355, 0.06409791127748422, 0.9947608483565953], translation: [11.820032141754586, 0.7100098406027365, -17.955505661882643] }, velocity: Vector3: [14.187530268930646, 0.4902264480428109, -21.412485393192274], bias: ConstantBias: accel_bias: Vector3Ref: [-6.534885191436878e-13, 2.735477234999997e-13, 5.678742036143317e-14], gyro_bias: Vector3Ref: [-0.004265029413118041, -0.0013368489961391207, -0.00045231788059907796] }[0m
+[37m[10.567 src/actors/tracking_backend_gtsam.rs:484 [37mDEBUG[0m[37m] IMU PREDICTED POSE USING GTSAM: Pose3: Isometry { rotation: [-0.06939381373918116, -0.020957167129269618, 0.055996133114361975, 0.9957960277270071], translation: [13.286007181037974, 0.7549329170216079, -20.172378621751545] }[0m
+[37m[10.568 src/actors/tracking_backend_gtsam.rs:379 [37mDEBUG[0m[37m] !!!!!! FINAL FRAME POSE: Some(t[13.2859,0.7612,-20.1701] r[0.0633,-0.0694,0.9932,0.0686])[0m
+Huh? Optimized pose in frame: Some(t[13.2859,0.7612,-20.1701] r[0.0633,-0.0694,0.9932,0.0686])
+TRACKING BACKEND SEND TO LOCAL MAPPING
+[37m[10.568 src/actors/visualizer.rs:466 [37mDEBUG[0m[37m] SOFIYA TRAJ: FOR TIMESTAMP 1403636860.5516665, VISUALIZER POSE IS t[15.6847,0.0707,18.3825] r[0.0633,-0.0694,0.9932,-0.0686][0m
+Local keyframes: {15, 18, 17, 16}
+Track in view: 2
+Matches in local mapping: 0/5.
+[37m[10.581 src/map/map.rs:180 [37mDEBUG[0m[37m] INSERT KEYFRAME TO MAP, mp matches: 1005[0m
+[31m[10.581 src/map/map.rs:356 [31mERROR[0m[31m] map::update_connections;kf counter is empty[0m
+[32m[10.581 src/map/map.rs:199 [32mINFO[0m[32m] Created keyframe 19[0m
+[32m[10.581 src/actors/local_mapping_gtsam.rs:153 [32mINFO[0m[32m] Local mapping working on keyframe 19. Queue length: 0[0m
+[31m[10.582 src/map/map.rs:356 [31mERROR[0m[31m] map::update_connections;kf counter is empty[0m
+[37m[10.582 src/modules/imu.rs:212 [37mDEBUG[0m[37m] IMU:  Early return timestamps (1.9000000953674316)... current keyframe is 19, first keyframe is 0[0m
+[37m[10.582 src/actors/local_mapping_gtsam.rs:375 [37mDEBUG[0m[37m] For keyframe 19, culled 0 mappoints, created 0 mappoints, culled 0 keyframes[0m
+[32m[10.582 src/actors/local_mapping_gtsam.rs:376 [32mINFO[0m[32m] Map has 20 keyframes and 100 mappoints[0m
+[37m[10.745 src/actors/tracking_frontend_gtsam.rs:106 [37mDEBUG[0m[37m] Tracking frontend working on frame 39[0m
+[37m[10.747 src/actors/tracking_frontend_gtsam.rs:321 [37mDEBUG[0m[37m] Optical flow tracked 187 from original 200[0m
+[37m[10.753 src/actors/tracking_frontend_gtsam.rs:132 [37mDEBUG[0m[37m] Pose prediction from pure optical flow: t[-0.9094,1.2758,0.5356] r[0.0832,-0.0065,-0.0453,0.9955][0m
+[37m[10.753 src/actors/tracking_frontend_gtsam.rs:377 [37mDEBUG[0m[37m] Need new keyframe? false false false, 187[0m
+[37m[10.947 src/actors/tracking_frontend_gtsam.rs:106 [37mDEBUG[0m[37m] Tracking frontend working on frame 40[0m
+[37m[10.948 src/actors/tracking_frontend_gtsam.rs:321 [37mDEBUG[0m[37m] Optical flow tracked 181 from original 187[0m
+[37m[10.953 src/actors/tracking_frontend_gtsam.rs:132 [37mDEBUG[0m[37m] Pose prediction from pure optical flow: t[-0.9167,1.1678,0.5303] r[0.0841,-0.0072,-0.0368,0.9958][0m
+[37m[10.953 src/actors/tracking_frontend_gtsam.rs:377 [37mDEBUG[0m[37m] Need new keyframe? false true false, 181[0m
+[37m[10.955 src/actors/tracking_frontend_gtsam.rs:358 [37mDEBUG[0m[37m] Extracted 19 new features[0m
+[37m[10.955 src/actors/tracking_backend_gtsam.rs:467 [37mDEBUG[0m[37m] ... current state: GtsamState { pose: Pose3: Isometry { rotation: [-0.06861388583066126, -0.06327849779386557, 0.06935061573620552, 0.9932162194029946], translation: [13.285923848965338, 0.7612240208299109, -20.170118944495524] }, velocity: Vector3: [15.226407815905254, 0.5262266131425828, -22.76983172579576], bias: ConstantBias: accel_bias: Vector3Ref: [-6.186629916400489e-13, 1.7612658931322763e-12, -7.752757497995653e-13], gyro_bias: Vector3Ref: [-0.003990206830197815, -0.0016191227440342964, -0.00048541605633217044] }[0m
+[37m[10.955 src/actors/tracking_backend_gtsam.rs:484 [37mDEBUG[0m[37m] IMU PREDICTED POSE USING GTSAM: Pose3: Isometry { rotation: [-0.07171671420371178, -0.050312803440530546, 0.06396830801360963, 0.9940992859285505], translation: [14.854526784545467, 0.8092151426368637, -22.528209078741103] }[0m
+[37m[10.955 src/actors/tracking_backend_gtsam.rs:379 [37mDEBUG[0m[37m] !!!!!! FINAL FRAME POSE: Some(t[14.8550,0.8043,-22.5172] r[0.0774,-0.0711,0.9918,0.0734])[0m
+Huh? Optimized pose in frame: Some(t[14.8550,0.8043,-22.5172] r[0.0774,-0.0711,0.9918,0.0734])
+TRACKING BACKEND SEND TO LOCAL MAPPING
+[37m[10.956 src/actors/visualizer.rs:466 [37mDEBUG[0m[37m] SOFIYA TRAJ: FOR TIMESTAMP 1403636860.6516664, VISUALIZER POSE IS t[18.1011,0.1961,20.0164] r[0.0774,-0.0711,0.9918,-0.0734][0m
+Local keyframes: {18, 19, 16, 17}
+Track in view: 0
+Matches in local mapping: 0/4.
+[37m[10.969 src/map/map.rs:180 [37mDEBUG[0m[37m] INSERT KEYFRAME TO MAP, mp matches: 1008[0m
+[31m[10.969 src/map/map.rs:356 [31mERROR[0m[31m] map::update_connections;kf counter is empty[0m
+[32m[10.969 src/map/map.rs:199 [32mINFO[0m[32m] Created keyframe 20[0m
+[32m[10.969 src/actors/local_mapping_gtsam.rs:153 [32mINFO[0m[32m] Local mapping working on keyframe 20. Queue length: 0[0m
+[37m[11.15 src/actors/tracking_frontend_gtsam.rs:106 [37mDEBUG[0m[37m] Tracking frontend working on frame 41[0m
+[37m[11.15 src/actors/tracking_frontend_gtsam.rs:321 [37mDEBUG[0m[37m] Optical flow tracked 197 from original 200[0m
+[37m[11.156 src/actors/tracking_frontend_gtsam.rs:132 [37mDEBUG[0m[37m] Pose prediction from pure optical flow: t[-0.9207,1.0772,0.5093] r[0.0806,-0.0051,-0.0355,0.9961][0m
+[37m[11.156 src/actors/tracking_frontend_gtsam.rs:377 [37mDEBUG[0m[37m] Need new keyframe? false false false, 197[0m
+[37m[11.354 src/actors/tracking_frontend_gtsam.rs:106 [37mDEBUG[0m[37m] Tracking frontend working on frame 42[0m
+[37m[11.356 src/actors/tracking_frontend_gtsam.rs:321 [37mDEBUG[0m[37m] Optical flow tracked 196 from original 197[0m
+[37m[11.36 src/actors/tracking_frontend_gtsam.rs:132 [37mDEBUG[0m[37m] Pose prediction from pure optical flow: t[-0.9343,0.9803,0.5039] r[0.0805,-0.0043,-0.0331,0.9962][0m
+[37m[11.36 src/actors/tracking_frontend_gtsam.rs:377 [37mDEBUG[0m[37m] Need new keyframe? false true false, 196[0m
+[37m[11.364 src/actors/tracking_frontend_gtsam.rs:358 [37mDEBUG[0m[37m] Extracted 4 new features[0m
+[37m[11.364 src/actors/tracking_backend_gtsam.rs:467 [37mDEBUG[0m[37m] ... current state: GtsamState { pose: Pose3: Isometry { rotation: [-0.07340722313873968, -0.07741369266222017, 0.07105906416493896, 0.9917505276930593], translation: [14.85503668831011, 0.8042820199744701, -22.5172394139637] }, velocity: Vector3: [16.274959100775305, 0.5453216785754968, -24.13992621937892], bias: ConstantBias: accel_bias: Vector3Ref: [6.775168235177637e-13, 3.108604616840641e-12, 1.3239527747615e-12], gyro_bias: Vector3Ref: [0.0007308492818908757, -0.0016359081608468826, -0.0008666396456410565] }[0m
+[37m[11.364 src/actors/tracking_backend_gtsam.rs:484 [37mDEBUG[0m[37m] IMU PREDICTED POSE USING GTSAM: Pose3: Isometry { rotation: [-0.0755066577263072, -0.07539912260789668, 0.07187920811899029, 0.9916890119332514], translation: [16.530099910673766, 0.854127708865574, -25.015360221122723] }[0m
+[37m[11.365 src/actors/tracking_backend_gtsam.rs:379 [37mDEBUG[0m[37m] !!!!!! FINAL FRAME POSE: Some(t[16.5716,0.8386,-24.9294] r[0.0674,-0.0838,0.9922,0.0626])[0m
+Huh? Optimized pose in frame: Some(t[16.5716,0.8386,-24.9294] r[0.0674,-0.0838,0.9922,0.0626])
+TRACKING BACKEND SEND TO LOCAL MAPPING
+[37m[11.365 src/actors/visualizer.rs:466 [37mDEBUG[0m[37m] SOFIYA TRAJ: FOR TIMESTAMP 1403636860.7516665, VISUALIZER POSE IS t[19.7945,-0.8698,22.4549] r[0.0674,-0.0838,0.9922,-0.0626][0m
+[37m[11.557 src/actors/tracking_frontend_gtsam.rs:106 [37mDEBUG[0m[37m] Tracking frontend working on frame 43[0m
+[37m[11.559 src/actors/tracking_frontend_gtsam.rs:321 [37mDEBUG[0m[37m] Optical flow tracked 199 from original 200[0m
+[37m[11.562 src/actors/tracking_frontend_gtsam.rs:132 [37mDEBUG[0m[37m] Pose prediction from pure optical flow: t[1.0840,-0.0226,-0.9029] r[0.1076,0.8830,-0.4566,-0.0183][0m
+[37m[11.562 src/actors/tracking_frontend_gtsam.rs:377 [37mDEBUG[0m[37m] Need new keyframe? false false false, 199[0m
+[37m[11.76 src/actors/tracking_frontend_gtsam.rs:106 [37mDEBUG[0m[37m] Tracking frontend working on frame 44[0m
+[37m[11.761 src/actors/tracking_frontend_gtsam.rs:321 [37mDEBUG[0m[37m] Optical flow tracked 198 from original 199[0m
+[37m[11.769 src/actors/tracking_frontend_gtsam.rs:132 [37mDEBUG[0m[37m] Pose prediction from pure optical flow: t[1.0841,0.0238,-0.8226] r[0.1048,0.8820,-0.4592,-0.0172][0m
+[37m[11.769 src/actors/tracking_frontend_gtsam.rs:377 [37mDEBUG[0m[37m] Need new keyframe? false true false, 198[0m
+[37m[11.772 src/actors/tracking_frontend_gtsam.rs:358 [37mDEBUG[0m[37m] Extracted 2 new features[0m

@@ -1,0 +1,128 @@
+Configs... System: config_systems/config_flow.yaml, Camera: config_datasets/EUROC.yaml
+SYSTEM SETTINGS
+	 SYSTEM localization_only_mode = false
+	 SYSTEM vocabulary_file = ../Vocabulary/ORBvoc.txt
+	 SYSTEM keyframe_trajectory_file_name = keyframe_trajectory.txt
+	 SYSTEM camera_trajectory_file_name = camera_trajectory.txt
+	 SYSTEM results_folder = results
+	 SYSTEM first_actor_name = TRACKING_FRONTEND
+	 SYSTEM fps = 10
+	 SYSTEM check_deadlocks = true
+	 SYSTEM initial_k = 50
+	 SYSTEM final_k = 10000
+	 SENSOR = (Frame: Mono, Imu: Yes)
+	 VISUALIZER stream = true
+	 VISUALIZER port = 8765
+	 VISUALIZER image_draw_type = plain
+	 VISUALIZER mcap_file_path = results/out.mcap
+	 VISUALIZER draw_all_mappoints = false
+	 VISUALIZER draw_local_mappoints = true
+	 VISUALIZER draw_graph = false
+	 VISUALIZER draw_only_trajectory = false
+	 TRACKING_FRONTEND mask_thresh = 0.5
+	 TRACKING_FRONTEND max_features = 200
+	 TRACKING_FRONTEND min_distance = 10
+	 TRACKING_FRONTEND min_num_features = 100
+	 TRACKING_FRONTEND min_frames_to_insert_kf = 1
+	 TRACKING_FRONTEND max_frames_to_insert_kf = 10
+	 FEATURE_DETECTION max_features = 1000
+	 FEATURE_DETECTION ini_features = 5000
+	 FEATURE_DETECTION scale_factor = 1.2
+	 FEATURE_DETECTION n_levels = 8
+	 FEATURE_DETECTION ini_th_fast = 20
+	 FEATURE_DETECTION min_th_fast = 7
+	 FEATURE_MATCHER far_points_threshold = 20
+	 FEATURE_MATCHER high_threshold = 100
+	 FEATURE_MATCHER low_threshold = 50
+	 FEATURE_MATCHER histo_length = 30
+	 FEATURES frame_grid_rows = 48
+	 FEATURES frame_grid_cols = 64
+CAMERA SETTINGS
+	 CAMERA fx = 458.654
+	 CAMERA fy = 457.296
+	 CAMERA cx = 367.215
+	 CAMERA cy = 248.375
+	 CAMERA width = 752
+	 CAMERA height = 480
+	 CAMERA stereo_overlapping_begin = 0
+	 CAMERA stereo_overlapping_end = 1000
+	 CAMERA k1 = -0.28340811
+	 CAMERA k2 = 0.07395907
+	 CAMERA p1 = 0.00019359
+	 CAMERA p2 = 0.0000176187114
+	 CAMERA k3 = 0
+	 CAMERA stereo_baseline_times_fx = 0
+	 CAMERA thdepth = 0
+	 CAMERA height = 350
+	 CAMERA width = 600
+	 IMU noise_gyro = 0.00017
+	 IMU noise_acc = 0.002
+	 IMU gyro_walk = 0.000019393
+	 IMU acc_walk = 0.003
+	 IMU frequency = 200
+	 CAMERA imu_rate = 200
+	 IMU initialPositionSigma = 0.00001
+	 IMU initialRollPitchSigma = 0.174533
+	 IMU initialYawSigma = 0.00174533
+	 IMU initialVelocitySigma = 0.001
+	 IMU initialAccBiasSigma = 0.1
+	 IMU initialGyroBiasSigma = 0.01
+	 IMU imu_integration_sigma = 0.00000001
+	 IMU imu_bias_init_sigma = 0.001
+[32m[0 src/main.rs:51 [32mINFO[0m[32m] Using dataset "euroc"[0m
+[32m[0.208 src/spawn.rs:32 [32mINFO[0m[32m] Using module 'orbslam feature detection' as FEATURE_DETECTION[0m
+[32m[0.208 src/spawn.rs:32 [32mINFO[0m[32m] Using module 'orbslam feature matching' as FEATURE_MATCHER[0m
+[32m[0.208 src/spawn.rs:32 [32mINFO[0m[32m] Using module 'features' as FEATURES[0m
+[32m[0.208 src/spawn.rs:32 [32mINFO[0m[32m] Using module 'orbslam3 loop detection' as LOOP_DETECTION[0m
+[32m[0.208 src/spawn.rs:32 [32mINFO[0m[32m] Using module 'bundle adjustment' as FULL_MAP_OPTIMIZATION[0m
+[32m[0.208 src/spawn.rs:32 [32mINFO[0m[32m] Using module 'CAMERA' as CAMERA[0m
+[32m[0.208 src/modules/bow.rs:20 [32mINFO[0m[32m] Loading vocabulary...[0m
+[32m[3.052 src/spawn.rs:69 [32mINFO[0m[32m] Spawning actor 'visualizer' with name VISUALIZER[0m
+[32m[3.052 src/spawn.rs:69 [32mINFO[0m[32m] Spawning actor 'gtsam tracking frontend' with name TRACKING_FRONTEND[0m
+[32m[3.052 src/spawn.rs:69 [32mINFO[0m[32m] Spawning actor 'gtsam tracking backend' with name TRACKING_BACKEND[0m
+[32m[3.052 src/spawn.rs:69 [32mINFO[0m[32m] Spawning actor 'gtsam local mapping' with name LOCAL_MAPPING[0m
+[32m[3.052 src/main.rs:60 [32mINFO[0m[32m] System ready to receive messages![0m
+[32m[3.052 src/main.rs:332 [32mINFO[0m[32m] Reading timestamps file /home/sofiya/euroc/MH_01_easy/[0m
+[32m[3.053 /home/sofiya/.cargo/registry/src/index.crates.io-6f17d22bba15001f/warp-0.3.7/src/server.rs:137 [32mINFO[0m[32m] Server::run; addr=127.0.0.1:8765[0m
+[32m[3.053 /home/sofiya/.cargo/registry/src/index.crates.io-6f17d22bba15001f/warp-0.3.7/src/server.rs:138 [32mINFO[0m[32m] listening on http://127.0.0.1:8765[0m
+[37m[4.443 /home/sofiya/.cargo/registry/src/index.crates.io-6f17d22bba15001f/hyper-0.14.29/src/proto/h1/io.rs:208 [37mDEBUG[0m[37m] parsed 13 headers[0m
+[37m[4.444 /home/sofiya/.cargo/registry/src/index.crates.io-6f17d22bba15001f/hyper-0.14.29/src/proto/h1/conn.rs:224 [37mDEBUG[0m[37m] incoming body is empty[0m
+[37m[4.444 /home/sofiya/.cargo/registry/src/index.crates.io-6f17d22bba15001f/hyper-0.14.29/src/proto/h1/io.rs:318 [37mDEBUG[0m[37m] flushed 213 bytes[0m
+[37m[8.185 src/actors/tracking_frontend_gtsam.rs:106 [37mDEBUG[0m[37m] Tracking frontend working on frame 0[0m
+Dist coefs: [-0.2834081, 0.07395907, 0.00019359, 1.7618711e-5]
+Compute image bounds: frame_grid_cols: 64, image_max_x: 714.5005, image_min_x: -108.347595
+[37m[8.483 src/actors/tracking_frontend_gtsam.rs:106 [37mDEBUG[0m[37m] Tracking frontend working on frame 1[0m
+Matches... 423 matches, 4686 prev_matched, initial frame id 0, current frame id 1
+[32m[8.547 src/map/map.rs:199 [32mINFO[0m[32m] Created keyframe 0[0m
+[32m[8.556 src/map/map.rs:199 [32mINFO[0m[32m] Created keyframe 1[0m
+[32m[8.557 src/modules/map_initialization.rs:193 [32mINFO[0m[32m] Monocular initialization created new map with 244 mappoints[0m
+After initialization, pose is t[-0.0089,-0.0600,-0.0259] r[-0.0081,0.0027,-0.0003,1.0000]
+[37m[8.562 src/actors/tracking_frontend_gtsam.rs:359 [37mDEBUG[0m[37m] Extracted 200 new features[0m
+From map, first pose is: t[0.0000,0.0000,0.0000] r[0.0000,0.0000,0.0000,1.0000]
+From map, second pose is: t[-0.0089,-0.0600,-0.0259] r[-0.0081,0.0027,-0.0003,1.0000]
+From map, velocity is: DVVector3([[-0.17771629516505397, -1.2002163580335883, -0.5171458338606956]])
+Backend initializing graph...
+From imu initialization, translation is: DVVector3([[4.71005, -1.790324, 0.694569]])
+From imu initialization, rotation is: [[0.524844, -0.158653, -0.831921, -0.085301]]
+From imu initialization, velocity is: DVVector3([[-0.038647, -0.017245, 0.278454]])
+From imu initialization, acc bias is: DVVector3([[-0.025266, 0.1367, 0.075598]])
+From imu initialization, gyro bias is: DVVector3([[-0.003172, 0.021267, 0.078502]])
+[33m[8.573 src/actors/local_mapping_gtsam.rs:327 [33mWARN[0m[33m] Not running LBA. Either we just initialized the map or there are too many keyframes in the queue (1)[0m
+[37m[8.573 src/modules/imu.rs:189 [37mDEBUG[0m[37m] IMU: Early return not enough KFs (2)[0m
+[37m[8.573 src/actors/local_mapping_gtsam.rs:378 [37mDEBUG[0m[37m] For keyframe 0, culled 0 mappoints, created 0 mappoints, culled 0 keyframes[0m
+[32m[8.573 src/actors/local_mapping_gtsam.rs:379 [32mINFO[0m[32m] Map has 2 keyframes and 244 mappoints[0m
+[33m[8.587 src/actors/local_mapping_gtsam.rs:327 [33mWARN[0m[33m] Not running LBA. Either we just initialized the map or there are too many keyframes in the queue (0)[0m
+[37m[8.587 src/modules/imu.rs:189 [37mDEBUG[0m[37m] IMU: Early return not enough KFs (2)[0m
+[37m[8.587 src/actors/local_mapping_gtsam.rs:378 [37mDEBUG[0m[37m] For keyframe 1, culled 0 mappoints, created 0 mappoints, culled 0 keyframes[0m
+[32m[8.587 src/actors/local_mapping_gtsam.rs:379 [32mINFO[0m[32m] Map has 2 keyframes and 244 mappoints[0m
+[37m[8.69 src/actors/tracking_frontend_gtsam.rs:106 [37mDEBUG[0m[37m] Tracking frontend working on frame 2[0m
+[37m[8.691 src/actors/tracking_frontend_gtsam.rs:322 [37mDEBUG[0m[37m] Optical flow tracked 200 from original 200[0m
+[37m[8.697 src/actors/tracking_frontend_gtsam.rs:132 [37mDEBUG[0m[37m] Pose prediction from pure optical flow: t[-0.0025,-0.7150,-0.4764] r[-0.0192,0.0047,-0.0034,0.9998][0m
+[37m[8.697 src/actors/tracking_frontend_gtsam.rs:378 [37mDEBUG[0m[37m] Need new keyframe? false false false, 200[0m
+[37m[8.895 src/actors/tracking_frontend_gtsam.rs:106 [37mDEBUG[0m[37m] Tracking frontend working on frame 3[0m
+[37m[8.897 src/actors/tracking_frontend_gtsam.rs:322 [37mDEBUG[0m[37m] Optical flow tracked 200 from original 200[0m
+[37m[8.903 src/actors/tracking_frontend_gtsam.rs:132 [37mDEBUG[0m[37m] Pose prediction from pure optical flow: t[0.0691,0.0585,-0.2984] r[-0.0166,0.0044,-0.0036,0.9998][0m
+[37m[8.903 src/actors/tracking_frontend_gtsam.rs:378 [37mDEBUG[0m[37m] Need new keyframe? false true false, 200[0m
+[33m[8.903 src/actors/tracking_frontend_gtsam.rs:332 [33mWARN[0m[33m] Have enough features (200), not extracting more[0m
+[37m[8.903 src/actors/tracking_backend_gtsam.rs:580 [37mDEBUG[0m[37m] ... current state: GtsamState { pose: Pose3: Isometry { rotation: [-0.15865293577833584, -0.8319206632439912, -0.08530096547073071, 0.5248437875466888], translation: [4.71005, -1.790324, 0.694569] }, velocity: Vector3: [-0.038647, -0.017245, 0.278454], bias: ConstantBias: accel_bias: Vector3Ref: [-0.025266, 0.1367, 0.075598], gyro_bias: Vector3Ref: [-0.003172, 0.021267, 0.078502] }[0m
+[37m[8.903 src/actors/tracking_backend_gtsam.rs:597 [37mDEBUG[0m[37m] IMU PREDICTED POSE USING GTSAM: Pose3: Isometry { rotation: [-0.1593511471055943, -0.8366150653406335, -0.08584085909979622, 0.517023975527468], translation: [4.658853356884831, -1.7728423103717939, 0.6362926836146543] }[0m

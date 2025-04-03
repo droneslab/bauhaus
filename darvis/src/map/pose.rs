@@ -22,6 +22,25 @@ impl Pose {
         Pose (pose)
     }
 
+    pub fn new_with_quaternion_convert(translation : nalgebra::Vector3<f64>, rotation: nalgebra::Vector4<f64>) -> Pose {
+        let trans = nalgebra::Translation3::from(translation);
+        let rot = nalgebra::geometry::UnitQuaternion::<f64>::from_quaternion(
+            nalgebra::Quaternion::<f64>::new(
+                rotation[0],
+                rotation[1],
+                rotation[2],
+                rotation[3]
+            )
+        );
+        Pose (nalgebra::IsometryMatrix3::from_parts(trans, rot.into()))
+    }
+
+
+    pub fn new_with_quaternion(translation : nalgebra::Vector3<f64>, rotation: nalgebra::geometry::UnitQuaternion<f64>) -> Pose {
+        let trans = nalgebra::Translation3::from(translation);
+        Pose (nalgebra::IsometryMatrix3::from_parts(trans, rotation.into()))
+    }
+
     pub fn new_from_isometry(isometry: nalgebra::Isometry3<f64>) -> Pose {
         let trans = nalgebra::Translation3::from(isometry.translation.vector);
         let rot = nalgebra::geometry::UnitQuaternion::<f64>::from_quaternion(

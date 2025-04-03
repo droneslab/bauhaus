@@ -20,6 +20,7 @@ use crate::{
 };
 use std::sync::atomic::{AtomicI32, AtomicBool, Ordering};
 use atomic_float::AtomicF32;
+use log::{debug, warn, info};
 
 // Equal to:
 //   bool Frame::mbInitialComputations=true;
@@ -447,6 +448,7 @@ impl Features {
             IMAGE_MIN_X.store(mn_min_x, Ordering::SeqCst);
             IMAGE_MIN_Y.store(mn_min_y, Ordering::SeqCst);
         } else {
+            debug!("SOFIYA USING REGULAR??");
             IMAGE_MAX_X.store(im_width as f32, Ordering::SeqCst);
             IMAGE_MAX_Y.store(im_height as f32, Ordering::SeqCst);
             IMAGE_MIN_X.store(0.0, Ordering::SeqCst);

@@ -99,12 +99,24 @@ impl PreintegrationCombinedParams {
             inner: ::sys::new_preintegrated_combined_params_makesharedu(),
         }
     }
-    pub fn set_params(&mut self, sigma_a_sq: f64, sigma_g_sq: f64, sigma_wa_sq: f64, sigma_wg_sq: f64, int_covar_val: f64, bias_acc_omega_int_val2: f64) {
+    pub fn set_accelerometer_covariance(&mut self, sigma_a_sq: f64) {
         ::sys::set_accelerometer_covariance(&mut self.inner, sigma_a_sq);
+    }
+    pub fn set_gyroscope_covariance(&mut self, sigma_g_sq: f64) {
         ::sys::set_gyroscope_covariance(&mut self.inner, sigma_g_sq);
+    }
+    pub fn set_bias_acc_covariance(&mut self, sigma_wa_sq: f64) {
         ::sys::bias_acc_covariance(&mut self.inner, sigma_wa_sq);
+    }
+    pub fn set_bias_omega_covariance(&mut self, sigma_wg_sq: f64) {
         ::sys::bias_omega_covariance(&mut self.inner, sigma_wg_sq);
+    }
+    pub fn set_integration_covariance(&mut self, int_covar_val: f64) {
         ::sys::set_integration_covariance(&mut self.inner, int_covar_val);
+    }
+    pub fn set_bias_acc_omega_int(&mut self, bias_acc_omega_int_val2: f64) {
         ::sys::bias_acc_omega_int(&mut self.inner, bias_acc_omega_int_val2);
     }
+    
+
 }

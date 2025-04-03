@@ -68,3 +68,59 @@ imu__gyro_walk: 1.9393e-05
 imu__acc_walk: 3.0000e-03 # 3e-03
 imu__frequency: 200.0
 
+####### Kimera #######
+# Initialization Parameters
+initialPositionSigma: 1e-05
+initialRollPitchSigma: 0.174533 # 10.0/180.0*M_PI
+initialYawSigma: 0.00174533 # 0.1/180.0*M_PI
+initialVelocitySigma: 0.001
+initialAccBiasSigma: 0.1
+initialGyroBiasSigma: 0.01
+
+## Noise models ##
+smartNoiseSigma: 3.0
+monoNoiseSigma: 1.8
+monoNormType: 2
+monoNormParam: 4.6851
+stereoNoiseSigma: 1.8
+stereoNormType: 2
+stereoNormParam: 4.6851
+regularityNoiseSigma: 0.03
+regularityNormType: 1
+regularityNormParam: 0.04
+
+
+## Between Stereo Factors ##
+addBetweenStereoFactors: 0
+betweenRotationPrecision: 0 # Inverse of variance.
+betweenTranslationPrecision: 100 # 1/(0.1*0.1)
+
+# Optimization parameters
+relinearizeThreshold: 0.01
+relinearizeSkip: 1
+zero_velocity_precision: 1000
+no_motion_position_precision: 1000
+no_motion_rotation_precision: 10000
+constant_vel_precision: 100
+numOptimize: 1
+nr_states: 25 # number of nodes in horizon.
+# ISAM2GaussNewtonParams: continue updating the linear delta only when
+# changes are above this threshold (default: 0.001)
+wildfire_threshold: 0.001
+useDogLeg: 0
+
+
+# inertial sensor noise model parameters (static)
+imu_bias_init_sigma: 1e-3
+gyroscope_noise_density: 1.6968e-04     # [ rad / s / sqrt(Hz) ]   ( gyro "white noise" )
+gyroscope_random_walk: 1.9393e-05       # [ rad / s^2 / sqrt(Hz) ] ( gyro bias diffusion )
+accelerometer_noise_density: 2.0000e-3  # [ m / s^2 / sqrt(Hz) ]   ( accel "white noise" )
+accelerometer_random_walk: 3.0000e-2    # [ m / s^3 / sqrt(Hz) ]  ( accel bias diffusion ) Default in Euroc: 3.0000e-3
+
+# Extra parameters
+do_imu_rate_time_alignment: 1
+time_alignment_window_size_s: 10.0
+time_alignment_variance_threshold_scaling: 30.0
+imu_integration_sigma: 1.0e-8
+imu_time_shift: 0.0
+n_gravity: [0.0, 0.0, -9.81]
