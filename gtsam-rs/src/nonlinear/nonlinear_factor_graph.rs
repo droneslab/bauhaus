@@ -51,7 +51,7 @@ impl NonlinearFactorGraph {
         )
     }
 
-    pub fn add_prior_factor_constant_bias(
+    pub fn add_prior_factor_constant_bias_isotropic(
         &mut self,
         symbol: impl IntoKey,
         prior: &ConstantBias,
@@ -64,6 +64,21 @@ impl NonlinearFactorGraph {
             &model.to_base_model().inner,
         )
     }
+
+    pub fn add_prior_factor_constant_bias_diagonal(
+        &mut self,
+        symbol: impl IntoKey,
+        prior: &ConstantBias,
+        model: &DiagonalNoiseModel,
+    ) {
+        ::sys::nonlinear_factor_graph_add_prior_factor_constant_bias(
+            self.inner.pin_mut(),
+            symbol.into_key(),
+            &prior.inner,
+            &model.to_base_model().inner,
+        )
+    }
+
 
     pub fn add_prior_factor_vector3(
         &mut self,

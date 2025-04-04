@@ -64,7 +64,7 @@ imu__T_b_c1_row4: [0.0, 0.0, 0.0, 1.0]
 # IMU noise
 imu__noise_gyro: 1.7e-4 #1.6968e-04
 imu__noise_acc: 2.0000e-3 #2.0e-3
-imu__gyro_walk: 1.9393e-05 
+imu__gyro_walk: 0.5e-05  #1.9393e-05 
 imu__acc_walk: 3.0000e-03 # 3e-03
 imu__frequency: 200.0
 

@@ -87,6 +87,7 @@ namespace gtsam
         const Vector3 &measuredOmega,
         const double dt)
     {
+        // std::cout << "C++ integrate measurement with acceleration " << measuredAcc.transpose() << ", omega " << measuredOmega.transpose() << ", and dt " << dt << std::endl;
         preintegrated_measurements.integrateMeasurement(measuredAcc, measuredOmega, dt);
     }
 

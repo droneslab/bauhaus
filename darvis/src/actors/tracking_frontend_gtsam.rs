@@ -110,7 +110,30 @@ impl TrackingFrontendGTSAM {
                     // If map is not initialized yet, just extract features and try to initialize
                     // If initialized successsfully,
                     // publish this frame so backend has a reference to the frame associated with the initialization
-                    self.initialize_map(&image, timestamp).unwrap()
+
+                    // SOFIYA TURN OFF MAP INITIALIZATION
+                    // self.initialize_map(&image, timestamp).unwrap()
+
+                    // When turning back on, comment all this out:
+                    let (keypoints, descriptors) = self.orb_extractor_ini.as_mut().unwrap().extract(& image).unwrap();
+                    let init_pose = Pose::new_with_quaternion_convert(*imu_initialization.as_ref().unwrap().translation, imu_initialization.as_ref().unwrap().rotation);
+
+                    self.current_frame = Frame::new(
+                        self.curr_frame_id, 
+                        keypoints,
+                        descriptors,
+                        image.cols() as u32,
+                        image.rows() as u32,
+                        Some(image.clone()),
+                        Some(& self.last_frame),
+                        false,
+                        timestamp,
+                    ).expect("Could not create frame!");
+                    self.current_frame.pose = Some(init_pose);
+                    self.state = GtsamFrontendTrackingState::Ok;
+                    self.extract_good_features_to_track().expect("Couldn't extract good features to track?");
+
+                    true
                 },
                 GtsamFrontendTrackingState::Ok => {
                     // Regular tracking
@@ -157,6 +180,8 @@ impl TrackingFrontendGTSAM {
                 // Send current imu measurements to backend, replace with empty ones
                 let mut imu_measurements = ImuMeasurements::new();
                 std::mem::swap(&mut self.imu_measurements_since_last_kf, &mut imu_measurements);
+
+                println!("Imu measurements in frontend: {:?}", imu_measurements);
 
                 // SEND TO BACKEND!
                 self.system.send(TRACKING_BACKEND, Box::new(FeatureTracksAndIMUMsg {

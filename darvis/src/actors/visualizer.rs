@@ -63,7 +63,7 @@ pub struct DarvisVisualizer {
     previous_keyframes: HashSet<Id>,
 
     current_update_id: u64,
-    prev_pose: Point3,
+    prev_poses: Vec<Pose>,
 }
 
 impl Actor for DarvisVisualizer {
@@ -127,7 +127,7 @@ impl Actor for DarvisVisualizer {
             map,
             image_draw_type,
             current_update_id: 0,
-            prev_pose,
+            prev_poses: vec![],
             current_image: None,
             prev_image: None,
             current_keypoints: None,
@@ -379,7 +379,7 @@ impl DarvisVisualizer {
         //     self.draw_connected_kfs(msg.timestamp).await;
         // }
         self.current_update_id += 1;
-        self.prev_pose = msg.pose.into();
+        // self.prev_pose = msg.pose.into();
         Ok(())
     }
 
@@ -397,23 +397,45 @@ impl DarvisVisualizer {
                 timestamp, 
                 "world",
                 format!("cam {}", timestamp),
-                &inverse_frame_pose,
+                &frame_pose,
                 TRACKING_TRAJECTORY_COLOR.clone()
             )
         );
 
-        // Draw line from current pose to previous pose
-        let points = vec![self.prev_pose.clone(), inverse_frame_pose.into()];
-        self.create_scene_entity(
-            timestamp,
-            "world",
-            format!("line {}", timestamp),
-            vec![],
-            vec![self.create_line(points, TRAJECTORY_COLOR.clone(), 3.0),], 
-            vec![]
-        );
+        println!("self.prev_poses.len() = {}", self.prev_poses.len());
+        if self.prev_poses.len() > 0 {
+            let mut curr_pose = frame_pose;
+            let mut i = 0;
+            for prev_pose in self.prev_poses.iter().rev() {
+                // Draw line from current pose to previous pose
+                let points = vec![(*prev_pose).into(), curr_pose.into()];
+                entities_traj.push(
+                    self.create_scene_entity(
+                        timestamp,
+                        "world",
+                        format!("t {}->{}", i, i+1),
+                        vec![],
+                        vec![self.create_line(points, TRAJECTORY_COLOR.clone(), 3.0),], 
+                        vec![]
+                    )
+                );
+
+                entities_traj.push(
+                    self.create_frame_scene_entity(
+                        timestamp, 
+                        "world",
+                        format!("kf {}", i),
+                        &curr_pose,
+                        KEYFRAME_COLOR.clone(),
+                    )
+                );
+                curr_pose = prev_pose.clone();
+                i += 1;
+            }
+        }
 
         debug!("SOFIYA TRAJ: FOR TIMESTAMP {}, VISUALIZER POSE IS {:?}", timestamp, inverse_frame_pose);
+        debug!("SOFIYA TRAJ: FOR TIMESTAMP {}, VISUALIZER UNMODIFIED POSE IS {:?}", timestamp, frame_pose);
 
         let sceneupdate = SceneUpdate {
             deletions: vec![],
@@ -423,7 +445,7 @@ impl DarvisVisualizer {
         self.writer.write(TRACKING_TRAJECTORY_CHANNEL, sceneupdate, timestamp, 0).await.expect("Could not write trajectory to foxglove");
 
 
-        self.prev_pose = frame_pose.into();
+        self.prev_poses.push(frame_pose.into());
 
         Ok(())
     }
