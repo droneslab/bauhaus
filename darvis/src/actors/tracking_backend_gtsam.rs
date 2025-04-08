@@ -426,135 +426,48 @@ impl GraphSolver {
             }
         };
 
-        let pose_noise = gtsam::linear::noise_model::DiagonalNoiseModel::from_sigmas(Vector6::new(
-            self.initial_roll_pitch_sigma,
-            self.initial_roll_pitch_sigma,
-            self.initial_yaw_sigma,
-            self.initial_position_sigma,
-            self.initial_position_sigma,
-            self.initial_position_sigma
-        ));
-        self.graph_new.add_prior_factor_pose3(&Symbol::new(b'x', self.ct_state), &prior_state.pose, &pose_noise);
-
-        let v_noise = gtsam::linear::noise_model::IsotropicNoiseModel::from_dim_and_sigma(3, self.initial_velocity_sigma);
-        self.graph_new.add_prior_factor_vector3(&Symbol::new(b'v', self.ct_state), &prior_state.velocity, &v_noise);
-
-        let b_noise = gtsam::linear::noise_model::DiagonalNoiseModel::from_sigmas(Vector6::new(
-            self.initial_acc_bias_sigma,
-            self.initial_acc_bias_sigma,
-            self.initial_acc_bias_sigma,
-            self.initial_gyro_bias_sigma,
-            self.initial_gyro_bias_sigma,
-            self.initial_gyro_bias_sigma,
-        ));
-        self.graph_new.add_prior_factor_constant_bias_diagonal(&Symbol::new(b'b', self.ct_state), &prior_state.bias, &b_noise);
-
-        // self.graph_main.add_prior_factor_pose3(&Symbol::new(b'x', self.ct_state), &prior_state.pose, &pose_noise);
-        // self.graph_main.add_prior_factor_vector3(&Symbol::new(b'v', self.ct_state), &prior_state.velocity, &v_noise);
-        // self.graph_main.add_prior_factor_constant_bias_diagonal(&Symbol::new(b'b', self.ct_state), &prior_state.bias, &b_noise);
-
-        // Add initial state to the graph
-        self.values_new.insert_pose3(&Symbol::new(b'x', self.ct_state), &prior_state.pose);
-        self.values_new.insert_vector3(&Symbol::new(b'v', self.ct_state), &prior_state.velocity);
-        self.values_new.insert_constant_bias(&Symbol::new(b'b', self.ct_state), &prior_state.bias);
-        self.values_initial.insert_pose3(&Symbol::new(b'x', self.ct_state), &prior_state.pose);
-        self.values_initial.insert_vector3(&Symbol::new(b'v', self.ct_state), &prior_state.velocity);
-        self.values_initial.insert_constant_bias(&Symbol::new(b'b', self.ct_state), &prior_state.bias);
-
-        // Add ct state to map
-        self.ct_state_lookup.insert(timestamp, self.ct_state);
-        self.timestamp_lookup.insert(self.ct_state, timestamp);
-
-        // Create GTSAM preintegration parameters for use with Foster's version
-        let mut params = PreintegrationCombinedParams::makesharedu();  // Z-up navigation frame: gravity points along negative Z-axis !!!
-        params.set_gyroscope_covariance(self.gyro_noise_density * self.gyro_noise_density);
-        params.set_accelerometer_covariance(self.accel_noise_density * self.accel_noise_density);
-        params.set_integration_covariance(self.imu_integration_sigma * self.imu_integration_sigma);
-        params.set_bias_acc_omega_int(self.init_bias_sigma);
-        params.set_bias_acc_covariance(self.accel_random_walk * self.accel_random_walk);
-        params.set_bias_omega_covariance(self.gyro_random_walk * self.gyro_random_walk);
-
-        // Actually create the GTSAM preintegration
-        self.preint_gtsam = PreintegratedCombinedMeasurements::new(params, &prior_state.bias);
-        Ok(())
-    }
-
-    fn initialize_kimera(&mut self, timestamp: i64, init_pose: Pose, init_vel: DVVector3<f64>, init_bias: ImuBias) -> Result<(), Box<dyn std::error::Error>> {
-        let _span = tracy_client::span!("initialize");
-
-        // Create prior factor and add it to the graph
-        let prior_state = {
-            // Some really gross conversions here...
-            let rot_gtsam: gtsam::geometry::rot3::Rot3 = init_pose.get_quaternion().into();
-            GtsamState {
-                pose: gtsam::geometry::pose3::Pose3::from_parts(
-                    gtsam::geometry::point3::Point3::new(init_pose.translation.x, init_pose.translation.y, init_pose.translation.z),
-                    rot_gtsam
-                ),
-                velocity: gtsam::base::vector::Vector3::new(init_vel[0], init_vel[1], init_vel[2]),
-                bias: gtsam::imu::imu_bias::ConstantBias::new(
-                    &gtsam::base::vector::Vector3::new(init_bias.bax, init_bias.bay, init_bias.baz),
-                    &gtsam::base::vector::Vector3::new(init_bias.bwx, init_bias.bwy, init_bias.bwz),
-                )
-            }
-        };
-
-
-        // Set initial covariance for inertial factors
-        // W_Pose_Blkf_ set by motion capture to start with
-        // let b_rot_w = w_pose_b_lkf_from_state.get_rotation().transpose();
-
         // Set initial pose uncertainty: constrain mainly position and global yaw.
         // roll and pitch is observable, therefore low variance.
-        // let mut pose_prior_covariance = nalgebra::Matrix6::zeros();
-        // pose_prior_covariance[(0, 0)] = self.initial_roll_pitch_sigma * self.initial_roll_pitch_sigma;
-        // pose_prior_covariance[(1, 1)] = self.initial_roll_pitch_sigma * self.initial_roll_pitch_sigma;
-        // pose_prior_covariance[(2, 2)] = self.initial_yaw_sigma * self.initial_yaw_sigma;
-        // pose_prior_covariance[(3, 3)] = self.initial_position_sigma * self.initial_position_sigma;
-        // pose_prior_covariance[(4, 4)] = self.initial_position_sigma * self.initial_position_sigma;
-        // pose_prior_covariance[(5, 5)] = self.initial_position_sigma * self.initial_position_sigma;
 
+        let mut pose_prior_covariance2 = nalgebra::Matrix3::zeros();
+        pose_prior_covariance2[(0, 0)] = self.initial_roll_pitch_sigma * self.initial_roll_pitch_sigma;
+        pose_prior_covariance2[(1, 1)] = self.initial_roll_pitch_sigma * self.initial_roll_pitch_sigma;
+        pose_prior_covariance2[(2, 2)] = self.initial_yaw_sigma * self.initial_yaw_sigma;
 
         // Rotate initial uncertainty into local frame, where the uncertainty is
         // specified.
+        let b_rot_w = init_pose.get_rotation().transpose();
+        pose_prior_covariance2 = b_rot_w * pose_prior_covariance2 * b_rot_w.transpose();
 
-        // todo
-        // pose_prior_covariance.topLeftCorner(3, 3) =
-        //     B_Rot_W * pose_prior_covariance.topLeftCorner(3, 3) * B_Rot_W.transpose();
+        let mut pose_prior_covariance = nalgebra::Matrix6::zeros();
+        pose_prior_covariance[(0, 0)] = pose_prior_covariance2[(0,0)];
+        pose_prior_covariance[(0, 1)] = pose_prior_covariance2[(0,1)];
+        pose_prior_covariance[(0, 2)] = pose_prior_covariance2[(0,2)];
+        pose_prior_covariance[(1, 0)] = pose_prior_covariance2[(1,0)];
+        pose_prior_covariance[(1, 1)] = pose_prior_covariance2[(1,1)];
+        pose_prior_covariance[(1, 2)] = pose_prior_covariance2[(1,2)];
+        pose_prior_covariance[(2, 0)] = pose_prior_covariance2[(2,0)];
+        pose_prior_covariance[(2, 1)] = pose_prior_covariance2[(2,1)];
+        pose_prior_covariance[(2, 2)] = pose_prior_covariance2[(2,2)];
+        pose_prior_covariance[(3, 3)] = self.initial_position_sigma * self.initial_position_sigma;
+        pose_prior_covariance[(4, 4)] = self.initial_position_sigma * self.initial_position_sigma;
+        pose_prior_covariance[(5, 5)] = self.initial_position_sigma * self.initial_position_sigma;
 
         // Add pose prior.
+        let pose_noise = gtsam::linear::noise_model::GaussianNoiseModel::from_covariance(pose_prior_covariance);
         // let pose_noise = gtsam::linear::noise_model::DiagonalNoiseModel::from_sigmas(Vector6::new(
-        //     pose_prior_covariance[(0, 0)],
-        //     pose_prior_covariance[(1, 1)],
-        //     pose_prior_covariance[(2, 2)],
-        //     pose_prior_covariance[(3, 3)],
-        //     pose_prior_covariance[(4, 4)],
-        //     pose_prior_covariance[(5, 5)]
+        //     self.initial_roll_pitch_sigma,
+        //     self.initial_roll_pitch_sigma,
+        //     self.initial_yaw_sigma,
+        //     self.initial_position_sigma,
+        //     self.initial_position_sigma,
+        //     self.initial_position_sigma
         // ));
-        // self.graph_new.add_prior_factor_pose3(&Symbol::new(b'x', self.ct_state), &prior_state.pose, &pose_noise);
-
-
-        let pose_noise = gtsam::linear::noise_model::DiagonalNoiseModel::from_sigmas(Vector6::new(
-            self.initial_roll_pitch_sigma * self.initial_roll_pitch_sigma,
-            self.initial_roll_pitch_sigma * self.initial_roll_pitch_sigma,
-            self.initial_yaw_sigma * self.initial_yaw_sigma,
-            self.initial_position_sigma * self.initial_position_sigma,
-            self.initial_position_sigma * self.initial_position_sigma,
-            self.initial_position_sigma * self.initial_position_sigma
-        ));
         self.graph_new.add_prior_factor_pose3(&Symbol::new(b'x', self.ct_state), &prior_state.pose, &pose_noise);
 
-        println!("POSE NOISE: {:?} {:?} {:?}", self.initial_roll_pitch_sigma * self.initial_roll_pitch_sigma, self.initial_yaw_sigma * self.initial_yaw_sigma, self.initial_position_sigma * self.initial_position_sigma);
-
-
-
-        // Add initial velocity priors.
         let v_noise = gtsam::linear::noise_model::IsotropicNoiseModel::from_dim_and_sigma(3, self.initial_velocity_sigma);
         self.graph_new.add_prior_factor_vector3(&Symbol::new(b'v', self.ct_state), &prior_state.velocity, &v_noise);
 
-        println!("Initial velocity sigma: {:?}", self.initial_velocity_sigma);
-
-        // Add initial bias priors:
         let b_noise = gtsam::linear::noise_model::DiagonalNoiseModel::from_sigmas(Vector6::new(
             self.initial_acc_bias_sigma,
             self.initial_acc_bias_sigma,
@@ -564,29 +477,6 @@ impl GraphSolver {
             self.initial_gyro_bias_sigma,
         ));
         self.graph_new.add_prior_factor_constant_bias_diagonal(&Symbol::new(b'b', self.ct_state), &prior_state.bias, &b_noise);
-
-        println!("Initial bias sigma: {:?} {:?}", self.initial_acc_bias_sigma, self.initial_gyro_bias_sigma);
-
-        // Vector6 prior_biasSigmas;
-        // prior_biasSigmas.head<3>().setConstant(backend_params_.initialAccBiasSigma_);
-        // prior_biasSigmas.tail<3>().setConstant(backend_params_.initialGyroBiasSigma_);
-        // // TODO(Toni): Make this noise model a member constant.
-        // gtsam::SharedNoiseModel imu_bias_prior_noise =
-        //     gtsam::noiseModel::Diagonal::Sigmas(prior_biasSigmas);
-        // if (VLOG_IS_ON(10))
-        // {
-        //     LOG(INFO) << "Imu bias for Backend prior:";
-        //     imu_bias_lkf_.print();
-        // }
-        // new_imu_prior_and_other_factors_
-        //     .emplace_shared<gtsam::PriorFactor<gtsam::imuBias::ConstantBias>>(
-        //         gtsam::Symbol(kImuBiasSymbolChar, frame_id),
-        //         imu_bias_lkf_,
-        //         imu_bias_prior_noise);
-
-
-        // OLD:
-
 
         // self.graph_main.add_prior_factor_pose3(&Symbol::new(b'x', self.ct_state), &prior_state.pose, &pose_noise);
         // self.graph_main.add_prior_factor_vector3(&Symbol::new(b'v', self.ct_state), &prior_state.velocity, &v_noise);
@@ -600,13 +490,10 @@ impl GraphSolver {
         self.values_initial.insert_vector3(&Symbol::new(b'v', self.ct_state), &prior_state.velocity);
         self.values_initial.insert_constant_bias(&Symbol::new(b'b', self.ct_state), &prior_state.bias);
 
-        println!("INSERTING PRIOR STATE {:?} AT KEY {}", prior_state.pose, self.ct_state);
-
         // Add ct state to map
         self.ct_state_lookup.insert(timestamp, self.ct_state);
         self.timestamp_lookup.insert(self.ct_state, timestamp);
 
-        // Kimera... Look at function generateCombinedPim and convertVioImuParamsToGtsam
         // Create GTSAM preintegration parameters for use with Foster's version
         let mut params = PreintegrationCombinedParams::makesharedu();  // Z-up navigation frame: gravity points along negative Z-axis !!!
         params.set_gyroscope_covariance(self.gyro_noise_density * self.gyro_noise_density);
@@ -616,18 +503,8 @@ impl GraphSolver {
         params.set_bias_acc_covariance(self.accel_random_walk * self.accel_random_walk);
         params.set_bias_omega_covariance(self.gyro_random_walk * self.gyro_random_walk);
 
-        println!("Gyroscope covariance: {}", self.gyro_noise_density * self.gyro_noise_density);
-        println!("Accelerometer covariance: {}", self.accel_noise_density * self.accel_noise_density);
-        println!("Integration covariance: {}", self.imu_integration_sigma * self.imu_integration_sigma);
-        println!("Bias acc omega int: {}", self.init_bias_sigma);
-        println!("Bias acc covariance: {}", self.accel_random_walk * self.accel_random_walk);
-        println!("Bias omega covariance: {}", self.gyro_random_walk * self.gyro_random_walk);
-        // params.set_bias_acc_covariance(self.accel_random_walk * self.accel_random_walk);
-
-
         // Actually create the GTSAM preintegration
         self.preint_gtsam = PreintegratedCombinedMeasurements::new(params, &prior_state.bias);
-
         Ok(())
     }
 

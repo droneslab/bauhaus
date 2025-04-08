@@ -156,6 +156,7 @@ mod ffi {
 
         type DiagonalNoiseModel;
         type IsotropicNoiseModel;
+        type GaussianNoiseModel;
 
         fn from_diagonal_noise_model_sigmas(sigmas: &mut [f64]) -> SharedPtr<DiagonalNoiseModel>;
 
@@ -168,6 +169,12 @@ mod ffi {
 
         fn cast_isotropic_noise_model_to_base_noise_model(
             a: &SharedPtr<IsotropicNoiseModel>,
+        ) -> SharedPtr<BaseNoiseModel>;
+
+        fn from_gaussian_noise_model_from_covariance(covariance: &mut [f64]) -> SharedPtr<GaussianNoiseModel>;
+
+        fn cast_gaussian_noise_model_to_base_noise_model(
+            a: &SharedPtr<GaussianNoiseModel>,
         ) -> SharedPtr<BaseNoiseModel>;
     }
 

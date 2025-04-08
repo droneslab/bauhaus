@@ -1,5 +1,5 @@
 use cxx::SharedPtr;
-use nalgebra::SVector;
+use nalgebra::{SMatrix, SVector};
 
 pub struct BaseNoiseModel {
     pub(crate) inner: SharedPtr<::sys::BaseNoiseModel>,
@@ -37,6 +37,24 @@ impl IsotropicNoiseModel {
     pub(crate) fn to_base_model(&self) -> BaseNoiseModel {
         BaseNoiseModel {
             inner: ::sys::cast_isotropic_noise_model_to_base_noise_model(&self.inner),
+        }
+    }
+}
+
+pub struct GaussianNoiseModel {
+    pub(crate) inner: SharedPtr<::sys::GaussianNoiseModel>,
+}
+
+impl GaussianNoiseModel {
+    pub fn from_covariance<const D: usize>(mut covariance: SMatrix<f64, D, D>) -> Self {
+        Self {
+            inner: ::sys::from_gaussian_noise_model_from_covariance(covariance.data.as_mut_slice()),
+        }
+    }
+
+    pub(crate) fn to_base_model(&self) -> BaseNoiseModel {
+        BaseNoiseModel {
+            inner: ::sys::cast_gaussian_noise_model_to_base_noise_model(&self.inner),
         }
     }
 }

@@ -1,7 +1,7 @@
 use cxx::UniquePtr;
 
 use crate::{
-    base::vector::Vector3, geometry::pose3::Pose3, imu::imu_bias::ConstantBias, inference::key::IntoKey, linear::noise_model::{DiagonalNoiseModel, IsotropicNoiseModel}, navigation::combined_imu_factor::CombinedImuFactor, slam::projection_factor::SmartProjectionPoseFactorCal3S2
+    base::vector::Vector3, geometry::pose3::Pose3, imu::imu_bias::ConstantBias, inference::key::IntoKey, linear::noise_model::{DiagonalNoiseModel, GaussianNoiseModel, IsotropicNoiseModel}, navigation::combined_imu_factor::CombinedImuFactor, slam::projection_factor::SmartProjectionPoseFactorCal3S2
 };
 
 pub struct NonlinearFactorGraph {
@@ -41,7 +41,7 @@ impl NonlinearFactorGraph {
         &mut self,
         symbol: impl IntoKey,
         prior: &Pose3,
-        model: &DiagonalNoiseModel,
+        model: &GaussianNoiseModel,
     ) {
         ::sys::nonlinear_factor_graph_add_prior_factor_pose3(
             self.inner.pin_mut(),
