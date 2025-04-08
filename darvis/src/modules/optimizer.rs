@@ -512,14 +512,12 @@ pub fn pose_inertial_optimization_last_keyframe(
         va, false, frame.imu_data.get_imu_bias().get_acc_bias().into()
     );
 
-    let mut bla = 0;
     // Set MapPoint vertices
     let mut mp_indexes = vec![]; // vnIndexEdgeMono
     for i in 0..frame.mappoint_matches.matches.len() {
         if frame.mappoint_matches.matches[i].is_none() {
             continue;
         }
-        bla += 1;
         let (mp_id, _) = frame.mappoint_matches.matches[i].unwrap();
 
         let (kp, is_right) = frame.features.get_keypoint(i);

@@ -1,11 +1,11 @@
 use std::cmp::min;
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
+use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 use std::f64::INFINITY;
 use std::iter::FromIterator;
 use std::sync::atomic::AtomicBool;
 
 use core::system::{Actor, MessageBox};
-use core::sensor::{Sensor, FrameSensor, ImuSensor};
+use core::sensor::{Sensor, FrameSensor};
 use core::{
     config::{SETTINGS, SYSTEM},
     matrix::DVVector3
@@ -17,10 +17,9 @@ use opencv::prelude::KeyPointTraitConst;
 use crate::map::frame::Frame;
 use crate::map::pose::Pose;
 use crate::map::read_only_lock::ReadWriteMap;
-use crate::modules::local_bundle_adjustment::local_inertial_ba;
 use crate::registered_actors::{CAMERA_MODULE, FEATURE_MATCHER, FEATURE_MATCHING_MODULE, LOCAL_MAP_OPTIMIZATION_MODULE, TRACKING_BACKEND};
 use crate::System;
-use crate::actors::messages::{LastKeyFrameUpdatedMsg, UpdateFrameIMUMsg};
+use crate::actors::messages::UpdateFrameIMUMsg;
 use crate::modules::optimizer::{self, LEVEL_SIGMA2};
 use crate::{
     modules::{imu::IMU, orbslam_matcher::SCALE_FACTORS, geometric_tools},
@@ -29,10 +28,8 @@ use crate::{
 };
 use crate::modules::module_definitions::{CameraModule, FeatureExtractionModule};
 use crate::modules::module_definitions::ImuModule;
-use super::messages::{InitKeyFrameMsg, InitKeyFrameMsgGTSAM, KeyFrameIdMsg, NewKeyFrameGTSAMMsg, NewKeyFrameMsg, ShutdownMsg};
-use super::tracking_backend::{TrackedMapPointData, TrackingState};
-use crate::modules::module_definitions::BoWModule;
-use crate::actors::tracking_frontend_gtsam::{TrackedFeatures, TrackedFeaturesIndexMap};
+use super::messages::{InitKeyFrameMsg, KeyFrameIdMsg, NewKeyFrameGTSAMMsg, ShutdownMsg};
+use super::tracking_backend::TrackingState;
 
 // TODO (design, variable locations): It would be nice for this to be a member of LocalMapping instead of floating around in the global namespace, but we can't do that easily because then Tracking would need a reference to the localmapping object.
 pub static LOCAL_MAPPING_IDLE: AtomicBool = AtomicBool::new(true);
@@ -227,7 +224,7 @@ impl LocalMappingGTSAM {
             }
         }
 
-        let (_non_tracked_points, matches) = FEATURE_MATCHING_MODULE.search_by_projection(
+        let matches = FEATURE_MATCHING_MODULE.search_by_projection(
             frame,
             &mut local_mappoints,
             6, 0.8,

@@ -1,6 +1,4 @@
-use core::config::{SETTINGS, SYSTEM};
-
-use opencv::{imgcodecs, imgproc::{resize, InterpolationFlags::INTER_LINEAR}, prelude::{Mat, MatTraitConst}, types::VectorOfKeyPoint, core::{Vector, KeyPoint, DMatch}};
+use opencv::{imgcodecs, imgproc::resize, prelude::Mat, types::VectorOfKeyPoint, core::{Vector, KeyPoint, DMatch}};
 
 pub fn read_image_file(path: &String) -> Mat {
     let _span = tracy_client::span!("read image");

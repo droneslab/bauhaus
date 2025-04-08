@@ -75,7 +75,7 @@ pub trait ImuModule: Send + Sync {
 pub trait FeatureExtractionModule {
     // TODO (modularization) Sofiya these should probably be the same function that takes a Self::FeatureExtractionSettings variable
     fn extract(&mut self, image : & Mat) -> Result<(DVVectorOfKeyPoint, DVMatrix), Box<dyn std::error::Error>>;
-    fn extract_amount(&mut self, image: & Mat, max_features: i32, min_distance: f64) -> Result<(VectorOfPoint2f), Box<dyn std::error::Error>>;
+    fn extract_amount(&mut self, image: & Mat, max_features: i32, min_distance: f64) -> Result<VectorOfPoint2f, Box<dyn std::error::Error>>;
     fn extract_with_existing_points(&mut self, image: &Mat, points: &VectorOfPoint2f) -> Result<(DVVectorOfKeyPoint, DVMatrix), Box<dyn std::error::Error>>;
 }
 
@@ -95,7 +95,7 @@ pub trait FeatureMatchingModule {
         frame: &mut Frame, mappoints: &mut BTreeSet<Id>, th: i32, ratio: f64,
         track_in_view: &HashMap<Id, TrackedMapPointData>, track_in_view_right: &HashMap<Id, TrackedMapPointData>, 
         map: &ReadWriteMap, sensor: Sensor
-    ) -> Result<(HashMap<Id, i32>, i32), Box<dyn std::error::Error>>;
+    ) -> Result<i32, Box<dyn std::error::Error>>;
     fn search_by_projection_with_threshold (
         &self, 
         current_frame: &mut Frame, last_frame: &mut Frame, th: i32,

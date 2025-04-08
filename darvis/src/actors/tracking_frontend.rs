@@ -1,5 +1,5 @@
 extern crate g2o;
-use log::{debug, info, warn};
+use log::{info, warn};
 use opencv::prelude::*;
 
 use core::{

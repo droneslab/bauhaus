@@ -1,10 +1,8 @@
-use std::{collections::{BTreeMap, HashMap, HashSet, VecDeque}, env, fs::{File, OpenOptions}, io::{self, BufRead}, path::Path, sync::atomic::AtomicBool, thread::{self, sleep}, time::Duration};
+use std::{collections::{BTreeMap, VecDeque}, env, fs::{File, OpenOptions}, io::{self, BufRead}, path::Path, sync::atomic::AtomicBool, thread::{self, sleep}, time::Duration};
 use fern::colors::{ColoredLevelConfig, Color};
 use glob::glob;
 use log::{debug, info, warn};
-use map::pose::Pose;
 use modules::imu::{ImuMeasurements, ImuPoint};
-use nalgebra::{Matrix3, Vector3};
 use opencv::core::Point3f;
 use registered_actors::CAMERA;
 use spin_sleep::LoopHelper;
@@ -110,6 +108,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         tracy_client::frame_mark();
 
         // debug!("Read image {} at timestamp {}", image_path, timestamp);
+        // debug!("Imu initialization: {:?}", imu_initialization);
+        // debug!("IMU measurements: {:?}", imu_measurements);
 
         let mut image = image::read_image_file(&image_path);
         if SETTINGS.get::<bool>(CAMERA, "need_to_resize") {
@@ -271,7 +271,6 @@ impl LoopManager {
         // KIMERA
         let gt_file = File::open(gt_filename).unwrap();
         rdr = csv::Reader::from_reader(gt_file);
-        let mut count = 0;
         for result in rdr.records() {
             let record = result?;
 

@@ -72,7 +72,7 @@ impl Actor for DarvisVisualizer {
     #[tokio::main]
     async fn spawn(system: System, map: Self::MapRef) {
         // Trajectory starts at 0,0
-        let prev_pose = Point3 { x: 0.0, y: 0.0, z: 0.0 };
+        let _prev_pose = Point3 { x: 0.0, y: 0.0, z: 0.0 };
 
         let image_draw_type = match SETTINGS.get::<String>(VISUALIZER, "image_draw_type").as_str() {
             "none" => ImageDrawType::NONE,
@@ -402,7 +402,6 @@ impl DarvisVisualizer {
             )
         );
 
-        println!("self.prev_poses.len() = {}", self.prev_poses.len());
         if self.prev_poses.len() > 0 {
             let mut curr_pose = frame_pose;
             let mut i = 0;
@@ -433,9 +432,6 @@ impl DarvisVisualizer {
                 i += 1;
             }
         }
-
-        debug!("SOFIYA TRAJ: FOR TIMESTAMP {}, VISUALIZER POSE IS {:?}", timestamp, inverse_frame_pose);
-        debug!("SOFIYA TRAJ: FOR TIMESTAMP {}, VISUALIZER UNMODIFIED POSE IS {:?}", timestamp, frame_pose);
 
         let sceneupdate = SceneUpdate {
             deletions: vec![],
@@ -485,8 +481,6 @@ impl DarvisVisualizer {
         };
         self.writer.write(TRANSFORM_CHANNEL, transform, timestamp, 0).await.expect("Could not write transform");
 
-        debug!("SOFIYA TRAJ: FOR TIMESTAMP {}, VISUALIZER POSE IS {:?}", timestamp, inverse_frame_pose);
-
         let map = self.map.read()?;
 
         // Draw keyframes and trajectory
@@ -530,7 +524,6 @@ impl DarvisVisualizer {
             if draw_graph {
                 let mut lines = vec![];
                 // Print connected keyframes
-                let covisibles = kf.get_covisibility_keyframes(100);
                 for connected_kf_id in &kf.get_covisibles_by_weight(100) {
                     let connected_kf = map.get_keyframe(*connected_kf_id);
                     let connected_pose = connected_kf.get_pose().inverse();
@@ -674,7 +667,7 @@ impl DarvisVisualizer {
         Ok(())
     }
 
-    async fn draw_connected_kfs(&mut self, timestamp: Timestamp) -> Result<(), Box<dyn std::error::Error>> {
+    async fn _draw_connected_kfs(&mut self, timestamp: Timestamp) -> Result<(), Box<dyn std::error::Error>> {
         // Draw connected keyframes graph
         // Will be re-drawn each time because kf may gain/lose connections over time
         // But won't update if a keyframe is deleted! Need to keep track of that and delete manually

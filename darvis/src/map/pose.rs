@@ -2,7 +2,6 @@ use std::ops::{Mul, Deref};
 use core::matrix::{DVMatrix3, DVVector3};
 use nalgebra::{Quaternion, UnitQuaternion};
 use num_traits::abs;
-use serde::{Deserialize, Serialize};
 
 pub type DVTranslation = DVVector3<f64>;
 pub type DVRotation = DVMatrix3<f64>;

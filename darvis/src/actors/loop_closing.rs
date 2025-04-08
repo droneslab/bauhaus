@@ -32,7 +32,7 @@ pub struct LoopClosing {
     map: ReadWriteMap,
 
     // Modules
-    imu: Option<IMU>,
+    // imu: Option<IMU>,
     loop_detection: Box<dyn LoopDetectionModule>,
 }
 
@@ -48,7 +48,7 @@ impl Actor for LoopClosing {
         let mut actor = LoopClosing {
             system,
             map,
-            imu,
+            // imu,
             sensor: SETTINGS.get(SYSTEM, "sensor"),
             loop_detection: registered_actors::new_loop_detection_module(),
         };
@@ -440,7 +440,7 @@ fn run_gba(map: &mut ReadWriteMap, loop_kf: Id) -> Result<(), Box<dyn std::error
                     child.ba_global_for_kf = loop_kf;
                     debug!("Add pose for child kf {}", child_id);
 
-                    todo!("SOFIYA mVwbGBA");
+                    todo!("mVwbGBA");
                         //                     Sophus::SO3f Rcor = pChild->mTcwGBA.so3().inverse() * pChild->GetPose().so3();
                         // if(pChild->isVelocitySet()){
                         //     pChild->mVwbGBA = Rcor * pChild->GetVelocity();
@@ -458,7 +458,7 @@ fn run_gba(map: &mut ReadWriteMap, loop_kf: Id) -> Result<(), Box<dyn std::error
             debug!("Update kf {} with pose {:?}", curr_kf_id, kf.get_pose());
             i += 1;
 
-            todo!("SOFIYA mVwbGBA");
+            todo!("mVwbGBA");
                 //             if(pKF->bImu)
                 // {
                 //     //cout << "-------Update inertial values" << endl;

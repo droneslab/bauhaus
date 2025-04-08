@@ -862,7 +862,7 @@ impl LocalMapping {
                                 (Some(prev_kf_id), Some(next_kf_id)) => {
                                     let next_kf = read_lock.get_keyframe(next_kf_id);
                                     let prev_kf = read_lock.get_keyframe(prev_kf_id);
-                                    let t = (next_kf.timestamp - prev_kf.timestamp);
+                                    let t = next_kf.timestamp - prev_kf.timestamp;
 
                                     if read_lock.imu_initialized && kf_id < last_id && t < 3.0 || t < 0.5 {
                                         self.discarded_kfs.insert(kf_id);

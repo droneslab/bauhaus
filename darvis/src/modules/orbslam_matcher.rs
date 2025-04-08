@@ -312,7 +312,7 @@ impl SearchByBoWTrait for ORBMatcher {
                 for index_kf1 in 0..kf_1_indices_size {
                     let real_idx_kf1 = kf_1.bow.as_ref().unwrap().get_feat_vec().vec_get(kf_1_node_id, index_kf1);
 
-                    if let Some((mp_id, is_outlier)) = kf_1.get_mp_match(&real_idx_kf1) {
+                    if let Some((_mp_id, _is_outlier)) = kf_1.get_mp_match(&real_idx_kf1) {
                         let mut best_dist1 = 256;
                         let mut best_dist2 = 256;
                         let mut best_idx2: i32 = -1;
@@ -493,7 +493,7 @@ impl FeatureMatchingModule for ORBMatcher {
         frame: &mut Frame, mappoints: &mut BTreeSet<Id>, th: i32, ratio: f64,
         track_in_view: &HashMap<Id, TrackedMapPointData>, track_in_view_right: &HashMap<Id, TrackedMapPointData>, 
         map: &ReadWriteMap, sensor: Sensor
-    ) -> Result<(HashMap<Id, i32>, i32), Box<dyn std::error::Error>> {
+    ) -> Result<i32, Box<dyn std::error::Error>> {
         // int SearchByProjection(Frame &F, const std::vector<MapPoint*> &vpMapPoints, const float th=3, const bool bFarPoints = false, const float thFarPoints = 50.0f);
         // Search matches between Frame keypoints and projected MapPoints. Returns number of matches
         // Used to track the local map (Tracking)
@@ -501,14 +501,8 @@ impl FeatureMatchingModule for ORBMatcher {
         let far_points_th = if fpt == 0.0 { INFINITY } else { fpt };
         let mut num_matches = 0;
 
-        let mut non_tracked_points = HashMap::new();
-
         let map = map.read()?;
         let mut local_mps_to_remove = vec![];
-
-        let mut debug_track_depth = 0;
-        let mut debug_level = 0;
-
 
         for mp_id in &*mappoints {
             let mp = match map.mappoints.get(&mp_id) {
@@ -521,7 +515,6 @@ impl FeatureMatchingModule for ORBMatcher {
             };
             if let Some(mp_data) = track_in_view.get(&mp_id) {
                 if mp_data.track_depth > far_points_th {
-                    debug_track_depth+=1;
                     continue;
                 }
 
@@ -587,7 +580,6 @@ impl FeatureMatchingModule for ORBMatcher {
                     // Apply ratio to second match (only if best and second are in the same scale level)
                     if best_dist <= self.high_threshold {
                         if best_level == best_level2 && (best_dist as f64) > (ratio * best_dist2 as f64) {
-                            debug_level += 1;
                             continue;
                         }
                         if best_level != best_level2 || (best_dist as f64) <= (ratio * best_dist2 as f64) {
@@ -686,7 +678,7 @@ impl FeatureMatchingModule for ORBMatcher {
         // debug!("debug_track_depth: {}, debug_level: {}", debug_track_depth, debug_level);
 
         mappoints.retain(|mp_id| !local_mps_to_remove.contains(&mp_id));
-        return Ok((non_tracked_points, num_matches));
+        return Ok(num_matches);
     }
 
     // Project MapPoints tracked in last frame into the current frame and search matches.

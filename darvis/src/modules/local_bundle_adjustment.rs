@@ -111,7 +111,7 @@ impl LocalMapOptimizationModule for LocalBundleAdjustment {
                             fixed_cameras.push(*kf_id);
                         }
                     }
-                    // SOFIYA KF DELETE: KF could have been deleted during optimization, ok to ignore
+                    // KF could have been deleted during optimization, ok to ignore
                 }
             }
 
@@ -140,7 +140,7 @@ impl LocalMapOptimizationModule for LocalBundleAdjustment {
                 } else {
                     kfs_to_optimize += 1;
                 }
-                // SOFIYA KF DELETE: KF could have been deleted during optimization, ok to ignore
+                // KF could have been deleted during optimization, ok to ignore
             }
 
             // Set Fixed KeyFrame vertices
@@ -152,7 +152,7 @@ impl LocalMapOptimizationModule for LocalBundleAdjustment {
                     max_kf_id = kf.id;
                 }
                 fixed_kfs += 1;
-                // SOFIYA KF DELETE: KF could have been deleted during optimization, ok to ignore
+                // KF could have been deleted during optimization, ok to ignore
             }
 
 
@@ -456,7 +456,7 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
             ba_local_for_kf.insert(optimizable_kfs[i], curr_kf_id);
             for data in mps {
                 if let Some((mp_id, _)) = data {
-                    if let Some(mp) = lock.mappoints.get(&mp_id) {
+                    if let Some(_mp) = lock.mappoints.get(&mp_id) {
                         if local_ba_for_mp.get(mp_id).is_none() || * local_ba_for_mp.get(mp_id).unwrap() != curr_kf_id {
                             local_mappoints.push(*mp_id);
                             local_ba_for_mp.insert(*mp_id, curr_kf_id);
@@ -488,36 +488,7 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
     }
 
     // Optimizable visual KFs
-    // const int maxCovKF = 0;
-    let opt_vis_kfs: Vec<Id> = vec![]; // lpOptVisKFs
-    for _ in neighbor_kfs {
-        if opt_vis_kfs.len() >= 0 {
-            break;
-        }
-        todo!("What is this? Isn't opt_vis_kfs.len() always 0?");
-        
-        // KeyFrame* pKFi = vpNeighsKFs[i];
-        // if(pKFi->mnBALocalForKF == pKF->mnId || pKFi->mnBAFixedForKF == pKF->mnId)
-        //     continue;
-        // pKFi->mnBALocalForKF = pKF->mnId;
-        // if(!pKFi->isBad() && pKFi->GetMap() == pCurrentMap)
-        // {
-        //     lpOptVisKFs.push_back(pKFi);
-
-        //     vector<MapPoint*> vpMPs = pKFi->GetMapPointMatches();
-        //     for(vector<MapPoint*>::iterator vit=vpMPs.begin(), vend=vpMPs.end(); vit!=vend; vit++)
-        //     {
-        //         MapPoint* pMP = *vit;
-        //         if(pMP)
-        //             if(!pMP->isBad())
-        //                 if(pMP->mnBALocalForKF!=pKF->mnId)
-        //                 {
-        //                     lLocalMapPoints.push_back(pMP);
-        //                     pMP->mnBALocalForKF=pKF->mnId;
-        //                 }
-        //     }
-        // }
-    }
+    // Note... In ORBSLAM this seems to be a loop that immediately breaks, so removing from the code here.
 
     // Fixed KFs which are not covisible optimizable
     {
@@ -567,7 +538,6 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
         for kf_id in &optimizable_kfs {
             let kf = lock.get_keyframe(*kf_id);
 
-            // debug!("Sofiya Add vertex: {}", kf.id);
             super::optimizer::add_vertex_pose_keyframe(&mut optimizer, kf, false, kf.id);
 
             if kf.imu_data.is_imu_initialized {
@@ -589,17 +559,16 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
             }
         }
 
+        // Note... this is the empty optimizable visual KFs from above
         // Set Local visual KeyFrame vertices
-        for kf_id in &opt_vis_kfs {
-            let kf = lock.get_keyframe(*kf_id);
-            // debug!("Sofiya Add vertex: {}", kf.id);
-            super::optimizer::add_vertex_pose_keyframe(&mut optimizer, kf, false, kf.id);
-        }
+        // for kf_id in &opt_vis_kfs {
+        //     let kf = lock.get_keyframe(*kf_id);
+        //     super::optimizer::add_vertex_pose_keyframe(&mut optimizer, kf, false, kf.id);
+        // }
 
         // Set Fixed KeyFrame vertices
         for kf_id in &fixed_keyframes {
             let kf = lock.get_keyframe(*kf_id);
-            // debug!("Sofiya Add vertex: {}", kf.id);
             super::optimizer::add_vertex_pose_keyframe(&mut optimizer, kf, true, kf.id);
 
             // This should be done only for keyframe just before temporal window
@@ -701,9 +670,9 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
 
 
     let th_huber_mono: f32 = (5.991 as f32).sqrt();
-    let th_huber_stereo: f32 = (7.815 as f32).sqrt();
+    let _th_huber_stereo: f32 = (7.815 as f32).sqrt();
     let chi2_mono2 = 5.991;
-    let chi2_stereo2 = 7.815;
+    let _chi2_stereo2 = 7.815;
 
     let ini_mp_id = max_kf_id * 5; // iniMPid
 
@@ -723,25 +692,17 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
     let mut mp_vertex_ids = HashMap::new();
     let mut edges_kf_mono = Vec::<Id>::new(); // vpEdgeKFMono
     {
-        // This is for debugging, can delete later
-        let mut mps_to_optimize = 0;
-        let mut fixed_kfs = 0;
-        let mut kfs_to_optimize = 0;
-        let mut edges = 0;
-
         let lock = map.read()?;
         for mp_id in &local_mappoints {
             let mp = lock.mappoints.get(mp_id).unwrap();
 
             let vertex_id = mp.id + ini_mp_id + 1;
-            // debug!("Sofiya Add vertex: {}", vertex_id);
             optimizer.pin_mut().add_vertex_sbapointxyz(
                 vertex_id,
                 Pose::new(*mp.position, Matrix3::identity()).into(), // create pose out of translation only
                 false, true
             );
             mp_vertex_ids.insert(*mp_id, vertex_id);
-            mps_to_optimize += 1;
 
             // Create visual constraints
             for (kf_id, (left_index, _right_index)) in mp.get_observations() {
@@ -802,7 +763,6 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
                                 inv_sigma2,
                                 th_huber_mono
                             );
-                            edges += 1;
                             edges_kf_mono.push(kf.id);
                         } else {
                             warn!("TODO monocular right observation");
@@ -924,7 +884,7 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
         let pose = optimizer.recover_optimized_vertex_pose(*kf_id, VertexPoseRecoverType::Cw);
         let mut lock = map.write()?;
         lock.get_keyframe_mut(*kf_id).set_pose(pose.into());
-        // SOFIYA KF DELETE: Possible that map actor deleted mappoint after local BA has finished but before
+        // Possible that map actor deleted mappoint after local BA has finished but before
         // this message is processed
     }
 
@@ -960,11 +920,11 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
     }
 
     // Local visual KeyFrame
-    for i in 0..opt_vis_kfs.len() {
-        let kf_id = opt_vis_kfs[i];
-        let pose = optimizer.recover_optimized_vertex_pose(kf_id, VertexPoseRecoverType::Cw);
-        map.write()?.get_keyframe_mut(kf_id).set_pose(pose.into());
-    }
+    // for i in 0..opt_vis_kfs.len() {
+    //     let kf_id = opt_vis_kfs[i];
+    //     let pose = optimizer.recover_optimized_vertex_pose(kf_id, VertexPoseRecoverType::Cw);
+    //     map.write()?.get_keyframe_mut(kf_id).set_pose(pose.into());
+    // }
 
     //Points
     for i in 0..local_mappoints.len() {

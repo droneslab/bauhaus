@@ -1,6 +1,6 @@
 use std::{collections::BTreeMap, fmt::Debug, sync::atomic::{AtomicI32, Ordering}};
 use core::{matrix::DVMatrix, config::{SETTINGS, SYSTEM}, sensor::{Sensor, FrameSensor}};
-use log::{debug, error, warn};
+use log::{error, warn};
 extern crate nalgebra as na;
 use crate::{matrix::DVVector3, modules::orbslam_matcher::SCALE_FACTORS, registered_actors::{FEATURE_DETECTION, FEATURE_MATCHING_MODULE}};
 use super::{map::{Id, Map}, keyframe::KeyFrame, pose::DVTranslation};

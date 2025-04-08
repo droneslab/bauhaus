@@ -1,34 +1,30 @@
 extern crate g2o;
-use gtsam::{imu::imu_bias::ConstantBias, navigation::combined_imu_factor::{PreintegratedCombinedMeasurements, PreintegrationCombinedParams}};
-use log::{warn, info, debug, error};
-use nalgebra::{Matrix3, Matrix6, SMatrix, Vector3};
-use std::{collections::{BTreeMap, BTreeSet, HashMap, VecDeque}, fmt::{self, Formatter}, mem, sync::atomic::Ordering, thread::sleep, time::Duration};
-use opencv::{core::{no_array, KeyPoint, Point, Point2f, Scalar, CV_8U, CV_8UC1}, features2d::{FastFeatureDetector, FastFeatureDetector_DetectorType, FastFeatureDetector_TYPE_9_16}, imgproc::circle, prelude::*, types::{VectorOfKeyPoint, VectorOfMat, VectorOfPoint2f, VectorOfu8}};
+use ahash::HashMap;
+use log::{warn, info, debug};
+use std::{sync::atomic::Ordering, thread::sleep, time::Duration};
+use opencv::{core::{Point, Point2f, Scalar, CV_8U}, imgproc::circle, prelude::*, types::{VectorOfPoint2f, VectorOfu8}};
 use core::{
-    config::*, matrix::*, sensor::{FrameSensor, ImuSensor, Sensor}, system::{Actor, MessageBox, System, Timestamp}
+    config::*, matrix::*, system::{Actor, MessageBox, System, Timestamp}
 };
 use crate::{
-    actors::messages::{ImageMsg, InitKeyFrameMsg, LastKeyFrameUpdatedMsg, ShutdownMsg, UpdateFrameIMUMsg, VisFeaturesMsg, VisTrajectoryMsg, VisTrajectoryTrackingMsg}, map::{features::Features, frame::Frame, keyframe::MapPointMatches, map::Id, pose::Pose, read_only_lock::ReadWriteMap}, modules::{good_features_to_track::GoodFeaturesExtractor, image, imu::{ImuBias, ImuCalib, ImuMeasurements, ImuPreIntegrated, IMU}, map_initialization::MapInitialization, module_definitions::{FeatureExtractionModule, ImuModule}, opencv_extractor::OpenCVExtractor, optimizer, orbslam_extractor::ORBExtractor, relocalization::Relocalization}, registered_actors::{new_feature_extraction_module, CAMERA_MODULE, FEATURE_DETECTION, FEATURE_MATCHING_MODULE, LOCAL_MAPPING, SHUTDOWN_ACTOR, TRACKING_BACKEND, TRACKING_FRONTEND, VISUALIZER}, MAP_INITIALIZED
+    actors::{local_mapping::LOCAL_MAPPING_IDLE, messages::{FeatureTracksAndIMUMsg, ImagePathMsg, TrajectoryMsg, ImageMsg, InitKeyFrameMsg, ShutdownMsg, VisFeaturesMsg}}, map::{frame::Frame, pose::Pose, read_only_lock::ReadWriteMap}, modules::{image, imu::{ImuMeasurements, IMU}, map_initialization::MapInitialization, module_definitions::{MapInitializationModule, FeatureExtractionModule}}, registered_actors::{new_feature_extraction_module, CAMERA_MODULE, LOCAL_MAPPING, SHUTDOWN_ACTOR, TRACKING_BACKEND, TRACKING_FRONTEND, VISUALIZER}
 };
-
-use super::{local_mapping::LOCAL_MAPPING_IDLE, messages::{FeatureTracksAndIMUMsg, ImagePathMsg, TrajectoryMsg, InitKeyFrameMsgGTSAM}, tracking_backend::TrackedMapPointData};
-use crate::modules::module_definitions::MapInitializationModule;
 
 
 
 pub struct TrackingFrontendGTSAM {
     system: System,
-    sensor: Sensor,
     state: GtsamFrontendTrackingState,
 
-    /// Frontend
-    orb_extractor_left: Box<dyn FeatureExtractionModule>,
+    /// Feature extractors
+    // orb_extractor_left: Box<dyn FeatureExtractionModule>,
     orb_extractor_ini: Option<Box<dyn FeatureExtractionModule>>,
+
+    // IMU
     imu_measurements_since_last_kf: ImuMeasurements,
 
     // Feature IDs
     tracked_features_last_kf: TrackedFeatures,
-
 
     // Frames
     last_frame: Frame,
@@ -36,7 +32,7 @@ pub struct TrackingFrontendGTSAM {
     current_frame: Frame,
     frames_since_last_kf: i32,
 
-    // Initialization 
+    // ORBSLAM map initialization 
     // I know this is hacky but I dont' want to figure out how to merge the gtsam imu preintegration object with the orbslam imu object
     // Imu_for_init object needed for map initialization but that's it, otherwise should use the GtsamIMUModule
     imu_for_init: IMU,
@@ -51,13 +47,10 @@ impl Actor for TrackingFrontendGTSAM {
     type MapRef = ReadWriteMap;
 
     fn spawn(system: System, map: Self::MapRef) {
-        let sensor = SETTINGS.get::<Sensor>(SYSTEM, "sensor");
-
         let mut actor = TrackingFrontendGTSAM {
             system,
-            orb_extractor_left: new_feature_extraction_module(false),
+            // orb_extractor_left: new_feature_extraction_module(false),
             orb_extractor_ini: Some(new_feature_extraction_module(true)),
-            sensor,
             map,
             initialization: Some(MapInitialization::new()),
             state: GtsamFrontendTrackingState::NotInitialized,
@@ -152,15 +145,16 @@ impl TrackingFrontendGTSAM {
                     let new_trans = *transform.get_translation() * (self.map_scale);
                     let new_pose = Pose::new(new_trans, * transform.get_rotation()) * self.last_frame.pose.unwrap();
                     self.current_frame.pose = Some(new_pose);
-                    debug!("Pose prediction from pure optical flow: {:?}", new_pose);
+                    debug!("OPTICAL FLOW POSE ESTIMATE... {}, {:?}", timestamp, new_pose);
 
                     self.tracked_features_last_kf = new_tracked_features;
 
+                    // SOFIYA SENDING TO BACKEND AT EVERY FRAME
                     // Determine if frame should be a keyframe
-                    let pub_this_frame = self.need_new_keyframe();
-                    if pub_this_frame {
+                    // let pub_this_frame = self.need_new_keyframe();
+                    // if pub_this_frame {
                         self.extract_good_features_to_track().unwrap();
-                    };
+                    // };
 
                     // self.system.try_send(VISUALIZER, Box::new(VisTrajectoryTrackingMsg{
                     //     pose: new_pose,
@@ -168,7 +162,7 @@ impl TrackingFrontendGTSAM {
                     //     map_version: self.map.read().unwrap().version
                     // }));
 
-                    pub_this_frame
+                    true
                 }
             };
 
@@ -180,8 +174,6 @@ impl TrackingFrontendGTSAM {
                 // Send current imu measurements to backend, replace with empty ones
                 let mut imu_measurements = ImuMeasurements::new();
                 std::mem::swap(&mut self.imu_measurements_since_last_kf, &mut imu_measurements);
-
-                println!("Imu measurements in frontend: {:?}", imu_measurements);
 
                 // SEND TO BACKEND!
                 self.system.send(TRACKING_BACKEND, Box::new(FeatureTracksAndIMUMsg {
@@ -219,19 +211,7 @@ impl TrackingFrontendGTSAM {
 
     fn initialize_map(&mut self, curr_img: &opencv::core::Mat, timestamp: Timestamp) -> Result<bool, Box<dyn std::error::Error>> {
         let _span = tracy_client::span!("initialize_map");
-        let (keypoints, descriptors) = match self.sensor {
-            Sensor(FrameSensor::Mono, _) => {
-                if matches!(self.state, GtsamFrontendTrackingState::NotInitialized) || (self.current_frame.frame_id < SETTINGS.get::<f64>(SYSTEM, "fps") as i32) {
-                    self.orb_extractor_ini.as_mut().unwrap().extract(& curr_img).unwrap()
-                } else {
-                    self.orb_extractor_left.extract(& curr_img).unwrap()
-                }
-            },
-            _ => { 
-                // See GrabImageMonocular, GrabImageStereo, GrabImageRGBD in Tracking.cc
-                todo!("Stereo, RGBD")
-            }
-        };
+        let (keypoints, descriptors) = self.orb_extractor_ini.as_mut().unwrap().extract(& curr_img).unwrap();
 
         self.current_frame = Frame::new(
             self.curr_frame_id, 
@@ -338,7 +318,6 @@ impl TrackingFrontendGTSAM {
             } else {
                 // FEATURE IS FOUND! Update the point in new_tracked_features
                 // Not updating current_frame's features yet, we will do this if this frame becomes a new keyframe during the feature extraction step.
-
                 new_tracked_features.add_with_id(pt, self.tracked_features_last_kf.feature_ids[index_in_mutated]);
                 total_tracked += 1;
             }
@@ -376,7 +355,6 @@ impl TrackingFrontendGTSAM {
             & image, &mut points, num_features_to_find as i32, 0.01, min_distance, &mut mask, 3, false, 0.04
         ).unwrap();
 
-
         for point in points.iter() {
             self.tracked_features_last_kf.add(Point2f::new(point.x as f32, point.y as f32));
         }
@@ -404,7 +382,6 @@ impl TrackingFrontendGTSAM {
 
         c1a || c1b || c1c
     }
-
 
     fn calculate_transform(&self, new_tracked_features: & TrackedFeatures) -> Result<Pose, Box<dyn std::error::Error>> {
         let _span = tracy_client::span!("calculate_transform");

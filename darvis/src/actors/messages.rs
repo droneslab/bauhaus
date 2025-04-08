@@ -240,7 +240,6 @@ impl ActorMessage for VisFeatureMatchMsg {
 pub struct VisTrajectoryMsg { 
     pub pose: Pose, 
     pub mappoint_matches: Vec<Option<(i32, bool)>>,
-    pub nontracked_mappoints: HashMap<Id, i32>,
     pub mappoints_in_tracking: BTreeSet<Id>,
     pub timestamp: Timestamp,
     pub map_version: u64

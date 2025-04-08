@@ -1,6 +1,6 @@
-use std::{backtrace::Backtrace, cmp::min, collections::{HashMap, HashSet}};
+use std::{cmp::min, collections::{HashMap, HashSet}};
 use core::{config::{ SETTINGS, SYSTEM}, matrix::{DVMatrix3, DVVector3}, sensor::Sensor, system::Timestamp};
-use log::{error, debug, warn};
+use log::{error, warn};
 use crate::{map::{map::Id, pose::Pose},modules::{bow::DVBoW, imu::*}, registered_actors::VOCABULARY_MODULE};
 use super::{features::Features, frame::Frame, map::{Map, MapItems}, mappoint::MapPoint,};
 use crate::modules::module_definitions::VocabularyModule;

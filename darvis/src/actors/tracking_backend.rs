@@ -39,7 +39,6 @@ pub struct TrackingBackend {
     kf_track_reference_for_frame: HashMap::<Id, Id>, // mnTrackReferenceForFrame, member variable in Keyframe
     mp_track_reference_for_frame: HashMap::<Id, Id>,  // mnTrackReferenceForFrame, member variable in Mappoint
     last_frame_seen: HashMap::<Id, Id>, // mnLastFrameSeen, member variable in Mappoint
-    non_tracked_mappoints: HashMap<Id, i32>, // just for testing
 
     // Modules 
     imu: IMU,
@@ -89,7 +88,6 @@ impl Actor for TrackingBackend {
             map_updated: false,
             last_map_change_index: 0,
             trajectory_poses: Vec::new(),
-            non_tracked_mappoints: HashMap::new(),
             last_frame: None,
             current_frame: Frame::new_no_features(-1, None, 0.0, None).expect("Should be able to make dummy frame"),
         };
@@ -136,9 +134,6 @@ impl TrackingBackend {
                 self.map.read()?.imu_initialized,
                 msg.timestamp,
             ).expect("Could not create frame!");
-
-            // debug!("SOFIYA FEATURES. In backend, frame has N {}, features {}, mappoint matches {}, ref kf is {:?}", self.current_frame.features.num_keypoints, self.current_frame.features.get_all_keypoints().len(), self.current_frame.mappoint_matches.len(), self.ref_kf_id);
-
 
             let mut imu_measurements = msg.imu_measurements;
             match self.track(&mut imu_measurements) {
@@ -426,11 +421,7 @@ impl TrackingBackend {
             let last_frame = self.last_frame.as_ref();
             if !last_frame.is_none() && !last_frame.unwrap().pose.is_none() && !self.current_frame.pose.is_none() {
                 let last_twc = last_frame.expect("No last frame in tracking?").pose.as_ref().expect("Can't get last frame's pose?").inverse();
-                // println!("Last frame pose: {:?}", last_twc);
-                // println!("Current frame pose: {:?}", self.current_frame.pose.unwrap());
                 self.imu.velocity = Some(*self.current_frame.pose.as_ref().expect("Can't get current frame?") * last_twc);
-                debug!("SOFIYA: SET IMU VELOCITY: {:?}... last twc: {:?}", self.imu.velocity.unwrap(), last_twc);
-                // println!("Setting velocity for frame {} to {:?}", self.current_frame.frame_id, self.imu.velocity.unwrap());
             } else {
                 self.imu.velocity = None;
             }
@@ -509,7 +500,6 @@ impl TrackingBackend {
         self.system.try_send(VISUALIZER, Box::new(VisTrajectoryMsg{
             pose: self.current_frame.pose.unwrap(),
             mappoint_matches: self.current_frame.mappoint_matches.matches.clone(),
-            nontracked_mappoints: self.non_tracked_mappoints.clone(),
             mappoints_in_tracking: self.local_mappoints.clone(),
             timestamp: self.current_frame.timestamp,
             map_version: self.map.read()?.version
@@ -655,9 +645,6 @@ impl TrackingBackend {
             self.sensor
         )?;
         debug!("Tracking search by projection with previous frame: {} matches / {} mappoints in last frame. ({} total mappoints in map)", matches, self.last_frame.as_ref().unwrap().mappoint_matches.debug_count, self.map.read()?.mappoints.len());
-
-
-        // debug!("SOFIYA FEATURES. In track with motion model, frame has N {}, features {}, mappoint matches {}, ref kf is {:?}", self.current_frame.features.num_keypoints, self.current_frame.features.get_all_keypoints().len(), self.current_frame.mappoint_matches.len(), self.ref_kf_id);
 
         // If few matches, uses a wider window search
         if matches < 20 {
@@ -1136,14 +1123,13 @@ impl TrackingBackend {
                 }
             }
 
-            let (non_tracked_points, matches) = FEATURE_MATCHING_MODULE.search_by_projection(
+            let matches = FEATURE_MATCHING_MODULE.search_by_projection(
                 &mut self.current_frame,
                 &mut self.local_mappoints,
                 th, 0.8,
                 &self.track_in_view, &self.track_in_view_r,
                 &self.map, self.sensor
             )?;
-            self.non_tracked_mappoints = non_tracked_points;
             debug!("Tracking search local points: {} matches / {} local points. ({} total mappoints in map)", matches, self.local_mappoints.len(), self.map.read()?.mappoints.len());
         } else {
             // debug!("Current frame id: {}", self.current_frame.frame_id);
@@ -1333,11 +1319,11 @@ impl TrackingBackend {
         // Condition 1b: More than "MinFrames" have passed and Local Mapping is idle
         let c1b = self.frames_since_last_kf >= (self.min_frames_to_insert_kf as i32) && LOCAL_MAPPING_IDLE.load(Ordering::SeqCst);
         //Condition 1c: tracking is weak
-        let sensor_is_right = match self.sensor {
+        let _sensor_is_right = match self.sensor {
             Sensor(FrameSensor::Mono, _) | Sensor(FrameSensor::Stereo, ImuSensor::Some) | Sensor(FrameSensor::Rgbd, ImuSensor::Some) => false,
             _ => true
         }; // I do not know why they just select for RGBD or Stereo without IMU
-        let c1c = ((self.matches_inliers as f32) < tracked_mappoints * 0.5 || need_to_insert_close) ;
+        let c1c = (self.matches_inliers as f32) < tracked_mappoints * 0.5 || need_to_insert_close ;
         // Condition 2: Few tracked points compared to reference keyframe. Lots of visual odometry compared to map matches.
         let c2 = (((self.matches_inliers as f32) < (tracked_mappoints * th_ref_ratio) || need_to_insert_close)) && self.matches_inliers > 15;
 
@@ -1495,7 +1481,6 @@ impl TrackingBackend {
         self.map_updated = false;
         self.last_map_change_index = 0;
         self.trajectory_poses = Vec::new();
-        self.non_tracked_mappoints = HashMap::new();
         self.imu.reset();
 
         tracy_client::Client::running()
@@ -1555,7 +1540,6 @@ impl TrackingBackend {
             map_updated: false,
             last_map_change_index: 0,
             trajectory_poses: Vec::new(),
-            non_tracked_mappoints: HashMap::new(),
             last_frame: None,
             current_frame: Frame::new_no_features(-1, None, 0.0, None).expect("Should be able to make dummy frame"),
         }

@@ -415,7 +415,7 @@ fn add_setting_string(namespace: &str, key: &str, value: &Yaml) {
     println!("\t {} {} = {}", namespace, key, val);
 }
 fn add_setting_imu_matrix(namespace: &str, key: &str, matrix_rows: Vec<&Yaml>) {
-    // TODO... this is so hacky ... doesn't accept different-sized matrixes than 4x4
+    // This is so hacky ... doesn't accept different-sized matrixes than 4x4
 
     let mut array = [[0f64; 4]; 4];
     for row in 0..4 {

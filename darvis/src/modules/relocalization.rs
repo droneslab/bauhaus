@@ -1,6 +1,6 @@
 use derivative::Derivative;
 use core::{config::{SETTINGS, SYSTEM}, system::Timestamp};
-use crate::{map::{frame::Frame, map::{Id, Map}}, registered_actors::FEATURE_MATCHING_MODULE};
+use crate::map::{frame::Frame, map::{Id, Map}};
 
 use super::module_definitions::RelocalizationModule;
 
@@ -15,7 +15,7 @@ impl RelocalizationModule for Relocalization {
     type Timestamp = Timestamp;
     type Map = Map;
 
-    fn run(&self, current_frame: &mut Frame, map: &Map) -> Result<bool, Box<dyn std::error::Error>> {
+    fn run(&self, _current_frame: &mut Frame, _map: &Map) -> Result<bool, Box<dyn std::error::Error>> {
         // Relocalization is performed when tracking is lost
         // Track Lost: Query KeyFrame Database for keyframe candidates for relocalisation
         // let candidate_kfs = map.detect_relocalization_candidates(current_frame);

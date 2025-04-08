@@ -392,13 +392,13 @@ impl ImuModule for IMU {
                         //     let rcor = child.gba_pose.unwrap().group_inverse() * child.get_pose();
                         //     child.vwb_gba = Some(rcor * child.imu_data.velocity.unwrap());
                         // }
-                        todo!("SOFIYA need to set mVwbGBA");
+                        todo!("Need to set mVwbGBA");
                         // if child.imu_data.velocity.is_some() {
                         //     let rcor = child.gba_pose.unwrap().group_inverse() * child.pose;
                         //     child.vwb_gba = Some(rcor * child.imu_data.velocity.unwrap());
                         // }
-                        child.ba_global_for_kf = current_keyframe_id;
-                        child.bias_gba = Some(child.imu_data.imu_bias.clone());
+                        // child.ba_global_for_kf = current_keyframe_id;
+                        // child.bias_gba = Some(child.imu_data.imu_bias.clone());
                     }
                     kfs_to_check.push(*child_id);
                 }
@@ -525,7 +525,6 @@ impl ImuCalib {
                 tbc[(0, 2)], tbc[(1, 2)], tbc[(2, 2)]
             );
             let trans = Vector3::new(tbc[(3, 0)], tbc[(3, 1)], tbc[(3, 2)]);
-            // TODO SOFIYA rot might be wrong? I needed to flip the axis on translation so I did the same for rotation, but I'm not sure if I did it correctly
             Pose::new(trans, rot)
         };
 
@@ -1025,7 +1024,6 @@ impl ConstraintPoseImu {
             h
         };
 
-        // todo sofiya working on this 
         constraint_pose_imu.h = (h + h).scale(1.0 / 2.0);
         let decomp = h.symmetric_eigen();
         let mut eigenvalues = decomp.eigenvalues;

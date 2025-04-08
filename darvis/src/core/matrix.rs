@@ -521,10 +521,6 @@ impl<T: nalgebra::ComplexField> From<[[T; 3]; 3]> for DVMatrix3<T> {
             mat[0][0].clone(), mat[1][0].clone(), mat[2][0].clone(),
             mat[0][1].clone(), mat[1][1].clone(), mat[2][1].clone(),
             mat[0][2].clone(), mat[1][2].clone(), mat[2][2].clone()
-            // mat[0][0].clone(), mat[0][1].clone(), mat[0][2].clone(),
-            // mat[1][0].clone(), mat[1][1].clone(), mat[1][2].clone(),
-            // mat[2][0].clone(), mat[2][1].clone(), mat[2][2].clone()
-
         ))
     }
 }
@@ -532,9 +528,6 @@ impl<T: nalgebra::ComplexField> From<& DVMatrix3<T>> for [[T; 3]; 3] {
     fn from(mat: & DVMatrix3<T>) -> [[T; 3]; 3] { 
         // Sofiya: STOP FLIPPING THESE! This is correct
         [
-            // [mat[(0,0)].clone(), mat[(0,1)].clone(), mat[(0,2)].clone()],
-            // [mat[(1,0)].clone(), mat[(1,1)].clone(), mat[(1,2)].clone()],
-            // [mat[(2,0)].clone(), mat[(2,1)].clone(), mat[(2,2)].clone()]
             [mat[(0,0)].clone(), mat[(1,0)].clone(), mat[(2,0)].clone()],
             [mat[(0,1)].clone(), mat[(1,1)].clone(), mat[(2,1)].clone()],
             [mat[(0,2)].clone(), mat[(1,2)].clone(), mat[(2,2)].clone()]
@@ -545,9 +538,6 @@ impl<T: nalgebra::ComplexField> From<&mut DVMatrix3<T>> for [[T; 3]; 3] {
     fn from(mat: &mut DVMatrix3<T>) -> [[T; 3]; 3] { 
         // Sofiya: STOP FLIPPING THESE! This is correct
         [
-            // [mat[(0,0)].clone(), mat[(0,1)].clone(), mat[(0,2)].clone()],
-            // [mat[(1,0)].clone(), mat[(1,1)].clone(), mat[(1,2)].clone()],
-            // [mat[(2,0)].clone(), mat[(2,1)].clone(), mat[(2,2)].clone()]
             [mat[(0,0)].clone(), mat[(1,0)].clone(), mat[(2,0)].clone()],
             [mat[(0,1)].clone(), mat[(1,1)].clone(), mat[(2,1)].clone()],
             [mat[(0,2)].clone(), mat[(1,2)].clone(), mat[(2,2)].clone()]
@@ -558,9 +548,6 @@ impl From<&DVMatrix3<f64>> for [[f32; 3]; 3] {
     fn from(mat: &DVMatrix3<f64>) -> [[f32; 3]; 3] { 
         // Sofiya: STOP FLIPPING THESE! This is correct
         [
-            // [mat[(0,0)].clone(), mat[(0,1)].clone(), mat[(0,2)].clone()],
-            // [mat[(1,0)].clone(), mat[(1,1)].clone(), mat[(1,2)].clone()],
-            // [mat[(2,0)].clone(), mat[(2,1)].clone(), mat[(2,2)].clone()]
             [mat[(0,0)].clone() as f32, mat[(1,0)].clone()  as f32, mat[(2,0)].clone()  as f32],
             [mat[(0,1)].clone()  as f32, mat[(1,1)].clone()  as f32, mat[(2,1)].clone()  as f32],
             [mat[(0,2)].clone()  as f32, mat[(1,2)].clone()  as f32, mat[(2,2)].clone()  as f32]

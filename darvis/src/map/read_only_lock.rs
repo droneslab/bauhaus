@@ -15,7 +15,7 @@
 //     RwLockWriteGuard, //MappedRwLockWriteGuard,
 // };
 
-use std::{backtrace::Backtrace, sync::Arc, time::Instant};
+use std::{sync::Arc, time::Instant};
 use log::{debug, warn};
 use parking_lot::{
     RwLock,

@@ -18,9 +18,9 @@ use crate::{
     matrix::{DVMatrix, DVVectorOfKeyPoint},
     map::map::Id,
 };
-use std::sync::atomic::{AtomicI32, AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use atomic_float::AtomicF32;
-use log::{debug, warn, info};
+use log::debug;
 
 // Equal to:
 //   bool Frame::mbInitialComputations=true;
@@ -136,7 +136,6 @@ impl Features {
                     // This is done only for the first Frame (or after a change in the calibration)
                     Self::compute_image_bounds(im_width, im_height)?;
 
-                    println!("Compute image bounds: frame_grid_cols: {}, image_max_x: {}, image_min_x: {}", frame_grid_cols, IMAGE_MAX_X.load(Ordering::SeqCst), IMAGE_MIN_X.load(Ordering::SeqCst));
                     IMAGE_GRID_ELEMENT_WIDTH_INV.store(
                         (frame_grid_cols as f32)
                         / (IMAGE_MAX_X.load(Ordering::SeqCst) - IMAGE_MIN_X.load(Ordering::SeqCst))
@@ -223,7 +222,7 @@ impl Features {
         };
     }
 
-    pub fn remove_keypoint(&mut self, index: usize) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn _remove_keypoint(&mut self, index: usize) -> Result<(), Box<dyn std::error::Error>> {
         // NOTE: THIS DOES NOT REMOVE THE DESCRIPTOR!
         match self.keypoints {
             KeyPoints::Mono{ref mut keypoints_un, ..} => {
@@ -414,7 +413,6 @@ impl Features {
             let mut undistorted_points = mat.clone();
             let dist_coefs = VectorOff32::from_iter((*dist_coeffs).clone());
 
-            println!("Dist coefs: {:?}", dist_coefs);
             opencv::calib3d::undistort_points(
                 &mat,
                 &mut undistorted_points,
@@ -448,7 +446,6 @@ impl Features {
             IMAGE_MIN_X.store(mn_min_x, Ordering::SeqCst);
             IMAGE_MIN_Y.store(mn_min_y, Ordering::SeqCst);
         } else {
-            debug!("SOFIYA USING REGULAR??");
             IMAGE_MAX_X.store(im_width as f32, Ordering::SeqCst);
             IMAGE_MAX_Y.store(im_height as f32, Ordering::SeqCst);
             IMAGE_MIN_X.store(0.0, Ordering::SeqCst);

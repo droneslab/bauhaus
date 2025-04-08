@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use std::{backtrace::Backtrace, collections::{BTreeMap, HashMap, HashSet}};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use log::{debug, error, info, warn};
 use core::{config::{SETTINGS, SYSTEM}, matrix::DVVector3, sensor::Sensor};
 use crate::map::{keyframe::*, mappoint::*};
