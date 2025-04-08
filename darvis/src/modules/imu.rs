@@ -871,6 +871,16 @@ impl ImuBias {
             bwz: 0.0,
         }
     }
+    pub fn new_with(gyro_bias: DVVector3<f64>, acc_bias: DVVector3<f64>) -> Self {
+        Self {
+            bax: acc_bias.x,
+            bay: acc_bias.y,
+            baz: acc_bias.z,
+            bwx: gyro_bias.x,
+            bwy: gyro_bias.y,
+            bwz: gyro_bias.z,
+        }
+    }
     pub fn get_gyro_bias(&self) -> DVVector3<f64> {
         DVVector3::new_with(self.bwx, self.bwy, self.bwz)
     }

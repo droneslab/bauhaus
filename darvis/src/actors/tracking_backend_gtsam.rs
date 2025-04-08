@@ -252,7 +252,7 @@ pub struct GraphSolver {
     values_new: Values, // New values that have not been optimized yet
 
     // Main graph
-    graph_main: NonlinearFactorGraph, // Main non-linear GTSAM graph, all created factors
+    // graph_main: NonlinearFactorGraph, // Main non-linear GTSAM graph, all created factors
     values_initial: Values, // All created nodes
 
     // Misc GTSAM objects
@@ -289,7 +289,7 @@ impl GraphSolver {
         Self {
             graph_new: NonlinearFactorGraph::default(),
             values_new: Values::default(),
-            graph_main: NonlinearFactorGraph::default(),
+            // graph_main: NonlinearFactorGraph::default(),
             values_initial: Values::default(),
             isam2: ISAM2::default(),
             preint_gtsam: PreintegratedCombinedMeasurements::default(),
@@ -372,47 +372,35 @@ impl GraphSolver {
 
         debug!("IMU POSE ESTIMATE... {}, {:?}, {:?}, {:?}", timestamp, new_state.pose, new_state.velocity, new_state.bias);
 
-        let optimized_pose = self.optimize();
-        if optimized_pose {
-            // Update frame with optimized values
-            // TODO there's probably a better way to clean up all this conversion than this
-            let updated_pose: Isometry3<f64> = self.values_initial.get_pose3(&Symbol::new(b'x', self.ct_state)).unwrap().into();
-            current_frame.pose = Some(Pose::new_from_isometry(updated_pose));
-            let velocity: gtsam::base::vector::Vector3 = self.values_initial.get_vector3(&Symbol::new(b'v', self.ct_state)).unwrap().into();
-            let vel_raw = velocity.get_raw();
-            current_frame.imu_data.velocity = Some(DVVector3::new_with(vel_raw[0], vel_raw[1], vel_raw[2]));
-            let bias_ref = self.values_initial.get_constantbias(&Symbol::new(b'b', self.ct_state)).unwrap();
-            let accel_bias = bias_ref.accel_bias().get_raw();
-            let gyro_bias = bias_ref.gyro_bias().get_raw();
+        self.optimize();
+        // Update frame with optimized values
+        // TODO there's probably a better way to clean up all this conversion than this
+        let updated_pose: Isometry3<f64> = self.values_initial.get_pose3(&Symbol::new(b'x', self.ct_state)).unwrap().into();
+        current_frame.pose = Some(Pose::new_from_isometry(updated_pose));
+        let velocity: gtsam::base::vector::Vector3 = self.values_initial.get_vector3(&Symbol::new(b'v', self.ct_state)).unwrap().into();
+        let vel_raw = velocity.get_raw();
+        current_frame.imu_data.velocity = Some(DVVector3::new_with(vel_raw[0], vel_raw[1], vel_raw[2]));
+        let bias_ref = self.values_initial.get_constantbias(&Symbol::new(b'b', self.ct_state)).unwrap();
+        let accel_bias = bias_ref.accel_bias().get_raw();
+        let gyro_bias = bias_ref.gyro_bias().get_raw();
 
-            // TODO SOFIYA Should this be set_new_bias?
-            current_frame.imu_data.imu_bias = ImuBias {
-                bax: accel_bias[0],
-                bay: accel_bias[1],
-                baz: accel_bias[2],
-                bwx: gyro_bias[0],
-                bwy: gyro_bias[1],
-                bwz: gyro_bias[2]
-            };
-            debug!("OPTIMIZED POSE ESTIMATE... {}, {:?}, {:?}, {:?}", timestamp, updated_pose, velocity, current_frame.imu_data.imu_bias);
-        } else {
-            error!("Could not optimize pose!");
-        }
+        // TODO SOFIYA Should this be set_new_bias?
+        current_frame.imu_data.imu_bias = ImuBias {
+            bax: accel_bias[0],
+            bay: accel_bias[1],
+            baz: accel_bias[2],
+            bwx: gyro_bias[0],
+            bwy: gyro_bias[1],
+            bwz: gyro_bias[2]
+        };
+        debug!("OPTIMIZED POSE ESTIMATE... {}, {:?}, {:?}, {:?}", timestamp, updated_pose, velocity, current_frame.imu_data.imu_bias);
 
-        Ok(optimized_pose)
+        Ok(true)
     }
 
     fn initialize_with_data(&mut self, timestamp: i64, imu_init: &ImuInitializationData) -> Result<(), Box<dyn std::error::Error>> {
         let init_pose = Pose::new_with_quaternion_convert(*imu_init.translation, imu_init.rotation);
-
-        let init_bias = ImuBias {
-            bax: imu_init.acc_bias[0],
-            bay: imu_init.acc_bias[1],
-            baz: imu_init.acc_bias[2],
-            bwx: imu_init.gyro_bias[0],
-            bwy: imu_init.gyro_bias[1],
-            bwz: imu_init.gyro_bias[2]
-        };
+        let init_bias = ImuBias::new_with(imu_init.gyro_bias, imu_init.acc_bias);
         self.initialize(timestamp, init_pose, imu_init.velocity, init_bias)
     }
 
@@ -438,12 +426,6 @@ impl GraphSolver {
             }
         };
 
-        // Old:
-        // let pose_noise = gtsam::linear::noise_model::DiagonalNoiseModel::from_sigmas(Vector6::new(
-        //     self.sigma_prior_rotation[0], self.sigma_prior_rotation[1], self.sigma_prior_rotation[2],
-        //     self.sigma_prior_translation[0], self.sigma_prior_translation[1], self.sigma_prior_translation[2]
-        // ));
-
         let pose_noise = gtsam::linear::noise_model::DiagonalNoiseModel::from_sigmas(Vector6::new(
             self.initial_roll_pitch_sigma,
             self.initial_roll_pitch_sigma,
@@ -452,7 +434,11 @@ impl GraphSolver {
             self.initial_position_sigma,
             self.initial_position_sigma
         ));
+        self.graph_new.add_prior_factor_pose3(&Symbol::new(b'x', self.ct_state), &prior_state.pose, &pose_noise);
+
         let v_noise = gtsam::linear::noise_model::IsotropicNoiseModel::from_dim_and_sigma(3, self.initial_velocity_sigma);
+        self.graph_new.add_prior_factor_vector3(&Symbol::new(b'v', self.ct_state), &prior_state.velocity, &v_noise);
+
         let b_noise = gtsam::linear::noise_model::DiagonalNoiseModel::from_sigmas(Vector6::new(
             self.initial_acc_bias_sigma,
             self.initial_acc_bias_sigma,
@@ -463,12 +449,9 @@ impl GraphSolver {
         ));
         self.graph_new.add_prior_factor_constant_bias_diagonal(&Symbol::new(b'b', self.ct_state), &prior_state.bias, &b_noise);
 
-        self.graph_new.add_prior_factor_pose3(&Symbol::new(b'x', self.ct_state), &prior_state.pose, &pose_noise);
-        self.graph_new.add_prior_factor_vector3(&Symbol::new(b'v', self.ct_state), &prior_state.velocity, &v_noise);
-        self.graph_new.add_prior_factor_constant_bias_diagonal(&Symbol::new(b'b', self.ct_state), &prior_state.bias, &b_noise);
-        self.graph_main.add_prior_factor_pose3(&Symbol::new(b'x', self.ct_state), &prior_state.pose, &pose_noise);
-        self.graph_main.add_prior_factor_vector3(&Symbol::new(b'v', self.ct_state), &prior_state.velocity, &v_noise);
-        self.graph_main.add_prior_factor_constant_bias_diagonal(&Symbol::new(b'b', self.ct_state), &prior_state.bias, &b_noise);
+        // self.graph_main.add_prior_factor_pose3(&Symbol::new(b'x', self.ct_state), &prior_state.pose, &pose_noise);
+        // self.graph_main.add_prior_factor_vector3(&Symbol::new(b'v', self.ct_state), &prior_state.velocity, &v_noise);
+        // self.graph_main.add_prior_factor_constant_bias_diagonal(&Symbol::new(b'b', self.ct_state), &prior_state.bias, &b_noise);
 
         // Add initial state to the graph
         self.values_new.insert_pose3(&Symbol::new(b'x', self.ct_state), &prior_state.pose);
@@ -483,12 +466,11 @@ impl GraphSolver {
         self.timestamp_lookup.insert(self.ct_state, timestamp);
 
         // Create GTSAM preintegration parameters for use with Foster's version
-
         let mut params = PreintegrationCombinedParams::makesharedu();  // Z-up navigation frame: gravity points along negative Z-axis !!!
         params.set_gyroscope_covariance(self.gyro_noise_density * self.gyro_noise_density);
         params.set_accelerometer_covariance(self.accel_noise_density * self.accel_noise_density);
-        params.set_integration_covariance(self.imu_integration_sigma * self.imu_integration_sigma); // 0.1
-        params.set_bias_acc_omega_int(self.init_bias_sigma); // 1e-5
+        params.set_integration_covariance(self.imu_integration_sigma * self.imu_integration_sigma);
+        params.set_bias_acc_omega_int(self.init_bias_sigma);
         params.set_bias_acc_covariance(self.accel_random_walk * self.accel_random_walk);
         params.set_bias_omega_covariance(self.gyro_random_walk * self.gyro_random_walk);
 
@@ -606,9 +588,9 @@ impl GraphSolver {
         // OLD:
 
 
-        self.graph_main.add_prior_factor_pose3(&Symbol::new(b'x', self.ct_state), &prior_state.pose, &pose_noise);
-        self.graph_main.add_prior_factor_vector3(&Symbol::new(b'v', self.ct_state), &prior_state.velocity, &v_noise);
-        self.graph_main.add_prior_factor_constant_bias_diagonal(&Symbol::new(b'b', self.ct_state), &prior_state.bias, &b_noise);
+        // self.graph_main.add_prior_factor_pose3(&Symbol::new(b'x', self.ct_state), &prior_state.pose, &pose_noise);
+        // self.graph_main.add_prior_factor_vector3(&Symbol::new(b'v', self.ct_state), &prior_state.velocity, &v_noise);
+        // self.graph_main.add_prior_factor_constant_bias_diagonal(&Symbol::new(b'b', self.ct_state), &prior_state.bias, &b_noise);
 
         // Add initial state to the graph
         self.values_new.insert_pose3(&Symbol::new(b'x', self.ct_state), &prior_state.pose);
@@ -771,7 +753,7 @@ impl GraphSolver {
             & self.preint_gtsam
         );
         self.graph_new.add_combined_imu_factor(&imu_factor);
-        self.graph_main.add_combined_imu_factor(&imu_factor);
+        // self.graph_main.add_combined_imu_factor(&imu_factor);
 
         // ORBSLAM3 imu preintegrated object
         // current_frame.imu_data.imu_preintegrated = Some(other_imu.imu_preintegrated_from_last_kf.clone());
@@ -825,7 +807,7 @@ impl GraphSolver {
 
                     // Add smart factor to FORSTER2 model
                     self.graph_new.add_smartfactor(&smartfactor_left);
-                    self.graph_main.add_smartfactor(&smartfactor_left);
+                    // self.graph_main.add_smartfactor(&smartfactor_left);
 
                     self.measurement_smart_lookup_left.insert(feature_id, smartfactor_left);
                 }
@@ -833,13 +815,8 @@ impl GraphSolver {
         }
     }
 
-    fn optimize(&mut self) -> bool {
+    fn optimize(&mut self) {
         let _span = tracy_client::span!("optimize");
-
-        // Return if not initialized
-        if matches!(self.solver_state, GraphSolverState::NotInitialized) && self.ct_state < 2 {
-            return false;
-        }
 
         // Perform smoothing update
         self.isam2.update_noresults(& self.graph_new, & self.values_new);
@@ -851,17 +828,13 @@ impl GraphSolver {
         // Remove the used up factors
         self.graph_new.resize(0);
 
-        self.reset_imu_integration();
-
-        return true;
-    }
-
-    fn reset_imu_integration(&mut self) {
         // Use the optimized bias to reset integration
         if self.values_initial.exists(&Symbol::new(b'b', self.ct_state)) {
             self.preint_gtsam.reset_integration_and_set_bias(
                 & self.values_initial.get_constantbias(&Symbol::new(b'b', self.ct_state)).unwrap().into()
             );
+        } else {
+            warn!("Bias wasn't optimized?");
         }
     }
 }

@@ -397,7 +397,7 @@ impl DarvisVisualizer {
                 timestamp, 
                 "world",
                 format!("cam {}", timestamp),
-                &frame_pose,
+                &inverse_frame_pose,
                 TRACKING_TRAJECTORY_COLOR.clone()
             )
         );
@@ -407,28 +407,28 @@ impl DarvisVisualizer {
             let mut i = 0;
             for prev_pose in self.prev_poses.iter().rev() {
                 // Draw line from current pose to previous pose
-                let points = vec![(*prev_pose).into(), curr_pose.into()];
-                entities_traj.push(
-                    self.create_scene_entity(
-                        timestamp,
-                        "world",
-                        format!("t {}->{}", i, i+1),
-                        vec![],
-                        vec![self.create_line(points, TRAJECTORY_COLOR.clone(), 3.0),], 
-                        vec![]
-                    )
-                );
+                // let points = vec![(*prev_pose).into(), curr_pose.into()];
+                // entities_traj.push(
+                //     self.create_scene_entity(
+                //         timestamp,
+                //         "world",
+                //         format!("t {}->{}", i, i+1),
+                //         vec![],
+                //         vec![self.create_line(points, TRAJECTORY_COLOR.clone(), 3.0),], 
+                //         vec![]
+                //     )
+                // );
 
                 entities_traj.push(
                     self.create_frame_scene_entity(
                         timestamp, 
                         "world",
                         format!("kf {}", i),
-                        &curr_pose,
+                        &prev_pose,
                         KEYFRAME_COLOR.clone(),
                     )
                 );
-                curr_pose = prev_pose.clone();
+                // curr_pose = prev_pose.clone();
                 i += 1;
             }
         }
