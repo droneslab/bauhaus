@@ -45,7 +45,6 @@ impl Actor for ShutdownActor {
             }
         }
     }
-
 }
 
 impl ShutdownActor {
@@ -125,13 +124,16 @@ impl ShutdownActor {
                         while !lock.has_keyframe(ref_kf) {
                             let (parent_id, pose_relative_to_parent) = lock.get_deleted_keyframe_info(ref_kf);
                             trw = trw * pose_relative_to_parent;
+			
                             ref_kf = parent_id;
                             debug!("..don't have ref kf, looking at parent {}", ref_kf);
                         }
 
                         trw = trw * lock.get_keyframe(ref_kf).get_pose() * twb; // Tcp*Tpw*Twb0=Tcb0 where b0 is the new world reference
-
+                        // debug! ("Debugging value: {:?}",trw);
+			
                         if self.sensor.is_imu() {
+
                             let twc = (imu_calib.as_ref().unwrap().tbc * self.trajectory_poses[i] * trw).inverse();
                             let rot = twc.get_quaternion();
                             let trans = twc.get_translation();
@@ -144,10 +146,13 @@ impl ShutdownActor {
                             );
                             write!(f, "{}", string).expect("unable to write");
                         } else {
+			    debug!("ELSE BRANCH IS TAKEN WITH THE IMU");
                             let twc = (self.trajectory_poses[i] * trw).inverse();
+			    //debug!("Twc value - {:?}!!",twc);			    
                             let rot = twc.get_quaternion();
+			    debug!("Quaternion value - {:?}!!",rot);
                             let trans = twc.get_translation();
-
+                            debug!("Translation value - {:?}!!",trans);			    			    
                             let string = format!(
                                 "{} {:.6} {:.7} {:.7} {:.7} {:.7} {:.7} {:.7}\n", 
                                 self.trajectory_times[i] * 1e9, 

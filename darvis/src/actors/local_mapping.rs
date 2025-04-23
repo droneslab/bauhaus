@@ -254,7 +254,7 @@ impl LocalMapping {
         }
 
         // Check redundant local Keyframes
-        let kfs_culled = self.keyframe_culling()?;
+//        let kfs_culled = self.keyframe_culling()?;
 
         if self.sensor.is_imu() && self.imu_module.as_ref().unwrap().timestamp_init < 50.0 && matches!(self.current_tracking_state, TrackingState::Ok) {
             // Enter here everytime local-mapping is called
@@ -287,7 +287,7 @@ impl LocalMapping {
             }
         }
 
-        debug!("For keyframe {}, culled {} mappoints, created {} mappoints, culled {} keyframes", self.current_keyframe_id, mps_culled, mps_created, kfs_culled);
+//        debug!("For keyframe {}, culled {} mappoints, created {} mappoints, culled {} keyframes", self.current_keyframe_id, mps_culled, mps_created, kfs_culled);
         info!("Map has {} keyframes and {} mappoints" , self.map.read()?.num_keyframes(), self.map.read()?.mappoints.len());
 
         tracy_client::plot!("MAP INFO: KeyFrames", self.map.read()?.num_keyframes() as f64);

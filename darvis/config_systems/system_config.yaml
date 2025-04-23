@@ -13,7 +13,7 @@ system:
       first_actor_name: TRACKING_FRONTEND # Name of actor to kick off pipeline
 
       # FPS
-      fps: 10.0
+      fps: 5.0
 
       # RESULTS
       results_folder: "results"
