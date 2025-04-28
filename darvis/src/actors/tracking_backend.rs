@@ -141,6 +141,7 @@ impl TrackingBackend {
 
 
             let mut imu_measurements = msg.imu_measurements;
+	    // This is where track is initially called
             match self.track(&mut imu_measurements) {
                 Ok((created_kf, reset_map)) => {
                     if reset_map {
@@ -322,8 +323,10 @@ impl TrackingBackend {
 
                 let track_success = match no_motion_model {
                     true => self.track_reference_keyframe()?,
+		    // First Optimize call
                     false => {
                         match self.track_with_motion_model()? {
+                        // First Optimize Call
                             true => true,
                             false => self.track_reference_keyframe()?
                         }
@@ -389,7 +392,9 @@ impl TrackingBackend {
         // TrackingState::Ok | TrackingState::RecentlyLost | TrackingState::Lost
 
         // Track Local Map
+	// This is where track_local_map is called
         let (enough_matches, _matches_in_frame) = self.track_local_map()?;
+	// First Optimize Call
         if enough_matches {
             self.state = TrackingState::Ok;
         } else if matches!(self.state, TrackingState::Ok) {
@@ -553,6 +558,7 @@ impl TrackingBackend {
         self.current_frame.pose = Some(self.last_frame.as_ref().unwrap().pose.unwrap());
         // println!("Track reference keyframe, set current frame pose to last frame pose: {:?}", self.last_frame.as_ref().unwrap().pose.unwrap());
 
+	// This is the first point where the optmizer actually works on the frame
         optimizer::optimize_pose(&mut self.current_frame, &self.map)?;
 
         // Discard outliers

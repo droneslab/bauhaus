@@ -9,7 +9,7 @@ system:
       localization_only_mode: false
       vocabulary_file: "../Vocabulary/ORBvoc.txt"
       framesensor: Mono
-      imusensor: None # options are [None, Some]
+      imusensor: Some # options are [None, Some]
       first_actor_name: TRACKING_FRONTEND # Name of actor to kick off pipeline
 
       # FPS
@@ -26,14 +26,14 @@ system:
       # To turn on visualizer, uncomment visualizer actor below
 
 modules:
-      # - 
-      #   name: IMU
-      #   tag: "imu"
-      #   settings:
-      #     -
-      #       name: tbc
-      #       value: "data/imu/imu.txt"
-      #       type: string
+       - 
+         name: IMU
+         tag: "imu"
+         settings:
+           -
+             name: tbc
+             value: "data/imu/imu.txt"
+             type: string
 
       - 
         name: FEATURE_DETECTION

@@ -99,6 +99,7 @@ impl ShutdownActor {
                     let twb;  // Can be word to cam0 or world to b depending on IMU or not.
                     if self.sensor.is_imu() {
                         twb = first_keyframe.get_imu_pose();
+			debug!("This is the value of imu pose {:?}", twb)
                     } else {
                         twb = first_keyframe.get_pose().inverse();
                     }
@@ -133,7 +134,7 @@ impl ShutdownActor {
                         // debug! ("Debugging value: {:?}",trw);
 			
                         if self.sensor.is_imu() {
-
+                            debug! ("The If Branch With Imu Is Taken");
                             let twc = (imu_calib.as_ref().unwrap().tbc * self.trajectory_poses[i] * trw).inverse();
                             let rot = twc.get_quaternion();
                             let trans = twc.get_translation();
@@ -146,7 +147,7 @@ impl ShutdownActor {
                             );
                             write!(f, "{}", string).expect("unable to write");
                         } else {
-			    debug!("ELSE BRANCH IS TAKEN WITH THE IMU");
+			    debug!("ELSE BRANCH IS TAKEN WITHOUT THE IMU");
                             let twc = (self.trajectory_poses[i] * trw).inverse();
 			    //debug!("Twc value - {:?}!!",twc);			    
                             let rot = twc.get_quaternion();
