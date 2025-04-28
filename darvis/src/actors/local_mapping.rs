@@ -142,14 +142,14 @@ impl LocalMapping {
             }
 
             let msg = message.downcast::<NewKeyFrameMsg>().unwrap_or_else(|_| panic!("Could not downcast local mapping message!"));
-            let kf_id = self.map.write()?.insert_keyframe_to_map(msg.keyframe, false);
+            // let kf_id = self.map.write()?.insert_keyframe_to_map(msg.keyframe, false);
 
-            info!("Local mapping working on keyframe {}. Queue length: {}", kf_id, self.system.queue_len());
+            info!("Local mapping working on keyframe {}. Queue length: {}", msg.kf_id, self.system.queue_len());
 
             // Send the new keyframe ID directly back to the sender so they can use the ID 
-            self.system.find_actor(TRACKING_BACKEND).send(Box::new(InitKeyFrameMsg{kf_id, map_version: self.map.get_version()})).unwrap();
+            // self.system.find_actor(TRACKING_BACKEND).send(Box::new(InitKeyFrameMsg{msg.kf_id, map_version: self.map.get_version()})).unwrap();
 
-            self.current_keyframe_id = kf_id;
+            self.current_keyframe_id = msg.kf_id;
             self.current_tracking_state = msg.tracking_state;
             self.local_mapping(msg.matches_in_tracking, msg.tracked_mappoint_depths)?;
         } else if message.is::<ShutdownMsg>() {

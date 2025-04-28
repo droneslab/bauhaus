@@ -131,6 +131,7 @@ impl ShutdownActor {
 
                         trw = trw * lock.get_keyframe(ref_kf).get_pose() * twb; // Tcp*Tpw*Twb0=Tcb0 where b0 is the new world reference
 
+
                         if self.sensor.is_imu() {
                             let twc = (imu_calib.as_ref().unwrap().tbc * self.trajectory_poses[i] * trw).inverse();
                             let rot = twc.get_quaternion();
@@ -215,7 +216,7 @@ impl ShutdownActor {
                                 let trans = pose.get_translation();
                                 let rot = pose.get_quaternion();
 
-                                debug!("Keyframe {} pose: {:?}", id, pose);
+                                // debug!("Keyframe {} pose: {:?}", id, pose);
 
                                 let string = format!(
                                     "{} {:.6} {:.7} {:.7} {:.7} {:.7} {:.7} {:.7}\n", 
@@ -226,7 +227,7 @@ impl ShutdownActor {
                                 write!(f, "{}", string).expect("unable to write");
                             }
                         } else {
-                            debug!("SKIP KEYFRAME {}", id);
+                            // debug!("SKIP KEYFRAME {}", id);
                         }
                     }
                 },

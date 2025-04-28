@@ -141,6 +141,7 @@ impl TrackingBackend {
                     if reset_map {
                         self.last_frame = None;
                         self.ref_kf_id = None;
+                        debug!("SET ref_kf_id to None");
                     } else {
                         if self.current_frame.ref_kf_id.is_none() {
                             self.current_frame.ref_kf_id = self.ref_kf_id;
@@ -173,6 +174,7 @@ impl TrackingBackend {
             } else {
                 self.last_frame.as_mut().unwrap().ref_kf_id = Some(msg.kf_id);
                 self.ref_kf_id = Some(msg.kf_id);
+                debug!("SET ref_kf_id to {}", msg.kf_id);
             }
 
         } else if message.is::<LastKeyFrameUpdatedMsg>() {
@@ -252,6 +254,7 @@ impl TrackingBackend {
                                     self.local_keyframes.insert(ini_kf_id);
                                     self.local_mappoints = local_mappoints;
                                     self.ref_kf_id = Some(curr_kf_id);
+                                    debug!("SET ref_kf_id to {}", curr_kf_id);
 
                                     self.last_kf_timestamp = Some(curr_kf_timestamp);
                                     if self.sensor.is_imu() {
@@ -466,33 +469,40 @@ impl TrackingBackend {
         // Store frame pose information to retrieve the complete camera trajectory afterwards.
 
         let relative_pose = {
-            let ref_kf_pose = if created_new_kf {
-                // If we created a new kf this round, the relative keyframe pose is the same as the current frame pose.
-                // We have to do this because ORBSLAM3 creates a new keyframe in tracking whereas we wait until beginning
-                // of local mapping. This code is fine, but we might want to make an atomic int in the map containing the
-                // latest keyframe inserted in local mapping, rather than sending that as a message from LM to T (current
-                // implementation). The way we have it now, we are always one reference keyframe behind because local mapping
-                // will insert the kf in the middle of the tracking thread loop, and then tracking will only know about it in
-                // the next iteration.
-                self.current_frame.pose.unwrap()
-            } else {
+            let ref_kf_pose = {//if created_new_kf {
+            //     // If we created a new kf this round, the relative keyframe pose is the same as the current frame pose.
+            //     // We have to do this because ORBSLAM3 creates a new keyframe in tracking whereas we wait until beginning
+            //     // of local mapping. This code is fine, but we might want to make an atomic int in the map containing the
+            //     // latest keyframe inserted in local mapping, rather than sending that as a message from LM to T (current
+            //     // implementation). The way we have it now, we are always one reference keyframe behind because local mapping
+            //     // will insert the kf in the middle of the tracking thread loop, and then tracking will only know about it in
+            //     // the next iteration.
+            //     debug!("CREATED KEYFRAME! Save trajectory, pose is: {:?}", self.current_frame.pose);
+
+            //     self.current_frame.pose.unwrap()
+            // } else {
                 let map = self.map.read()?;
                 let ref_kf = map.get_keyframe(self.ref_kf_id.unwrap());
                 ref_kf.get_pose()
             };
-            self.current_frame.pose.unwrap() * ref_kf_pose.inverse()
+            let relative_pose = self.current_frame.pose.unwrap() * ref_kf_pose.inverse();
+
+            debug!("Save trajectory, pose is: {:?}", relative_pose);
+            debug!("...current frame pose: {:?}", self.current_frame.pose);
+            debug!("...ref kf pose: {:?}", ref_kf_pose.inverse());
+            debug!("...ref kf id: {:?}", self.ref_kf_id.unwrap());
+
+            relative_pose
         };
         self.trajectory_poses.push(relative_pose);
 
 
-        // debug!("SOFIYA TRAJ: FOR TIMESTAMP {}, TRACKING BACKEND POSE IS {:?}", last_frame.timestamp, last_frame.pose);
-        // debug!("SOFIYA TRAJ: FOR TIMESTAMP {}, TRACKING BACKEND RELATIVE POSE IS: {:?}", last_frame.timestamp, relative_pose);
 
         self.system.send(
             SHUTDOWN_ACTOR, 
             Box::new(TrajectoryMsg{
                 pose: relative_pose,
-                ref_kf_id: self.current_frame.ref_kf_id.unwrap(),
+                ref_kf_id: self.ref_kf_id.unwrap(),
                 timestamp: self.current_frame.timestamp,
                 map_version: self.map.read()?.version
             })
@@ -520,6 +530,7 @@ impl TrackingBackend {
         {
             let map_read_lock = self.map.read()?;
             self.ref_kf_id = Some(map_read_lock.last_kf_id);
+            debug!("SET ref_kf_id to {}", map_read_lock.last_kf_id);
 
             let ref_kf = map_read_lock.get_keyframe(self.ref_kf_id.unwrap());
 
@@ -900,6 +911,8 @@ impl TrackingBackend {
                     } else {
                         self.current_frame.mappoint_matches.delete_at_indices((i as i32, -1));
                     }
+                } else {
+                    self.current_frame.mappoint_matches.delete_at_indices((i as i32, -1));
                 }
             }
 
@@ -923,6 +936,7 @@ impl TrackingBackend {
         self.local_keyframes.clear();
         let mut local_kf_vec = Vec::<Id>::new();
 
+        debug!("KF counter: {:?}", kf_counter);
         // All keyframes that observe a map point are included in the local map. Also check which keyframe shares most points
         for (kf_id, count) in kf_counter {
             // Note: Added kf_id > max_kf_id so that we choose the latest keyframe in case of a tie
@@ -996,6 +1010,8 @@ impl TrackingBackend {
         if max_kf_id != 0 {
             self.current_frame.ref_kf_id = Some(max_kf_id);
             self.ref_kf_id = Some(max_kf_id);
+            debug!("SET ref_kf_id to {}", max_kf_id);
+
         }
         Ok(())
     }
@@ -1156,7 +1172,9 @@ impl TrackingBackend {
         let _span = tracy_client::span!("create_new_keyframe");
         //CreateNewKeyFrame
         // Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Tracking.cc#L3216
-        let new_kf = Frame::new_clone(& self.current_frame);
+        let new_frame = Frame::new_clone(& self.current_frame);
+        self.last_kf_timestamp = Some(new_frame.timestamp);
+        let new_kf_id = self.map.write()?.insert_keyframe_to_map(new_frame, false);
 
         //Reset preintegration from last KF (Create new object)
         self.imu.imu_preintegrated_from_last_kf = ImuPreIntegrated::new(self.current_frame.imu_data.get_imu_bias());
@@ -1247,10 +1265,8 @@ impl TrackingBackend {
         //     }
         }
 
-        // mnLastKeyFrameId = mCurrentFrame.mnId;
-        // mpLastKeyFrame = pKF;
-
-        self.last_kf_timestamp = Some(new_kf.timestamp);
+        self.current_frame.ref_kf_id = Some(new_kf_id);
+        self.ref_kf_id = Some(new_kf_id);
 
         tracy_client::Client::running()
         .expect("message! without a running Client")
@@ -1260,7 +1276,8 @@ impl TrackingBackend {
         self.system.send(
             LOCAL_MAPPING,
             Box::new( NewKeyFrameMsg{
-                keyframe: new_kf,
+                // keyframe: new_frame,
+                kf_id: new_kf_id,
                 tracking_state: self.state,
                 matches_in_tracking: self.matches_inliers,
                 tracked_mappoint_depths: self.track_in_view.iter().map(|(k, v)| (*k, v.track_depth)).collect(),
@@ -1402,7 +1419,6 @@ impl TrackingBackend {
         self.last_frame.as_mut().unwrap().imu_data.set_new_bias(imu_bias);
         self.current_frame.imu_data.set_new_bias(imu_bias);
 
-        // if(mLastFrame.mnId == mLastFrame.mpLastKeyFrame->mnFrameId)
         let lock = lock;
         let last_kf = lock.get_keyframe(lock.last_kf_id);
         if self.last_frame.as_ref().unwrap().frame_id == lock.last_kf_id {
@@ -1466,6 +1482,7 @@ impl TrackingBackend {
         self.initialization = Some(MapInitialization::new());
         self.state = TrackingState::NotInitialized;
         self.ref_kf_id = None;
+        debug!("SET ref_kf_id to None");
 
         self.frames_since_last_kf = 0;
         self.last_kf_timestamp = None;
