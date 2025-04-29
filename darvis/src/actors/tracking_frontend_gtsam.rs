@@ -145,6 +145,7 @@ impl TrackingFrontendGTSAM {
                     let new_trans = *transform.get_translation() * (self.map_scale);
                     let new_pose = Pose::new(new_trans, * transform.get_rotation()) * self.last_frame.pose.unwrap();
                     self.current_frame.pose = Some(new_pose);
+		    // This is one optical flow pose that we require
                     debug!("OPTICAL FLOW POSE ESTIMATE... {}, {:?}", timestamp * 1e9, new_pose);
 
                     self.tracked_features_last_kf = new_tracked_features;
@@ -157,7 +158,7 @@ impl TrackingFrontendGTSAM {
                     // };
 
                     // self.system.try_send(VISUALIZER, Box::new(VisTrajectoryTrackingMsg{
-                    //     pose: new_pose,
+                    //     pose: new_pose,n
                     //     timestamp: self.current_frame.timestamp,
                     //     map_version: self.map.read().unwrap().version
                     // }));

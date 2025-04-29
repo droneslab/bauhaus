@@ -393,9 +393,8 @@ impl GraphSolver {
             bwy: gyro_bias[1],
             bwz: gyro_bias[2]
         };
-	// This is required for plotting information
         debug!("OPTIMIZED POSE ESTIMATE... {}, {:?}, {:?}, {:?}", timestamp, updated_pose, velocity, current_frame.imu_data.imu_bias);
-	
+
         Ok(true)
     }
 
@@ -532,7 +531,7 @@ impl GraphSolver {
         );
 
         let predicted = GtsamState {
-	    // This is a required pose for the interpolation
+	    // This is a required pose for the interpolation1
             pose: state_k1.get_pose().into(),
             velocity: state_k1.get_velocity().into(),
             bias: state_k.bias
