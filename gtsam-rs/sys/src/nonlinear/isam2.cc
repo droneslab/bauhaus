@@ -1,4 +1,5 @@
 #include "isam2.h"
+#include "../base/rust.hpp"
 
 namespace gtsam
 {
@@ -15,5 +16,12 @@ namespace gtsam
 
     std::unique_ptr<Values> calculate_estimate(const ISAM2 &isam2) {
         return std::make_unique<Values>(isam2.calculateEstimate());
+    }
+
+    rust::Vec<DoubleVec> get_marginal_covariance(
+        const ISAM2 &isam2,
+        const Key key)
+    {
+        return eigenmat_to_rustvec(isam2.marginalCovariance(key));
     }
 }

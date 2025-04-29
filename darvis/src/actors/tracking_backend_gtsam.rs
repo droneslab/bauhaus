@@ -373,6 +373,9 @@ impl GraphSolver {
         debug!("IMU POSE ESTIMATE... {}, {:?}, {:?}, {:?}", timestamp, new_state.pose, new_state.velocity, new_state.bias);
 
         self.optimize();
+
+        debug!("OPTIMIZATION COVARIANCE: {:?}", self.isam2.get_marginal_covariance(&Symbol::new(b'x', self.ct_state)));
+
         // Update frame with optimized values
         // TODO there's probably a better way to clean up all this conversion than this
         let updated_pose: Isometry3<f64> = self.values_initial.get_pose3(&Symbol::new(b'x', self.ct_state)).unwrap().into();
@@ -530,7 +533,7 @@ impl GraphSolver {
             &state_k.bias
         );
 
-        // debug!("IMU COVARIANCE: {:?}", self.preint_gtsam.get_covariance());
+        debug!("IMU COVARIANCE: {:?}", self.preint_gtsam.get_covariance());
 
         let predicted = GtsamState {
             pose: state_k1.get_pose().into(),

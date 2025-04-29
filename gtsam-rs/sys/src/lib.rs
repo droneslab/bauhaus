@@ -13,6 +13,7 @@ mod ffi {
     //     type DoubleVec = orb_slam3::DoubleVec;
     // }
 
+    #[derive(Debug)]
     struct DoubleVec
     {
         vec: Vec<f64>,
@@ -249,6 +250,11 @@ mod ffi {
         );
 
         fn calculate_estimate(isam2: &ISAM2) -> UniquePtr<Values>;
+
+        fn get_marginal_covariance(
+            isam2: &ISAM2,
+            key: u64,
+        ) -> Vec<DoubleVec>;
     }
 
     unsafe extern "C++" {
