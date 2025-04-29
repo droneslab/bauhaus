@@ -54,6 +54,10 @@ impl PreintegratedCombinedMeasurements {
         }
     }
 
+    pub fn get_covariance(&self) -> Vec<DoubleVec> {
+        ::sys::get_covariance(& self.inner)
+    }
+
     pub fn integrate_measurement(
         &mut self,
         measured_acc: &Vector3,

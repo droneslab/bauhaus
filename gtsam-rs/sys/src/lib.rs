@@ -104,6 +104,7 @@ mod ffi {
         type Cal3_S2;
 
         fn default_cal3_s2() -> SharedPtr<Cal3_S2>;
+        fn new_cal3_s2(fx: f64, fy: f64, s: f64, u0: f64, v0: f64) -> SharedPtr<Cal3_S2>;
     } 
 
     #[namespace = "gtsam::imuBias"]
@@ -374,6 +375,8 @@ mod ffi {
             params: SharedPtr<PreintegrationCombinedParams>,
             bias: &ConstantBias,
         ) -> UniquePtr<PreintegratedCombinedMeasurements>;
+    
+        fn get_covariance(preintegrated_measurements: &PreintegratedCombinedMeasurements) -> Vec<DoubleVec>;
 
         fn integrateMeasurement(
             preintegrated_measurements: Pin<&mut PreintegratedCombinedMeasurements>,

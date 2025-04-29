@@ -27,7 +27,7 @@ std::shared_ptr<BaseNoiseModel> cast_isotropic_noise_model_to_base_noise_model(
 }
 
 std::shared_ptr<GaussianNoiseModel> from_gaussian_noise_model_from_covariance(const rust::Slice<double> covariance) {
-    Matrix6 covariance_convert = Eigen::Map<Matrix6>(covariance.data(), covariance.size(), 1);
+    Matrix6 covariance_convert = Eigen::Map<Matrix6>(covariance.data(), 6, 6);
 
     return to_std_ptr(GaussianNoiseModel::Covariance(covariance_convert));
 }

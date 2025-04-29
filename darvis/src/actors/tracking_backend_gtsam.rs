@@ -11,8 +11,8 @@ use core::{
     config::*, matrix::*, system::{Actor, MessageBox, System, Timestamp}
 };
 use crate::{
-    actors::{local_mapping_gtsam::LOCAL_MAPPING_IDLE, messages::{ShutdownMsg, UpdateFrameIMUMsg, FeatureTracksAndIMUMsg, TrajectoryMsg, VisTrajectoryMsg, VisTrajectoryTrackingMsg}, tracking_frontend_gtsam::TrackedFeatures},
-    map::{frame::Frame, map::Id, pose::Pose, read_only_lock::ReadWriteMap}, modules::imu::{ImuBias, ImuCalib, ImuMeasurements}, registered_actors::{IMU, SHUTDOWN_ACTOR, TRACKING_FRONTEND, VISUALIZER}, ImuInitializationData
+    actors::{local_mapping_gtsam::LOCAL_MAPPING_IDLE, messages::{FeatureTracksAndIMUMsg, ShutdownMsg, TrajectoryMsg, UpdateFrameIMUMsg, VisTrajectoryMsg, VisTrajectoryTrackingMsg}, tracking_frontend_gtsam::TrackedFeatures},
+    map::{frame::Frame, map::Id, pose::Pose, read_only_lock::ReadWriteMap}, modules::imu::{ImuBias, ImuCalib, ImuMeasurements}, registered_actors::{CAMERA, IMU, SHUTDOWN_ACTOR, TRACKING_FRONTEND, VISUALIZER}, ImuInitializationData
 };
 
 pub struct TrackingBackendGTSAM {
@@ -530,6 +530,8 @@ impl GraphSolver {
             &state_k.bias
         );
 
+        // debug!("IMU COVARIANCE: {:?}", self.preint_gtsam.get_covariance());
+
         let predicted = GtsamState {
             pose: state_k1.get_pose().into(),
             velocity: state_k1.get_velocity().into(),
@@ -665,7 +667,13 @@ impl GraphSolver {
                     // If we know it is not in the graph
                     // Create a smart factor for the new feature
                     let measurement_noise = gtsam::linear::noise_model::IsotropicNoiseModel::from_dim_and_sigma(2, self.sigma_camera);
-                    let k = gtsam::geometry::cal3_s2::Cal3S2::default();
+                    let k = gtsam::geometry::cal3_s2::Cal3S2::new(
+                        SETTINGS.get::<f64>(CAMERA, "fx"),
+                        SETTINGS.get::<f64>(CAMERA, "fy"),
+                        0.0,
+                        SETTINGS.get::<f64>(CAMERA, "cx"),
+                        SETTINGS.get::<f64>(CAMERA, "cy"),
+                    );
 
                     // Transformation from camera frame to imu frame, i.e., pose of imu frame in camera frame
                     let sensor_p_body = ImuCalib::new().tbc;
