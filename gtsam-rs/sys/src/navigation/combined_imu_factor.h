@@ -40,6 +40,8 @@ namespace gtsam
         const std::shared_ptr<PreintegrationCombinedParams> params,
         const imuBias::ConstantBias &bias);
 
+    rust::Vec<DoubleVec> get_covariance(const PreintegratedCombinedMeasurements &preintegrated_measurements);
+
     void integrateMeasurement(
         PreintegratedCombinedMeasurements &preintegrated_measurements,
         const Vector3 &measuredAcc, const Vector3 &measuredOmega, const double dt);

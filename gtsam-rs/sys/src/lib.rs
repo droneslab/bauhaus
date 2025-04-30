@@ -13,6 +13,7 @@ mod ffi {
     //     type DoubleVec = orb_slam3::DoubleVec;
     // }
 
+    #[derive(Debug)]
     struct DoubleVec
     {
         vec: Vec<f64>,
@@ -104,6 +105,7 @@ mod ffi {
         type Cal3_S2;
 
         fn default_cal3_s2() -> SharedPtr<Cal3_S2>;
+        fn new_cal3_s2(fx: f64, fy: f64, s: f64, u0: f64, v0: f64) -> SharedPtr<Cal3_S2>;
     } 
 
     #[namespace = "gtsam::imuBias"]
@@ -248,6 +250,11 @@ mod ffi {
         );
 
         fn calculate_estimate(isam2: &ISAM2) -> UniquePtr<Values>;
+
+        fn get_marginal_covariance(
+            isam2: &ISAM2,
+            key: u64,
+        ) -> Vec<DoubleVec>;
     }
 
     unsafe extern "C++" {
@@ -374,6 +381,8 @@ mod ffi {
             params: SharedPtr<PreintegrationCombinedParams>,
             bias: &ConstantBias,
         ) -> UniquePtr<PreintegratedCombinedMeasurements>;
+    
+        fn get_covariance(preintegrated_measurements: &PreintegratedCombinedMeasurements) -> Vec<DoubleVec>;
 
         fn integrateMeasurement(
             preintegrated_measurements: Pin<&mut PreintegratedCombinedMeasurements>,

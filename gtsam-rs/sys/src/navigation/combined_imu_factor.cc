@@ -81,6 +81,11 @@ namespace gtsam
         return std::make_unique<PreintegratedCombinedMeasurements>(to_boost_ptr(params), bias);
     }
 
+    rust::Vec<DoubleVec> get_covariance(const PreintegratedCombinedMeasurements &preintegrated_measurements)
+    {
+        return eigenmat_to_rustvec(preintegrated_measurements.preintMeasCov());
+    }
+
     void integrateMeasurement(
         PreintegratedCombinedMeasurements &preintegrated_measurements,
         const Vector3 &measuredAcc,

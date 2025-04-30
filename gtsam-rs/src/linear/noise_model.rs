@@ -46,7 +46,7 @@ pub struct GaussianNoiseModel {
 }
 
 impl GaussianNoiseModel {
-    pub fn from_covariance<const D: usize>(mut covariance: SMatrix<f64, D, D>) -> Self {
+    pub fn from_covariance(mut covariance: SMatrix<f64, 6, 6>) -> Self {
         Self {
             inner: ::sys::from_gaussian_noise_model_from_covariance(covariance.data.as_mut_slice()),
         }

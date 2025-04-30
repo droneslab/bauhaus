@@ -1,6 +1,7 @@
 use cxx::UniquePtr;
 
-use crate::nonlinear::{values::{Values, ValuesRef}, nonlinear_factor_graph::NonlinearFactorGraph};
+use crate::{inference::key::IntoKey, nonlinear::{nonlinear_factor_graph::NonlinearFactorGraph, values::{Values, ValuesRef}}};
+use crate::sys::DoubleVec;
 
 pub struct ISAM2 {
     pub(super) inner: UniquePtr<::sys::ISAM2>,
@@ -29,5 +30,12 @@ impl ISAM2 {
         Values {
             inner: ::sys::calculate_estimate(& self.inner),
         }
+    }
+
+    pub fn get_marginal_covariance(
+        &self,
+        key: impl IntoKey,
+    ) -> Vec<DoubleVec> {
+        ::sys::get_marginal_covariance(& self.inner, key.into_key())
     }
 }
