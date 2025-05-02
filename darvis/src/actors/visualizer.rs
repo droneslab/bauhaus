@@ -27,7 +27,9 @@ static MAPPOINT_LOCAL_COLOR: Color = Color { r: 0.0, g: 0.0, b: 1.0, a: 1.0 };
 static MAPPOINT_SIZE: Vector3 = Vector3 {  x: 0.01, y: 0.01, z: 0.01 };
 static MAPPOINT_LARGE_SIZE: Vector3 = Vector3 { x: 0.1, y: 0.1, z: 0.1 };
 
-static TRACKING_TRAJECTORY_COLOR: Color = Color { r: 0.0, g: 0.8, b: 0.8, a: 1.0 };
+static TRACKING_TRAJECTORY_COLOR: Color = Color { r: 0.0, g: 0.8, b: 0.0, a: 1.0 };
+static TRACKING_TRAJECTORY_COLOR2: Color = Color { r: 0.8, g: 0.0, b: 0.0, a: 1.0 };
+static TRACKING_TRAJECTORY_COLOR3: Color = Color { r: 0.0, g: 0.0, b: 0.8, a: 1.0 };
 
 enum ImageDrawType {
     NONE,
@@ -369,6 +371,8 @@ impl DarvisVisualizer {
     async fn update_draw_map(&mut self, msg: VisTrajectoryMsg) -> Result<(), Box<dyn std::error::Error>> {
         self.draw_trajectory(msg.pose, msg.timestamp, SETTINGS.get::<bool>(VISUALIZER, "draw_graph")).await?;
 
+        println!("Update draw map??");
+
         self.plot_map_info(&msg.mappoint_matches, msg.timestamp).await?;
 
         if !SETTINGS.get::<bool>(VISUALIZER, "draw_only_trajectory") {
@@ -402,22 +406,24 @@ impl DarvisVisualizer {
             )
         );
 
+        println!("TRAJECTORY POSE: {:?}", inverse_frame_pose);
+
         if self.prev_poses.len() > 0 {
             let mut curr_pose = frame_pose;
             let mut i = 0;
             for prev_pose in self.prev_poses.iter().rev() {
                 // Draw line from current pose to previous pose
-                // let points = vec![(*prev_pose).into(), curr_pose.into()];
-                // entities_traj.push(
-                //     self.create_scene_entity(
-                //         timestamp,
-                //         "world",
-                //         format!("t {}->{}", i, i+1),
-                //         vec![],
-                //         vec![self.create_line(points, TRAJECTORY_COLOR.clone(), 3.0),], 
-                //         vec![]
-                //     )
-                // );
+                let points = vec![(*prev_pose).into(), curr_pose.into()];
+                entities_traj.push(
+                    self.create_scene_entity(
+                        timestamp,
+                        "world",
+                        format!("t {}->{}", i, i+1),
+                        vec![],
+                        vec![self.create_line(points, TRACKING_TRAJECTORY_COLOR2.clone(), 3.0),], 
+                        vec![]
+                    )
+                );
 
                 entities_traj.push(
                     self.create_frame_scene_entity(
@@ -425,10 +431,10 @@ impl DarvisVisualizer {
                         "world",
                         format!("kf {}", i),
                         &prev_pose,
-                        KEYFRAME_COLOR.clone(),
+                        TRACKING_TRAJECTORY_COLOR3.clone(),
                     )
                 );
-                // curr_pose = prev_pose.clone();
+                curr_pose = prev_pose.clone();
                 i += 1;
             }
         }

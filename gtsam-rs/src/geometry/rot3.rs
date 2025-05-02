@@ -52,6 +52,8 @@ impl<'a> From<Rot3Ref<'a>> for ::nalgebra::UnitQuaternion<f64> {
         let mut dst = [0.0; 9];
         ::sys::rot3_to_raw(value.inner, &mut dst);
 
+        // println!("Rot3 raw: {:?}", dst);
+
         let [m11, m12, m13, m21, m22, m23, m31, m32, m33] = dst;
         ::nalgebra::UnitQuaternion::from_matrix(&Matrix3::new(
             m11, m12, m13, // row 1
@@ -70,9 +72,9 @@ impl<'a> From<Rot3Ref<'a>> for Rot3 {
         let [m11, m12, m13, m21, m22, m23, m31, m32, m33] = dst;
 
         Rot3::from(UnitQuaternion::from_matrix(&Matrix3::new(
-            m11, m12, m13, // row 1
-            m21, m22, m23, // row 2
-            m31, m32, m33, // row 3
+            m11, m21, m31, // row 1
+            m12, m22, m32, // row 2
+            m13, m23, m33, // row 3
         )))
     }
 }

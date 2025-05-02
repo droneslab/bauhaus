@@ -13,7 +13,7 @@ system:
       first_actor_name: TRACKING_FRONTEND # Name of actor to kick off pipeline
 
       # FPS
-      fps: 2.0
+      fps: 10.0
 
       # KIMERA
       initial_k: 50 # Start processing dataset from frame initial_k. Useful to skip a bunch of images at the beginning (imu calibration).

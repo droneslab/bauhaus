@@ -99,7 +99,7 @@ impl ImuModule for IMU {
         }
 
         let mut imu_from_last_frame = VecDeque::with_capacity(measurements.len()); // mvImuFromLastFrame
-        let imu_per = 0.001; // 0.001 in orbslam, adjusted here for different timestamp units
+        let imu_per = 0.001;
 
         while !measurements.is_empty() {
             if measurements.front().unwrap().timestamp < previous_frame.timestamp - imu_per {
