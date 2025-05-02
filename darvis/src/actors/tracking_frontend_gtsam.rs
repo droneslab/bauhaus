@@ -124,7 +124,6 @@ impl TrackingFrontendGTSAM {
                     ).expect("Could not create frame!");
                     self.current_frame.pose = Some(init_pose);
                     self.state = GtsamFrontendTrackingState::Ok;
-                    self.extract_good_features_to_track().expect("Couldn't extract good features to track?");
 
                     true
                 },
@@ -149,20 +148,8 @@ impl TrackingFrontendGTSAM {
 
                     self.tracked_features_last_kf = new_tracked_features;
 
-                    // SOFIYA SENDING TO BACKEND AT EVERY FRAME
                     // Determine if frame should be a keyframe
-                    // let pub_this_frame = self.need_new_keyframe();
-                    // if pub_this_frame {
-                        self.extract_good_features_to_track().unwrap();
-                    // };
-
-                    // self.system.try_send(VISUALIZER, Box::new(VisTrajectoryTrackingMsg{
-                    //     pose: new_pose,
-                    //     timestamp: self.current_frame.timestamp,
-                    //     map_version: self.map.read().unwrap().version
-                    // }));
-
-                    true
+                    self.need_new_keyframe()
                 }
             };
 
@@ -170,6 +157,8 @@ impl TrackingFrontendGTSAM {
                 tracy_client::Client::running()
                     .expect("message! without a running Client")
                     .message("Publish frame!", 2);
+
+                self.extract_good_features_to_track().expect("Couldn't extract good features to track?");
 
                 // Send current imu measurements to backend, replace with empty ones
                 let mut imu_measurements = ImuMeasurements::new();
