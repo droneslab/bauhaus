@@ -406,7 +406,7 @@ impl DarvisVisualizer {
             )
         );
 
-        println!("TRAJECTORY POSE: {:?}", inverse_frame_pose);
+        // println!("TRAJECTORY POSE: {:?}", inverse_frame_pose);
 
         if self.prev_poses.len() > 0 {
             let mut curr_pose = frame_pose;

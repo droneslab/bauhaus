@@ -96,47 +96,115 @@ impl TrackingBackendGTSAM {
             // First frame received here... was already put into local mapping map as latest keyframe
             // Need to initialize the factor graph 
 
-            // Initialize from gt
+            // // Initialize from gt
+            // let imu_init = msg.imu_initialization.expect("Msg should have imu initialization data!");
+            // self.graph_solver.initialize_with_data(
+            //     msg.frame.timestamp,
+            //     &imu_init
+            // ).expect("Failed to initialize?");
+
+            // self.graph_solver.solver_state = GraphSolverState::Ok;
+            // self.last_timestamp = msg.frame.timestamp;
+            // self.last_kf_id = 1;
+            // self.last_kf_pose = msg.frame.pose.unwrap();
+            // self.last_kf_imu_bias = ImuBias {
+            //     bax: imu_init.acc_bias[0],
+            //     bay: imu_init.acc_bias[1],
+            //     baz: imu_init.acc_bias[2],
+            //     bwx: imu_init.gyro_bias[0],
+            //     bwy: imu_init.gyro_bias[1],
+            //     bwz: imu_init.gyro_bias[2]
+            // };
+
+            // debug!("Initialization timestamp: {:?}", msg.frame.timestamp);
+
+            // Initialize from map initialization
+            let map = self.map.read()?;
+            let kf0 = map.get_keyframe(0);
+            let kf1 = map.get_keyframe(1);
+            let kf0_pose = kf0.get_pose();
+            let kf1_pose = kf1.get_pose();
+            let velocity = DVVector3::new(
+                (*kf1_pose.get_translation() - *kf0_pose.get_translation()) / (kf1.timestamp - kf0.timestamp)
+            );
+
+            println!("KF 0 pose: {:?}", kf0_pose);
+            println!("KF 1 pose: {:?}", kf1_pose);
+            println!("KF 0 timestamp: {:?}", kf0.timestamp);
+            println!("KF 1 timestamp: {:?}", kf1.timestamp);
+            println!("Velocity: {:?}", velocity);
+
             let imu_init = msg.imu_initialization.expect("Msg should have imu initialization data!");
-            self.graph_solver.initialize_with_data(
-                (msg.frame.timestamp * 1e9) as i64,
-                &imu_init
+
+            // First initialize with all 0s, as if we are the first keyframe
+            // Use the imu measurements to predict what kf 1's pose should be, then scale the map using that
+            let (kf1_scaledpose, scaled_velocity) = {
+                let velocity = DVVector3::new_with(-0.023791,-0.016973,0.091484);
+                // let velocity = DVVector3::new_with(0.0, 0.0, 0.0);
+
+                self.graph_solver.initialize(
+                    kf0.timestamp,
+                    kf0_pose,
+                    velocity,
+                    ImuBias {
+                        bax: imu_init.acc_bias[0],
+                        bay: imu_init.acc_bias[1],
+                        baz: imu_init.acc_bias[2],
+                        bwx: imu_init.gyro_bias[0],
+                        bwy: imu_init.gyro_bias[1],
+                        bwz: imu_init.gyro_bias[2]
+                    }
+                ).expect("Failed to initialize?");
+                self.graph_solver.preintegrate(&mut msg.imu_measurements, kf1.timestamp, kf0.timestamp).expect("Could not preintegrate!");
+                let predicted_trans = {
+                    let p1 = self.graph_solver.predict_state();
+                    println!("PREDICTED POSITION: {:?}", p1.pose);
+
+                    let p2: Isometry3<f64> = (&p1.pose).into();
+                    let p3: DVVector3<f64> = DVVector3::new_with(p2.translation.x, p2.translation.y, p2.translation.z);
+                    p3
+                };
+                let predicted_distance = Self::distance(&kf0_pose.get_translation(), &predicted_trans);
+                let initialized_distance = Self::distance(&kf0_pose.get_translation(), &kf1_pose.get_translation());
+                let scale = predicted_distance / initialized_distance;
+                println!("PREDICTED DISTANCE: {:?}", predicted_distance);
+                println!("INITIALIZED DISTANCE: {:?}", initialized_distance);
+                println!("SCALE: {:?}", scale);
+
+                let scaled_pose = Pose::new(
+                    *kf1_pose.get_translation() * scale,
+                    *kf1_pose.get_rotation()
+                );
+                // let scaled_velocity = DVVector3::new(
+                //     *velocity * scale
+                // );
+                (scaled_pose, velocity)
+            };
+
+            println!("Scaled kf 1 pose: {:?}", kf1_scaledpose);
+
+
+            // Now that the map is scaled, re-initialize the graph solver
+            self.graph_solver = GraphSolver::new();
+            self.graph_solver.initialize(
+                kf1.timestamp,
+                kf1_scaledpose,
+                scaled_velocity,
+                ImuBias {
+                    bax: imu_init.acc_bias[0],
+                    bay: imu_init.acc_bias[1],
+                    baz: imu_init.acc_bias[2],
+                    bwx: imu_init.gyro_bias[0],
+                    bwy: imu_init.gyro_bias[1],
+                    bwz: imu_init.gyro_bias[2]
+                }
             ).expect("Failed to initialize?");
 
 
-            // Initialize from map initialization
-            // let map = self.map.read()?;
-            // let kf0 = map.get_keyframe(0);
-            // let kf1 = map.get_keyframe(1);
-            // let kf0_pose = kf0.get_pose();
-            // let kf1_pose = kf1.get_pose();
-
-            // let velocity = DVVector3::new(
-            //     (*kf1_pose.get_translation() - *kf0_pose.get_translation()) / (kf1.timestamp - kf0.timestamp)
-            // );
-
-            // let trans_imu = *kf1_pose.inverse().get_rotation() * *ImuCalib::new().tcb.get_translation() + *kf1_pose.inverse().get_translation();
-            // let rot_imu =  *kf1_pose.inverse().get_rotation() * *ImuCalib::new().tcb.get_rotation();
-            // let pose_imu = Pose::new(trans_imu, rot_imu);
-
-            // self.graph_solver.initialize(
-            //     (msg.frame.timestamp * 1e9) as i64,
-            //     pose_imu,
-            //     velocity,
-            //     ImuBias {
-            //         bax: imu_init.acc_bias[0],
-            //         bay: imu_init.acc_bias[1],
-            //         baz: imu_init.acc_bias[2],
-            //         bwx: imu_init.gyro_bias[0],
-            //         bwy: imu_init.gyro_bias[1],
-            //         bwz: imu_init.gyro_bias[2]
-            //     }
-            // )?;
-
             self.graph_solver.solver_state = GraphSolverState::Ok;
-            self.last_timestamp = msg.frame.timestamp;
-            self.last_kf_id = 1;
-            self.last_kf_pose = msg.frame.pose.unwrap();
+            self.last_timestamp = kf1.timestamp;
+            self.last_kf_id = kf1.id;
+            self.last_kf_pose = kf1_scaledpose; //kf1_pose;
             self.last_kf_imu_bias = ImuBias {
                 bax: imu_init.acc_bias[0],
                 bay: imu_init.acc_bias[1],
@@ -149,6 +217,8 @@ impl TrackingBackendGTSAM {
         } else {
             // If we have previous frames already, can track normally
             let mut current_frame = msg.frame;
+
+            println!("Regular tracking on timestamp {}", current_frame.timestamp);
 
             // Solve VIO graph. Includes preintegration
             let optimized = self.graph_solver.solve(
@@ -242,6 +312,12 @@ impl TrackingBackendGTSAM {
         c1a || c1b || c1c
     }
 
+    fn distance(v1: &Vector3<f64>, v2: &Vector3<f64>) -> f64 {
+        let dx = v2.x - v1.x;
+        let dy = v2.y - v1.y;
+        let dz = v2.z - v1.z;
+        (dx * dx + dy * dy + dz * dz).sqrt()
+    }
 }
 
 pub struct GraphSolver {
@@ -334,7 +410,8 @@ impl GraphSolver {
             return Ok(false);
         }
 
-        self.create_imu_factor(imu_measurements, current_frame.timestamp, self.last_timestamp)?;
+        self.preintegrate(imu_measurements, current_frame.timestamp, self.last_timestamp)?;
+        self.create_imu_factor();
 
         // Original models
         let new_state = self.predict_state();
@@ -375,7 +452,7 @@ impl GraphSolver {
 
         self.optimize();
 
-        debug!("OPTIMIZATION COVARIANCE: {:?}", self.isam2.get_marginal_covariance(&Symbol::new(b'x', self.ct_state + 1)));
+        // debug!("OPTIMIZATION COVARIANCE: {:?}", self.isam2.get_marginal_covariance(&Symbol::new(b'x', self.ct_state + 1)));
 
         // Update frame with optimized values
         // TODO there's probably a better way to clean up all this conversion than this
@@ -407,13 +484,14 @@ impl GraphSolver {
         Ok(true)
     }
 
-    fn initialize_with_data(&mut self, timestamp: i64, imu_init: &ImuInitializationData) -> Result<(), Box<dyn std::error::Error>> {
+    fn initialize_with_data(&mut self, timestamp: f64, imu_init: &ImuInitializationData) -> Result<(), Box<dyn std::error::Error>> {
         let init_pose = Pose::new_with_quaternion_convert(*imu_init.translation, imu_init.rotation);
         let init_bias = ImuBias::new_with(imu_init.gyro_bias, imu_init.acc_bias);
         self.initialize(timestamp, init_pose, imu_init.velocity, init_bias)
     }
 
-    fn initialize(&mut self, timestamp: i64, init_pose: Pose, init_vel: DVVector3<f64>, init_bias: ImuBias) -> Result<(), Box<dyn std::error::Error>> {
+    fn initialize(&mut self, timestamp: f64, init_pose: Pose, init_vel: DVVector3<f64>, init_bias: ImuBias) -> Result<(), Box<dyn std::error::Error>> {
+        let timestamp_converted = (timestamp * 1e9) as i64;
         println!("... Initial pose: {:?}", init_pose);
         println!("... Initial velocity: {:?}", init_vel);
         println!("... Initial bias: {:?}", init_bias);
@@ -500,8 +578,8 @@ impl GraphSolver {
         self.values_initial.insert_constant_bias(&Symbol::new(b'b', self.ct_state), &prior_state.bias);
 
         // Add ct state to map
-        self.ct_state_lookup.insert(timestamp, self.ct_state);
-        self.timestamp_lookup.insert(self.ct_state, timestamp);
+        self.ct_state_lookup.insert(timestamp_converted, self.ct_state);
+        self.timestamp_lookup.insert(self.ct_state, timestamp_converted);
 
         // Create GTSAM preintegration parameters for use with Foster's version
         let mut params = PreintegrationCombinedParams::makesharedu();  // Z-up navigation frame: gravity points along negative Z-axis !!!
@@ -515,8 +593,7 @@ impl GraphSolver {
         // Actually create the GTSAM preintegration
         self.preint_gtsam = PreintegratedCombinedMeasurements::new(params, &prior_state.bias);
 
-        self.last_timestamp = timestamp as f64 / 1e9; // Convert back to seconds
-        println!("Last timestamp: {:?}", self.last_timestamp);
+        self.last_timestamp = timestamp;
 
         Ok(())
     }
@@ -543,7 +620,7 @@ impl GraphSolver {
             &state_k.bias
         );
 
-        debug!("IMU COVARIANCE: {:?}", self.preint_gtsam.get_covariance());
+        // debug!("IMU COVARIANCE: {:?}", self.preint_gtsam.get_covariance());
 
         let predicted = GtsamState {
             pose: state_k1.get_pose().into(),
@@ -554,14 +631,14 @@ impl GraphSolver {
         return predicted;
     }
 
-    fn create_imu_factor(&mut self, imu_measurements: &mut ImuMeasurements, current_timestamp: Timestamp, last_timestamp: Timestamp) -> Result<(), Box<dyn std::error::Error>> {
+    fn preintegrate(&mut self, imu_measurements: &mut ImuMeasurements, current_timestamp: Timestamp, last_timestamp: Timestamp) -> Result<(), Box<dyn std::error::Error>> {
         // This function will create a discrete IMU factor using the GTSAM preintegrator class
         // This will integrate from the current state time up to the new update time
         let _span = tracy_client::span!("create_imu_factor");
 
         // println!("Current timestamp: {:?}", current_timestamp);
         // println!("Last timestamp: {:?}", last_timestamp);
-        // println!("Imu measurements: {:?}", imu_measurements);
+        println!("Imu measurements: {:?}", imu_measurements);
 
         // From ORBSLAM:
         let mut imu_from_last_frame = VecDeque::with_capacity(imu_measurements.len()); // mvImuFromLastFrame
@@ -637,7 +714,10 @@ impl GraphSolver {
             // other_imu.imu_preintegrated_from_last_kf.integrate_new_measurement(acc, ang_vel, tstep);
             // imu_preintegrated_from_last_frame.integrate_new_measurement(acc, ang_vel, tstep);
         }
+        Ok(())
+    }
 
+    fn create_imu_factor(&mut self) {
         let imu_factor = CombinedImuFactor::new(
             &Symbol::new(b'x', self.ct_state),
             &Symbol::new(b'v', self.ct_state),
@@ -655,8 +735,6 @@ impl GraphSolver {
         // current_frame.imu_data.imu_preintegrated_frame = Some(imu_preintegrated_from_last_frame);
         // current_frame.imu_data.prev_keyframe = Some(last_kf_id);
         // other_imu.predict_state_last_keyframe(&map, current_frame, last_kf_id)?;
-
-        Ok(())
     }
 
     fn process_smart_features(&mut self, new_tracked_features: &TrackedFeatures) {

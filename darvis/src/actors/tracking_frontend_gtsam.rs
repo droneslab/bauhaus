@@ -96,7 +96,7 @@ impl TrackingFrontendGTSAM {
             };
             self.imu_measurements_since_last_kf.append(&mut imu_measurements);
 
-            debug!("Tracking frontend working on frame {}", self.curr_frame_id);
+            debug!("Tracking frontend working on frame {} at timestamp {}", self.curr_frame_id, timestamp);
 
             let pub_this_frame = match self.state {
                 GtsamFrontendTrackingState::NotInitialized => {
@@ -111,21 +111,21 @@ impl TrackingFrontendGTSAM {
                     let (keypoints, descriptors) = self.orb_extractor_ini.as_mut().unwrap().extract(& image).unwrap();
                     let init_pose = Pose::new_with_quaternion_convert(*imu_initialization.as_ref().unwrap().translation, imu_initialization.as_ref().unwrap().rotation);
 
-                    self.current_frame = Frame::new(
-                        self.curr_frame_id, 
-                        keypoints,
-                        descriptors,
-                        image.cols() as u32,
-                        image.rows() as u32,
-                        Some(image.clone()),
-                        Some(& self.last_frame),
-                        false,
-                        timestamp,
-                    ).expect("Could not create frame!");
-                    self.current_frame.pose = Some(init_pose);
-                    self.state = GtsamFrontendTrackingState::Ok;
+                    // self.current_frame = Frame::new(
+                    //     self.curr_frame_id, 
+                    //     keypoints,
+                    //     descriptors,
+                    //     image.cols() as u32,
+                    //     image.rows() as u32,
+                    //     Some(image.clone()),
+                    //     Some(& self.last_frame),
+                    //     false,
+                    //     timestamp,
+                    // ).expect("Could not create frame!");
+                    // self.current_frame.pose = Some(init_pose);
+                    // self.state = GtsamFrontendTrackingState::Ok;
 
-                    true
+                    // true
                 },
                 GtsamFrontendTrackingState::Ok => {
                     // Regular tracking
@@ -140,11 +140,11 @@ impl TrackingFrontendGTSAM {
                     let new_tracked_features = self.optical_flow().unwrap();
 
                     // Calculate transform from optical flow
-                    let transform = self.calculate_transform(& new_tracked_features).unwrap();
-                    let new_trans = *transform.get_translation() * (self.map_scale);
-                    let new_pose = Pose::new(new_trans, * transform.get_rotation()) * self.last_frame.pose.unwrap();
-                    self.current_frame.pose = Some(new_pose);
-                    debug!("OPTICAL FLOW POSE ESTIMATE... {}, {:?}", timestamp * 1e9, new_pose);
+                    // let transform = self.calculate_transform(& new_tracked_features).unwrap();
+                    // let new_trans = *transform.get_translation() * (self.map_scale);
+                    // let new_pose = Pose::new(new_trans, * transform.get_rotation()) * self.last_frame.pose.unwrap();
+                    // self.current_frame.pose = Some(new_pose);
+                    // debug!("OPTICAL FLOW POSE ESTIMATE... {}, {:?}", timestamp * 1e9, new_pose);
 
                     self.tracked_features_last_kf = new_tracked_features;
 
@@ -220,6 +220,8 @@ impl TrackingFrontendGTSAM {
         // TODO SOFIYA Should the self.imu_for_init values be used somewhere after initialization?
         let init_success = self.initialization.as_mut().unwrap().try_initialize(&self.current_frame, &mut self.imu_for_init.imu_preintegrated_from_last_kf)?;
         if init_success {
+            println!("Map initialized successfully with frames {:?} and {}", self.initialization.as_ref().unwrap().initial_frame.as_ref().unwrap().frame_id, self.curr_frame_id);
+
             match self.initialization.as_mut().unwrap().create_initial_map_monocular(&mut self.map,  &mut self.imu_for_init.imu_preintegrated_from_last_kf)? {
                 Some((curr_kf_pose, curr_kf_id, ini_kf_id, local_mappoints, _curr_kf_timestamp, map_scale)) => {
                     // Map needs to be initialized before tracking can begin
@@ -252,8 +254,6 @@ impl TrackingFrontendGTSAM {
                     panic!("Could not create initial map");
                 }
             };
-
-            self.extract_good_features_to_track()?;
 
             self.state = GtsamFrontendTrackingState::Ok;
             Ok(true)

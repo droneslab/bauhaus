@@ -326,19 +326,18 @@ impl LocalMappingGTSAM {
 
         // SOFIYA TURN OFF IMU
         // Initialize IMU
-        if self.sensor.is_imu() && !self.map.read()?.imu_initialized {
-            let (prior_g, prior_a, fiba) = match self.sensor.frame() {
-                FrameSensor::Mono => (1e2, 1e10, true),
-                FrameSensor::Stereo | FrameSensor::Rgbd => (1e2, 1e5, true),
-            };
+        // if self.sensor.is_imu() && !self.map.read()?.imu_initialized {
+        //     let (prior_g, prior_a, fiba) = match self.sensor.frame() {
+        //         FrameSensor::Mono => (1e2, 1e10, true),
+        //         FrameSensor::Stereo | FrameSensor::Rgbd => (1e2, 1e5, true),
+        //     };
 
-            self.imu_module.as_mut().unwrap().initialize(&mut self.map, self.current_keyframe_id, prior_g, prior_a, fiba, Some(self.system.find_actor(TRACKING_BACKEND)))?;
-        }
+        //     self.imu_module.as_mut().unwrap().initialize(&mut self.map, self.current_keyframe_id, prior_g, prior_a, fiba, Some(self.system.find_actor(TRACKING_BACKEND)))?;
+        // }
 
         // Check redundant local Keyframes
         let kfs_culled = self.keyframe_culling()?;
         // let kfs_culled = 0;
-        // warn!("SOFIYA TURNED OFF KF CULLING");
 
         // SOFIYA TURN OFF IMU
         // if self.sensor.is_imu() && self.imu_module.as_ref().unwrap().timestamp_init < 50.0 && matches!(self.current_tracking_state, TrackingState::Ok) {
