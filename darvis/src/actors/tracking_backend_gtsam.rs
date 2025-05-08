@@ -21,10 +21,10 @@ pub struct TrackingBackendGTSAM {
 
     // Last kf/frame
     last_kf_id: Id,
-    last_kf_pose: Pose,
+    // last_kf_pose: Pose,
+    // last_kf_imu_bias: ImuBias,
+    // last_feature_tracks: TrackedFeatures,
     last_timestamp: Timestamp,
-    last_kf_imu_bias: ImuBias,
-    last_feature_tracks: TrackedFeatures,
 
     // Modules 
     graph_solver: GraphSolver,
@@ -47,9 +47,9 @@ impl Actor for TrackingBackendGTSAM {
             trajectory_poses: Vec::new(),
             last_kf_id: -1,
             last_timestamp: 0.0,
-            last_kf_pose: Pose::default(),
-            last_kf_imu_bias: ImuBias::new(),
-            last_feature_tracks: TrackedFeatures::default(),
+            // last_kf_pose: Pose::default(),
+            // last_kf_imu_bias: ImuBias::new(),
+            // last_feature_tracks: TrackedFeatures::default(),
             frames_since_last_kf: 0,
         };
         tracy_client::set_thread_name!("tracking backend gtsam");
@@ -92,11 +92,11 @@ impl TrackingBackendGTSAM {
     fn handle_regular_message(&mut self, mut msg: FeatureTracksAndIMUMsg) -> Result<(), Box<dyn std::error::Error>> {
         let _span = tracy_client::span!("track");
 
-        if self.last_kf_id == -1 {
+        if matches!(self.graph_solver.solver_state, GraphSolverState::NotInitialized) {
             // First frame received here... was already put into local mapping map as latest keyframe
             // Need to initialize the factor graph 
 
-            // // Initialize from gt
+            // Initialize from gt
             // let imu_init = msg.imu_initialization.expect("Msg should have imu initialization data!");
             // self.graph_solver.initialize_with_data(
             //     msg.frame.timestamp,
@@ -105,91 +105,21 @@ impl TrackingBackendGTSAM {
 
             // self.graph_solver.solver_state = GraphSolverState::Ok;
             // self.last_timestamp = msg.frame.timestamp;
-            // self.last_kf_id = 1;
-            // self.last_kf_pose = msg.frame.pose.unwrap();
-            // self.last_kf_imu_bias = ImuBias {
-            //     bax: imu_init.acc_bias[0],
-            //     bay: imu_init.acc_bias[1],
-            //     baz: imu_init.acc_bias[2],
-            //     bwx: imu_init.gyro_bias[0],
-            //     bwy: imu_init.gyro_bias[1],
-            //     bwz: imu_init.gyro_bias[2]
-            // };
-
+            // self.last_kf_id += 1;
             // debug!("Initialization timestamp: {:?}", msg.frame.timestamp);
 
             // Initialize from map initialization
-            let map = self.map.read()?;
-            let kf0 = map.get_keyframe(0);
-            let kf1 = map.get_keyframe(1);
-            let kf0_pose = kf0.get_pose();
-            let kf1_pose = kf1.get_pose();
-            let velocity = DVVector3::new(
-                (*kf1_pose.get_translation() - *kf0_pose.get_translation()) / (kf1.timestamp - kf0.timestamp)
-            );
+            self.scale_map_from_imu(&mut msg)?;
 
-            println!("KF 0 pose: {:?}", kf0_pose);
-            println!("KF 1 pose: {:?}", kf1_pose);
-            println!("KF 0 timestamp: {:?}", kf0.timestamp);
-            println!("KF 1 timestamp: {:?}", kf1.timestamp);
-            println!("Velocity: {:?}", velocity);
-
-            let imu_init = msg.imu_initialization.expect("Msg should have imu initialization data!");
-
-            // First initialize with all 0s, as if we are the first keyframe
-            // Use the imu measurements to predict what kf 1's pose should be, then scale the map using that
-            let (kf1_scaledpose, scaled_velocity) = {
-                let velocity = DVVector3::new_with(-0.023791,-0.016973,0.091484);
-                // let velocity = DVVector3::new_with(0.0, 0.0, 0.0);
-
-                self.graph_solver.initialize(
-                    kf0.timestamp,
-                    kf0_pose,
-                    velocity,
-                    ImuBias {
-                        bax: imu_init.acc_bias[0],
-                        bay: imu_init.acc_bias[1],
-                        baz: imu_init.acc_bias[2],
-                        bwx: imu_init.gyro_bias[0],
-                        bwy: imu_init.gyro_bias[1],
-                        bwz: imu_init.gyro_bias[2]
-                    }
-                ).expect("Failed to initialize?");
-                self.graph_solver.preintegrate(&mut msg.imu_measurements, kf1.timestamp, kf0.timestamp).expect("Could not preintegrate!");
-                let predicted_trans = {
-                    let p1 = self.graph_solver.predict_state();
-                    println!("PREDICTED POSITION: {:?}", p1.pose);
-
-                    let p2: Isometry3<f64> = (&p1.pose).into();
-                    let p3: DVVector3<f64> = DVVector3::new_with(p2.translation.x, p2.translation.y, p2.translation.z);
-                    p3
-                };
-                let predicted_distance = Self::distance(&kf0_pose.get_translation(), &predicted_trans);
-                let initialized_distance = Self::distance(&kf0_pose.get_translation(), &kf1_pose.get_translation());
-                let scale = predicted_distance / initialized_distance;
-                println!("PREDICTED DISTANCE: {:?}", predicted_distance);
-                println!("INITIALIZED DISTANCE: {:?}", initialized_distance);
-                println!("SCALE: {:?}", scale);
-
-                let scaled_pose = Pose::new(
-                    *kf1_pose.get_translation() * scale,
-                    *kf1_pose.get_rotation()
-                );
-                // let scaled_velocity = DVVector3::new(
-                //     *velocity * scale
-                // );
-                (scaled_pose, velocity)
+            let (kf1_timestamp, kf1_scaled_pose, kf1_scaled_velocity) = {
+                let map = self.map.read()?;
+                let kf1 = map.get_keyframe(1);
+                let kf1_pose = kf1.get_pose();
+                let kf1_velocity = kf1.imu_data.velocity.unwrap();
+                (kf1.timestamp, kf1_pose, kf1_velocity)
             };
-
-            println!("Scaled kf 1 pose: {:?}", kf1_scaledpose);
-
-
-            // Now that the map is scaled, re-initialize the graph solver
-            self.graph_solver = GraphSolver::new();
-            self.graph_solver.initialize(
-                kf1.timestamp,
-                kf1_scaledpose,
-                scaled_velocity,
+            let init_bias = {
+                let imu_init = msg.imu_initialization.as_ref().expect("Msg should have imu initialization data!");
                 ImuBias {
                     bax: imu_init.acc_bias[0],
                     bay: imu_init.acc_bias[1],
@@ -198,21 +128,20 @@ impl TrackingBackendGTSAM {
                     bwy: imu_init.gyro_bias[1],
                     bwz: imu_init.gyro_bias[2]
                 }
+            };
+
+            // Now that the map is scaled, re-initialize the graph solver
+            self.graph_solver = GraphSolver::new();
+            self.graph_solver.initialize(
+                kf1_timestamp,
+                kf1_scaled_pose,
+                kf1_scaled_velocity,
+                init_bias
             ).expect("Failed to initialize?");
 
-
             self.graph_solver.solver_state = GraphSolverState::Ok;
-            self.last_timestamp = kf1.timestamp;
-            self.last_kf_id = kf1.id;
-            self.last_kf_pose = kf1_scaledpose; //kf1_pose;
-            self.last_kf_imu_bias = ImuBias {
-                bax: imu_init.acc_bias[0],
-                bay: imu_init.acc_bias[1],
-                baz: imu_init.acc_bias[2],
-                bwx: imu_init.gyro_bias[0],
-                bwy: imu_init.gyro_bias[1],
-                bwz: imu_init.gyro_bias[2]
-            };
+            self.last_timestamp = kf1_timestamp;
+            self.last_kf_id = 1;
 
         } else {
             // If we have previous frames already, can track normally
@@ -232,9 +161,7 @@ impl TrackingBackendGTSAM {
             current_frame.ref_kf_id = Some(self.last_kf_id);
             self.update_trajectory_in_logs(& current_frame).expect("Could not save trajectory");
             self.last_timestamp = current_frame.timestamp;
-            self.last_kf_pose = current_frame.pose.unwrap();
             self.last_kf_id += 1;
-            self.last_kf_imu_bias = current_frame.imu_data.imu_bias;
 
 
             if self.need_new_keyframe(msg.feature_tracks.len() as u32) {
@@ -255,8 +182,6 @@ impl TrackingBackendGTSAM {
                 self.frames_since_last_kf += 1;
             }
         }
-
-        self.last_feature_tracks = msg.feature_tracks;
 
         return Ok(());
     }
@@ -290,6 +215,78 @@ impl TrackingBackendGTSAM {
             map_version: map.version
         }));
 
+
+        Ok(())
+    }
+
+    fn scale_map_from_imu(&mut self, msg: &mut FeatureTracksAndIMUMsg) -> Result<(), Box<dyn std::error::Error>> {
+        let (scale, velocity) = {
+            let map = self.map.read()?;
+            let kf0 = map.get_keyframe(0);
+            let kf1 = map.get_keyframe(1);
+            let kf0_pose = kf0.get_pose();
+            let kf1_pose = kf1.get_pose();
+            let velocity = DVVector3::new(
+                (*kf1_pose.get_translation() - *kf0_pose.get_translation()) / (kf1.timestamp - kf0.timestamp)
+            );
+            // let velocity = DVVector3::new_with(-0.023791,-0.016973,0.091484);
+
+            println!("KF 0 pose: {:?}", kf0_pose);
+            println!("KF 1 pose: {:?}", kf1_pose);
+            println!("KF 0 timestamp: {:?}", kf0.timestamp);
+            println!("KF 1 timestamp: {:?}", kf1.timestamp);
+            println!("Velocity: {:?}", velocity);
+
+            // Initialize with all 0s, as if we are the first keyframe
+            // Use the imu measurements to predict what kf 1's pose should be
+            let init_bias = {
+                let imu_init = msg.imu_initialization.as_ref().expect("Msg should have imu initialization data!");
+                ImuBias {
+                    bax: imu_init.acc_bias[0],
+                    bay: imu_init.acc_bias[1],
+                    baz: imu_init.acc_bias[2],
+                    bwx: imu_init.gyro_bias[0],
+                    bwy: imu_init.gyro_bias[1],
+                    bwz: imu_init.gyro_bias[2]
+                }
+            };
+            self.graph_solver.initialize(
+                kf0.timestamp,
+                kf0_pose,
+                velocity,
+                init_bias
+            ).expect("Failed to initialize?");
+            self.graph_solver.preintegrate(
+                &mut msg.imu_measurements,
+                kf1.timestamp,
+                kf0.timestamp
+            ).expect("Could not preintegrate!");
+
+            let predicted_trans = {
+                let p1 = self.graph_solver.predict_state();
+                println!("PREDICTED POSITION: {:?}", p1.pose);
+
+                let p2: Isometry3<f64> = (&p1.pose).into();
+                let p3: DVVector3<f64> = DVVector3::new_with(p2.translation.x, p2.translation.y, p2.translation.z);
+                p3
+            };
+
+            // Using predicted translation, calculate scale of the new map
+            let predicted_distance = Self::distance(&kf0_pose.get_translation(), &predicted_trans);
+            let initialized_distance = Self::distance(&kf0_pose.get_translation(), &kf1_pose.get_translation());
+            let scale = predicted_distance / initialized_distance;
+            println!("PREDICTED DISTANCE: {:?}", predicted_distance);
+            println!("INITIALIZED DISTANCE: {:?}", initialized_distance);
+            println!("SCALE: {:?}", scale);
+            (scale, velocity)
+        };
+
+        {
+            let mut map = self.map.write()?;
+            map.get_keyframe_mut(1).imu_data.velocity = Some(velocity);
+            map.get_keyframe_mut(0).imu_data.velocity = Some(DVVector3::new_with(0.0, 0.0, 0.0));
+            map.apply_scaled_rotation(&Pose::default(), scale,true);
+        }
 
         Ok(())
     }
@@ -455,12 +452,17 @@ impl GraphSolver {
         // debug!("OPTIMIZATION COVARIANCE: {:?}", self.isam2.get_marginal_covariance(&Symbol::new(b'x', self.ct_state + 1)));
 
         // Update frame with optimized values
-        // TODO there's probably a better way to clean up all this conversion than this
         let updated_pose: Isometry3<f64> = self.values_initial.get_pose3(&Symbol::new(b'x', self.ct_state)).unwrap().into();
-        current_frame.pose = Some(Pose::new_from_isometry(updated_pose));
         let velocity: gtsam::base::vector::Vector3 = self.values_initial.get_vector3(&Symbol::new(b'v', self.ct_state)).unwrap().into();
         let vel_raw = velocity.get_raw();
-        current_frame.imu_data.velocity = Some(DVVector3::new_with(vel_raw[0], vel_raw[1], vel_raw[2]));
+
+        // current_frame.pose = Some(Pose::new_from_isometry(updated_pose));
+        current_frame.set_imu_pose_velocity(
+            Pose::new_from_isometry(updated_pose),
+            Vector3::new(vel_raw[0], vel_raw[1], vel_raw[2])
+        );
+
+
         let bias_ref = self.values_initial.get_constantbias(&Symbol::new(b'b', self.ct_state)).unwrap();
         let accel_bias = bias_ref.accel_bias().get_raw();
         let gyro_bias = bias_ref.gyro_bias().get_raw();
@@ -542,14 +544,6 @@ impl GraphSolver {
 
         // Add pose prior.
         let pose_noise = gtsam::linear::noise_model::GaussianNoiseModel::from_covariance(pose_prior_covariance);
-        // let pose_noise = gtsam::linear::noise_model::DiagonalNoiseModel::from_sigmas(Vector6::new(
-        //     self.initial_roll_pitch_sigma,
-        //     self.initial_roll_pitch_sigma,
-        //     self.initial_yaw_sigma,
-        //     self.initial_position_sigma,
-        //     self.initial_position_sigma,
-        //     self.initial_position_sigma
-        // ));
         self.graph_new.add_prior_factor_pose3(&Symbol::new(b'x', self.ct_state), &prior_state.pose, &pose_noise);
 
         let v_noise = gtsam::linear::noise_model::IsotropicNoiseModel::from_dim_and_sigma(3, self.initial_velocity_sigma);
@@ -770,12 +764,12 @@ impl GraphSolver {
                     );
 
                     // Transformation from camera frame to imu frame, i.e., pose of imu frame in camera frame
-                    let sensor_p_body = ImuCalib::new().tbc;
+                    let transform = ImuCalib::new().tbc;
 
                     let mut smartfactor_left = gtsam::slam::projection_factor::SmartProjectionPoseFactorCal3S2::new(
                         &measurement_noise,
                         &k,
-                        & sensor_p_body.inverse().into()
+                        & transform.into()
                     );
 
                     // Insert measurements to a smart factor

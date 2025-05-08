@@ -357,14 +357,16 @@ fn load_camera_settings(camera_fn: &String, module_println: &mut Vec<ModuleConf>
     add_setting_f64("CAMERA", "imu_rate", &yaml_document["imu__frequency"]);
 
     // Add dataset name
-    add_setting_f64("IMU", "initialPositionSigma", &yaml_document["initialPositionSigma"]);
-    add_setting_f64("IMU", "initialRollPitchSigma", &yaml_document["initialRollPitchSigma"]);
-    add_setting_f64("IMU", "initialYawSigma", &yaml_document["initialYawSigma"]);
-    add_setting_f64("IMU", "initialVelocitySigma", &yaml_document["initialVelocitySigma"]);
-    add_setting_f64("IMU", "initialAccBiasSigma", &yaml_document["initialAccBiasSigma"]);
-    add_setting_f64("IMU", "initialGyroBiasSigma", &yaml_document["initialGyroBiasSigma"]);
-    add_setting_f64("IMU", "imu_integration_sigma", &yaml_document["imu_integration_sigma"]);
-    add_setting_f64("IMU", "imu_bias_init_sigma", &yaml_document["imu_bias_init_sigma"]);
+    if SETTINGS.get::<Sensor>(SYSTEM, "sensor").is_imu() {
+        add_setting_f64("IMU", "initialPositionSigma", &yaml_document["initialPositionSigma"]);
+        add_setting_f64("IMU", "initialRollPitchSigma", &yaml_document["initialRollPitchSigma"]);
+        add_setting_f64("IMU", "initialYawSigma", &yaml_document["initialYawSigma"]);
+        add_setting_f64("IMU", "initialVelocitySigma", &yaml_document["initialVelocitySigma"]);
+        add_setting_f64("IMU", "initialAccBiasSigma", &yaml_document["initialAccBiasSigma"]);
+        add_setting_f64("IMU", "initialGyroBiasSigma", &yaml_document["initialGyroBiasSigma"]);
+        add_setting_f64("IMU", "imu_integration_sigma", &yaml_document["imu_integration_sigma"]);
+        add_setting_f64("IMU", "imu_bias_init_sigma", &yaml_document["imu_bias_init_sigma"]);
+    }
 
     // Add camera module to module_println so it gets spawned
     let camera_module = ModuleConf {

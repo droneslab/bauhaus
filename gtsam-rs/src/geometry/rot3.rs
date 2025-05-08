@@ -17,6 +17,8 @@ impl From<Quaternion<f64>> for Rot3 {
     fn from(value: Quaternion<f64>) -> Self {
         let quaternion = value.as_vector();
 
+        println!("Quaternion is: {:?}", quaternion);
+
         Self {
             inner: ::sys::from_rot3_quaternion(
                 quaternion.w,

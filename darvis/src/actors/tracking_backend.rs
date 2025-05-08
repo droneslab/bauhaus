@@ -489,7 +489,7 @@ impl TrackingBackend {
 
             debug!("Save trajectory, pose is: {:?}", relative_pose);
             debug!("...current frame pose: {:?}", self.current_frame.pose);
-            debug!("...ref kf pose: {:?}", ref_kf_pose.inverse());
+            debug!("...ref kf pose: {:?}", ref_kf_pose);
             debug!("...ref kf id: {:?}", self.ref_kf_id.unwrap());
 
             relative_pose
@@ -1271,6 +1271,8 @@ impl TrackingBackend {
         tracy_client::Client::running()
         .expect("message! without a running Client")
         .message("create new keyframe", 2);
+
+        println!("Created new keyframe with pose {:?}", self.current_frame.pose.unwrap());
 
         // KeyFrame created here and inserted into map
         self.system.send(

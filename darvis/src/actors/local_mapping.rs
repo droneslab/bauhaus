@@ -290,6 +290,8 @@ impl LocalMapping {
         debug!("For keyframe {}, culled {} mappoints, created {} mappoints, culled {} keyframes", self.current_keyframe_id, mps_culled, mps_created, kfs_culled);
         info!("Map has {} keyframes and {} mappoints" , self.map.read()?.num_keyframes(), self.map.read()?.mappoints.len());
 
+        println!("After lba, keyframe pose is {:?}", self.map.read()?.get_keyframe(self.current_keyframe_id).get_pose().get_translation());
+
         tracy_client::plot!("MAP INFO: KeyFrames", self.map.read()?.num_keyframes() as f64);
         tracy_client::plot!("MAP INFO: MapPoints", self.map.read()?.mappoints.len() as f64);
 

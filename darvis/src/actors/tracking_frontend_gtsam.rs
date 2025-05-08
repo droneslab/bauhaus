@@ -40,7 +40,6 @@ pub struct TrackingFrontendGTSAM {
 
     /// References to map
     map: ReadWriteMap,
-    map_scale: f64,
 }
 
 impl Actor for TrackingFrontendGTSAM {
@@ -60,7 +59,6 @@ impl Actor for TrackingFrontendGTSAM {
             current_frame: Frame::new_no_features(-1, None, 0.0, None).expect("Should be able to make dummy frame"),
             curr_frame_id: 0,
             imu_measurements_since_last_kf: ImuMeasurements::new(),
-            map_scale: 1.0,
             frames_since_last_kf: 0,
         };
         tracy_client::set_thread_name!("tracking frontend gtsam");
@@ -105,11 +103,11 @@ impl TrackingFrontendGTSAM {
                     // publish this frame so backend has a reference to the frame associated with the initialization
 
                     // SOFIYA TURN OFF MAP INITIALIZATION
-                    // self.initialize_map(&image, timestamp).unwrap()
+                    self.initialize_map(&image, timestamp).unwrap()
 
                     // When turning back on, comment all this out:
-                    let (keypoints, descriptors) = self.orb_extractor_ini.as_mut().unwrap().extract(& image).unwrap();
-                    let init_pose = Pose::new_with_quaternion_convert(*imu_initialization.as_ref().unwrap().translation, imu_initialization.as_ref().unwrap().rotation);
+                    // let (keypoints, descriptors) = self.orb_extractor_ini.as_mut().unwrap().extract(& image).unwrap();
+                    // let init_pose = Pose::new_with_quaternion_convert(*imu_initialization.as_ref().unwrap().translation, imu_initialization.as_ref().unwrap().rotation);
 
                     // self.current_frame = Frame::new(
                     //     self.curr_frame_id, 
@@ -228,7 +226,6 @@ impl TrackingFrontendGTSAM {
                     // Set current frame's updated info from map initialization
                     self.current_frame.pose = Some(curr_kf_pose);
                     self.current_frame.ref_kf_id = Some(curr_kf_id);
-                    self.map_scale = map_scale;
                     self.state = GtsamFrontendTrackingState::Ok;
 
                     // Log initial pose in shutdown actor
