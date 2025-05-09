@@ -267,19 +267,9 @@ impl MapInitialization {
             _ => {}
         };
 
-        // TODO (mvp): commented this out because I don't think they ever use it??
-        // Compute here initial velocity
-        // let delta_t = self.get_keyframe(&self.last_kf_id).unwrap().pose * self.get_keyframe(&1).unwrap().pose.inverse();
-        // let velocity = false;
-        // Eigen::Vector3f phi = deltaT.so3().log(); need to convert to rust
-        // let initial_frame_ts = inidata.initial_frame.as_ref().unwrap().timestamp;
-        // let curr_frame_ts = inidata.current_frame.as_ref().unwrap().timestamp;
-        // let last_frame_ts = inidata.last_frame.as_ref().unwrap().timestamp;
-        // let aux = (curr_frame_ts - last_frame_ts).to_std().unwrap().as_secs() / (curr_frame_ts - initial_frame_ts).to_std().unwrap().as_secs();
-        // phi *= aux;
-
         // TODO (multimaps)
-        // mpAtlas->GetCurrentMap()->mvpKeyFrameOrigins.push_back(pKFini)
+            // mpAtlas->GetCurrentMap()->mvpKeyFrameOrigins.push_back(pKFini)
+    
         let (curr_kf_pose, relevant_mappoints, curr_kf_timestamp) = {
             let lock = map.read()?;
 

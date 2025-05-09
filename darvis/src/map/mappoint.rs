@@ -208,8 +208,6 @@ impl MapPoint {
         }
     }
     pub(super) fn delete_observation(&mut self, kf_id: &Id) -> bool {
-        // let _span = tracy_client::span!("delete_observation");
-
         // void MapPoint::EraseObservation(KeyFrame* pKF)
         if let Some((left_index, right_index)) = self.observations.get(kf_id) {
             if *left_index != -1 {

@@ -40,7 +40,7 @@ impl Actor for LoopClosing {
     type MapRef = ReadWriteMap;
 
     fn spawn(system: System, map: Self::MapRef) {
-        let imu = match SETTINGS.get::<Sensor>(SYSTEM, "sensor").imu() {
+        let _imu = match SETTINGS.get::<Sensor>(SYSTEM, "sensor").imu() {
             ImuSensor::Some => Some(IMU::new()),
             _ => None
         };

@@ -278,7 +278,6 @@ impl Map {
         // Include that children as new parent candidate for the rest
         let mut continue_loop = false;
 
-        // Nitin ... something here could be wrong?
         while !children1.is_empty() {
             let (mut max, mut child_id, mut parent_id) = (-1, -1, -1);
 
@@ -326,7 +325,6 @@ impl Map {
             // Save keyframe info for trajectory retrieval later
             let pose_relative_to_parent = self.keyframes.get(&kf_id).unwrap().get_pose() * self.keyframes.get(&parent1.unwrap()).unwrap().get_pose().inverse();
 
-            // Nitin ... after keyframe is deleted, its data is saved here
             self.deleted_keyframe_info.insert(kf_id, (parent1.unwrap(), pose_relative_to_parent));
         }
         self.keyframes.remove(&kf_id);
@@ -503,7 +501,6 @@ impl Map {
     }
 
     pub fn get_deleted_keyframe_info(&self, kf: Id) -> (Id, Pose) {
-        // Nitin ... after keyframe is deleted,  access its data here
         * self.deleted_keyframe_info.get(&kf).expect(&format!("Keyframe {} deleted, but its `deleted_keyframe_info` was not saved into the map", kf))
     }
 

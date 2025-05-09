@@ -110,10 +110,6 @@ impl Actor for TrackingBackend {
 impl TrackingBackend {
     fn handle_message(&mut self, message: MessageBox) -> Result<bool, Box<dyn std::error::Error>> {
         if message.is::<FeatureMsg>() {
-            // tracy_client::Client::running()
-            // .expect("message! without a running Client")
-            // .message("Regular tracking", 2);
-
             // Regular tracking. Received from tracking frontend
             if self.system.queue_full() {
                 // Abort additional work if there are too many frames in the msg queue.
@@ -137,7 +133,7 @@ impl TrackingBackend {
 
             let mut imu_measurements = msg.imu_measurements;
             match self.track(&mut imu_measurements) {
-                Ok((created_kf, reset_map)) => {
+                Ok((_created_kf, reset_map)) => {
                     if reset_map {
                         self.last_frame = None;
                         self.ref_kf_id = None;
@@ -151,7 +147,7 @@ impl TrackingBackend {
 
                     match self.state {
                         TrackingState::Ok | TrackingState::RecentlyLost => {
-                            self.update_trajectory_in_logs(created_kf).expect("Could not save trajectory");
+                            self.update_trajectory_in_logs().expect("Could not save trajectory");
                         },
                         _ => {},
                     };
@@ -464,23 +460,11 @@ impl TrackingBackend {
     }
 
     fn update_trajectory_in_logs(
-        &mut self, created_new_kf: bool
+        &mut self
     ) -> Result<(), Box<dyn std::error::Error>> {
         // Store frame pose information to retrieve the complete camera trajectory afterwards.
-
         let relative_pose = {
-            let ref_kf_pose = {//if created_new_kf {
-            //     // If we created a new kf this round, the relative keyframe pose is the same as the current frame pose.
-            //     // We have to do this because ORBSLAM3 creates a new keyframe in tracking whereas we wait until beginning
-            //     // of local mapping. This code is fine, but we might want to make an atomic int in the map containing the
-            //     // latest keyframe inserted in local mapping, rather than sending that as a message from LM to T (current
-            //     // implementation). The way we have it now, we are always one reference keyframe behind because local mapping
-            //     // will insert the kf in the middle of the tracking thread loop, and then tracking will only know about it in
-            //     // the next iteration.
-            //     debug!("CREATED KEYFRAME! Save trajectory, pose is: {:?}", self.current_frame.pose);
-
-            //     self.current_frame.pose.unwrap()
-            // } else {
+            let ref_kf_pose = {
                 let map = self.map.read()?;
                 let ref_kf = map.get_keyframe(self.ref_kf_id.unwrap());
                 ref_kf.get_pose()
@@ -524,7 +508,6 @@ impl TrackingBackend {
         // We perform first an ORB matching with the reference keyframe
         // If enough matches are found we setup a PnP solver
 
-        // println!("TRACK REFERENCe KEYFRAME");
         self.current_frame.compute_bow();
         let nmatches;
         {
@@ -536,7 +519,6 @@ impl TrackingBackend {
 
             nmatches = FEATURE_MATCHING_MODULE.search_by_bow_with_frame(ref_kf, &mut self.current_frame, true, 0.7)?;
             // debug!("Tracking search by bow: {} matches / {} matches in keyframe {}. ({} total mappoints in map)", nmatches, ref_kf.get_mp_matches().iter().filter(|item| item.is_some()).count(), ref_kf.id, map_read_lock.mappoints.len());
-
         }
 
         if nmatches < 15 {
@@ -545,7 +527,6 @@ impl TrackingBackend {
         }
 
         self.current_frame.pose = Some(self.last_frame.as_ref().unwrap().pose.unwrap());
-        // println!("Track reference keyframe, set current frame pose to last frame pose: {:?}", self.last_frame.as_ref().unwrap().pose.unwrap());
 
         optimizer::optimize_pose(&mut self.current_frame, &self.map)?;
 
@@ -571,9 +552,6 @@ impl TrackingBackend {
 
         // Update last frame pose according to its reference keyframe
         // Create "visual odometry" points if in Localization Mode
-        // println!("TRACK MOTION MODEL");
-
-        // println!("TRACK MOTION MODEL");
         self.update_last_frame()?;
 
         let enough_frames_to_reset_imu = self.current_frame.frame_id > self.relocalization.last_reloc_frame_id + (self.frames_to_reset_imu as i32);
@@ -586,56 +564,16 @@ impl TrackingBackend {
                 .message("Predict state last keyframe", 2);
 
                 self.imu.predict_state_last_keyframe(& self.map, &mut self.current_frame, self.map.read()?.last_kf_id)?;
-                // println!("Track motion model, initial pose prediction: {:?}", self.current_frame.pose.unwrap());
-                // println!("Last frame pose is: {:?}", self.last_frame.as_ref().unwrap().pose.unwrap());
-                // println!("Last keyframe is {}, pose is: {:?}", self.ref_kf_id.unwrap(), self.map.read()?.get_keyframe(self.ref_kf_id.unwrap()).get_pose());
-
-                // {
-                //     let curr_pose = self.current_frame.pose.unwrap().get_translation();
-                //     let last_frame_pose = self.last_frame.as_ref().unwrap().pose.unwrap().get_translation();
-                //     let last_kf_pose = self.map.read()?.get_keyframe(self.ref_kf_id.unwrap()).get_pose().get_translation();
-                //     let last_last_kf_pose = self.map.read()?.get_keyframe(self.map.read()?.get_keyframe(self.ref_kf_id.unwrap()).parent.unwrap()).get_pose().get_translation();
-
-                //     println!("Last last keyframe is {}, pose is: {:?}", self.map.read()?.get_keyframe(self.map.read()?.get_keyframe(self.ref_kf_id.unwrap()).parent.unwrap()).id, last_last_kf_pose);
-                //     println!("DISTANCE #1! {:?}", curr_pose.metric_distance(&last_frame_pose));
-                //     println!("DISTANCE #2! {:?}", last_frame_pose.metric_distance(&last_kf_pose));
-                //     println!("DISTANCE #3! {:?}", last_kf_pose.metric_distance(&last_last_kf_pose));
-
-                // }
-                // if self.current_frame.frame_id > 1100 {
-                //     println!("PAUSED, TRACK MOTION MODEL");
-                //     self.system.try_send(VISUALIZER, Box::new(VisTrajectoryMsg{
-                //         pose: self.current_frame.pose.unwrap(),
-                //         mappoint_matches: self.current_frame.mappoint_matches.matches.clone(),
-                //         nontracked_mappoints: self.non_tracked_mappoints.clone(),
-                //         mappoints_in_tracking: self.local_mappoints.clone(),
-                //         timestamp: self.current_frame.timestamp,
-                //         map_version: self.map.read()?.version
-                //     }));
-                //     sleep(Duration::from_millis(100000));
-                // }
-
             } else {
                 tracy_client::Client::running()
                 .expect("message! without a running Client")
                 .message("Predict state last frame", 2);
 
                 self.imu.predict_state_last_frame(&mut self.current_frame, self.last_frame.as_mut().unwrap());
-
-                // println!("PREDICT STATE LAST FRAME!!!!!!!!");
             }
-            // println!("Track motion model, initial pose prediction: {:?}", self.current_frame.pose.unwrap());
-            // println!("Last frame pose is: {:?}", self.last_frame.as_ref().unwrap().pose.unwrap());
-            // println!("Ref kf id is {}, pose is: {:?}", self.ref_kf_id.unwrap(), self.map.read()?.get_keyframe(self.ref_kf_id.unwrap()).get_pose());
 
             return Ok(true);
         } else {
-            // tracy_client::Client::running()
-            // .expect("message! without a running Client")
-            // .message("Predict state constant velocity", 2);
-
-            // debug!("SOFIYA: READ CONSTANT MOTION MODEL VELOCITY: {:?}", self.imu.velocity.unwrap());
-
             self.current_frame.pose = Some(self.imu.velocity.unwrap() * self.last_frame.as_ref().unwrap().pose.unwrap());
         }
 
@@ -779,7 +717,7 @@ impl TrackingBackend {
         // bool Tracking::TrackLocalMap()
         // We have an estimation of the camera pose and some map points tracked in the frame.
         // We retrieve the local map and try to find matches to points in the local map.
-        
+
         {
             let _span = tracy_client::span!("update_local_map");
             self.update_local_keyframes()?;
@@ -790,8 +728,6 @@ impl TrackingBackend {
             Err(e) => warn!("Error in search_local_points: {}", e)
         }
 
-        // println!("Before pose optimization, current frame pose is: {:?}", self.current_frame.pose.unwrap());
-        // println!("Last frame pose is: {:?}", self.last_frame.as_ref().unwrap().pose.unwrap());
         if !self.map.read()?.imu_initialized {
             optimizer::optimize_pose(&mut self.current_frame, &self.map)?;
         } else if self.current_frame.frame_id <= self.relocalization.last_reloc_frame_id + (self.frames_to_reset_imu as i32) {
@@ -800,24 +736,8 @@ impl TrackingBackend {
             // Note: Added constraint_pose_imu check because pose_inertial_optimization_last_keyframe 
             // should be called first to create this on the previous frame, but if the timing doesn't work out
             // then we end up here first
-            // debug!("Mappoint matches: {:?}", self.current_frame.mappoint_matches.matches);
             optimizer::pose_inertial_optimization_last_frame(&mut self.current_frame, &mut self.last_frame.as_mut().unwrap(), & self.track_in_view, &self.map, &self.sensor)?;
         } else {
-            // println!("Current frame id: {}", self.current_frame.frame_id);
-            // if self.current_frame.frame_id > 600 {
-            //     println!("PAUSED AT FRAME {}", self.current_frame.frame_id);
-
-            //     self.system.try_send(VISUALIZER, Box::new(VisTrajectoryMsg{
-            //         pose: self.current_frame.pose.unwrap(),
-            //         mappoint_matches: self.current_frame.mappoint_matches.matches.clone(),
-            //         nontracked_mappoints: self.non_tracked_mappoints.clone(),
-            //         mappoints_in_tracking: self.local_mappoints.clone(),
-            //         timestamp: self.current_frame.timestamp,
-            //         map_version: self.map.read()?.version
-            //     }));
-            //     sleep(Duration::from_millis(100000));
-            // }
-
             optimizer::pose_inertial_optimization_last_keyframe(&mut self.current_frame, & self.track_in_view, &self.map, &self.sensor)?;
         }
 
@@ -865,20 +785,6 @@ impl TrackingBackend {
             },
             _ => {}
         }
-
-        // println!("Current frame id: {}", self.current_frame.frame_id);
-        // if self.matches_inliers == 0 && self.current_frame.frame_id > 1100 {
-        //     println!("PAUSED AT FRAME {}", self.current_frame.frame_id);
-
-        //     self.system.try_send(VISUALIZER, Box::new(VisTrajectoryMsg{
-        //         pose: self.current_frame.pose.unwrap(),
-        //         mappoint_matches: self.current_frame.mappoint_matches.matches.clone(),
-        //         nontracked_mappoints: self.non_tracked_mappoints.clone(),
-        //         mappoints_in_tracking: self.local_mappoints.clone(),
-        //         timestamp: self.current_frame.timestamp
-        //     }));
-        //     sleep(Duration::from_millis(100000));
-        // }
 
         match self.sensor {
             Sensor(FrameSensor::Mono, ImuSensor::Some) => { 
@@ -936,7 +842,6 @@ impl TrackingBackend {
         self.local_keyframes.clear();
         let mut local_kf_vec = Vec::<Id>::new();
 
-        debug!("KF counter: {:?}", kf_counter);
         // All keyframes that observe a map point are included in the local map. Also check which keyframe shares most points
         for (kf_id, count) in kf_counter {
             // Note: Added kf_id > max_kf_id so that we choose the latest keyframe in case of a tie
@@ -1031,7 +936,6 @@ impl TrackingBackend {
                         if self.mp_track_reference_for_frame.get(mp_id) != Some(&self.current_frame.frame_id) {
                             self.local_mappoints.insert(*mp_id);
                             self.mp_track_reference_for_frame.insert(*mp_id, self.current_frame.frame_id);
-                            // debug!("Add mp {} from kf {}", mp_id, kf.id);
                         }
                     }
                 } 
@@ -1072,11 +976,8 @@ impl TrackingBackend {
             }
 
             // Project points in frame and check its visibility
-            let mut last_frame_seen = 0;
-            let mut not_in_frustum = 0;
             for mp_id in &self.local_mappoints {
                 if self.last_frame_seen.get(mp_id) == Some(&self.current_frame.frame_id) {
-                    last_frame_seen += 1;
                     continue;
                 }
 
@@ -1088,8 +989,6 @@ impl TrackingBackend {
                         if tracked_data_left.is_some() || tracked_data_right.is_some() {
                             lock.mappoints.get(&mp_id).unwrap().increase_visible(1);
                             to_match += 1;
-                        } else {
-                            not_in_frustum += 1;
                         }
                         if let Some(d) = tracked_data_left {
                             self.track_in_view.insert(*mp_id, d);
@@ -1108,7 +1007,6 @@ impl TrackingBackend {
                     }
                 };
             }
-            // println!("Search local points: {} local mappoints, {} last frame seen, {} not in frustum, {} to match", self.local_mappoints.len(), last_frame_seen, not_in_frustum, to_match);
         }
 
         if to_match > 0 {
@@ -1148,30 +1046,16 @@ impl TrackingBackend {
             )?;
             debug!("Tracking search local points: {} matches / {} local points. ({} total mappoints in map)", matches, self.local_mappoints.len(), self.map.read()?.mappoints.len());
         } else {
-            // debug!("Current frame id: {}", self.current_frame.frame_id);
-            // debug!("PAUSED AT FRAME {}", self.current_frame.frame_id);
             warn!("ZERO POINTS IN SEARCH LOCAL POINTS!");
-            // if self.current_frame.frame_id > 1100 {
-
-            //     self.system.try_send(VISUALIZER, Box::new(VisTrajectoryMsg{
-            //         pose: self.current_frame.pose.unwrap(),
-            //         mappoint_matches: self.current_frame.mappoint_matches.matches.clone(),
-            //         nontracked_mappoints: self.non_tracked_mappoints.clone(),
-            //         mappoints_in_tracking: self.local_mappoints.clone(),
-            //         timestamp: self.current_frame.timestamp
-            //     }));
-            //     sleep(Duration::from_millis(100000));
-            // }
-
         }
 
         Ok(())
     }
 
     fn create_new_keyframe(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        let _span = tracy_client::span!("create_new_keyframe");
-        //CreateNewKeyFrame
         // Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Tracking.cc#L3216
+        let _span = tracy_client::span!("create_new_keyframe");
+
         let new_frame = Frame::new_clone(& self.current_frame);
         self.last_kf_timestamp = Some(new_frame.timestamp);
         let new_kf_id = self.map.write()?.insert_keyframe_to_map(new_frame, false);
@@ -1181,88 +1065,88 @@ impl TrackingBackend {
 
         if !self.sensor.is_mono() {
             todo!("Stereo");
-        //     mCurrentFrame.UpdatePoseMatrices();
-        //     // cout << "create new MPs" << endl;
-        //     // We sort points by the measured depth by the stereo/RGBD sensor.
-        //     // We create all those MapPoints whose depth < mThDepth.
-        //     // If there are less than 100 close points we create the 100 closest.
-        //     int maxPoint = 100;
-        //     if(mSensor == System::IMU_STEREO || mSensor == System::IMU_RGBD)
-        //         maxPoint = 100;
+            // mCurrentFrame.UpdatePoseMatrices();
+            // // cout << "create new MPs" << endl;
+            // // We sort points by the measured depth by the stereo/RGBD sensor.
+            // // We create all those MapPoints whose depth < mThDepth.
+            // // If there are less than 100 close points we create the 100 closest.
+            // int maxPoint = 100;
+            // if(mSensor == System::IMU_STEREO || mSensor == System::IMU_RGBD)
+            //     maxPoint = 100;
 
-        //     vector<pair<float,int> > vDepthIdx;
-        //     int N = (mCurrentFrame.Nleft != -1) ? mCurrentFrame.Nleft : mCurrentFrame.N;
-        //     vDepthIdx.reserve(mCurrentFrame.N);
-        //     for(int i=0; i<N; i++)
-        //     {
-        //         float z = mCurrentFrame.mvDepth[i];
-        //         if(z>0)
-        //         {
-        //             vDepthIdx.push_back(make_pair(z,i));
-        //         }
-        //     }
+            // vector<pair<float,int> > vDepthIdx;
+            // int N = (mCurrentFrame.Nleft != -1) ? mCurrentFrame.Nleft : mCurrentFrame.N;
+            // vDepthIdx.reserve(mCurrentFrame.N);
+            // for(int i=0; i<N; i++)
+            // {
+            //     float z = mCurrentFrame.mvDepth[i];
+            //     if(z>0)
+            //     {
+            //         vDepthIdx.push_back(make_pair(z,i));
+            //     }
+            // }
 
-        //     if(!vDepthIdx.empty())
-        //     {
-        //         sort(vDepthIdx.begin(),vDepthIdx.end());
+            // if(!vDepthIdx.empty())
+            // {
+            //     sort(vDepthIdx.begin(),vDepthIdx.end());
 
-        //         int nPoints = 0;
-        //         for(size_t j=0; j<vDepthIdx.size();j++)
-        //         {
-        //             int i = vDepthIdx[j].second;
+            //     int nPoints = 0;
+            //     for(size_t j=0; j<vDepthIdx.size();j++)
+            //     {
+            //         int i = vDepthIdx[j].second;
 
-        //             bool bCreateNew = false;
+            //         bool bCreateNew = false;
 
-        //             MapPoint* pMP = mCurrentFrame.mvpMapPoints[i];
-        //             if(!pMP)
-        //                 bCreateNew = true;
-        //             else if(pMP->Observations()<1)
-        //             {
-        //                 bCreateNew = true;
-        //                 mCurrentFrame.mvpMapPoints[i] = static_cast<MapPoint*>(NULL);
-        //             }
+            //         MapPoint* pMP = mCurrentFrame.mvpMapPoints[i];
+            //         if(!pMP)
+            //             bCreateNew = true;
+            //         else if(pMP->Observations()<1)
+            //         {
+            //             bCreateNew = true;
+            //             mCurrentFrame.mvpMapPoints[i] = static_cast<MapPoint*>(NULL);
+            //         }
 
-        //             if(bCreateNew)
-        //             {
-        //                 Eigen::Vector3f x3D;
+            //         if(bCreateNew)
+            //         {
+            //             Eigen::Vector3f x3D;
 
-        //                 if(mCurrentFrame.Nleft == -1){
-        //                     mCurrentFrame.UnprojectStereo(i, x3D);
-        //                 }
-        //                 else{
-        //                     x3D = mCurrentFrame.UnprojectStereoFishEye(i);
-        //                 }
+            //             if(mCurrentFrame.Nleft == -1){
+            //                 mCurrentFrame.UnprojectStereo(i, x3D);
+            //             }
+            //             else{
+            //                 x3D = mCurrentFrame.UnprojectStereoFishEye(i);
+            //             }
 
-        //                 MapPoint* pNewMP = new MapPoint(x3D,pKF,mpAtlas->GetCurrentMap());
-        //                 pNewMP->AddObservation(pKF,i);
+            //             MapPoint* pNewMP = new MapPoint(x3D,pKF,mpAtlas->GetCurrentMap());
+            //             pNewMP->AddObservation(pKF,i);
 
-        //                 //Check if it is a stereo observation in order to not
-        //                 //duplicate mappoints
-        //                 if(mCurrentFrame.Nleft != -1 && mCurrentFrame.mvLeftToRightMatch[i] >= 0){
-        //                     mCurrentFrame.mvpMapPoints[mCurrentFrame.Nleft + mCurrentFrame.mvLeftToRightMatch[i]]=pNewMP;
-        //                     pNewMP->AddObservation(pKF,mCurrentFrame.Nleft + mCurrentFrame.mvLeftToRightMatch[i]);
-        //                     pKF->AddMapPoint(pNewMP,mCurrentFrame.Nleft + mCurrentFrame.mvLeftToRightMatch[i]);
-        //                 }
+            //             //Check if it is a stereo observation in order to not
+            //             //duplicate mappoints
+            //             if(mCurrentFrame.Nleft != -1 && mCurrentFrame.mvLeftToRightMatch[i] >= 0){
+            //                 mCurrentFrame.mvpMapPoints[mCurrentFrame.Nleft + mCurrentFrame.mvLeftToRightMatch[i]]=pNewMP;
+            //                 pNewMP->AddObservation(pKF,mCurrentFrame.Nleft + mCurrentFrame.mvLeftToRightMatch[i]);
+            //                 pKF->AddMapPoint(pNewMP,mCurrentFrame.Nleft + mCurrentFrame.mvLeftToRightMatch[i]);
+            //             }
 
-        //                 pKF->AddMapPoint(pNewMP,i);
-        //                 pNewMP->ComputeDistinctiveDescriptors();
-        //                 pNewMP->UpdateNormalAndDepth();
-        //                 mpAtlas->AddMapPoint(pNewMP);
+            //             pKF->AddMapPoint(pNewMP,i);
+            //             pNewMP->ComputeDistinctiveDescriptors();
+            //             pNewMP->UpdateNormalAndDepth();
+            //             mpAtlas->AddMapPoint(pNewMP);
 
-        //                 mCurrentFrame.mvpMapPoints[i]=pNewMP;
-        //                 nPoints++;
-        //             }
-        //             else
-        //             {
-        //                 nPoints++;
-        //             }
+            //             mCurrentFrame.mvpMapPoints[i]=pNewMP;
+            //             nPoints++;
+            //         }
+            //         else
+            //         {
+            //             nPoints++;
+            //         }
 
-        //             if(vDepthIdx[j].first>mThDepth && nPoints>maxPoint)
-        //             {
-        //                 break;
-        //             }
-        //         }
-        //     }
+            //         if(vDepthIdx[j].first>mThDepth && nPoints>maxPoint)
+            //         {
+            //             break;
+            //         }
+            //     }
+            // }
         }
 
         self.current_frame.ref_kf_id = Some(new_kf_id);
@@ -1272,7 +1156,7 @@ impl TrackingBackend {
         .expect("message! without a running Client")
         .message("create new keyframe", 2);
 
-        println!("Created new keyframe with pose {:?}", self.current_frame.pose.unwrap());
+        debug!("Created new keyframe with pose {:?}", self.current_frame.pose.unwrap());
 
         // KeyFrame created here and inserted into map
         self.system.send(
@@ -1346,8 +1230,6 @@ impl TrackingBackend {
         // Condition 2: Few tracked points compared to reference keyframe. Lots of visual odometry compared to map matches.
         let c2 = (((self.matches_inliers as f32) < (tracked_mappoints * th_ref_ratio) || need_to_insert_close)) && self.matches_inliers > 15;
 
-        // println!("c2: {}, inliers: {}, tracked mappoints: {}, th ref ratio: {}", c2, self.matches_inliers, tracked_mappoints, th_ref_ratio);
-
         // Temporal condition for Inertial cases
         let close_to_last_kf = match self.last_kf_timestamp {
             Some(timestamp) => self.current_frame.timestamp - timestamp >= 0.5, // 500 milliseconds
@@ -1372,12 +1254,12 @@ impl TrackingBackend {
         // Note: removed code here about checking for idle local mapping and/or interrupting bundle adjustment
         let create_new_kf =  ((c1a||c1b||c1c) && c2)||c3 ||c4 || c5;
 
-        // println!("NEED NEW KF? {}", create_new_kf);
-        // println!("More than maxkeyframes passed: {}", c1a);
-        // println!("More than minkeyframes passed and local mapping idle: {}", c1b);
-        // println!("Tracking is weak: {} (matches inliers: {}, tracked_mappoints: {}, tracked close: {}, tracked non close: {}", c1c, self.matches_inliers, tracked_mappoints, tracked_close, non_tracked_close);
-        // println!("Few tracked points compared to reference keyframe: {}", c2);
-        // println!("Recently lost! {}", c5);
+        // debug!("NEED NEW KF? {}", create_new_kf);
+        // debug!("More than maxkeyframes passed: {}", c1a);
+        // debug!("More than minkeyframes passed and local mapping idle: {}", c1b);
+        // debug!("Tracking is weak: {} (matches inliers: {}, tracked_mappoints: {}, tracked close: {}, tracked non close: {}", c1c, self.matches_inliers, tracked_mappoints, tracked_close, non_tracked_close);
+        // debug!("Few tracked points compared to reference keyframe: {}", c2);
+        // debug!("Recently lost! {}", c5);
 
         // tracy_client::Client::running()
         //     .expect("message! without a running Client")
@@ -1400,11 +1282,6 @@ impl TrackingBackend {
         let imu_bias = msg.imu_bias;
         let current_kf_id = msg.current_kf_id;
         let expected_map_version = msg.map_version;
-        // println!("IMU: Updateframeimu, Set bias for KF {}, scale is {}, bias is {}", current_kf_id, scale, imu_bias);
-        // Map * pMap = pCurrentKeyFrame->GetMap();
-        // unsigned int index = mnFirstFrameId;
-        // list<ORB_SLAM3::KeyFrame*>::iterator lRit = mlpReferences.begin();
-        // list<bool>::iterator lbL = mlbLost.begin(); // todo this is always true??
 
         let lock = self.map.read()?;
 

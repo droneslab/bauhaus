@@ -160,7 +160,7 @@ impl KeyFrame {
 
     pub fn get_right_camera_center(&self) -> DVVector3<f64> {
         todo!("Stereo");
-        // NOt sure what mTlr is, it comes from the settings but might get updated somewhere.
+        // Not sure what mTlr is, it comes from the settings but might get updated somewhere.
         //    return (mTwc * mTlr).translation();
         // this needs to be generic on sensor, so it can't be called if the sensor doesn't have a right camera
     }
@@ -280,18 +280,6 @@ impl MapPointMatches {
             None => None
         }
     }
-
-    // pub fn delete_with_id(&mut self, mp_id: Id) {
-    //     for index in 0..self.matches.len() {
-    //         if let Some((id, _)) = self.matches[index] {
-    //             if id == mp_id {
-    //                 self.matches[index] = None;
-    //                 self.debug_count -= 1;
-    //                 return
-    //             }
-    //         }
-    //     }
-    // }
 
     pub fn delete_at_indices(&mut self, indices: (i32, i32)) -> (Option<(Id, bool)>, Option<(Id, bool)>) {
         // Indices are (left, right). Right should be -1 for mono. Maybe we can rewrite this to make it more clear?

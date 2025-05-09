@@ -47,11 +47,9 @@ impl ActorMessage for ImageMsg {
 }
 pub struct FeatureTracksAndIMUMsg {
     pub frame: Frame,
-    // pub preintegration_results: PreintegratedCombinedMeasurementsResults,
     pub imu_measurements: ImuMeasurements,
     pub imu_initialization: Option<ImuInitializationData>,
     pub feature_tracks: TrackedFeatures,
-    // pub curr_kf_features_map: TrackedFeaturesIndexMap,
 }
 impl ActorMessage for FeatureTracksAndIMUMsg {
     fn get_map_version(&self) -> u64 {
@@ -160,9 +158,6 @@ impl ActorMessage for NewKeyFrameMsg {
 pub struct NewKeyFrameGTSAMMsg {
     pub keyframe: Frame,
     pub tracking_state: TrackingState,
-    // pub tracked_mappoint_depths: HashMap<Id, f64>,
-    // pub feature_tracks: TrackedFeatures,
-    // pub curr_kf_features_map: TrackedFeaturesIndexMap,
     pub map_version: u64
 }
 impl ActorMessage for NewKeyFrameGTSAMMsg {

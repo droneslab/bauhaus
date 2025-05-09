@@ -121,9 +121,8 @@ impl CameraModule for Camera {
     }
 
     fn epipolar_constrain(&self, kp1: &KeyPoint, kp2: &KeyPoint, r12: &DVMatrix3<f64>, t12: &DVVector3<f64>, unc: f32) -> bool {
-        // let _span = tracy_client::span!("epipolar_constrain");
-
         // bool Pinhole::epipolarConstrain(GeometricCamera* pCamera2,  const cv::KeyPoint &kp1, const cv::KeyPoint &kp2, const Eigen::Matrix3f& R12, const Eigen::Vector3f& t12, const float sigmaLevel, const float unc) {
+
         //Compute Fundamental Matrix
         let rot = **r12;
         let trans = *t12;

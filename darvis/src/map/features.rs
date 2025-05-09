@@ -301,20 +301,17 @@ impl Features {
         let min_cell_y = i64::max(0, ((y-min_y-factor_y)*grid_element_height_inv).floor() as i64);
         let max_cell_y = i64::min((self.frame_grid_rows-1) as i64, ((y-min_y+factor_y)*grid_element_height_inv).ceil() as i64);
 
-        // println!("Min_cell_x: {}, x: {}, min_x: {}, factor_x: {}, grid_element_width_inv: {}", min_cell_x, x, min_x, factor_x, grid_element_width_inv);
-
         if !self.is_in_image(min_cell_x as f64, min_cell_y as f64) || !self.is_in_image(max_cell_x as f64, max_cell_y as f64) {
             return indices;
         }
 
         let check_levels = levels.is_some() && (levels.unwrap().0>0 || levels.unwrap().1>=0);
 
-        // debug!("Get features in area... min cell x: {}, max cell x: {}, min cell y: {}, max cell y: {}", min_cell_x, max_cell_x, min_cell_y, max_cell_y);
         for ix in min_cell_x..max_cell_x + 1 {
             for iy in min_cell_y..max_cell_y + 1 {
                 let v_cell  =&self.grid[ix as usize][iy as usize];
                 // TODO (STEREO) 
-                //const vector<size_t> vCell = (!bRight) ? mGrid[ix][iy] : mGridRight[ix][iy];
+                    //const vector<size_t> vCell = (!bRight) ? mGrid[ix][iy] : mGridRight[ix][iy];
 
                 if v_cell.is_empty() {
                     continue;

@@ -379,11 +379,7 @@ impl DarvisVisualizer {
             self.draw_mappoints(&msg.mappoints_in_tracking, &msg.mappoint_matches, msg.timestamp).await?;
         }
 
-        // if SETTINGS.get::<bool>(VISUALIZER, "draw_graph") {
-        //     self.draw_connected_kfs(msg.timestamp).await;
-        // }
         self.current_update_id += 1;
-        // self.prev_pose = msg.pose.into();
         Ok(())
     }
 
@@ -405,8 +401,6 @@ impl DarvisVisualizer {
                 TRACKING_TRAJECTORY_COLOR.clone()
             )
         );
-
-        // println!("TRAJECTORY POSE: {:?}", inverse_frame_pose);
 
         if self.prev_poses.len() > 0 {
             let mut curr_pose = frame_pose;
@@ -453,8 +447,6 @@ impl DarvisVisualizer {
     }
 
     async fn draw_trajectory(&mut self, frame_pose: Pose, timestamp: Timestamp, draw_graph: bool) -> Result<(), Box<dyn std::error::Error>> {
-        // debug!("Drawing trajectory at timestamp {} with pose {:?}", timestamp, frame_pose.inverse());
-
         self.clear_scene(timestamp, TRAJECTORY_CHANNEL).await.expect("Could not clear scene");
 
         let mut entities_graph = vec![]; // connected keyframes graph

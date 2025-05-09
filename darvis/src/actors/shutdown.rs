@@ -89,8 +89,6 @@ impl ShutdownActor {
 
             match file_camera {
                 Ok(file) => {
-                    // Nitin ... printing trajectory
-                    // Look at void System::SaveTrajectoryEuRoC(const string &filename) in System.cc
                     let mut f = BufWriter::new(file);
                     let lock = self.map.read().unwrap();
 
@@ -108,13 +106,6 @@ impl ShutdownActor {
                     // We need to get first the keyframe pose and then concatenate the relative transformation.
                     // Frames not localized (tracking failure) are not saved.
 
-                    // For each frame we have a reference keyframe (lRit), the timestamp (lT) and a flag
-                    // which is true when tracking failed (lbL).
-                    // list<ORB_SLAM3::KeyFrame*>::iterator lRit = mpTracker->mlpReferences.begin();
-                    // list<double>::iterator lT = mpTracker->mlFrameTimes.begin();
-                    // list<bool>::iterator lbL = mpTracker->mlbLost.begin();
-
-
                     for i in 0..self.trajectory_poses.len() {
                         let mut ref_kf = self.trajectory_keyframes[i];
                         let mut trw = Pose::default();
@@ -130,7 +121,6 @@ impl ShutdownActor {
                         }
 
                         trw = trw * lock.get_keyframe(ref_kf).get_pose() * twb; // Tcp*Tpw*Twb0=Tcb0 where b0 is the new world reference
-
 
                         if self.sensor.is_imu() {
                             let twc = (imu_calib.as_ref().unwrap().tbc * self.trajectory_poses[i] * trw).inverse();
@@ -160,37 +150,6 @@ impl ShutdownActor {
                         }
 
                     }
-
-
-
-                //     for i in 0..self.trajectory_poses.len() {
-
-                //         let trw = Pose::default();
-                //         let ref_kf_id = self.trajectory_keyframes[i];
-                //         while !lock.has_keyframe(ref_kf_id) {
-
-                //         }
-
-                //         if !lock.has_keyframe(self.trajectory_keyframes[i] as i32) {
-                //             trw = trw * pkf.mtcp;
-                //             pkf = pkf.get_parent();
-                //         }
-
-                //         trw = trw * pkf.get_pose() * twb;  // Tcp*Tpw*Twb0=Tcb0 where b0 is the new world reference
-
-
-
-                //         let pose = self.trajectory_poses[i];
-                //         let trans = pose.get_translation();
-                //         let rot = pose.get_quaternion();
-                //         let string = format!(
-                //             "{} {:.6} {:.7} {:.7} {:.7} {:.7} {:.7} {:.7}\n", 
-                //             self.trajectory_times[i] * 1e9, 
-                //             trans[0], trans[1], trans[2],
-                //             rot[0], rot[1], rot[2], rot[3]
-                //         );
-                //         write!(f, "{}", string).expect("unable to write");
-                //     }
                 },
                 Err(_) => {
                     warn!("Could not create trajectory file {:?}", Path::new(&self.results_folder).join(&self.camera_trajectory_filename));
@@ -201,22 +160,23 @@ impl ShutdownActor {
                 Ok(file) =>{
                     let mut f = BufWriter::new (file);
 
-                    for id in 0..map.num_keyframes() {
+                    let mut id = 0;
+                    let mut count = 0;
+                    while count < map.num_keyframes() {
                         if map.has_keyframe(id as i32) {
                             let kf = map.get_keyframe(id as i32);
-                            if self.sensor.is_imu() {
-                                todo!("IMU");
-                                // Sophus::SE3f Twb = pKF->GetImuPose();
-                                // Eigen::Quaternionf q = Twb.unit_quaternion();
-                                // Eigen::Vector3f twb = Twb.translation();
-                                // f << setprecision(6) << 1e9*pKF->mTimeStamp  << " " <<  setprecision(9) << twb(0) << " " << twb(1) << " " << twb(2) << " " << q.x() << " " << q.y() << " " << q.z() << " " << q.w() << endl;
+                            // if self.sensor.is_imu() {
+                            //     todo!("IMU");
+                            //     // Sophus::SE3f Twb = pKF->GetImuPose();
+                            //     // Eigen::Quaternionf q = Twb.unit_quaternion();
+                            //     // Eigen::Vector3f twb = Twb.translation();
+                            //     // f << setprecision(6) << 1e9*pKF->mTimeStamp  << " " <<  setprecision(9) << twb(0) << " " << twb(1) << " " << twb(2) << " " << q.x() << " " << q.y() << " " << q.z() << " " << q.w() << endl;
 
-                            } else {
+                            // } else {
+                                println!("For keyframe at timestamp {}, regular pose is {:?}, inverse pose is {:?}", kf.timestamp, kf.get_pose().get_translation(), kf.get_pose().inverse().get_translation());
                                 let pose = kf.get_pose().inverse();
                                 let trans = pose.get_translation();
                                 let rot = pose.get_quaternion();
-
-                                // debug!("Keyframe {} pose: {:?}", id, pose);
 
                                 let string = format!(
                                     "{} {:.6} {:.7} {:.7} {:.7} {:.7} {:.7} {:.7}\n", 
@@ -225,10 +185,12 @@ impl ShutdownActor {
                                     rot[0], rot[1], rot[2], rot[3]
                                 );
                                 write!(f, "{}", string).expect("unable to write");
-                            }
-                        } else {
-                            // debug!("SKIP KEYFRAME {}", id);
+                            // }
+
+                            count += 1;
                         }
+
+                        id += 1;
                     }
                 },
                 Err(_) => {

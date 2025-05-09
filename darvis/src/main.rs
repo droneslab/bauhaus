@@ -479,30 +479,10 @@ fn setup_logger(level: &str) -> Result<(), fern::InitError> {
             .create(true)
             .open(Path::new(&results_folder).join("output.log"))?
         );
-        
-    // let trace_output = fern::Dispatch::new()
-    //     .level(log::LevelFilter::Trace)
-    //     .format(move |out, message, record| {
-    //         out.finish(format_args!(
-    //             "[{time} {target}:{line_num} {level}] {message}",
-    //             time = (chrono::Local::now() - start_time).num_milliseconds() as f64  / 1000.0,
-    //             target = record.file().unwrap_or("unknown"),
-    //             line_num = record.line().unwrap_or(0),
-    //             level = record.level(),
-    //             message = message
-    //         ))
-    //     })
-    //     .chain(OpenOptions::new()
-    //         .write(true)
-    //         .truncate(true)
-    //         .create(true)
-    //         .open(Path::new(&results_folder).join("trace.log"))?
-    //     );
 
     fern::Dispatch::new()
     .chain(terminal_output)
     .chain(file_output)
-    // .chain(trace_output)
     .apply()?;
 
 

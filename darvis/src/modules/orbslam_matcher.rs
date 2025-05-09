@@ -4,7 +4,7 @@ use std::f64::INFINITY;
 use core::config::SETTINGS;
 use core::matrix::{DVVector3, DVVectorOfPoint2f};
 use core::sensor::{Sensor, FrameSensor};
-use log::{debug, error};
+use log::{debug, error, warn};
 use opencv::core::KeyPoint;
 use opencv::prelude::*;
 use crate::actors::tracking_backend::TrackedMapPointData;
@@ -420,7 +420,7 @@ impl SearchForInitializationTrait for ORBMatcher {
             );
 
             if v_indices2.is_empty() {
-                println!("v_indices2 is empty");
+                warn!("v_indices2 is empty");
                 continue;
             }
 
@@ -946,10 +946,6 @@ impl FeatureMatchingModule for ORBMatcher {
             let mut best_dist = std::i32::MAX;
             let mut best_idx = -1;
             for idx in indices { 
-                // if matches.get(&(idx as usize)).is_some() {
-                //     n_has_match += 1;
-                //     continue;
-                // }
                 let kp_level = kf.features.get_octave(idx as usize);
                 if kp_level < n_predicted_level - 1 || kp_level > n_predicted_level {
                     n_levels += 1;
@@ -1087,8 +1083,6 @@ impl FeatureMatchingModule for ORBMatcher {
                 num_matches += 1;
             }
         }
-
-        // debug!("...Search by projection for loop detection stats:  already found {}, depth {}, not in image {}, wrong dist {}, viewing angle {}, indices {}, has match {}, levels {}, final dist too low {}", n_already_found, n_depth, n_not_in_image, n_wrong_dist, n_viewing_angle, n_indices, n_has_match, n_levels, n_final_dist_too_low);
 
         Ok(num_matches)
 

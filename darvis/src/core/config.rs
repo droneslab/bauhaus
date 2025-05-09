@@ -418,7 +418,6 @@ fn add_setting_string(namespace: &str, key: &str, value: &Yaml) {
 }
 fn add_setting_imu_matrix(namespace: &str, key: &str, matrix_rows: Vec<&Yaml>) {
     // This is so hacky ... doesn't accept different-sized matrixes than 4x4
-
     let mut array = [[0f64; 4]; 4];
     for row in 0..4 {
         let curr_matrix_row = matrix_rows[row].as_vec().unwrap();
@@ -427,7 +426,6 @@ fn add_setting_imu_matrix(namespace: &str, key: &str, matrix_rows: Vec<&Yaml>) {
         }
     }
 
-    // let mat = opencv::core::Mat::from_slice_2d(& array).expect("Failed to create matrix");
     let mat = nalgebra::Matrix4::from(array);
     let matrix: DVMatrix4<f64> = DVMatrix4::<f64>::new(mat);
 

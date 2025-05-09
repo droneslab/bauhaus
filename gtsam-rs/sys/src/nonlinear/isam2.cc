@@ -11,6 +11,11 @@ namespace gtsam
 
     void update_noresults(ISAM2 &isam2, const NonlinearFactorGraph &graph, const Values &initial_values)
     {
+        // std::cout << "Initial values: ";
+        // initial_values.print();
+        // std::cout << std::endl << "Graph: ";
+        // graph.print();
+
         ISAM2Result result = isam2.update(graph, initial_values);
     }
 

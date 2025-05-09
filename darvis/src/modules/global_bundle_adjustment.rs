@@ -123,10 +123,6 @@ impl FullMapOptimizationModule for GlobalBundleAdjustment {
                     kf.gba_pose = Some(pose);
                     kf.ba_global_for_kf = loop_kf;
                 }
-                // // Possible that map actor deleted mappoint after local BA has finished but before
-                // // this message is processed
-                // println!("GBA: KF {} is deleted?", kf_id);
-                // continue;
             }
 
             for (mp_id, vertex_id) in mp_vertex_ids {
@@ -291,7 +287,6 @@ pub fn full_inertial_ba(
             let vp2_id = kf.id;
             let vv2_id = max_kf_id + 3 * kf.id + 1;
 
-            // debug!("(all of them) {} {} {} {} {} {} ", vp1_id, vv1_id, vg1_id, va1_id, vp2_id, vv2_id);
             optimizer.pin_mut().add_edge_inertial(
                 vp1_id,
                 vv1_id,
@@ -318,7 +313,6 @@ pub fn full_inertial_ba(
     {
         let mut lock = map.write()?;
         for (id, preintegrated) in new_imu_preintegrated_for_kfs {
-            // debug!("SET KF {} IMU PREINTEGRATED", id);
             lock.get_keyframe_mut(id).imu_data.imu_preintegrated = Some(preintegrated);
         }
     }
@@ -545,7 +539,6 @@ pub fn full_inertial_ba(
                 let mp = lock.mappoints.get_mut(&mp_id).unwrap();
                 mp.gba_pose = Some(pos);
                 mp.ba_global_for_kf = loop_id;
-                // debug!("(baglobal) set in fiba, for mp {}: {}", mp.id, loop_id);
             }
         }
     }

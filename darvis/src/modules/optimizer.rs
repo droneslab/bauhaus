@@ -227,14 +227,6 @@ pub fn pose_inertial_optimization_last_frame(
 
     if previous_frame.imu_data.constraint_pose_imu.is_some() {
         let cpi = previous_frame.imu_data.constraint_pose_imu.as_ref().unwrap();
-        println!("In rust....");
-        println!("Rwb: {:?}", cpi.rwb);
-        println!("twb: {:?}", cpi.twb);
-        println!("vwb: {:?}", cpi.vwb);
-        println!("bg: {:?}", cpi.bg);
-        println!("ba: {:?}", cpi.ba);
-        println!("h: {:?}", cpi.h);
-
         optimizer.pin_mut().add_edge_prior_pose_imu(
             vpk, vvk, vgk, vak,
             (&cpi.rwb).into(), cpi.twb.into(), cpi.vwb.into(), cpi.bg.into(), cpi.ba.into(), cpi.h.into(),
@@ -372,8 +364,6 @@ pub fn pose_inertial_optimization_last_frame(
         }
     }
 
-    // num_inliers = num_inliers_mono + num_inliers_stereo;
-
     // Recover optimized pose, velocity and biases
     let recovered_pose: Pose = optimizer.recover_optimized_vertex_pose(vp, VertexPoseRecoverType::Wb).into();
     let recovered_velocity = optimizer.recover_optimized_vertex_velocity(vv);
@@ -468,8 +458,6 @@ pub fn pose_inertial_optimization_last_frame(
         recovered_bias,
         final_h
     )).unwrap();
-        // pFrame->mpcpi = new ConstraintPoseImu(VP->estimate().Rwb,VP->estimate().twb,VV->estimate(),VG->estimate(),VA->estimate(),H.block<15,15>(15,15));
-    println!("Add mpcpi for frame {}", frame.frame_id);
 
     previous_frame.imu_data.constraint_pose_imu = None;
 
@@ -482,8 +470,6 @@ pub fn pose_inertial_optimization_last_keyframe(
 ) -> Result<i32, Box<dyn std::error::Error> > {
     // int Optimizer::PoseInertialOptimizationLastKeyFrame(Frame *pFrame, bool bRecInit)
     // but bRecInit is always set to false
-
-    debug!("POSE INERTIAL OPTIMIZATION LAST KEYFRAME!");
 
     let fx= SETTINGS.get::<f64>(CAMERA, "fx");
     let fy= SETTINGS.get::<f64>(CAMERA, "fy");
@@ -682,11 +668,9 @@ pub fn pose_inertial_optimization_last_keyframe(
                 frame.mappoint_matches.set_outlier(mp_idx as usize, true);
                 edge.inner.pin_mut().set_level(1);
                 num_bad += 1;
-                // println!("SET LEVEL {}, CHI2 {}, IS CLOSE {}, IS DEPTH POSITIVE {}", 1, chi2, is_close, edge.inner.is_depth_positive());
             } else {
                 frame.mappoint_matches.set_outlier(mp_idx as usize, false);
                 edge.inner.pin_mut().set_level(0);
-                // println!("SET LEVEL {}, CHI2 {}, IS CLOSE {}, IS DEPTH POSITIVE {}", 0, chi2, is_close, edge.inner.is_depth_positive());
             }
 
             if iteration == 2 {
@@ -789,7 +773,6 @@ pub fn pose_inertial_optimization_last_keyframe(
         bwy: recovered_bias_estimate.vb[1],
         bwz: recovered_bias_estimate.vb[2],
     };
-    debug!("Recovered pose: {:?}, recovered velocity: {:?}, recovered bias: {:?}", recovered_pose, recovered_velocity, recovered_bias);
 
     // Recover Hessian, marginalize keyFframe states and generate new prior for frame
     let mut h = nalgebra::SMatrix::<f64, 15, 15>::zeros();
@@ -806,7 +789,6 @@ pub fn pose_inertial_optimization_last_keyframe(
         }
         i += 1;
     }
-    debug!("new H is: {:?}", h);
 
     match sensor.frame() {
         FrameSensor::Stereo => {
@@ -835,8 +817,6 @@ pub fn pose_inertial_optimization_last_keyframe(
         recovered_bias,
         h
     )).unwrap();
-    println!("Add mpcpi for frame {}", frame.frame_id);
-        // pFrame->mpcpi = new ConstraintPoseImu(VP->estimate().Rwb,VP->estimate().twb,VV->estimate(),VG->estimate(),VA->estimate(),H);
 
     return Ok(num_initial_correspondences - num_bad);
 }
@@ -988,9 +968,6 @@ pub fn inertial_optimization_initialization(
     *scale = estimate.scale;
     *rwg = estimate.rwg.into();
 
-    debug!("Rust RWG: {:?}", rwg);
-    // todo sofiya should this be flipped?
-
     let b = ImuBias {
         bax: vb[3],
         bay: vb[4],
@@ -999,8 +976,6 @@ pub fn inertial_optimization_initialization(
         bwy: vb[1],
         bwz: vb[2],
     };
-
-    debug!("IMU init.... RESULT bias: {:?}", b);
 
     //Keyframes velocities and biases
     let mut lock = map.write()?;
@@ -1021,10 +996,6 @@ pub fn inertial_optimization_initialization(
         } else {
             kf.imu_data.set_new_bias(b);
         }
-        
-        debug!("INERTIAL OPTIMIZATION RESULTS.... KF bias {} {:?}", kf.id, kf.imu_data.get_imu_bias());
-        debug!("INERTIAL OPTIMIZATION RESULTS.... KF velocity {} {:?}", kf.id, kf.imu_data.velocity.unwrap());
-
     }
     Ok(())
 }
@@ -1053,7 +1024,6 @@ pub fn inertial_optimization_scale_refinement(map: &ReadWriteMap, rwg: &mut nalg
         for (kf_id, kf) in lock.get_keyframes_iter() {
             add_vertex_pose_keyframe(&mut optimizer, kf, true, kf.id);
 
-            debug!("kf.imu_data.velocity {:?}", kf.imu_data.velocity);
             optimizer.pin_mut().add_vertex_velocity(
                 max_kf_id + kf_id + 1,
                 true,
@@ -1151,8 +1121,6 @@ pub fn optimize_pose(
 ) -> Result<Option<i32>, Box<dyn std::error::Error> > {
     //int Optimizer::PoseOptimization(Frame *pFrame)
     let _span = tracy_client::span!("optimize_pose");
-
-    debug!("REGULAR POSE OPTIMIZATION!");
 
     let sensor: Sensor = SETTINGS.get(SYSTEM, "sensor");
     let fx= SETTINGS.get::<f64>(CAMERA, "fx");
