@@ -350,6 +350,8 @@ mod ffi {
 
         type PreintegrationCombinedParams;
         fn new_preintegrated_combined_params_makesharedu() -> SharedPtr<PreintegrationCombinedParams>;
+        fn new_preintegrated_combined_params_negativeyup() -> SharedPtr<PreintegrationCombinedParams>;
+        fn new_preintegrated_combined_params_positivexup() -> SharedPtr<PreintegrationCombinedParams>;
         fn set_accelerometer_covariance(
             params: &mut SharedPtr<PreintegrationCombinedParams>,
             sigma_a_sq: f64,

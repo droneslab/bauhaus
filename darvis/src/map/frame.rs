@@ -251,15 +251,15 @@ impl Frame {
         res
     }
 
-    pub fn set_imu_pose_velocity(&mut self, new_pose: Pose, vwb: nalgebra::Vector3<f64>) {
+    pub fn set_imu_pose_velocity(&mut self, twb: Pose, vwb: nalgebra::Vector3<f64>) {
         // void Frame::SetImuPoseVelocity(const Eigen::Matrix3f &Rwb, const Eigen::Vector3f &twb, const Eigen::Vector3f &Vwb)
 
         self.imu_data.velocity = Some(DVVector3::new(vwb));
-        let inv_pose = new_pose.inverse(); // Tbw
+        let inv_pose = twb.inverse(); // Tbw
         self.pose = Some(ImuCalib::new().tcb * inv_pose);
 
         println!("Set imu pose velocity.");
-        println!("Initial pose: {:?}",new_pose.get_translation());
+        println!("Initial pose: {:?}",twb.get_translation());
         println!("Inverse pose: {:?}", inv_pose.get_translation());
         println!("Actually set to: {:?}", self.pose.unwrap().get_translation());
     }

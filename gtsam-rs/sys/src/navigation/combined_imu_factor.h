@@ -16,6 +16,9 @@ namespace gtsam
 
 
     std::shared_ptr<PreintegrationCombinedParams> new_preintegrated_combined_params_makesharedu();
+    std::shared_ptr<PreintegrationCombinedParams> new_preintegrated_combined_params_negativeyup();
+    std::shared_ptr<PreintegrationCombinedParams> new_preintegrated_combined_params_positivexup();
+
     void set_accelerometer_covariance(
         std::shared_ptr<PreintegrationCombinedParams> &params,
         double sigma_a_sq);

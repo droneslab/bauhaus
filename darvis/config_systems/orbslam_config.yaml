@@ -9,7 +9,7 @@ system:
       localization_only_mode: false
       vocabulary_file: "../Vocabulary/ORBvoc.txt"
       framesensor: Mono
-      imusensor: None
+      imusensor: Some
       first_actor_name: TRACKING_FRONTEND # Name of actor to kick off pipeline
 
       # FPS

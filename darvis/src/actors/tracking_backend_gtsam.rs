@@ -125,10 +125,21 @@ impl TrackingBackendGTSAM {
             };
 
             // Now that the map is scaled, re-initialize the graph solver
+            // Note (frames): Kf1 pose is Tcw, initialize graph solver with tbw
+            let pose_for_init = {
+                let tcw = kf1_scaled_pose;
+                let tbc = ImuCalib::new().tbc;
+                let tbw = tbc * tcw;
+                tbw
+            };
+            debug!("Sofiya! Initial pose for graph solver: {:?}", pose_for_init);
+            debug!("Sofiya! Initial pose for graph solver original: {:?}", kf1_scaled_pose);
+            debug!("Sofiya! Initial velocity for graph solver: {:?}", kf1_scaled_velocity);
+            
             self.graph_solver = GraphSolver::new();
             self.graph_solver.initialize(
                 kf1_timestamp,
-                kf1_scaled_pose,
+                pose_for_init,
                 kf1_scaled_velocity,
                 init_bias
             ).expect("Failed to initialize?");
@@ -226,7 +237,7 @@ impl TrackingBackendGTSAM {
             self.graph_solver.initialize(
                 kf0.timestamp,
                 kf0_pose,
-                velocity,
+                DVVector3::new_with(0.0, 0.0, 0.0),
                 init_bias
             ).expect("Failed to initialize?");
             self.graph_solver.preintegrate(
@@ -236,7 +247,7 @@ impl TrackingBackendGTSAM {
             ).expect("Could not preintegrate!");
 
             let predicted_pose = {
-                // Note (frames): Predicted state should be Tbw or Twb
+                // Note (frames): Predicted state should be Tbw or Twb (assuming Tbw)
                 let p1 = self.graph_solver.predict_state();
                 println!("PREDICTED POSITION Twb: {:?}", p1.pose);
 
@@ -244,9 +255,8 @@ impl TrackingBackendGTSAM {
                 let p2: Isometry3<f64> = (&p1.pose).into();
                 let p3 = Pose::new_from_isometry(p2);
 
-                // Note (frames): Convert Twb to Tcw (the regular pose saved in keyframe)
-                let inv_pose = p3.inverse(); // Twb -> Tbw
-                let tcw = ImuCalib::new().tcb * inv_pose; // Tbw -> Tcw
+                // Note (frames): Convert Tbw to Tcw (the regular pose saved in keyframe)
+                let tcw = ImuCalib::new().tcb * p3; // Tbw -> Tcw
 
                 println!("PREDICTED POSITION Tcw: {:?}", tcw);
 
@@ -267,7 +277,17 @@ impl TrackingBackendGTSAM {
             let mut map = self.map.write()?;
             map.get_keyframe_mut(1).imu_data.velocity = Some(velocity);
             map.get_keyframe_mut(0).imu_data.velocity = Some(DVVector3::new_with(0.0, 0.0, 0.0));
-            map.apply_scaled_rotation(&Pose::default(), scale,true);
+            // let rotation = Pose::new_with_default_trans(
+            //     nalgebra::Matrix3::from_columns(
+            //         &[
+            //             Vector3::new(0.0, 0.0, -1.0),
+            //             Vector3::new(1.0, 0.0, 0.0),
+            //             Vector3::new(0.0, -1.0, 0.0)
+            //         ]
+            //     )
+            // );
+            let rotation = Pose::default();
+            map.apply_scaled_rotation(&rotation, scale,true);
         }
 
         Ok(())
@@ -483,7 +503,7 @@ impl GraphSolver {
         self.timestamp_lookup.insert(self.ct_state, timestamp_converted);
 
         // Create GTSAM preintegration parameters for use with Foster's version
-        let mut params = PreintegrationCombinedParams::makesharedu();  // Z-up navigation frame: gravity points along negative Z-axis !!!
+        let mut params = PreintegrationCombinedParams::make_positive_x_up(); // Note (frames): Set positive x to up (matching imu frame)
         params.set_gyroscope_covariance(self.gyro_noise_density * self.gyro_noise_density);
         params.set_accelerometer_covariance(self.accel_noise_density * self.accel_noise_density);
         params.set_integration_covariance(self.imu_integration_sigma * self.imu_integration_sigma);

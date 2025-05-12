@@ -103,6 +103,17 @@ impl PreintegrationCombinedParams {
             inner: ::sys::new_preintegrated_combined_params_makesharedu(),
         }
     }
+    pub fn make_negative_y_up() -> Self {
+        Self {
+            inner: ::sys::new_preintegrated_combined_params_negativeyup(),
+        }
+    }
+    pub fn make_positive_x_up() -> Self {
+        Self {
+            inner: ::sys::new_preintegrated_combined_params_positivexup(),
+        }
+    }
+
     pub fn set_accelerometer_covariance(&mut self, sigma_a_sq: f64) {
         ::sys::set_accelerometer_covariance(&mut self.inner, sigma_a_sq);
     }

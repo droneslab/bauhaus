@@ -396,7 +396,7 @@ impl DarvisVisualizer {
             self.create_frame_scene_entity(
                 timestamp, 
                 "world",
-                format!("cam {}", timestamp),
+                format!("cam"),
                 &inverse_frame_pose,
                 TRACKING_TRAJECTORY_COLOR.clone()
             )
@@ -407,7 +407,7 @@ impl DarvisVisualizer {
             let mut i = 0;
             for prev_pose in self.prev_poses.iter().rev() {
                 // Draw line from current pose to previous pose
-                let points = vec![(*prev_pose).into(), curr_pose.into()];
+                let points = vec![(*prev_pose).inverse().into(), curr_pose.inverse().into()];
                 entities_traj.push(
                     self.create_scene_entity(
                         timestamp,
@@ -424,7 +424,7 @@ impl DarvisVisualizer {
                         timestamp, 
                         "world",
                         format!("kf {}", i),
-                        &prev_pose,
+                        &prev_pose.inverse(),
                         TRACKING_TRAJECTORY_COLOR3.clone(),
                     )
                 );

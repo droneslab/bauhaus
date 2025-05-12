@@ -306,6 +306,8 @@ impl ImuModule for IMU {
         {
             if (scale - 1.0).abs() > 0.00001 || !self.sensor.is_mono() {
                 let twg = Pose::new(nalgebra::Vector3::zeros(), *rwg);
+
+                println!("SOFIYA RWG: {:?}", rwg);
                 map.write()?.apply_scaled_rotation(&twg, scale, true);
 
                 tracking_backend.unwrap().send(Box::new(

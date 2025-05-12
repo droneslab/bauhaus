@@ -18,6 +18,19 @@ namespace gtsam
             pose_i, vel_i, pose_j, vel_j, bias_i, bias_j, preintegratedMeasurements);
     }
 
+    std::shared_ptr<PreintegrationCombinedParams> new_preintegrated_combined_params_negativeyup() {
+        return to_std_ptr(
+            boost::shared_ptr<PreintegrationCombinedParams>(new PreintegrationCombinedParams(Vector3(0, -9.81, 0)))
+        );
+    }
+
+    std::shared_ptr<PreintegrationCombinedParams> new_preintegrated_combined_params_positivexup()
+    {
+        return to_std_ptr(
+            boost::shared_ptr<PreintegrationCombinedParams>(new PreintegrationCombinedParams(Vector3(9.81, 0, 0)))
+        );
+    }
+
     std::shared_ptr<PreintegrationCombinedParams> new_preintegrated_combined_params_makesharedu()
     {
         boost::shared_ptr<gtsam::PreintegrationCombinedParams> params;
