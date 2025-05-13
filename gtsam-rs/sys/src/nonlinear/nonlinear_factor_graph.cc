@@ -41,6 +41,7 @@ void nonlinear_factor_graph_add_prior_factor_vector3(
 
 void nonlinear_factor_graph_add_combined_imu_factor(
     NonlinearFactorGraph &graph, const std::shared_ptr<CombinedImuFactor> &factor) {
+    factor->print();
     return graph.add(to_boost_ptr(factor));
 }
 

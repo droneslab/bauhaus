@@ -92,59 +92,61 @@ impl TrackingBackendGTSAM {
             // Need to initialize the factor graph 
 
             // Initialize from gt
-            // let imu_init = msg.imu_initialization.expect("Msg should have imu initialization data!");
-            // self.graph_solver.initialize_with_data(
-            //     msg.frame.timestamp,
-            //     &imu_init
-            // ).expect("Failed to initialize?");
-
-            // self.graph_solver.solver_state = GraphSolverState::Ok;
-            // self.last_timestamp = msg.frame.timestamp;
-
-            // Initialize from map initialization
-            self.scale_map_from_imu(&mut msg)?;
-
-            let (kf1_timestamp, kf1_scaled_pose, kf1_scaled_velocity) = {
-                let map = self.map.read()?;
-                let kf1 = map.get_keyframe(1);
-                let kf1_pose = kf1.get_pose();
-                let kf1_velocity = kf1.imu_data.velocity.unwrap();
-                (kf1.timestamp, kf1_pose, kf1_velocity)
-            };
-            let init_bias = {
-                let imu_init = msg.imu_initialization.as_ref().expect("Msg should have imu initialization data!");
-                ImuBias {
-                    bax: imu_init.acc_bias[0],
-                    bay: imu_init.acc_bias[1],
-                    baz: imu_init.acc_bias[2],
-                    bwx: imu_init.gyro_bias[0],
-                    bwy: imu_init.gyro_bias[1],
-                    bwz: imu_init.gyro_bias[2]
-                }
-            };
-
-            // Now that the map is scaled, re-initialize the graph solver
-            // Note (frames): Kf1 pose is Tcw, initialize graph solver with tbw
-            let pose_for_init = {
-                let tcw = kf1_scaled_pose;
-                let tbc = ImuCalib::new().tbc;
-                let tbw = tbc * tcw;
-                tbw
-            };
-            debug!("Sofiya! Initial pose for graph solver: {:?}", pose_for_init);
-            debug!("Sofiya! Initial pose for graph solver original: {:?}", kf1_scaled_pose);
-            debug!("Sofiya! Initial velocity for graph solver: {:?}", kf1_scaled_velocity);
-            
-            self.graph_solver = GraphSolver::new();
-            self.graph_solver.initialize(
-                kf1_timestamp,
-                pose_for_init,
-                kf1_scaled_velocity,
-                init_bias
+            let imu_init = msg.imu_initialization.expect("Msg should have imu initialization data!");
+            self.graph_solver.initialize_with_data(
+                msg.frame.timestamp,
+                &imu_init
             ).expect("Failed to initialize?");
 
             self.graph_solver.solver_state = GraphSolverState::Ok;
-            self.last_timestamp = kf1_timestamp;
+            self.last_timestamp = msg.frame.timestamp;
+
+            // Initialize from map initialization
+            // self.scale_map_from_imu(&mut msg)?;
+
+            // let (kf1_timestamp, kf1_scaled_pose, kf1_scaled_velocity) = {
+            //     let map = self.map.read()?;
+            //     let kf1 = map.get_keyframe(1);
+            //     let kf1_pose = kf1.get_pose();
+            //     let kf1_velocity = kf1.imu_data.velocity.unwrap();
+            //     (kf1.timestamp, kf1_pose, kf1_velocity)
+            // };
+            // let init_bias = {
+            //     let imu_init = msg.imu_initialization.as_ref().expect("Msg should have imu initialization data!");
+            //     ImuBias {
+            //         bax: -4.8980757128447294e-05, bay:  2.0707564090116648e-06, baz:  4.1218168917112052e-05, bwx: -0.012245224788784981, bwy:  0.023727549239993095, bwz:  0.080935150384902954
+
+            //         // bax: imu_init.acc_bias[0],
+            //         // bay: imu_init.acc_bias[1],
+            //         // baz: imu_init.acc_bias[2],
+            //         // bwx: imu_init.gyro_bias[0],
+            //         // bwy: imu_init.gyro_bias[1],
+            //         // bwz: imu_init.gyro_bias[2]
+            //     }
+            // };
+
+            // // Now that the map is scaled, re-initialize the graph solver
+            // // Note (frames): Kf1 pose is Tcw, initialize graph solver with tbw
+            // let pose_for_init = {
+            //     let tcw = kf1_scaled_pose;
+            //     let tbc = ImuCalib::new().tbc;
+            //     let tbw = tbc * tcw;
+            //     tbw
+            // };
+            // debug!("Sofiya! Initial pose for graph solver: {:?}", pose_for_init);
+            // debug!("Sofiya! Initial pose for graph solver original: {:?}", kf1_scaled_pose);
+            // debug!("Sofiya! Initial velocity for graph solver: {:?}", kf1_scaled_velocity);
+
+            // self.graph_solver = GraphSolver::new();
+            // self.graph_solver.initialize(
+            //     kf1_timestamp,
+            //     pose_for_init,
+            //     kf1_scaled_velocity,
+            //     init_bias
+            // ).expect("Failed to initialize?");
+
+            // self.graph_solver.solver_state = GraphSolverState::Ok;
+            // self.last_timestamp = kf1_timestamp;
 
         } else {
             // If we have previous frames already, can track normally
@@ -473,8 +475,8 @@ impl GraphSolver {
             let velocity: gtsam::base::vector::Vector3 = self.values_initial.get_vector3(&Symbol::new(b'v', self.ct_state + 1)).unwrap().into();
             let vel_raw = velocity.get_raw();
 
-            let reg = Pose::new_from_isometry(updated_pose);
-            let inv = Pose::new_from_isometry(updated_pose.inverse());
+            // let reg = Pose::new_from_isometry(updated_pose);
+            // let inv = Pose::new_from_isometry(updated_pose.inverse());
             // println!("Updated pose inverse: {:?}", inv.get_translation());
             // println!("Updated pose regular: {:?}", reg.get_translation());
 
