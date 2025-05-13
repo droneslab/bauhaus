@@ -529,20 +529,30 @@ impl Map {
         // void Map::ApplyScaledRotation(const Sophus::SE3f &T, const float s, const bool bScaledVel)
         let _span = tracy_client::span!("apply_scaled_rotation");
 
+        println!("T rotation: {:?}", t.get_rotation());
+
         // Body position (IMU) of first keyframe is fixed to (0,0,0)
         for keyframe in self.keyframes.values_mut() {
+            println!("Apply scaled rotation: Previous pose: {:?}", keyframe.get_pose());
+            println!("Apply scaled rotation: Previous velocity: {:?}", keyframe.imu_data.velocity);
+
             let mut twc = keyframe.get_pose().inverse().clone();
             let twc_trans = twc.get_translation();
             twc.set_translation(twc_trans.scale(s));
             let tyc = *t * twc;
             let tcy = tyc.inverse();
             keyframe.set_pose(tcy);
+
             let vw = keyframe.imu_data.velocity.unwrap();
             if !b_scaled_vel {
                 keyframe.imu_data.velocity = Some(DVVector3::new(*t.get_rotation() * *vw));
             } else {
                 keyframe.imu_data.velocity = Some(DVVector3::new(*t.get_rotation() * *vw * s));
             }
+
+            println!("Apply scaled rotation: New pose: {:?}", tcy);
+            println!("Apply scaled rotation: New velocity: {:?}", keyframe.imu_data.velocity);
+
         }
 
         let mp_ids = self.mappoints.keys().cloned().collect::<Vec<Id>>();

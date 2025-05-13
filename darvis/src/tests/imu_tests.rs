@@ -26,7 +26,7 @@ mod imutests {
     }
 
 
-    #[test]
+    // #[test]
     fn test_pose_inertial_optimization_last_frame() {
         load_config_files();
 

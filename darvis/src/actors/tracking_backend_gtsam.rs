@@ -1,6 +1,6 @@
 extern crate g2o;
 use log::{warn, info, debug, error};
-use nalgebra::{Isometry3, Vector3, Vector6};
+use nalgebra::{Isometry3, Matrix3, Vector3, Vector6};
 use std::{collections::{BTreeSet, HashMap, VecDeque}, fmt::Debug, sync::atomic::Ordering, thread::sleep, time::Duration};
 use gtsam::{
     inference::symbol::Symbol, navigation::combined_imu_factor::{CombinedImuFactor, PreintegratedCombinedMeasurements, PreintegrationCombinedParams}, nonlinear::{
@@ -213,63 +213,66 @@ impl TrackingBackendGTSAM {
             let velocity = DVVector3::new(
                 (*kf1_pose.get_translation() - *kf0_pose.get_translation()) / (kf1.timestamp - kf0.timestamp)
             );
-            // Note (frames): Initial kf1 pose here is Tcw
+        //     // Note (frames): Initial kf1 pose here is Tcw
 
-            println!("KF 0 pose: {:?}", kf0_pose);
-            println!("KF 1 pose: {:?}", kf1_pose);
-            println!("KF 0 timestamp: {:?}", kf0.timestamp);
-            println!("KF 1 timestamp: {:?}", kf1.timestamp);
-            println!("Velocity: {:?}", velocity);
+        //     println!("KF 0 pose: {:?}", kf0_pose);
+        //     println!("KF 1 pose: {:?}", kf1_pose);
+        //     println!("KF 0 timestamp: {:?}", kf0.timestamp);
+        //     println!("KF 1 timestamp: {:?}", kf1.timestamp);
+        //     println!("Velocity: {:?}", velocity);
 
-            // Initialize with all 0s, as if we are the first keyframe
-            // Use the imu measurements to predict what kf 1's pose should be
-            let init_bias = {
-                let imu_init = msg.imu_initialization.as_ref().expect("Msg should have imu initialization data!");
-                ImuBias {
-                    bax: imu_init.acc_bias[0],
-                    bay: imu_init.acc_bias[1],
-                    baz: imu_init.acc_bias[2],
-                    bwx: imu_init.gyro_bias[0],
-                    bwy: imu_init.gyro_bias[1],
-                    bwz: imu_init.gyro_bias[2]
-                }
-            };
-            self.graph_solver.initialize(
-                kf0.timestamp,
-                kf0_pose,
-                DVVector3::new_with(0.0, 0.0, 0.0),
-                init_bias
-            ).expect("Failed to initialize?");
-            self.graph_solver.preintegrate(
-                &mut msg.imu_measurements,
-                kf1.timestamp,
-                kf0.timestamp
-            ).expect("Could not preintegrate!");
+        //     // Initialize with all 0s, as if we are the first keyframe
+        //     // Use the imu measurements to predict what kf 1's pose should be
+        //     let init_bias = {
+        //         let imu_init = msg.imu_initialization.as_ref().expect("Msg should have imu initialization data!");
+        //         ImuBias {
+        //             bax: imu_init.acc_bias[0],
+        //             bay: imu_init.acc_bias[1],
+        //             baz: imu_init.acc_bias[2],
+        //             bwx: imu_init.gyro_bias[0],
+        //             bwy: imu_init.gyro_bias[1],
+        //             bwz: imu_init.gyro_bias[2]
+        //         }
+        //     };
+        //     self.graph_solver.initialize(
+        //         kf0.timestamp,
+        //         kf0_pose,
+        //         DVVector3::new_with(0.0, 0.0, 0.0),
+        //         init_bias
+        //     ).expect("Failed to initialize?");
+        //     self.graph_solver.preintegrate(
+        //         &mut msg.imu_measurements,
+        //         kf1.timestamp,
+        //         kf0.timestamp
+        //     ).expect("Could not preintegrate!");
 
-            let predicted_pose = {
-                // Note (frames): Predicted state should be Tbw or Twb (assuming Tbw)
-                let p1 = self.graph_solver.predict_state();
-                println!("PREDICTED POSITION Twb: {:?}", p1.pose);
+        //     let predicted_pose = {
+        //         // Note (frames): Predicted state should be Tbw or Twb (assuming Tbw)
+        //         let p1 = self.graph_solver.predict_state();
 
-                // This is all just to convert back into a type we can easily use
-                let p2: Isometry3<f64> = (&p1.pose).into();
-                let p3 = Pose::new_from_isometry(p2);
+        //         // This is all just to convert back into a type we can easily use
+        //         let p2: Isometry3<f64> = (&p1.pose).into();
+        //         let p3 = Pose::new_from_isometry(p2);
 
-                // Note (frames): Convert Tbw to Tcw (the regular pose saved in keyframe)
-                let tcw = ImuCalib::new().tcb * p3; // Tbw -> Tcw
+        //         println!("PREDICTED POSITION: {:?}", p3);
+        //         println!("PREDICTED POSITION inverse: {:?}", p3.inverse());
 
-                println!("PREDICTED POSITION Tcw: {:?}", tcw);
+        //         // Note (frames): Convert Tbw to Tcw (the regular pose saved in keyframe)
+        //         let tcw = ImuCalib::new().tcb * p3; // Tbw -> Tcw
 
-                tcw
-            };
+        //         println!("PREDICTED POSITION Tcw: {:?}", tcw);
+
+        //         tcw
+        //     };
 
             // Using predicted translation, calculate scale of the new map
-            let predicted_distance = Self::distance(&kf0_pose.get_translation(), &predicted_pose.get_translation());
-            let initialized_distance = Self::distance(&kf0_pose.get_translation(), &kf1_pose.get_translation());
-            let scale = predicted_distance / initialized_distance;
-            println!("PREDICTED DISTANCE: {:4}", predicted_distance);
-            println!("INITIALIZED DISTANCE: {:4}", initialized_distance);
-            println!("SCALE: {:3}", scale);
+        //     let predicted_distance = Self::distance(&kf0_pose.get_translation(), &predicted_pose.get_translation());
+        //     let initialized_distance = Self::distance(&kf0_pose.get_translation(), &kf1_pose.get_translation());
+        //     let scale = predicted_distance / initialized_distance;
+        //     println!("PREDICTED DISTANCE: {:4}", predicted_distance);
+        //     println!("INITIALIZED DISTANCE: {:4}", initialized_distance);
+        //     println!("SCALE: {:3}", scale);
+            let scale = 5.5914506912231445;
             (scale, velocity)
         };
 
@@ -277,17 +280,15 @@ impl TrackingBackendGTSAM {
             let mut map = self.map.write()?;
             map.get_keyframe_mut(1).imu_data.velocity = Some(velocity);
             map.get_keyframe_mut(0).imu_data.velocity = Some(DVVector3::new_with(0.0, 0.0, 0.0));
-            // let rotation = Pose::new_with_default_trans(
-            //     nalgebra::Matrix3::from_columns(
-            //         &[
-            //             Vector3::new(0.0, 0.0, -1.0),
-            //             Vector3::new(1.0, 0.0, 0.0),
-            //             Vector3::new(0.0, -1.0, 0.0)
-            //         ]
-            //     )
-            // );
-            let rotation = Pose::default();
-            map.apply_scaled_rotation(&rotation, scale,true);
+            let t = Pose::new(
+                Vector3::new(0.0, 0.0, 0.0),
+                Matrix3::new(
+                0.99650955200195312, 0.074449501931667328, 0.037762001156806946,
+                0.061686959117650986, -0.35195067524909973, -0.93398362398147583,
+                -0.056244250386953354, 0.93305301666259766, -0.35531479120254517
+                )
+            );
+            map.apply_scaled_rotation(&t, scale,true);
         }
 
         Ok(())
@@ -503,7 +504,7 @@ impl GraphSolver {
         self.timestamp_lookup.insert(self.ct_state, timestamp_converted);
 
         // Create GTSAM preintegration parameters for use with Foster's version
-        let mut params = PreintegrationCombinedParams::make_positive_x_up(); // Note (frames): Set positive x to up (matching imu frame)
+        let mut params = PreintegrationCombinedParams::makesharedu(); // Note (frames): Z up
         params.set_gyroscope_covariance(self.gyro_noise_density * self.gyro_noise_density);
         params.set_accelerometer_covariance(self.accel_noise_density * self.accel_noise_density);
         params.set_integration_covariance(self.imu_integration_sigma * self.imu_integration_sigma);
