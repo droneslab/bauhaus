@@ -258,10 +258,10 @@ impl Frame {
         let inv_pose = twb.inverse(); // Tbw
         self.pose = Some(ImuCalib::new().tcb * inv_pose);
 
-        println!("Set imu pose velocity.");
-        println!("Initial pose: {:?}",twb.get_translation());
-        println!("Inverse pose: {:?}", inv_pose.get_translation());
-        println!("Actually set to: {:?}", self.pose.unwrap().get_translation());
+    //     println!("Set imu pose velocity.");
+    //     println!("Initial pose: {:?}",twb.get_translation());
+    //     println!("Inverse pose: {:?}", inv_pose.get_translation());
+    //     println!("Actually set to: {:?}", self.pose.unwrap().get_translation());
     }
 
 }

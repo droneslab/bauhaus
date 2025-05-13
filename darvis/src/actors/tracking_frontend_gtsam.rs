@@ -306,7 +306,7 @@ impl TrackingFrontendGTSAM {
             }
         }
 
-        debug!("Optical flow tracked {} from original {}", total_tracked, status.len());
+        // debug!("Optical flow tracked {} from original {}", total_tracked, status.len());
         Ok(new_tracked_features)
     }
 

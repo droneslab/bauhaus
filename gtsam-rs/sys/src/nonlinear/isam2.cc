@@ -20,7 +20,10 @@ namespace gtsam
     }
 
     std::unique_ptr<Values> calculate_estimate(const ISAM2 &isam2) {
-        return std::make_unique<Values>(isam2.calculateEstimate());
+        Values estimate = isam2.calculateEstimate();
+        std::cout << "SOFIYA! ESTIMATE: ";
+        estimate.print();
+        return std::make_unique<Values>(estimate);
     }
 
     rust::Vec<DoubleVec> get_marginal_covariance(

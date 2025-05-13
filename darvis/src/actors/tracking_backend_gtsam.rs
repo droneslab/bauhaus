@@ -100,7 +100,6 @@ impl TrackingBackendGTSAM {
 
             // self.graph_solver.solver_state = GraphSolverState::Ok;
             // self.last_timestamp = msg.frame.timestamp;
-            // debug!("Initialization timestamp: {:?}", msg.frame.timestamp);
 
             // Initialize from map initialization
             self.scale_map_from_imu(&mut msg)?;
@@ -311,7 +310,7 @@ impl TrackingBackendGTSAM {
         .expect("message! without a running Client")
         .message("create new keyframe", 2);
 
-        println!("Created new keyframe with pose {:?}", current_frame.pose.unwrap());
+        // println!("Created new keyframe with pose {:?}", current_frame.pose.unwrap());
 
         // SOFIYA TURN OFF LOCAL MAPPING
         // println!("TRACKING BACKEND SEND TO LOCAL MAPPING");
@@ -347,7 +346,7 @@ pub struct GraphSolver {
 
     // Main graph
     // graph_main: NonlinearFactorGraph, // Main non-linear GTSAM graph, all created factors
-    values_all: Values, // All created nodes
+    values_initial: Values, // All created nodes
 
     // Misc GTSAM objects
     isam2: ISAM2, // ISAM2 solvers
@@ -386,7 +385,7 @@ impl GraphSolver {
             graph_new: NonlinearFactorGraph::default(),
             values_new: Values::default(),
             // graph_main: NonlinearFactorGraph::default(),
-            values_all: Values::default(),
+            values_initial: Values::default(),
             isam2: ISAM2::default(),
             preint_gtsam: PreintegratedCombinedMeasurements::default(),
             solver_state: GraphSolverState::NotInitialized,
@@ -412,6 +411,101 @@ impl GraphSolver {
 
             last_timestamp: 0.0
         }
+    }
+
+    fn solve(&mut self,
+        current_frame : &mut Frame, 
+        imu_measurements : &mut ImuMeasurements, new_tracked_features : &TrackedFeatures
+    ) -> Result<bool, Box<dyn std::error::Error>> {
+        let _span = tracy_client::span!("solve");
+
+        let timestamp = (current_frame.timestamp * 1e9) as i64; // Convert to int just so we can hash it
+
+        self.preintegrate(imu_measurements, current_frame.timestamp, self.last_timestamp)?;
+        self.create_imu_factor();
+
+        // Original models
+        let new_state = self.predict_state();
+
+        // Append to our node vectors
+        self.values_new.insert_pose3(
+            &Symbol::new(b'x', self.ct_state + 1),
+            &new_state.pose
+        );
+        self.values_new.insert_vector3(
+            &Symbol::new(b'v', self.ct_state + 1),
+            &new_state.velocity
+        );
+        self.values_new.insert_constant_bias(
+            &Symbol::new(b'b', self.ct_state + 1),
+            &new_state.bias
+        );
+        self.values_initial.insert_pose3(
+            &Symbol::new(b'x', self.ct_state + 1),
+            &new_state.pose
+        );
+        self.values_initial.insert_vector3(
+            &Symbol::new(b'v', self.ct_state + 1),
+            &new_state.velocity
+        );
+        self.values_initial.insert_constant_bias(
+            &Symbol::new(b'b', self.ct_state + 1),
+            &new_state.bias
+        );
+
+        // Add ct state to map
+        self.ct_state_lookup.insert(timestamp, self.ct_state + 1);
+        self.timestamp_lookup.insert(self.ct_state + 1, timestamp);
+
+        self.process_smart_features(new_tracked_features);
+
+        debug!("IMU POSE ESTIMATE... {}, {:?}, {:?}, {:?}", timestamp, new_state.pose, new_state.velocity, new_state.bias);
+
+        self.optimize();
+
+        // debug!("OPTIMIZATION COVARIANCE: {:?}", self.isam2.get_marginal_covariance(&Symbol::new(b'x', self.ct_state)));
+
+        // Update frame with optimized values
+        // Note (frames): Result should be Tbw or Twb, not sure which one.
+        // Sofiya!!! None of the stuff below should actually affect the drift in the visualizer
+        {
+            let updated_pose: Isometry3<f64> = self.values_initial.get_pose3(&Symbol::new(b'x', self.ct_state + 1)).unwrap().into();
+            let velocity: gtsam::base::vector::Vector3 = self.values_initial.get_vector3(&Symbol::new(b'v', self.ct_state + 1)).unwrap().into();
+            let vel_raw = velocity.get_raw();
+
+            let reg = Pose::new_from_isometry(updated_pose);
+            let inv = Pose::new_from_isometry(updated_pose.inverse());
+            // println!("Updated pose inverse: {:?}", inv.get_translation());
+            // println!("Updated pose regular: {:?}", reg.get_translation());
+
+            // Note (frames): Have a look inside this function. It takes Twb and sets the frame pose to Tcw
+            current_frame.set_imu_pose_velocity(
+                Pose::new_from_isometry(updated_pose.inverse()),
+                Vector3::new(vel_raw[0], vel_raw[1], vel_raw[2])
+            );
+
+            let bias_ref = self.values_initial.get_constantbias(&Symbol::new(b'b', self.ct_state + 1)).unwrap();
+            let accel_bias = bias_ref.accel_bias().get_raw();
+            let gyro_bias = bias_ref.gyro_bias().get_raw();
+
+            // TODO SOFIYA Should this be set_new_bias?
+            current_frame.imu_data.imu_bias = ImuBias {
+                bax: accel_bias[0],
+                bay: accel_bias[1],
+                baz: accel_bias[2],
+                bwx: gyro_bias[0],
+                bwy: gyro_bias[1],
+                bwz: gyro_bias[2]
+            };
+            debug!("OPTIMIZED POSE ESTIMATE... {}, {:?}, {:?}, {:?}", timestamp, updated_pose, velocity, current_frame.imu_data.imu_bias);
+        }
+
+        self.last_timestamp = current_frame.timestamp;
+
+        // Move node count forward in time
+        self.ct_state += 1;
+
+        Ok(true)
     }
 
     fn initialize_with_data(&mut self, timestamp: f64, imu_init: &ImuInitializationData) -> Result<(), Box<dyn std::error::Error>> {
@@ -495,16 +589,16 @@ impl GraphSolver {
         self.values_new.insert_pose3(&Symbol::new(b'x', self.ct_state), &prior_state.pose);
         self.values_new.insert_vector3(&Symbol::new(b'v', self.ct_state), &prior_state.velocity);
         self.values_new.insert_constant_bias(&Symbol::new(b'b', self.ct_state), &prior_state.bias);
-        self.values_all.insert_pose3(&Symbol::new(b'x', self.ct_state), &prior_state.pose);
-        self.values_all.insert_vector3(&Symbol::new(b'v', self.ct_state), &prior_state.velocity);
-        self.values_all.insert_constant_bias(&Symbol::new(b'b', self.ct_state), &prior_state.bias);
+        self.values_initial.insert_pose3(&Symbol::new(b'x', self.ct_state), &prior_state.pose);
+        self.values_initial.insert_vector3(&Symbol::new(b'v', self.ct_state), &prior_state.velocity);
+        self.values_initial.insert_constant_bias(&Symbol::new(b'b', self.ct_state), &prior_state.bias);
 
         // Add ct state to map
         self.ct_state_lookup.insert(timestamp_converted, self.ct_state);
         self.timestamp_lookup.insert(self.ct_state, timestamp_converted);
 
         // Create GTSAM preintegration parameters for use with Foster's version
-        let mut params = PreintegrationCombinedParams::makesharedu(); // Note (frames): Z up
+        let mut params = PreintegrationCombinedParams::makesharedu();  // Z-up navigation frame: gravity points along negative Z-axis !!!
         params.set_gyroscope_covariance(self.gyro_noise_density * self.gyro_noise_density);
         params.set_accelerometer_covariance(self.accel_noise_density * self.accel_noise_density);
         params.set_integration_covariance(self.imu_integration_sigma * self.imu_integration_sigma);
@@ -520,106 +614,6 @@ impl GraphSolver {
         Ok(())
     }
 
-    fn solve(&mut self,
-        current_frame : &mut Frame, 
-        imu_measurements : &mut ImuMeasurements, new_tracked_features : &TrackedFeatures
-    ) -> Result<bool, Box<dyn std::error::Error>> {
-        let _span = tracy_client::span!("solve");
-
-        let timestamp = (current_frame.timestamp * 1e9) as i64; // Convert to int just so we can hash it
-
-        // Return if the node already exists in the graph
-        if self.ct_state_lookup.contains_key(&timestamp) {
-            warn!("NODE WITH TIMESTAMP {} ALREADY EXISTS", timestamp);
-            return Ok(false);
-        }
-
-        self.preintegrate(imu_measurements, current_frame.timestamp, self.last_timestamp)?;
-        self.create_imu_factor();
-
-        // Original models
-        let new_state = self.predict_state();
-
-        // Append to our node vectors
-        self.values_new.insert_pose3(
-            &Symbol::new(b'x', self.ct_state + 1),
-            &new_state.pose
-        );
-        self.values_new.insert_vector3(
-            &Symbol::new(b'v', self.ct_state + 1),
-            &new_state.velocity
-        );
-        self.values_new.insert_constant_bias(
-            &Symbol::new(b'b', self.ct_state + 1),
-            &new_state.bias
-        );
-        self.values_all.insert_pose3(
-            &Symbol::new(b'x', self.ct_state + 1),
-            &new_state.pose
-        );
-        self.values_all.insert_vector3(
-            &Symbol::new(b'v', self.ct_state + 1),
-            &new_state.velocity
-        );
-        self.values_all.insert_constant_bias(
-            &Symbol::new(b'b', self.ct_state + 1),
-            &new_state.bias
-        );
-
-        // Add ct state to map
-        self.ct_state_lookup.insert(timestamp, self.ct_state + 1);
-        self.timestamp_lookup.insert(self.ct_state + 1, timestamp);
-
-        self.process_smart_features(new_tracked_features);
-
-        debug!("IMU POSE ESTIMATE... {}, {:?}, {:?}, {:?}", timestamp, new_state.pose, new_state.velocity, new_state.bias);
-
-        self.optimize();
-
-        // debug!("OPTIMIZATION COVARIANCE: {:?}", self.isam2.get_marginal_covariance(&Symbol::new(b'x', self.ct_state + 1)));
-
-        // Update frame with optimized values
-        // Note (frames): Result should be Tbw or Twb, not sure which one
-        let updated_pose: Isometry3<f64> = self.values_all.get_pose3(&Symbol::new(b'x', self.ct_state)).unwrap().into();
-        let velocity: gtsam::base::vector::Vector3 = self.values_all.get_vector3(&Symbol::new(b'v', self.ct_state)).unwrap().into();
-        let vel_raw = velocity.get_raw();
-
-        let reg = Pose::new_from_isometry(updated_pose);
-        let inv = Pose::new_from_isometry(updated_pose.inverse());
-        println!("Updated pose inverse: {:?}", inv.get_translation());
-        println!("Updated pose regular: {:?}", reg.get_translation());
-
-        // Note (frames): Have a look inside this function. It takes Twb and sets the frame pose to Tcw
-        current_frame.set_imu_pose_velocity(
-            Pose::new_from_isometry(updated_pose.inverse()),
-            Vector3::new(vel_raw[0], vel_raw[1], vel_raw[2])
-        );
-
-
-        let bias_ref = self.values_all.get_constantbias(&Symbol::new(b'b', self.ct_state)).unwrap();
-        let accel_bias = bias_ref.accel_bias().get_raw();
-        let gyro_bias = bias_ref.gyro_bias().get_raw();
-
-        // TODO SOFIYA Should this be set_new_bias?
-        current_frame.imu_data.imu_bias = ImuBias {
-            bax: accel_bias[0],
-            bay: accel_bias[1],
-            baz: accel_bias[2],
-            bwx: gyro_bias[0],
-            bwy: gyro_bias[1],
-            bwz: gyro_bias[2]
-        };
-
-        debug!("OPTIMIZED POSE ESTIMATE... {}, {:?}, {:?}, {:?}", timestamp, updated_pose, velocity, current_frame.imu_data.imu_bias);
-
-        self.last_timestamp = current_frame.timestamp;
-
-        // Move node count forward in time
-        self.ct_state += 1;
-
-        Ok(true)
-    }
-
 
     fn predict_state(&self) -> GtsamState {
         let _span = tracy_client::span!("get_predicted_state");
@@ -627,9 +621,9 @@ impl GraphSolver {
 
         // Get the current state (t=k)
         let state_k = GtsamState {
-            pose: self.values_all.get_pose3(&Symbol::new(b'x', self.ct_state)).unwrap().into(),
-            velocity: self.values_all.get_vector3(&Symbol::new(b'v', self.ct_state)).unwrap().into(),
-            bias: self.values_all.get_constantbias(&Symbol::new(b'b', self.ct_state)).unwrap().into()
+            pose: self.values_initial.get_pose3(&Symbol::new(b'x', self.ct_state)).unwrap().into(),
+            velocity: self.values_initial.get_vector3(&Symbol::new(b'v', self.ct_state)).unwrap().into(),
+            bias: self.values_initial.get_constantbias(&Symbol::new(b'b', self.ct_state)).unwrap().into()
         };
 
         debug!("Current state used for imu-based prediction: {:?}", state_k);
@@ -761,7 +755,6 @@ impl GraphSolver {
     fn process_smart_features(&mut self, new_tracked_features: &TrackedFeatures) {
         let _span = tracy_client::span!("process_smart_features");
 
-        println!("New tracked features length: {}", new_tracked_features.len());
         let mut id_notset = 0;
         let mut added_new = 0;
         let mut added_old = 0;
@@ -775,17 +768,17 @@ impl GraphSolver {
             let point = new_tracked_features.get_point(i as usize);
 
             // Check to see if it is already in the graph
-            // match self.measurement_smart_lookup_left.get_mut(&feature_id) {
-            //     Some(smartfactor) => {
-            //         // Insert measurements to a smart factor
-            //         smartfactor.add(
-            //             & gtsam::geometry::point2::Point2::new(point.x as f64, point.y as f64),
-            //             &Symbol::new(b'x', self.ct_state + 1)
-            //         );
-            //         added_old += 1;
-            //         continue;
-            //     },
-            //     None => {
+            match self.measurement_smart_lookup_left.get_mut(&feature_id) {
+                Some(smartfactor) => {
+                    // Insert measurements to a smart factor
+                    smartfactor.add(
+                        & gtsam::geometry::point2::Point2::new(point.x as f64, point.y as f64),
+                        &Symbol::new(b'x', self.ct_state + 1)
+                    );
+                    added_old += 1;
+                    continue;
+                },
+                None => {
                     // If we know it is not in the graph
                     // Create a smart factor for the new feature
                     let measurement_noise = gtsam::linear::noise_model::IsotropicNoiseModel::from_dim_and_sigma(2, self.sigma_camera);
@@ -819,8 +812,8 @@ impl GraphSolver {
                     self.measurement_smart_lookup_left.insert(feature_id, smartfactor_left);
 
                     added_new += 1;
-                // }
-            // }
+                }
+            }
         }
         println!("Added new features: {}, added old features: {}, id not set: {}", added_new, added_old, id_notset);
     }
@@ -830,22 +823,18 @@ impl GraphSolver {
 
         // Perform smoothing update
         self.isam2.update_noresults(& self.graph_new, & self.values_new);
-        self.values_all = self.isam2.calculate_estimate().into();
+        self.values_initial = self.isam2.calculate_estimate().into();
 
-        self.clean_up();
-    }
-
-    fn clean_up(&mut self) {
         // Remove the used up nodes
         self.values_new.clear();
 
         // Remove the used up factors
-        self.graph_new.resize(0);
+        // self.graph_new.resize(0);
 
         // Use the optimized bias to reset integration
-        if self.values_all.exists(&Symbol::new(b'b', self.ct_state + 1)) {
+        if self.values_initial.exists(&Symbol::new(b'b', self.ct_state + 1)) {
             self.preint_gtsam.reset_integration_and_set_bias(
-                & self.values_all.get_constantbias(&Symbol::new(b'b', self.ct_state + 1)).unwrap().into()
+                & self.values_initial.get_constantbias(&Symbol::new(b'b', self.ct_state + 1)).unwrap().into()
             );
         } else {
             warn!("Bias wasn't optimized?");
