@@ -10,7 +10,7 @@ path = "src/lib.rs"
 
 [dependencies]
 cxx = "1.0.108"
-opencv = {version = "0.85.3", default-features = false, features= ["imgcodecs", "video"]}
+opencv = {version = "0.85.3", default-features = false, features= ["imgcodecs", "video", "calib3d"]}
 
 [build-dependencies]
 cxx-build = "1.0.108"

@@ -92,59 +92,65 @@ impl TrackingBackendGTSAM {
             // Need to initialize the factor graph 
 
             // Initialize from gt
-            // let imu_init = msg.imu_initialization.expect("Msg should have imu initialization data!");
-            // self.graph_solver.initialize_with_data(
-            //     msg.frame.timestamp,
-            //     &imu_init
-            // ).expect("Failed to initialize?");
-
-            // self.graph_solver.solver_state = GraphSolverState::Ok;
-            // self.last_timestamp = msg.frame.timestamp;
-
-            // Initialize from map initialization
-            self.scale_map_from_imu(&mut msg)?;
-
-            let (kf1_timestamp, kf1_scaled_pose, kf1_scaled_velocity) = {
-                let map = self.map.read()?;
-                let kf1 = map.get_keyframe(1);
-                let kf1_pose = kf1.get_pose();
-                let kf1_velocity = kf1.imu_data.velocity.unwrap();
-                (kf1.timestamp, kf1_pose, kf1_velocity)
-            };
-            let init_bias = {
-                let imu_init = msg.imu_initialization.as_ref().expect("Msg should have imu initialization data!");
-                ImuBias {
-                    bax: imu_init.acc_bias[0],
-                    bay: imu_init.acc_bias[1],
-                    baz: imu_init.acc_bias[2],
-                    bwx: imu_init.gyro_bias[0],
-                    bwy: imu_init.gyro_bias[1],
-                    bwz: imu_init.gyro_bias[2]
-                }
-            };
-
-            // Now that the map is scaled, re-initialize the graph solver
-            // Note (frames): Kf1 pose is Tcw, initialize graph solver with tbw
-            let pose_for_init = {
-                let tcw = kf1_scaled_pose;
-                let tbc = ImuCalib::new().tbc;
-                let tbw = tbc * tcw;
-                tbw
-            };
-            debug!("Sofiya! Initial pose for graph solver: {:?}", pose_for_init);
-            debug!("Sofiya! Initial pose for graph solver original: {:?}", kf1_scaled_pose);
-            debug!("Sofiya! Initial velocity for graph solver: {:?}", kf1_scaled_velocity);
-            
-            self.graph_solver = GraphSolver::new();
-            self.graph_solver.initialize(
-                kf1_timestamp,
-                pose_for_init,
-                kf1_scaled_velocity,
-                init_bias
+            let imu_init = msg.imu_initialization.expect("Msg should have imu initialization data!");
+            self.graph_solver.initialize_with_data(
+                msg.frame.timestamp,
+                &imu_init
             ).expect("Failed to initialize?");
 
             self.graph_solver.solver_state = GraphSolverState::Ok;
-            self.last_timestamp = kf1_timestamp;
+            self.last_timestamp = msg.frame.timestamp;
+
+            // Initialize from map initialization
+            // self.scale_map_from_imu(&mut msg)?;
+
+            // let (kf1_timestamp, kf1_scaled_pose, kf1_scaled_velocity) = {
+            //     let map = self.map.read()?;
+            //     let kf1 = map.get_keyframe(1);
+            //     let kf1_pose = kf1.get_pose();
+            //     let kf1_velocity = kf1.imu_data.velocity.unwrap();
+            //     (kf1.timestamp, kf1_pose, kf1_velocity)
+            // };
+            // let init_bias = {
+            //     let imu_init = msg.imu_initialization.as_ref().expect("Msg should have imu initialization data!");
+            //     ImuBias {
+            //         bax: imu_init.acc_bias[0],
+            //         bay: imu_init.acc_bias[1],
+            //         baz: imu_init.acc_bias[2],
+            //         bwx: imu_init.gyro_bias[0],
+            //         bwy: imu_init.gyro_bias[1],
+            //         bwz: imu_init.gyro_bias[2]
+            //     }
+            // };
+
+            // // Now that the map is scaled, re-initialize the graph solver
+            // // Note (frames): Kf1 pose is Tcw, initialize graph solver with tbw
+            // let pose_for_init = {
+            //     let tcw = kf1_scaled_pose;
+            //     let tbc = ImuCalib::new().tbc;
+            //     let tbw = tbc * tcw;
+            //     tbw
+            // };
+            // debug!("Sofiya! Initial pose for graph solver: {:?}", pose_for_init);
+            // debug!("Sofiya! Initial pose for graph solver original: {:?}", kf1_scaled_pose);
+            // debug!("Sofiya! Initial velocity for graph solver: {:?}", kf1_scaled_velocity);
+            
+            // self.graph_solver = GraphSolver::new();
+            // self.graph_solver.initialize(
+            //     kf1_timestamp,
+            //     Pose::new_with_quaternion(
+            //         Vector3::new(0.0, 0.0, 0.0),
+            //         nalgebra::geometry::UnitQuaternion::<f64>::from_quaternion(
+            //         nalgebra::Quaternion::<f64>::new(
+            //             0.0, 0.0, 0.0, 1.0
+            //         ))
+            //     ),
+            //     DVVector3::new_with(0.0, 0.0, 0.0),
+            //     init_bias
+            // ).expect("Failed to initialize?");
+
+            // self.graph_solver.solver_state = GraphSolverState::Ok;
+            // self.last_timestamp = kf1_timestamp;
 
         } else {
             // If we have previous frames already, can track normally
@@ -275,18 +281,51 @@ impl TrackingBackendGTSAM {
             (scale, velocity)
         };
 
+        let t = {
+            let rot1 = Matrix3::new(
+                0.99977350234985352, 0.011315983720123768, -0.018024308606982231,
+                0.021248025819659233,  -0.48284673690795898,   0.87544715404510498,
+                0.0012035687686875463,  -0.87563186883926392,  -0.48297786712646484,
+            );
+
+            let rot2 = Matrix3::new(
+                0.99999994039535522,  4.4160465506593027e-08,  0.00025777640985324979,
+                4.4160010759242141e-08,     0.99999994039535522, -0.00034262429107911885,
+                -0.00025777640985324979,  0.00034262429107911885,     0.99999988079071045,
+            );
+
+            let rot3 = Matrix3::new(
+                0.99995380640029907,  -3.057897265534848e-05,    0.009609355591237545,
+                -2.7023115762858652e-05,     0.99998205900192261,   0.0059941890649497509,
+                -0.0096093658357858658,  -0.0059941718354821205,     0.99993586540222168,
+            );
+
+            let rot4 = Matrix3::new(
+                0.99999964237213135,  -4.904205752609414e-07, -0.00086154910968616605,
+                -5.3174642289377516e-07 ,     0.9999992847442627 , -0.0011864284751936793,
+                0.00086154905147850513  , 0.0011864284751936793  ,   0.99999892711639404,
+            );
+            let final_rot = (rot1 * rot2 * rot3 * rot4);
+
+
+            println!("Final rotation: {:?}", final_rot);
+
+            Pose::new(
+                Vector3::new(0.0, 0.0, 0.0),
+                final_rot
+            )
+        };
+
+        let scale = 0.54736596345901489 *
+            0.99563616514205933 *
+            1.0052615404129028 *
+            0.99784046411514282;
+        // let scale = 0.5;
+
         {
             let mut map = self.map.write()?;
             map.get_keyframe_mut(1).imu_data.velocity = Some(velocity);
             map.get_keyframe_mut(0).imu_data.velocity = Some(DVVector3::new_with(0.0, 0.0, 0.0));
-            let t = Pose::new(
-                Vector3::new(0.0, 0.0, 0.0),
-                Matrix3::new(
-                0.99650955200195312, 0.074449501931667328, 0.037762001156806946,
-                0.061686959117650986, -0.35195067524909973, -0.93398362398147583,
-                -0.056244250386953354, 0.93305301666259766, -0.35531479120254517
-                )
-            );
             map.apply_scaled_rotation(&t, scale,true);
         }
 
@@ -655,6 +694,8 @@ impl GraphSolver {
         // This will integrate from the current state time up to the new update time
         let _span = tracy_client::span!("create_imu_factor");
 
+        println!("imu measurements: {:?}", imu_measurements);
+
         // From ORBSLAM:
         let mut imu_from_last_frame = VecDeque::with_capacity(imu_measurements.len()); // mvImuFromLastFrame
         let imu_per = 0.001;
@@ -722,8 +763,12 @@ impl GraphSolver {
             }
             // tstep = tstep * 1e2;
 
+            acc = Vector3::<f64>::new(acc[0], acc[1], acc[2]);
+
             self.preint_gtsam.integrate_measurement(&acc.into(), &ang_vel.into(), tstep);
             // println!("Tstep: {:?}", tstep);
+
+            println!("acc: {:?}", acc);
 
             // ORBSLAM3 imu preintegrated object
             // other_imu.imu_preintegrated_from_last_kf.integrate_new_measurement(acc, ang_vel, tstep);

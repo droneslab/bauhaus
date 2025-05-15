@@ -102,27 +102,27 @@ impl TrackingFrontendGTSAM {
                     // publish this frame so backend has a reference to the frame associated with the initialization
 
                     // SOFIYA TURN OFF MAP INITIALIZATION
-                    self.initialize_map(&image, timestamp).unwrap()
+                    // self.initialize_map(&image, timestamp).unwrap()
 
                     // When turning back on, comment all this out:
-                    // let (keypoints, descriptors) = self.orb_extractor_ini.as_mut().unwrap().extract(& image).unwrap();
-                    // let init_pose = Pose::new_with_quaternion_convert(*imu_initialization.as_ref().unwrap().translation, imu_initialization.as_ref().unwrap().rotation);
+                    let (keypoints, descriptors) = self.orb_extractor_ini.as_mut().unwrap().extract(& image).unwrap();
+                    let init_pose = Pose::new_with_quaternion_convert(*imu_initialization.as_ref().unwrap().translation, imu_initialization.as_ref().unwrap().rotation);
 
-                    // self.current_frame = Frame::new(
-                    //     self.curr_frame_id, 
-                    //     keypoints,
-                    //     descriptors,
-                    //     image.cols() as u32,
-                    //     image.rows() as u32,
-                    //     Some(image.clone()),
-                    //     Some(& self.last_frame),
-                    //     false,
-                    //     timestamp,
-                    // ).expect("Could not create frame!");
-                    // self.current_frame.pose = Some(init_pose);
-                    // self.state = GtsamFrontendTrackingState::Ok;
+                    self.current_frame = Frame::new(
+                        self.curr_frame_id, 
+                        keypoints,
+                        descriptors,
+                        image.cols() as u32,
+                        image.rows() as u32,
+                        Some(image.clone()),
+                        Some(& self.last_frame),
+                        false,
+                        timestamp,
+                    ).expect("Could not create frame!");
+                    self.current_frame.pose = Some(init_pose);
+                    self.state = GtsamFrontendTrackingState::Ok;
 
-                    // true
+                    true
                 },
                 GtsamFrontendTrackingState::Ok => {
                     // Regular tracking

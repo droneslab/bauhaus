@@ -539,8 +539,14 @@ impl Map {
             let mut twc = keyframe.get_pose().inverse().clone();
             let twc_trans = twc.get_translation();
             twc.set_translation(twc_trans.scale(s));
+
+            println!("Scaled: {:?}", twc);
             let tyc = *t * twc;
+            println!("Rotated: {:?}", tyc);
+
             let tcy = tyc.inverse();
+
+            println!("Inverse: {:?}", tcy);
             keyframe.set_pose(tcy);
 
             let vw = keyframe.imu_data.velocity.unwrap();
