@@ -1,6 +1,6 @@
 extern crate g2o;
 use log::{warn, info, debug, error};
-use nalgebra::{Isometry3, Matrix3, Vector3, Vector6};
+use nalgebra::{Isometry3, Matrix3, Vector3, Vector4, Vector6};
 use std::{collections::{BTreeSet, HashMap, VecDeque}, fmt::Debug, sync::atomic::Ordering, thread::sleep, time::Duration};
 use gtsam::{
     inference::symbol::Symbol, navigation::combined_imu_factor::{CombinedImuFactor, PreintegratedCombinedMeasurements, PreintegrationCombinedParams}, nonlinear::{
@@ -92,65 +92,73 @@ impl TrackingBackendGTSAM {
             // Need to initialize the factor graph 
 
             // Initialize from gt
-            let imu_init = msg.imu_initialization.expect("Msg should have imu initialization data!");
-            self.graph_solver.initialize_with_data(
-                msg.frame.timestamp,
-                &imu_init
-            ).expect("Failed to initialize?");
+            // let imu_init = msg.imu_initialization.expect("Msg should have imu initialization data!");
+            // self.graph_solver.initialize_with_data(
+            //     msg.frame.timestamp,
+            //     &imu_init
+            // ).expect("Failed to initialize?");
 
-            self.graph_solver.solver_state = GraphSolverState::Ok;
-            self.last_timestamp = msg.frame.timestamp;
+            // self.graph_solver.solver_state = GraphSolverState::Ok;
+            // self.last_timestamp = msg.frame.timestamp;
 
-            // Initialize from map initialization
-            // self.scale_map_from_imu(&mut msg)?;
 
-            // let (kf1_timestamp, kf1_scaled_pose, kf1_scaled_velocity) = {
-            //     let map = self.map.read()?;
-            //     let kf1 = map.get_keyframe(1);
-            //     let kf1_pose = kf1.get_pose();
-            //     let kf1_velocity = kf1.imu_data.velocity.unwrap();
-            //     (kf1.timestamp, kf1_pose, kf1_velocity)
-            // };
-            // let init_bias = {
-            //     let imu_init = msg.imu_initialization.as_ref().expect("Msg should have imu initialization data!");
-            //     ImuBias {
-            //         bax: imu_init.acc_bias[0],
-            //         bay: imu_init.acc_bias[1],
-            //         baz: imu_init.acc_bias[2],
-            //         bwx: imu_init.gyro_bias[0],
-            //         bwy: imu_init.gyro_bias[1],
-            //         bwz: imu_init.gyro_bias[2]
-            //     }
-            // };
+            // Dummy initialization
+            // let imu_init = msg.imu_initialization.expect("Msg should have imu initialization data!");
+            // let init_bias = ImuBias::new_with(imu_init.gyro_bias, imu_init.acc_bias);
+            // // let init_pose = Pose::new_with_quaternion_convert(*imu_init.translation, imu_init.rotation);
+            // let init_pose = Pose::new_with_quaternion_convert(
+            //     Vector3::new(0.0, 0.0, 0.0),
+            //     // Vector4::new(1.0, 0.0, 0.0, 0.0)
+            //     imu_init.rotation
+            // );
 
-            // // Now that the map is scaled, re-initialize the graph solver
-            // // Note (frames): Kf1 pose is Tcw, initialize graph solver with tbw
-            // let pose_for_init = {
-            //     let tcw = kf1_scaled_pose;
-            //     let tbc = ImuCalib::new().tbc;
-            //     let tbw = tbc * tcw;
-            //     tbw
-            // };
-            // debug!("Sofiya! Initial pose for graph solver: {:?}", pose_for_init);
-            // debug!("Sofiya! Initial pose for graph solver original: {:?}", kf1_scaled_pose);
-            // debug!("Sofiya! Initial velocity for graph solver: {:?}", kf1_scaled_velocity);
-            
-            // self.graph_solver = GraphSolver::new();
             // self.graph_solver.initialize(
-            //     kf1_timestamp,
-            //     Pose::new_with_quaternion(
-            //         Vector3::new(0.0, 0.0, 0.0),
-            //         nalgebra::geometry::UnitQuaternion::<f64>::from_quaternion(
-            //         nalgebra::Quaternion::<f64>::new(
-            //             0.0, 0.0, 0.0, 1.0
-            //         ))
-            //     ),
-            //     DVVector3::new_with(0.0, 0.0, 0.0),
+            //     msg.frame.timestamp,
+            //     init_pose,
+            //     imu_init.velocity,
+            //     // DVVector3::new_with(0.0, 0.0, 0.0),
             //     init_bias
             // ).expect("Failed to initialize?");
 
             // self.graph_solver.solver_state = GraphSolverState::Ok;
-            // self.last_timestamp = kf1_timestamp;
+            // self.last_timestamp = msg.frame.timestamp;
+
+            // Initialize from map initialization
+            self.scale_map_from_imu(&mut msg)?;
+            let imu_init = msg.imu_initialization.expect("Msg should have imu initialization data!");
+
+            let (kf1_timestamp, kf1_scaled_pose, kf1_scaled_velocity) = {
+                let map = self.map.read()?;
+                let kf1 = map.get_keyframe(1);
+                let kf1_pose = kf1.get_pose();
+                let kf1_velocity = kf1.imu_data.velocity.unwrap();
+                (kf1.timestamp, kf1_pose, kf1_velocity)
+            };
+            let init_bias = ImuBias::new_with(imu_init.gyro_bias, imu_init.acc_bias);
+
+            // Now that the map is scaled, re-initialize the graph solver
+            // Note (frames): Kf1 pose is Tcw, initialize graph solver with tbw
+            let pose_for_init = {
+                let tcw = kf1_scaled_pose;
+                let tbc = ImuCalib::new().tbc;
+                let tbw = tbc * tcw;
+                tbw
+            };
+            debug!("Sofiya! Initial pose for graph solver: {:?}", pose_for_init);
+            debug!("Sofiya! Initial pose for graph solver original: {:?}", kf1_scaled_pose);
+            debug!("Sofiya! Initial velocity for graph solver: {:?}", kf1_scaled_velocity);
+            
+            self.graph_solver = GraphSolver::new();
+            self.graph_solver.initialize(
+                kf1_timestamp,
+                pose_for_init,
+                // imu_init.velocity,
+                kf1_scaled_velocity,
+                init_bias
+            ).expect("Failed to initialize?");
+
+            self.graph_solver.solver_state = GraphSolverState::Ok;
+            self.last_timestamp = kf1_timestamp;
 
         } else {
             // If we have previous frames already, can track normally
@@ -310,6 +318,12 @@ impl TrackingBackendGTSAM {
 
             println!("Final rotation: {:?}", final_rot);
 
+            // let final_rot = Matrix3::new(
+            //     1.0, -0.0, 0.0,
+            //     0.0,  0.0, 1.0,
+            //     -0.0, -1.0, 0.0
+            // );
+
             Pose::new(
                 Vector3::new(0.0, 0.0, 0.0),
                 final_rot
@@ -320,7 +334,6 @@ impl TrackingBackendGTSAM {
             0.99563616514205933 *
             1.0052615404129028 *
             0.99784046411514282;
-        // let scale = 0.5;
 
         {
             let mut map = self.map.write()?;
@@ -519,7 +532,7 @@ impl GraphSolver {
 
             // Note (frames): Have a look inside this function. It takes Twb and sets the frame pose to Tcw
             current_frame.set_imu_pose_velocity(
-                Pose::new_from_isometry(updated_pose.inverse()),
+                Pose::new_from_isometry(updated_pose),
                 Vector3::new(vel_raw[0], vel_raw[1], vel_raw[2])
             );
 

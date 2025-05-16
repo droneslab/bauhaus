@@ -1,13 +1,14 @@
 extern crate g2o;
 use ahash::HashMap;
 use log::{warn, info, debug};
+use std::{collections::{BTreeSet}};
 use std::{sync::atomic::Ordering, thread::sleep, time::Duration};
 use opencv::{core::{Point, Point2f, Scalar, CV_8U}, imgproc::circle, prelude::*, types::{VectorOfPoint2f, VectorOfu8}};
 use core::{
     config::*, matrix::*, system::{Actor, MessageBox, System, Timestamp}
 };
 use crate::{
-    actors::{local_mapping::LOCAL_MAPPING_IDLE, messages::{FeatureTracksAndIMUMsg, ImagePathMsg, TrajectoryMsg, ImageMsg, InitKeyFrameMsg, ShutdownMsg, VisFeaturesMsg}}, map::{frame::Frame, pose::Pose, read_only_lock::ReadWriteMap}, modules::{image, imu::{ImuMeasurements, IMU}, map_initialization::MapInitialization, module_definitions::{MapInitializationModule, FeatureExtractionModule}}, registered_actors::{new_feature_extraction_module, CAMERA_MODULE, LOCAL_MAPPING, SHUTDOWN_ACTOR, TRACKING_BACKEND, TRACKING_FRONTEND, VISUALIZER}
+    actors::{local_mapping::LOCAL_MAPPING_IDLE, messages::{FeatureTracksAndIMUMsg, ImagePathMsg, VisTrajectoryMsg, TrajectoryMsg, ImageMsg, InitKeyFrameMsg, ShutdownMsg, VisFeaturesMsg}}, map::{frame::Frame, pose::Pose, read_only_lock::ReadWriteMap}, modules::{image, imu::{ImuMeasurements, IMU}, map_initialization::MapInitialization, module_definitions::{MapInitializationModule, FeatureExtractionModule}}, registered_actors::{new_feature_extraction_module, CAMERA_MODULE, LOCAL_MAPPING, SHUTDOWN_ACTOR, TRACKING_BACKEND, TRACKING_FRONTEND, VISUALIZER}
 };
 
 
@@ -102,27 +103,27 @@ impl TrackingFrontendGTSAM {
                     // publish this frame so backend has a reference to the frame associated with the initialization
 
                     // SOFIYA TURN OFF MAP INITIALIZATION
-                    // self.initialize_map(&image, timestamp).unwrap()
+                    self.initialize_map(&image, timestamp).unwrap()
 
                     // When turning back on, comment all this out:
-                    let (keypoints, descriptors) = self.orb_extractor_ini.as_mut().unwrap().extract(& image).unwrap();
-                    let init_pose = Pose::new_with_quaternion_convert(*imu_initialization.as_ref().unwrap().translation, imu_initialization.as_ref().unwrap().rotation);
+                    // let (keypoints, descriptors) = self.orb_extractor_ini.as_mut().unwrap().extract(& image).unwrap();
+                    // let init_pose = Pose::new_with_quaternion_convert(*imu_initialization.as_ref().unwrap().translation, imu_initialization.as_ref().unwrap().rotation);
 
-                    self.current_frame = Frame::new(
-                        self.curr_frame_id, 
-                        keypoints,
-                        descriptors,
-                        image.cols() as u32,
-                        image.rows() as u32,
-                        Some(image.clone()),
-                        Some(& self.last_frame),
-                        false,
-                        timestamp,
-                    ).expect("Could not create frame!");
-                    self.current_frame.pose = Some(init_pose);
-                    self.state = GtsamFrontendTrackingState::Ok;
+                    // self.current_frame = Frame::new(
+                    //     self.curr_frame_id, 
+                    //     keypoints,
+                    //     descriptors,
+                    //     image.cols() as u32,
+                    //     image.rows() as u32,
+                    //     Some(image.clone()),
+                    //     Some(& self.last_frame),
+                    //     false,
+                    //     timestamp,
+                    // ).expect("Could not create frame!");
+                    // self.current_frame.pose = Some(init_pose);
+                    // self.state = GtsamFrontendTrackingState::Ok;
 
-                    true
+                    // true
                 },
                 GtsamFrontendTrackingState::Ok => {
                     // Regular tracking
@@ -149,6 +150,16 @@ impl TrackingFrontendGTSAM {
                     self.need_new_keyframe()
                 }
             };
+
+
+            // self.system.try_send(VISUALIZER, Box::new(VisTrajectoryMsg{
+            //     pose: Pose::default(),
+            //     mappoint_matches: vec![],
+            //     mappoints_in_tracking: BTreeSet::new(),
+            //     timestamp: self.current_frame.timestamp,
+            //     map_version: 1
+            // }));
+
 
             if pub_this_frame {
                 tracy_client::Client::running()
