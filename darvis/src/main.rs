@@ -191,8 +191,12 @@ impl LoopManager {
                 None
             } else {
                 if dataset == "kitti" {
-                    warn!("KITTI dataset does not have IMU data.");
-                    None
+                    // warn!("KITTI dataset does not have IMU data.");
+                    let imu_file = dataset_dir.clone() + "imu.txt";
+                    let gt_file = dataset_dir.clone() + "gt.txt";
+                    Some(Self::read_imu(imu_file, gt_file, &mut timestamps, &mut image_paths).expect("Could not read IMU file!"))
+
+                    // None
                 } else if dataset == "euroc" {
                     let imu_file = dataset_dir.clone() + "/mav0/imu0/data.csv";
                     let gt_file = dataset_dir.clone() + "/mav0/state_groundtruth_estimate0/data.csv";

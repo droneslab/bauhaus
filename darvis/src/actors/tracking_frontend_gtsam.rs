@@ -1,13 +1,14 @@
 extern crate g2o;
 use ahash::HashMap;
 use log::{warn, info, debug};
+use std::{collections::{BTreeSet}};
 use std::{sync::atomic::Ordering, thread::sleep, time::Duration};
 use opencv::{core::{Point, Point2f, Scalar, CV_8U}, imgproc::circle, prelude::*, types::{VectorOfPoint2f, VectorOfu8}};
 use core::{
     config::*, matrix::*, system::{Actor, MessageBox, System, Timestamp}
 };
 use crate::{
-    actors::{local_mapping::LOCAL_MAPPING_IDLE, messages::{FeatureTracksAndIMUMsg, ImagePathMsg, TrajectoryMsg, ImageMsg, InitKeyFrameMsg, ShutdownMsg, VisFeaturesMsg}}, map::{frame::Frame, pose::Pose, read_only_lock::ReadWriteMap}, modules::{image, imu::{ImuMeasurements, IMU}, map_initialization::MapInitialization, module_definitions::{MapInitializationModule, FeatureExtractionModule}}, registered_actors::{new_feature_extraction_module, CAMERA_MODULE, LOCAL_MAPPING, SHUTDOWN_ACTOR, TRACKING_BACKEND, TRACKING_FRONTEND, VISUALIZER}
+    actors::{local_mapping::LOCAL_MAPPING_IDLE, messages::{FeatureTracksAndIMUMsg, ImagePathMsg, VisTrajectoryMsg, TrajectoryMsg, ImageMsg, InitKeyFrameMsg, ShutdownMsg, VisFeaturesMsg}}, map::{frame::Frame, pose::Pose, read_only_lock::ReadWriteMap}, modules::{image, imu::{ImuMeasurements, IMU}, map_initialization::MapInitialization, module_definitions::{MapInitializationModule, FeatureExtractionModule}}, registered_actors::{new_feature_extraction_module, CAMERA_MODULE, LOCAL_MAPPING, SHUTDOWN_ACTOR, TRACKING_BACKEND, TRACKING_FRONTEND, VISUALIZER}
 };
 
 
@@ -149,6 +150,16 @@ impl TrackingFrontendGTSAM {
                     self.need_new_keyframe()
                 }
             };
+
+
+            // self.system.try_send(VISUALIZER, Box::new(VisTrajectoryMsg{
+            //     pose: Pose::default(),
+            //     mappoint_matches: vec![],
+            //     mappoints_in_tracking: BTreeSet::new(),
+            //     timestamp: self.current_frame.timestamp,
+            //     map_version: 1
+            // }));
+
 
             if pub_this_frame {
                 tracy_client::Client::running()
