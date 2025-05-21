@@ -12,7 +12,7 @@ use core::{
 };
 use crate::{
     actors::{local_mapping_gtsam::LOCAL_MAPPING_IDLE, messages::{FeatureTracksAndIMUMsg, ShutdownMsg, TrajectoryMsg, UpdateFrameIMUMsg, VisTrajectoryMsg, VisTrajectoryTrackingMsg}, tracking_frontend_gtsam::TrackedFeatures},
-    map::{frame::Frame, map::Id, pose::Pose, read_only_lock::ReadWriteMap}, modules::imu::{ImuBias, ImuCalib, ImuMeasurements}, registered_actors::{CAMERA, IMU, SHUTDOWN_ACTOR, TRACKING_FRONTEND, VISUALIZER}, ImuInitializationData
+    map::{frame::Frame, keyframe::KeyFrame, map::Id, pose::Pose, read_only_lock::ReadWriteMap}, modules::imu::{ImuBias, ImuCalib, ImuMeasurements}, registered_actors::{CAMERA, IMU, SHUTDOWN_ACTOR, TRACKING_FRONTEND, VISUALIZER}, ImuInitializationData
 };
 
 pub struct TrackingBackendGTSAM {
@@ -92,120 +92,110 @@ impl TrackingBackendGTSAM {
             // Need to initialize the factor graph 
 
             // Initialize from gt
-            // let imu_init = msg.imu_initialization.expect("Msg should have imu initialization data!");
-            // self.graph_solver.initialize_with_data(
-            //     msg.frame.timestamp,
-            //     &imu_init
-            // ).expect("Failed to initialize?");
+                let imu_init = msg.imu_initialization.expect("Msg should have imu initialization data!");
+                self.graph_solver.initialize_with_data(
+                    msg.frame.timestamp,
+                    &imu_init
+                ).expect("Failed to initialize?");
 
-            // self.graph_solver.solver_state = GraphSolverState::Ok;
-            // self.last_timestamp = msg.frame.timestamp;
+                self.graph_solver.solver_state = GraphSolverState::Ok;
+                self.last_timestamp = msg.frame.timestamp;
+
 
 
             // Dummy initialization
-            // let imu_init = msg.imu_initialization.expect("Msg should have imu initialization data!");
-            // let init_bias = ImuBias::new_with(imu_init.gyro_bias, imu_init.acc_bias);
-            // // let init_pose = Pose::new_with_quaternion_convert(*imu_init.translation, imu_init.rotation);
-            // let init_pose = Pose::new_with_quaternion_convert(
-            //     Vector3::new(0.0, 0.0, 0.0),
-            //     // Vector4::new(1.0, 0.0, 0.0, 0.0)
-            //     imu_init.rotation
-            // );
+                // let imu_init = msg.imu_initialization.expect("Msg should have imu initialization data!");
+                // let init_bias = ImuBias::new_with(imu_init.gyro_bias, imu_init.acc_bias);
+                // // let init_pose = Pose::new_with_quaternion_convert(*imu_init.translation, imu_init.rotation);
+                // let init_pose = Pose::new_with_quaternion_convert(
+                //     Vector3::new(0.0, 0.0, 0.0),
+                //     // Vector4::new(1.0, 0.0, 0.0, 0.0)
+                //     imu_init.rotation
+                // );
 
-            // self.graph_solver.initialize(
-            //     msg.frame.timestamp,
-            //     init_pose,
-            //     imu_init.velocity,
-            //     // DVVector3::new_with(0.0, 0.0, 0.0),
-            //     init_bias
-            // ).expect("Failed to initialize?");
+                // self.graph_solver.initialize(
+                //     msg.frame.timestamp,
+                //     init_pose,
+                //     imu_init.velocity,
+                //     // DVVector3::new_with(0.0, 0.0, 0.0),
+                //     init_bias
+                // ).expect("Failed to initialize?");
 
-            // self.graph_solver.solver_state = GraphSolverState::Ok;
-            // self.last_timestamp = msg.frame.timestamp;
+                // self.graph_solver.solver_state = GraphSolverState::Ok;
+                // self.last_timestamp = msg.frame.timestamp;
 
-            // Initialize from map initialization
-            self.scale_map_from_imu(&mut msg)?;
-            let imu_init = msg.imu_initialization.expect("Msg should have imu initialization data!");
 
-            let (kf1_timestamp, kf1_scaled_pose, kf1_scaled_velocity) = {
-                let map = self.map.read()?;
-                let kf1 = map.get_keyframe(1);
-                let kf1_pose = kf1.get_pose();
-                let kf1_velocity = kf1.imu_data.velocity.unwrap();
-                (kf1.timestamp, kf1_pose, kf1_velocity)
-            };
-            let init_bias = ImuBias::new_with(imu_init.gyro_bias, imu_init.acc_bias);
-
-            // Now that the map is scaled, re-initialize the graph solver
-            // Note (frames): Kf1 pose is Tcw, initialize graph solver with tbw
-            let pose_for_init = {
-                let tcw = kf1_scaled_pose;
-                let tbc = ImuCalib::new().tbc;
-                let tbw = tbc * tcw;
-                tbw
-            };
-            debug!("Sofiya! Initial pose for graph solver: {:?}", pose_for_init);
-            debug!("Sofiya! Initial pose for graph solver original: {:?}", kf1_scaled_pose);
-            debug!("Sofiya! Initial velocity for graph solver: {:?}", kf1_scaled_velocity);
-            
-            self.graph_solver = GraphSolver::new();
-            self.graph_solver.initialize(
-                kf1_timestamp,
-                pose_for_init,
-                // imu_init.velocity,
-                kf1_scaled_velocity,
-                init_bias
-            ).expect("Failed to initialize?");
-
-            self.graph_solver.solver_state = GraphSolverState::Ok;
-            self.last_timestamp = msg.frame.timestamp;
 
             // Initialize from map initialization
-            // self.scale_map_from_imu(&mut msg)?;
+                // let imu_init = msg.imu_initialization.expect("Msg should have imu initialization data!"); // Rotation in this is TBW! 
+                // let init_bias = ImuBias::new_with(imu_init.gyro_bias, imu_init.acc_bias);
 
-            // let (kf1_timestamp, kf1_scaled_pose, kf1_scaled_velocity) = {
-            //     let map = self.map.read()?;
-            //     let kf1 = map.get_keyframe(1);
-            //     let kf1_pose = kf1.get_pose();
-            //     let kf1_velocity = kf1.imu_data.velocity.unwrap();
-            //     (kf1.timestamp, kf1_pose, kf1_velocity)
-            // };
-            // let init_bias = {
-            //     let imu_init = msg.imu_initialization.as_ref().expect("Msg should have imu initialization data!");
-            //     ImuBias {
-            //         bax: -4.8980757128447294e-05, bay:  2.0707564090116648e-06, baz:  4.1218168917112052e-05, bwx: -0.012245224788784981, bwy:  0.023727549239993095, bwz:  0.080935150384902954
+                // // self.scale_map_from_imu(&mut msg)?;
 
-            //         // bax: imu_init.acc_bias[0],
-            //         // bay: imu_init.acc_bias[1],
-            //         // baz: imu_init.acc_bias[2],
-            //         // bwx: imu_init.gyro_bias[0],
-            //         // bwy: imu_init.gyro_bias[1],
-            //         // bwz: imu_init.gyro_bias[2]
-            //     }
-            // };
+                // // Instead of scale map from imu..............
+                // {
+                //     let current_distance = Self::distance(&self.map.read().unwrap().get_keyframe(0).get_pose().get_translation(), &self.map.read().unwrap().get_keyframe(1).get_pose().get_translation());
+                //     let gt_distance = Self::distance(
+                //         & Vector3::new(4.633082, -1.807218, 0.830638),
+                //         & Vector3::new(4.629793, -1.804637, 0.862069)
+                //     );
+                //     println!("Current distance: {:?}", current_distance);
+                //     println!("GT distance: {:?}", gt_distance);
+                //     println!("Scale: {:?}", current_distance / gt_distance);
+                // }
 
-            // // Now that the map is scaled, re-initialize the graph solver
-            // // Note (frames): Kf1 pose is Tcw, initialize graph solver with tbw
-            // let pose_for_init = {
-            //     let tcw = kf1_scaled_pose;
-            //     let tbc = ImuCalib::new().tbc;
-            //     let tbw = tbc * tcw;
-            //     tbw
-            // };
-            // debug!("Sofiya! Initial pose for graph solver: {:?}", pose_for_init);
-            // debug!("Sofiya! Initial pose for graph solver original: {:?}", kf1_scaled_pose);
-            // debug!("Sofiya! Initial velocity for graph solver: {:?}", kf1_scaled_velocity);
+                // {
+                //     // self.set_keyframe_experiment(1, &imu_init.rotation, &imu_init.velocity).unwrap();
 
-            // self.graph_solver = GraphSolver::new();
-            // self.graph_solver.initialize(
-            //     kf1_timestamp,
-            //     pose_for_init,
-            //     kf1_scaled_velocity,
-            //     init_bias
-            // ).expect("Failed to initialize?");
+                //     // // Some messed up experiments going on in here....
+                //     // let rbw = Vector4::new(0.53085, -0.136527, -0.832938, -0.076147);
+                //     // let velocity = DVVector3::new_with(
+                //     //     -0.06432, 0.048513, 0.62881
+                //     // );
+                //     // self.set_keyframe_experiment(0, &rbw, &velocity).unwrap();
+                // }
 
-            // self.graph_solver.solver_state = GraphSolverState::Ok;
-            // self.last_timestamp = kf1_timestamp;
+                // {
+                //     let mut map = self.map.write()?;
+                //     // Ground truth rotation is Tbw, need to store in keyframe as Tcw
+                //     let tbw = Pose::new_with_quaternion_convert(
+                //         Vector3::new(0.0, 0.0, 0.0),
+                //         imu_init.rotation
+                //     );
+                //     let twc = tbw.inverse() * ImuCalib::new().tbc; // twb * tbc
+                //     let tcw = twc.inverse();
+
+                //     map.get_keyframe_mut(1).imu_data.velocity = Some(imu_init.velocity);
+                //     map.get_keyframe_mut(0).imu_data.velocity = Some(DVVector3::new_with(0.0, 0.0, 0.0));
+                //     map.apply_scaled_rotation(&tcw, 1.0,false);
+                // }
+
+
+                
+                // // Now that the map is scaled, re-initialize the graph solver
+                // let (init_timestamp, init_pose, init_velocity) = {
+                //     let map = self.map.read()?;
+                //     let kf = map.get_keyframe(1);
+
+                //     // Note (frames): Kf1 pose is Tcw, initialize graph solver with Tbw
+                //     let tcw = kf.get_pose();
+                //     let tbw = ImuCalib::new().tbc * tcw;
+
+                //     let velocity = kf.imu_data.velocity.unwrap();
+
+                //     (kf.timestamp, tbw, velocity)
+                // };
+
+                // self.graph_solver = GraphSolver::new();
+                // self.graph_solver.initialize(
+                //     init_timestamp,
+                //     init_pose,
+                //     init_velocity,
+                //     init_bias
+                // ).expect("Failed to initialize?");
+
+                // self.graph_solver.solver_state = GraphSolverState::Ok;
+                // self.last_timestamp = msg.frame.timestamp;
 
         } else {
             // If we have previous frames already, can track normally
@@ -246,20 +236,41 @@ impl TrackingBackendGTSAM {
         );
 
         let map = self.map.read()?;
-        // self.system.try_send(VISUALIZER, Box::new(VisTrajectoryMsg{
-        //     pose: current_frame.pose.unwrap(),
-        //     mappoint_matches: vec![],
-        //     mappoints_in_tracking: BTreeSet::new(),
-        //     timestamp: current_frame.timestamp,
-        //     map_version: map.version
-        // }));
-        self.system.try_send(VISUALIZER, Box::new(VisTrajectoryTrackingMsg{
+        self.system.try_send(VISUALIZER, Box::new(VisTrajectoryMsg{
             pose: current_frame.pose.unwrap(),
+            mappoint_matches: vec![],
+            mappoints_in_tracking: BTreeSet::new(),
             timestamp: current_frame.timestamp,
             map_version: map.version
         }));
 
+        Ok(())
+    }
 
+    fn set_keyframe_experiment(&self, kf_id: Id, rbw: &nalgebra::Vector4<f64>, velocity: &DVVector3<f64>) -> Result<(), Box<dyn std::error::Error>> {
+        // Ground truth rotation is Tbw, need to store in keyframe as Tcw
+        let tbw = Pose::new_with_quaternion_convert(
+            Vector3::new(0.0, 0.0, 0.0),
+            * rbw
+        );
+        let twc = tbw.inverse() * ImuCalib::new().tbc; // twb * tbc
+        let tcw = twc.inverse();
+
+        let mut map = self.map.write()?;
+        let kf = map.get_keyframe_mut(kf_id);
+
+        kf.set_pose(
+            Pose::new_with_quaternion(
+                * kf.get_pose().get_translation(),
+                tcw.get_quaternion()
+            )
+        );
+
+        println!("Setting keyframe {} to be {:?}", kf_id, tcw.get_quaternion());
+
+        println!("Diff between kf rotation and tcw from ground truth (is this rwg?): {:?}", *kf.get_pose().get_rotation() - *tcw.get_rotation());
+
+        kf.imu_data.velocity = Some(*velocity);
         Ok(())
     }
 
@@ -616,6 +627,7 @@ impl GraphSolver {
     fn initialize(&mut self, timestamp: f64, init_pose: Pose, init_vel: DVVector3<f64>, init_bias: ImuBias) -> Result<(), Box<dyn std::error::Error>> {
         let timestamp_converted = (timestamp * 1e9) as i64;
         println!("... Initial pose: {:?}", init_pose);
+        println!("... Initial pose rotation matrix: {:?}", init_pose.get_rotation());
         println!("... Initial velocity: {:?}", init_vel);
         println!("... Initial bias: {:?}", init_bias);
 
@@ -754,8 +766,6 @@ impl GraphSolver {
         // This will integrate from the current state time up to the new update time
         let _span = tracy_client::span!("create_imu_factor");
 
-        println!("imu measurements: {:?}", imu_measurements);
-
         // From ORBSLAM:
         let mut imu_from_last_frame = VecDeque::with_capacity(imu_measurements.len()); // mvImuFromLastFrame
         let imu_per = 0.001;
@@ -826,9 +836,6 @@ impl GraphSolver {
             acc = Vector3::<f64>::new(acc[0], acc[1], acc[2]);
 
             self.preint_gtsam.integrate_measurement(&acc.into(), &ang_vel.into(), tstep);
-            // println!("Tstep: {:?}", tstep);
-
-            println!("acc: {:?}", acc);
 
             // ORBSLAM3 imu preintegrated object
             // other_imu.imu_preintegrated_from_last_kf.integrate_new_measurement(acc, ang_vel, tstep);

@@ -57,7 +57,7 @@ impl ORBSLAM3LoopDetection {
                     fixed_scale = false;
                 }
             }
-            debug!("Fixed scale is {}", fixed_scale);
+            // debug!("Fixed scale is {}", fixed_scale);
 
             let num_opt_matches = optimizer::optimize_sim3(
                 &map, current_kf_id, loop_kf, &mut matched_mappoints, &mut scm, 10, fixed_scale
@@ -229,7 +229,7 @@ impl ORBSLAM3LoopDetection {
                         fixed_scale = false;
                     }
                 }
-                debug!("Fixed scale is {}", fixed_scale);
+                // debug!("Fixed scale is {}", fixed_scale);
 
                 let mut solver = Sim3Solver::new(
                     &map,
@@ -290,7 +290,7 @@ impl ORBSLAM3LoopDetection {
                                     fixed_scale = false;
                                 }
                             }
-                            debug!("Fixed scale is {}", fixed_scale);
+                            // debug!("Fixed scale is {}", fixed_scale);
 
 
                             let num_opt_matches = optimizer::optimize_sim3(

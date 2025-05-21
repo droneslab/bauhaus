@@ -371,8 +371,6 @@ impl DarvisVisualizer {
     async fn update_draw_map(&mut self, msg: VisTrajectoryMsg) -> Result<(), Box<dyn std::error::Error>> {
         self.draw_trajectory(msg.pose, msg.timestamp, SETTINGS.get::<bool>(VISUALIZER, "draw_graph")).await?;
 
-        println!("Update draw map??");
-
         self.plot_map_info(&msg.mappoint_matches, msg.timestamp).await?;
 
         if !SETTINGS.get::<bool>(VISUALIZER, "draw_only_trajectory") {
@@ -496,6 +494,8 @@ impl DarvisVisualizer {
                 // so that it doesn't cover up the drawing of the current frame. 
                 continue;
             }
+
+            // println!("Drawing kf {} with rotation {:?}", id, curr_pose);
 
             let points = vec![prev_pose, curr_pose.into()];
             entities_traj.push(

@@ -9,7 +9,7 @@ void clear_values(Values &values) {
 }
 
 const Pose3 &values_at_pose3(const Values &values, Key key) {
-    // std::cout << "POSE IN c++: " << values.at(key).cast<Pose3>() << std::endl;
+    std::cout << "POSE IN c++: " << values.at(key).cast<Pose3>() << std::endl;
     return values.at(key).cast<Pose3>();
 }
 

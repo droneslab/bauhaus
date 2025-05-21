@@ -257,7 +257,7 @@ impl LoopClosing {
                 // Make sure connections are updated
                 lock.update_connections(*kf_id);
             }
-            self.map.write()?.map_change_index += 1;
+            lock.map_change_index += 1;
 
             // Start Loop Fusion
             // Update matched map points and replace if duplicated
