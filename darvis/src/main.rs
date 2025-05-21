@@ -107,10 +107,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if *shutdown_flag.lock().unwrap() { break; }
         tracy_client::frame_mark();
 
-        // debug!("Read image {} at timestamp {}", image_path, timestamp);
-        // debug!("Imu initialization: {:?}", imu_initialization);
-        // debug!("IMU measurements: {:?}", imu_measurements);
-
         let mut image = image::read_image_file(&image_path);
         if SETTINGS.get::<bool>(CAMERA, "need_to_resize") {
             let new_height = SETTINGS.get::<i32>(CAMERA, "height");
@@ -118,8 +114,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // debug!("Resizing image to {}x{}", new_width, new_height);
             image = image::resize_image(&image, new_width, new_height).expect("Could not resize image!");
         }
-
-        // println!("IMU INITIALIZATION VALUES: {:?}", imu_initialization);
 
         first_actor_tx.send(Box::new(
             ImageMsg{

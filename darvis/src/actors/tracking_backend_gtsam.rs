@@ -1,7 +1,7 @@
 extern crate g2o;
 use log::{warn, info, debug, error};
 use nalgebra::{Isometry3, Vector3, Vector6};
-use std::{collections::{BTreeSet, HashMap}, sync::atomic::Ordering, thread::sleep, time::Duration, fmt::Debug};
+use std::{collections::{BTreeSet, HashMap, VecDeque}, fmt::Debug, sync::atomic::Ordering, thread::sleep, time::Duration};
 use gtsam::{
     inference::symbol::Symbol, navigation::combined_imu_factor::{CombinedImuFactor, PreintegratedCombinedMeasurements, PreintegrationCombinedParams}, nonlinear::{
         isam2::ISAM2, nonlinear_factor_graph::NonlinearFactorGraph, values::Values
@@ -207,13 +207,13 @@ impl TrackingBackendGTSAM {
         );
 
         let map = self.map.read()?;
-        self.system.try_send(VISUALIZER, Box::new(VisTrajectoryMsg{
-            pose: current_frame.pose.unwrap(),
-            mappoint_matches: vec![],
-            mappoints_in_tracking: BTreeSet::new(),
-            timestamp: current_frame.timestamp,
-            map_version: map.version
-        }));
+        // self.system.try_send(VISUALIZER, Box::new(VisTrajectoryMsg{
+        //     pose: current_frame.pose.unwrap(),
+        //     mappoint_matches: vec![],
+        //     mappoints_in_tracking: BTreeSet::new(),
+        //     timestamp: current_frame.timestamp,
+        //     map_version: map.version
+        // }));
         self.system.try_send(VISUALIZER, Box::new(VisTrajectoryTrackingMsg{
             pose: current_frame.pose.unwrap(),
             timestamp: current_frame.timestamp,
@@ -282,6 +282,8 @@ pub struct GraphSolver {
     ct_state_lookup: HashMap<i64, u64>,
     timestamp_lookup: HashMap<u64, i64>,
     measurement_smart_lookup_left: HashMap<i32, gtsam::slam::projection_factor::SmartProjectionPoseFactorCal3S2>, // Smart lookup for IMU measurements
+
+    last_timestamp: Timestamp
 }
 
 impl GraphSolver {
@@ -313,6 +315,8 @@ impl GraphSolver {
             ct_state_lookup: HashMap::new(),
             timestamp_lookup: HashMap::new(),
             measurement_smart_lookup_left: HashMap::new(),
+
+            last_timestamp: 0.0
         }
     }
 
@@ -330,43 +334,40 @@ impl GraphSolver {
             return Ok(false);
         }
 
-        self.create_imu_factor(imu_measurements)?;
+        self.create_imu_factor(imu_measurements, current_frame.timestamp, self.last_timestamp)?;
 
         // Original models
         let new_state = self.predict_state();
 
-        // Move node count forward in time
-        self.ct_state += 1;
-
         // Append to our node vectors
         self.values_new.insert_pose3(
-            &Symbol::new(b'x', self.ct_state),
+            &Symbol::new(b'x', self.ct_state + 1),
             &new_state.pose
         );
         self.values_new.insert_vector3(
-            &Symbol::new(b'v', self.ct_state),
+            &Symbol::new(b'v', self.ct_state + 1),
             &new_state.velocity
         );
         self.values_new.insert_constant_bias(
-            &Symbol::new(b'b', self.ct_state),
+            &Symbol::new(b'b', self.ct_state + 1),
             &new_state.bias
         );
         self.values_initial.insert_pose3(
-            &Symbol::new(b'x', self.ct_state),
+            &Symbol::new(b'x', self.ct_state + 1),
             &new_state.pose
         );
         self.values_initial.insert_vector3(
-            &Symbol::new(b'v', self.ct_state),
+            &Symbol::new(b'v', self.ct_state + 1),
             &new_state.velocity
         );
         self.values_initial.insert_constant_bias(
-            &Symbol::new(b'b', self.ct_state),
+            &Symbol::new(b'b', self.ct_state + 1),
             &new_state.bias
         );
 
         // Add ct state to map
-        self.ct_state_lookup.insert(timestamp, self.ct_state);
-        self.timestamp_lookup.insert(self.ct_state, timestamp);
+        self.ct_state_lookup.insert(timestamp, self.ct_state + 1);
+        self.timestamp_lookup.insert(self.ct_state + 1, timestamp);
 
         self.process_smart_features(new_tracked_features);
 
@@ -374,7 +375,7 @@ impl GraphSolver {
 
         self.optimize();
 
-        debug!("OPTIMIZATION COVARIANCE: {:?}", self.isam2.get_marginal_covariance(&Symbol::new(b'x', self.ct_state)));
+        debug!("OPTIMIZATION COVARIANCE: {:?}", self.isam2.get_marginal_covariance(&Symbol::new(b'x', self.ct_state + 1)));
 
         // Update frame with optimized values
         // TODO there's probably a better way to clean up all this conversion than this
@@ -397,6 +398,11 @@ impl GraphSolver {
             bwz: gyro_bias[2]
         };
         debug!("OPTIMIZED POSE ESTIMATE... {}, {:?}, {:?}, {:?}", timestamp, updated_pose, velocity, current_frame.imu_data.imu_bias);
+
+        self.last_timestamp = current_frame.timestamp;
+
+        // Move node count forward in time
+        self.ct_state += 1;
 
         Ok(true)
     }
@@ -508,6 +514,10 @@ impl GraphSolver {
 
         // Actually create the GTSAM preintegration
         self.preint_gtsam = PreintegratedCombinedMeasurements::new(params, &prior_state.bias);
+
+        self.last_timestamp = timestamp as f64 / 1e9; // Convert back to seconds
+        println!("Last timestamp: {:?}", self.last_timestamp);
+
         Ok(())
     }
 
@@ -544,81 +554,84 @@ impl GraphSolver {
         return predicted;
     }
 
-    fn create_imu_factor(&mut self, imu_measurements: &mut ImuMeasurements) -> Result<(), Box<dyn std::error::Error>> {
+    fn create_imu_factor(&mut self, imu_measurements: &mut ImuMeasurements, current_timestamp: Timestamp, last_timestamp: Timestamp) -> Result<(), Box<dyn std::error::Error>> {
         // This function will create a discrete IMU factor using the GTSAM preintegrator class
         // This will integrate from the current state time up to the new update time
         let _span = tracy_client::span!("create_imu_factor");
 
+        // println!("Current timestamp: {:?}", current_timestamp);
+        // println!("Last timestamp: {:?}", last_timestamp);
         // println!("Imu measurements: {:?}", imu_measurements);
 
         // From ORBSLAM:
-        // let mut imu_from_last_frame = VecDeque::with_capacity(imu_measurements.len()); // mvImuFromLastFrame
-        // let imu_per = 0.001;
-        // while !imu_measurements.is_empty() {
-        //     if imu_measurements.front().unwrap().timestamp < last_timestamp - imu_per {
-        //         imu_measurements.pop_front();
-        //     } else if imu_measurements.front().unwrap().timestamp < current_frame.timestamp - imu_per {
-        //         let msmt = imu_measurements.pop_front().unwrap();
-        //         imu_from_last_frame.push_back(msmt);
-        //     } else {
-        //         let msmt = imu_measurements.pop_front().unwrap();
-        //         imu_from_last_frame.push_back(msmt);
-        //         break;
-        //     }
-        // }
-        // let n = imu_from_last_frame.len() - 1;
+        let mut imu_from_last_frame = VecDeque::with_capacity(imu_measurements.len()); // mvImuFromLastFrame
+        let imu_per = 0.001;
+        while !imu_measurements.is_empty() {
+            if imu_measurements.front().unwrap().timestamp < last_timestamp - imu_per {
+                imu_measurements.pop_front();
+            } else if imu_measurements.front().unwrap().timestamp < current_timestamp - imu_per {
+                let msmt = imu_measurements.pop_front().unwrap();
+                imu_from_last_frame.push_back(msmt);
+            } else {
+                let msmt = imu_measurements.pop_front().unwrap();
+                imu_from_last_frame.push_back(msmt);
+                break;
+            }
+        }
+        let n = imu_from_last_frame.len() - 1;
 
         // ORBSLAM3 imu preintegrated object. If not doing imu-based optimizations in local mapping and loop closure, don't need this
         // let mut other_imu = IMU::new();
         // let mut imu_preintegrated_from_last_frame = ImuPreIntegrated::new(last_frame_imu_bias);
 
-        for i in 0..imu_measurements.len()-1 {
+        // for i in 0..imu_measurements.len()-1 {
         // Commented out code here from ORBSLAM3 as well
-        // for i in 0..n {
-            let mut tstep = imu_measurements[i + 1].timestamp - imu_measurements[i].timestamp;
-            let mut acc: Vector3<f64> = imu_measurements[i].acc; // acc
-            let mut ang_vel: Vector3<f64> = imu_measurements[i].ang_vel; // angVel
-            // let mut tstep = 0.0;
-            // let mut acc: Vector3<f64> = Vector3::zeros(); // acc
-            // let mut ang_vel: Vector3<f64> = Vector3::zeros(); // angVel
+        for i in 0..n {
+            // let mut tstep = imu_measurements[i + 1].timestamp - imu_measurements[i].timestamp;
+            // let mut acc: Vector3<f64> = imu_measurements[i].acc; // acc
+            // let mut ang_vel: Vector3<f64> = imu_measurements[i].ang_vel; // angVel
+            let mut tstep = 0.0;
+            let mut acc: Vector3<f64> = Vector3::zeros(); // acc
+            let mut ang_vel: Vector3<f64> = Vector3::zeros(); // angVel
 
-            // // orbslam:
-            // if i == 0 && i < (n - 1) {
-            //     let tab = imu_from_last_frame[i + 1].timestamp - imu_from_last_frame[i].timestamp;
-            //     let tini = imu_from_last_frame[i].timestamp - last_timestamp;
-            //     acc = (
-            //         imu_from_last_frame[i].acc + imu_from_last_frame[i + 1].acc -
-            //         (imu_from_last_frame[i + 1].acc - imu_from_last_frame[i].acc) * (tini/tab)
-            //     ) * 0.5;
-            //     ang_vel = (
-            //         imu_from_last_frame[i].ang_vel + imu_from_last_frame[i + 1].ang_vel -
-            //         (imu_from_last_frame[i + 1].ang_vel - imu_from_last_frame[i].ang_vel) * (tini/tab)
-            //     ) * 0.5;
-            //     tstep = imu_from_last_frame[i + 1].timestamp - last_timestamp;
-            // } else if i < (n - 1) {
-            //     acc = (imu_from_last_frame[i].acc + imu_from_last_frame[i + 1].acc) * 0.5;
-            //     ang_vel = (imu_from_last_frame[i].ang_vel + imu_from_last_frame[i + 1].ang_vel) * 0.5;
-            //     tstep = imu_from_last_frame[i + 1].timestamp - imu_from_last_frame[i].timestamp;
-            // } else if i > 0 && i == (n - 1) {
-            //     let tab = imu_from_last_frame[i + 1].timestamp - imu_from_last_frame[i].timestamp;
-            //     let tend = imu_from_last_frame[i + 1].timestamp - current_frame.timestamp;
-            //     acc = (
-            //         imu_from_last_frame[i].acc + imu_from_last_frame[i + 1].acc -
-            //         (imu_from_last_frame[i + 1].acc - imu_from_last_frame[i].acc) * (tend/tab)
-            //     ) * 0.5;
-            //     ang_vel = (
-            //         imu_from_last_frame[i].ang_vel + imu_from_last_frame[i + 1].ang_vel -
-            //         (imu_from_last_frame[i + 1].ang_vel - imu_from_last_frame[i].ang_vel) * (tend/tab)
-            //     ) * 0.5;
-            //     tstep = current_frame.timestamp - imu_from_last_frame[i].timestamp;
-            // } else if i == 0 && i == (n - 1) {
-            //     acc = imu_from_last_frame[i].acc;
-            //     ang_vel = imu_from_last_frame[i].ang_vel;
-            //     tstep = current_frame.timestamp - last_timestamp;
-            // }
-            // tstep = tstep * 1e9;
+            // orbslam:
+            if i == 0 && i < (n - 1) {
+                let tab = imu_from_last_frame[i + 1].timestamp - imu_from_last_frame[i].timestamp;
+                let tini = imu_from_last_frame[i].timestamp - last_timestamp;
+                acc = (
+                    imu_from_last_frame[i].acc + imu_from_last_frame[i + 1].acc -
+                    (imu_from_last_frame[i + 1].acc - imu_from_last_frame[i].acc) * (tini/tab)
+                ) * 0.5;
+                ang_vel = (
+                    imu_from_last_frame[i].ang_vel + imu_from_last_frame[i + 1].ang_vel -
+                    (imu_from_last_frame[i + 1].ang_vel - imu_from_last_frame[i].ang_vel) * (tini/tab)
+                ) * 0.5;
+                tstep = imu_from_last_frame[i + 1].timestamp - last_timestamp;
+            } else if i < (n - 1) {
+                acc = (imu_from_last_frame[i].acc + imu_from_last_frame[i + 1].acc) * 0.5;
+                ang_vel = (imu_from_last_frame[i].ang_vel + imu_from_last_frame[i + 1].ang_vel) * 0.5;
+                tstep = imu_from_last_frame[i + 1].timestamp - imu_from_last_frame[i].timestamp;
+            } else if i > 0 && i == (n - 1) {
+                let tab = imu_from_last_frame[i + 1].timestamp - imu_from_last_frame[i].timestamp;
+                let tend = imu_from_last_frame[i + 1].timestamp - current_timestamp;
+                acc = (
+                    imu_from_last_frame[i].acc + imu_from_last_frame[i + 1].acc -
+                    (imu_from_last_frame[i + 1].acc - imu_from_last_frame[i].acc) * (tend/tab)
+                ) * 0.5;
+                ang_vel = (
+                    imu_from_last_frame[i].ang_vel + imu_from_last_frame[i + 1].ang_vel -
+                    (imu_from_last_frame[i + 1].ang_vel - imu_from_last_frame[i].ang_vel) * (tend/tab)
+                ) * 0.5;
+                tstep = current_timestamp - imu_from_last_frame[i].timestamp;
+            } else if i == 0 && i == (n - 1) {
+                acc = imu_from_last_frame[i].acc;
+                ang_vel = imu_from_last_frame[i].ang_vel;
+                tstep = current_timestamp - last_timestamp;
+            }
+            // tstep = tstep * 1e2;
 
             self.preint_gtsam.integrate_measurement(&acc.into(), &ang_vel.into(), tstep);
+            // println!("Tstep: {:?}", tstep);
 
             // ORBSLAM3 imu preintegrated object
             // other_imu.imu_preintegrated_from_last_kf.integrate_new_measurement(acc, ang_vel, tstep);
@@ -662,7 +675,7 @@ impl GraphSolver {
                     // Insert measurements to a smart factor
                     smartfactor.add(
                         & gtsam::geometry::point2::Point2::new(point.x as f64, point.y as f64),
-                        &Symbol::new(b'x', self.ct_state)
+                        &Symbol::new(b'x', self.ct_state + 1)
                     );
                     continue;
                 },
@@ -690,7 +703,7 @@ impl GraphSolver {
                     // Insert measurements to a smart factor
                     smartfactor_left.add(
                         & gtsam::geometry::point2::Point2::new(point.x as f64, point.y as f64),
-                        &Symbol::new(b'x', self.ct_state)
+                        &Symbol::new(b'x', self.ct_state + 1)
                     );
 
                     // Add smart factor to FORSTER2 model
@@ -717,9 +730,9 @@ impl GraphSolver {
         self.graph_new.resize(0);
 
         // Use the optimized bias to reset integration
-        if self.values_initial.exists(&Symbol::new(b'b', self.ct_state)) {
+        if self.values_initial.exists(&Symbol::new(b'b', self.ct_state + 1)) {
             self.preint_gtsam.reset_integration_and_set_bias(
-                & self.values_initial.get_constantbias(&Symbol::new(b'b', self.ct_state)).unwrap().into()
+                & self.values_initial.get_constantbias(&Symbol::new(b'b', self.ct_state + 1)).unwrap().into()
             );
         } else {
             warn!("Bias wasn't optimized?");
