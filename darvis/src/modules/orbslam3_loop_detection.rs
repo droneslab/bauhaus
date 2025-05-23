@@ -39,7 +39,7 @@ impl ORBSLAM3LoopDetection {
 
     fn detect_and_reffine_sim3_from_last_kf(&mut self, map: &ReadWriteMap, current_kf_id: Id, loop_kf: Id, scw: &mut Sim3) -> Result<Option<(Sim3, Vec<Option<i32>>)>, Box<dyn std::error::Error>> {
         // bool LoopClosing::DetectAndReffineSim3FromLastKF(KeyFrame* pCurrentKF, KeyFrame* pMatchedKF, g2o::Sim3 &gScw, int &nNumProjMatches, std::vector<MapPoint*> &vpMPs, std::vector<MapPoint*> &vpMatchedMPs)
-        let _span = tracy_client::span!("detect_and_reffine_sim3_from_last_kf");
+        // let _span = tracy_client::span!("detect_and_reffine_sim3_from_last_kf");
 
         let mut matched_mappoints = Vec::new();
         let num_proj_matches = Self::find_matches_by_projection(&map, current_kf_id, scw, loop_kf, &mut self.loop_mps, &mut matched_mappoints)?;
@@ -77,7 +77,7 @@ impl ORBSLAM3LoopDetection {
         map: & ReadWriteMap, current_kf_id: Id, scw: &mut Sim3, loop_kf: Id, mappoints: &mut Vec<Id>, matched_mappoints: &mut Vec<Option<i32>>,
     ) -> Result<i32, Box<dyn std::error::Error>> {
         // int LoopClosing::FindMatchesByProjection(KeyFrame* pCurrentKF, KeyFrame* pMatchedKFw, g2o::Sim3 &g2oScw, set<MapPoint*> &spMatchedMPinOrigin, vector<MapPoint*> &vpMapPoints, vector<MapPoint*> &vpMatchedMapPoints)
-        let _span = tracy_client::span!("find_matches_by_projection");
+        // let _span = tracy_client::span!("find_matches_by_projection");
 
         let num_covisibles = 10;
         let mut cov_kf_matched = map.read()?.get_keyframe(loop_kf).get_covisibility_keyframes(num_covisibles); // vpCovKFm
@@ -130,7 +130,7 @@ impl ORBSLAM3LoopDetection {
 
     fn detect_common_regions_from_bow(&mut self, map: &ReadWriteMap, current_kf_id: Id, bow_cands: &Vec<Id>) -> Result<(Option<Id>, Option<Sim3>), Box<dyn std::error::Error>> {
         // bool LoopClosing::DetectCommonRegionsFromBoW(std::vector<KeyFrame*> &vpBowCand, KeyFrame* &pMatchedKF2, KeyFrame* &pLastCurrentKF, g2o::Sim3 &g2oScw, int &nNumCoincidences, std::vector<MapPoint*> &vpMPs, std::vector<MapPoint*> &vpMatchedMPs)
-        let _span = tracy_client::span!("detect_common_regions_from_bow");
+        // let _span = tracy_client::span!("detect_common_regions_from_bow");
 
         let bow_matches_threshold = 20; // nBoWMatches
         let bow_inliers_threshold = 15; // nBoWInliers
@@ -418,7 +418,7 @@ impl ORBSLAM3LoopDetection {
 
     fn detect_common_regions_from_last_kf(&mut self, map: &ReadWriteMap, current_kf_id: Id, scw: &mut Sim3, loop_kf: Id, mappoints: &mut Vec<Id>) -> Result<(bool, i32), Box<dyn std::error::Error>>{
         // bool LoopClosing::DetectCommonRegionsFromLastKF(KeyFrame* pCurrentKF, KeyFrame* pMatchedKF, g2o::Sim3 &gScw, int &nNumProjMatches, std::vector<MapPoint*> &vpMPs, std::vector<MapPoint*> &vpMatchedMPs)
-        let _span = tracy_client::span!("detect_common_regions_from_last_kf");
+        // let _span = tracy_client::span!("detect_common_regions_from_last_kf");
 
         let mut matched_mappoints = Vec::new();
         let num_proj_matches = Self::find_matches_by_projection(&map, current_kf_id, scw, loop_kf, mappoints, &mut matched_mappoints)?;
@@ -433,7 +433,7 @@ impl ORBSLAM3LoopDetection {
 impl LoopDetectionModule for ORBSLAM3LoopDetection {
     fn detect_loop(&mut self, map: &ReadWriteMap, current_kf_id: Id) -> Result<(Option<Id>, Option<Id>, Option<Sim3>, Vec<Id>, Vec<Option<Id>>), Box<dyn std::error::Error>>{
         // bool LoopClosing::NewDetectCommonRegions
-        let _span = tracy_client::span!("detect_common_regions");
+        // let _span = tracy_client::span!("detect_common_regions");
 
         let mut loop_kf = None;
         let mut scw = None;

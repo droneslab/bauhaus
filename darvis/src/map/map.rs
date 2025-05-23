@@ -154,7 +154,7 @@ impl Map {
     }
 
     pub fn insert_keyframe_to_map(&mut self, frame: Frame, is_initialization: bool) -> Id {
-        let _span = tracy_client::span!("insert_keyframe");
+        // let _span = tracy_client::span!("insert_keyframe");
         self.last_kf_id += 1;
         let new_kf_id = self.last_kf_id;
         if self.keyframes.is_empty() {
@@ -177,7 +177,6 @@ impl Map {
             // Possible that that is faster than cloning.
             let mp_matches = self.keyframes.get(&new_kf_id).unwrap().get_mp_matches().clone();
 
-            debug!("INSERT KEYFRAME TO MAP, mp matches: {}", mp_matches.len());
             for i in 0..mp_matches.len() {
                 if let Some((mp_id, _is_outlier)) = self.keyframes.get(&new_kf_id).unwrap().get_mp_match(&(i as u32)) {
                     // Add observation for mp->kf
@@ -218,7 +217,7 @@ impl Map {
     }
 
     pub fn discard_keyframe(&mut self, kf_id: Id) {
-        let _span = tracy_client::span!("discard_keyframe");
+        // let _span = tracy_client::span!("discard_keyframe");
         if kf_id == self.initial_kf_id {
             return;
         }
@@ -230,7 +229,6 @@ impl Map {
             let kf = self.keyframes.get(&kf_id).unwrap();
 
             if kf.dont_delete {
-                debug!("Loop closing working on keyframe, don't delete.");
                 return;
             }
             connections1 = kf.get_covisibility_keyframes(i32::MAX);
@@ -278,12 +276,17 @@ impl Map {
         // Include that children as new parent candidate for the rest
         let mut continue_loop = false;
 
+        println!("Shake something loose?");
+        let mut teehee = 0;
+        let mut connectedkfssize = vec![];
         while !children1.is_empty() {
+            teehee +=1;
             let (mut max, mut child_id, mut parent_id) = (-1, -1, -1);
 
             for child_kf_id in &children1 {
                 let child_kf = self.keyframes.get(&child_kf_id).unwrap();
                 let connected_kfs = child_kf.get_covisibility_keyframes(i32::MAX);
+                connectedkfssize.push(connected_kfs.len());
 
                 // Check if a parent candidate is connected to the keyframe
                 for connected_kf_id in &connected_kfs {
@@ -312,7 +315,9 @@ impl Map {
                 break;
             }
         }
-
+        println!("Teehee: {}", teehee);
+        println!("connectedkfssize: ({}), {:?}", connectedkfssize.len(), connectedkfssize);
+        
         // If a children has no covisibility links with any parent candidate, assign to the original parent of this KF
         for child_id in children1 {
             self.keyframes.get_mut(&child_id).unwrap().parent = parent1;
@@ -328,12 +333,10 @@ impl Map {
             self.deleted_keyframe_info.insert(kf_id, (parent1.unwrap(), pose_relative_to_parent));
         }
         self.keyframes.remove(&kf_id);
-
-        debug!("Sof: Discard keyframe {}", kf_id);
     }
 
     pub fn update_connections(&mut self, main_kf_id: Id) {
-        let _span = tracy_client::span!("update_connections");
+        // let _span = tracy_client::span!("update_connections");
         //For all map points in keyframe check in which other keyframes are they seen
         //Increase counter for those keyframes
         let mut kf_counter = HashMap::<Id, i32>::new();
@@ -527,26 +530,18 @@ impl Map {
     pub fn apply_scaled_rotation(&mut self, t: &Pose, s: f64, b_scaled_vel: bool) {
         // Sofiya: Tested!!
         // void Map::ApplyScaledRotation(const Sophus::SE3f &T, const float s, const bool bScaledVel)
-        let _span = tracy_client::span!("apply_scaled_rotation");
-
-        println!("T rotation: {:?}", t.get_rotation());
+        // let _span = tracy_client::span!("apply_scaled_rotation");
 
         // Body position (IMU) of first keyframe is fixed to (0,0,0)
         for keyframe in self.keyframes.values_mut() {
-            println!("Apply scaled rotation: Previous pose: {:?}", keyframe.get_pose());
-            println!("Apply scaled rotation: Previous velocity: {:?}", keyframe.imu_data.velocity);
-
             let mut twc = keyframe.get_pose().inverse().clone();
             let twc_trans = twc.get_translation();
             twc.set_translation(twc_trans.scale(s));
 
-            println!("Scaled: {:?}", twc);
             let tyc = *t * twc;
-            println!("Rotated: {:?}", tyc);
 
             let tcy = tyc.inverse();
 
-            println!("Inverse: {:?}", tcy);
             keyframe.set_pose(tcy);
 
             let vw = keyframe.imu_data.velocity.unwrap();
@@ -555,10 +550,6 @@ impl Map {
             } else {
                 keyframe.imu_data.velocity = Some(DVVector3::new(*t.get_rotation() * *vw * s));
             }
-
-            println!("Apply scaled rotation: New pose: {:?}", tcy);
-            println!("Apply scaled rotation: New velocity: {:?}", keyframe.imu_data.velocity);
-
         }
 
         let mp_ids = self.mappoints.keys().cloned().collect::<Vec<Id>>();

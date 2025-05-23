@@ -92,14 +92,14 @@ impl TrackingBackendGTSAM {
             // Need to initialize the factor graph 
 
             // Initialize from gt
-                let imu_init = msg.imu_initialization.expect("Msg should have imu initialization data!");
-                self.graph_solver.initialize_with_data(
-                    msg.frame.timestamp,
-                    &imu_init
-                ).expect("Failed to initialize?");
+                // let imu_init = msg.imu_initialization.expect("Msg should have imu initialization data!");
+                // self.graph_solver.initialize_with_data(
+                //     msg.frame.timestamp,
+                //     &imu_init
+                // ).expect("Failed to initialize?");
 
-                self.graph_solver.solver_state = GraphSolverState::Ok;
-                self.last_timestamp = msg.frame.timestamp;
+                // self.graph_solver.solver_state = GraphSolverState::Ok;
+                // self.last_timestamp = msg.frame.timestamp;
 
 
 
@@ -127,75 +127,75 @@ impl TrackingBackendGTSAM {
 
 
             // Initialize from map initialization
-                // let imu_init = msg.imu_initialization.expect("Msg should have imu initialization data!"); // Rotation in this is TBW! 
-                // let init_bias = ImuBias::new_with(imu_init.gyro_bias, imu_init.acc_bias);
+                let imu_init = msg.imu_initialization.expect("Msg should have imu initialization data!"); // Rotation in this is TBW! 
+                let init_bias = ImuBias::new_with(imu_init.gyro_bias, imu_init.acc_bias);
 
-                // // self.scale_map_from_imu(&mut msg)?;
+                // self.scale_map_from_imu(&mut msg)?;
 
-                // // Instead of scale map from imu..............
-                // {
-                //     let current_distance = Self::distance(&self.map.read().unwrap().get_keyframe(0).get_pose().get_translation(), &self.map.read().unwrap().get_keyframe(1).get_pose().get_translation());
-                //     let gt_distance = Self::distance(
-                //         & Vector3::new(4.633082, -1.807218, 0.830638),
-                //         & Vector3::new(4.629793, -1.804637, 0.862069)
-                //     );
-                //     println!("Current distance: {:?}", current_distance);
-                //     println!("GT distance: {:?}", gt_distance);
-                //     println!("Scale: {:?}", current_distance / gt_distance);
-                // }
+                // Instead of scale map from imu..............
+                {
+                    let current_distance = Self::distance(&self.map.read().unwrap().get_keyframe(0).get_pose().get_translation(), &self.map.read().unwrap().get_keyframe(1).get_pose().get_translation());
+                    let gt_distance = Self::distance(
+                        & Vector3::new(4.633082, -1.807218, 0.830638),
+                        & Vector3::new(4.629793, -1.804637, 0.862069)
+                    );
+                    println!("Current distance: {:?}", current_distance);
+                    println!("GT distance: {:?}", gt_distance);
+                    println!("Scale: {:?}", current_distance / gt_distance);
+                }
 
-                // {
-                //     // self.set_keyframe_experiment(1, &imu_init.rotation, &imu_init.velocity).unwrap();
+                {
+                    // self.set_keyframe_experiment(1, &imu_init.rotation, &imu_init.velocity).unwrap();
 
-                //     // // Some messed up experiments going on in here....
-                //     // let rbw = Vector4::new(0.53085, -0.136527, -0.832938, -0.076147);
-                //     // let velocity = DVVector3::new_with(
-                //     //     -0.06432, 0.048513, 0.62881
-                //     // );
-                //     // self.set_keyframe_experiment(0, &rbw, &velocity).unwrap();
-                // }
+                    // // Some messed up experiments going on in here....
+                    // let rbw = Vector4::new(0.53085, -0.136527, -0.832938, -0.076147);
+                    // let velocity = DVVector3::new_with(
+                    //     -0.06432, 0.048513, 0.62881
+                    // );
+                    // self.set_keyframe_experiment(0, &rbw, &velocity).unwrap();
+                }
 
-                // {
-                //     let mut map = self.map.write()?;
-                //     // Ground truth rotation is Tbw, need to store in keyframe as Tcw
-                //     let tbw = Pose::new_with_quaternion_convert(
-                //         Vector3::new(0.0, 0.0, 0.0),
-                //         imu_init.rotation
-                //     );
-                //     let twc = tbw.inverse() * ImuCalib::new().tbc; // twb * tbc
-                //     let tcw = twc.inverse();
+                {
+                    let mut map = self.map.write()?;
+                    // Ground truth rotation is Tbw, need to store in keyframe as Tcw
+                    let tbw = Pose::new_with_quaternion_convert(
+                        Vector3::new(0.0, 0.0, 0.0),
+                        imu_init.rotation
+                    );
+                    let twc = tbw.inverse() * ImuCalib::new().tbc; // twb * tbc
+                    let tcw = twc.inverse();
 
-                //     map.get_keyframe_mut(1).imu_data.velocity = Some(imu_init.velocity);
-                //     map.get_keyframe_mut(0).imu_data.velocity = Some(DVVector3::new_with(0.0, 0.0, 0.0));
-                //     map.apply_scaled_rotation(&tcw, 1.0,false);
-                // }
+                    map.get_keyframe_mut(1).imu_data.velocity = Some(imu_init.velocity);
+                    map.get_keyframe_mut(0).imu_data.velocity = Some(DVVector3::new_with(0.0, 0.0, 0.0));
+                    map.apply_scaled_rotation(&tcw, 1.0,false);
+                }
 
 
                 
-                // // Now that the map is scaled, re-initialize the graph solver
-                // let (init_timestamp, init_pose, init_velocity) = {
-                //     let map = self.map.read()?;
-                //     let kf = map.get_keyframe(1);
+                // Now that the map is scaled, re-initialize the graph solver
+                let (init_timestamp, init_pose, init_velocity) = {
+                    let map = self.map.read()?;
+                    let kf = map.get_keyframe(1);
 
-                //     // Note (frames): Kf1 pose is Tcw, initialize graph solver with Tbw
-                //     let tcw = kf.get_pose();
-                //     let tbw = ImuCalib::new().tbc * tcw;
+                    // Note (frames): Kf1 pose is Tcw, initialize graph solver with Tbw
+                    let tcw = kf.get_pose();
+                    let tbw = ImuCalib::new().tbc * tcw;
 
-                //     let velocity = kf.imu_data.velocity.unwrap();
+                    let velocity = kf.imu_data.velocity.unwrap();
 
-                //     (kf.timestamp, tbw, velocity)
-                // };
+                    (kf.timestamp, tbw, velocity)
+                };
 
-                // self.graph_solver = GraphSolver::new();
-                // self.graph_solver.initialize(
-                //     init_timestamp,
-                //     init_pose,
-                //     init_velocity,
-                //     init_bias
-                // ).expect("Failed to initialize?");
+                self.graph_solver = GraphSolver::new();
+                self.graph_solver.initialize(
+                    init_timestamp,
+                    init_pose,
+                    init_velocity,
+                    init_bias
+                ).expect("Failed to initialize?");
 
-                // self.graph_solver.solver_state = GraphSolverState::Ok;
-                // self.last_timestamp = msg.frame.timestamp;
+                self.graph_solver.solver_state = GraphSolverState::Ok;
+                self.last_timestamp = msg.frame.timestamp;
 
         } else {
             // If we have previous frames already, can track normally

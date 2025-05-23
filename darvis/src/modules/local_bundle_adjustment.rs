@@ -18,7 +18,7 @@ impl LocalMapOptimizationModule for LocalBundleAdjustment {
     ) -> Result<(), Box<dyn std::error::Error>> {
         // void Optimizer::LocalBundleAdjustment(KeyFrame *pKF, bool* pbStopFlag, Map* pMap, int& num_fixedKF, int& num_OptKF, int& num_MPs, int& num_edges)
 
-        let _span = tracy_client::span!("local_bundle_adjustment");
+        // let _span = tracy_client::span!("local_bundle_adjustment");
 
         // Setup optimizer
         let sensor: Sensor = SETTINGS.get(SYSTEM, "sensor");
@@ -47,7 +47,6 @@ impl LocalMapOptimizationModule for LocalBundleAdjustment {
             // Construct factor graph with read lock, but don't have to have lock to optimize.
             let lock = map.read()?;
 
-            let _span = tracy_client::span!("local_bundle_adjustment:construct_factor_graph");
             // Local KeyFrames: First Breath Search from Current Keyframe
             let keyframe = lock.get_keyframe(keyframe_id);
             let mut local_keyframes = vec![keyframe.id];
@@ -91,8 +90,6 @@ impl LocalMapOptimizationModule for LocalBundleAdjustment {
                     }
                 }
             }
-            tracy_client::plot!("LBA: local mps in local kfs ", local_mappoints.len() as f64);
-
 
             // Fixed Keyframes. Keyframes that see Local MapPoints but that are not Local Keyframes
             let mut fixed_cameras = Vec::new();
@@ -114,8 +111,6 @@ impl LocalMapOptimizationModule for LocalBundleAdjustment {
                     // KF could have been deleted during optimization, ok to ignore
                 }
             }
-
-            tracy_client::plot!("LBA: fixed_cameras ", fixed_cameras.len() as f64);
 
             if fixed_cameras.len() + num_fixed_kf == 0 {
                 warn!("LM_LBA: There are 0 fixed KF in the optimizations, LBA aborted");
@@ -257,7 +252,6 @@ impl LocalMapOptimizationModule for LocalBundleAdjustment {
                             // Monocular observation
                             if *left_index != -1 && kf.features.get_mv_right(*left_index as usize).is_none() {
                                 let (kp_un, _) = kf.features.get_keypoint(*left_index as usize);
-                                // debug!("Adding edge {} -> {}", vertex_id, kf_vertex);
 
                                 let th_huber_mono: f32 = (5.991 as f32).sqrt();
 
@@ -270,21 +264,12 @@ impl LocalMapOptimizationModule for LocalBundleAdjustment {
                                 );
                                 edges += 1;
                                 edges_kf_body.push(kf.id);
-                            } else {
-                                warn!("Local bundle adjustment, monocular observation... Pretty sure this line shouldn't be hit.");
                             }
                         }
                     }
                 }
             }
         }
-
-        debug!("LBA: KFs to optimize: {}, Fixed KFs: {}, MPs to optimize: {}, Edges: {}", kfs_to_optimize, fixed_kfs, mps_to_optimize, edges);
-        
-        tracy_client::plot!("LBA: KFs to Optimize", kfs_to_optimize as f64);
-        tracy_client::plot!("LBA: Fixed KFs", fixed_kfs as f64);
-        tracy_client::plot!("LBA: MPs to Optimize", mps_to_optimize as f64);
-        tracy_client::plot!("LBA: Edges", edges as f64);
 
         // TODO (concurrency): pbStopFlag
         if GBA_KILL_SWITCH.load(std::sync::atomic::Ordering::SeqCst) {
@@ -294,13 +279,13 @@ impl LocalMapOptimizationModule for LocalBundleAdjustment {
 
         // Optimize
         {
-            let _span = tracy_client::span!("local_bundle_adjustment::optimize");
+            // let _span = tracy_client::span!("local_bundle_adjustment::optimize");
             optimizer.pin_mut().optimize(10, false, false);
         }
 
 
         {
-            let _span = tracy_client::span!("local_bundle_adjustment::post_process");
+            // let _span = tracy_client::span!("local_bundle_adjustment::post_process");
 
             let mut lock = map.write()?;
 
@@ -358,7 +343,7 @@ impl LocalMapOptimizationModule for LocalBundleAdjustment {
             }
 
             {
-                let _span = tracy_client::span!("lba::post_process::recover_kfs");
+                // let _span = tracy_client::span!("lba::post_process::recover_kfs");
                 // Recover optimized data
                 for (kf_id, vertex_id) in kf_vertex_ids {
                     let pose = optimizer.recover_optimized_frame_pose(vertex_id);
@@ -367,11 +352,11 @@ impl LocalMapOptimizationModule for LocalBundleAdjustment {
             }
 
             {
-                let _span = tracy_client::span!("lba::post_process::recover_mps");
+                // let _span = tracy_client::span!("lba::post_process::recover_mps");
 
                 //Points
                 for (mp_id, vertex_id) in mp_vertex_ids {
-                    let _span = tracy_client::span!("lba::post_process::recover_mps::bindings");
+                    // let _span = tracy_client::span!("lba::post_process::recover_mps::bindings");
 
                     let position = optimizer.recover_optimized_mappoint_pose(vertex_id);
                     let translation = nalgebra::Translation3::new(
@@ -379,9 +364,9 @@ impl LocalMapOptimizationModule for LocalBundleAdjustment {
                         position.translation[1] as f64,
                         position.translation[2] as f64
                     );
-                    drop(_span);
+                    // drop(_span);
 
-                    let _span = tracy_client::span!("lba::post_process::recover_mps::update");
+                    // let _span = tracy_client::span!("lba::post_process::recover_mps::update");
 
                     let norm_and_depth = match lock.mappoints.get(&mp_id) {
                         Some(mp) => {
@@ -411,11 +396,11 @@ impl LocalMapOptimizationModule for LocalBundleAdjustment {
 pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_init: bool, tracked_mappoint_depths: HashMap<Id, f64>, sensor: Sensor) -> Result<(), Box<dyn std::error::Error>>{
     // void Optimizer::LocalInertialBA(KeyFrame *pKF, bool *pbStopFlag, Map *pMap, int& num_fixedKF, int& num_OptKF, int& num_MPs, int& num_edges, bool bLarge, bool bRecInit)
 
-    let _span = tracy_client::span!("local_bundle_adjustment (inertial)");
+    // let _span = tracy_client::span!("local_bundle_adjustment (inertial)");
 
     // Map* pCurrentMap = pKF->GetMap(); // TODO (multi-maps) should use keyframe's map instead of general map
 
-    let _span_construct = tracy_client::span!("local_bundle_adjustment:construct_factor_graph (inertial)");
+    // let _span_construct = tracy_client::span!("local_bundle_adjustment:construct_factor_graph (inertial)");
 
     let mut max_opt = 10;
     let mut opt_it = 10;
@@ -448,7 +433,6 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
                 local_ba_for_kf.insert(kf_id, curr_kf_id);
             }
         }
-        // println!("LI_BA, optimizable kfs: {:?}", optimizable_kfs);
 
         // Optimizable points seen by temporal optimizable keyframes
         for i in 0..optimizable_kfs.len() {
@@ -465,7 +449,6 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
                 }
             }
         }
-        // println!("LI_BA, optimizable points: {:?}", local_mappoints);
     }
 
     // Fixed Keyframe: First frame previous KF to optimization window)
@@ -477,12 +460,10 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
         if let Some(prev_kf_id) = last_opt_kf.prev_kf_id {
             fixed_keyframes.push(prev_kf_id);
             ba_fixed_for_kf.insert(prev_kf_id, curr_kf_id);
-            // println!("LI_BA, add fixed keyframe #1: {}", prev_kf_id);
         } else {
             ba_local_for_kf.insert(* optimizable_kfs.back().unwrap(), 0);
             ba_fixed_for_kf.insert(* optimizable_kfs.back().unwrap(), curr_kf_id);
             fixed_keyframes.push(* optimizable_kfs.back().unwrap());
-            // println!("LI_BA, add fixed keyframe #2: {}", optimizable_kfs.back().unwrap());
             optimizable_kfs.pop_back();
         }
     }
@@ -510,8 +491,6 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
                 break;
             }
         }
-        // println!("LI_BA, fixed keyframes which are not covisible: {:?}", fixed_keyframes);
-        // println!("LI_BA, optimizable keyframes: {:?}", optimizable_kfs);
     }
 
     let non_fixed = fixed_keyframes.len() == 0;
@@ -600,7 +579,6 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
             let kf_id = optimizable_kfs[i];
             let kf = lock.get_keyframe(kf_id);
             if kf.prev_kf_id.is_none() {
-                debug!("No inertial link to previous frame!!");
                 continue;
             }
             let prev_kf = lock.get_keyframe(kf.prev_kf_id.unwrap());
@@ -609,7 +587,6 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
                 !kf.imu_data.is_imu_initialized ||
                 prev_kf.imu_data.imu_preintegrated.is_none() ||
                 !prev_kf.imu_data.is_imu_initialized {
-                    warn!("Error building inertial edge... for kf {}: {} {} {} {}", kf.id, kf.imu_data.imu_preintegrated.is_none(), !kf.imu_data.is_imu_initialized, prev_kf.imu_data.imu_preintegrated.is_none(), !prev_kf.imu_data.is_imu_initialized);
                     continue;
             }
             let mut imu_preintegrated = kf.imu_data.imu_preintegrated.as_ref().unwrap().clone();
@@ -749,7 +726,6 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
                         // Monocular left observation
                         if *left_index != -1 && kf.features.get_mv_right(*left_index as usize).is_none() {
                             let (kp_un, _) = kf.features.get_keypoint(*left_index as usize);
-                            // debug!("Adding edge {} -> {}", vertex_id, kf_vertex);
 
                             // Add here uncerteinty
                             let unc2 = CAMERA_MODULE.uncertainty;
@@ -765,7 +741,7 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
                             );
                             edges_kf_mono.push(kf.id);
                         } else {
-                            warn!("TODO monocular right observation");
+                            panic!("TODO monocular right observation");
                             // Monocular right observation
                             // if(pKFi->mpCamera2){
                             //     int rightIndex = get<1>(mit->second);
@@ -813,15 +789,15 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
     //     assert(mit->second>=3);
     // }
 
-    drop(_span_construct);
+    // drop(_span_construct);
 
     // Optimize
     {
-        let _span = tracy_client::span!("local_bundle_adjustment::optimize (inertial)");
+        // let _span = tracy_client::span!("local_bundle_adjustment::optimize (inertial)");
         optimizer.pin_mut().optimize(opt_it, false, true);
     }
 
-    let _span = tracy_client::span!("local_bundle_adjustment::post_process (inertial)");
+    // let _span = tracy_client::span!("local_bundle_adjustment::post_process (inertial)");
 
     // Check inlier observations
     // Mono

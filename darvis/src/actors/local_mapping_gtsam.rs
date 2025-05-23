@@ -82,7 +82,6 @@ impl Actor for LocalMappingGTSAM {
             // Actor can early-return if self.map.read() returns an incorrect version of the map
             // see read() in read_only_lock.rs for more info
             if !actor.handle_message(message).is_ok() {
-                debug!("LOCAL MAPPING RESET !");
                 actor.current_keyframe_id= -1;
                 actor.recently_added_mappoints.clear();
                 actor.discarded_kfs.clear();
@@ -232,9 +231,6 @@ impl LocalMappingGTSAM {
             &self.map, self.sensor
         )?;
 
-        println!("Track in view: {:?}", track_in_view.len());
-        println!("Matches in local mapping: {}/{}.", matches, local_mappoints.len());
-
         // let last_kf = lock.get_keyframe(self.current_keyframe_id - 1);
 
         // for (feature_id, idx_in_frame) in curr_kf_features_map {
@@ -373,9 +369,6 @@ impl LocalMappingGTSAM {
 
         debug!("For keyframe {}, culled {} mappoints, created {} mappoints, culled {} keyframes", self.current_keyframe_id, mps_culled, mps_created, kfs_culled);
         info!("Map has {} keyframes and {} mappoints" , self.map.read()?.num_keyframes(), self.map.read()?.mappoints.len());
-
-        tracy_client::plot!("MAP INFO: KeyFrames", self.map.read()?.num_keyframes() as f64);
-        tracy_client::plot!("MAP INFO: MapPoints", self.map.read()?.mappoints.len() as f64);
 
         self.system.try_send(LOOP_CLOSING, Box::new(KeyFrameIdMsg{ kf_id: self.current_keyframe_id, map_version: self.map.get_version() }));
         Ok(())

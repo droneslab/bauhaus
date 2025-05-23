@@ -207,8 +207,6 @@ impl KeyFrame {
         // num is the target number of keyframes to return
         let max_len = min(self.connections.ordered_connected_keyframes.len(), num as usize);
 
-        tracy_client::plot!("Connected KFs {}", self.connections.ordered_connected_keyframes.len() as f64);
-
         let (connections, _) : (Vec<i32>, Vec<i32>) = self.connections.ordered_connected_keyframes[0..max_len].iter().cloned().unzip();
         connections
     }
@@ -341,9 +339,6 @@ impl MapPointMatches {
                     match map.mappoints.get(mp_id) {
                         Some(mappoint) => {
                             if check_obs {
-                                if mappoint.num_obs <= 1 {
-                                    // debug!("mappoint.num_obs {}", mappoint.num_obs);
-                                }
                                 mappoint.num_obs >= (min_observations as i32)
                             } else {
                                 true

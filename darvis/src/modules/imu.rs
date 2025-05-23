@@ -1,6 +1,6 @@
 use core::{config::{SETTINGS, SYSTEM}, matrix::{DVMatrix3, DVMatrix4, DVVector3}, sensor::{FrameSensor, Sensor}, system::Sender};
 use std::{collections::{HashMap, VecDeque}, fmt::Display};
-use log::{debug, warn};
+use log::{debug, info, warn};
 use nalgebra::{Matrix3, SMatrix, Vector3};
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
@@ -59,7 +59,6 @@ impl ImuModule for IMU {
 
         current_frame.imu_data.set_new_bias(bias);
 
-        debug!("PREDICT STATE LAST KEYFRAME NEW POSE = {:?}", current_frame.pose);
         // Predbias is never used anywhere??
         // mCurrentFrame.mPredBias = mCurrentFrame.mImuBias;
         return Ok(true);
@@ -82,7 +81,6 @@ impl ImuModule for IMU {
         current_frame.imu_data.imu_bias = last_frame.imu_data.imu_bias;
         // Predbias is never used anywhere??
         // mCurrentFrame.mPredBias = mCurrentFrame.mImuBias;
-        debug!("PREDICT STATE NEW POSE = {:?}", current_frame.pose);
 
         return Some(true);
     }
@@ -91,10 +89,9 @@ impl ImuModule for IMU {
         // Sofiya: Tested!!
         // void Tracking::PreintegrateIMU()
 
-        let _span = tracy_client::span!("IMU preintegration");
+        // let _span = tracy_client::span!("IMU preintegration");
 
         if measurements.is_empty() {
-            warn!("No IMU data!");
             return false;
         }
 
@@ -114,7 +111,6 @@ impl ImuModule for IMU {
 
         let n = imu_from_last_frame.len() - 1;
         if n == 0 {
-            warn!("Empty IMU measurements vector!");
             return false;
         }
 
@@ -174,7 +170,7 @@ impl ImuModule for IMU {
 
     fn initialize(&self, map: &mut ReadWriteMap, current_keyframe_id: Id, prior_g: f64, prior_a: f64, fiba: bool, tracking_backend: Option<&Sender>) -> Result<(), Box<dyn std::error::Error>> {
         //void LocalMapping::InitializeIMU(float priorG, float priorA, bool bFIBA)
-        let _span = tracy_client::span!("IMU initialization");
+        // let _span = tracy_client::span!("IMU initialization");
 
         let (min_time, min_kf) = match self.sensor.frame() {
             FrameSensor::Mono => (2.0, 10),
@@ -186,7 +182,6 @@ impl ImuModule for IMU {
             let lock = map.read()?;
 
             if lock.num_keyframes() < min_kf {
-                debug!("IMU: Early return not enough KFs ({})", lock.num_keyframes());
                 return Ok(());
             }
 
@@ -202,14 +197,12 @@ impl ImuModule for IMU {
                 keyframes
             }; 
             if keyframes.len() < min_kf {
-                debug!("IMU:  Early return not enough KFs #2 ({})", keyframes.len());
                 return Ok(());
             }
 
             let first_timestamp = lock.get_keyframe( keyframes[0]).timestamp; // mFirstTs
             let current_timestamp = lock.get_keyframe(current_keyframe_id).timestamp; // mpCurrentKeyFrame->mTimeStamp
             if (current_timestamp - first_timestamp) < min_time {
-                debug!("IMU:  Early return timestamps ({})... current keyframe is {}, first keyframe is {}", (current_timestamp - first_timestamp), current_keyframe_id, keyframes[0]);
                 return Ok(());
             }
         }
@@ -235,7 +228,7 @@ impl ImuModule for IMU {
         let mut mba: DVVector3<f64> = DVVector3::new_with(0.0, 0.0, 0.0); // mba
         let mut dir_g: Vector3<f64> = Vector3::zeros(); // dirG
 
-        let _span2 = tracy_client::span!("InitializeIMU_InertialOptimization");
+        // let _span2 = tracy_client::span!("InitializeIMU_InertialOptimization");
         if !map.read()?.imu_initialized {
             for kf_id in keyframes.iter() {
                 let (velocity, prev_kf_id) = {
@@ -252,7 +245,6 @@ impl ImuModule for IMU {
 
                     dir_g = dir_g - (*prev_kf.get_imu_rotation() * imu_preintegrated.get_updated_delta_velocity());
                     
-                    debug!("curr kf imu pos: {:?}, prev kf imu pos: {:?}, d_t: {}", kf.get_imu_position(), prev_kf.get_imu_position(), imu_preintegrated.d_t);
                     (
                         DVVector3::new((*kf.get_imu_position() - *prev_kf.get_imu_position()) / imu_preintegrated.d_t),
                         kf.prev_kf_id.unwrap()
@@ -281,8 +273,6 @@ impl ImuModule for IMU {
             mba = map.read()?.get_keyframe(current_keyframe_id).imu_data.imu_bias.get_acc_bias();
         }
 
-        debug!("IMU: Begin initialization optimization");
-
         let mut scale = 1.0; // mScale
         optimizer::inertial_optimization_initialization(
             map,
@@ -295,10 +285,9 @@ impl ImuModule for IMU {
             prior_a,
         )?;
 
-        drop(_span2);
+        // drop(_span2);
 
         if scale < 1e-1 {
-            warn!("IMU: Scale too small. Early return");
             return Ok(());
         }
 
@@ -344,17 +333,12 @@ impl ImuModule for IMU {
         if !map.read()?.imu_initialized {
             let mut lock = map.write()?;
             lock.get_keyframe_mut(current_keyframe_id).imu_data.is_imu_initialized = true;
-
-        } else {
-            warn!("IMU: Map already initialized? #1");
         }
 
         if fiba {
             if prior_a != 0.0 {
-                debug!("FULL INERTIAL BA TYPE 1");
                 full_inertial_ba(map, 100, false, current_keyframe_id, true, prior_g, prior_a)?;
             } else {
-                debug!("FULL INERTIAL BA TYPE 2");
                 full_inertial_ba(map, 100, false, current_keyframe_id, false, 0.0, 0.0)?;
             }
         }
@@ -369,7 +353,7 @@ impl ImuModule for IMU {
         // }
 
         {
-            let _span2 = tracy_client::span!("InitializeIMU_UpdateMap");
+            // let _span2 = tracy_client::span!("InitializeIMU_UpdateMap");
             let mut lock = map.write()?;
             // Correct keyframes starting at map first keyframe
             let mut kfs_to_check = vec![lock.initial_kf_id];
@@ -411,17 +395,12 @@ impl ImuModule for IMU {
                 kf.set_pose(kf.gba_pose.unwrap().clone());
 
                 i += 1;
-                debug!("IMU: post-fiba, KF {} translation: {:?}, old translation: {:?}", kf.id, kf.get_pose().get_translation(),  kf.tcw_bef_gba.unwrap().get_translation());
 
                 if kf.imu_data.is_imu_initialized {
                     kf.vwb_bef_gba = Some(kf.imu_data.velocity.unwrap());
                     kf.imu_data.velocity = kf.vwb_gba.clone();
                     kf.imu_data.set_new_bias(kf.bias_gba.unwrap().clone());
-                    debug!("IMU: post-fiba, kf {} velocity: {:?}", kf.id, kf.imu_data.velocity.unwrap());
-                } else {
-                    warn!("KF {} not set to inertial!!", curr_kf_id);
                 }
-
             }
 
             // Correct MapPoints
@@ -465,7 +444,7 @@ impl ImuModule for IMU {
         }
         map.write()?.map_change_index += 1;
         map.write()?.imu_initialized = true;
-        println!("IMU INITIALIZATION SUCCESSFUL!!!!!!!!!!!");
+        info!("IMU initialization successful!");
         return Ok(());
     }
 }
@@ -1052,10 +1031,6 @@ impl ConstraintPoseImu {
         //         eigs[i]=0;
         // H = es.eigenvectors()*eigs.asDiagonal()*es.eigenvectors().transpose();
 
-        debug!("H after eigen stuff: {:?}", constraint_pose_imu.h);
-        debug!("Eigenvalues: {:?}", eigenvalues);
-        debug!("Eigenvectors: {:?}", decomp.eigenvectors);
-        
         Some(constraint_pose_imu)
     }
 }

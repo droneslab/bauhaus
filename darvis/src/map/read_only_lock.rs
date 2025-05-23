@@ -37,9 +37,9 @@ impl<T> ReadOnlyMap<T> {
         let now = Instant::now();
         let guard = RwLockReadGuard::map(self.inner.read(), |unlocked| unlocked);
         let elapsed = now.elapsed().as_millis();
-        if elapsed > 5 {
-            debug!("LOCKS...Read acquire: {} ms", now.elapsed().as_millis());
-        }
+        // if elapsed > 5 {
+        //     debug!("LOCKS...Read acquire: {} ms", now.elapsed().as_millis());
+        // }
 
         guard
     }

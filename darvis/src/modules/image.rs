@@ -1,18 +1,8 @@
 use opencv::{imgcodecs, imgproc::resize, prelude::Mat, types::VectorOfKeyPoint, core::{Vector, KeyPoint, DMatch}};
 
 pub fn read_image_file(path: &String) -> Mat {
-    let _span = tracy_client::span!("read image");
+    // let _span = tracy_client::span!("read image");
     let image = imgcodecs::imread(path, imgcodecs::IMREAD_UNCHANGED).expect("Could not read image.");
-
-    // println!("Image size: {}x{}", image.cols(), image.rows());
-    // println!("IMAGE READ: ");
-    // for i in 0..image.rows() {
-    //     for j in 0..image.cols() {
-    //         let pixel = image.at_2d::<u8>(i, j).unwrap();
-    //         print!("{:?}, ", pixel);
-    //     }
-    //     println!(";");
-    // }
     image
 }
 

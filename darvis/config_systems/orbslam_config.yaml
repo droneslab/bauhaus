@@ -13,7 +13,7 @@ system:
       first_actor_name: TRACKING_FRONTEND # Name of actor to kick off pipeline
 
       # FPS
-      fps: 5.0
+      fps: 10.0
 
       # KIMERA
       initial_k: 0 # Start processing dataset from frame initial_k. Useful to skip a bunch of images at the beginning (imu calibration).
@@ -155,7 +155,7 @@ actors:
       -
        name: TRACKING_BACKEND
        tag: "orbslam tracking backend"
-       receiver_bound: 5
+       receiver_bound: -1
        settings:
           - 
             name: recently_lost_cutoff

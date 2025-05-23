@@ -111,7 +111,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if SETTINGS.get::<bool>(CAMERA, "need_to_resize") {
             let new_height = SETTINGS.get::<i32>(CAMERA, "height");
             let new_width = SETTINGS.get::<i32>(CAMERA, "width");
-            // debug!("Resizing image to {}x{}", new_width, new_height);
             image = image::resize_image(&image, new_width, new_height).expect("Could not resize image!");
         }
 
@@ -411,8 +410,8 @@ impl Iterator for LoopManager {
             if let Some((_timestamp, data)) = it_low {
                 imu_initialization = Some(data);
             } else {
-                println!("Can't find timestamp! {}", timestamp_convert);
-                println!("Hashmap: {:?}", imu.initialization);
+                debug!("Can't find timestamp! {}", timestamp_convert);
+                debug!("Hashmap: {:?}", imu.initialization);
             }
         };
 
@@ -465,28 +464,28 @@ fn setup_logger(level: &str) -> Result<(), fern::InitError> {
         })
         .chain(std::io::stdout());
 
-    let file_output = fern::Dispatch::new()
-        .level(log_level)
-        .format(move |out, message, record| {
-            out.finish(format_args!(
-                "[{time} {target}:{line_num} {level}] {message}",
-                time = (chrono::Local::now() - start_time).num_milliseconds() as f64  / 1000.0,
-                target = record.file().unwrap_or("unknown"),
-                line_num = record.line().unwrap_or(0),
-                level = record.level(),
-                message = message
-            ))
-        })
-        .chain(OpenOptions::new()
-            .write(true)
-            .truncate(true)
-            .create(true)
-            .open(Path::new(&results_folder).join("output.log"))?
-        );
+    // let file_output = fern::Dispatch::new()
+    //     .level(log_level)
+    //     .format(move |out, message, record| {
+    //         out.finish(format_args!(
+    //             "[{time} {target}:{line_num} {level}] {message}",
+    //             time = (chrono::Local::now() - start_time).num_milliseconds() as f64  / 1000.0,
+    //             target = record.file().unwrap_or("unknown"),
+    //             line_num = record.line().unwrap_or(0),
+    //             level = record.level(),
+    //             message = message
+    //         ))
+    //     })
+    //     .chain(OpenOptions::new()
+    //         .write(true)
+    //         .truncate(true)
+    //         .create(true)
+    //         .open(Path::new(&results_folder).join("output.log"))?
+    //     );
 
     fern::Dispatch::new()
     .chain(terminal_output)
-    .chain(file_output)
+    // .chain(file_output)
     .apply()?;
 
 

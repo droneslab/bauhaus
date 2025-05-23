@@ -177,7 +177,6 @@ impl DescriptorDistanceTrait for ORBMatcher {
         //     }
         // }
 
-        // debug!("TEST DESCRIPTOR DISTANCE! ORBSLAM: {}, OURS: {}", orbslam, dist);
         return orbslam;
 
     }
@@ -420,7 +419,6 @@ impl SearchForInitializationTrait for ORBMatcher {
             );
 
             if v_indices2.is_empty() {
-                warn!("v_indices2 is empty");
                 continue;
             }
 
@@ -522,7 +520,6 @@ impl FeatureMatchingModule for ORBMatcher {
                 let mut r = self.radius_by_viewing_cos(mp_data.view_cos);
                 if th != 1 { r *= th as f64; }
 
-                // debug!("get features in area: {}, {}, {}, {:?}", mp_data.proj_x, mp_data.proj_y, r, (mp_data.predicted_level-1, mp_data.predicted_level));
                 let indices = frame.features.get_features_in_area(
                     &mp_data.proj_x,
                     &mp_data.proj_y,
@@ -675,7 +672,6 @@ impl FeatureMatchingModule for ORBMatcher {
                 // }
             }
         }
-        // debug!("debug_track_depth: {}, debug_level: {}", debug_track_depth, debug_level);
 
         mappoints.retain(|mp_id| !local_mps_to_remove.contains(&mp_id));
         return Ok(num_matches);
@@ -968,7 +964,7 @@ impl FeatureMatchingModule for ORBMatcher {
             }
         }
 
-        debug!("...Search by projection for loop detection: already found {}, depth {}, not in image {}, wrong dist {}, viewing angle {}, indices {}, levels {}, final dist too low {}", n_already_found, n_depth, n_not_in_image, n_wrong_dist, n_viewing_angle, n_indices, n_levels, n_final_dist_too_low);
+        // debug!("...Search by projection for loop detection: already found {}, depth {}, not in image {}, wrong dist {}, viewing angle {}, indices {}, levels {}, final dist too low {}", n_already_found, n_depth, n_not_in_image, n_wrong_dist, n_viewing_angle, n_indices, n_levels, n_final_dist_too_low);
 
         Ok((num_matches, matched_kfs))
 

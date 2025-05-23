@@ -57,7 +57,6 @@ pub fn pose_inertial_optimization_last_frame(
     // int Optimizer::PoseInertialOptimizationLastFrame(Frame *pFrame, bool bRecInit)
     // but bRecInit is always set to false
 
-    debug!("POSE INERTIAL OPTIMIZATION LAST FRAME!");
     let fx= SETTINGS.get::<f64>(CAMERA, "fx");
     let fy= SETTINGS.get::<f64>(CAMERA, "fy");
     let cx= SETTINGS.get::<f64>(CAMERA, "cx");
@@ -116,9 +115,7 @@ pub fn pose_inertial_optimization_last_frame(
                 mp_indexes.push(i as u32);
 
             } else {
-                warn!("Mappoint {} deleted but was in current frame matches, probably just a timing error.", mp_id);
                 frame.mappoint_matches.delete_at_indices((i as i32, -1)); // TODO STEREO should not be -1
-
                 continue;
             }
         } else {
@@ -186,7 +183,6 @@ pub fn pose_inertial_optimization_last_frame(
     }
 
     let num_initial_correspondences = initial_mono_correspondences + initial_stereo_correspondences;
-    debug!("Num initial correspondences: {}", num_initial_correspondences);
 
     // Set Previous Frame Vertex
     let vpk = 4;
@@ -779,7 +775,6 @@ pub fn pose_inertial_optimization_last_keyframe(
     h.view_mut((0, 0), (9, 9)).add_assign(&optimizer.get_hessian2_from_edge_inertial(0).into());
     h.view_mut((9, 9), (3, 3)).add_assign(&optimizer.get_hessian2_from_edge_gyro().into());
     h.view_mut((12, 12), (3, 3)).add_assign(&optimizer.get_hessian2_from_edge_acc().into());
-    debug!("H is: {:?}", h);
 
     let mut i = 0;
     for mut edge in optimizer.pin_mut().get_mut_mono_onlypose_edges().iter_mut() {
@@ -1120,7 +1115,7 @@ pub fn optimize_pose(
     frame: &mut Frame, map: &ReadWriteMap
 ) -> Result<Option<i32>, Box<dyn std::error::Error> > {
     //int Optimizer::PoseOptimization(Frame *pFrame)
-    let _span = tracy_client::span!("optimize_pose");
+    // let _span = tracy_client::span!("optimize_pose");
 
     let sensor: Sensor = SETTINGS.get(SYSTEM, "sensor");
     let fx= SETTINGS.get::<f64>(CAMERA, "fx");
@@ -1310,8 +1305,6 @@ pub fn optimize_pose(
     let pose = optimizer.recover_optimized_frame_pose(0);
     frame.pose = Some(pose.into());
 
-    debug!("Set outliers in pose optimization: {}. Optimized pose: {:?}", num_bad, frame.pose.as_ref().unwrap());
-
     // Return number of inliers
     return Ok(Some(initial_correspondences - num_bad));
 }
@@ -1344,7 +1337,7 @@ pub fn optimize_essential_graph(
     //                                        const LoopClosing::KeyFrameAndPose &NonCorrectedSim3,
     //                                        const LoopClosing::KeyFrameAndPose &CorrectedSim3,
     //                                        const map<KeyFrame *, set<KeyFrame *> > &LoopConnections, const bool &bFixScale)
-    let _span = tracy_client::span!("optimize_essential");
+    // let _span = tracy_client::span!("optimize_essential");
 
     let camera_param = [
         SETTINGS.get::<f64>(CAMERA, "fx"),
@@ -1547,7 +1540,7 @@ pub fn optimize_sim3(
     //                             g2o::Sim3 &g2oS12, const float th2, const bool bFixScale)
     // but bAllPoints is always set to true
     // returns vpMatches1, mAcumHessian
-    let _span = tracy_client::span!("optimize_sim3");
+    // let _span = tracy_client::span!("optimize_sim3");
 
     let camera_param = [
         SETTINGS.get::<f64>(CAMERA, "fx"),

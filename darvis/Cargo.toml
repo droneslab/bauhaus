@@ -19,7 +19,7 @@ debug = true
 lto = "fat"
 
 [rust]
-debuginfo-level = 1
+debuginfo-level = 2
 
 #[env]
 #IDL_PACKAGE_FILTER = { value = "std_msgs;r2r_minimal_node_msgs" }
@@ -72,7 +72,7 @@ fern = {version = "0.6.2", features = ["colored"] }
 log = "0.4.20"
 env_logger = "0.7.1"
 logging_timer = "1.1.0"
-tracy-client = {version = "0.16.0", features = ["enable"] }
+tracy-client = {version = "0.16.0" }
 tracy-client-sys = {version = "0.21.0"}
 ordered-map = "0.4.2"
 

@@ -3068,7 +3068,6 @@ MapPointDummy { id: 1006, position: DVVector3::new_with(0.96421003341674805, 1.5
 
 //         }
 //         // for (id, preintegrated) in new_imu_preintegrated_for_kfs {
-//         //     debug!("SET KF {} IMU PREINTEGRATED", id);
 //         //     map.write().keyframes.get_mut(&id).unwrap().imu_data.imu_preintegrated = Some(preintegrated);
 //         // }
 

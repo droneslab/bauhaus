@@ -13,7 +13,7 @@ use super::{imu::{ImuBias, ImuPreIntegrated}, module_definitions::FullMapOptimiz
 pub struct GlobalBundleAdjustment { }
 impl FullMapOptimizationModule for GlobalBundleAdjustment {
     fn optimize(&self, map: &mut ReadWriteMap, iterations: i32, robust: bool, loop_kf: Id) -> Result<(), Box<dyn std::error::Error>> { // stop_flag: Option<SharedPtr<bool>>
-        let _span = tracy_client::span!("global_bundle_adjustment");
+        // let _span = tracy_client::span!("global_bundle_adjustment");
         // void Optimizer::GlobalBundleAdjustemnt(Map* pMap, int nIterations, bool* pbStopFlag, const unsigned long nLoopKF, const bool bRobust)
         let sensor: Sensor = SETTINGS.get(SYSTEM, "sensor");
         let fx= SETTINGS.get::<f64>(CAMERA, "fx");
@@ -94,7 +94,6 @@ impl FullMapOptimizationModule for GlobalBundleAdjustment {
                     }
                 }
                 if n_edges == 0 {
-                    warn!("Removed vertex");
                     optimizer.pin_mut().remove_vertex(id_count);
                     mp_vertex_ids.remove(mp_id);
                 }
@@ -162,13 +161,11 @@ pub fn full_inertial_ba(
     init: bool, prior_g: f64, prior_a: f64, 
     ) -> Result<(), Box<dyn std::error::Error>> {
     // void static FullInertialBA(Map *pMap, int its, const bool bFixLocal=false, const unsigned long nLoopKF=0, bool *pbStopFlag=NULL, bool bInit=false, float priorG = 1e2, float priorA=1e6, Eigen::VectorXd *vSingVal = NULL, bool *bHess=NULL);
-    let _span = tracy_client::span!("FullInertialBA");
+    // let _span = tracy_client::span!("FullInertialBA");
 
     let max_kf_id = * map.read()?.get_keyframes_iter()
         .max_by(|a, b| a.1.id.cmp(&b.1.id))
         .map(|(k, _v)| k).unwrap();
-
-    debug!("BEGIN FULL INERTIAL BA... max kf id: {}, fix local: {}, loop id: {}", max_kf_id, fix_local, loop_id);
 
     // Setup optimizer
     // ... Note... pretty sure camera params aren't necessary for this optimization but throwing them in here anyway just in case
@@ -202,8 +199,6 @@ pub fn full_inertial_ba(
         optimizer::add_vertex_pose_keyframe(&mut optimizer, kf, fixed, kf.id);
         kf_vertex_fixed.insert(*kf_id, fixed);
 
-        // println!("add vertex pose {}", kf.id);
-
         if kf.imu_data.is_imu_initialized {
             optimizer.pin_mut().add_vertex_velocity(
                 max_kf_id + 3 * kf.id + 1,
@@ -223,8 +218,6 @@ pub fn full_inertial_ba(
                     kf.imu_data.get_imu_bias().get_acc_bias().into()
                 );
             }
-        } else {
-            debug!("KF {} imu is not initialized", kf.id);
         }
     }
 
@@ -457,22 +450,18 @@ pub fn full_inertial_ba(
 
             if loop_id == 0 {
                 kf.set_pose(pose.into());
-                debug!("FIBA result, KF {} pose: {:?} ", kf.id, pose);
             } else {
                 kf.gba_pose = Some(pose);
                 kf.ba_global_for_kf = loop_id;
-                debug!("FIBA result, KF {} gba pose: {:?} ", kf.id, pose.get_rotation());
             }
 
             if kf.imu_data.is_imu_initialized {
                 let vertex_velocity = optimizer.recover_optimized_vertex_velocity(max_kf_id + 3 * kf.id + 1);
 
                 if loop_id == 0 {
-                    debug!("FIBA result, KF {} velocity: {:?} ", kf.id, vertex_velocity);
                     kf.imu_data.velocity = Some(vertex_velocity.into());
                 } else {
                     kf.vwb_gba = Some(vertex_velocity.into());
-                    debug!("FIBA result, KF {} gba velocity: {:?} ", kf.id, vertex_velocity);
                 }
 
                 let (vg_id, va_id) = if !init {

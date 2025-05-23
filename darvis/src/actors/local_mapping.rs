@@ -232,8 +232,6 @@ impl LocalMapping {
                     LOCAL_MAP_OPTIMIZATION_MODULE.optimize(&self.map, self.current_keyframe_id)?;
                 }
             }
-        } else {
-            warn!("Not running LBA. Either we just initialized the map or there are too many keyframes in the queue ({})", self.system.queue_len());
         }
 
         // Initialize IMU
@@ -253,13 +251,11 @@ impl LocalMapping {
             // Enter here everytime local-mapping is called
             if self.imu_module.as_mut().unwrap().imu_ba1 {
                 if self.imu_module.as_ref().unwrap().timestamp_init > 5.0 {
-                    debug!("Start VIBA 1");
                     self.imu_module.as_mut().unwrap().imu_ba1 = true;
                     self.imu_module.as_mut().unwrap().initialize(&mut self.map, self.current_keyframe_id, 1.0, 1e5, true, Some(self.system.find_actor(TRACKING_BACKEND)))?;
                 }
             } else if !self.map.read()?.imu_ba2 {
                 if self.imu_module.as_ref().unwrap().timestamp_init > 15.0 {
-                    debug!("Start VIBA 2");
                     self.map.write()?.imu_ba2 = true;
                     self.imu_module.as_mut().unwrap().initialize(&mut self.map, self.current_keyframe_id, 0.0, 0.0, true, Some(self.system.find_actor(TRACKING_BACKEND)))?;
                 }
@@ -283,17 +279,12 @@ impl LocalMapping {
         debug!("For keyframe {}, culled {} mappoints, created {} mappoints, culled {} keyframes", self.current_keyframe_id, mps_culled, mps_created, kfs_culled);
         info!("Map has {} keyframes and {} mappoints" , self.map.read()?.num_keyframes(), self.map.read()?.mappoints.len());
 
-        println!("After lba, keyframe pose at timestamp {} is {:?}", self.map.read()?.get_keyframe(self.current_keyframe_id).timestamp, self.map.read()?.get_keyframe(self.current_keyframe_id).get_pose().get_translation());
-
-        tracy_client::plot!("MAP INFO: KeyFrames", self.map.read()?.num_keyframes() as f64);
-        tracy_client::plot!("MAP INFO: MapPoints", self.map.read()?.mappoints.len() as f64);
-
         self.system.try_send(LOOP_CLOSING, Box::new(KeyFrameIdMsg{ kf_id: self.current_keyframe_id, map_version: self.map.get_version() }));
         Ok(())
     }
 
     fn mappoint_culling(&mut self) -> Result<i32, Box<dyn std::error::Error>> {
-        let _span = tracy_client::span!("mappoint_culling");
+        // let _span = tracy_client::span!("mappoint_culling");
 
         let th_obs = match self.sensor.is_mono() {
             true => 2,
@@ -339,7 +330,7 @@ impl LocalMapping {
     }
 
     fn create_new_mappoints(&mut self) -> Result<i32, Box<dyn std::error::Error>> {
-        let _span = tracy_client::span!("create_new_mappoints");
+        // let _span = tracy_client::span!("create_new_mappoints");
 
         // Retrieve neighbor keyframes in covisibility graph
         let nn = match self.sensor.is_mono() {
@@ -391,7 +382,6 @@ impl LocalMapping {
                     true => {
                         let median_depth_neigh = neighbor_kf.compute_scene_median_depth(&lock.mappoints, 2);
                         if baseline / median_depth_neigh < 0.01 {
-                            debug!("Local mapping create new mappoints, continuing bc baseline.. baseline {} median scene depth {}", baseline, median_depth_neigh);
                             continue
                         }
                     },
@@ -601,7 +591,7 @@ impl LocalMapping {
     }
 
     fn search_in_neighbors(&self) -> Result<(), Box<dyn std::error::Error>> {
-        let _span = tracy_client::span!("search_in_neighbors");
+        // let _span = tracy_client::span!("search_in_neighbors");
 
         // Retrieve neighbor keyframes
         let nn = match self.sensor.frame() {
@@ -738,7 +728,7 @@ impl LocalMapping {
         // in at least other 3 keyframes (in the same or finer scale)
         // We only consider close stereo points
 
-        let _span = tracy_client::span!("keyframe_culling");
+        // let _span = tracy_client::span!("keyframe_culling");
 
         //TODO (mvp)... I think we don't need this because the covisibility keyframes struct organizes itself but double check
         // mpCurrentKeyFrame->UpdateBestCovisibles(); 
@@ -921,7 +911,7 @@ impl LocalMapping {
     fn scale_refinement(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         // Minimum number of keyframes to compute a solution
         // Minimum time (seconds) between first and last keyframe to compute a solution. Make the difference between monocular and stereo
-        let _span = tracy_client::span!("imu scale refinement");
+        // let _span = tracy_client::span!("imu scale refinement");
 
         // Retrieve all keyframes in temporal order
         let lock = self.map.read()?;
@@ -947,7 +937,6 @@ impl LocalMapping {
         optimizer::inertial_optimization_scale_refinement(&self.map, &mut imu.rwg, &mut imu.scale)?;
 
         if imu.scale < 1e-1 {
-            warn!("Scale too small");
             // bInitializing=false;
             return Ok(());
         }

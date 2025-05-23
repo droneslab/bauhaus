@@ -94,8 +94,6 @@ impl KeyFrameDatabase {
         let min_common_words = (max_common_words as f32 * 0.8) as i32;
         let mut score_and_match = vec![];
 
-        // debug!("Detect loop candidates... max common words: {}, min common words: {}, max word kf id: {}", max_common_words, min_common_words, max_word_kf_id);
-
         // Compute similarity score.
         let mut place_recognition_score = HashMap::new(); // mPlaceRecognitionScore
         for kf_i_id in &kfs_sharing_words {
@@ -169,8 +167,6 @@ impl KeyFrameDatabase {
         let mut kfs_sharing_words = vec![]; //lKFsSharingWords
         let mut loop_words = HashMap::new(); // mnLoopWords
         let mut loop_query = HashMap::new(); // mnLoopQuery
-
-        // debug!("Detect loop candidates... min score: {}", min_score);
 
         // Search all keyframes that share a word with current keyframes
         // Discard keyframes connected to the query keyframe

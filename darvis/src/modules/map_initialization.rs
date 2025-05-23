@@ -86,7 +86,6 @@ impl MapInitialization {
             return Ok(false);
         } else {
             if current_frame.features.num_keypoints <=100 || self.sensor.is_imu() && (self.last_frame.as_ref().unwrap().timestamp - self.initial_frame.as_ref().unwrap().timestamp) > 1.0 {
-                debug!("QUIT: Timestamp too high?");
                 self.ready_to_initialize = false;
                 return Ok(false);
             }
@@ -102,12 +101,9 @@ impl MapInitialization {
 
             // Check if there are enough correspondences
             if num_matches < 100 {
-                println!("QUIT: Matches too low... {} matches, {} prev_matched, initial frame id {}, current frame id {}", num_matches, self.prev_matched.len(), self.initial_frame.as_ref().unwrap().frame_id, current_frame.frame_id);
                 self.ready_to_initialize = false;
                 return Ok(false);
             };
-
-            println!("Matches... {} matches, {} prev_matched, initial frame id {}, current frame id {}", num_matches, self.prev_matched.len(), self.initial_frame.as_ref().unwrap().frame_id, current_frame.frame_id);
 
             if let Some((tcw, v_p3d, vb_triangulated)) = CAMERA_MODULE.two_view_reconstruction(
                 self.initial_frame.as_ref().unwrap().features.get_all_keypoints(),
@@ -128,7 +124,7 @@ impl MapInitialization {
 
                 return Ok(true);
             } else {
-                debug!("MonocularInitialization, ReconstructWithTwoViews... failure");
+                // debug!("MonocularInitialization, ReconstructWithTwoViews... failure");
                 return Ok(false);
             }
         }
@@ -216,7 +212,6 @@ impl MapInitialization {
         };
         if median_depth < 0.0 || tracked_mappoints < 50 {
             // reset active map
-            warn!("map::create_initial_map_monocular;wrong initialization");
             return Ok(None);
         }
 
@@ -281,7 +276,6 @@ impl MapInitialization {
             (curr_kf_pose, relevant_mappoints, curr_kf_timestamp)
         };
 
-        println!("After initialization, pose is {:?}", curr_kf_pose);
         Ok(Some((curr_kf_pose, curr_kf_id, initial_kf_id, relevant_mappoints, curr_kf_timestamp, inverse_median_depth)))
     }
 
