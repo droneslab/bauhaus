@@ -72,8 +72,8 @@ fern = {version = "0.6.2", features = ["colored"] }
 log = "0.4.20"
 env_logger = "0.7.1"
 logging_timer = "1.1.0"
-tracy-client = {version = "0.16.0" }
-tracy-client-sys = {version = "0.21.0"}
+tracy-client = {version = "0.16.0", default-features = false }
+tracy-client-sys = {version = "0.21.0", default-features = false}
 ordered-map = "0.4.2"
 
 dynamize = "0.3.5"

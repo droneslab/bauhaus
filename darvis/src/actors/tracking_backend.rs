@@ -473,7 +473,8 @@ impl TrackingBackend {
             };
             let relative_pose = self.current_frame.pose.unwrap() * ref_kf_pose.inverse();
 
-            // debug!("Save trajectory, pose is: {:?}", relative_pose);
+            debug!("SOFIYA TRAJ: FOR TIMESTAMP {}, TRACKING BACKEND POSE IS: {:?}", self.current_frame.timestamp, self.current_frame.pose.unwrap());
+            debug!("SOFIYA TRAJ: FOR TIMESTAMP {}, TRACKING BACKEND RELATIVE POSE IS: {:?}", self.current_frame.timestamp, relative_pose);
             // debug!("...current frame pose: {:?}", self.current_frame.pose);
             // debug!("...ref kf pose: {:?}", ref_kf_pose);
             // debug!("...ref kf id: {:?}", self.ref_kf_id.unwrap());

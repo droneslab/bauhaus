@@ -311,6 +311,7 @@ impl Map {
                     parent_candidates.insert(parent_id);
                     children1.remove(&child_id);
                 }
+                continue_loop = false;
             } else {
                 break;
             }
