@@ -1485,7 +1485,15 @@ pub fn optimize_essential_graph(
         // SE3 Pose Recovering. Sim3:[sR t;0 1] -> SE3:[R t/s;0 1]
         let mut lock = map.write()?;
         for (kf_id, kf) in lock.get_keyframes_iter_mut() {
-            let corrected_siw: Sim3 = optimizer.recover_optimized_sim3(kf.id).into();
+            let corrected_siw: Sim3 = {
+                let mut sim3_ffi = g2o::ffi::RustSim3 {
+                    translation: [0.0; 3],
+                    rotation: [0.0; 4],
+                    scale: 1.0,
+                };
+                optimizer.recover_optimized_sim3(kf.id, &mut sim3_ffi);
+                sim3_ffi.into()
+            };
             corrected_swc.insert(*kf_id, corrected_siw.inverse());
 
             let tiw: Pose = corrected_siw.into(); //[R t/s;0 1]
@@ -1689,7 +1697,17 @@ pub fn optimize_sim3(
     }
 
     // Recover optimized Sim3
-    let optimized_sim3: Sim3 = optimizer.recover_optimized_sim3(0).into();
+    // let optimized_sim3: Sim3 = optimizer.recover_optimized_sim3(0).into();
+    let optimized_sim3: Sim3 = {
+        let mut sim3_ffi = g2o::ffi::RustSim3 {
+            translation: [0.0; 3],
+            rotation: [0.0; 4],
+            scale: 1.0,
+        };
+        optimizer.recover_optimized_sim3(0, &mut sim3_ffi);
+        sim3_ffi.into()
+    };
+
     *sim3 = optimized_sim3;
     return Ok(n_in);
 }

@@ -339,7 +339,8 @@ pub mod ffi {
         fn recover_optimized_sim3(
             self: &BridgeSparseOptimizer,
             vertex: i32,
-        ) -> RustSim3;
+            sim3: &mut RustSim3,
+        );
         fn recover_optimized_inertial(
             self: &BridgeSparseOptimizer,
             vg: i32,
