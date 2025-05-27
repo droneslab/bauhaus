@@ -1485,6 +1485,10 @@ pub fn optimize_essential_graph(
         // SE3 Pose Recovering. Sim3:[sR t;0 1] -> SE3:[R t/s;0 1]
         let mut lock = map.write()?;
         for (kf_id, kf) in lock.get_keyframes_iter_mut() {
+            if !v_scw.contains_key(kf_id) {
+                warn!("Keyframe {} in map but not in g2o graph", kf_id);
+                continue;
+            }
             let corrected_siw: Sim3 = {
                 let mut sim3_ffi = g2o::ffi::RustSim3 {
                     translation: [0.0; 3],
