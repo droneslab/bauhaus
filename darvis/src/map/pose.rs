@@ -44,10 +44,10 @@ impl Pose {
         let trans = nalgebra::Translation3::from(isometry.translation.vector);
         let rot = nalgebra::geometry::UnitQuaternion::<f64>::from_quaternion(
             nalgebra::Quaternion::<f64>::new(
-                isometry.rotation[0],
-                isometry.rotation[1],
-                isometry.rotation[2],
-                isometry.rotation[3],
+                isometry.rotation.w,
+                isometry.rotation.i,
+                isometry.rotation.j,
+                isometry.rotation.k,
             )
         );
         Pose (nalgebra::IsometryMatrix3::from_parts(trans, rot.into()))
@@ -194,6 +194,7 @@ impl Into<Sim3> for Pose {
 //* bindings with gtsam */
 impl From<Pose> for gtsam::geometry::pose3::Pose3 {
     fn from(pose: Pose) -> Self { 
+        // println!("Converting Pose to gtsam::geometry::pose3::Pose3: {:?}", pose.get_rotation());
         gtsam::geometry::pose3::Pose3::from_parts((*pose.get_translation()).into(), (*pose.get_quaternion()).into())
     }
 }

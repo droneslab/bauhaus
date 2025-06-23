@@ -1115,7 +1115,7 @@ pub fn optimize_pose(
     frame: &mut Frame, map: &ReadWriteMap
 ) -> Result<Option<i32>, Box<dyn std::error::Error> > {
     //int Optimizer::PoseOptimization(Frame *pFrame)
-    // let _span = tracy_client::span!("optimize_pose");
+    let _span = tracy_client::span!("optimize_pose");
 
     let sensor: Sensor = SETTINGS.get(SYSTEM, "sensor");
     let fx= SETTINGS.get::<f64>(CAMERA, "fx");

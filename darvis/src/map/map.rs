@@ -154,7 +154,7 @@ impl Map {
     }
 
     pub fn insert_keyframe_to_map(&mut self, frame: Frame, is_initialization: bool) -> Id {
-        // let _span = tracy_client::span!("insert_keyframe");
+        let _span = tracy_client::span!("insert_keyframe");
         self.last_kf_id += 1;
         let new_kf_id = self.last_kf_id;
         if self.keyframes.is_empty() {

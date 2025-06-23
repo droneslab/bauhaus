@@ -284,7 +284,7 @@ impl LocalMapping {
     }
 
     fn mappoint_culling(&mut self) -> Result<i32, Box<dyn std::error::Error>> {
-        // let _span = tracy_client::span!("mappoint_culling");
+        let _span = tracy_client::span!("mappoint_culling");
 
         let th_obs = match self.sensor.is_mono() {
             true => 2,
@@ -330,7 +330,7 @@ impl LocalMapping {
     }
 
     fn create_new_mappoints(&mut self) -> Result<i32, Box<dyn std::error::Error>> {
-        // let _span = tracy_client::span!("create_new_mappoints");
+        let _span = tracy_client::span!("create_new_mappoints");
 
         // Retrieve neighbor keyframes in covisibility graph
         let nn = match self.sensor.is_mono() {
@@ -591,7 +591,7 @@ impl LocalMapping {
     }
 
     fn search_in_neighbors(&self) -> Result<(), Box<dyn std::error::Error>> {
-        // let _span = tracy_client::span!("search_in_neighbors");
+        let _span = tracy_client::span!("search_in_neighbors");
 
         // Retrieve neighbor keyframes
         let nn = match self.sensor.frame() {
@@ -728,7 +728,7 @@ impl LocalMapping {
         // in at least other 3 keyframes (in the same or finer scale)
         // We only consider close stereo points
 
-        // let _span = tracy_client::span!("keyframe_culling");
+        let _span = tracy_client::span!("keyframe_culling");
 
         //TODO (mvp)... I think we don't need this because the covisibility keyframes struct organizes itself but double check
         // mpCurrentKeyFrame->UpdateBestCovisibles(); 

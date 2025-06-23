@@ -256,7 +256,7 @@ impl Frame {
 
         self.imu_data.velocity = Some(DVVector3::new(vwb));
         let inv_pose = twb.inverse(); // Tbw
-        self.pose = Some(ImuCalib::new().tcb * inv_pose);
+        self.pose = Some(ImuCalib::new().tcb * inv_pose); //tcw
     }
 
 }

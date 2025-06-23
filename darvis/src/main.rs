@@ -114,6 +114,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             image = image::resize_image(&image, new_width, new_height).expect("Could not resize image!");
         }
 
+        println!("Reading image {}", image_path);
+
         first_actor_tx.send(Box::new(
             ImageMsg{
                 image,
@@ -283,7 +285,7 @@ impl LoopManager {
                 record[4].parse::<f64>().unwrap(),
                 record[5].parse::<f64>().unwrap(),
                 record[6].parse::<f64>().unwrap(),
-                record[7].parse::<f64>().unwrap()
+                record[7].parse::<f64>().unwrap(),
             );
             let velocity = DVVector3::new_with(
                 record[8].parse::<f64>().unwrap(),

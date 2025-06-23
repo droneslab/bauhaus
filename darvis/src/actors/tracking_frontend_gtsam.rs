@@ -103,30 +103,30 @@ impl TrackingFrontendGTSAM {
                     // publish this frame so backend has a reference to the frame associated with the initialization
 
                     // SOFIYA TURN OFF MAP INITIALIZATION
-                        let initialized = self.initialize_map(&image, timestamp).unwrap();
-                        println!("Timestamp {}. Initialized map? {} Imu init is: {:?}", timestamp, initialized, imu_initialization);
+                        // let initialized = self.initialize_map(&image, timestamp).unwrap();
+                        // println!("Timestamp {}. Initialized map? {} Imu init is: {:?}", timestamp, initialized, imu_initialization);
 
-                        initialized
+                        // initialized
 
                     // When turning back on, comment all this out:
-                        // let (keypoints, descriptors) = self.orb_extractor_ini.as_mut().unwrap().extract(& image).unwrap();
-                        // let init_pose = Pose::new_with_quaternion_convert(*imu_initialization.as_ref().unwrap().translation, imu_initialization.as_ref().unwrap().rotation);
+                        let (keypoints, descriptors) = self.orb_extractor_ini.as_mut().unwrap().extract(& image).unwrap();
+                        let init_pose = Pose::new_with_quaternion_convert(*imu_initialization.as_ref().unwrap().translation, imu_initialization.as_ref().unwrap().rotation);
 
-                        // self.current_frame = Frame::new(
-                        //     self.curr_frame_id, 
-                        //     keypoints,
-                        //     descriptors,
-                        //     image.cols() as u32,
-                        //     image.rows() as u32,
-                        //     Some(image.clone()),
-                        //     Some(& self.last_frame),
-                        //     false,
-                        //     timestamp,
-                        // ).expect("Could not create frame!");
-                        // self.current_frame.pose = Some(init_pose);
-                        // self.state = GtsamFrontendTrackingState::Ok;
+                        self.current_frame = Frame::new(
+                            self.curr_frame_id, 
+                            keypoints,
+                            descriptors,
+                            image.cols() as u32,
+                            image.rows() as u32,
+                            Some(image.clone()),
+                            Some(& self.last_frame),
+                            false,
+                            timestamp,
+                        ).expect("Could not create frame!");
+                        self.current_frame.pose = Some(init_pose);
+                        self.state = GtsamFrontendTrackingState::Ok;
 
-                        // true
+                        true
                 },
                 GtsamFrontendTrackingState::Ok => {
                     // Regular tracking
@@ -138,7 +138,7 @@ impl TrackingFrontendGTSAM {
                     ).expect("Could not create frame!");
 
                     // Optical flow
-                    let new_tracked_features = self.optical_flow().unwrap();
+                    self.optical_flow().unwrap();
 
                     // Calculate transform from optical flow
                     // let transform = self.calculate_transform(& new_tracked_features).unwrap();
@@ -147,10 +147,11 @@ impl TrackingFrontendGTSAM {
                     // self.current_frame.pose = Some(new_pose);
                     // debug!("OPTICAL FLOW POSE ESTIMATE... {}, {:?}", timestamp * 1e9, new_pose);
 
-                    self.tracked_features_last_kf = new_tracked_features;
+                    // self.tracked_features_last_kf = new_tracked_features;
 
                     // Determine if frame should be a keyframe
                     self.need_new_keyframe()
+                    // true
                 }
             };
 
@@ -273,7 +274,7 @@ impl TrackingFrontendGTSAM {
         }
     }
 
-    fn optical_flow(&mut self) -> Result<TrackedFeatures, Box<dyn std::error::Error>> {
+    fn optical_flow(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         let _span = tracy_client::span!("optical_flow");
         let mut status = VectorOfu8::new();
         let mut points2 = VectorOfPoint2f::new();
@@ -286,23 +287,24 @@ impl TrackingFrontendGTSAM {
             &mut points2,
             &mut status,
             &mut opencv::types::VectorOff32::default(),
-            opencv::core::Size::new(24, 24), 
-            3,
+            opencv::core::Size::new(21, 21), 
+            4,
             opencv::core::TermCriteria {
                 typ: 3,
                 max_count: 30,
                 epsilon: 0.01,
             },
             0,
-            0.001,
+            1e-4,
         )?;
 
         // Get rid of points for which the KLT tracking failed or those who have gone outside the frame
-        let mut new_tracked_features = TrackedFeatures::default();
-        new_tracked_features.last_feature_id = self.tracked_features_last_kf.last_feature_id;
+        // let mut new_tracked_features = TrackedFeatures::default();
+        // new_tracked_features.last_feature_id = self.tracked_features_last_kf.last_feature_id;
 
         let mut index_correction = 0; // We mutate self.tracked_features vectors while status and points2 lengths remain the same
         let mut total_tracked = 0;
+        // println!("Tracked features: ");
         for i in 0..status.len() {
             let index_in_mutated = i - index_correction;
             let pt = points2.get(i)?;
@@ -315,13 +317,15 @@ impl TrackingFrontendGTSAM {
             } else {
                 // FEATURE IS FOUND! Update the point in new_tracked_features
                 // Not updating current_frame's features yet, we will do this if this frame becomes a new keyframe during the feature extraction step.
-                new_tracked_features.add_with_id(pt, self.tracked_features_last_kf.feature_ids[index_in_mutated]);
+                // new_tracked_features.add_with_id(pt, self.tracked_features_last_kf.feature_ids[index_in_mutated]);
                 total_tracked += 1;
+                // print!("({}, {}, {})", pt.x, pt.y, self.tracked_features_last_kf.feature_ids[index_in_mutated]);
             }
         }
 
         // debug!("Optical flow tracked {} from original {}", total_tracked, status.len());
-        Ok(new_tracked_features)
+        // Ok(new_tracked_features)
+        Ok(())
     }
 
     fn extract_good_features_to_track(&mut self) -> Result<(), Box<dyn std::error::Error>> {
@@ -345,15 +349,18 @@ impl TrackingFrontendGTSAM {
         ).unwrap();
         for point in self.tracked_features_last_kf.points.iter() {
             circle(&mut mask, Point::new(point.x as i32, point.y as i32), 20, Scalar::all(0.0), -1, 8, 0).unwrap();
+            // println!("Masking feature: {:?}", Point::new(point.x as i32, point.y as i32));
         }
         let min_distance = SETTINGS.get::<f64>(TRACKING_FRONTEND, "min_distance") as f64;
 
         opencv::imgproc::good_features_to_track(
-            & image, &mut points, num_features_to_find as i32, 0.01, min_distance, &mut mask, 3, false, 0.04
+            & image, &mut points, num_features_to_find as i32, 0.01, min_distance, &mut mask, 7, false, 0.04
         ).unwrap();
 
+        // println!("Extracted features:");
         for point in points.iter() {
             self.tracked_features_last_kf.add(Point2f::new(point.x as f32, point.y as f32));
+            // print!("({}, {}, {}),", point.x, point.y, self.tracked_features_last_kf.last_feature_id);
         }
 
         debug!("Extracted {} new features", points.len());

@@ -123,6 +123,9 @@ pub fn spawn_actor(
         str if str == SHUTDOWN_ACTOR.to_string() => {
             crate::actors::shutdown::ShutdownActor::spawn(system, map.expect("Shutdown needs the map!"))
         },
+        str if str == "garbage tracking".to_string() => {
+            crate::actors::garbage_tracking::GarbageTracking::spawn(system, map.expect("Garbage tracking needs the map!"))
+        },
         _ => {
             error!("Actor not implemented: {}", actor_tag);
         },
