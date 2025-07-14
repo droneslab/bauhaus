@@ -1,5 +1,7 @@
 # Bauhaus
 
+A Modular Framework for Next-Generation Visual SLAM Systems 
+
 # 1. Installation
 ```bash
 # Install system dependencies 
