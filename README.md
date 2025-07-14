@@ -1,5 +1,4 @@
-# darvis
-Distributed, modulAR Visual SLAM
+# Bauhaus
 
 # 1. Installation
 ```bash
