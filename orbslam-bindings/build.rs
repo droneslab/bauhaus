@@ -10,7 +10,7 @@ fn main() {
 
     let _dst = Config::new("orb_slam3")
                     .cxxflag(cxxflags)
-                    .cxxflag("-DCMAKE_CXX_COMPILER=/usr/bin/clang-cpp-14")
+                    .cxxflag("-DCMAKE_CXX_COMPILER=/home/darvis/Downloads/LLVM-19.1.7-Linux-X64/bin/clang-19")	
                     // .cxxflag("-fsanitize=address")
                     // .cflag("-fsanitize=address")
                     .build_target("orb_slam3")

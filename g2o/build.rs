@@ -9,7 +9,7 @@ fn main() {
 
     let _dst = Config::new("g2o")
                         .cxxflag(manifest_dir)
-                        .cxxflag("-DCMAKE_CXX_COMPILER=/usr/bin/clang-cpp-14")
+                        .cxxflag("-DCMAKE_CXX_COMPILER=/home/darvis/Downloads/LLVM-19.1.7-Linux-X64/bin/clang-19")
                         .very_verbose(true)
                         .build_target("g2o")
                         .profile("RelWithDebInfo")

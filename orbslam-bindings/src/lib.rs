@@ -4,12 +4,12 @@ use cxx::{type_id, ExternType};
 
 // Note: The structs BindCV[x] below allow us to pass rust openCV objects
 // (created using the rust opencv crate) to the orbslam C++ code.
-// The rust opencv objects (opencv::types::VectorOfKeyPoint, opencv::core::Mat) 
+// The rust opencv objects (opencv::core::Vector<opencv::core::KeyPoint>, opencv::core::Mat) 
 // are actually just pointers to data allocated in C++, so we should be able to
 // just pass those raw pointers from rust to the orbslam C++ code.
 // Of course, we could accidentally pass the wrong pointer and end up with a
 // memory error. The code below helps prevent that by linking the opencv rust
-// pointers (ex, opencv::types::VectorOfKeyPoint) to the orbslam C++ pointers
+// pointers (ex, opencv::core::Vector<opencv::core::KeyPoint>) to the orbslam C++ pointers
 // (ex, orb_slam3::BindCVKeyPoints, see CVConvert.h). Unfortunately we need the 
 // wrapper BindCVKeyPoints and BindCVMat because we can't implement ExternType
 // on a struct declared outside our repository.
@@ -32,14 +32,14 @@ use cxx::{type_id, ExternType};
 // The C++ equivalent of these structs is defined in CVConvert.h
 #[derive(Debug, Clone)]
 pub struct BindCVKeyPoints {
-    pub kp_ptr: opencv::types::VectorOfKeyPoint
+    pub kp_ptr: opencv::core::Vector<opencv::core::KeyPoint>
 }
 unsafe impl ExternType for BindCVKeyPoints {
     type Id = type_id!("orb_slam3::BindCVKeyPoints");
     type Kind = cxx::kind::Trivial;
 }
 pub struct BindCVKeyPointsRef<'a> {
-    pub kp_ptr: &'a opencv::types::VectorOfKeyPoint
+    pub kp_ptr: &'a opencv::core::Vector<opencv::core::KeyPoint>
 }
 unsafe impl<'a> ExternType for BindCVKeyPointsRef<'a> {
     type Id = type_id!("orb_slam3::BindCVKeyPointsRef");
@@ -64,7 +64,7 @@ unsafe impl<'a> ExternType for BindCVMatRef<'a> {
 
 #[derive(Debug, Clone)]
 pub struct BindCVVectorOfi32 {
-    pub vec_ptr: opencv::types::VectorOfi32
+    pub vec_ptr: opencv::core::Vector<i32>
 }
 unsafe impl ExternType for BindCVVectorOfi32 {
     type Id = type_id!("orb_slam3::BindCVVectorOfi32");
@@ -72,7 +72,7 @@ unsafe impl ExternType for BindCVVectorOfi32 {
 }
 #[derive(Debug, Clone)]
 pub struct BindCVVectorOfPoint2f {
-    pub vec_ptr: opencv::types::VectorOfPoint2f
+    pub vec_ptr: opencv::core::Vector<opencv::core::Point2f>
 }
 unsafe impl ExternType for BindCVVectorOfPoint2f {
     type Id = type_id!("orb_slam3::BindCVVectorOfPoint2f");
@@ -81,14 +81,14 @@ unsafe impl ExternType for BindCVVectorOfPoint2f {
 
 #[derive(Debug, Clone)]
 pub struct BindCVVectorOfPoint3f {
-    pub vec_ptr: opencv::types::VectorOfPoint3f
+    pub vec_ptr: opencv::core::Vector<opencv::core::Point3f>
 }
 unsafe impl ExternType for BindCVVectorOfPoint3f {
     type Id = type_id!("orb_slam3::BindCVVectorOfPoint3f");
     type Kind = cxx::kind::Trivial;
 }
 pub struct BindCVVectorOfPoint2fRef<'a> {
-    pub vec_ptr:  &'a mut opencv::types::VectorOfPoint2f
+    pub vec_ptr:  &'a mut opencv::core::Vector<opencv::core::Point2f>
 }
 unsafe impl<'a> ExternType for BindCVVectorOfPoint2fRef<'a> {
     type Id = type_id!("orb_slam3::BindCVVectorOfPoint2fRef");

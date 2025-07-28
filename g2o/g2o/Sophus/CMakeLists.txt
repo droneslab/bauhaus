@@ -13,10 +13,11 @@ endif()
 set(CMAKE_CXX_STANDARD 11)
 
 # Set compiler specific settings (FixMe: Should not cmake do this for us automatically?)
-# Sofiya: Added -flto=thin to enable link time optimization with Rust: https://doc.rust-lang.org/rustc/linker-plugin-lto.html#toolchain-compatibility
+
 IF("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
-   SET(CMAKE_CXX_FLAGS_DEBUG  "-O0 -g  -flto=thin")
-   SET(CMAKE_CXX_FLAGS_RELEASE "-O3  -flto=thin")
+   set(CMAKE_CXX_COMPILER "/home/darvis/Downloads/LLVM-19.1.7-Linux-X64/bin/clang-19")
+   add_link_options(-fuse-ld=lld)
+   set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Werror -Wextra  -Wno-deprecated-register -Qunused-arguments -fcolor-diagnostics")
 ELSEIF("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
    SET(CMAKE_CXX_FLAGS_DEBUG  "-O0 -g")

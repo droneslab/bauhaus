@@ -9,9 +9,10 @@ path = "src/lib.rs"
 #crate_type = ["staticlib"]
 
 [dependencies]
-cxx = "1.0.108"
-opencv = {version = "0.85.3", default-features = false, features= ["imgcodecs", "video"]}
+cxx = "1.0"
+opencv = { path = "/home/darvis/Downloads/opencv-rust", default-features = true, features= ["imgcodecs", "video"]}
+#opencv = {version = "0.85.3", default-features = false, features= ["imgcodecs", "video"]}
 
 [build-dependencies]
-cxx-build = "1.0.108"
+cxx-build = "1.0"
 cmake = "0.1.50"

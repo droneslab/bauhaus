@@ -10,6 +10,10 @@ MESSAGE("Build type: " ${CMAKE_BUILD_TYPE})
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -g") # -std=c++17
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -g")
 
+set(CMAKE_CXX_COMPILER "/home/darvis/Downloads/LLVM-19.1.7-Linux-X64/bin/clang-19")
+add_link_options(-fuse-ld=lld)
+set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
+
 # Sofiya: Removed -march=native, based on https://github.com/raulmur/ORB_SLAM2/issues/341 
 set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE}")
 set(CMAKE_CXX_FLAGS_RELEASE"${CMAKE_CXX_FLAGS_RELEASE}")
@@ -80,8 +84,8 @@ src/Converter.cc
 src/Converter.h
 src/GeometricTools.cc
 src/GeometricTools.h
-../target/cxxbridge/dvos3binding/src/lib.rs.cc
-../target/cxxbridge/dvos3binding/src/lib.rs.h
+/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/cxxbridge/dvos3binding/src/lib.rs.cc
+/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/cxxbridge/dvos3binding/src/lib.rs.h
 DBoW2/DBoW2/BowVector.h
 DBoW2/DBoW2/FORB.h 
 DBoW2/DBoW2/FClass.h       

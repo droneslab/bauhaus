@@ -3,9 +3,9 @@ pub mod tracking_backend; // orbslam3 tracking backend
 pub mod local_mapping; // orbslam3 local mapping
 pub mod loop_closing; // orbslam3 loop closing.
 
-pub mod tracking_backend_gtsam;
-pub mod tracking_frontend_gtsam;
-pub mod local_mapping_gtsam;
+//pub mod tracking_backend_gtsam;
+//pub mod tracking_frontend_gtsam;
+//pub mod local_mapping_gtsam;
 
 // Bauhaus-defined actors
 pub mod visualizer;

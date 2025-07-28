@@ -1,7 +1,7 @@
 use core::{config::SETTINGS, matrix::{DVMatrix, DVVectorOfKeyPoint}, system::Module};
 use std::{fmt, fmt::Debug};
 
-use opencv::{core::Mat, features2d::Feature2DTrait, types::VectorOfPoint2f};
+use opencv::{core::Mat, features2d::Feature2DTrait};
 
 use crate::registered_actors::FEATURE_DETECTION;
 
@@ -16,7 +16,7 @@ impl Module for OpenCVExtractor { }
 impl FeatureExtractionModule for OpenCVExtractor {
     fn extract(&mut self, image: & Mat) -> Result<(DVVectorOfKeyPoint, DVMatrix), Box<dyn std::error::Error>> {
         let mut descriptors = opencv::core::Mat::default();
-        let mut keypoints= opencv::types::VectorOfKeyPoint::new();
+        let mut keypoints= opencv::core::Vector::<opencv::core::KeyPoint>::new();
 
         self.extractor.detect(& *image, &mut keypoints, & opencv::core::no_array())?;
         self.extractor.compute(& *image, &mut keypoints, &mut descriptors)?;
@@ -24,11 +24,11 @@ impl FeatureExtractionModule for OpenCVExtractor {
         Ok((DVVectorOfKeyPoint::new(keypoints), DVMatrix::new(descriptors)))
     }
 
-    fn extract_amount(&mut self, _image: & Mat, _max_features: i32, _min_distance: f64) -> Result<VectorOfPoint2f, Box<dyn std::error::Error>> {
+    fn extract_amount(&mut self, _image: & Mat, _max_features: i32, _min_distance: f64) -> Result<opencv::core::Vector<opencv::core::Point2f>, Box<dyn std::error::Error>> {
         todo!("Not implemented")
     }
 
-    fn extract_with_existing_points(&mut self, _image : &Mat, _points : &VectorOfPoint2f) -> Result<(DVVectorOfKeyPoint, DVMatrix), Box<dyn std::error::Error>> {
+    fn extract_with_existing_points(&mut self, _image : &Mat, _points : &opencv::core::Vector<opencv::core::Point2f>) -> Result<(DVVectorOfKeyPoint, DVMatrix), Box<dyn std::error::Error>> {
         todo!("Not implemented!")
     }
 

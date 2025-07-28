@@ -1,8 +1,9 @@
 cmake_minimum_required (VERSION 3.0)
 SET(CMAKE_LEGACY_CYGWIN_WIN32 0)
+set(CMAKE_POLICY_DEFAULT_CMP<0069> NEW)
 
 PROJECT(g2o)
-
+#11;rgb:fcc2/f732/e5d0
 SET(g2o_C_FLAGS)
 SET(g2o_CXX_FLAGS)
 
@@ -12,11 +13,15 @@ SET(g2o_CXX_FLAGS ${g2o_CXX_FLAGS} -I${g2o_SOURCE_DIR}/g2o/rust/ )
 
 message(STATUS "g2o_CXX_FLAGS:" "${g2o_CXX_FLAGS}")
 # default built type
-if(NOT CMAKE_BUILD_TYPE)
+if (NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()
 
 MESSAGE(STATUS "BUILD TYPE:" ${CMAKE_BUILD_TYPE})
+
+set(CMAKE_CXX_COMPILER "/home/darvis/Downloads/LLVM-19.1.7-Linux-X64/bin/clang-19")
+add_link_options(-fuse-ld=lld)
+set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
 
 SET (G2O_LIB_TYPE STATIC)
 
@@ -213,7 +218,7 @@ g2o/orbslam_types/Pinhole.cc
 
 # rust bindings
 g2o/rust/rust_helper.cpp
-../target/cxxbridge/g2o/src/lib.rs.cc
+/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/cxxbridge/g2o/src/lib.rs.cc
 )
 
 include_directories(../target/cxxbridge)

@@ -25,10 +25,11 @@ debuginfo-level = 1
 #IDL_PACKAGE_FILTER = { value = "std_msgs;r2r_minimal_node_msgs" }
 
 [dependencies]
+opencv = { path = "/home/darvis/Downloads/opencv-rust" }
 g2o = { path = "../g2o" }
 dvos3binding = { path = "../orbslam-bindings" }
 foxglove = { path = "../foxglove" }
-gtsam = { path = "../gtsam-rs" }
+#gtsam = { path = "../gtsam-rs" }
 
 once_cell = "*"
 chrono = { version = "*", features = ["serde"] }
@@ -46,10 +47,13 @@ foxglove-ws = "0.2.2"
 tokio = "1.36.0"
 base64 = "0.21.7"
 
-#cc = { version = "1.0.79", features = ["parallel"] }
-opencv = {version = "0.85.3", default-features = false, features= ["imgcodecs", "video", "imgproc"]}
+cc = { version = "1.0.79", features = ["parallel"] }
+# opencv = {version = "0.85.3", default-features = false, features= ["imgcodecs", "video", "imgproc","clang-runtime"]}
+
 nalgebra = {version = "0.32.3"}
-cv-convert = {version = '0.25.0', default-features = false, features = ['opencv_0-85','nalgebra_0-32']}
+#cv-convert = {version = '0.25.0', default-features = false, features = ['opencv','nalgebra_0-32']}
+cv-convert = {version = '0.26.0', default-features = false, features = ['opencv','nalgebra']}
+#cv-convert = {version = '0.25.0', default-features = true}
 cxx = "1.0"
 
 yaml-rust = "*"

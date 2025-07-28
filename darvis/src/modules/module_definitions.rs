@@ -1,7 +1,7 @@
 use core::{matrix::{DVMatrix, DVMatrix3, DVVector3, DVVectorOfKeyPoint, DVVectorOfPoint2f}, sensor::Sensor, system::{Module, Sender}};
 use std::{collections::{BTreeSet, HashMap}, fmt::Debug};
 
-use opencv::{core::Mat, types::VectorOfPoint2f};
+use opencv::{core::Mat};
 
 use crate::{actors::tracking_backend::TrackedMapPointData, map::{frame::Frame, keyframe::KeyFrame, map::Id, pose::Sim3, read_only_lock::ReadWriteMap}};
 
@@ -75,8 +75,8 @@ pub trait ImuModule: Send + Sync {
 pub trait FeatureExtractionModule {
     // TODO (modularization) Sofiya these should probably be the same function that takes a Self::FeatureExtractionSettings variable
     fn extract(&mut self, image : & Mat) -> Result<(DVVectorOfKeyPoint, DVMatrix), Box<dyn std::error::Error>>;
-    fn extract_amount(&mut self, image: & Mat, max_features: i32, min_distance: f64) -> Result<VectorOfPoint2f, Box<dyn std::error::Error>>;
-    fn extract_with_existing_points(&mut self, image: &Mat, points: &VectorOfPoint2f) -> Result<(DVVectorOfKeyPoint, DVMatrix), Box<dyn std::error::Error>>;
+    fn extract_amount(&mut self, image: & Mat, max_features: i32, min_distance: f64) -> Result<opencv::core::Vector<opencv::core::Point2f>, Box<dyn std::error::Error>>;
+    fn extract_with_existing_points(&mut self, image: &Mat, points: &opencv::core::Vector<opencv::core::Point2f>) -> Result<(DVVectorOfKeyPoint, DVMatrix), Box<dyn std::error::Error>>;
 }
 
 impl Module for dyn FeatureExtractionModule { }

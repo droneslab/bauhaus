@@ -67,17 +67,17 @@ impl DVMatrix {
     pub fn mat(&self) -> &opencv::core::Mat { &self.0 }
     pub fn row(&self, index: u32) -> DVMatrix {
         DVMatrix::new(
-            self.0.row(index as i32).unwrap()
+            self.0.row(index as i32).unwrap().clone_pointee()
         )
     }
     pub fn row_range(&self, start: i32, end: i32) -> DVMatrix {
         DVMatrix::new(
-            self.0.row_range(&Range::new(start,end).unwrap()).unwrap()
+            self.0.row_range(&Range::new(start,end).unwrap()).unwrap().clone_pointee()
         )
     }
     pub fn col_range(&self, start: i32, end: i32) -> DVMatrix {
         DVMatrix::new(
-            self.0.col_range(&Range::new(start,end).unwrap()).unwrap()
+            self.0.col_range(&Range::new(start,end).unwrap()).unwrap().clone_pointee()
     )
     }
     pub fn divide_by_scalar(&self, scalar: f32) -> DVMatrix {
@@ -191,14 +191,14 @@ impl<T: nalgebra::ComplexField> From<[T; 3]> for DVVector3<T> {
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct DVVectorOfKeyPoint ( opencv::types::VectorOfKeyPoint );
+pub struct DVVectorOfKeyPoint (opencv::core::Vector<opencv::core::KeyPoint> );
 unsafe impl Sync for DVVectorOfKeyPoint {}
 impl DVVectorOfKeyPoint {
     // Constructors
     pub fn empty() -> Self {
-        Self ( opencv::types::VectorOfKeyPoint::new() )
+        Self (opencv::core::Vector::<opencv::core::KeyPoint>::new() )
     }
-    pub fn new(vec: opencv::types::VectorOfKeyPoint) -> Self {
+    pub fn new(vec:opencv::core::Vector<opencv::core::KeyPoint>) -> Self {
         Self ( vec )
     }
     pub fn clone(&self) -> DVVectorOfKeyPoint {
@@ -207,14 +207,14 @@ impl DVVectorOfKeyPoint {
 
     pub fn len(&self) -> i32 { self.0.len() as i32 }
     pub fn get(&self, index: usize) -> Result<KeyPoint, opencv::Error> { self.0.get(index) }
-    pub fn convert(&self, vec_of_points: &mut opencv::types::VectorOfPoint2f, index: &opencv::types::VectorOfi32) -> Result<(), opencv::Error> {
+    pub fn convert(&self, vec_of_points: &mut opencv::core::Vector<opencv::core::Point2f>, index: &opencv::core::Vector<i32>) -> Result<(), opencv::Error> {
         opencv::core::KeyPoint::convert(&self.0, vec_of_points, index)
     }
 
     pub fn clear(&mut self) { self.0.clear() }
 }
 impl Deref for DVVectorOfKeyPoint {
-    type Target = opencv::types::VectorOfKeyPoint;
+    type Target =opencv::core::Vector<opencv::core::KeyPoint>;
     fn deref(&self) -> &Self::Target {
         &self.0
     }
@@ -226,8 +226,8 @@ impl DerefMut for DVVectorOfKeyPoint {
 }
 
 // From implementations to make it easier to pass this into opencv functions
-impl From<DVVectorOfKeyPoint> for opencv::types::VectorOfKeyPoint {
-    fn from(vec: DVVectorOfKeyPoint) -> opencv::types::VectorOfKeyPoint { vec.0 }
+impl From<DVVectorOfKeyPoint> for opencv::core::Vector<opencv::core::KeyPoint> {
+    fn from(vec: DVVectorOfKeyPoint) ->opencv::core::Vector<opencv::core::KeyPoint> { vec.0 }
 }
 // For interop with custom C++ bindings to ORBSLAM
 impl From<DVVectorOfKeyPoint> for dvos3binding::ffi::WrapBindCVKeyPoints {
@@ -265,14 +265,14 @@ impl<'a> From<&'a DVVectorOfKeyPoint> for dvos3binding::BindCVKeyPointsRef<'a> {
 
 
 #[derive(Clone, Debug, Default)]
-pub struct DVVectorOfPoint3f ( opencv::types::VectorOfPoint3f );
+pub struct DVVectorOfPoint3f ( opencv::core::Vector<opencv::core::Point3f> );
 unsafe impl Sync for DVVectorOfPoint3f {}
 impl DVVectorOfPoint3f {
     // Constructors
     pub fn empty() -> Self {
-        Self ( opencv::types::VectorOfPoint3f::new() )
+        Self ( opencv::core::Vector::<opencv::core::Point3f>::new() )
     }
-    pub fn new(vec: opencv::types::VectorOfPoint3f) -> Self {
+    pub fn new(vec: opencv::core::Vector::<opencv::core::Point3f>) -> Self {
         Self ( vec ) 
     }
     pub fn clone(&self) -> DVVectorOfPoint3f {
@@ -306,13 +306,13 @@ impl From<dvos3binding::ffi::WrapBindCVVectorOfPoint3f> for DVVectorOfPoint3f {
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct DVVectorOfPoint2f ( opencv::types::VectorOfPoint2f );
+pub struct DVVectorOfPoint2f ( opencv::core::Vector<opencv::core::Point2f> );
 unsafe impl Sync for DVVectorOfPoint2f {}
 impl DVVectorOfPoint2f {
     pub fn empty() -> Self {
-        Self ( opencv::types::VectorOfPoint2f::new() )
+        Self ( opencv::core::Vector::<opencv::core::Point2f>::new() )
     }
-    pub fn new(vec: opencv::types::VectorOfPoint2f) -> Self {
+    pub fn new(vec: opencv::core::Vector<opencv::core::Point2f>) -> Self {
         Self ( vec ) 
     }
     pub fn len(&self) -> i32 { self.0.len() as i32 }
@@ -353,13 +353,13 @@ impl<'a> From<&'a mut DVVectorOfPoint2f> for dvos3binding::BindCVVectorOfPoint2f
 
 
 #[derive(Clone, Debug, Default)]
-pub struct DVVectorOfi32 ( opencv::types::VectorOfi32 );
+pub struct DVVectorOfi32 ( opencv::core::Vector<i32> );
 unsafe impl Sync for DVVectorOfi32 {}
 impl DVVectorOfi32 {
     pub fn empty() -> Self {
-        Self ( opencv::types::VectorOfi32::new() )
+        Self ( opencv::core::Vector::<i32>::new() )
     } 
-    pub fn new(vec: opencv::types::VectorOfi32) -> Self {
+    pub fn new(vec: opencv::core::Vector::<i32>) -> Self {
         Self ( vec ) 
     }
 	pub fn set(&mut self, index: size_t, val: i32) -> std::result::Result<(), opencv::Error> {
@@ -367,7 +367,7 @@ impl DVVectorOfi32 {
     }
 }
 impl Deref for DVVectorOfi32 {
-    type Target = opencv::types::VectorOfi32;
+    type Target = opencv::core::Vector<i32>;
     fn deref(&self) -> &Self::Target {
         &self.0
     }

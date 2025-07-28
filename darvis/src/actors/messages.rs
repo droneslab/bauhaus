@@ -5,7 +5,7 @@ use core::{
     matrix::{ DVMatrix, DVVectorOfKeyPoint}, system::{ActorMessage, Timestamp},
 };
 use crate::{
-    actors::{tracking_backend::TrackingState, tracking_frontend_gtsam::{TrackedFeatures, TrackedFeaturesIndexMap}},
+    actors::{tracking_backend::TrackingState},
     map::{frame::Frame, map::Id, pose::Pose}, modules::imu::{ImuBias, ImuMeasurements}, ImuInitializationData
 };
 
@@ -45,19 +45,19 @@ impl ActorMessage for ImageMsg {
         0
     }
 }
-pub struct FeatureTracksAndIMUMsg {
-    pub frame: Frame,
-    // pub preintegration_results: PreintegratedCombinedMeasurementsResults,
-    pub imu_measurements: ImuMeasurements,
-    pub imu_initialization: Option<ImuInitializationData>,
-    pub feature_tracks: TrackedFeatures,
-    // pub curr_kf_features_map: TrackedFeaturesIndexMap,
-}
-impl ActorMessage for FeatureTracksAndIMUMsg {
-    fn get_map_version(&self) -> u64 {
-        0
-    }
-}
+// pub struct FeatureTracksAndIMUMsg {
+//     pub frame: Frame,
+//     // pub preintegration_results: PreintegratedCombinedMeasurementsResults,
+//     pub imu_measurements: ImuMeasurements,
+//     pub imu_initialization: Option<ImuInitializationData>,
+//     pub feature_tracks: TrackedFeatures,
+//     // pub curr_kf_features_map: TrackedFeaturesIndexMap,
+// }
+// impl ActorMessage for FeatureTracksAndIMUMsg {
+//     fn get_map_version(&self) -> u64 {
+//         0
+//     }
+// }
 
 pub struct TrackingStateMsg{
     pub state: TrackingState, 
@@ -109,16 +109,16 @@ impl ActorMessage for InitKeyFrameMsg {
         self.map_version
     }
 }
-pub struct InitKeyFrameMsgGTSAM { 
-    pub kf_id: Id,
-    pub map_version: u64,
-    pub curr_kf_features_map: TrackedFeaturesIndexMap
-}
-impl ActorMessage for InitKeyFrameMsgGTSAM {
-    fn get_map_version(&self) -> u64 {
-        self.map_version
-    }
-}
+// pub struct InitKeyFrameMsgGTSAM { 
+//     pub kf_id: Id,
+//     pub map_version: u64,
+//     pub curr_kf_features_map: TrackedFeaturesIndexMap
+// }
+// impl ActorMessage for InitKeyFrameMsgGTSAM {
+//     fn get_map_version(&self) -> u64 {
+//         self.map_version
+//     }
+// }
 
 pub struct LastKeyFrameUpdatedMsg {
     pub map_version: u64

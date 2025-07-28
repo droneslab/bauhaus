@@ -1,4 +1,4 @@
-use opencv::{imgcodecs, imgproc::resize, prelude::Mat, types::VectorOfKeyPoint, core::{Vector, KeyPoint, DMatch}};
+use opencv::{imgcodecs, imgproc::resize, prelude::Mat, core::{Vector, KeyPoint, DMatch}};
 
 pub fn read_image_file(path: &String) -> Mat {
     let _span = tracy_client::span!("read image");
@@ -31,7 +31,7 @@ pub fn _write_image_file(path: &String, image: &Mat) {
     let _ = imgcodecs::imwrite(path, image, &params).expect("Could not read image.");
 }
 
-pub fn write_features(image: &Mat, keypoints: &VectorOfKeyPoint) -> Result<Mat, opencv::Error> {
+pub fn write_features(image: &Mat, keypoints: &opencv::core::Vector<opencv::core::KeyPoint>) -> Result<Mat, opencv::Error> {
     let mut dst_img = Mat::default();
     opencv::features2d::draw_keypoints(
         image,

@@ -11,7 +11,6 @@ use core::config::SETTINGS;
 use std::fmt::Debug;
 use core::sensor::{Sensor, FrameSensor};
 use opencv::prelude::{Mat, MatTraitConst, MatTrait, KeyPointTraitConst};
-use opencv::types::VectorOff32;
 use opencv::core::{KeyPoint, CV_32F, Scalar, Point2f};
 use crate::registered_actors::{CAMERA_MODULE, FEATURES};
 use crate::{
@@ -209,7 +208,7 @@ impl Features {
         }
     }
 
-    pub fn _replace_keypoints_and_descriptors(&mut self, keypoints: opencv::types::VectorOfKeyPoint, descriptors: Mat) {
+    pub fn _replace_keypoints_and_descriptors(&mut self, keypoints: opencv::core::Vector::<opencv::core::KeyPoint>, descriptors: Mat) {
         match &self.keypoints {
             KeyPoints::Mono{..} => {
                 self.num_keypoints = keypoints.len() as u32;
@@ -368,12 +367,12 @@ impl Features {
         }
 
         // Undistort points
-        mat = mat.reshape(2, 0)?;
+        let mat2 = mat.reshape(2, 0)?;
 
-        let mut undistorted = mat.clone(); // TODO (timing) ... trying to avoid clone, but can't have &mat and &mut mat at the same time
-        let dist_coefs = VectorOff32::from_iter((*dist_coef).clone());
+        let mut undistorted = mat2.try_clone().unwrap(); // TODO (timing) ... trying to avoid clone, but can't have &mat and &mut mat at the same time
+        let dist_coefs = opencv::core::Vector::<f32>::from_iter((*dist_coef).clone());
         opencv::calib3d::undistort_points(
-            &mat,
+            &mat2,
             &mut undistorted,
             &CAMERA_MODULE.k_matrix.mat(),
             &dist_coefs,
@@ -381,14 +380,14 @@ impl Features {
             &CAMERA_MODULE.k_matrix.mat(),
         )?;
 
-        undistorted = undistorted.reshape(1, 0)?;
+        let undistorted2 = undistorted.reshape(1, 0)?;
 
         // Fill undistorted keypoint vector
-        let mut keypoints_un = opencv::types::VectorOfKeyPoint::new();
+        let mut keypoints_un = opencv::core::Vector::<opencv::core::KeyPoint>::new();
         for i in 0..num_keypoints {
             let kp_orig = keypoints.get(i as usize)?;
             let kp_new = KeyPoint::new_point(
-                Point2f::new(*undistorted.at_2d::<f32>(i, 0)?,  *undistorted.at_2d::<f32>(i, 1)?),
+                Point2f::new(*undistorted2.at_2d::<f32>(i, 0)?,  *undistorted2.at_2d::<f32>(i, 1)?),
                 kp_orig.size(), kp_orig.angle(), kp_orig.response(), kp_orig.octave(), kp_orig.class_id())?;
             keypoints_un.push(kp_new);
         }
@@ -407,14 +406,14 @@ impl Features {
 
             // Reshape points
             let mut mat = Mat::from_slice_2d(&points.iter().map(|p| vec![p.x, p.y]).collect::<Vec<_>>()).unwrap();
-            mat = mat.reshape(2, 0).unwrap();
+            let mat2 = mat.reshape(2, 0).unwrap();
 
             // Undistort points
-            let mut undistorted_points = mat.clone();
-            let dist_coefs = VectorOff32::from_iter((*dist_coeffs).clone());
+            let mut undistorted_points = mat2.try_clone().unwrap();
+            let dist_coefs = opencv::core::Vector::<f32>::from_iter((*dist_coeffs).clone());
 
             opencv::calib3d::undistort_points(
-                &mat,
+                &mat2,
                 &mut undistorted_points,
                 &CAMERA_MODULE.k_matrix.mat(),
                 &dist_coefs,

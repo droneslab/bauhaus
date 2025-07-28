@@ -174,8 +174,8 @@ impl Sim3Solver {
             return Ok((no_more, None));
         }
 
-        let p_3d_c1_i = Mat::new_rows_cols_with_default(3,3, CV_64F, Scalar::all(0.0))?; // P3Dc1i
-        let p_3d_c2_i = Mat::new_rows_cols_with_default(3,3, CV_64F, Scalar::all(0.0))?; // P3Dc2i
+        let mut p_3d_c1_i = Mat::new_rows_cols_with_default(3,3, CV_64F, Scalar::all(0.0))?; // P3Dc1i
+        let mut p_3d_c2_i = Mat::new_rows_cols_with_default(3,3, CV_64F, Scalar::all(0.0))?; // P3Dc2i
 
         let mut current_iterations = 0;
         while self.current_ransac_state.num_iterations < self.ransac_max_its && current_iterations < num_iterations {
@@ -190,11 +190,11 @@ impl Sim3Solver {
                 // let randi = dvos3binding::ffi::RandomInt(0, available_indices.len() as i32 - 2) as usize;
                 let idx = available_indices[randi] as usize;
                 self.x_3d_c1[idx].copy_to(
-                    &mut p_3d_c1_i.col(i)?
+                    &mut p_3d_c1_i.col_mut(i)?
                 )?;
 
                 self.x_3d_c2[idx].copy_to(
-                    &mut p_3d_c2_i.col(i)?
+                    &mut p_3d_c2_i.col_mut(i)?
                 )?;
 
                 available_indices[randi] = available_indices.pop().unwrap();
@@ -239,10 +239,10 @@ impl Sim3Solver {
         let division = 1.0 / p.cols() as f64;
         c = c.mul(&division, 1.)?.to_mat()?;
 
-        let pr = Mat::new_rows_cols_with_default(p.rows(), p.cols(), CV_64F, Scalar::all(0.0))?;
+        let mut pr = Mat::new_rows_cols_with_default(p.rows(), p.cols(), CV_64F, Scalar::all(0.0))?;
         for i in 0..p.cols() {
-            let temp = res_to_mat(p.col(i)?.clone() - &c)?;
-            temp.copy_to(&mut pr.col(i)?)?;
+            let temp = res_to_mat(p.col(i)?.try_clone().unwrap() - &c)?;
+            temp.copy_to(&mut pr.col_mut(i)?)?;
         }
 
         return Ok((pr, c));
@@ -342,13 +342,13 @@ impl Sim3Solver {
 
         s_r.copy_to(
             &mut self.current_estimation.T12_i
-            .row_range(&Range::new(0,3)?)?
-            .col_range(&Range::new(0,3)?)?
+            .row_range_mut(&Range::new(0,3)?)?
+            .col_range_mut(&Range::new(0,3)?)?
         )?;
 
         self.current_estimation.t_12_i.copy_to(
             &mut self.current_estimation.T12_i
-            .col(0)?
+            .col_mut(0)?
         )?;
 
         // Step 8.2 T21
@@ -356,16 +356,16 @@ impl Sim3Solver {
 
         s_r_inv.copy_to(
             &mut self.current_estimation.T21_i
-            .row_range(&Range::new(0,3)?)?
-            .col_range(&Range::new(0,3)?)?
+            .row_range_mut(&Range::new(0,3)?)?
+            .col_range_mut(&Range::new(0,3)?)?
         )?;
 
         let neg_s_r_inv = s_r_inv.mul(&-1., 1.)?.to_mat()?;
         let tinv = res_to_mat(neg_s_r_inv * &self.current_estimation.t_12_i)?;
         tinv.copy_to(
             &mut self.current_estimation.T21_i
-            .row_range(&Range::new(0,3)?)?
-            .col(3)?
+            .row_range_mut(&Range::new(0,3)?)?
+            .col_mut(3)?
         )?;
 
 
@@ -406,11 +406,12 @@ impl Sim3Solver {
     fn project(&self, p3d_w: &Vec<Mat>, tcw: &Mat) -> Result<Vec<(f64, f64)>, opencv::Error> {
         // void Sim3Solver::Project(const vector<Eigen::Vector3f> &vP3Dw, vector<Eigen::Vector2f> &vP2D, Eigen::Matrix4f Tcw, GeometricCamera* pCamera)
 
-        let rcw = tcw.row_range(& Range::new(0,3)?)?.col_range(& Range::new(0,3)?)?;
-        let tcw = tcw.row_range(& Range::new(0,3)?)?.col(3)?;
+        let binding = tcw.row_range(& Range::new(0,3)?)?;
+        let rcw = binding.col_range(& Range::new(0,3)?)?;
+        let tcw = binding.col(3)?;
         let mut p2d = vec![];
         for pose_in_vec in p3d_w {
-            let p3d_c = res_to_mat(&rcw * pose_in_vec + &tcw)?;
+            let p3d_c = res_to_mat(res_to_mat(rcw.clone_pointee() * pose_in_vec).unwrap() + tcw.clone_pointee())?;
             let invz = 1.0 / p3d_c.at::<f64>(2)?;
             let x = p3d_c.at::<f64>(0)? * invz;
             let y = p3d_c.at::<f64>(1)? * invz;
