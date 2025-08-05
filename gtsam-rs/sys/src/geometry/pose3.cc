@@ -6,8 +6,8 @@ std::unique_ptr<Pose3> default_pose3() { return std::make_unique<Pose3>(); }
 
 std::unique_ptr<Pose3> new_pose3(const Rot3 &rotation, const Point3 &point) {
 
-    std::cout << "When creating pose3 in c++, rotation is: " << rotation.quaternion() << std::endl;
-    std::cout << "When creating pose3 in c++, rotation is: " << rotation.matrix() << std::endl;
+    // std::cout << "When creating pose3 in c++, rotation is: " << rotation.quaternion() << std::endl;
+    // std::cout << "When creating pose3 in c++, rotation is: " << rotation.matrix() << std::endl;
 
     return std::make_unique<Pose3>(rotation, point);
 }

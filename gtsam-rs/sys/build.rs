@@ -85,7 +85,6 @@ impl Default for Repository {
     }
 }
 
-#[cfg(feature = "build")]
 impl Repository {
     fn build(&self) -> Library {
         trait CmakeFlag {
@@ -320,15 +319,15 @@ fn main() {
     println!("cargo:rerun-if-changed=./build.rs");
     println!("cargo:rerun-if-changed=./Cargo.toml");
 
-    let mut library = match Library::find("gtsam") {
-        Ok(library) => library,
-        #[cfg(feature = "build")]
-        Err(_) => {
+    let mut library = {// match Library::find("gtsam") {
+    //     Ok(library) => library,
+    //     #[cfg(feature = "build")]
+    //     Err(_) => {
             let repo = Repository::default();
             repo.build()
-        }
-        #[cfg(not(feature = "build"))]
-        Err(error) => panic!("failed to find \"gtsam\" library; you can enable \"build\" feature to skip the step: {error}"),
+        // }
+        // #[cfg(not(feature = "build"))]
+        // Err(error) => panic!("failed to find \"gtsam\" library; you can enable \"build\" feature to skip the step: {error}"),
     };
 
     library.build();

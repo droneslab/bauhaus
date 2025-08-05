@@ -3,7 +3,7 @@ use cxx::{SharedPtr, UniquePtr};
 use crate::{geometry::{cal3_s2::Cal3S2, point2::Point2, pose3::Pose3}, inference::key::IntoKey, linear::noise_model::IsotropicNoiseModel};
 
 pub struct SmartProjectionPoseFactorCal3S2 {
-    pub(crate) inner: UniquePtr<::sys::SmartProjectionPoseFactorCal3_S2>,
+    pub(crate) inner: SharedPtr<::sys::SmartProjectionPoseFactorCal3_S2>,
 }
 
 impl SmartProjectionPoseFactorCal3S2 {
@@ -27,7 +27,7 @@ impl SmartProjectionPoseFactorCal3S2 {
         key: impl IntoKey
     ) {
         ::sys::add(
-            self.inner.pin_mut(),
+            &mut self.inner,
             &point.inner,
             key.into_key(),
         )

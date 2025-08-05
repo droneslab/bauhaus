@@ -15,7 +15,7 @@ pub struct Frame {
 
     pub image: Option<opencv::core::Mat>,
 
-    pub pose: Option<Pose>,
+    pub pose: Option<Pose>, //  == tcw
     pub mappoint_matches: MapPointMatches, // mvpmappoints , mvbOutlier
     pub ref_kf_id: Option<Id>, //mpReferenceKF
 

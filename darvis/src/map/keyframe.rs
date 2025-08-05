@@ -9,7 +9,7 @@ use crate::modules::module_definitions::VocabularyModule;
 pub struct KeyFrame {
     pub id: Id,
     pub timestamp: Timestamp,
-    pose: Pose,
+    pose: Pose, // == tcw
     pub frame_id: i32,
 
     // Map connections

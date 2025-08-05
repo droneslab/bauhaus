@@ -47,8 +47,6 @@ pub struct Rot3Ref<'a> {
     pub(super) inner: &'a ::sys::Rot3,
 }
 
-// SOFIYA look at these! Could the conversion be wrong?
-
 impl<'a> From<Rot3Ref<'a>> for ::nalgebra::UnitQuaternion<f64> {
     fn from(value: Rot3Ref<'a>) -> Self {
         let mut dst = [0.0; 9];

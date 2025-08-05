@@ -238,6 +238,7 @@ pub struct VisTrajectoryMsg {
     pub mappoint_matches: Vec<Option<(i32, bool)>>,
     pub mappoints_in_tracking: BTreeSet<Id>,
     pub timestamp: Timestamp,
+    pub debug: ImuMeasurements,
     pub map_version: u64
 }
 impl ActorMessage for VisTrajectoryMsg {

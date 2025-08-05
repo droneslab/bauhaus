@@ -8,7 +8,7 @@ use core::{
     config::*, matrix::*, system::{Actor, MessageBox, System, Timestamp}
 };
 use crate::{
-    actors::{local_mapping::LOCAL_MAPPING_IDLE, messages::{FeatureTracksAndIMUMsg, ImagePathMsg, VisTrajectoryMsg, TrajectoryMsg, ImageMsg, InitKeyFrameMsg, ShutdownMsg, VisFeaturesMsg}}, map::{frame::Frame, pose::Pose, read_only_lock::ReadWriteMap}, modules::{image, imu::{ImuMeasurements, IMU}, map_initialization::MapInitialization, module_definitions::{MapInitializationModule, FeatureExtractionModule}}, registered_actors::{new_feature_extraction_module, CAMERA_MODULE, LOCAL_MAPPING, SHUTDOWN_ACTOR, TRACKING_BACKEND, TRACKING_FRONTEND, VISUALIZER}
+    actors::{local_mapping::LOCAL_MAPPING_IDLE, messages::{FeatureTracksAndIMUMsg, ImageMsg, ImagePathMsg, InitKeyFrameMsg, ShutdownMsg, TrajectoryMsg, VisFeaturesMsg, VisTrajectoryMsg}}, map::{frame::Frame, pose::Pose, read_only_lock::ReadWriteMap}, modules::{image::{self, _write_image_file}, imu::{ImuMeasurements, IMU}, map_initialization::MapInitialization, module_definitions::{FeatureExtractionModule, MapInitializationModule}}, registered_actors::{new_feature_extraction_module, CAMERA_MODULE, LOCAL_MAPPING, SHUTDOWN_ACTOR, TRACKING_BACKEND, TRACKING_FRONTEND, VISUALIZER}
 };
 
 
@@ -85,7 +85,7 @@ impl TrackingFrontendGTSAM {
                 return false;
             }
 
-            let (image, timestamp, mut imu_measurements, imu_initialization) = if message.is::<ImagePathMsg>() {
+            let (image, timestamp, mut imu_measurements, mut imu_initialization) = if message.is::<ImagePathMsg>() {
                 let msg = message.downcast::<ImagePathMsg>().unwrap_or_else(|_| panic!("Could not downcast tracking message!"));
                 (image::read_image_file(&msg.image_path), msg.timestamp, msg.imu_measurements, msg.imu_initialization)
             } else {
@@ -104,15 +104,21 @@ impl TrackingFrontendGTSAM {
 
                     // SOFIYA TURN OFF MAP INITIALIZATION
                         // let initialized = self.initialize_map(&image, timestamp).unwrap();
-                        // println!("Timestamp {}. Initialized map? {} Imu init is: {:?}", timestamp, initialized, imu_initialization);
+                        // println!("Timestamp {}. Initialized map? {}. GT Imu init is: {:?}", timestamp, initialized, imu_initialization);
 
+                        // if initialized {
+                        //     let kf1_pose = self.map.read().unwrap().get_keyframe(1).get_pose();
+                        //     imu_initialization.as_mut().unwrap().pose = kf1_pose;
+                        //     println!("Set imu initialization pose to: {:?}", kf1_pose);
+                        // }
+                        
                         // initialized
 
                     // When turning back on, comment all this out:
                         let (keypoints, descriptors) = self.orb_extractor_ini.as_mut().unwrap().extract(& image).unwrap();
-                        let init_pose = Pose::new_with_quaternion_convert(*imu_initialization.as_ref().unwrap().translation, imu_initialization.as_ref().unwrap().rotation);
-
-                        self.current_frame = Frame::new(
+                        let init_pose = imu_initialization.as_ref().unwrap().pose;
+                        
+                        self.current_frame = Frame::new( 
                             self.curr_frame_id, 
                             keypoints,
                             descriptors,

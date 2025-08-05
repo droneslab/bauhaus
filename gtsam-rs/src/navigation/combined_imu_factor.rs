@@ -98,6 +98,11 @@ pub struct PreintegrationCombinedParams {
 }
 
 impl PreintegrationCombinedParams {
+    pub fn new(x: f64, y: f64, z: f64) -> Self {
+        Self {
+            inner: ::sys::new_preintegrated_combined_params(x, y, z),
+        }
+    }
     pub fn makesharedu() -> Self {
         Self {
             inner: ::sys::new_preintegrated_combined_params_makesharedu(),

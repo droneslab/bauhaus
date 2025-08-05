@@ -46,6 +46,6 @@ namespace gtsam {
 
     void nonlinear_factor_graph_add_smart_projection_pose_factor(
         NonlinearFactorGraph &graph,
-        const gtsam::SmartProjectionPoseFactor<gtsam::Cal3_S2> &factor);
+        const std::shared_ptr<gtsam::SmartProjectionPoseFactor<gtsam::Cal3_S2>> &factor);
 }
 // namespace gtsam

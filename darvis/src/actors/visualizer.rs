@@ -6,10 +6,10 @@ use foxglove::{foxglove::items::{line_primitive, scene_entity_deletion, ArrowPri
 use base64::{engine::general_purpose, Engine as _};
 
 use core::{
-    config::SETTINGS, matrix::{DVVector3, DVVectorOfKeyPoint}, system::{Actor, MessageBox, System, Timestamp}
+    config::SETTINGS, matrix::{DVMatrix3, DVVector3, DVVectorOfKeyPoint}, system::{Actor, MessageBox, System, Timestamp}
 };
 use crate::{
-    actors::messages::{ShutdownMsg, VisFeatureMatchMsg, VisFeaturesMsg, VisTrajectoryMsg}, map::{map::Id, pose::{DVRotation, Pose}, read_only_lock::ReadWriteMap}, modules::image, registered_actors::VISUALIZER
+    actors::messages::{ShutdownMsg, VisFeatureMatchMsg, VisFeaturesMsg, VisTrajectoryMsg}, map::{map::Id, pose::{DVRotation, DVTranslation, Pose}, read_only_lock::ReadWriteMap}, modules::{image, imu::ImuMeasurements}, registered_actors::VISUALIZER
 };
 
 use super::messages::{LoopClosureEssentialGraphMsg, LoopClosureGBAMsg, LoopClosureMapPointFusionMsg, VisTrajectoryTrackingMsg};
@@ -48,6 +48,7 @@ pub const CONNECTED_KFS_CHANNEL: &str = "/connected_kfs";
 pub const MAP_INFO_CHANNEL: &str = "/map_info";
 pub const DEBUG_CHANNEL: &str = "/debug";
 pub const TRACKING_TRAJECTORY_CHANNEL: &str = "/trajectory_tracking";
+pub const RAW_IMU_DATA: &str = "/raw_imu";
 
 pub struct DarvisVisualizer {
     system: System,
@@ -100,10 +101,11 @@ impl Actor for DarvisVisualizer {
             (MAP_INFO_CHANNEL, "foxglove.MapInfo"),
             (DEBUG_CHANNEL, "foxglove.SceneUpdate"),
             (TRACKING_TRAJECTORY_CHANNEL, "foxglove.SceneUpdate"),
+            (RAW_IMU_DATA, "foxglove.Vector3"),
         ]);
 
         let mut writer = if SETTINGS.get::<bool>(VISUALIZER, "stream") {
-        let server = foxglove_ws::FoxgloveWebSocket::new();
+            let server = foxglove_ws::FoxgloveWebSocket::new();
             tokio::spawn({
                 let server = server.clone();
                 async move { server.serve(([127, 0, 0, 1], SETTINGS.get::<i32>(VISUALIZER, "port") as u16)).await }
@@ -369,7 +371,7 @@ impl DarvisVisualizer {
     }
 
     async fn update_draw_map(&mut self, msg: VisTrajectoryMsg) -> Result<(), Box<dyn std::error::Error>> {
-        self.draw_trajectory(msg.pose, msg.timestamp, SETTINGS.get::<bool>(VISUALIZER, "draw_graph")).await?;
+        self.draw_trajectory(msg.pose, msg.timestamp, msg.debug, SETTINGS.get::<bool>(VISUALIZER, "draw_graph")).await?;
 
         self.plot_map_info(&msg.mappoint_matches, msg.timestamp).await?;
 
@@ -444,7 +446,7 @@ impl DarvisVisualizer {
         Ok(())
     }
 
-    async fn draw_trajectory(&mut self, frame_pose: Pose, timestamp: Timestamp, draw_graph: bool) -> Result<(), Box<dyn std::error::Error>> {
+    async fn draw_trajectory(&mut self, frame_pose: Pose, timestamp: Timestamp, debug: ImuMeasurements, draw_graph: bool) -> Result<(), Box<dyn std::error::Error>> {
         self.clear_scene(timestamp, TRAJECTORY_CHANNEL).await.expect("Could not clear scene");
 
         let mut entities_graph = vec![]; // connected keyframes graph
@@ -496,6 +498,7 @@ impl DarvisVisualizer {
                 // so that it doesn't cover up the drawing of the current frame. 
                 continue;
             }
+            println!("Visualizer drawing keyframe pose {:?}", kf.get_pose());
 
             // println!("Drawing kf {} with rotation {:?}", id, curr_pose);
 
@@ -823,7 +826,7 @@ impl DarvisVisualizer {
         let rot = pose.get_rotation();
         let w = 0.075;
         let h = 0.05;
-        let z = 0.025;
+        let z = 0.035;
 
         let lines = vec![
             // Rectangle
@@ -859,6 +862,82 @@ impl DarvisVisualizer {
         }
     }
         
+    fn create_frame_scene_entity_with_vector_rotation(&self, timestamp: Timestamp, frame_id: &str, entity_id: String, trans: &DVTranslation, u: &DVVector3<f64>, color: Color) -> SceneEntity {
+        fn create_line(init_point1: (f64, f64, f64), init_point2: (f64, f64, f64), rot: &DVRotation, trans: &DVVector3<f64>, color: &Color) -> LinePrimitive {
+            let point1 = {
+                let temp = **rot * *DVVector3::new_with(init_point1.0, init_point1.1, init_point1.2);
+                Point3{x: temp.x + trans.x, y: temp.y + trans.y, z: temp.z + trans.z}
+            };
+            let point2 = {
+                let temp = **rot * *DVVector3::new_with(init_point2.0, init_point2.1, init_point2.2);
+                Point3{x: temp.x + trans.x, y: temp.y + trans.y, z: temp.z + trans.z}
+            };
+
+            LinePrimitive {
+                r#type: line_primitive::Type::LineStrip as i32,
+                pose: make_pose(0.0, 0.0, 0.0),
+                thickness: 2.0,
+                scale_invariant: true,
+                points: vec![point1, point2],
+                color: Some(color.clone()),
+                colors: vec![],
+                indices: vec![],
+            }
+        }
+
+        let (seconds, nanos) = convert_timestamp(timestamp);
+            
+            let x_axis = DVVector3::new_with(1.0, 0.0, 0.0); // x-axis in world frame
+            let v = x_axis.cross(u); // rotation axis
+            let s = v.norm(); // sin(angle)
+            let c = x_axis.dot(u); // cos(angle)
+            let vx = nalgebra::Matrix3::new(
+                0.0, -v.z,  v.y,
+                v.z,  0.0, -v.x,
+                -v.y,  v.x,  0.0,
+            );
+            let rot = DVMatrix3::new(
+                nalgebra::Matrix3::identity() + vx + vx * vx * ((1.0 - c) / (s * s))
+            );
+
+        let w = 0.075;
+        let h = 0.05;
+        let z = 0.025;
+
+        let lines = vec![
+            // Rectangle
+            create_line((w, h, z), (w, - h, z), &rot, &trans, &color),
+            create_line((- w, h, z), (- w, - h, z), &rot, &trans, &color),
+            create_line((- w, h, z), (w, h, z), &rot, &trans, &color),
+            create_line((- w, - h, z), (w, - h, z), &rot, &trans, &color),
+            // Diagonals
+            // create_line((- w, h, z), (w, - h, z), &rot, &trans, &color),
+            // create_line((w, h, z), (- w, - h, z), &rot, &trans, &color),
+            // Protruding pyramid
+            create_line((0.0, 0.0, 0.0), (w, h, z), &rot, &trans, &color),
+            create_line((0.0, 0.0, 0.0), (w, - h, z), &rot, &trans, &color),
+            create_line((0.0, 0.0, 0.0), (- w, - h, z), &rot, &trans, &color),
+            create_line((0.0, 0.0, 0.0), (- w, h, z), &rot, &trans, &color),
+            ];
+
+        SceneEntity {
+            timestamp: Some(prost_types::Timestamp { seconds, nanos }),
+            frame_id: frame_id.to_string(),
+            id: entity_id,
+            lifetime: None,
+            frame_locked: false,
+            metadata: vec![],
+            arrows: vec![],
+            cubes: vec![],
+            spheres: vec![],
+            cylinders: vec![],
+            lines,
+            triangles: vec![],
+            texts: vec![],
+            models: vec![],
+        }
+    }
+
     fn create_scene_entity(
         &self, timestamp: Timestamp, frame_id: &str, entity_id: String,
         arrows: Vec<ArrowPrimitive>, lines: Vec<LinePrimitive>, spheres: Vec<SpherePrimitive>

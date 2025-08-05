@@ -191,7 +191,7 @@ mod ffi {
             params: &LevenbergMarquardtParams,
         ) -> UniquePtr<LevenbergMarquardtOptimizer>;
 
-        fn optimizeSafely(self: Pin<&mut Self>) -> &Values;
+        fn optimize_safely(optimizer: Pin<&mut LevenbergMarquardtOptimizer>) -> UniquePtr<Values>;
     }
 
     unsafe extern "C++" {
@@ -303,7 +303,7 @@ mod ffi {
 
         fn nonlinear_factor_graph_add_smart_projection_pose_factor(
             graph: Pin<&mut NonlinearFactorGraph>,
-            factor: &SmartProjectionPoseFactorCal3_S2,
+            factor: &SharedPtr<SmartProjectionPoseFactorCal3_S2>,
         );
     }
 
@@ -349,6 +349,7 @@ mod ffi {
 
 
         type PreintegrationCombinedParams;
+        fn new_preintegrated_combined_params(x: f64, y: f64, z: f64) -> SharedPtr<PreintegrationCombinedParams>;
         fn new_preintegrated_combined_params_makesharedu() -> SharedPtr<PreintegrationCombinedParams>;
         fn new_preintegrated_combined_params_negativeyup() -> SharedPtr<PreintegrationCombinedParams>;
         fn new_preintegrated_combined_params_positivexup() -> SharedPtr<PreintegrationCombinedParams>;
@@ -426,10 +427,10 @@ mod ffi {
             measurement_noise: &SharedPtr<IsotropicNoiseModel>,
             k: &SharedPtr<Cal3_S2>,
             sensor_p_body: &Pose3,
-        ) -> UniquePtr<SmartProjectionPoseFactorCal3_S2>;
+        ) -> SharedPtr<SmartProjectionPoseFactorCal3_S2>;
 
         fn add(
-            smartfactor: Pin<&mut SmartProjectionPoseFactorCal3_S2>,
+            smartfactor: &mut SharedPtr<SmartProjectionPoseFactorCal3_S2>,
             point: &Point2,
             key: u64
         );

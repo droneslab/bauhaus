@@ -14,7 +14,7 @@ namespace gtsam
         Key pose_i, Key vel_i, Key pose_j, Key vel_j, Key bias_i, Key bias_j,
         const PreintegratedCombinedMeasurements & preintegratedMeasurements);
 
-
+    std::shared_ptr<PreintegrationCombinedParams> new_preintegrated_combined_params(double x, double y, double z);
     std::shared_ptr<PreintegrationCombinedParams> new_preintegrated_combined_params_makesharedu();
     std::shared_ptr<PreintegrationCombinedParams> new_preintegrated_combined_params_negativeyup();
     std::shared_ptr<PreintegrationCombinedParams> new_preintegrated_combined_params_positivexup();

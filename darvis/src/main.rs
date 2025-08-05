@@ -9,7 +9,7 @@ use spin_sleep::LoopHelper;
 #[macro_use] extern crate lazy_static;
 
 use core::{config::*, matrix::DVVector3, sensor::Sensor, system::System, *};
-use crate::{actors::messages::{ImageMsg, ShutdownMsg}, modules::image};
+use crate::{actors::messages::{ImageMsg, ShutdownMsg}, map::pose::Pose, modules::image};
 use crate::map::map::Id;
 
 mod actors;
@@ -131,6 +131,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         current_index += 1;
+
+        // SOFIYA WHEN LOOP SLEEP IS TURNED OFF, SLEEPING HERE INSTEAD, SO WE CAN SKIP PAST THE INITIAL FRAMES FASTER
+        sleep(Duration::from_millis(1000 / SETTINGS.get::<f64>(SYSTEM, "fps") as u64));
     }
 
     info!("Done with dataset! Shutting down.");
@@ -142,8 +145,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 #[derive(Debug, Clone)]
 struct ImuInitializationData {
-    translation: DVVector3<f64>,
-    rotation: nalgebra::Vector4<f64>,
+    pose: Pose,
     velocity: DVVector3<f64>,
     gyro_bias: DVVector3<f64>,
     acc_bias: DVVector3<f64>,
@@ -282,10 +284,10 @@ impl LoopManager {
                 record[3].parse::<f64>().unwrap()
             );
             let rotation = nalgebra::Vector4::new(
-                record[4].parse::<f64>().unwrap(),
-                record[5].parse::<f64>().unwrap(),
-                record[6].parse::<f64>().unwrap(),
-                record[7].parse::<f64>().unwrap(),
+                record[4].parse::<f64>().unwrap(), // w
+                record[5].parse::<f64>().unwrap(), // x
+                record[6].parse::<f64>().unwrap(), // y
+                record[7].parse::<f64>().unwrap(), // z
             );
             let velocity = DVVector3::new_with(
                 record[8].parse::<f64>().unwrap(),
@@ -306,8 +308,7 @@ impl LoopManager {
             imu_data.initialization.insert(
                 timestamp, 
                 ImuInitializationData {
-                    translation,
-                    rotation,
+                    pose: Pose::new_with_quaternion_convert(*translation, rotation),
                     velocity,
                     gyro_bias,
                     acc_bias
@@ -378,8 +379,9 @@ impl Iterator for LoopManager {
             return None;
         }
 
-        // First, sleep until the next timestamp
-        self.loop_helper.loop_sleep(); 
+        // SOFIYA TURN OFF LOOP SLEEP TEMPORARILY, SO WE CAN SKIP PAST THE INITIAL FRAMES FASTER
+        // // First, sleep until the next timestamp
+        // self.loop_helper.loop_sleep(); 
 
         let timestamp = self.timestamps[self.current_index as usize];
         let image = self.image_paths[self.current_index as usize].clone();

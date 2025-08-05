@@ -8,7 +8,7 @@ use core::{
     config::*, matrix::*, system::{Actor, MessageBox, System, Timestamp}
 };
 use crate::{
-    actors::{local_mapping::LOCAL_MAPPING_IDLE, messages::{FeatureTracksAndIMUMsg, ImagePathMsg, VisTrajectoryMsg, TrajectoryMsg, ImageMsg, InitKeyFrameMsg, ShutdownMsg, VisFeaturesMsg}}, map::{frame::Frame, pose::Pose, read_only_lock::ReadWriteMap}, modules::{image, imu::{ImuMeasurements, IMU}, map_initialization::MapInitialization, module_definitions::{MapInitializationModule, FeatureExtractionModule}}, registered_actors::{new_feature_extraction_module, CAMERA_MODULE, LOCAL_MAPPING, SHUTDOWN_ACTOR, TRACKING_BACKEND, TRACKING_FRONTEND, VISUALIZER}
+    actors::{local_mapping::LOCAL_MAPPING_IDLE, messages::{FeatureTracksAndIMUMsg, ImageMsg, ImagePathMsg, InitKeyFrameMsg, ShutdownMsg, TrajectoryMsg, VisFeaturesMsg, VisTrajectoryMsg}}, map::{frame::Frame, pose::Pose, read_only_lock::ReadWriteMap}, modules::{image, imu::{ImuCalib, ImuMeasurements, IMU}, map_initialization::MapInitialization, module_definitions::{FeatureExtractionModule, MapInitializationModule}}, registered_actors::{new_feature_extraction_module, CAMERA_MODULE, LOCAL_MAPPING, SHUTDOWN_ACTOR, TRACKING_BACKEND, TRACKING_FRONTEND, VISUALIZER}
 };
 
 
@@ -60,30 +60,54 @@ impl GarbageTracking {
             ).unwrap();
             frame.pose = {
                 let imu_init = imu_initialization.unwrap();
-                let pose_original = Pose::new_with_quaternion_convert(
-                    *imu_init.translation,
-                    imu_init.rotation,
-                );
-                let transform = Pose::new_with_quaternion(
+                let pose_original = imu_init.pose.clone();
+
+                let transform1 = Pose::new_with_quaternion(
                     nalgebra::Vector3::<f64>::new(0.0, 0.0, 0.0),
                     nalgebra::geometry::UnitQuaternion::<f64>::from_quaternion(
-                    nalgebra::Quaternion::<f64>::new(
-                        // 0.0, 0.7071, -0.0, -0.7071,
-                        1.0, 0.0, 0.0, 0.0,
-                    )
+                    nalgebra::Quaternion::<f64>::new
+                        // (0.0, 7.07106781e-01, 0.0, 7.07106781e-01) // gt to imu frame
+                        (-0.7071, 0.0, 0.7071, 0.7071), 
+                        // (1.0, 0.0, 0.0, 0.0) // Identity
+
+                        // (0.7071, 0.7071, 0.0, 0.0),  // +X	90° around +X
+                        // (0.7071, -0.7071, 0.0, 0.0),  // -X	90° around -X
+                        // (0.7071, 0.0, 0.7071, 0.0),  // +Y	90° around +Y
+                        // (0.7071, 0.0, -0.7071, 0.0),  // -Y	90° around -Y
+                        // (0.7071, 0.0, 0.0, 0.7071),  // +Z	90° around +Z
+                        // (0.7071, 0.0, 0.0, -0.7071), // -Z	90° around -Z
                     )
                 );
+                // let transform2 = Pose::new_with_quaternion(
+                //     nalgebra::Vector3::<f64>::new(0.0, 0.0, 0.0),
+                //     nalgebra::geometry::UnitQuaternion::<f64>::from_quaternion(
+                //     nalgebra::Quaternion::<f64>::new
+                //         // 0.0, 7.07106781e-01, 0.0, 7.07106781e-01 // gt to imu frame
+                //         // (1.0, 0.0, 0.0, 0.0) // Identity
 
-                let pose_convert = transform * pose_original;
+                //         (0.7071, 0.7071, 0.0, 0.0),  // +X	90° around +X
+                //         // (0.7071, -0.7071, 0.0, 0.0),  // -X	90° around -X
+                //         // (0.7071, 0.0, 0.7071, 0.0),  // +Y	90° around +Y
+                //         // (0.7071, 0.0, -0.7071, 0.0),  // -Y	90° around -Y
+                //         // (0.7071, 0.0, 0.0, 0.7071),  // +Z	90° around +Z
+                //         // (0.7071, 0.0, 0.0, -0.7071), // -Z	90° around -Z
+                    
+                //     )
+                // );
+                let transform = transform1;
+                // let pose_convert = ImuCalib::new().tcb * transform1 *  pose_original; //tcb * tbg * tgw
+                let pose_convert = transform1 * pose_original;
+                println!("Transform is: {:?}", transform.get_quaternion());
+                println!("Transform is: {:?}", transform.get_rotation());
 
                 println!("Timestamp: {:?}", timestamp);
                 println!("Ground truth pose: {:?}", pose_original);
                 println!("Converted pose: {:?}", pose_convert);
-                println!("Imu measurements: {:?}", imu_measurements);
-                println!("Bias: {:?}", crate::modules::imu::ImuBias::new_with(imu_init.gyro_bias, imu_init.acc_bias));
+
 
                 Some(pose_convert)
-            };
+                // Some(pose_original)
+            }; // **** should be set to TCW
             let new_kf_id = self.map.write().unwrap().insert_keyframe_to_map(frame, false);
 
 
@@ -92,12 +116,14 @@ impl GarbageTracking {
                 image,
                 timestamp,
             }));
+            println!("Measurements: {:?}", imu_measurements);
 
             self.system.try_send(VISUALIZER, Box::new(VisTrajectoryMsg{
                 pose: self.map.read().unwrap().get_keyframe(new_kf_id).get_pose().clone(),
                 mappoint_matches: vec![],
                 mappoints_in_tracking: BTreeSet::new(),
                 timestamp: timestamp,
+                debug: imu_measurements.clone(),
                 map_version: 1
             }));
 

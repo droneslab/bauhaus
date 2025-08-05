@@ -12,4 +12,10 @@ new_levenberg_marquardt_optimizer(const NonlinearFactorGraph &graph,
                                                        params);
 }
 
+std::unique_ptr<Values> optimize_safely(LevenbergMarquardtOptimizer &optimizer)
+{
+    Values estimate = optimizer.optimizeSafely();
+    return std::make_unique<Values>(estimate);
+}
+
 } // namespace gtsam

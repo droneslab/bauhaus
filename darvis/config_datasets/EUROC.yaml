@@ -1,41 +1,27 @@
-#dataset name
 dataset: EUROC
 
-# # General sensor definitions.
-# sensor_type: camera
-# comment: VI-Sensor cam0 (MT9M034)
+# Camera calibration and distortion parameters
+# FROM ORBSLAM:
+# fx: 458.654
+# fy: 457.296
+# cx: 367.215
+# cy: 248.375
+# k1: -0.28340811
+# k2: 0.07395907
+# p1: 0.00019359
+# p2: 1.76187114e-05
+# k3: 0.0
 
-# # Sensor extrinsics wrt. the body-frame.
-# T_BS:
-#   cols: 4
-#   rows: 4
-#   data: [0.0148655429818, -0.999880929698, 0.00414029679422, -0.0216401454975,
-#          0.999557249008, 0.0149672133247, 0.025715529948, -0.064676986768,
-#         -0.0257744366974, 0.00375618835797, 0.999660727178, 0.00981073058949,
-#          0.0, 0.0, 0.0, 1.0]
-
-# # Camera specific definitions.
-# rate_hz: 20
-# resolution: [752, 480]
-# camera_model: pinhole
-# intrinsics: [458.654, 457.296, 367.215, 248.375] #fu, fv, cu, cv
-# distortion_model: radial-tangential
-# distortion_coefficients: [-0.28340811, 0.07395907, 0.00019359, 1.76187114e-05]
-
-
-
-
-# Camera calibration and distortion parameters (OpenCV) 
-fx: 458.654
-fy: 457.296
-cx: 367.215
-cy: 248.375
-
-k1: -0.28340811
-k2: 0.07395907
-p1: 0.00019359
-p2: 1.76187114e-05
+# FROM VINS MONO:
+fx: 4.616e+02
+fy: 4.603e+02
+cx: 3.630e+02
+cy: 2.481e+02
+k1: -2.917e-01
+k2: 8.228e-02
 k3: 0.0
+p1: 5.333e-05
+p2: -1.578e-04
 
 stereo_baseline_times_fx: 386.1448
 thdepth: 35
@@ -54,7 +40,6 @@ stereo_overlapping_begin: 0
 stereo_overlapping_end: 1000
 
 
-
 # Transformation from camera to body-frame (imu)
 imu__T_b_c1_row1: [0.0148655429818, -0.999880929698, 0.00414029679422, -0.0216401454975]
 imu__T_b_c1_row2: [0.999557249008, 0.0149672133247, 0.025715529948, -0.064676986768]
@@ -62,65 +47,37 @@ imu__T_b_c1_row3: [-0.0257744366974, 0.00375618835797, 0.999660727178, 0.0098107
 imu__T_b_c1_row4: [0.0, 0.0, 0.0, 1.0]
 
 # IMU noise
-imu__noise_gyro: 1.7e-4 #1.6968e-04
-imu__noise_acc: 2.0000e-3 #2.0e-3
-imu__gyro_walk: 0.5e-05  #1.9393e-05 
-imu__acc_walk: 3.0000e-03 # 3e-03
+# FROM ORBSLAM:
+# imu__noise_gyro: 1.7e-4
+# imu__noise_acc: 2.0000e-3
+# imu__gyro_walk: 1.9393e-05 
+# imu__acc_walk: 3.0000e-03
+# imu__frequency: 200.0
+
+# FROM VINSMONO:
+imu__noise_acc: 0.1          # accelerometer measurement noise standard deviation. #0.2   0.04
+imu__noise_gyro: 0.01         # gyroscope measurement noise standard deviation.     #0.05  0.004
+imu__acc_walk: 0.001         # accelerometer bias random work noise standard deviation.  #0.02
+imu__gyro_walk: 0.0001       # gyroscope bias random work noise standard deviation.     #4.0e-5
 imu__frequency: 200.0
+
+# FROM KIMERA:
+# imu__noise_gyro: 1.6968e-04     # [ rad / s / sqrt(Hz) ]   ( gyro "white noise" )
+# imu__gyro_walk: 1.9393e-05       # [ rad / s^2 / sqrt(Hz) ] ( gyro bias diffusion )
+# imu__noise_acc: 2.0000e-3  # [ m / s^2 / sqrt(Hz) ]   ( accel "white noise" )
+# imu__acc_walk: 3.0000e-2    # [ m / s^3 / sqrt(Hz) ]  ( accel bias diffusion ) Default in Euroc: 3.0000e-3
+# imu__frequency: 200.0
+
+
 
 ####### Kimera #######
 # Initialization Parameters
 initialPositionSigma: 1e-05
 initialRollPitchSigma: 0.174533 # 10.0/180.0*M_PI
 initialYawSigma: 0.00174533 # 0.1/180.0*M_PI
-initialVelocitySigma: 0.001
+initialVelocitySigma: 0.01
 initialAccBiasSigma: 0.1
 initialGyroBiasSigma: 0.01
-
-## Noise models ##
-smartNoiseSigma: 3.0
-monoNoiseSigma: 1.8
-monoNormType: 2
-monoNormParam: 4.6851
-stereoNoiseSigma: 1.8
-stereoNormType: 2
-stereoNormParam: 4.6851
-regularityNoiseSigma: 0.03
-regularityNormType: 1
-regularityNormParam: 0.04
-
-
-## Between Stereo Factors ##
-addBetweenStereoFactors: 0
-betweenRotationPrecision: 0 # Inverse of variance.
-betweenTranslationPrecision: 100 # 1/(0.1*0.1)
-
-# Optimization parameters
-relinearizeThreshold: 0.01
-relinearizeSkip: 1
-zero_velocity_precision: 1000
-no_motion_position_precision: 1000
-no_motion_rotation_precision: 10000
-constant_vel_precision: 100
-numOptimize: 1
-nr_states: 25 # number of nodes in horizon.
-# ISAM2GaussNewtonParams: continue updating the linear delta only when
-# changes are above this threshold (default: 0.001)
-wildfire_threshold: 0.001
-useDogLeg: 0
-
-
-# inertial sensor noise model parameters (static)
-imu_bias_init_sigma: 1e-3
-gyroscope_noise_density: 1.6968e-04     # [ rad / s / sqrt(Hz) ]   ( gyro "white noise" )
-gyroscope_random_walk: 1.9393e-05       # [ rad / s^2 / sqrt(Hz) ] ( gyro bias diffusion )
-accelerometer_noise_density: 2.0000e-3  # [ m / s^2 / sqrt(Hz) ]   ( accel "white noise" )
-accelerometer_random_walk: 3.0000e-2    # [ m / s^3 / sqrt(Hz) ]  ( accel bias diffusion ) Default in Euroc: 3.0000e-3
-
-# Extra parameters
-do_imu_rate_time_alignment: 1
-time_alignment_window_size_s: 10.0
-time_alignment_variance_threshold_scaling: 30.0
 imu_integration_sigma: 1.0e-8
-imu_time_shift: 0.0
-n_gravity: [0.0, 0.0, -9.81]
+imu_bias_init_sigma: 1e-3
+g_norm: 9.81007     # gravity magnitude

@@ -288,7 +288,7 @@ impl std::fmt::Debug for Pose {
             f,
             "t[{:.4},{:.4},{:.4}] r[{:.4},{:.4},{:.4},{:.4}]",
             trans[0], trans[1], trans[2],
-            rot[0], rot[1], rot[2], rot[3],
+            rot.i, rot.j, rot.k, rot.w,
         )
     }
 }
@@ -414,7 +414,7 @@ impl std::fmt::Debug for Sim3 {
             f,
             "t[{:.5},{:.5},{:.5}] r[{:.4},{:.4},{:.4},{:.4}] s {:.3}",
             trans[0], trans[1], trans[2],
-            rot[0], rot[1], rot[2], rot[3],
+            rot.w, rot.i, rot.j, rot.k,
             self.scale
         )
     }

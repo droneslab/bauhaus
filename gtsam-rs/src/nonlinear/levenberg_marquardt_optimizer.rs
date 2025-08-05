@@ -25,9 +25,9 @@ impl LevenbergMarquardtOptimizer {
         }
     }
 
-    pub fn optimize_safely(&mut self) -> ValuesRef {
-        ValuesRef {
-            inner: self.inner.pin_mut().optimizeSafely(),
+    pub fn optimize_safely(&mut self) -> Values {
+        Values {
+            inner: ::sys::optimize_safely(self.inner.pin_mut()),
         }
     }
 }

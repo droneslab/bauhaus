@@ -18,16 +18,22 @@ namespace gtsam
             pose_i, vel_i, pose_j, vel_j, bias_i, bias_j, preintegratedMeasurements);
     }
 
+    std::shared_ptr<PreintegrationCombinedParams> new_preintegrated_combined_params(double x, double y, double z)
+    {
+        return to_std_ptr(
+            boost::shared_ptr<PreintegrationCombinedParams>(new PreintegrationCombinedParams(Vector3(x, y, z))));
+    }
+
     std::shared_ptr<PreintegrationCombinedParams> new_preintegrated_combined_params_negativeyup() {
         return to_std_ptr(
-            boost::shared_ptr<PreintegrationCombinedParams>(new PreintegrationCombinedParams(Vector3(0, -9.81, 0)))
+            boost::shared_ptr<PreintegrationCombinedParams>(new PreintegrationCombinedParams(Vector3(0, 9.81, 0)))
         );
     }
 
     std::shared_ptr<PreintegrationCombinedParams> new_preintegrated_combined_params_positivexup()
     {
         return to_std_ptr(
-            boost::shared_ptr<PreintegrationCombinedParams>(new PreintegrationCombinedParams(Vector3(9.81, 0, 0)))
+            boost::shared_ptr<PreintegrationCombinedParams>(new PreintegrationCombinedParams(Vector3(-9.81, 0, 0)))
         );
     }
 
@@ -44,6 +50,7 @@ namespace gtsam
         double sigma_a_sq)
     {
         params->setAccelerometerCovariance(gtsam::I_3x3 * sigma_a_sq);
+        // std::cout << "set_accelerometer_covariance: " << sigma_a_sq << std::endl;
     }
 
     void set_gyroscope_covariance(
@@ -51,6 +58,7 @@ namespace gtsam
         double sigma_g_sq)
     {
         params->setGyroscopeCovariance(gtsam::I_3x3 * sigma_g_sq);
+        // std::cout << "set_gyroscope_covariance: " << sigma_g_sq << std::endl;
     }
 
     void bias_acc_covariance(
@@ -58,6 +66,7 @@ namespace gtsam
         double sigma_wa_sq)
     {
         params->biasAccCovariance = sigma_wa_sq * gtsam::Matrix33::Identity(3, 3);
+        // std::cout << "bias_acc_covariance: " << sigma_wa_sq << std::endl;
     }
 
     void bias_omega_covariance(
@@ -65,6 +74,7 @@ namespace gtsam
         double sigma_wg_sq)
     {
         params->biasOmegaCovariance = sigma_wg_sq * gtsam::Matrix33::Identity(3, 3);
+        // std::cout << "bias_omega_covariance: " << sigma_wg_sq << std::endl;
     }
 
     void set_integration_covariance(
@@ -72,6 +82,7 @@ namespace gtsam
         double val)
     {
         params->setIntegrationCovariance(gtsam::I_3x3 * val);
+        // std::cout << "set_integration_covariance: " << val << std::endl;
     }
 
     void bias_acc_omega_int(
@@ -79,6 +90,7 @@ namespace gtsam
         double val)
     {
         params->biasAccOmegaInt = val * gtsam::Matrix66::Identity(6, 6);
+        // std::cout << "bias_acc_omega_int: " << val << std::endl;
     }
 
     std::unique_ptr<PreintegratedCombinedMeasurements> default_preintegrated_combined_measurements()
@@ -91,6 +103,7 @@ namespace gtsam
         const imuBias::ConstantBias &bias)
     {
         // PreintegratedCombinedMeasurements * msmts = new PreintegratedCombinedMeasurements(to_boost_ptr(params));
+
         return std::make_unique<PreintegratedCombinedMeasurements>(to_boost_ptr(params), bias);
     }
 
@@ -107,6 +120,7 @@ namespace gtsam
     {
         // std::cout << "C++ integrate measurement with acceleration " << measuredAcc.transpose() << ", omega " << measuredOmega.transpose() << ", and dt " << dt << std::endl;
         preintegrated_measurements.integrateMeasurement(measuredAcc, measuredOmega, dt);
+        // preintegrated_measurements.print("Preint meas cov: ");
     }
 
     std::unique_ptr<NavState> predict(
@@ -114,6 +128,8 @@ namespace gtsam
         const NavState &state_i, const imuBias::ConstantBias & bias_i)
     {
         NavState state = preintegrated_measurements.predict(state_i, bias_i);
+        std::cout << "C++ imu predicted state: " << state.matrix() << std::endl;
+        std::cout << "C++ predicted velocity: " << state.velocity().transpose() << std::endl;
         return std::make_unique<NavState>(state);
     }
 
@@ -121,9 +137,9 @@ namespace gtsam
         PreintegratedCombinedMeasurements &preintegrated_measurements,
         const imuBias::ConstantBias &bias)
     {
-            preintegrated_measurements.resetIntegrationAndSetBias(bias);
+        std::cout << "C++ reset integration and set bias: " << bias << std::endl;
+        preintegrated_measurements.resetIntegrationAndSetBias(bias);
     }
-
 
 
     FakePreintegratedCombinedMeasurements create_fake_copy_of_preintegrated_measurements(const PreintegratedCombinedMeasurements &preintegrated_measurements)

@@ -187,10 +187,16 @@ cargo flamegraph -o flamegraph.svg --root --release --ignore-status  -- ~/datase
     ```
     Tracy C++ version has to be compatible with tracy-client version in Rust. [See table here](https://github.com/nagisa/rust_tracy_client).
 2. Try to run ``./tracy/profiler/build/unix/Tracy-release``. If you get [this error](https://github.com/wolfpld/tracy/issues/567), you need to make [this change](https://github.com/wolfpld/tracy/commit/c57b8994f6dcee2e3312b1a7aec9e055f7a0bb01) to the tracy source code.
-2. In darvis ``Cargo.toml``, set tracy-client features to "enable", like this:
+2. In darvis ``Cargo.toml``, make sure tracy is enabled, like this:
     ```rust
-    tracy-client = {version = "0.16.0", features = ["enable"] }
+    tracy-client = {version = "0.16.0"}
+    tracy-client-sys = {version = "0.21.0"}
     ```
+   Note: If you want to disable tracy later on, change those lines to:
+   ```rust
+    tracy-client = {version = "0.16.0", default-features = false }
+    tracy-client-sys = {version = "0.21.0", default-features = false}
+    ```   
 3. Uncomment this line of code in ``main.rs`` :
     ```rust
     let _client = tracy_client::Client::start();
