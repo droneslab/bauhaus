@@ -13,14 +13,14 @@ wget https://raw.githubusercontent.com/rust-lang/rustup/master/rustup-init.sh
 chmod +x rustup-init.sh
 ./rustup-init.sh -y
 
-# Create directories for darvis project, clone repo
-mkdir ~/darvis-home && cd ~/darvis-home
-git clone git@github.com:droneslab/darvis.git
-mkdir ~/darvis-home/depends
+# Create directories for bauhaus project, clone repo
+mkdir ~/bauhaus-home && cd ~/bauhaus-home
+git clone git@github.com:droneslab/bauhaus.git
+mkdir ~/bauhaus-home/depends
 
 # Upgrade version of cmake (needed for C++ bindings)
 # Only do this for ubuntu 20, ignore for ubuntu 22! Didn't test on earlier versions than 20.
-cd ~/darvis-home/depends
+cd ~/bauhaus-home/depends
 sudo apt remove --purge cmake && hash -r
 sudo apt install build-essential libssl-dev
 sudo wget https://github.com/Kitware/CMake/releases/download/v3.20.2/cmake-3.20.2.tar.gz
@@ -29,7 +29,7 @@ cd cmake-3.20.2 && ./bootstrap && make && make install
 
 # Install eigen
 # This installs 3.3: sudo apt-get install libeigen3-dev 
-cd ~/darvis-home/depends/
+cd ~/bauhaus-home/depends/
 wget https://gitlab.com/libeigen/eigen/-/archive/3.2.10/eigen-3.2.10.tar.gz
 tar –xvzf eigen-3.2.10.tar.gz
 cd eigen-3.2.10 && mkdir build && cd build
@@ -39,7 +39,7 @@ sudo make install
 export EIGEN3_INCLUDE_DIR=/usr/local/include
 
 # Install OpenCV
-cd ~/darvis-home/depends
+cd ~/bauhaus-home/depends
 git clone https://github.com/opencv/opencv.git
 cd opencv && git checkout tags/4.5.4 && cd ..
 git clone https://github.com/opencv/opencv_contrib.git
@@ -49,7 +49,7 @@ cmake -DOPENCV_EXTRA_MODULES_PATH=../../opencv_contrib/modules -DBUILD_opencv_xf
 make -j4 install
 
 # Install Pangolin
-cd ~/darvis-home/depends
+cd ~/bauhaus-home/depends
 git clone --recursive https://github.com/stevenlovegrove/Pangolin.git
 cd Pangolin
 ./scripts/install_prerequisites.sh recommended
@@ -57,15 +57,15 @@ cmake -B build
 cmake --build build
 
 # Install gtsam
-# cd ~/darvis-home/depends
+# cd ~/bauhaus-home/depends
 # git clone git@github.com:ssemenova/gtsam-rs.git
-cd ~/darvis-home/darvis/gtsam-rs/sys/3rd/
+cd ~/bauhaus-home/bauhaus/gtsam-rs/sys/3rd/
 git clone https://github.com/borglab/gtsam.git --branch 4.2
 cd ../../
 cargo build --release
 
-# Build darvis
-cd ~/darvis-home/darvis/darvis/
+# Build bauhaus
+cd ~/bauhaus-home/bauhaus/bauhaus/
 cargo build --release
 ```
 
@@ -74,17 +74,17 @@ cargo build --release
     - If you have two versions of OpenCV (for example, one from apt that gets downloaded when you install ROS and the one you installed in the instructions above) then you can get segfaults inside the C++ OpenCV code in `orbslam-bindings`. This occurs because C++ finds one OpenCV version (usually the ROS version) and Rust finds a different one (usually the system-installed one). The easiest workaround is just to uninstall ROS and the apt version of OpenCV. It should be possible to inform the rust OpenCV package to look for the right version with [environment variables like this](https://github.com/twistedfall/opencv-rust#environment-variables) but I have not tested it.
 
 ## Optional: Using docker
-If you want to run darvis inside a docker container instead:
+If you want to run bauhaus inside a docker container instead:
 1. [Install docker](https://docs.docker.com/get-docker/)
 2. (Macs only) [Download Xquartz](https://www.xquartz.org/) 
-3. Create darvis container (linux):
+3. Create bauhaus container (linux):
     ```
-        cd darvis
+        cd bauhaus
         ./docker_run.sh [pathToDatasetDirectory]
     ```
-    Create darvis container (mac):
+    Create bauhaus container (mac):
     ```
-        cd darvis
+        cd bauhaus
         ./docker_run_mac.sh [pathToDatasetDirectory]
     ```
 4. Using rust-analyzer in VSCode typically gives errors about not finding opencv. To resolve these errors, you need to open VSCode inside the container:
@@ -94,13 +94,13 @@ If you want to run darvis inside a docker container instead:
 
 
 ## Optional: Set up ORB_SLAM3
-If you want to set up ORB_SLAM3 to compare its performance against Darvis You can also just follow the instructions in the ORB_SLAM3 repo, but if darvis is already set up then you only need to do these steps. Tested on Ubuntu 22.
+If you want to set up ORB_SLAM3 to compare its performance against bauhaus You can also just follow the instructions in the ORB_SLAM3 repo, but if bauhaus is already set up then you only need to do these steps. Tested on Ubuntu 22.
 
 ```bash
 sudo apt-get install libssl-dev
-git clone git@github.com:droneslab/darvis-orbslam3.git
+git clone git@github.com:droneslab/bauhaus-orbslam3.git
 cd ORB_SLAM3
-# If using darvis-orbslam3, don't have to do this.
+# If using bauhaus-orbslam3, don't have to do this.
 # sed -i 's/++11/++14/g' CMakeLists.txt
 ./build.sh
 ```
@@ -118,13 +118,13 @@ cargo build
 cargo run [PATH TO DATASET] [PATH TO SYSTEM CONFIG FILE] [PATH TO DATASET CONFIG FILE] [DATASET NAME]
 ```
 
-Current supported datasets are tum, euroc, and kitti. We have dataset configuration files for these datasets in the `darvis/config_datasets` folder.
+Current supported datasets are tum, euroc, and kitti. We have dataset configuration files for these datasets in the `bauhaus/config_datasets` folder.
 
 **Using the Visualizer**
 1. Download the [foxglove application](https://foxglove.dev/). This can be on any device (does not need to be the test device).
 2. Open foxglove, click on `layout` in the top right corner, then `import from file`. Load the file in `foxglove/foxglovelayout.json`.
 3. Make sure the `visualizer` actor in `config.yaml` is not commented out. In the actor settings, change the setting `stream" to either true or false (true will stream to a websocket, false will save to an mcap file for later replay).
-4. Run the system. If you are streaming, the foxglove application should update with the visualization in a second or two. If you are not streaming, the system will write the file `darvis/results/out.mcap` after execution is over. To open this file in foxglove, click `file > open local file`.
+4. Run the system. If you are streaming, the foxglove application should update with the visualization in a second or two. If you are not streaming, the system will write the file `bauhaus/results/out.mcap` after execution is over. To open this file in foxglove, click `file > open local file`.
 
 For longer datasets, the mcap file size can get unreasonably large because it saves all the images. You can turn this off by setting the `image_draw_type` setting in the visualizer actor to `none`. The other valid options are `plain` (unmodified images), `features` (detected features), and `featuresandmatches` (current and previous image with feature matches highlighted).
 
@@ -133,7 +133,7 @@ For longer datasets, the mcap file size can get unreasonably large because it sa
 ### Use GDB
 ```bash
 cargo build    # Either debug or release build works
-rust-gdb --args target/debug/bindarvis [DATASET] config.yaml
+rust-gdb --args target/debug/binbauhaus [DATASET] config.yaml
 ```
 You can also use regular gdb instead of rust-gdb, but [it doesn't work in all cases](https://users.rust-lang.org/t/printing-single-vector-elements-in-gdb/16890/4).
 
@@ -145,7 +145,7 @@ RUSTFLAGS="-Z sanitizer=address" cargo run --target x86_64-unknown-linux-gnu [DA
 Run with valgrind and save output to `log.txt`:
 ```bash
 cargo build # Either debug or release build works
-valgrind target/debug/bindarvis  [DATASET] config.yaml > log.txt 2>&1
+valgrind target/debug/binbauhaus  [DATASET] config.yaml > log.txt 2>&1
 ```
 
 ### Check for deadlocks
@@ -178,7 +178,7 @@ cargo flamegraph -o flamegraph.svg --root --release --ignore-status  -- ~/datase
 1. Set up C++
     ```bash
     apt install libdbus-glib-1-dev libcapstone-dev
-    cd ~/darvis-home
+    cd ~/bauhaus-home
     git clone https://github.com/wolfpld/tracy.git
     cd tracy
     git checkout 897aec5 # Set to version 0.9.1
@@ -188,7 +188,7 @@ cargo flamegraph -o flamegraph.svg --root --release --ignore-status  -- ~/datase
     ```
     Tracy C++ version has to be compatible with tracy-client version in Rust. [See table here](https://github.com/nagisa/rust_tracy_client).
 2. Try to run ``./tracy/profiler/build/unix/Tracy-release``. If you get [this error](https://github.com/wolfpld/tracy/issues/567), you need to make [this change](https://github.com/wolfpld/tracy/commit/c57b8994f6dcee2e3312b1a7aec9e055f7a0bb01) to the tracy source code.
-2. In darvis ``Cargo.toml``, set tracy-client features to "enable", like this:
+2. In bauhaus ``Cargo.toml``, set tracy-client features to "enable", like this:
     ```rust
     tracy-client = {version = "0.16.0", features = ["enable"] }
     ```
@@ -221,17 +221,17 @@ cargo flamegraph -o flamegraph.svg --root --release --ignore-status  -- ~/datase
 
 **Run**
 - Two ways to run: showing the GUI while the program is running, or logging the output and viewing the results in the GUI afterward. Instructions below are for logging and viewing afterward, but if you want it in real-time you should be able to just run the ``Tracy-release`` command in step 3 instead of the ``capture-release`` command in step 1.
-1. Start the tracy client (this is from darvis-home directory)
+1. Start the tracy client (this is from bauhaus-home directory)
     ```bash
     ./tracy/capture/build/unix/capture-release -o output.tracy
     ```
-2. Run darvis normally
-3. After darvis ends, tracy capture should have created `output.tracy`. To view this, open the GUI application:
+2. Run bauhaus normally
+3. After bauhaus ends, tracy capture should have created `output.tracy`. To view this, open the GUI application:
     ```bash
     ./tracy/profiler/build/unix/Tracy-release
     ```
 4. Select ``open saved trace`` in the GUI
-- If you're on a mac and sshing into the darvis computer or running it in docker, ``brew install tracy`` will actually work to show the tracy GUI. I could not get wayland forwarding to work.
+- If you're on a mac and sshing into the bauhaus computer or running it in docker, ``brew install tracy`` will actually work to show the tracy GUI. I could not get wayland forwarding to work.
 5. To export tracy statistics to a csv, run:
     ```bash
     ./tracy/csvexport/build/unix/csvexport-release output.tracy
@@ -284,9 +284,9 @@ All the steps below reference the module ``Visualizer`` as an example.
     - Visualizer example (from ``vis.rs``):
         ```Rust
         /// Constructor
-        impl DarvisVis {
-            pub fn new(id: String) -> DarvisVis {
-                DarvisVis {
+        impl bauhausVis {
+            pub fn new(id: String) -> bauhausVis {
+                bauhausVis {
                     traj_img: Mat::new_rows_cols_with_default(376, 500, core::CV_8UC3, core::Scalar::all(0.0)).unwrap(),
                     cam_img: Mat::default(),
                     traj_pos: DVVector3::zeros(),
@@ -297,7 +297,7 @@ All the steps below reference the module ``Visualizer`` as an example.
         }
 
         /// Function trait
-        impl Function for DarvisVis {
+        impl Function for bauhausVis {
             fn handle(&mut self, _context: axiom::prelude::Context, message: Message) -> ActorResult<()>
             {
                 self.visualize(_context, message).unwrap();
@@ -339,7 +339,7 @@ All the steps below reference the module ``Visualizer`` as an example.
     ```
     - In ``src/registered_modules.rs``, under ``getmethod``, add a reference to your object. Visualizer example:
     ```Rust
-    "vis" => FunctionProxy {function: Box::new(crate::modules::vis::DarvisVis::new(id.clone()))}
+    "vis" => FunctionProxy {function: Box::new(crate::modules::vis::bauhausVis::new(id.clone()))}
     ```
     - In ``src/modules/mod.rs``, add your module. Visualizer example:
     ```Rust
@@ -398,7 +398,7 @@ timestamps
 # 5. Link Time Optimization
  **Detailed Information** 
  
-To get link time optimization performed on the binary created by rustc (the Rust compiler), it is necessary to use the same versions of LLVM/clang that the current Rust toolchain (in the rust toolchain file in Darvis) uses to compile the C++ code.
+To get link time optimization performed on the binary created by rustc (the Rust compiler), it is necessary to use the same versions of LLVM/clang that the current Rust toolchain (in the rust toolchain file in bauhaus) uses to compile the C++ code.
 If the Rust toolchain is updated to the latest stable/nightly offered by the Rust language maintainers, chances are that most Linux distributions would not have the correct versions of LLVM/clang. This is because the Rust toolchain is updated quite frequently.
 If the versions do not match, then **lld** (the linker) will not be able to link the code successfully at the final step. 
 
@@ -412,11 +412,11 @@ Along with this, ```set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)``` must also be
 If running the binary on a standalone computer which is different from the computer that compiled the binary, the standalone computer will require a glibc that matches the version required by clang. If there is no match, the binary will not run. 
 To get the binary running, the right version of glibc's shared library (libc.so) has to be compiled from scratch and must be loaded using ```export LD_LIBRARY_PATH=/path/to/newly/built/libc.so```. 
 The dynamic linker as well (ie something that looks like ld-linux-x86-64.so.2) in built the glibc directory has to used on the binary. This is accomplished with **patchelf**, a tool that facilitates the use of a different dynamic linker apart from the one in the system's /usr. 
-The patchelf tool can be installed from the distribution's repos. For a Debian based system, this would be ```sudo apt-get install patchelf```. The executable for darvis would lie within /target/release, it should be called bindarvis. 
+The patchelf tool can be installed from the distribution's repos. For a Debian based system, this would be ```sudo apt-get install patchelf```. The executable for bauhaus would lie within /target/release, it should be called binbauhaus. 
 
 **Specific Steps**
 
-**Building Darvis with LTO**
+**Building bauhaus with LTO**
 1. Build the corresponding llvm tools/clang from source. Detailed instructions are given at the following link - https://llvm.org/docs/CMake.html
 2. The source files for the above are found here - https://github.com/llvm/llvm-project. Sometimes, volunteers may upload the binaries which may be used, however if no binaries exist, the above mentioned will have to be built from source.
 3. Specify the correct compiler and linker path (path specification mentioned above) in all the ```CMakeLists.txt``` - These would be the ones corresponding to g2o,orb_slam3 and DBoW2.
@@ -425,12 +425,12 @@ The patchelf tool can be installed from the distribution's repos. For a Debian b
 6. For compiling the project, invoke cargo as follows:
    ```RUSTFLAGS="-Clinker-plugin-lto -Clinker=/path/to/clang -Clink-arg=-fuse-ld=lld" cargo build --release```
 
-**Executing the Darvis binary on a non-developmental device** **(if running it normally fails)**
-1. Get a copy of the glibc required by device from the following website - https://ftp.gnu.org/gnu/glibc/. This information (version) will be seen in the terminal if bindarvis is unable to execute.
+**Executing the bauhaus binary on a non-developmental device** **(if running it normally fails)**
+1. Get a copy of the glibc required by device from the following website - https://ftp.gnu.org/gnu/glibc/. This information (version) will be seen in the terminal if binbauhaus is unable to execute.
 2. Compile glibc from source, the instructions are available at the following website - https://sourceware.org/glibc/wiki/Testing/Builds.
-3. Get the bindarvis executable to use the new dynamic linker that we just built using ```patchelf```.
+3. Get the binbauhaus executable to use the new dynamic linker that we just built using ```patchelf```.
 4. Install patchelf using ```sudo apt-get install patchelf``` for Debian based distros or ```sudo pacman -S patchelf``` for Arch based distros.
-5. Use the following command in the terminal - ```patchelf --set-interpreter /path/where/newly/compiled/ld-linux-x86-64.so/lives /path/of/darvis_executable(bindarvis)```.
+5. Use the following command in the terminal - ```patchelf --set-interpreter /path/where/newly/compiled/ld-linux-x86-64.so/lives /path/of/bauhaus_executable(binbauhaus)```.
 7. Add the directory containing libc.so to ```export LD_LIBRARY_PATH=/path/of/library/with/libc```, this would be where the glibc that we built from source exists.
 
 
