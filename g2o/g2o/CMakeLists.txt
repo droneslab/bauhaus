@@ -1,3 +1,4 @@
+
 cmake_minimum_required (VERSION 3.0)
 SET(CMAKE_LEGACY_CYGWIN_WIN32 0)
 set(CMAKE_POLICY_DEFAULT_CMP<0069> NEW)
@@ -6,8 +7,12 @@ PROJECT(g2o)
 #11;rgb:fcc2/f732/e5d0
 SET(g2o_C_FLAGS)
 SET(g2o_CXX_FLAGS)
+MESSAGE(STATUS "Reached this point")  
 
-
+find_package(Iconv)
+   if (NOT Iconv_FOUND)
+     message(FATAL ERROR "Iconv not found")
+endif()
 # Pranay : Need to set the rust include directory for lib.rs to compile
 SET(g2o_CXX_FLAGS ${g2o_CXX_FLAGS} -I${g2o_SOURCE_DIR}/g2o/rust/ )
 
@@ -19,7 +24,6 @@ endif()
 
 MESSAGE(STATUS "BUILD TYPE:" ${CMAKE_BUILD_TYPE})
 
-set(CMAKE_CXX_COMPILER "/home/darvis/Downloads/LLVM-19.1.7-Linux-X64/bin/clang-19")
 add_link_options(-fuse-ld=lld)
 set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
 
@@ -115,6 +119,7 @@ ${g2o_SOURCE_DIR}/Sophus
 # Include the subdirectories
 ADD_LIBRARY(g2o ${G2O_LIB_TYPE}
 #types
+# MESSAGE(STATUS "Reached this point")  
 g2o/types/types_sba.h
 g2o/types/types_six_dof_expmap.h
 g2o/types/types_sba.cpp
@@ -218,7 +223,7 @@ g2o/orbslam_types/Pinhole.cc
 
 # rust bindings
 g2o/rust/rust_helper.cpp
-/home/darvis/Downloads/Darvis_Git_Latest/darvis/darvis/target/cxxbridge/g2o/src/lib.rs.cc
+/home/Downloads/bauhaus/darvis/target/cxxbridge/g2o/src/lib.rs.cc
 )
 
 include_directories(../target/cxxbridge)

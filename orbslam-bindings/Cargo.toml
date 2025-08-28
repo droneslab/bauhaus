@@ -10,7 +10,7 @@ path = "src/lib.rs"
 
 [dependencies]
 cxx = "1.0"
-opencv = { path = "/home/darvis/Downloads/opencv-rust", default-features = true, features= ["imgcodecs", "video"]}
+opencv = { path = "/home/Downloads/opencv-rust", default-features = true, features= ["imgcodecs", "video"]}
 #opencv = {version = "0.85.3", default-features = false, features= ["imgcodecs", "video"]}
 
 [build-dependencies]

@@ -17,7 +17,7 @@
 
 #include <boost/serialization/serialization.hpp>
 #include <boost/serialization/map.hpp>
-#include "rust/cxx.h"
+#include "/home/Downloads/bauhaus/darvis/target/cxxbridge/rust/cxx.h"
 
 namespace DBoW2 {
 
