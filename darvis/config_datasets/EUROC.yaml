@@ -2,26 +2,26 @@ dataset: EUROC
 
 # Camera calibration and distortion parameters
 # FROM ORBSLAM:
-# fx: 458.654
-# fy: 457.296
-# cx: 367.215
-# cy: 248.375
-# k1: -0.28340811
-# k2: 0.07395907
-# p1: 0.00019359
-# p2: 1.76187114e-05
-# k3: 0.0
+fx: 458.654
+fy: 457.296
+cx: 367.215
+cy: 248.375
+k1: -0.28340811
+k2: 0.07395907
+p1: 0.00019359
+p2: 1.76187114e-05
+k3: 0.0
 
 # FROM VINS MONO:
-fx: 4.616e+02
-fy: 4.603e+02
-cx: 3.630e+02
-cy: 2.481e+02
-k1: -2.917e-01
-k2: 8.228e-02
-k3: 0.0
-p1: 5.333e-05
-p2: -1.578e-04
+# fx: 4.616e+02
+# fy: 4.603e+02
+# cx: 3.630e+02
+# cy: 2.481e+02
+# k1: -2.917e-01
+# k2: 8.228e-02
+# k3: 0.0
+# p1: 5.333e-05
+# p2: -1.578e-04
 
 stereo_baseline_times_fx: 386.1448
 thdepth: 35
@@ -48,18 +48,18 @@ imu__T_b_c1_row4: [0.0, 0.0, 0.0, 1.0]
 
 # IMU noise
 # FROM ORBSLAM:
-# imu__noise_gyro: 1.7e-4
-# imu__noise_acc: 2.0000e-3
-# imu__gyro_walk: 1.9393e-05 
-# imu__acc_walk: 3.0000e-03
-# imu__frequency: 200.0
+imu__noise_gyro: 1.6968e-04 #1.7e-4
+imu__noise_acc: 1.9393e-05 #2.0000e-3
+imu__gyro_walk: 2.0000e-3 #1.9393e-05 
+imu__acc_walk: 3.0000e-03
+imu__frequency: 200.0
 
 # FROM VINSMONO:
-imu__noise_acc: 0.1          # accelerometer measurement noise standard deviation. #0.2   0.04
-imu__noise_gyro: 0.01         # gyroscope measurement noise standard deviation.     #0.05  0.004
-imu__acc_walk: 0.001         # accelerometer bias random work noise standard deviation.  #0.02
-imu__gyro_walk: 0.0001       # gyroscope bias random work noise standard deviation.     #4.0e-5
-imu__frequency: 200.0
+# imu__noise_acc: 0.1          # accelerometer measurement noise standard deviation. #0.2   0.04
+# imu__noise_gyro: 0.01         # gyroscope measurement noise standard deviation.     #0.05  0.004
+# imu__acc_walk: 0.001         # accelerometer bias random work noise standard deviation.  #0.02
+# imu__gyro_walk: 0.0001       # gyroscope bias random work noise standard deviation.     #4.0e-5
+# imu__frequency: 200.0
 
 # FROM KIMERA:
 # imu__noise_gyro: 1.6968e-04     # [ rad / s / sqrt(Hz) ]   ( gyro "white noise" )
@@ -80,4 +80,3 @@ initialAccBiasSigma: 0.1
 initialGyroBiasSigma: 0.01
 imu_integration_sigma: 1.0e-8
 imu_bias_init_sigma: 1e-3
-g_norm: 9.81007     # gravity magnitude

@@ -4,7 +4,7 @@ pub use self::ffi::*;
 pub type Key = u64;
 
 #[cxx::bridge(namespace = "gtsam")]
-mod ffi {
+pub mod ffi {
 
     // DoubleVec is the same thing in the orbslam bindings crate, but I don't want to link
     // that as a dependency here so I guess we will just have two DoubleVecs
@@ -12,11 +12,25 @@ mod ffi {
     // {
     //     type DoubleVec = orb_slam3::DoubleVec;
     // }
-
     #[derive(Debug)]
-    struct DoubleVec
+    pub struct DoubleVec
     {
         vec: Vec<f64>,
+    }
+
+    pub struct Point
+    {
+        id: u64,
+        x: f64,
+        y: f64,
+        z: f64,
+    }
+
+    pub struct ISAM2ResultRust
+    {
+        pub new_factor_indices: Vec<u64>,
+        pub points: Vec<Point>,
+        pub invalid_points: Vec<u64>
     }
 
     // Note: PreintegratedCombinedMeasurements cannot be passed between threads safely.
@@ -241,13 +255,21 @@ mod ffi {
 
         type ISAM2;
 
-        fn default_isam2() -> UniquePtr<ISAM2>;
+        fn default_isam2(
+            relinearize_threshold: f64,
+            relinearize_skip: i32,
+            cache_linearized_factors: bool,
+            enable_detailed_results: bool,
 
-        fn update_noresults(
+        ) -> UniquePtr<ISAM2>;
+
+        fn update(
             isam2: Pin<&mut ISAM2>,
             graph: &NonlinearFactorGraph,
             initial_values: &Values,
-        );
+            new_affected_keys: & Vec<DoubleVec>,
+            keys_to_remove: & Vec<u64>,
+        ) -> ISAM2ResultRust;
 
         fn calculate_estimate(isam2: &ISAM2) -> UniquePtr<Values>;
 
@@ -256,6 +278,25 @@ mod ffi {
             key: u64,
         ) -> Vec<DoubleVec>;
     }
+
+    // unsafe extern "C++" {
+    //     include!("nonlinear/incremental_fixed_lag_smoother.h");
+
+    //     type IncrementalFixedLagSmoother;
+
+    //     fn default_incremental_fixed_lag_smoother(
+    //         smoother_lag: f64,
+    //     ) -> UniquePtr<IncrementalFixedLagSmoother>;
+
+    //     // fn update(
+    //     //     isam2: Pin<&mut ISAM2>,
+    //     //     graph: &NonlinearFactorGraph,
+    //     //     initial_values: &Values,
+    //     //     new_affected_keys: & Vec<DoubleVec>,
+    //     //     keys_to_remove: & Vec<u64>,
+    //     // ) -> ISAM2ResultRust;
+
+    // }
 
     unsafe extern "C++" {
         include!("nonlinear/nonlinear_factor_graph.h");
@@ -305,6 +346,11 @@ mod ffi {
             graph: Pin<&mut NonlinearFactorGraph>,
             factor: &SharedPtr<SmartProjectionPoseFactorCal3_S2>,
         );
+
+        fn nonlinear_factor_graph_add_generic_projection_pose_factor(
+            graph: Pin<&mut NonlinearFactorGraph>,
+            factor: &SharedPtr<GenericProjectionFactorPose3Point3Cal3_S2>,
+        );
     }
 
     unsafe extern "C++" {
@@ -329,7 +375,6 @@ mod ffi {
         fn values_insert_constant_bias(values: Pin<&mut Values>, key: u64, value: &ConstantBias);
 
         fn values_insert_vector3(values: Pin<&mut Values>, key: u64, value: &Vector3);
-
     }
 
     unsafe extern "C++"{
@@ -422,12 +467,22 @@ mod ffi {
         include!("slam/projection_factor.h");
 
         type SmartProjectionPoseFactorCal3_S2;
+        type GenericProjectionFactorPose3Point3Cal3_S2;
 
         fn new_smart_projection_pose_factor(
             measurement_noise: &SharedPtr<IsotropicNoiseModel>,
             k: &SharedPtr<Cal3_S2>,
             sensor_p_body: &Pose3,
         ) -> SharedPtr<SmartProjectionPoseFactorCal3_S2>;
+
+        fn new_generic_projection_factor(
+            point: &Point2,
+            measurement_noise: &SharedPtr<IsotropicNoiseModel>,
+            pose_key: u64,
+            point_key: u64,
+            k: &SharedPtr<Cal3_S2>,
+            sensor_p_body: &Pose3,
+        ) -> SharedPtr<GenericProjectionFactorPose3Point3Cal3_S2>;
 
         fn add(
             smartfactor: &mut SharedPtr<SmartProjectionPoseFactorCal3_S2>,

@@ -1,14 +1,14 @@
 extern crate g2o;
 use ahash::HashMap;
 use log::{warn, info, debug};
-use std::{collections::{BTreeSet}};
 use std::{sync::atomic::Ordering, thread::sleep, time::Duration};
-use opencv::{core::{Point, Point2f, Scalar, CV_8U}, imgproc::circle, prelude::*, types::{VectorOfPoint2f, VectorOfu8}};
+use opencv::{core::{Point, Point2f, Scalar, CV_8U}, imgcodecs, imgproc::circle, prelude::*, types::{VectorOfPoint2f, VectorOfu8}};
 use core::{
     config::*, matrix::*, system::{Actor, MessageBox, System, Timestamp}
 };
+use std::fmt::Debug;
 use crate::{
-    actors::{local_mapping::LOCAL_MAPPING_IDLE, messages::{FeatureTracksAndIMUMsg, ImageMsg, ImagePathMsg, InitKeyFrameMsg, ShutdownMsg, TrajectoryMsg, VisFeaturesMsg, VisTrajectoryMsg}}, map::{frame::Frame, pose::Pose, read_only_lock::ReadWriteMap}, modules::{image::{self, _write_image_file}, imu::{ImuMeasurements, IMU}, map_initialization::MapInitialization, module_definitions::{FeatureExtractionModule, MapInitializationModule}}, registered_actors::{new_feature_extraction_module, CAMERA_MODULE, LOCAL_MAPPING, SHUTDOWN_ACTOR, TRACKING_BACKEND, TRACKING_FRONTEND, VISUALIZER}
+    actors::{local_mapping::LOCAL_MAPPING_IDLE, messages::{FeatureTracksAndIMUMsg, ImageMsg, ImagePathMsg, InitKeyFrameMsg, ShutdownMsg, TrajectoryMsg, VisFeaturesMsg}}, map::{frame::Frame, pose::Pose, read_only_lock::ReadWriteMap}, modules::{image::{self, draw_optical_flow}, imu::{ImuMeasurements, IMU}, map_initialization::MapInitialization, module_definitions::{FeatureExtractionModule, MapInitializationModule}}, registered_actors::{new_feature_extraction_module, CAMERA_MODULE, LOCAL_MAPPING, SHUTDOWN_ACTOR, TRACKING_BACKEND, TRACKING_FRONTEND, VISUALIZER}
 };
 
 
@@ -24,13 +24,17 @@ pub struct TrackingFrontendGTSAM {
     imu_measurements_since_last_kf: ImuMeasurements,
 
     // Feature IDs
-    tracked_features_last_kf: TrackedFeatures,
+    tracked_features: TrackedFeatures,
+    removed_features: Vec<u64>,
 
     // Frames
     last_frame: Frame,
     curr_frame_id: i32,
     current_frame: Frame,
     frames_since_last_kf: i32,
+
+    // Just for drawing
+    tracked_features_last_kf: TrackedFeatures,
 
     // ORBSLAM map initialization 
     // I know this is hacky but I dont' want to figure out how to merge the gtsam imu preintegration object with the orbslam imu object
@@ -53,13 +57,15 @@ impl Actor for TrackingFrontendGTSAM {
             map,
             initialization: Some(MapInitialization::new()),
             state: GtsamFrontendTrackingState::NotInitialized,
-            tracked_features_last_kf: TrackedFeatures::default(),
+            tracked_features: TrackedFeatures::default(),
             imu_for_init: IMU::new(),
             last_frame: Frame::new_no_features(-1, None, 0.0, None).expect("Should be able to make dummy frame"),
             current_frame: Frame::new_no_features(-1, None, 0.0, None).expect("Should be able to make dummy frame"),
             curr_frame_id: 0,
             imu_measurements_since_last_kf: ImuMeasurements::new(),
             frames_since_last_kf: 0,
+            tracked_features_last_kf: TrackedFeatures::default(),
+            removed_features: vec![],
         };
         tracy_client::set_thread_name!("tracking frontend gtsam");
 
@@ -85,12 +91,12 @@ impl TrackingFrontendGTSAM {
                 return false;
             }
 
-            let (image, timestamp, mut imu_measurements, mut imu_initialization) = if message.is::<ImagePathMsg>() {
+            let (image, image_color, timestamp, mut imu_measurements, mut imu_initialization) = if message.is::<ImagePathMsg>() {
                 let msg = message.downcast::<ImagePathMsg>().unwrap_or_else(|_| panic!("Could not downcast tracking message!"));
-                (image::read_image_file(&msg.image_path), msg.timestamp, msg.imu_measurements, msg.imu_initialization)
+                (image::read_image_file(&msg.image_path, imgcodecs::IMREAD_GRAYSCALE), None, msg.timestamp, msg.imu_measurements, msg.imu_initialization)
             } else {
                 let msg = message.downcast::<ImageMsg>().unwrap_or_else(|_| panic!("Could not downcast tracking message!"));
-                (msg.image, msg.timestamp, msg.imu_measurements, msg.imu_initialization)
+                (msg.image, msg.color_image, msg.timestamp, msg.imu_measurements, msg.imu_initialization)
             };
             self.imu_measurements_since_last_kf.append(&mut imu_measurements);
 
@@ -132,6 +138,8 @@ impl TrackingFrontendGTSAM {
                         self.current_frame.pose = Some(init_pose);
                         self.state = GtsamFrontendTrackingState::Ok;
 
+                        println!("INITIALIZED IN FRONTEND!");
+
                         true
                 },
                 GtsamFrontendTrackingState::Ok => {
@@ -153,14 +161,13 @@ impl TrackingFrontendGTSAM {
                     // self.current_frame.pose = Some(new_pose);
                     // debug!("OPTICAL FLOW POSE ESTIMATE... {}, {:?}", timestamp * 1e9, new_pose);
 
-                    // self.tracked_features_last_kf = new_tracked_features;
-
                     // Determine if frame should be a keyframe
                     self.need_new_keyframe()
                     // true
                 }
             };
 
+            // println!("IMU MEASUREMENTS ARE: {:?}", self.imu_measurements_since_last_kf);
 
             // self.system.try_send(VISUALIZER, Box::new(VisTrajectoryMsg{
             //     pose: Pose::default(),
@@ -182,13 +189,30 @@ impl TrackingFrontendGTSAM {
                 let mut imu_measurements = ImuMeasurements::new();
                 std::mem::swap(&mut self.imu_measurements_since_last_kf, &mut imu_measurements);
 
+
                 // SEND TO BACKEND!
                 self.system.send(TRACKING_BACKEND, Box::new(FeatureTracksAndIMUMsg {
                     frame: self.current_frame.clone(),
                     imu_measurements,
-                    feature_tracks: self.tracked_features_last_kf.clone(),
+                    feature_tracks: self.tracked_features.clone(),
+                    // last_features: self.tracked_features_last_kf.clone(),
+                    removed_feature_ids: self.removed_features.clone(),
                     imu_initialization,
                 }));
+
+                self.removed_features.clear();
+
+                // if self.last_frame.image.is_some() {
+                //     draw_optical_flow(
+                //         self.last_frame.image.as_ref().unwrap(),
+                //         self.current_frame.image.as_ref().unwrap(),
+                //         & self.tracked_features_last_kf.get_points_as_vector_of_point2f(),
+                //         & self.tracked_features.get_points_as_vector_of_point2f(),
+                //         &format!("results/flow/front{}.png", self.curr_frame_id),
+                //     ).unwrap();
+                //     debug!("Frontend, tracked features last: {:?}", self.tracked_features_last_kf);
+                //     debug!("Frontend, tracked features now: {:?}", self.tracked_features);
+                // }
 
                 self.frames_since_last_kf = 0;
             } else {
@@ -285,11 +309,14 @@ impl TrackingFrontendGTSAM {
         let mut status = VectorOfu8::new();
         let mut points2 = VectorOfPoint2f::new();
 
+        // Just for drawing, keep track of last last features
+        self.tracked_features_last_kf = self.tracked_features.clone();
+
         // Optical flow
         opencv::video::calc_optical_flow_pyr_lk(
             & self.last_frame.image.as_ref().unwrap(),
             & self.current_frame.image.as_ref().unwrap(),
-            & self.tracked_features_last_kf.get_points_as_vector_of_point2f(),
+            & self.tracked_features.get_points_as_vector_of_point2f(),
             &mut points2,
             &mut status,
             &mut opencv::types::VectorOff32::default(),
@@ -304,13 +331,9 @@ impl TrackingFrontendGTSAM {
             1e-4,
         )?;
 
-        // Get rid of points for which the KLT tracking failed or those who have gone outside the frame
-        // let mut new_tracked_features = TrackedFeatures::default();
-        // new_tracked_features.last_feature_id = self.tracked_features_last_kf.last_feature_id;
-
         let mut index_correction = 0; // We mutate self.tracked_features vectors while status and points2 lengths remain the same
         let mut total_tracked = 0;
-        // println!("Tracked features: ");
+
         for i in 0..status.len() {
             let index_in_mutated = i - index_correction;
             let pt = points2.get(i)?;
@@ -318,29 +341,30 @@ impl TrackingFrontendGTSAM {
 
             if !status_ok || pt.x < 0.0 || pt.y < 0.0 {
                 // FEATURE IS NOT TRACKED! Remove from tracked_features
-                let _removed_id = self.tracked_features_last_kf.remove(index_in_mutated);
+                let removed_id = self.tracked_features.remove(index_in_mutated);
+                self.tracked_features_last_kf.remove(index_in_mutated);
                 index_correction = index_correction + 1;
+                self.removed_features.push(removed_id as u64);
             } else {
-                // FEATURE IS FOUND! Update the point in new_tracked_features
+                // FEATURE IS FOUND! Update the point in tracked_features_last_kf
                 // Not updating current_frame's features yet, we will do this if this frame becomes a new keyframe during the feature extraction step.
-                // new_tracked_features.add_with_id(pt, self.tracked_features_last_kf.feature_ids[index_in_mutated]);
+                self.tracked_features.update(index_in_mutated, pt);
                 total_tracked += 1;
-                // print!("({}, {}, {})", pt.x, pt.y, self.tracked_features_last_kf.feature_ids[index_in_mutated]);
             }
         }
 
-        // debug!("Optical flow tracked {} from original {}", total_tracked, status.len());
-        // Ok(new_tracked_features)
+        debug!("Optical flow tracked {} from original {}", total_tracked, status.len());
+        // debug!("Removed: {:?}", self.removed_features);
         Ok(())
     }
 
     fn extract_good_features_to_track(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         let _span = tracy_client::span!("extract features");
 
-        let num_features_to_find = 200 - self.tracked_features_last_kf.points.len();
+        let num_features_to_find = 200 - self.tracked_features.points.len();
 
         if num_features_to_find <= 0 {
-            warn!("Have enough features ({}), not extracting more", self.tracked_features_last_kf.points.len());
+            warn!("Have enough features ({}), not extracting more", self.tracked_features.points.len());
             return Ok(());
         }
 
@@ -353,7 +377,7 @@ impl TrackingFrontendGTSAM {
             CV_8U,
             Scalar::all(255.0)
         ).unwrap();
-        for point in self.tracked_features_last_kf.points.iter() {
+        for point in self.tracked_features.points.iter() {
             circle(&mut mask, Point::new(point.x as i32, point.y as i32), 20, Scalar::all(0.0), -1, 8, 0).unwrap();
             // println!("Masking feature: {:?}", Point::new(point.x as i32, point.y as i32));
         }
@@ -365,7 +389,7 @@ impl TrackingFrontendGTSAM {
 
         // println!("Extracted features:");
         for point in points.iter() {
-            self.tracked_features_last_kf.add(Point2f::new(point.x as f32, point.y as f32));
+            self.tracked_features.add(Point2f::new(point.x as f32, point.y as f32));
             // print!("({}, {}, {}),", point.x, point.y, self.tracked_features_last_kf.last_feature_id);
         }
 
@@ -381,14 +405,14 @@ impl TrackingFrontendGTSAM {
         // Condition 1b: More than "MinFrames" have passed and Local Mapping is idle
         let c1b = self.frames_since_last_kf >= (SETTINGS.get::<i32>(TRACKING_FRONTEND, "min_frames_to_insert_kf") as i32) && LOCAL_MAPPING_IDLE.load(Ordering::SeqCst);
         //Condition 1c: tracking is weak
-        let c1c = (self.tracked_features_last_kf.len() as u32) < (SETTINGS.get::<i32>(TRACKING_FRONTEND, "min_num_features") as u32);
+        let c1c = (self.tracked_features.len() as u32) < (SETTINGS.get::<i32>(TRACKING_FRONTEND, "min_num_features") as u32);
 
         // let c1c = ((self.matches_inliers as f32) < tracked_mappoints * 0.5 || need_to_insert_close) ;
         // // Condition 2: Few tracked points compared to reference keyframe. Lots of visual odometry compared to map matches.
         // let c2 = (((self.matches_inliers as f32) < (tracked_mappoints * th_ref_ratio) || need_to_insert_close)) && self.matches_inliers > 15;
         // (c1a||c1b||c1c) && c2
 
-        debug!("Need new keyframe? {} {} {}, {}", c1a, c1b, c1c, self.tracked_features_last_kf.len());
+        debug!("Need new keyframe? {} {} {}", c1a, c1b, c1c);
 
         c1a || c1b || c1c
     }
@@ -396,7 +420,7 @@ impl TrackingFrontendGTSAM {
     fn calculate_transform(&self, new_tracked_features: & TrackedFeatures) -> Result<Pose, Box<dyn std::error::Error>> {
         let _span = tracy_client::span!("calculate_transform");
         // recovering the pose and the essential matrix
-        let prev_features: VectorOfPoint2f = self.tracked_features_last_kf.get_points_as_vector_of_point2f();
+        let prev_features: VectorOfPoint2f = self.tracked_features.get_points_as_vector_of_point2f();
         let curr_features: VectorOfPoint2f = new_tracked_features.get_points_as_vector_of_point2f();
 
         let (mut recover_r, mut recover_t, mut mask) = (Mat::default(), Mat::default(), Mat::default());
@@ -445,7 +469,7 @@ enum GtsamFrontendTrackingState {
 
 pub type TrackedFeaturesIndexMap = HashMap<i32, usize>; // feature_id -> index in a frame's features
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct TrackedFeatures {
     points: Vec<Point2f>,
     feature_ids: Vec<i32>,
@@ -478,6 +502,10 @@ impl TrackedFeatures {
         self.points[index]
     }
 
+    pub fn update(&mut self, index: usize, point: Point2f) {
+        self.points[index] = point;
+    }
+
     pub fn add(&mut self, point: Point2f) -> i32 {
         self.points.push(point);
         self.feature_ids.push(self.last_feature_id);
@@ -486,14 +514,19 @@ impl TrackedFeatures {
         return self.last_feature_id - 1;
     }
 
-    pub fn add_with_id(&mut self, point: Point2f, id: i32) {
-        self.points.push(point);
-        self.feature_ids.push(id);
-    }
-
     pub fn remove(&mut self, index: usize) -> i32 {
         let id = self.feature_ids.remove(index);
         self.points.remove(index);
         id
+    }
+}
+
+impl Debug for TrackedFeatures {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "TrackedFeatures with {} points: ; ", self.points.len())?;
+        for i in 0..self.points.len() {
+            write!(f, "ID {}: ({}, {}), ", self.feature_ids[i], self.points[i].x, self.points[i].y)?;
+        }
+        Ok(())
     }
 }

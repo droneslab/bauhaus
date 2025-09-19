@@ -3,7 +3,7 @@ use core::matrix::{DVVector3, DVVectorOfPoint2f};
 use core::sensor::{Sensor, FrameSensor, ImuSensor};
 use core::system::Timestamp;
 use std::collections::BTreeSet;
-use log::{debug, info, warn};
+use log::info;
 use core::matrix::DVVectorOfPoint3f;
 use opencv::prelude::KeyPointTraitConst;
 use crate::map::map::Id;
@@ -35,13 +35,6 @@ impl MapInitializationModule for MapInitialization {
         match self.sensor.frame() {
             FrameSensor::Mono => self.monocular_initialization(current_frame, imu_preintegrated_from_last_kf),
             _ => self.stereo_initialization()
-        }
-    }
-
-    fn create_initial_map(&mut self, map: &mut Self::Map, imu_preintegrated_from_last_kf: &mut  ImuPreIntegrated) -> Self::InitializationResult {
-        match self.sensor.frame() {
-            FrameSensor::Mono => self.create_initial_map_monocular(map, imu_preintegrated_from_last_kf),
-            _ => self.create_initial_map_stereo()
         }
     }
 }

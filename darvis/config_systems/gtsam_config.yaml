@@ -13,11 +13,11 @@ system:
       first_actor_name: TRACKING_FRONTEND # Name of actor to kick off pipeline
 
       # FPS
-      fps: 10.0
+      fps: 5.0
 
       # KIMERA
-      # 1100
-      initial_k: 1100 # Start processing dataset from frame initial_k. Useful to skip a bunch of images at the beginning (imu calibration).
+      # 1100, 482
+      initial_k: 50 # Start processing dataset from frame initial_k. Useful to skip a bunch of images at the beginning (imu calibration).
       final_k: 0 # Finish processing dataset at frame final_k. Last frame to process (to avoid processing the entire dataset), skip last frames. If set to 0 will process everything. 
 
       # RESULTS
@@ -176,7 +176,7 @@ actors:
             type: i32
           - 
             name: min_frames_to_insert_kf
-            value: 1
+            value: 3
             type: i32
           -
             name: max_frames_to_insert_kf
@@ -189,6 +189,29 @@ actors:
        receiver_bound: 10
        settings:
           - 
+            name: use_isam
+            value: true
+            type: bool
+          -
+            name: isam_update_interval
+            value: 0
+            type: i32
+          - name: isam_relinearize_threshold
+            value: 0.1
+            type: f64
+          - name: isam_relinearize_skip
+            value: 1
+            type: i32
+          - name: isam_cache_linearized_factors
+            value: true
+            type: bool
+          - name: isam_enable_detailed_results
+            value: true
+            type: bool
+          - 
+            name: use_smart_factors
+            value: true
+            type: bool
 
       -
        name: LOCAL_MAPPING

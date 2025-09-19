@@ -1,7 +1,8 @@
 extern crate g2o;
-use log::{warn, info, debug, error};
-use nalgebra::{Isometry3, Matrix3, Vector3, Vector4, Vector6};
-use std::{collections::{BTreeSet, HashMap, VecDeque}, fmt::Debug, sync::atomic::Ordering, thread::sleep, time::Duration};
+use log::{warn, info, debug};
+use nalgebra::{Isometry3, Matrix3, Vector3, Vector6};
+use opencv::core::Mat;
+use std::{collections::{BTreeSet, HashMap, VecDeque}, fmt::Debug, thread::sleep, time::Duration};
 use gtsam::{
     inference::symbol::Symbol, navigation::combined_imu_factor::{CombinedImuFactor, PreintegratedCombinedMeasurements, PreintegrationCombinedParams}, nonlinear::{
         isam2::ISAM2, levenberg_marquardt_optimizer::LevenbergMarquardtOptimizer, levenberg_marquardt_params::LevenbergMarquardtParams, nonlinear_factor_graph::NonlinearFactorGraph, values::Values
@@ -11,19 +12,21 @@ use core::{
     config::*, matrix::*, system::{Actor, MessageBox, System, Timestamp}
 };
 use crate::{
-    actors::{local_mapping_gtsam::LOCAL_MAPPING_IDLE, messages::{FeatureTracksAndIMUMsg, ShutdownMsg, TrajectoryMsg, UpdateFrameIMUMsg, VisTrajectoryMsg, VisTrajectoryTrackingMsg}, tracking_frontend_gtsam::TrackedFeatures},
-    map::{frame::Frame, keyframe::KeyFrame, map::Id, pose::Pose, read_only_lock::ReadWriteMap}, modules::imu::{ImuBias, ImuCalib, ImuMeasurements}, registered_actors::{CAMERA, IMU, SHUTDOWN_ACTOR, TRACKING_FRONTEND, VISUALIZER}, ImuInitializationData
+    actors::{messages::{FeatureTracksAndIMUMsg, ShutdownMsg, TrajectoryMsg, UpdateFrameIMUMsg, VisTrajectoryMsg}, tracking_frontend_gtsam::TrackedFeatures},
+    map::{frame::Frame, map::Id, pose::Pose, read_only_lock::ReadWriteMap}, modules::{image::draw_optical_flow, imu::{ImuBias, ImuCalib, ImuMeasurements}}, registered_actors::{CAMERA, IMU, SHUTDOWN_ACTOR, TRACKING_BACKEND, VISUALIZER}, ImuInitializationData
 };
+use num_traits::Pow;
+use gtsam::sys::ffi::DoubleVec;
 
 pub struct TrackingBackendGTSAM {
     system: System,
     map: ReadWriteMap,
 
-    // Last kf/frame
-    // last_kf_pose: Pose,
-    // last_kf_imu_bias: ImuBias,
-    // last_feature_tracks: TrackedFeatures,
     last_timestamp: Timestamp,
+
+    // For drawing
+    last_image: Option<Mat>,
+    curr_frame_id: i32,
 
     // Modules 
     graph_solver: GraphSolver,
@@ -36,16 +39,17 @@ impl Actor for TrackingBackendGTSAM {
     type MapRef = ReadWriteMap;
 
     fn spawn(system: System, map: Self::MapRef) {
+        let use_isam = SETTINGS.get::<bool>(TRACKING_BACKEND, "use_isam");
+        let use_smart_factors = SETTINGS.get::<bool>(TRACKING_BACKEND, "use_smart_factors");
+
         let mut actor = TrackingBackendGTSAM {
             system,
-            graph_solver: GraphSolver::new(),
-            // sensor,
+            graph_solver: GraphSolver::new(use_isam, use_smart_factors),
             map,
             trajectory_poses: Vec::new(),
             last_timestamp: 0.0,
-            // last_kf_pose: Pose::default(),
-            // last_kf_imu_bias: ImuBias::new(),
-            // last_feature_tracks: TrackedFeatures::default(),
+            last_image: None,
+            curr_frame_id: 0,
         };
         tracy_client::set_thread_name!("tracking backend gtsam");
 
@@ -86,35 +90,40 @@ impl TrackingBackendGTSAM {
 
     fn handle_regular_message(&mut self, mut msg: FeatureTracksAndIMUMsg) -> Result<(), Box<dyn std::error::Error>> {
         let _span = tracy_client::span!("track");
+        // println!("Imu measurements right now: {:?}", msg.imu_measurements);
 
-        if matches!(self.graph_solver.solver_state, GraphSolverState::NotInitialized) {
-            // First frame received here... was already put into local mapping map as latest keyframe
-            // Need to initialize the factor graph 
-
+        let current_frame = if matches!(self.graph_solver.solver_state, GraphSolverState::NotInitialized) {
             // Initialize from gt
-                println!("Initializing!");
-                let imu_init = msg.imu_initialization.expect("Msg should have imu initialization data!");
-                let init_pose = self.graph_solver.initialize_with_data(
-                    msg.frame.timestamp,
-                    &imu_init
-                ).expect("Failed to initialize?");
-                self.graph_solver.process_smart_features(&msg.feature_tracks, 0);
+            debug!("Initializing!");
+            let mut current_frame = msg.frame;
+            let (init_pose, init_velocity, init_bias) = self.graph_solver.initialize(
+                current_frame.timestamp,
+                &msg.imu_initialization.expect("Msg should have imu initialization data!"),
+                msg.feature_tracks,
+            ).expect("Failed to initialize?");
 
-                self.graph_solver.solver_state = GraphSolverState::Ok;
-                self.last_timestamp = msg.frame.timestamp;
-                println!("Initializing done!");
+            // Update frame and create new keyframe
+            current_frame.set_imu_pose_velocity(
+                init_pose,
+                init_velocity
+            );
+            current_frame.imu_data.set_new_bias(init_bias);
+            let _new_kf_id = self.create_new_keyframe(&mut current_frame).expect("Could not create new keyframe");
 
-                msg.frame.pose = Some(init_pose.clone());
-                self.create_new_keyframe(&mut msg.frame).expect("Could not create new keyframe");
-                let map = self.map.read()?;
-                self.system.try_send(VISUALIZER, Box::new(VisTrajectoryMsg{
-                    pose: init_pose,
-                    mappoint_matches: vec![],
-                    mappoints_in_tracking: BTreeSet::new(),
-                    debug: msg.imu_measurements,
-                    timestamp: msg.frame.timestamp,
-                    map_version: map.version
-                }));
+            let map = self.map.read()?;
+            self.system.try_send(VISUALIZER, Box::new(VisTrajectoryMsg{
+                pose: init_pose,
+                mappoint_matches: vec![],
+                mappoints_in_tracking: BTreeSet::new(),
+                timestamp: current_frame.timestamp,
+                map_version: map.version
+            }));
+
+            debug!("Initializing done! First keyframe's timestamp: {}", current_frame.timestamp);
+
+
+            // Only for visualizing optical flow
+            // self.last_image = Some(msg.frame.image.as_ref().unwrap().clone());
 
 
             // Initialize from map initialization
@@ -209,33 +218,56 @@ impl TrackingBackendGTSAM {
                 //     map_version: map.version,
                 //     debug: msg.imu_measurements.clone(),
                 // }));
-
+            current_frame
         } else {
             // If we have previous frames already, can track normally
             let mut current_frame = msg.frame;
+            println!("Current timestamp: {}", current_frame.timestamp);
+
+            // Visualizing optical flow
+            // if self.last_image.is_some() {
+                // draw_optical_flow(
+                //     self.last_image.as_ref().unwrap(),
+                //     current_frame.image.as_ref().unwrap(),
+                //     & msg.last_features.get_points_as_vector_of_point2f(),
+                //     & msg.feature_tracks.get_points_as_vector_of_point2f(),
+                //     &format!("results/flow/backend{}.png", self.curr_frame_id),
+                // ).unwrap();
+                // debug!("Backend, tracked features last: {:?}", msg.last_features);
+                // debug!("Backend, tracked features now: {:?}", msg.feature_tracks);
+            // }
 
             // Solve VIO graph. Includes preintegration
-            let optimized = self.graph_solver.solve(
+            let optimization_results = self.graph_solver.solve(
                 &mut current_frame,
-                &mut msg.imu_measurements.clone(), &msg.feature_tracks
+                &mut msg.imu_measurements.clone(),
+                &msg.feature_tracks,
+                msg.removed_feature_ids
             )?;
-            if !optimized {
-                warn!("Could not optimize graph");
+
+            let _new_kf_id = self.create_new_keyframe(&mut current_frame).expect("Could not create new keyframe");
+
+            if self.graph_solver.use_isam {
+                // If using isam, we need to update all keyframes' poses because they are optimized each time
+                for (state_key, pose, _velocity, _bias) in optimization_results.iter() {
+                    self.map.write()?.get_keyframe_mut(*state_key as i32).set_pose(*pose);
+                }
             }
 
-            self.create_new_keyframe(&mut current_frame).expect("Could not create new keyframe");
+            current_frame
 
-            self.update_trajectory_in_logs(& current_frame, &msg.imu_measurements).expect("Could not save trajectory");
-            self.last_timestamp = current_frame.timestamp;
             // sleep(Duration::from_millis(10000000));
+        };
 
-        }
+        self.last_timestamp = current_frame.timestamp;
+        self.update_trajectory_in_logs(& current_frame).expect("Could not save trajectory");
+        self.curr_frame_id += 1;
 
         return Ok(());
     }
 
     fn update_trajectory_in_logs(
-        &mut self, current_frame: &Frame, imu_measurements: &ImuMeasurements
+        &mut self, current_frame: &Frame
     ) -> Result<(), Box<dyn std::error::Error>> {
         self.trajectory_poses.push(current_frame.pose.unwrap());
 
@@ -256,14 +288,13 @@ impl TrackingBackendGTSAM {
             mappoints_in_tracking: BTreeSet::new(),
             timestamp: current_frame.timestamp,
             map_version: map.version,
-            debug: imu_measurements.clone(),
         }));
 
         Ok(())
     }
 
     fn scale_map_from_imu(&mut self, msg: &mut FeatureTracksAndIMUMsg) -> Result<(), Box<dyn std::error::Error>> {
-        let (scale, velocity) = {
+        let (_scale, velocity) = {
             let map = self.map.read()?;
             let kf0 = map.get_keyframe(0);
             let kf1 = map.get_keyframe(1);
@@ -359,7 +390,7 @@ impl TrackingBackendGTSAM {
                 -5.3174642289377516e-07 ,     0.9999992847442627 , -0.0011864284751936793,
                 0.00086154905147850513  , 0.0011864284751936793  ,   0.99999892711639404,
             );
-            let final_rot = (rot1 * rot2 * rot3 * rot4);
+            let final_rot = rot1 * rot2 * rot3 * rot4;
 
 
             println!("Final rotation: {:?}", final_rot);
@@ -391,7 +422,7 @@ impl TrackingBackendGTSAM {
         Ok(())
     }
 
-    fn create_new_keyframe(&mut self, current_frame: &mut Frame) -> Result<(), Box<dyn std::error::Error>> {
+    fn create_new_keyframe(&mut self, current_frame: &mut Frame) -> Result<Id, Box<dyn std::error::Error>> {
         let _span = tracy_client::span!("create_new_keyframe");
         //CreateNewKeyFrame
         // Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Tracking.cc#L3216
@@ -424,7 +455,7 @@ impl TrackingBackendGTSAM {
         // );
     
 
-        Ok(())
+        Ok(new_kf_id)
     }
 
     fn distance(v1: &Vector3<f64>, v2: &Vector3<f64>) -> f64 {
@@ -437,14 +468,16 @@ impl TrackingBackendGTSAM {
 
 pub struct GraphSolver {
     solver_state: GraphSolverState,
+    use_isam: bool, // isam or levenberg marquadt
+    use_smart_factors: bool,
 
     // New graph
     graph_new: NonlinearFactorGraph, // New factors that have not been optimized yet
     values_new: Values, // New values that have not been optimized yet
 
     // Main graph
-    graph_all: NonlinearFactorGraph, // Main non-linear GTSAM graph, all created factors
     values_all: Values, // All created nodes
+    inserted_kfs: Vec<u64>, // Keyframe IDs that have been inserted into the graph
 
     // Misc GTSAM objects
     isam2: ISAM2, // ISAM2 solvers
@@ -455,7 +488,11 @@ pub struct GraphSolver {
     gyro_noise_density: f64, // gyroscope_noise_density, sigma_g
     accel_random_walk: f64, // accelerometer_random_walk, sigma_wa
     gyro_random_walk: f64, // gyroscope_random_walk, sigma_wg
-    sigma_camera: f64,
+    sampling_frequency: f64, // sqrt(imu frequency)
+    // Camera defaults
+    k: gtsam::geometry::cal3_s2::Cal3S2, // Camera intrinsics
+    vision_measurement_noise: gtsam::linear::noise_model::IsotropicNoiseModel, // Camera measurement noise model
+    tbc: Pose, // Transform from camera frame to body (IMU) 
 
     // Kimera
     // Noise values for initialization
@@ -470,23 +507,41 @@ pub struct GraphSolver {
 
     // Iterations of the map
     ct_state: u64,
-    measurement_smart_lookup_left: HashMap<i32, gtsam::slam::projection_factor::SmartProjectionPoseFactorCal3S2>, // Smart lookup for IMU measurements
+
+    // Managing smart factors
+    smartfactors: HashMap<i32, gtsam::slam::projection_factor::SmartProjectionPoseFactorCal3S2>, // Lookup of smart factor pointers by feature ID
+    smartfactor_idx_in_isam2: HashMap<i32, u64>, // (smart factor ID in this object) -> (index in isam2)
 
     last_timestamp: Timestamp
 }
 
 impl GraphSolver {
-    pub fn new() -> Self {
+    pub fn new(use_isam: bool, use_smart_factors: bool) -> Self {
+        let vision_measurement_noise = gtsam::linear::noise_model::IsotropicNoiseModel::from_dim_and_sigma(2, 1.0);
+        let k = gtsam::geometry::cal3_s2::Cal3S2::new(
+            SETTINGS.get::<f64>(CAMERA, "fx"),
+            SETTINGS.get::<f64>(CAMERA, "fy"),
+            0.0,
+            SETTINGS.get::<f64>(CAMERA, "cx"),
+            SETTINGS.get::<f64>(CAMERA, "cy"),
+        );
+
         Self {
-            graph_new: NonlinearFactorGraph::default(),
-            values_new: Values::default(),
-            graph_all: NonlinearFactorGraph::default(),
-            values_all: Values::default(),
-            isam2: ISAM2::default(),
-            preint_gtsam: PreintegratedCombinedMeasurements::default(),
+            use_isam,
+            use_smart_factors,
             solver_state: GraphSolverState::NotInitialized,
 
-            sigma_camera: 10000.0,
+            isam2: ISAM2::new(
+                SETTINGS.get::<f64>(TRACKING_BACKEND, "isam_relinearize_threshold"),
+                SETTINGS.get::<i32>(TRACKING_BACKEND, "isam_relinearize_skip"),
+                SETTINGS.get::<bool>(TRACKING_BACKEND, "isam_cache_linearized_factors"),
+                SETTINGS.get::<bool>(TRACKING_BACKEND, "isam_enable_detailed_results"),
+            ),
+            preint_gtsam: PreintegratedCombinedMeasurements::default(),
+            graph_new: NonlinearFactorGraph::default(),
+            values_new: Values::default(),
+            values_all: Values::default(),
+
             initial_position_sigma: SETTINGS.get::<f64>(IMU, "initialPositionSigma"),
             initial_roll_pitch_sigma: SETTINGS.get::<f64>(IMU, "initialRollPitchSigma"),
             initial_yaw_sigma: SETTINGS.get::<f64>(IMU, "initialYawSigma"),
@@ -495,306 +550,54 @@ impl GraphSolver {
             initial_gyro_bias_sigma: SETTINGS.get::<f64>(IMU, "initialGyroBiasSigma"),
             accel_noise_density: SETTINGS.get::<f64>(IMU, "noise_acc"),
             gyro_noise_density: SETTINGS.get::<f64>(IMU, "noise_gyro"),
+            sampling_frequency: SETTINGS.get::<f64>(IMU, "frequency").sqrt(),
             accel_random_walk: SETTINGS.get::<f64>(IMU, "acc_walk"),
             gyro_random_walk: SETTINGS.get::<f64>(IMU, "gyro_walk"),
             imu_integration_sigma: SETTINGS.get::<f64>(IMU, "imu_integration_sigma"),
             init_bias_sigma: SETTINGS.get::<f64>(IMU, "imu_bias_init_sigma"),
+            tbc: ImuCalib::new().tbc,
+            k,
+            vision_measurement_noise,
 
             ct_state: 0,
-            measurement_smart_lookup_left: HashMap::new(),
-
-            last_timestamp: 0.0
+            smartfactors: HashMap::new(),
+            smartfactor_idx_in_isam2: HashMap::new(),
+            last_timestamp: 0.0,
+            inserted_kfs: Vec::new(),
         }
     }
 
-    fn solve(&mut self,
-        current_frame : &mut Frame, 
-        imu_measurements : &mut ImuMeasurements, new_tracked_features : &TrackedFeatures
-    ) -> Result<bool, Box<dyn std::error::Error>> {
-        let _span = tracy_client::span!("solve");
-
-        let timestamp = (current_frame.timestamp * 1e9) as i64; // Convert to int just so we can hash it
-
-        self.preintegrate(imu_measurements, current_frame.timestamp, self.last_timestamp)?;
-        self.create_imu_factor();
-
-        // Original models
-        let new_state = self.predict_state();
-
-        // Append to our node vectors
-        self.values_new.insert_pose3(
-            &Symbol::new(b'x', self.ct_state + 1),
-            &new_state.pose
+    fn initialize(&mut self, timestamp: f64, imu_init: &ImuInitializationData, feature_tracks: TrackedFeatures) -> Result<(Pose, nalgebra::Vector3<f64>, ImuBias), Box<dyn std::error::Error>> {
+        let init_bias = ImuBias::new_with(imu_init.gyro_bias, imu_init.acc_bias);
+        let init_pose = Pose::new(
+                *imu_init.pose.get_translation(),
+                *imu_init.pose.get_rotation()
         );
-        self.values_new.insert_vector3(
-            &Symbol::new(b'v', self.ct_state + 1),
-            &new_state.velocity
-        );
-        self.values_new.insert_constant_bias(
-            &Symbol::new(b'b', self.ct_state + 1),
-            &new_state.bias
-        );
-        self.values_all.insert_pose3(
-            &Symbol::new(b'x', self.ct_state + 1),
-            &new_state.pose
-        );
-        self.values_all.insert_vector3(
-            &Symbol::new(b'v', self.ct_state + 1),
-            &new_state.velocity
-        );
-        self.values_all.insert_constant_bias(
-            &Symbol::new(b'b', self.ct_state + 1),
-            &new_state.bias
-        );
-
-        self.process_smart_features(new_tracked_features, self.ct_state + 1);
-
-        debug!("IMU POSE ESTIMATE... {}; {:?}; {:?}; {:?}", timestamp, new_state.pose, new_state.velocity, new_state.bias);
-
-        // debug!("IMU POSE ESTIMATE AFTER CONVERT... {}; {:?}; {:?}; {:?}", timestamp, new_state2.pose, new_state2.velocity, new_state2.bias);
-
-        self.optimize();
-
-        // debug!("OPTIMIZATION COVARIANCE: {:?}", self.isam2.get_marginal_covariance(&Symbol::new(b'x', self.ct_state)));
-
-        // Update frame with optimized values
-        // Note (frames): Result should be Tbw or Twb, not sure which one.
-        // Sofiya!!! None of the stuff below should actually affect the drift in the visualizer
-        {
-            let updated_pose: Isometry3<f64> = self.values_all.get_pose3(&Symbol::new(b'x', self.ct_state + 1)).unwrap().into();
-            let velocity: gtsam::base::vector::Vector3 = self.values_all.get_vector3(&Symbol::new(b'v', self.ct_state + 1)).unwrap().into();
-            let vel_raw = velocity.get_raw();
-
-            // let reg = Pose::new_from_isometry(updated_pose);
-            // let inv = Pose::new_from_isometry(updated_pose.inverse());
-            // println!("Updated pose inverse: {:?}", inv.get_translation());
-            // println!("Updated pose regular: {:?}", reg.get_translation());
-
-            // Note (frames): Have a look inside this function. It takes Twb and sets the frame pose to Tcw
-            // current_frame.set_imu_pose_velocity(
-            //     Pose::new_from_isometry(updated_pose),
-            //     Vector3::new(vel_raw[0], vel_raw[1], vel_raw[2])
-            // );
-            // println!("Rotation set in orbslam: {:?}", current_frame.pose.unwrap().get_rotation());
-            // println!("Rotation in gtsam: {:?}", updated_pose.rotation.to_rotation_matrix());
-
-
-            current_frame.pose = Some(ImuCalib::new().tcb * Pose::new_from_isometry(updated_pose).inverse());
-            // current_frame.pose = Some(Pose::new_from_isometry(updated_pose));
-            current_frame.imu_data.velocity = Some(DVVector3::new_with(vel_raw[0], vel_raw[1], vel_raw[2]));
-            // let transform1 = Pose::new_with_quaternion(
-            //     nalgebra::Vector3::<f64>::new(0.0, 0.0, 0.0),
-            //     nalgebra::geometry::UnitQuaternion::<f64>::from_quaternion(
-            //     nalgebra::Quaternion::<f64>::new
-            //         (0.7071, 0.0, 0.7071, 0.0),  // +Y	90° around +Y
-            //     )
-            // );
-            // current_frame.pose = Some(ImuCalib::new().tcb * Pose::new_from_isometry(updated_pose).inverse());
-
-
-            let bias_ref = self.values_all.get_constantbias(&Symbol::new(b'b', self.ct_state + 1)).unwrap();
-            let accel_bias = bias_ref.accel_bias().get_raw();
-            let gyro_bias = bias_ref.gyro_bias().get_raw();
-
-            // TODO SOFIYA Should this be set_new_bias?
-            current_frame.imu_data.imu_bias = ImuBias {
-                bax: accel_bias[0],
-                bay: accel_bias[1],
-                baz: accel_bias[2],
-                bwx: gyro_bias[0],
-                bwy: gyro_bias[1],
-                bwz: gyro_bias[2]
-            };
-            debug!("OPTIMIZED POSE ESTIMATE... {}; {:?}; {:?}; {:?}", timestamp, updated_pose, velocity, current_frame.imu_data.imu_bias);
-        }
-
-
-        self.last_timestamp = current_frame.timestamp;
-
-        // Move node count forward in time
-        self.ct_state += 1;
-
-        Ok(true)
-    }
-
-    fn initialize_with_data(&mut self, timestamp: f64, imu_init: &ImuInitializationData) -> Result<Pose, Box<dyn std::error::Error>> {
-
-        // Regular gt
-            // let init_bias = ImuBias::new_with(imu_init.gyro_bias, imu_init.acc_bias);
-            let mut init_pose = Pose::new(
-                    // Vector3::new(0.0, 0.0, 0.0),
-                    *imu_init.pose.get_translation(),
-                    *imu_init.pose.get_rotation()
-            );
-            // // self.initialize(timestamp, init_pose, imu_init.velocity, init_bias)?;
-            // // return Ok(init_pose);
-
-        // Transform gt into Twb
-            // let transform = Pose::new_with_quaternion(
-            //     // nalgebra::Vector3::<f64>::new(7.48903e-02, -1.84772e-02, -1.20209e-01),
-            //     nalgebra::Vector3::<f64>::new (0.0, 0.0, 0.0),
-
-            //     nalgebra::geometry::UnitQuaternion::<f64>::from_quaternion(
-            //         nalgebra::Quaternion::<f64>::new
-            //         // (-0.7071, 0.0, 0.7071, 0.7071),
-            //         // (0.0, 7.07106781e-01, 0.0, 7.07106781e-01) // gt to imu frame
-            //         (1.0, 0.0, 0.0, 0.0) // Identity
-
-            //         // (0.7071, 0.7071, 0.0, 0.0),  // +X	90° around +X
-            //         // (0.7071, -0.7071, 0.0, 0.0),  // -X	90° around -X
-            //         // (0.7071, 0.0, 0.7071, 0.0),  // +Y	90° around +Y
-            //         // (0.7071, 0.0, -0.7071, 0.0),  // -Y	90° around -Y
-            //         // (0.7071, 0.0, 0.0, 0.7071),  // +Z	90° around +Z
-            //         // (0.7071, 0.0, 0.0, -0.7071), // -Z	90° around -Z
-            //         ));
-
-            // init_pose = {
-            //     println!("Sofiya, init pose: {:?}", imu_init.pose);
-            //     let p2 = transform * init_pose;
-            //     println!("Sofiya, init pose after: {:?}", p2);
-            //     p2
-            // };
-
-            // let init_velocity = {
-            //     println!("Sofiya, init velocity: {:?}", imu_init.velocity);
-            //     let v: DVVector3<f64> = (*transform.get_rotation() * *imu_init.velocity).into();
-            //     // let v = imu_init.velocity;
-            //     println!("Sofiya, init velocity after: {:?}", v);
-            //     v
-            // };
-
-            // let init_bias = {
-            //     println!("Sofiya, init bias: {:?} {:?}", imu_init.acc_bias, imu_init.gyro_bias);
-
-            //     let g = *transform.get_rotation() * *DVVector3::new_with(
-            //         // 1e-3, 1e-3, 1e-3
-            //         imu_init.gyro_bias[0],
-            //         imu_init.gyro_bias[1],
-            //         imu_init.gyro_bias[2]
-            //     ); //.transpose() * *transform.get_rotation();
-            //     let a = *transform.get_rotation() * *DVVector3::new_with(
-            //         // 1e-3, 1e-3, 1e-3
-            //         imu_init.acc_bias[0],
-            //         imu_init.acc_bias[1],
-            //         imu_init.acc_bias[2]
-            //     ); //.transpose() * *transform.get_rotation();
-            //     println!("Sofiya, init bias after: {:?} {:?}", g, a);
-
-            //     ImuBias::new_with(DVVector3::new(g), DVVector3::new(a))
-            //     // ImuBias::new_with(
-            //     //     DVVector3::new_with(imu_init.gyro_bias[0], imu_init.gyro_bias[1], imu_init.gyro_bias[2]),
-            //     //     DVVector3::new_with(imu_init.acc_bias[0], imu_init.acc_bias[1], imu_init.acc_bias[2])
-            //     // )
-            // };
-
-            // self.initialize(timestamp, init_pose, init_velocity, init_bias)?;
-            // // return Ok(ImuCalib::new().tcb * init_pose.inverse());
-            // return Ok(init_pose);
-
-        // ORB SLAM copy
-            // gyro, acc
-
-            let init_bias = ImuBias::new_with(DVVector3::new_with(
-                // -0.0023937642108649015, 0.021298706531524658,  0.077273309230804443
-                //  -0.0025661741383373737, 0.020561076700687408, 0.076775811612606049
-                -0.002536,0.021173,0.077161
-            ), DVVector3::new_with(
-                // 0.021134030073881149, -0.096875123679637909, 0.13393025100231171
-                // -0.008509383536875248, 0.049257952719926834, 0.088884495198726654
-                -0.024193,0.144611,0.067736
-            ));
-            let mut init_pose = Pose::new (
-                Vector3::new (
-                    // 31.795526504516602,
-                    // 9.3692846298217773,
-                    // -23.720619201660156
-                    4.8249959945678711, 5.2189044952392578, 0.4842458963394165
-                ),
-                Matrix3::new (
-                    // 0.045980334281921387,    0.99244165420532227,    0.11377885192632675,
-                    // 0.34533321857452393,   -0.12266898155212402,    0.93042874336242676,
-                    // 0.93735325336456299, -0.0034899467136710882,   -0.34836351871490479,
-                    0.010028146207332611, 0.99989396333694458, 0.010568329133093357,
-                    0.33784052729606628, -0.013335276395082474, 0.94110912084579468,
-                    0.94115006923675537, -0.0058671683073043823, -0.3379383385181427
-                )//.transpose() // could need to be transposed
-            );
-            let init_velocity = DVVector3::new_with(
-                // 0.50395935773849487,   0.39655265212059021, -0.038063980638980865,
-                0.47263139486312866, 0.43024358153343201, 0.016524255275726318
-            );
-            self.initialize(timestamp, init_pose, init_velocity, init_bias)?;
-            return Ok(ImuCalib::new ().tcb *init_pose.inverse());
-
-        // Map initialization
-            // let transform = Pose::new_with_quaternion(
-            //     nalgebra::Vector3::<f64>::new(0.0, 0.0, 0.0),
-            //     nalgebra::geometry::UnitQuaternion::<f64>::from_quaternion(
-            //     nalgebra::Quaternion::<f64>::new(
-            //             0.0, 7.07106781e-01, 0.0, 7.07106781e-01
-            //     )
-            //     )
-            // );
-
-            // let init_pose = {
-            //     let p1 = Pose::new(
-            //             // Vector3::new(0.0, 0.0, 0.0),
-            //             *imu_init.pose.get_translation(),
-            //             *imu_init.pose.get_rotation()
-            //     );
-            //     println!("Sofiya, init pose: {:?}", p1);
-
-            //     let p2 = (ImuCalib::new().tbc * imu_init.pose).inverse(); // Tbc * Tcw  = Tbw
-            //     // let init_pose2 = init_pose * transform; // init_pose = r0, transform = r1
-
-            //     println!("Sofiya, init pose after: {:?}", p2);
-            //     p2
-            // };
-
-            // let init_velocity = {
-            //     println!("Sofiya, init velocity: {:?}", imu_init.velocity);
-            //     // let init_velocity2: DVVector3<f64> = (*transform.get_rotation() * (*imu_init.velocity)).into();
-            //     let v: DVVector3<f64> = ((*imu_init.velocity).transpose() * *transform.get_rotation()).transpose().into();
-            //     // let v = imu_init.velocity;
-            //     println!("Sofiya, init velocity after: {:?}", v);
-            //     v
-            // };
-
-            // let init_bias = {
-            //     println!("Sofiya, init bias: {:?} {:?}", imu_init.acc_bias, imu_init.gyro_bias);
-
-            //     let g = DVVector3::new_with(
-            //         imu_init.gyro_bias[0],
-            //         imu_init.gyro_bias[1],
-            //         imu_init.gyro_bias[2]
-            //     );//.transpose() * *transform.get_rotation();
-            //     let a = DVVector3::new_with(
-            //         imu_init.acc_bias[0],
-            //         imu_init.acc_bias[1],
-            //         imu_init.acc_bias[2]
-            //     );//.transpose() * *transform.get_rotation();
-            //     println!("Sofiya, init bias after: {:?} {:?}", g, a);
-
-            //     // ImuBias::new_with(DVVector3::new(g.transpose()), DVVector3::new(a.transpose()))
-            //     ImuBias::new_with(DVVector3::new(*g), DVVector3::new(*a))
-            // };
-
-            // self.initialize(timestamp, init_pose, init_velocity, init_bias)?;
-            // return Ok(init_pose);
-
-
-    }
-
-    fn initialize(&mut self, timestamp: f64, init_pose: Pose, init_vel: DVVector3<f64>, init_bias: ImuBias) -> Result<(), Box<dyn std::error::Error>> {
         println!("... Initial pose: {:?}", init_pose);
         println!("... Initial pose rotation matrix: {:?}", init_pose.get_rotation());
-        println!("... Initial velocity: {:?}", init_vel);
+        println!("... Initial velocity: {:?}", imu_init.velocity);
         println!("... Initial bias: {:?}", init_bias);
 
+        // Create preintegraiton object and add all priors to graph
+        let prior_state = self.add_initial_state(init_pose, imu_init.velocity, init_bias, true)?;
+        self.create_preintegration(prior_state.bias);
+        self.last_timestamp = timestamp;
+
+        // Add features to graph
+        let (new_factor_feature_ids, new_affected_keys) = self.process_features(&feature_tracks, 0);
+        self.optimize(new_factor_feature_ids, new_affected_keys, vec![]);
+
+        self.solver_state = GraphSolverState::Ok;
+        let (pose, velocity, bias) = self.get_results_from_values(self.ct_state)?;
+
+        return Ok((pose, velocity, bias));
+    }
+
+    fn add_initial_state(&mut self, prior_pose: Pose, init_vel: DVVector3<f64>, init_bias: ImuBias, add_to_all_values: bool) -> Result<GtsamState, Box<dyn std::error::Error>> {
         // Create prior factor and add it to the graph
         let prior_state = {
-            let trans = init_pose.translation;
-            let rot = init_pose.get_quaternion();
+            let trans = prior_pose.translation;
+            let rot = prior_pose.get_quaternion();
             GtsamState {
                 pose: gtsam::geometry::pose3::Pose3::from_parts(
                     gtsam::geometry::point3::Point3::new(trans.x, trans.y, trans.z),
@@ -810,7 +613,6 @@ impl GraphSolver {
 
         // Set initial pose uncertainty: constrain mainly position and global yaw.
         // roll and pitch is observable, therefore low variance.
-
         let mut pose_prior_covariance2 = nalgebra::Matrix3::zeros();
         pose_prior_covariance2[(0, 0)] = self.initial_roll_pitch_sigma * self.initial_roll_pitch_sigma;
         pose_prior_covariance2[(1, 1)] = self.initial_roll_pitch_sigma * self.initial_roll_pitch_sigma;
@@ -819,7 +621,7 @@ impl GraphSolver {
 
         // Rotate initial uncertainty into local frame, where the uncertainty is
         // specified.
-        let b_rot_w = * init_pose.get_rotation();
+        let b_rot_w = * prior_pose.get_rotation();
         pose_prior_covariance2 = b_rot_w * pose_prior_covariance2 * b_rot_w.transpose();
 
         let mut pose_prior_covariance = nalgebra::Matrix6::zeros();
@@ -839,12 +641,10 @@ impl GraphSolver {
         // Add pose prior.
         let pose_noise = gtsam::linear::noise_model::GaussianNoiseModel::from_covariance(pose_prior_covariance);
         self.graph_new.add_prior_factor_pose3(&Symbol::new(b'x', self.ct_state), &prior_state.pose, &pose_noise);
-        self.graph_all.add_prior_factor_pose3(&Symbol::new(b'x', self.ct_state), &prior_state.pose, &pose_noise);
 
         // Add initial velocity priors.
         let v_noise = gtsam::linear::noise_model::IsotropicNoiseModel::from_dim_and_sigma(3, self.initial_velocity_sigma);
         self.graph_new.add_prior_factor_vector3(&Symbol::new(b'v', self.ct_state), &prior_state.velocity, &v_noise);
-        self.graph_all.add_prior_factor_vector3(&Symbol::new(b'v', self.ct_state), &prior_state.velocity, &v_noise);
 
         // Add initial bias priors:
         let b_noise = gtsam::linear::noise_model::DiagonalNoiseModel::from_sigmas(Vector6::new(
@@ -856,39 +656,131 @@ impl GraphSolver {
             self.initial_gyro_bias_sigma,
         ));
         self.graph_new.add_prior_factor_constant_bias_diagonal(&Symbol::new(b'b', self.ct_state), &prior_state.bias, &b_noise);
-        self.graph_all.add_prior_factor_constant_bias_diagonal(&Symbol::new(b'b', self.ct_state), &prior_state.bias, &b_noise);
 
         // Add initial state to the graph
         self.values_new.insert_pose3(&Symbol::new(b'x', self.ct_state), &prior_state.pose);
         self.values_new.insert_vector3(&Symbol::new(b'v', self.ct_state), &prior_state.velocity);
         self.values_new.insert_constant_bias(&Symbol::new(b'b', self.ct_state), &prior_state.bias);
-        self.values_all.insert_pose3(&Symbol::new(b'x', self.ct_state), &prior_state.pose);
-        self.values_all.insert_vector3(&Symbol::new(b'v', self.ct_state), &prior_state.velocity);
-        self.values_all.insert_constant_bias(&Symbol::new(b'b', self.ct_state), &prior_state.bias);
+        if add_to_all_values {
+            self.values_all.insert_pose3(&Symbol::new(b'x', self.ct_state), &prior_state.pose);
+            self.values_all.insert_vector3(&Symbol::new(b'v', self.ct_state), &prior_state.velocity);
+            self.values_all.insert_constant_bias(&Symbol::new(b'b', self.ct_state), &prior_state.bias);
+        }
 
+        Ok(prior_state)
+    }
 
+    fn create_preintegration(&mut self, prior_bias: gtsam::imu::imu_bias::ConstantBias) {
         // Create GTSAM preintegration parameters for use with Foster's version
         // let mut params = PreintegrationCombinedParams::new(-9.81, 0.0, 0.0);
         let mut params = PreintegrationCombinedParams::new(0.0, 0.0, -9.81);
 
-        params.set_gyroscope_covariance(self.gyro_noise_density * self.gyro_noise_density);
-        params.set_accelerometer_covariance(self.accel_noise_density * self.accel_noise_density);
-        params.set_integration_covariance(self.imu_integration_sigma * self.imu_integration_sigma);
+        params.set_gyroscope_covariance(f64::pow(self.gyro_noise_density * self.sampling_frequency, 2));
+        params.set_accelerometer_covariance(f64::pow(self.accel_noise_density * self.sampling_frequency, 2));
+        params.set_bias_acc_covariance(f64::pow(self.accel_random_walk / self.sampling_frequency, 2));
+        params.set_bias_omega_covariance(f64::pow(self.gyro_random_walk / self.sampling_frequency, 2));
+        // These are not in orbslam but are in kimera:
+        params.set_integration_covariance(f64::pow(self.imu_integration_sigma * self.imu_integration_sigma, 2));
         params.set_bias_acc_omega_int(self.init_bias_sigma);
-        params.set_bias_acc_covariance(self.accel_random_walk * self.accel_random_walk);
-        params.set_bias_omega_covariance(self.gyro_random_walk * self.gyro_random_walk);
 
         // Actually create the GTSAM preintegration
-        self.preint_gtsam = PreintegratedCombinedMeasurements::new(params, &prior_state.bias);
-
-
-        self.last_timestamp = timestamp;
-
-        Ok(())
+        self.preint_gtsam = PreintegratedCombinedMeasurements::new(params, &prior_bias);
     }
 
+    fn solve(&mut self,
+        current_frame : &mut Frame, 
+        imu_measurements : &mut ImuMeasurements, new_tracked_features : &TrackedFeatures,
+        removed_feature_ids: Vec<u64>,
+    ) -> Result<Vec<(u64, Pose, nalgebra::Vector3<f64>, ImuBias)>, Box<dyn std::error::Error>> {
+        let _span = tracy_client::span!("solve");
 
-    fn predict_state(&self) -> GtsamState {
+        let timestamp = (current_frame.timestamp * 1e9) as i64; // Convert to int just so we can hash it
+
+        self.preintegrate(imu_measurements, current_frame.timestamp, self.last_timestamp)?;
+        self.create_imu_factor();
+
+        // IMU
+        let new_state = self.imu_predict_state();
+        debug!("IMU POSE ESTIMATE... {}; {:?}; {:?}; {:?}", timestamp, new_state.pose, new_state.velocity, new_state.bias);
+
+        // Move node count forward in time
+        self.ct_state += 1;
+
+        // Add nodes
+        self.values_new.insert_pose3(
+            &Symbol::new(b'x', self.ct_state),
+            &new_state.pose
+        );
+        self.values_new.insert_vector3(
+            &Symbol::new(b'v', self.ct_state),
+            &new_state.velocity
+        );
+        self.values_new.insert_constant_bias(
+            &Symbol::new(b'b', self.ct_state),
+            &new_state.bias
+        );
+        self.values_all.insert_pose3(
+            &Symbol::new(b'x', self.ct_state),
+            &new_state.pose
+        );
+        self.values_all.insert_vector3(
+            &Symbol::new(b'v', self.ct_state),
+            &new_state.velocity
+        );
+        self.values_all.insert_constant_bias(
+            &Symbol::new(b'b', self.ct_state),
+            &new_state.bias
+        );
+
+        // Add features
+        let (new_factor_feature_ids, new_affected_keys) = self.process_features(new_tracked_features, self.ct_state);
+
+        self.optimize(new_factor_feature_ids, new_affected_keys, removed_feature_ids);
+
+        // debug!("OPTIMIZATION COVARIANCE: {:?}", self.isam2.get_marginal_covariance(&Symbol::new(b'x', self.ct_state)));
+
+        let mut optimization_results = vec![];
+        if self.use_isam {
+            // If using isam, we need to edit all the prior keyframes with new optimized values
+            // Note (frames): Result should be Tbw or Twb, not sure which one.
+            self.inserted_kfs.push(self.ct_state);
+
+            for state_key in &self.inserted_kfs {
+                let (pose, velocity, bias) = self.get_results_from_values(*state_key)?;
+
+                if state_key == &self.ct_state {
+                    // Current frame
+                    current_frame.set_imu_pose_velocity(
+                        pose,
+                        velocity
+                    );
+                    current_frame.imu_data.set_new_bias(bias);
+                    debug!("OPTIMIZED POSE ESTIMATE... {}; {:?}; {:?}; {:?}", timestamp, pose, velocity, current_frame.imu_data.imu_bias);
+                } else {
+                    optimization_results.push(
+                        (*state_key, ImuCalib::new().tcb * pose.inverse(), velocity, bias)
+                    );
+                    debug!("OPTIMIZED POSE ESTIMATE... STATE {}; {:?}; {:?}; {:?}", state_key, pose, velocity, current_frame.imu_data.imu_bias);
+                }
+            }
+        } else {
+            // If using LM, only set current frame
+            let (pose, velocity, bias) = self.get_results_from_values(self.ct_state)?;
+            current_frame.set_imu_pose_velocity(
+                pose,
+                velocity
+            );
+            current_frame.imu_data.set_new_bias(bias);
+            debug!("OPTIMIZED POSE ESTIMATE... {}; {:?}; {:?}; {:?}", timestamp, pose, velocity, current_frame.imu_data.imu_bias);
+
+        }
+
+        self.last_timestamp = current_frame.timestamp;
+
+        Ok(optimization_results)
+    }
+
+    fn imu_predict_state(&self) -> GtsamState {
         let _span = tracy_client::span!("get_predicted_state");
         // This function will get the predicted state based on the IMU measurement
 
@@ -910,13 +802,13 @@ impl GraphSolver {
             &state_k.bias
         );
 
-        // Note (frames): state_k1 seems to be Twb or Tbw
-
         let predicted = GtsamState {
             pose: state_k1.get_pose().into(),
             velocity: state_k1.get_velocity().into(),
             bias: state_k.bias
         };
+
+        debug!("IMU COVARIANCE: {:?}", self.preint_gtsam.get_covariance());
 
         return predicted;
     }
@@ -925,6 +817,8 @@ impl GraphSolver {
         // This function will create a discrete IMU factor using the GTSAM preintegrator class
         // This will integrate from the current state time up to the new update time
         let _span = tracy_client::span!("create_imu_factor");
+
+        let mut total_tstep = 0.0;
 
         // for i in 1..imu_measurements.len() {
         //     let tstep = imu_measurements[i].timestamp - imu_measurements[i - 1].timestamp;
@@ -938,10 +832,8 @@ impl GraphSolver {
         //     );
 
         //     self.preint_gtsam.integrate_measurement(&acc.into(), &ang_vel.into(), tstep);
-
+        //     total_tstep += tstep;
         // }
-
-        let mut total_tstep = 0.0;
 
         // From ORBSLAM:
         let mut imu_from_last_frame = VecDeque::with_capacity(imu_measurements.len()); // mvImuFromLastFrame
@@ -982,10 +874,12 @@ impl GraphSolver {
                     (imu_from_last_frame[i + 1].ang_vel - imu_from_last_frame[i].ang_vel) * (tini/tab)
                 ) * 0.5;
                 tstep = imu_from_last_frame[i + 1].timestamp - last_timestamp;
+                // println!("#1, current timestamp: {}, last timestamp: {}", imu_from_last_frame[i + 1].timestamp, last_timestamp);
             } else if i < (n - 1) {
                 acc = (imu_from_last_frame[i].acc + imu_from_last_frame[i + 1].acc) * 0.5;
                 ang_vel = (imu_from_last_frame[i].ang_vel + imu_from_last_frame[i + 1].ang_vel) * 0.5;
                 tstep = imu_from_last_frame[i + 1].timestamp - imu_from_last_frame[i].timestamp;
+                // println!("#2, current timestamp: {}, last timestamp: {}", imu_from_last_frame[i + 1].timestamp, imu_from_last_frame[i].timestamp);
             } else if i > 0 && i == (n - 1) {
                 let tab = imu_from_last_frame[i + 1].timestamp - imu_from_last_frame[i].timestamp;
                 let tend = imu_from_last_frame[i + 1].timestamp - current_timestamp;
@@ -998,25 +892,37 @@ impl GraphSolver {
                     (imu_from_last_frame[i + 1].ang_vel - imu_from_last_frame[i].ang_vel) * (tend/tab)
                 ) * 0.5;
                 tstep = current_timestamp - imu_from_last_frame[i].timestamp;
+                // println!("#3, current timestamp: {}, last timestamp: {}", current_timestamp, imu_from_last_frame[i].timestamp);
             } else if i == 0 && i == (n - 1) {
                 acc = imu_from_last_frame[i].acc;
                 ang_vel = imu_from_last_frame[i].ang_vel;
                 tstep = current_timestamp - last_timestamp;
+                // println!("#4, current timestamp: {}, last timestamp: {}", current_timestamp, last_timestamp);
             }
 
             acc = Vector3::<f64>::new(acc[0], acc[1], acc[2]);
 
+            if tstep == 0.0 {
+                // IMU messages between frames have one overlapping message, so if we have multiple frames
+                // between keyframes then there will be the same message twice in a row. Safe to skip.
+                continue;
+            }
+
             self.preint_gtsam.integrate_measurement(&acc.into(), &ang_vel.into(), tstep);
 
-            println!("Preintegrating {} measurement:  Acc: {} {} {}, Omega: {} {} {}, dt: {}",
-                i,
-                acc.x, acc.y, acc.z, // acc
-                ang_vel.x, ang_vel.y, ang_vel.z, // angVel
-                tstep
-            );
+            // println!("RAW IMU: Acc: {} {} {}, Omega: {} {} {}",
+            //     imu_from_last_frame[i].acc.x, imu_from_last_frame[i].acc.y, imu_from_last_frame[i].acc.z,
+            //     imu_from_last_frame[i].ang_vel.x, imu_from_last_frame[i].ang_vel.y, imu_from_last_frame[i].ang_vel.z,
+            // );
+            // println!("Preintegrating {} measurement:  Acc: {} {} {}, Omega: {} {} {}, dt: {}",
+            //     i,
+            //     acc.x, acc.y, acc.z, // acc
+            //     ang_vel.x, ang_vel.y, ang_vel.z, // angVel
+            //     tstep
+            // );
             total_tstep += tstep;
         }
-        println!("Sofiya, total tstep: {}", total_tstep);
+        // println!("Sofiya, total tstep: {}", total_tstep);
         Ok(())
     }
 
@@ -1031,116 +937,182 @@ impl GraphSolver {
             & self.preint_gtsam
         );
         self.graph_new.add_combined_imu_factor(&imu_factor);
-        self.graph_all.add_combined_imu_factor(&imu_factor);
     }
 
-    fn process_smart_features(&mut self, new_tracked_features: &TrackedFeatures, state_id: u64) {
+    fn process_features(&mut self, new_tracked_features: &TrackedFeatures, state_id: u64) -> (Vec<i32>, Vec<DoubleVec>) {
         let _span = tracy_client::span!("process_smart_features");
 
         let mut id_notset = 0;
         let mut added_new = 0;
         let mut added_old = 0;
 
+        let mut new_factor_feature_ids: Vec<i32> = vec![];
+        let mut new_affected_keys: Vec<DoubleVec> = vec![];
+
+        // println!("NEW TRACKED FEATURES: {:?}", new_tracked_features);
+
         for i in 0..new_tracked_features.len() {
             let feature_id = new_tracked_features.get_feature_id(i as usize);
             if feature_id == -1 {
                 id_notset += 1;
-                println!("Id not set for feature with point {:?}", new_tracked_features.get_point(i as usize));
+                warn!("Id not set for feature with point {:?}", new_tracked_features.get_point(i as usize));
                 continue;
             }
             let point = new_tracked_features.get_point(i as usize);
 
-            // Check to see if it is already in the graph
-            match self.measurement_smart_lookup_left.get_mut(&feature_id) {
-                Some(smartfactor) => {
-                    // Insert measurements to a smart factor
-                    smartfactor.add(
-                        & gtsam::geometry::point2::Point2::new(point.x as f64, point.y as f64),
-                        &Symbol::new(b'x', state_id)
-                    );
-                    added_old += 1;
-                    // println!("Update point {{gtsam::Point2({}, {}), {}}},", point.x as f64, point.y as f64, feature_id);
+            if self.use_smart_factors {
+                // USING SMART FACTORS! 
+                // Check to see if it is already in the graph
+                match self.smartfactors.get_mut(&feature_id) {
+                    Some(smartfactor) => {
+                        // Insert measurements to a smart factor
+                        smartfactor.add(
+                            & gtsam::geometry::point2::Point2::new(point.x as f64, point.y as f64),
+                            &Symbol::new(b'x', state_id)
+                        );
+                        added_old += 1;
 
-                    continue;
-                },
-                None => {
-                    // If we know it is not in the graph
-                    // Create a smart factor for the new feature
-                    let measurement_noise = gtsam::linear::noise_model::IsotropicNoiseModel::from_dim_and_sigma(2, 3.0);
-                    let k = gtsam::geometry::cal3_s2::Cal3S2::new(
-                        SETTINGS.get::<f64>(CAMERA, "fx"),
-                        SETTINGS.get::<f64>(CAMERA, "fy"),
-                        0.0,
-                        SETTINGS.get::<f64>(CAMERA, "cx"),
-                        SETTINGS.get::<f64>(CAMERA, "cy"),
-                    );
+                        if self.use_isam {
+                            // Update new_affected_keys to show that this smart factor was updated
+                            // This is sent to the isam2 update function
+                            let index_in_isam2 = self.smartfactor_idx_in_isam2[&feature_id];
+                            new_affected_keys.push(DoubleVec{
+                                    vec: vec![index_in_isam2 as f64, state_id as f64]
+                            });
+                        }
 
+                        continue;
+                    },
+                    None => {
+                        // If we know it is not in the graph
+                        // Create a smart factor for the new feature
+                        let mut smartfactor_left = gtsam::slam::projection_factor::SmartProjectionPoseFactorCal3S2::new(
+                            &self.vision_measurement_noise,
+                            &self.k,
+                            & self.tbc.into()
+                        );
 
-                    let transform = ImuCalib::new().tcb;
-                    // let transform = Pose::identity();
-                    // let transform = ImuCalib::new().tcb * Pose::new_with_quaternion(
-                    //     nalgebra::Vector3::<f64>::new(0.0, 0.0, 0.0),
-                    //     nalgebra::geometry::UnitQuaternion::<f64>::from_quaternion(
-                    //     nalgebra::Quaternion::<f64>::new
-                    //         (0.0, 7.07106781e-01, 0.0, 7.07106781e-01)
-                    //     )
-                    // );
+                        smartfactor_left.add(
+                            & gtsam::geometry::point2::Point2::new(point.x as f64, point.y as f64),
+                            &Symbol::new(b'x', state_id)
+                        );
 
-                    let mut smartfactor_left = gtsam::slam::projection_factor::SmartProjectionPoseFactorCal3S2::new(
-                        &measurement_noise,
-                        &k,
-                        & transform.into()
-                    );
+                        // Add smart factor
+                        self.graph_new.add_smartfactor(&smartfactor_left);
 
-                    // println!("SOFIYA EXPERIMENTS! NEW POINTS: {:?}, {:?}, {:?}", point.x, point.y, feature_id);
-                    // println!("New point {{gtsam::Point2({}, {}), {}}},", point.x as f64, point.y as f64, feature_id);
+                        // Insert to smartfactor lookup, so we can find this smartfactor in the next frames
+                        self.smartfactors.insert(feature_id, smartfactor_left);
+                        // Keep track of smartfactors in the order we insert them in, we will need this after the update in isam2
+                        new_factor_feature_ids.push(feature_id);
 
-                    // Insert measurements to a smart factor
-                    smartfactor_left.add(
-                        & gtsam::geometry::point2::Point2::new(point.x as f64, point.y as f64),
-                        &Symbol::new(b'x', state_id)
-                    );
-
-                    // Add smart factor to FORSTER2 model
-                    self.graph_new.add_smartfactor(&smartfactor_left);
-                    self.graph_all.add_smartfactor(&smartfactor_left);
-
-                    self.measurement_smart_lookup_left.insert(feature_id, smartfactor_left);
-
-                    added_new += 1;
+                        added_new += 1;
+                    }
                 }
+            } else {
+                // USING GENERIC FACTORS!
+                let factor = gtsam::slam::projection_factor::GenericProjectionFactorPose3Point3Cal3S2::new(
+                    & gtsam::geometry::point2::Point2::new(point.x as f64, point.y as f64),
+                    &self.vision_measurement_noise,
+                    &Symbol::new(b'x', state_id),
+                    &Symbol::new(b'l', feature_id.try_into().unwrap()),
+                    &self.k,
+                    & self.tbc.into()
+                );
+
+                self.graph_new.add_generic_factor(&factor);
+
             }
         }
-        println!("Added new features: {}, added old features: {}, id not set: {}", added_new, added_old, id_notset);
+        debug!("Added new features: {}, updated old features: {}, id not set: {}", added_new, added_old, id_notset);
+
+        return (new_factor_feature_ids, new_affected_keys);
     }
 
-    fn optimize(&mut self) {
+    fn optimize(&mut self, new_factor_feature_ids: Vec<i32>, new_affected_keys: Vec<DoubleVec>, removed_feature_ids: Vec<u64>) -> Vec<gtsam::sys::Point> {
         let _span = tracy_client::span!("optimize");
 
-        // Perform smoothing update
-        self.isam2.update_noresults(& self.graph_new, & self.values_new);
-        self.values_all = self.isam2.calculate_estimate();
+        let points = if self.use_isam {
+            // Removed features... currently not using this
+            let mut removed_feature_ids_idx_in_isam2: Vec<u64> = vec![];
+            for id in &removed_feature_ids {
+                // Remove smartfactor from our list of smartfactors
+                self.smartfactors.remove(&(*id as i32));
+                removed_feature_ids_idx_in_isam2.push(self.smartfactor_idx_in_isam2[&(*id as i32)] as u64);
+            }
 
-        // let params = LevenbergMarquardtParams::default();
-        // let values_result = LevenbergMarquardtOptimizer::new(& self.graph_new, & self.values_new, & params).optimize_safely();
+            // Perform smoothing update
+            let isam2result = self.isam2.update(& self.graph_new, & self.values_new, & new_affected_keys, & vec![]);
+
+            self.values_all = self.isam2.calculate_estimate();
+
+            // ISAM2 returns vector of indexes for each smartfactor within isam2. The vector is 
+            // sorted by order of smartfactor insertion.
+            // Here, link up inserted smartfactor feature ID with isam2 index. We will need these
+            // links later to tell isam2 that a previously inserted smartfactor has an update
+            for i in 0..new_factor_feature_ids.len() {
+                self.smartfactor_idx_in_isam2.insert(new_factor_feature_ids[i], isam2result.new_factor_indices[i]);
+            }
+            // debug!("TEST! After optimize, smartfactor_idx_in_isam2 is: {:?}", self.smartfactor_idx_in_isam2);
+
+            isam2result.points
+        } else {
+            let params = LevenbergMarquardtParams::default();
+            let mut optimizer = LevenbergMarquardtOptimizer::new(& self.graph_new, & self.values_new, & params);
+            let result = optimizer.optimize_safely();
+            self.values_all = result;
+            vec![] // Ignoring mappoints for LM
+        };
 
         // Use the optimized bias to reset integration
-        if self.values_all.exists(&Symbol::new(b'b', self.ct_state + 1)) {
+        if self.values_all.exists(&Symbol::new(b'b', self.ct_state)) {
             self.preint_gtsam.reset_integration_and_set_bias(
                 & self.values_all.get_constantbias(&Symbol::new(b'b', self.ct_state)).unwrap().into()
-                // & self.values_all.get_constantbias(&Symbol::new(b'b', self.ct_state + 1)).unwrap().into()
             );
         } else {
             warn!("Bias wasn't optimized?");
         }
 
-        // Remove the used up factors
+        // Remove the used up factors and nodes
         self.graph_new.resize(0);
-        // self.measurement_smart_lookup_left.clear();
-
-        // Remove the used up nodes
         self.values_new.clear();
+
+        if !self.use_isam {
+            // For Levenberg-Marquardt, re-add prior factors for the current state after each optimization step.
+            let (pose, velocity, bias) = self.get_results_from_values(self.ct_state).unwrap();
+            self.add_initial_state(pose.into(), velocity.into(), bias.into(), false).unwrap();
+        }
+
+        return points;
     }
+
+
+    fn get_results_from_values(&self, state_key: u64) -> Result<(Pose, nalgebra::Vector3<f64>, ImuBias), Box<dyn std::error::Error>> {
+        let pose = {
+            let pose: Isometry3<f64> = self.values_all.get_pose3(&Symbol::new(b'x', state_key)).unwrap().into();
+            Pose::new_from_isometry(pose)
+        };
+        let velocity = {
+            let velocity: gtsam::base::vector::Vector3 = self.values_all.get_vector3(&Symbol::new(b'v', state_key)).unwrap().into();
+            let vel_raw = velocity.get_raw();
+            Vector3::new(vel_raw[0], vel_raw[1], vel_raw[2])
+        };
+        let bias = {
+            let bias_ref = self.values_all.get_constantbias(&Symbol::new(b'b', state_key)).unwrap();
+            let accel_bias = bias_ref.accel_bias().get_raw();
+            let gyro_bias = bias_ref.gyro_bias().get_raw();
+            ImuBias {
+            bax: accel_bias[0],
+            bay: accel_bias[1],
+            baz: accel_bias[2],
+            bwx: gyro_bias[0],
+            bwy: gyro_bias[1],
+            bwz: gyro_bias[2]
+            }
+        };
+
+        Ok((pose, velocity, bias))
+    }
+
 }
 
 

@@ -27,7 +27,6 @@ use crate::{
     Id,
 };
 use crate::modules::module_definitions::{CameraModule, FeatureExtractionModule};
-use crate::modules::module_definitions::ImuModule;
 use super::messages::{InitKeyFrameMsg, KeyFrameIdMsg, NewKeyFrameGTSAMMsg, ShutdownMsg};
 use super::tracking_backend::TrackingState;
 

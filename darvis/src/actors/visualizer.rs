@@ -1,5 +1,5 @@
 use std::{borrow::Cow, collections::{BTreeMap, BTreeSet, HashMap, HashSet}, fs::{self, File}, io::BufWriter, sync::Arc, thread::sleep, time::Duration};
-use log::{debug, warn};
+use log::warn;
 use mcap::{Schema, Channel, records::MessageHeader, Writer};
 use opencv::prelude::{Mat, MatTraitConst, MatTraitConstManual};
 use foxglove::{foxglove::items::{line_primitive, scene_entity_deletion, ArrowPrimitive, Color, FrameTransform, LinePrimitive, MapInfo, Point3, Quaternion, RawImage, SceneEntity, SceneEntityDeletion, SceneUpdate, SpherePrimitive, Vector3}, get_file_descriptor_set_bytes, make_pose};
@@ -371,7 +371,7 @@ impl DarvisVisualizer {
     }
 
     async fn update_draw_map(&mut self, msg: VisTrajectoryMsg) -> Result<(), Box<dyn std::error::Error>> {
-        self.draw_trajectory(msg.pose, msg.timestamp, msg.debug, SETTINGS.get::<bool>(VISUALIZER, "draw_graph")).await?;
+        self.draw_trajectory(msg.pose, msg.timestamp, SETTINGS.get::<bool>(VISUALIZER, "draw_graph")).await?;
 
         self.plot_map_info(&msg.mappoint_matches, msg.timestamp).await?;
 
@@ -446,7 +446,7 @@ impl DarvisVisualizer {
         Ok(())
     }
 
-    async fn draw_trajectory(&mut self, frame_pose: Pose, timestamp: Timestamp, debug: ImuMeasurements, draw_graph: bool) -> Result<(), Box<dyn std::error::Error>> {
+    async fn draw_trajectory(&mut self, frame_pose: Pose, timestamp: Timestamp, draw_graph: bool) -> Result<(), Box<dyn std::error::Error>> {
         self.clear_scene(timestamp, TRAJECTORY_CHANNEL).await.expect("Could not clear scene");
 
         let mut entities_graph = vec![]; // connected keyframes graph
@@ -454,7 +454,7 @@ impl DarvisVisualizer {
         let mut entities_traj = vec![]; // keyframes, frames, and trajectory
         let inverse_frame_pose = frame_pose.inverse();
 
-        println!("Visualizer drawing frame pose {:?}", frame_pose);
+        // println!("Visualizer drawing frame pose {:?}", frame_pose);
 
         // Draw current pose
         // This entity is overwritten at every update, so only one camera is in view at all times
@@ -645,6 +645,51 @@ impl DarvisVisualizer {
             let mp_entity = self.create_scene_entity(
                 timestamp, "world",
                 format!("mp {}", mappoint_id),
+                vec![],
+                vec![],
+                vec![mp_sphere]
+            );
+            entities.push(mp_entity);
+        }
+
+        // Delete mappoints that are no longer in the map but were previously drawn
+        let deleted_mappoints = self.previous_mappoints.difference(&curr_mappoints);
+
+        let deletions: Vec<SceneEntityDeletion> = deleted_mappoints.map(|id|
+            self.create_scene_entity_deletion(timestamp, format!("mp {}", id),
+        )).collect();
+        self.previous_mappoints = curr_mappoints;
+
+        let sceneupdate = SceneUpdate {
+            deletions,
+            entities
+        };
+
+        self.writer.write(MAPPOINTS_CHANNEL, sceneupdate, timestamp, 0).await?;
+
+        Ok(())
+    }
+
+    async fn draw_points(&mut self, points: &Vec<gtsam::sys::Point>, timestamp: Timestamp) -> Result<(), Box<dyn std::error::Error>> {
+        // Like draw_mappoints, but takes in list of gtsam points instead of mappoint ids
+        // Should be overwritten when there is new info for a mappoint
+
+        // I'm turning off the clear scene for now
+        // it seems like it has better performance but it flashes every time it clears the screen which is annoying
+        self.clear_scene(timestamp, MAPPOINTS_CHANNEL).await?;
+
+        let mut entities = Vec::new();
+
+        let mut curr_mappoints = HashSet::new();
+        for point in points {
+            let pose = Pose::new_with_default_rot(DVTranslation::new_with(point.x, point.y, point.z));
+            curr_mappoints.insert(point.id as Id);
+
+            let mp_sphere = self.create_sphere(&pose, MAPPOINT_MATCH_COLOR.clone(), MAPPOINT_SIZE.clone());
+
+            let mp_entity = self.create_scene_entity(
+                timestamp, "world",
+                format!("mp {}", point.id),
                 vec![],
                 vec![],
                 vec![mp_sphere]

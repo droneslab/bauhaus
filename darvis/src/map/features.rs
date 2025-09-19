@@ -20,7 +20,6 @@ use crate::{
 };
 use std::sync::atomic::{AtomicBool, Ordering};
 use atomic_float::AtomicF32;
-use log::debug;
 
 // Equal to:
 //   bool Frame::mbInitialComputations=true;

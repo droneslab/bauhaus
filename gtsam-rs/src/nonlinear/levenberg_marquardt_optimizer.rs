@@ -3,7 +3,7 @@ use cxx::UniquePtr;
 use super::{
     levenberg_marquardt_params::LevenbergMarquardtParams,
     nonlinear_factor_graph::NonlinearFactorGraph,
-    values::{Values, ValuesRef},
+    values::Values,
 };
 
 pub struct LevenbergMarquardtOptimizer {

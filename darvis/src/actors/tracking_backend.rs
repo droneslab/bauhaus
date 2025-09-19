@@ -501,7 +501,6 @@ impl TrackingBackend {
                 mappoints_in_tracking: self.local_mappoints.clone(),
                 timestamp: self.current_frame.timestamp,
                 map_version: self.map.read()?.version,
-                debug: ImuMeasurements::new()
             }));
         }
 

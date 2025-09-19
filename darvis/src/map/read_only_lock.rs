@@ -16,7 +16,7 @@
 // };
 
 use std::{sync::Arc, time::Instant};
-use log::{debug, warn};
+use log::warn;
 use parking_lot::{
     RwLock,
     MappedRwLockReadGuard,

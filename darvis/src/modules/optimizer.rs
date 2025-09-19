@@ -7,7 +7,7 @@ use core::{
 use cxx::UniquePtr;
 use dvos3binding::ffi::SVDComputeType;
 use g2o::ffi::{BridgeSparseOptimizer, VertexPoseRecoverType};
-use log::{debug, error, warn};
+use log::{error, warn};
 use nalgebra::Matrix3;
 use opencv::prelude::KeyPointTraitConst;
 use crate::{

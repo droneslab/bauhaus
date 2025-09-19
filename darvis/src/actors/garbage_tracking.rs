@@ -1,14 +1,11 @@
 extern crate g2o;
-use ahash::HashMap;
-use log::{warn, info, debug};
+use log::warn;
+use opencv::imgcodecs;
 use std::{collections::{BTreeSet}};
-use std::{sync::atomic::Ordering, thread::sleep, time::Duration};
-use opencv::{core::{Point, Point2f, Scalar, CV_8U}, imgproc::circle, prelude::*, types::{VectorOfPoint2f, VectorOfu8}};
-use core::{
-    config::*, matrix::*, system::{Actor, MessageBox, System, Timestamp}
-};
+use std::{thread::sleep, time::Duration};
+use core::{matrix::*, system::{Actor, MessageBox, System}};
 use crate::{
-    actors::{local_mapping::LOCAL_MAPPING_IDLE, messages::{FeatureTracksAndIMUMsg, ImageMsg, ImagePathMsg, InitKeyFrameMsg, ShutdownMsg, TrajectoryMsg, VisFeaturesMsg, VisTrajectoryMsg}}, map::{frame::Frame, pose::Pose, read_only_lock::ReadWriteMap}, modules::{image, imu::{ImuCalib, ImuMeasurements, IMU}, map_initialization::MapInitialization, module_definitions::{FeatureExtractionModule, MapInitializationModule}}, registered_actors::{new_feature_extraction_module, CAMERA_MODULE, LOCAL_MAPPING, SHUTDOWN_ACTOR, TRACKING_BACKEND, TRACKING_FRONTEND, VISUALIZER}
+    actors::{messages::{ImageMsg, ImagePathMsg, ShutdownMsg, VisFeaturesMsg, VisTrajectoryMsg}}, map::{frame::Frame, pose::Pose, read_only_lock::ReadWriteMap}, modules::image, registered_actors::VISUALIZER
 };
 
 
@@ -46,7 +43,7 @@ impl GarbageTracking {
         if message.is::<ImagePathMsg>() || message.is::<ImageMsg>() {
             let (image, timestamp, mut imu_measurements, imu_initialization) = if message.is::<ImagePathMsg>() {
                 let msg = message.downcast::<ImagePathMsg>().unwrap_or_else(|_| panic!("Could not downcast tracking message!"));
-                (image::read_image_file(&msg.image_path), msg.timestamp, msg.imu_measurements, msg.imu_initialization)
+                (image::read_image_file(&msg.image_path, imgcodecs::IMREAD_GRAYSCALE), msg.timestamp, msg.imu_measurements, msg.imu_initialization)
             } else {
                 let msg = message.downcast::<ImageMsg>().unwrap_or_else(|_| panic!("Could not downcast tracking message!"));
                 (msg.image, msg.timestamp, msg.imu_measurements, msg.imu_initialization)
@@ -123,7 +120,6 @@ impl GarbageTracking {
                 mappoint_matches: vec![],
                 mappoints_in_tracking: BTreeSet::new(),
                 timestamp: timestamp,
-                debug: imu_measurements.clone(),
                 map_version: 1
             }));
 

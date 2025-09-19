@@ -1,6 +1,6 @@
 extern crate g2o;
 use log::{info, warn};
-use opencv::prelude::*;
+use opencv::{imgcodecs, prelude::*};
 
 use core::{
     config::*, matrix::*, sensor::{FrameSensor, Sensor}, system::{Actor, MessageBox, Timestamp}
@@ -76,7 +76,7 @@ impl TrackingFrontEnd {
 
             let msg = message.downcast::<ImagePathMsg>().unwrap_or_else(|_| panic!("Could not downcast tracking frontend message!"));
 
-            let image = image::read_image_file(&msg.image_path);
+            let image = image::read_image_file(&msg.image_path, imgcodecs::IMREAD_GRAYSCALE);
             let image_cols = image.cols() as u32;
             let image_rows = image.rows() as u32;
 

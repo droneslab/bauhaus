@@ -85,7 +85,8 @@ impl PreintegratedCombinedMeasurements {
     pub fn reset_integration_and_set_bias(
         &mut self,
         bias : &ConstantBias, ){
-        ::sys::reset_integration_and_set_bias(self.inner.pin_mut(), &bias.inner)}
+        ::sys::reset_integration_and_set_bias(self.inner.pin_mut(), &bias.inner)
+    }
 
     pub fn create_fake_copy_of_preintegrated_measurements(&self) -> FakePreintegratedCombinedMeasurements
     {

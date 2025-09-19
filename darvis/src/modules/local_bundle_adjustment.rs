@@ -2,7 +2,7 @@ use core::{config::{SETTINGS, SYSTEM}, sensor::{FrameSensor, Sensor}};
 use std::{cmp::min, collections::{HashMap, HashSet, VecDeque}};
 
 use g2o::ffi::VertexPoseRecoverType;
-use log::{debug, info, warn};
+use log::{info, warn};
 use nalgebra::Matrix3;
 use opencv::core::KeyPointTraitConst;
 

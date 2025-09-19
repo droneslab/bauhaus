@@ -178,7 +178,6 @@ pub trait MapInitializationModule {
     type InitializationResult;
 
     fn try_initialize(&mut self, current_frame: &Self::Frame, imu_preintegrated_from_last_kf: &mut ImuPreIntegrated) -> Result<bool, Box<dyn std::error::Error>>;
-    fn create_initial_map(&mut self, map: &mut Self::Map, imu_preintegrated_from_last_kf: &mut ImuPreIntegrated) -> Self::InitializationResult ;
 }
 
 /// *** Map initialization *** //

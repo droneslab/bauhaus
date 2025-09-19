@@ -35,6 +35,7 @@ impl ActorMessage for ImagePathMsg {
 }
 pub struct ImageMsg{ 
     pub image: Mat, 
+    pub color_image: Option<Mat>,
     pub imu_measurements: ImuMeasurements,
     pub imu_initialization: Option<ImuInitializationData>,
     pub timestamp: Timestamp, 
@@ -50,6 +51,8 @@ pub struct FeatureTracksAndIMUMsg {
     pub imu_measurements: ImuMeasurements,
     pub imu_initialization: Option<ImuInitializationData>,
     pub feature_tracks: TrackedFeatures,
+    // pub last_features: TrackedFeatures,
+    pub removed_feature_ids: Vec<u64>,
 }
 impl ActorMessage for FeatureTracksAndIMUMsg {
     fn get_map_version(&self) -> u64 {
@@ -238,7 +241,6 @@ pub struct VisTrajectoryMsg {
     pub mappoint_matches: Vec<Option<(i32, bool)>>,
     pub mappoints_in_tracking: BTreeSet<Id>,
     pub timestamp: Timestamp,
-    pub debug: ImuMeasurements,
     pub map_version: u64
 }
 impl ActorMessage for VisTrajectoryMsg {

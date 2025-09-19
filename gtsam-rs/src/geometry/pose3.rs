@@ -1,5 +1,5 @@
 use cxx::UniquePtr;
-use nalgebra::{Isometry3, Translation, UnitQuaternion, Vector3};
+use nalgebra::{Isometry3, UnitQuaternion, Vector3};
 use std::fmt::{Debug, Formatter, Result};
 
 use super::{

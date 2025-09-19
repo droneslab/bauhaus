@@ -1,9 +1,9 @@
-use std::{collections::{BTreeMap, VecDeque}, env, fs::{File, OpenOptions}, io::{self, BufRead}, path::Path, sync::atomic::AtomicBool, thread::{self, sleep}, time::Duration};
+use std::{collections::{BTreeMap, VecDeque}, env, fs::File, io::{self, BufRead}, sync::atomic::AtomicBool, thread::{self, sleep}, time::Duration};
 use fern::colors::{ColoredLevelConfig, Color};
 use glob::glob;
 use log::{debug, info, warn};
 use modules::imu::{ImuMeasurements, ImuPoint};
-use opencv::core::Point3f;
+use opencv::{core::Point3f, imgcodecs};
 use registered_actors::CAMERA;
 use spin_sleep::LoopHelper;
 #[macro_use] extern crate lazy_static;
@@ -107,18 +107,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if *shutdown_flag.lock().unwrap() { break; }
         tracy_client::frame_mark();
 
-        let mut image = image::read_image_file(&image_path);
+        let mut image_bw = image::read_image_file(&image_path, imgcodecs::IMREAD_GRAYSCALE);
+        let mut image_color = image::read_image_file(&image_path, imgcodecs::IMREAD_COLOR);
         if SETTINGS.get::<bool>(CAMERA, "need_to_resize") {
             let new_height = SETTINGS.get::<i32>(CAMERA, "height");
             let new_width = SETTINGS.get::<i32>(CAMERA, "width");
-            image = image::resize_image(&image, new_width, new_height).expect("Could not resize image!");
+            image_bw = image::resize_image(&image_bw, new_width, new_height).expect("Could not resize image!");
+            image_color = image::resize_image(&image_color, new_width, new_height).expect("Could not resize image!");
         }
 
-        println!("Reading image {}", image_path);
+        // println!("Reading image {}", image_path);
 
         first_actor_tx.send(Box::new(
             ImageMsg{
-                image,
+                image: image_bw,
+                color_image: Some(image_color),
                 timestamp,
                 imu_measurements,
                 imu_initialization,
@@ -335,9 +338,12 @@ impl LoopManager {
             .map(|x| {
                 let x2 = x.unwrap();
                 let mut x3 = x2.split(",");
-                let timestamp = x3.next().unwrap().parse::<f64>().unwrap() * 1e-9;
+                let timestamp_before_convert = x3.next().unwrap().parse::<f64>().unwrap();
+                let timestamp = timestamp_before_convert * 1e-9;
                 let filename = x3.next().unwrap().to_string();
                 let filepath = format!("{}/{}", image_dir, filename);
+
+                // println!("READ TIMESTAMPS FILE, {} {}", timestamp, timestamp_before_convert);
                 (timestamp, filepath)
             })
             .collect::<Vec<(f64, String)>>();
@@ -385,6 +391,7 @@ impl Iterator for LoopManager {
 
         let timestamp = self.timestamps[self.current_index as usize];
         let image = self.image_paths[self.current_index as usize].clone();
+        // debug!("TIMESTAMP IS {}", timestamp);
 
         let mut imu_measurements = VecDeque::new();
         let mut imu_initialization = None;
@@ -406,7 +413,7 @@ impl Iterator for LoopManager {
                 });
                 imu.first_imu_idx += 1;
             }
-            // imu.first_imu_idx -= 1;
+            imu.first_imu_idx -= 1;
 
             // Kimera imu initialization values
             let timestamp_convert = (timestamp * 1e9) as i64;
@@ -423,6 +430,15 @@ impl Iterator for LoopManager {
         // Start next loop
         self.loop_helper.loop_start(); 
         self.current_index = self.current_index + 1;
+
+        // for i in 0..imu_measurements.len() {
+        //     let meas = imu_measurements[i].clone();
+        //     debug!("Iterator, timestamp {} measurements are: Acc: {} {} {}, Omega: {} {} {}",
+        //         i,
+        //         meas.acc.x, meas.acc.y, meas.acc.z, // acc
+        //         meas.ang_vel.x, meas.ang_vel.y, meas.ang_vel.z, // angVel
+        //     );
+        // }
 
         Some((image, imu_measurements, imu_initialization.cloned(), timestamp, self.current_index))
     }

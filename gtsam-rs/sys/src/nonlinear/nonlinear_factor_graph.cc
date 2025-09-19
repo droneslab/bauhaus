@@ -53,4 +53,11 @@ void nonlinear_factor_graph_add_smart_projection_pose_factor(
     return graph.add(to_boost_ptr(factor));
 }
 
+void nonlinear_factor_graph_add_generic_projection_pose_factor(
+    NonlinearFactorGraph &graph,
+    const std::shared_ptr<gtsam::GenericProjectionFactor<Pose3, Point3, Cal3_S2>> &factor)
+{
+    return graph.add(to_boost_ptr(factor));
+}
+
 } // namespace gtsam

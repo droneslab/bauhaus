@@ -4,7 +4,7 @@ use std::f64::INFINITY;
 use core::config::SETTINGS;
 use core::matrix::{DVVector3, DVVectorOfPoint2f};
 use core::sensor::{Sensor, FrameSensor};
-use log::{debug, error, warn};
+use log::error;
 use opencv::core::KeyPoint;
 use opencv::prelude::*;
 use crate::actors::tracking_backend::TrackedMapPointData;

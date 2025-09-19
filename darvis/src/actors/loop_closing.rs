@@ -257,8 +257,6 @@ impl LoopClosing {
 
             // Start Loop Fusion
             // Update matched map points and replace if duplicated
-            let mut num_replaced = 0;
-            let mut num_added = 0;
             for i in 0..current_matched_points.len() {
                 if let Some(loop_mp_id) = current_matched_points[i] {
                     let curr_kf = lock.get_keyframe(current_kf_id);
@@ -266,9 +264,7 @@ impl LoopClosing {
                         None => {
                             if let Some((curr_mp_id, _is_outlier)) = curr_kf.get_mp_match(&(i as u32)) {
                                 lock.replace_mappoint(curr_mp_id, loop_mp_id);
-                                num_replaced += 1;
                             } else {
-                                num_added += 1;
                                 lock.add_observation(current_kf_id, loop_mp_id, i as u32, false);
                                 let best_descriptor = lock.mappoints.get(&loop_mp_id)
                                     .and_then(|mp| mp.compute_distinctive_descriptors(&lock)).unwrap();
@@ -373,13 +369,11 @@ impl LoopClosing {
             let replace_points = FEATURE_MATCHING_MODULE.fuse_from_loop_closing(
                 &kf_id, &g2o_scw, &loop_mappoints, &self.map, 4
             )?;
-            let mut num_fused = 0;
 
             for i in 0..replace_points.len() {
                 if let Some(mp_to_replace) = replace_points[i] {
                     let replace_with = loop_mappoints[i];
                     self.map.write()?.replace_mappoint(mp_to_replace, replace_with);
-                    num_fused += 1;
                 }
             }
         }

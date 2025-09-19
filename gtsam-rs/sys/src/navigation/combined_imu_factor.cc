@@ -128,8 +128,8 @@ namespace gtsam
         const NavState &state_i, const imuBias::ConstantBias & bias_i)
     {
         NavState state = preintegrated_measurements.predict(state_i, bias_i);
-        std::cout << "C++ imu predicted state: " << state.matrix() << std::endl;
-        std::cout << "C++ predicted velocity: " << state.velocity().transpose() << std::endl;
+        // std::cout << "C++ imu predicted state: " << state.matrix() << std::endl;
+        // std::cout << "C++ predicted velocity: " << state.velocity().transpose() << std::endl;
         return std::make_unique<NavState>(state);
     }
 
@@ -137,7 +137,7 @@ namespace gtsam
         PreintegratedCombinedMeasurements &preintegrated_measurements,
         const imuBias::ConstantBias &bias)
     {
-        std::cout << "C++ reset integration and set bias: " << bias << std::endl;
+        // std::cout << "C++ reset integration and set bias: " << bias << std::endl;
         preintegrated_measurements.resetIntegrationAndSetBias(bias);
     }
 
