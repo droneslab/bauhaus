@@ -17,6 +17,8 @@ namespace gtsam
         parameters.relinearizeSkip = relinearizeSkip;
         parameters.cacheLinearizedFactors = cacheLinearizedFactors;
         parameters.enableDetailedResults = enableDetailedResults;
+        parameters.optimizationParams = ISAM2GaussNewtonParams();
+        parameters.findUnusedFactorSlots = true;
         parameters.print();
         ISAM2 * isam2 = new ISAM2(parameters);
 

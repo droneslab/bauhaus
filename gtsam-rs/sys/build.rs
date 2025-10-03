@@ -68,6 +68,7 @@ impl Default for Repository {
 
     #[cfg(not(feature = "download"))]
     fn default() -> Self {
+        // gtsam
         let src_dir = format!("{}/3rd/gtsam", env!("CARGO_MANIFEST_DIR"));
         let dst_dir = get_out_dir();
 
@@ -81,6 +82,7 @@ impl Default for Repository {
         if !path.exists() {
             ::fs_extra::dir::copy(src_dir, dst_dir, &options).expect("failed to copy source files");
         }
+
         Self { path }
     }
 }
@@ -162,7 +164,7 @@ impl Repository {
 
         // Configure Sub-packages
         builder
-            .define("GTSAM_BUILD_UNSTABLE", false.to_bool())
+            .define("GTSAM_BUILD_UNSTABLE", true.to_bool())
             .define("GTSAM_USE_SYSTEM_EIGEN", USE_SYSTEM_EIGEN.to_bool());
             // .define("GTSAM_USE_SYSTEM_METIS", USE_SYSTEM_METIS.to_bool());
 
@@ -187,6 +189,7 @@ impl Library {
         "boost_serialization",
         "boost_timer",
         "gtsam",
+        "gtsam_unstable"
     ];
     const EXTERNAL_DYNAMIC_LIBS: &'static [&'static str] = &[
         #[cfg(feature = "link-metis")]

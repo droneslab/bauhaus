@@ -34,6 +34,39 @@ impl SmartProjectionPoseFactorCal3S2 {
     }
 }
 
+// pub struct SmartProjectionFactorCal3S2 {
+//     pub(crate) inner: SharedPtr<::sys::SmartProjectionFactorCal3S2>,
+// }
+
+// impl SmartProjectionFactorCal3S2 {
+//     pub fn new(
+//         measurement_noise: &IsotropicNoiseModel,
+//         k: &Cal3S2,
+//         sensor_p_body: &Pose3,
+//     ) -> Self {
+//         Self {
+//             inner: ::sys::new_smart_projection_pose_factor(
+//                 &measurement_noise.inner,
+//                 &k.inner,
+//                 &sensor_p_body.inner,
+//             ),
+//         }
+//     }
+
+//     pub fn add(
+//         self: &mut Self,
+//         point: &Point2,
+//         key: impl IntoKey
+//     ) {
+//         ::sys::add(
+//             &mut self.inner,
+//             &point.inner,
+//             key.into_key(),
+//         )
+//     }
+// }
+
+
 
 pub struct GenericProjectionFactorPose3Point3Cal3S2 {
     pub(crate) inner: SharedPtr<::sys::GenericProjectionFactorPose3Point3Cal3_S2>,

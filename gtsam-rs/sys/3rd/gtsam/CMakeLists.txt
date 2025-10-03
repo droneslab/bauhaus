@@ -86,9 +86,9 @@ add_subdirectory(examples)
 add_subdirectory(timing)
 
 # Build gtsam_unstable
-if (GTSAM_BUILD_UNSTABLE)
+#if (GTSAM_BUILD_UNSTABLE)
     add_subdirectory(gtsam_unstable)
-endif()
+#endif()
 
 # This is the new wrapper
 if(GTSAM_BUILD_PYTHON OR GTSAM_INSTALL_MATLAB_TOOLBOX)

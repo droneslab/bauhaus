@@ -13,11 +13,11 @@ system:
       first_actor_name: TRACKING_FRONTEND # Name of actor to kick off pipeline
 
       # FPS
-      fps: 5.0
+      fps: 10.0
 
       # KIMERA
       # 1100, 482
-      initial_k: 50 # Start processing dataset from frame initial_k. Useful to skip a bunch of images at the beginning (imu calibration).
+      initial_k: 100 # Start processing dataset from frame initial_k. Useful to skip a bunch of images at the beginning (imu calibration).
       final_k: 0 # Finish processing dataset at frame final_k. Last frame to process (to avoid processing the entire dataset), skip last frames. If set to 0 will process everything. 
 
       # RESULTS
@@ -159,20 +159,76 @@ actors:
        tag: "gtsam tracking frontend"
        receiver_bound: 10
        settings:
-          - name: mask_thresh
-            value: 0.5
+        # Good features to track parameters
+          - 
+            name: gftt_k
+            value: 0.04
             type: f64
           - 
-            name: max_features # max feature number in feature tracking
-            value: 200
+            name: gftt_block_size
+            value: 3
+            type: i32
+          - 
+            name: gftt_quality_level
+            value: 0.001
+            type: f64
+          - 
+            name: gftt_max_features # max feature number in feature tracking
+            value: 400
             type: i32
           -
-            name: min_distance # min distance between two features 
-            value: 7.0
+            name: gftt_use_harris_corner_detector
+            value: false
+            type: bool
+          -
+            name: gftt_min_distance_btw_tracked_and_detected_features
+            value: 10
+            type: i32
+
+        # Optical flow parameters
+          - 
+            name: opticalflow_winsize
+            value: 24
+            type: i32
+          - 
+            name: opticalflow_maxlevel
+            value: 4
+            type: i32
+          - 
+            name: opticalflow_maxiter
+            value: 30
+            type: i32
+          - 
+            name: opticalflow_epsilon
+            value: 0.1
             type: f64
           - 
+            name: opticalflow_termcriteriatype
+            value: 3 # COUNT (1), EPS (2), or COUNT + EPS (3)
+            type: i32
+          - 
+            name: opticalflow_maxfeatureage
+            value: 24
+            type: i32
+
+          # Non-max suppression parameters
+          -
+            name: nonmaxsuppression__max_nr_keypoints_before_anms
+            value: 2000
+            type: i32
+          -
+            name: nonmaxsuppression__nr_horizontal_bins
+            value: 7
+            type: i32
+          -
+            name: nonmaxsuppression__nr_vertical_bins
+            value: 5
+            type: i32
+
+        # Need new KF decision
+          - 
             name: min_num_features
-            value: 100
+            value: 200
             type: i32
           - 
             name: min_frames_to_insert_kf
@@ -183,21 +239,50 @@ actors:
             value: 10
             type: i32
 
+        # Subpixel corner refinement for the monocular case
+          -
+            name: subpix_max_iters
+            value: 40
+            type: i32
+          -
+            name: subpix_epsilon_error
+            value: 0.001
+            type: f64
+          -
+            name: subpix_window_size
+            value: 10
+            type: i32
+          -
+            name: subpix_zero_zone
+            value: -1
+            type: i32
+          -
+            name: subpix_termcriteriatype
+            value: 3
+            type: i32
+
+
+
+
       -
        name: TRACKING_BACKEND
        tag: "gtsam tracking backend"
        receiver_bound: 10
        settings:
           - 
-            name: use_isam
+            name: use_smart_factors # If false, will use genericfactors
             value: true
             type: bool
+          - 
+            name: optimizer_type # 0: ISAM2, 1: IncrementalFixedLagSmoother, 2: LevenbergMarquardt
+            value: 0
+            type: i32
           -
             name: isam_update_interval
             value: 0
             type: i32
           - name: isam_relinearize_threshold
-            value: 0.1
+            value: 0.01
             type: f64
           - name: isam_relinearize_skip
             value: 1
@@ -206,10 +291,6 @@ actors:
             value: true
             type: bool
           - name: isam_enable_detailed_results
-            value: true
-            type: bool
-          - 
-            name: use_smart_factors
             value: true
             type: bool
 

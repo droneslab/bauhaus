@@ -25,6 +25,8 @@
 
 namespace gtsam {
 
+extern int foobar;
+
 /**
  * This is a base class for the various HMF2 implementations. The HMF2 eliminates the factor graph
  * such that the active states are placed in/near the root. This base class implements a function
@@ -39,20 +41,17 @@ public:
 
   /** default constructor */
   IncrementalFixedLagSmoother(double smootherLag = 0.0,
-      const ISAM2Params& parameters = DefaultISAM2Params()) :
-      FixedLagSmoother(smootherLag), isam_(parameters) {
-  }
+      const ISAM2Params& parameters = DefaultISAM2Params());
 
   /** destructor */
-  ~IncrementalFixedLagSmoother() override {
-  }
+  ~IncrementalFixedLagSmoother();
 
   /** Print the factor for debugging and testing (implementing Testable) */
   void print(const std::string& s = "IncrementalFixedLagSmoother:\n",
-      const KeyFormatter& keyFormatter = DefaultKeyFormatter) const override;
+      const KeyFormatter& keyFormatter = DefaultKeyFormatter) const;
 
   /** Check if two IncrementalFixedLagSmoother Objects are equal */
-  bool equals(const FixedLagSmoother& rhs, double tol = 1e-9) const override;
+  bool equals(const FixedLagSmoother& rhs, double tol = 1e-9) const;
 
   /**
    * Add new factors, updating the solution and re-linearizing as needed.

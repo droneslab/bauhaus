@@ -38,25 +38,25 @@ public:
     FixedLagSmoother(smootherLag), parameters_(parameters), enforceConsistency_(enforceConsistency) { };
 
   /** destructor */
-  ~BatchFixedLagSmoother() override { };
+  ~BatchFixedLagSmoother() { };
 
   /** Print the factor for debugging and testing (implementing Testable) */
-  void print(const std::string& s = "BatchFixedLagSmoother:\n", const KeyFormatter& keyFormatter = DefaultKeyFormatter) const override;
+  void print(const std::string& s = "BatchFixedLagSmoother:\n", const KeyFormatter& keyFormatter = DefaultKeyFormatter) const;
 
   /** Check if two IncrementalFixedLagSmoother Objects are equal */
-  bool equals(const FixedLagSmoother& rhs, double tol = 1e-9) const override;
+  bool equals(const FixedLagSmoother& rhs, double tol = 1e-9) const;
 
   /** Add new factors, updating the solution and relinearizing as needed. */
   Result update(const NonlinearFactorGraph& newFactors = NonlinearFactorGraph(),
                 const Values& newTheta = Values(),
                 const KeyTimestampMap& timestamps = KeyTimestampMap(),
-                const FactorIndices& factorsToRemove = FactorIndices()) override;
+                const FactorIndices& factorsToRemove = FactorIndices());
 
   /** Compute an estimate from the incomplete linear delta computed during the last update.
    * This delta is incomplete because it was not updated below wildfire_threshold.  If only
    * a single variable is needed, it is faster to call calculateEstimate(const KEY&).
    */
-  Values calculateEstimate() const override {
+  Values calculateEstimate() const {
     return theta_.retract(delta_);
   }
 

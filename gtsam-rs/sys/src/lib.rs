@@ -260,7 +260,6 @@ pub mod ffi {
             relinearize_skip: i32,
             cache_linearized_factors: bool,
             enable_detailed_results: bool,
-
         ) -> UniquePtr<ISAM2>;
 
         fn update(
@@ -279,24 +278,32 @@ pub mod ffi {
         ) -> Vec<DoubleVec>;
     }
 
-    // unsafe extern "C++" {
-    //     include!("nonlinear/incremental_fixed_lag_smoother.h");
+    unsafe extern "C++" {
+        include!("nonlinear/incremental_fixed_lag_smoother.h");
 
-    //     type IncrementalFixedLagSmoother;
+        fn get_foobar();
 
-    //     fn default_incremental_fixed_lag_smoother(
-    //         smoother_lag: f64,
-    //     ) -> UniquePtr<IncrementalFixedLagSmoother>;
+        type IncrementalFixedLagSmoother;
 
-    //     // fn update(
-    //     //     isam2: Pin<&mut ISAM2>,
-    //     //     graph: &NonlinearFactorGraph,
-    //     //     initial_values: &Values,
-    //     //     new_affected_keys: & Vec<DoubleVec>,
-    //     //     keys_to_remove: & Vec<u64>,
-    //     // ) -> ISAM2ResultRust;
+        fn new_incremental_fixed_lag_smoother(
+            smoother_lag: f64,
+            relinearize_threshold: f64,
+            relinearize_skip: i32,
+            cache_linearized_factors: bool,
+            enable_detailed_results: bool,
+        ) -> UniquePtr<IncrementalFixedLagSmoother>;
 
-    // }
+        // Same as update()... for some reason rust won't let me name it update since isam2
+        // already defines update
+        fn update_smoother(
+            smoother: Pin<&mut IncrementalFixedLagSmoother>,
+            graph: &NonlinearFactorGraph,
+            initial_values: &Values,
+            // new_affected_keys: & Vec<DoubleVec>,
+            // keys_to_remove: & Vec<u64>,
+        ) -> ISAM2ResultRust;
+
+    }
 
     unsafe extern "C++" {
         include!("nonlinear/nonlinear_factor_graph.h");
