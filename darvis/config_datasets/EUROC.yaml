@@ -20,8 +20,9 @@ RGB: 1
 # Camera resolution
 width: 752
 height: 480
-new_width: 600
-new_height: 350
+# NOTE: Turn these on for orbslam pipeline to get the same results as orbslam
+# new_width: 600
+# new_height: 350
 stereo_overlapping_begin: 0
 stereo_overlapping_end: 1000
 

@@ -1,20 +1,39 @@
-use core::{config::{SETTINGS, SYSTEM}, sensor::{FrameSensor, Sensor}};
-use std::{cmp::min, collections::{HashMap, HashSet, VecDeque}};
+use core::{
+    config::{SETTINGS, SYSTEM},
+    sensor::{FrameSensor, Sensor},
+};
+use std::{
+    cmp::min,
+    collections::{HashMap, HashSet, VecDeque},
+};
 
 use g2o::ffi::VertexPoseRecoverType;
 use log::{info, warn};
 use nalgebra::Matrix3;
 use opencv::core::KeyPointTraitConst;
 
-use crate::{actors::loop_closing::GBA_KILL_SWITCH, map::{map::Id, pose::{DVTranslation, Pose}, read_only_lock::ReadWriteMap}, modules::optimizer::INV_LEVEL_SIGMA2, registered_actors::{CAMERA, CAMERA_MODULE}};
+use crate::{
+    actors::loop_closing::GBA_KILL_SWITCH,
+    map::{
+        map::Id,
+        pose::{DVTranslation, Pose},
+        read_only_lock::ReadWriteMap,
+    },
+    modules::optimizer::INV_LEVEL_SIGMA2,
+    registered_actors::{CAMERA, CAMERA_MODULE},
+};
 
-use super::{imu::{ImuBias, ImuPreIntegrated}, module_definitions::LocalMapOptimizationModule};
+use super::{
+    imu::{ImuBias, ImuPreIntegrated},
+    module_definitions::LocalMapOptimizationModule,
+};
 
-pub struct LocalBundleAdjustment { }
+pub struct LocalBundleAdjustment {}
 impl LocalMapOptimizationModule for LocalBundleAdjustment {
-
     fn optimize(
-        &self, map: &ReadWriteMap, keyframe_id: Id
+        &self,
+        map: &ReadWriteMap,
+        keyframe_id: Id,
     ) -> Result<(), Box<dyn std::error::Error>> {
         // void Optimizer::LocalBundleAdjustment(KeyFrame *pKF, bool* pbStopFlag, Map* pMap, int& num_fixedKF, int& num_OptKF, int& num_MPs, int& num_edges)
 
@@ -22,11 +41,11 @@ impl LocalMapOptimizationModule for LocalBundleAdjustment {
 
         // Setup optimizer
         let sensor: Sensor = SETTINGS.get(SYSTEM, "sensor");
-        let fx= SETTINGS.get::<f64>(CAMERA, "fx");
-        let fy= SETTINGS.get::<f64>(CAMERA, "fy");
-        let cx= SETTINGS.get::<f64>(CAMERA, "cx");
-        let cy= SETTINGS.get::<f64>(CAMERA, "cy");
-        let camera_param = [fx, fy, cx,cy];
+        let fx = SETTINGS.get::<f64>(CAMERA, "fx");
+        let fy = SETTINGS.get::<f64>(CAMERA, "fy");
+        let cx = SETTINGS.get::<f64>(CAMERA, "cx");
+        let cy = SETTINGS.get::<f64>(CAMERA, "cy");
+        let camera_param = [fx, fy, cx, cy];
 
         let mut optimizer = match sensor.is_imu() {
             true => g2o::ffi::new_sparse_optimizer(1, camera_param, 100.0),
@@ -77,10 +96,11 @@ impl LocalMapOptimizationModule for LocalBundleAdjustment {
                     if let Some((mp_id, _)) = mp_match {
                         if let Some(mp) = lock.mappoints.get(&mp_id) {
                             if mp.origin_map_id == current_map_id {
-                                let mappoint_optimized_for_curr_kf = match local_ba_for_mp.get(&mp_id) {
-                                    Some(id) => *id == keyframe_id,
-                                    None => false
-                                };
+                                let mappoint_optimized_for_curr_kf =
+                                    match local_ba_for_mp.get(&mp_id) {
+                                        Some(id) => *id == keyframe_id,
+                                        None => false,
+                                    };
                                 if !mappoint_optimized_for_curr_kf {
                                     local_mappoints.push(*mp_id);
                                     local_ba_for_mp.insert(mp_id, keyframe_id);
@@ -100,7 +120,7 @@ impl LocalMapOptimizationModule for LocalBundleAdjustment {
                     let kf = lock.get_keyframe(*kf_id);
                     let local_ba = match local_ba_for_kf.get(kf_id) {
                         Some(local_ba) => *local_ba != keyframe_id,
-                        None => true
+                        None => true,
                     };
                     if local_ba && !ba_fixed_for_kf.contains(kf_id) {
                         ba_fixed_for_kf.insert(kf_id);
@@ -116,7 +136,7 @@ impl LocalMapOptimizationModule for LocalBundleAdjustment {
                 warn!("LM_LBA: There are 0 fixed KF in the optimizations, LBA aborted");
             }
 
-            // TODO (concurrency): mbAbortBA 
+            // TODO (concurrency): mbAbortBA
             // if(pbStopFlag)
             //     optimizer.setForceStopFlag(pbStopFlag);
 
@@ -125,7 +145,9 @@ impl LocalMapOptimizationModule for LocalBundleAdjustment {
             for kf_id in &local_keyframes {
                 let kf = lock.get_keyframe(*kf_id);
                 let set_fixed = *kf_id == lock.initial_kf_id;
-                optimizer.pin_mut().add_vertex_se3expmap(kf.id, (kf.get_pose()).into(), set_fixed);
+                optimizer
+                    .pin_mut()
+                    .add_vertex_se3expmap(kf.id, (kf.get_pose()).into(), set_fixed);
                 kf_vertex_ids.insert(*kf_id, kf.id);
                 if kf.id > max_kf_id {
                     max_kf_id = kf.id;
@@ -141,7 +163,9 @@ impl LocalMapOptimizationModule for LocalBundleAdjustment {
             // Set Fixed KeyFrame vertices
             for kf_id in &fixed_cameras {
                 let kf = lock.get_keyframe(*kf_id);
-                optimizer.pin_mut().add_vertex_se3expmap(kf.id, (kf.get_pose()).into(), true);
+                optimizer
+                    .pin_mut()
+                    .add_vertex_se3expmap(kf.id, (kf.get_pose()).into(), true);
                 kf_vertex_ids.insert(*kf_id, kf.id);
                 if kf.id > max_kf_id {
                     max_kf_id = kf.id;
@@ -149,7 +173,6 @@ impl LocalMapOptimizationModule for LocalBundleAdjustment {
                 fixed_kfs += 1;
                 // KF could have been deleted during optimization, ok to ignore
             }
-
 
             // Set MapPoint vertices
             for mp_id in &local_mappoints {
@@ -160,7 +183,8 @@ impl LocalMapOptimizationModule for LocalBundleAdjustment {
                 optimizer.pin_mut().add_vertex_sbapointxyz(
                     vertex_id,
                     Pose::new(*mp.position, Matrix3::identity()).into(), // create pose out of translation only
-                    false, true
+                    false,
+                    true,
                 );
                 mp_vertex_ids.insert(*mp_id, vertex_id);
                 mps_to_optimize += 1;
@@ -169,16 +193,15 @@ impl LocalMapOptimizationModule for LocalBundleAdjustment {
                 for (kf_id, (left_index, _right_index)) in mp.get_observations() {
                     let kf = lock.get_keyframe(*kf_id);
                     if kf.origin_map_id != current_map_id {
-                        continue
+                        continue;
                     }
-
 
                     match sensor.frame() {
                         FrameSensor::Stereo => {
                             todo!("Stereo");
                             // if *left_index != -1 && kf.features.get_mv_right(*left_index as usize).unwrap() >= 0.0 {
                             //     // Stereo observation
-                            //     // This is still the left observation, but because it is stereo it needs to be 
+                            //     // This is still the left observation, but because it is stereo it needs to be
 
                             //     // const cv::KeyPoint &kpUn = pKFi->mvKeysUn[leftIndex];
                             //     // Eigen::Matrix<double,3,1> obs;
@@ -247,21 +270,28 @@ impl LocalMapOptimizationModule for LocalBundleAdjustment {
                             // //         nEdges++;
                             // //     }
                             // // }
-                        },
+                        }
                         _ => {
                             // Monocular observation
-                            if *left_index != -1 && kf.features.get_mv_right(*left_index as usize).is_none() {
+                            if *left_index != -1
+                                && kf.features.get_mv_right(*left_index as usize).is_none()
+                            {
                                 let (kp_un, _) = kf.features.get_keypoint(*left_index as usize);
 
                                 let th_huber_mono: f32 = (5.991 as f32).sqrt();
 
-                                optimizer.pin_mut().add_edge_se3_project_xyz_monocular_binary(
-                                    true, vertex_id, kf.id,
-                                    mp.id,
-                                    kp_un.pt().x, kp_un.pt().y,
-                                    INV_LEVEL_SIGMA2[kp_un.octave() as usize],
-                                    th_huber_mono
-                                );
+                                optimizer
+                                    .pin_mut()
+                                    .add_edge_se3_project_xyz_monocular_binary(
+                                        true,
+                                        vertex_id,
+                                        kf.id,
+                                        mp.id,
+                                        kp_un.pt().x,
+                                        kp_un.pt().y,
+                                        INV_LEVEL_SIGMA2[kp_un.octave() as usize],
+                                        th_huber_mono,
+                                    );
                                 edges += 1;
                                 edges_kf_body.push(kf.id);
                             }
@@ -283,7 +313,6 @@ impl LocalMapOptimizationModule for LocalBundleAdjustment {
             optimizer.pin_mut().optimize(10, false, false);
         }
 
-
         {
             // let _span = tracy_client::span!("local_bundle_adjustment::post_process");
 
@@ -296,8 +325,8 @@ impl LocalMapOptimizationModule for LocalBundleAdjustment {
                     // Note: map.delete_observation can have side effect of deleting the mappoint itself,
                     // if deleting the observation causes it to not be observed by enough keyframes.
                     // This is ok, but if we end up calling delete_observation again on one of these mappoints,
-                    // we get a false warning that the mappoint doesn't exist. 
-                    // Despite the warning, it is still ok to call this function... but it will clog up the 
+                    // we get a false warning that the mappoint doesn't exist.
+                    // Despite the warning, it is still ok to call this function... but it will clog up the
                     // log with warnings that aren't real issues. So in this case let's check for the mappoint
                     // existence first.
                     if lock.has_mappoint(edge.mappoint_id) {
@@ -307,38 +336,37 @@ impl LocalMapOptimizationModule for LocalBundleAdjustment {
                 i += 1;
             }
 
-
             if matches!(sensor.frame(), FrameSensor::Stereo) {
                 todo!("Stereo");
                 // For the below vectors, will need to make vector in g2o bindings similar to
                 // xyz_onlypose_edges and iterate over it like get_mut_xyz_onlypose_edges above
 
                 // for (_mp_id, _edge) in all_edges_body {
-                    // ORB_SLAM3::EdgeSE3ProjectXYZToBody* e = vpEdgesBody[i];
-                    // MapPoint* pMP = vpMapPointEdgeBody[i];
+                // ORB_SLAM3::EdgeSE3ProjectXYZToBody* e = vpEdgesBody[i];
+                // MapPoint* pMP = vpMapPointEdgeBody[i];
 
-                    // if(pMP->isBad())
-                    //     continue;
+                // if(pMP->isBad())
+                //     continue;
 
-                    // if(e->chi2()>5.991 || !e->isDepthPositive())
-                    // {
-                    //     KeyFrame* pKFi = vpEdgeKFBody[i];
-                    //     vToErase.push_back(make_pair(pKFi,pMP));
-                    // }
+                // if(e->chi2()>5.991 || !e->isDepthPositive())
+                // {
+                //     KeyFrame* pKFi = vpEdgeKFBody[i];
+                //     vToErase.push_back(make_pair(pKFi,pMP));
+                // }
                 // }
 
                 // for (_mp_id, _edge) in all_edges_stereo {
-                    // g2o::EdgeStereoSE3ProjectXYZ* e = vpEdgesStereo[i];
-                    // MapPoint* pMP = vpMapPointEdgeStereo[i];
+                // g2o::EdgeStereoSE3ProjectXYZ* e = vpEdgesStereo[i];
+                // MapPoint* pMP = vpMapPointEdgeStereo[i];
 
-                    // if(pMP->isBad())
-                    //     continue;
+                // if(pMP->isBad())
+                //     continue;
 
-                    // if(e->chi2()>7.815 || !e->isDepthPositive())
-                    // {
-                    //     KeyFrame* pKFi = vpEdgeKFStereo[i];
-                    //     vToErase.push_back(make_pair(pKFi,pMP));
-                    // }
+                // if(e->chi2()>7.815 || !e->isDepthPositive())
+                // {
+                //     KeyFrame* pKFi = vpEdgeKFStereo[i];
+                //     vToErase.push_back(make_pair(pKFi,pMP));
+                // }
                 // }
             }
 
@@ -362,16 +390,14 @@ impl LocalMapOptimizationModule for LocalBundleAdjustment {
                     let translation = nalgebra::Translation3::new(
                         position.translation[0] as f64,
                         position.translation[1] as f64,
-                        position.translation[2] as f64
+                        position.translation[2] as f64,
                     );
                     // drop(_span);
 
                     // let _span = tracy_client::span!("lba::post_process::recover_mps::update");
 
                     let norm_and_depth = match lock.mappoints.get(&mp_id) {
-                        Some(mp) => {
-                            mp.get_norm_and_depth(&lock)
-                        },
+                        Some(mp) => mp.get_norm_and_depth(&lock),
                         None => {
                             // Possible that map actor deleted mappoint after local BA has finished but before
                             // this message is processed
@@ -393,7 +419,14 @@ impl LocalMapOptimizationModule for LocalBundleAdjustment {
     }
 }
 
-pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_init: bool, tracked_mappoint_depths: HashMap<Id, f64>, sensor: Sensor) -> Result<(), Box<dyn std::error::Error>>{
+pub fn local_inertial_ba(
+    map: &ReadWriteMap,
+    curr_kf_id: Id,
+    large: bool,
+    rec_init: bool,
+    tracked_mappoint_depths: HashMap<Id, f64>,
+    sensor: Sensor,
+) -> Result<(), Box<dyn std::error::Error>> {
     // void Optimizer::LocalInertialBA(KeyFrame *pKF, bool *pbStopFlag, Map *pMap, int& num_fixedKF, int& num_OptKF, int& num_MPs, int& num_edges, bool bLarge, bool bRecInit)
 
     // let _span = tracy_client::span!("local_bundle_adjustment (inertial)");
@@ -411,10 +444,13 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
     let n_d = min(map.read()?.num_keyframes() as i32 - 2, max_opt);
     let max_kf_id = curr_kf_id;
 
-    let neighbor_kfs = map.read()?.get_keyframe(curr_kf_id).get_covisibility_keyframes(i32::MAX); // vpNeighsKFs
+    let neighbor_kfs = map
+        .read()?
+        .get_keyframe(curr_kf_id)
+        .get_covisibility_keyframes(i32::MAX); // vpNeighsKFs
 
     let mut optimizable_kfs: VecDeque<Id> = VecDeque::new(); // vpOptimizableKFs
-    optimizable_kfs.push_front(curr_kf_id); 
+    optimizable_kfs.push_front(curr_kf_id);
     let mut local_ba_for_kf = HashMap::new(); // keyframe::mnBALocalForKF
     local_ba_for_kf.insert(curr_kf_id, curr_kf_id);
     let mut local_mappoints: Vec<Id> = vec![]; // lLocalMapPoints
@@ -441,7 +477,9 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
             for data in mps {
                 if let Some((mp_id, _)) = data {
                     if let Some(_mp) = lock.mappoints.get(&mp_id) {
-                        if local_ba_for_mp.get(mp_id).is_none() || * local_ba_for_mp.get(mp_id).unwrap() != curr_kf_id {
+                        if local_ba_for_mp.get(mp_id).is_none()
+                            || *local_ba_for_mp.get(mp_id).unwrap() != curr_kf_id
+                        {
                             local_mappoints.push(*mp_id);
                             local_ba_for_mp.insert(*mp_id, curr_kf_id);
                         }
@@ -461,9 +499,9 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
             fixed_keyframes.push(prev_kf_id);
             ba_fixed_for_kf.insert(prev_kf_id, curr_kf_id);
         } else {
-            ba_local_for_kf.insert(* optimizable_kfs.back().unwrap(), 0);
-            ba_fixed_for_kf.insert(* optimizable_kfs.back().unwrap(), curr_kf_id);
-            fixed_keyframes.push(* optimizable_kfs.back().unwrap());
+            ba_local_for_kf.insert(*optimizable_kfs.back().unwrap(), 0);
+            ba_fixed_for_kf.insert(*optimizable_kfs.back().unwrap(), curr_kf_id);
+            fixed_keyframes.push(*optimizable_kfs.back().unwrap());
             optimizable_kfs.pop_back();
         }
     }
@@ -478,12 +516,16 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
         for mp_id in &local_mappoints {
             let observations = lock.mappoints.get(&mp_id).unwrap().get_observations();
             for (kf_id, _) in observations {
-                let local =  (ba_local_for_kf.get(&kf_id).is_some() && * ba_local_for_kf.get(&kf_id).unwrap() != curr_kf_id) || ba_local_for_kf.get(&kf_id).is_none();
-                let fixed =  (ba_fixed_for_kf.get(&kf_id).is_some() && * ba_fixed_for_kf.get(&kf_id).unwrap() != curr_kf_id) || ba_fixed_for_kf.get(&kf_id).is_none();
+                let local = (ba_local_for_kf.get(&kf_id).is_some()
+                    && *ba_local_for_kf.get(&kf_id).unwrap() != curr_kf_id)
+                    || ba_local_for_kf.get(&kf_id).is_none();
+                let fixed = (ba_fixed_for_kf.get(&kf_id).is_some()
+                    && *ba_fixed_for_kf.get(&kf_id).unwrap() != curr_kf_id)
+                    || ba_fixed_for_kf.get(&kf_id).is_none();
 
                 if local && fixed {
-                    ba_fixed_for_kf.insert(* kf_id, curr_kf_id);
-                    fixed_keyframes.push(* kf_id);
+                    ba_fixed_for_kf.insert(*kf_id, curr_kf_id);
+                    fixed_keyframes.push(*kf_id);
                 }
             }
 
@@ -497,11 +539,11 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
 
     // Setup optimizer
     // ... Note... pretty sure camera params aren't necessary for this optimization but throwing them in here anyway just in case
-    let fx= SETTINGS.get::<f64>(CAMERA, "fx");
-    let fy= SETTINGS.get::<f64>(CAMERA, "fy");
-    let cx= SETTINGS.get::<f64>(CAMERA, "cx");
-    let cy= SETTINGS.get::<f64>(CAMERA, "cy");
-    let camera_param = [fx, fy, cx,cy];
+    let fx = SETTINGS.get::<f64>(CAMERA, "fx");
+    let fy = SETTINGS.get::<f64>(CAMERA, "fy");
+    let cx = SETTINGS.get::<f64>(CAMERA, "cx");
+    let cy = SETTINGS.get::<f64>(CAMERA, "cy");
+    let camera_param = [fx, fy, cx, cy];
 
     let mut optimizer = if large {
         // to avoid iterating for finding optimal lambda
@@ -509,7 +551,6 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
     } else {
         g2o::ffi::new_sparse_optimizer(5, camera_param, 1.0)
     };
-
 
     {
         let lock = map.read()?;
@@ -523,17 +564,17 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
                 optimizer.pin_mut().add_vertex_velocity(
                     max_kf_id + 3 * kf.id + 1,
                     false,
-                    kf.imu_data.velocity.unwrap().into()
+                    kf.imu_data.velocity.unwrap().into(),
                 );
                 optimizer.pin_mut().add_vertex_gyrobias(
                     max_kf_id + 3 * kf.id + 2,
                     false,
-                    kf.imu_data.get_imu_bias().get_gyro_bias().into()
+                    kf.imu_data.get_imu_bias().get_gyro_bias().into(),
                 );
                 optimizer.pin_mut().add_vertex_accbias(
                     max_kf_id + 3 * kf.id + 3,
                     false,
-                    kf.imu_data.get_imu_bias().get_acc_bias().into()
+                    kf.imu_data.get_imu_bias().get_acc_bias().into(),
                 );
             }
         }
@@ -551,21 +592,21 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
             super::optimizer::add_vertex_pose_keyframe(&mut optimizer, kf, true, kf.id);
 
             // This should be done only for keyframe just before temporal window
-            if kf.imu_data.is_imu_initialized { 
+            if kf.imu_data.is_imu_initialized {
                 optimizer.pin_mut().add_vertex_velocity(
                     max_kf_id + 3 * kf.id + 1,
                     true,
-                    kf.imu_data.velocity.unwrap().into()
+                    kf.imu_data.velocity.unwrap().into(),
                 );
                 optimizer.pin_mut().add_vertex_gyrobias(
                     max_kf_id + 3 * kf.id + 2,
                     true,
-                    kf.imu_data.get_imu_bias().get_gyro_bias().into()
+                    kf.imu_data.get_imu_bias().get_gyro_bias().into(),
                 );
                 optimizer.pin_mut().add_vertex_accbias(
                     max_kf_id + 3 * kf.id + 3,
                     true,
-                    kf.imu_data.get_imu_bias().get_acc_bias().into()
+                    kf.imu_data.get_imu_bias().get_acc_bias().into(),
                 );
             }
         }
@@ -583,11 +624,12 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
             }
             let prev_kf = lock.get_keyframe(kf.prev_kf_id.unwrap());
 
-            if kf.imu_data.imu_preintegrated.is_none() ||
-                !kf.imu_data.is_imu_initialized ||
-                prev_kf.imu_data.imu_preintegrated.is_none() ||
-                !prev_kf.imu_data.is_imu_initialized {
-                    continue;
+            if kf.imu_data.imu_preintegrated.is_none()
+                || !kf.imu_data.is_imu_initialized
+                || prev_kf.imu_data.imu_preintegrated.is_none()
+                || !prev_kf.imu_data.is_imu_initialized
+            {
+                continue;
             }
             let mut imu_preintegrated = kf.imu_data.imu_preintegrated.as_ref().unwrap().clone();
             imu_preintegrated.set_new_bias(prev_kf.imu_data.get_imu_bias());
@@ -621,20 +663,20 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
                 max_kf_id + 3 * kf_id + 1,
                 max_kf_id + 3 * kf_id + 2,
                 max_kf_id + 3 * kf_id + 3,
-                (& imu_preintegrated).into(),
+                (&imu_preintegrated).into(),
                 set_robust_kernel,
                 delta,
                 set_information,
-                information_weight
+                information_weight,
             );
 
             optimizer.pin_mut().add_edge_gyro_and_acc(
                 max_kf_id + 3 * prev_kf.id + 2,
                 max_kf_id + 3 * kf_id + 2,
-                max_kf_id + 3 * prev_kf.id + 3, 
+                max_kf_id + 3 * prev_kf.id + 3,
                 max_kf_id + 3 * kf_id + 3,
-                (& imu_preintegrated).into(),
-                false
+                (&imu_preintegrated).into(),
+                false,
             );
 
             new_imu_preintegrated_for_kfs.insert(kf_id, imu_preintegrated);
@@ -644,7 +686,6 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
         let mut lock = map.write()?;
         lock.get_keyframe_mut(kf_id).imu_data.imu_preintegrated = Some(new_imu_preintegrated);
     }
-
 
     let th_huber_mono: f32 = (5.991 as f32).sqrt();
     let _th_huber_stereo: f32 = (7.815 as f32).sqrt();
@@ -677,19 +718,21 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
             optimizer.pin_mut().add_vertex_sbapointxyz(
                 vertex_id,
                 Pose::new(*mp.position, Matrix3::identity()).into(), // create pose out of translation only
-                false, true
+                false,
+                true,
             );
             mp_vertex_ids.insert(*mp_id, vertex_id);
 
             // Create visual constraints
             for (kf_id, (left_index, _right_index)) in mp.get_observations() {
-                if (local_ba_for_kf.get(&kf_id).is_some() && * local_ba_for_kf.get(&kf_id).unwrap() != curr_kf_id) &&
-                    ba_fixed_for_kf.get(&kf_id).is_some() && * ba_fixed_for_kf.get(&kf_id).unwrap() != curr_kf_id
+                if (local_ba_for_kf.get(&kf_id).is_some()
+                    && *local_ba_for_kf.get(&kf_id).unwrap() != curr_kf_id)
+                    && ba_fixed_for_kf.get(&kf_id).is_some()
+                    && *ba_fixed_for_kf.get(&kf_id).unwrap() != curr_kf_id
                 {
                     continue;
                 }
                 let kf = lock.get_keyframe(*kf_id);
-
 
                 match sensor.frame() {
                     FrameSensor::Stereo => {
@@ -721,23 +764,27 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
                         // vpEdgesStereo.push_back(e);
                         // vpEdgeKFStereo.push_back(pKFi);
                         // vpMapPointEdgeStereo.push_back(pMP);
-                    },
+                    }
                     _ => {
                         // Monocular left observation
-                        if *left_index != -1 && kf.features.get_mv_right(*left_index as usize).is_none() {
+                        if *left_index != -1
+                            && kf.features.get_mv_right(*left_index as usize).is_none()
+                        {
                             let (kp_un, _) = kf.features.get_keypoint(*left_index as usize);
 
                             // Add here uncerteinty
                             let unc2 = CAMERA_MODULE.uncertainty;
                             let inv_sigma2 = INV_LEVEL_SIGMA2[kp_un.octave() as usize] / unc2;
 
-
                             optimizer.pin_mut().add_edge_mono_binary(
-                                true, vertex_id, kf.id,
+                                true,
+                                vertex_id,
+                                kf.id,
                                 mp.id,
-                                kp_un.pt().x, kp_un.pt().y,
+                                kp_un.pt().x,
+                                kp_un.pt().y,
                                 inv_sigma2,
-                                th_huber_mono
+                                th_huber_mono,
                             );
                             edges_kf_mono.push(kf.id);
                         } else {
@@ -805,10 +852,11 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
     let mut i = 0;
     for edge in optimizer.pin_mut().get_mut_xyz_edges().iter() {
         // TODO Sofiya edges_kf_mono might not match up with edges from this iterator
-        let close = tracked_mappoint_depths.get(&edge.mappoint_id).is_some() && *tracked_mappoint_depths.get(&edge.mappoint_id).unwrap() < 10.0;
-        if (edge.inner.chi2() > chi2_mono2 && !close) || 
-            (edge.inner.chi2() > 1.5 * chi2_mono2 && close) || 
-            !edge.inner.is_depth_positive() 
+        let close = tracked_mappoint_depths.get(&edge.mappoint_id).is_some()
+            && *tracked_mappoint_depths.get(&edge.mappoint_id).unwrap() < 10.0;
+        if (edge.inner.chi2() > chi2_mono2 && !close)
+            || (edge.inner.chi2() > 1.5 * chi2_mono2 && close)
+            || !edge.inner.is_depth_positive()
         {
             to_erase.push((edges_kf_mono[i], edge.mappoint_id));
         }
@@ -832,7 +880,7 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
             //         vToErase.push_back(make_pair(pKFi,pMP));
             //     }
             // }
-        },
+        }
         _ => {}
     }
 
@@ -878,7 +926,7 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
                 max_kf_id + 3 * kf_id + 2,
                 max_kf_id + 3 * kf_id + 3,
                 -1,
-                -1
+                -1,
             );
             let b = ImuBias {
                 bax: estimate.vb[3],
@@ -909,10 +957,17 @@ pub fn local_inertial_ba(map: &ReadWriteMap, curr_kf_id: Id, large: bool, rec_in
         map.write()?.mappoints.get_mut(&mp_id).unwrap().position = pose.translation.into();
         let norm_and_depth = {
             let lock = map.read()?;
-            lock.mappoints.get(&mp_id).unwrap().get_norm_and_depth(&lock)
+            lock.mappoints
+                .get(&mp_id)
+                .unwrap()
+                .get_norm_and_depth(&lock)
         };
         if norm_and_depth.is_some() {
-            map.write()?.mappoints.get_mut(&mp_id).unwrap().update_norm_and_depth(norm_and_depth.unwrap());
+            map.write()?
+                .mappoints
+                .get_mut(&mp_id)
+                .unwrap()
+                .update_norm_and_depth(norm_and_depth.unwrap());
         }
     }
 

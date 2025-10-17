@@ -1,22 +1,35 @@
-use std::{collections::{BTreeMap, VecDeque}, env, fs::File, io::{self, BufRead}, sync::atomic::AtomicBool, thread::{self, sleep}, time::Duration};
-use fern::colors::{ColoredLevelConfig, Color};
+use fern::colors::{Color, ColoredLevelConfig};
 use glob::glob;
 use log::{debug, info, warn};
 use modules::imu::{ImuMeasurements, ImuPoint};
 use opencv::{core::Point3f, imgcodecs};
 use registered_actors::CAMERA;
 use spin_sleep::LoopHelper;
-#[macro_use] extern crate lazy_static;
+use std::{
+    collections::{BTreeMap, VecDeque},
+    env,
+    fs::File,
+    io::{self, BufRead},
+    sync::atomic::AtomicBool,
+    thread::{self, sleep},
+    time::Duration,
+};
+#[macro_use]
+extern crate lazy_static;
 
-use core::{config::*, matrix::DVVector3, sensor::Sensor, system::System, *};
-use crate::{actors::messages::{ImageMsg, ShutdownMsg}, map::pose::Pose, modules::image};
 use crate::map::map::Id;
+use crate::{
+    actors::messages::{ImageMsg, ShutdownMsg},
+    map::pose::Pose,
+    modules::image,
+};
+use core::{config::*, matrix::DVVector3, sensor::Sensor, system::System, *};
 
 mod actors;
-mod registered_actors;
-mod spawn;
 mod map;
 mod modules;
+mod registered_actors;
+mod spawn;
 mod tests;
 
 // pub type ReadWriteMap = Arc<Mutex<Map>>; // Replace above line with this if you want to switch all locks to mutexes
@@ -43,7 +56,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let dataset_name = args[4].to_owned();
 
     // Load config, including custom settings and actor information
-    let (actor_info, module_info, log_level) = load_config(&system_config_file, &dataset_config_file).expect("Could not load config");
+    let (actor_info, module_info, log_level) =
+        load_config(&system_config_file, &dataset_config_file).expect("Could not load config");
 
     setup_logger(&log_level)?;
     info!("Using dataset {:?}", dataset_name);
@@ -53,33 +67,31 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Launch actor system
     let first_actor_name = SETTINGS.get::<String>(SYSTEM, "first_actor_name"); // Actor that launches the pipeline
-    let (shutdown_flag, first_actor_tx, shutdown_tx, shutdown_join) = spawn::launch_system(actor_info, module_info, first_actor_name)?;
+    let (shutdown_flag, first_actor_tx, shutdown_tx, shutdown_join) =
+        spawn::launch_system(actor_info, module_info, first_actor_name)?;
 
     info!("System ready to receive messages!");
 
     if SETTINGS.get::<bool>(SYSTEM, "check_deadlocks") {
         // This slows stuff down, so only enable this if you really need to.
         // This seems to find deadlocks more consistently if you turn all rwlocks into
-        // mutexes. You can do that pretty quickly by modifying pub type ReadWriteMap in the 
+        // mutexes. You can do that pretty quickly by modifying pub type ReadWriteMap in the
         // beginning of this file and turning usages of read() and write() into lock().
-        thread::spawn(move || { 
-            loop {
-                let deadlocks = parking_lot::deadlock::check_deadlock();
-                if !deadlocks.is_empty() {
-                    println!("{} deadlocks detected", deadlocks.len());
-                    for (i, threads) in deadlocks.iter().enumerate() {
-                        println!("Deadlock #{}", i);
-                        for t in threads {
-                            println!("Thread Id {:#?}", t.thread_id());
-                            println!("{:#?}", t.backtrace());
-                        }
+        thread::spawn(move || loop {
+            let deadlocks = parking_lot::deadlock::check_deadlock();
+            if !deadlocks.is_empty() {
+                println!("{} deadlocks detected", deadlocks.len());
+                for (i, threads) in deadlocks.iter().enumerate() {
+                    println!("Deadlock #{}", i);
+                    for t in threads {
+                        println!("Thread Id {:#?}", t.thread_id());
+                        println!("{:#?}", t.backtrace());
                     }
                 }
-                thread::sleep(Duration::from_secs_f64(2.0));
             }
-        } );
+            thread::sleep(Duration::from_secs_f64(2.0));
+        });
     }
-
 
     // Process images
     let read_imu = SETTINGS.get::<Sensor>(SYSTEM, "sensor").is_imu();
@@ -87,7 +99,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let loop_manager = LoopManager::new(dataset_name, dataset_dir, read_imu);
     let mut sent_map_init = false;
     let mut current_index = 0;
-    for (image_path, imu_measurements, imu_initialization, timestamp, frame_id) in loop_manager.into_iter() {
+    for (image_path, imu_measurements, imu_initialization, timestamp, frame_id) in
+        loop_manager.into_iter()
+    {
         // If first_k set, loop until we are at the first frame.
         if current_index < SETTINGS.get::<i32>(SYSTEM, "initial_k") {
             current_index += 1;
@@ -95,7 +109,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         // If final_k set, stop processing images after this time.
-        if SETTINGS.get::<i32>(SYSTEM, "final_k") != 0 && current_index == SETTINGS.get::<i32>(SYSTEM, "final_k") {
+        if SETTINGS.get::<i32>(SYSTEM, "final_k") != 0
+            && current_index == SETTINGS.get::<i32>(SYSTEM, "final_k")
+        {
             debug!("Ending early at frame {}", current_index);
             break;
         }
@@ -104,7 +120,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             sleep(Duration::from_millis(200));
         }
 
-        if *shutdown_flag.lock().unwrap() { break; }
+        if *shutdown_flag.lock().unwrap() {
+            break;
+        }
         tracy_client::frame_mark();
 
         let mut image_bw = image::read_image_file(&image_path, imgcodecs::IMREAD_GRAYSCALE);
@@ -112,22 +130,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if SETTINGS.get::<bool>(CAMERA, "need_to_resize") {
             let new_height = SETTINGS.get::<i32>(CAMERA, "height");
             let new_width = SETTINGS.get::<i32>(CAMERA, "width");
-            image_bw = image::resize_image(&image_bw, new_width, new_height).expect("Could not resize image!");
-            image_color = image::resize_image(&image_color, new_width, new_height).expect("Could not resize image!");
+            image_bw = image::resize_image(&image_bw, new_width, new_height)
+                .expect("Could not resize image!");
+            image_color = image::resize_image(&image_color, new_width, new_height)
+                .expect("Could not resize image!");
         }
 
         // println!("Reading image {}", image_path);
 
-        first_actor_tx.send(Box::new(
-            ImageMsg{
-                image: image_bw,
-                color_image: Some(image_color),
-                timestamp,
-                imu_measurements,
-                imu_initialization,
-                frame_id
-            }
-        ))?;
+        first_actor_tx.send(Box::new(ImageMsg {
+            image: image_bw,
+            color_image: Some(image_color),
+            timestamp,
+            imu_measurements,
+            imu_initialization,
+            frame_id,
+        }))?;
 
         if frame_id > 5 && !sent_map_init {
             sent_map_init = true;
@@ -136,11 +154,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         current_index += 1;
 
         // SOFIYA WHEN LOOP SLEEP IS TURNED OFF, SLEEPING HERE INSTEAD, SO WE CAN SKIP PAST THE INITIAL FRAMES FASTER
-        sleep(Duration::from_millis(1000 / SETTINGS.get::<f64>(SYSTEM, "fps") as u64));
+        sleep(Duration::from_millis(
+            1000 / SETTINGS.get::<f64>(SYSTEM, "fps") as u64,
+        ));
     }
 
     info!("Done with dataset! Shutting down.");
-    shutdown_tx.send(Box::new(ShutdownMsg{}))?;
+    shutdown_tx.send(Box::new(ShutdownMsg {}))?;
     shutdown_join.join().expect("Waiting for shutdown thread");
 
     Ok(())
@@ -188,7 +208,7 @@ impl LoopManager {
             img_dir = dataset_dir.clone() + "/mav0/cam0/data";
             timestamps = Self::read_timestamps_file_tum(&dataset_dir);
             image_paths = Self::generate_image_paths(img_dir);
-        }  else {
+        } else {
             panic!("Invalid dataset name");
         };
 
@@ -200,33 +220,50 @@ impl LoopManager {
                     // warn!("KITTI dataset does not have IMU data.");
                     let imu_file = dataset_dir.clone() + "imu.txt";
                     let gt_file = dataset_dir.clone() + "gt.txt";
-                    Some(Self::read_imu(imu_file, gt_file, &mut timestamps, &mut image_paths).expect("Could not read IMU file!"))
+                    Some(
+                        Self::read_imu(imu_file, gt_file, &mut timestamps, &mut image_paths)
+                            .expect("Could not read IMU file!"),
+                    )
 
                     // None
                 } else if dataset == "euroc" {
                     let imu_file = dataset_dir.clone() + "/mav0/imu0/data.csv";
-                    let gt_file = dataset_dir.clone() + "/mav0/state_groundtruth_estimate0/data.csv";
-                    Some(Self::read_imu(imu_file, gt_file, &mut timestamps, &mut image_paths).expect("Could not read IMU file!"))
+                    let gt_file =
+                        dataset_dir.clone() + "/mav0/state_groundtruth_estimate0/data.csv";
+                    Some(
+                        Self::read_imu(imu_file, gt_file, &mut timestamps, &mut image_paths)
+                            .expect("Could not read IMU file!"),
+                    )
                 } else if dataset == "tum-vi" {
                     let imu_file = dataset_dir.clone() + "/mav0/imu0/data.csv";
-                    let gt_file = dataset_dir.clone() + "/mav0/state_groundtruth_estimate0/data.csv"; // TODO This may not be the right filename
-                    Some(Self::read_imu(imu_file, gt_file, &mut timestamps, &mut image_paths).expect("Could not read IMU file!"))
+                    let gt_file =
+                        dataset_dir.clone() + "/mav0/state_groundtruth_estimate0/data.csv"; // TODO This may not be the right filename
+                    Some(
+                        Self::read_imu(imu_file, gt_file, &mut timestamps, &mut image_paths)
+                            .expect("Could not read IMU file!"),
+                    )
                 } else {
                     panic!("Invalid dataset name");
                 }
             }
         };
 
-        LoopManager { 
-            loop_helper: LoopHelper::builder().build_with_target_rate(SETTINGS.get::<f64>(SYSTEM, "fps")),
+        LoopManager {
+            loop_helper: LoopHelper::builder()
+                .build_with_target_rate(SETTINGS.get::<f64>(SYSTEM, "fps")),
             image_paths,
             timestamps,
             imu,
-            current_index: 0
+            current_index: 0,
         }
     }
 
-    fn read_imu(imu_filename: String, gt_filename: String, camera_timestamps: &mut Vec<f64>, image_paths: &mut Vec<String>) -> Result<ImuData, Box<dyn std::error::Error>>{
+    fn read_imu(
+        imu_filename: String,
+        gt_filename: String,
+        camera_timestamps: &mut Vec<f64>,
+        image_paths: &mut Vec<String>,
+    ) -> Result<ImuData, Box<dyn std::error::Error>> {
         let imu_file = File::open(imu_filename)?;
         let mut rdr = csv::Reader::from_reader(imu_file);
         let mut imu_data = ImuData {
@@ -243,16 +280,18 @@ impl LoopManager {
             imu_data.gyro.push(Point3f::new(
                 record[1].parse::<f32>().unwrap(),
                 record[2].parse::<f32>().unwrap(),
-                record[3].parse::<f32>().unwrap()
+                record[3].parse::<f32>().unwrap(),
             ));
 
             imu_data.acceleration.push(Point3f::new(
                 record[4].parse::<f32>().unwrap(),
                 record[5].parse::<f32>().unwrap(),
-                record[6].parse::<f32>().unwrap()
+                record[6].parse::<f32>().unwrap(),
             ));
 
-            imu_data.timestamps.push(record[0].parse::<f64>().unwrap() / 1000000000.0);
+            imu_data
+                .timestamps
+                .push(record[0].parse::<f64>().unwrap() / 1000000000.0);
         }
 
         // Find first imu to be considered, supposing imu measurements start first
@@ -271,7 +310,6 @@ impl LoopManager {
         }
         imu_data.first_imu_idx = index - 1;
 
-
         // KIMERA
         let gt_file = File::open(gt_filename).unwrap();
         rdr = csv::Reader::from_reader(gt_file);
@@ -284,7 +322,7 @@ impl LoopManager {
             let translation = DVVector3::new_with(
                 record[1].parse::<f64>().unwrap(),
                 record[2].parse::<f64>().unwrap(),
-                record[3].parse::<f64>().unwrap()
+                record[3].parse::<f64>().unwrap(),
             );
             let rotation = nalgebra::Vector4::new(
                 record[4].parse::<f64>().unwrap(), // w
@@ -295,27 +333,27 @@ impl LoopManager {
             let velocity = DVVector3::new_with(
                 record[8].parse::<f64>().unwrap(),
                 record[9].parse::<f64>().unwrap(),
-                record[10].parse::<f64>().unwrap()
+                record[10].parse::<f64>().unwrap(),
             );
             let gyro_bias = DVVector3::new_with(
                 record[11].parse::<f64>().unwrap(),
                 record[12].parse::<f64>().unwrap(),
-                record[13].parse::<f64>().unwrap()
+                record[13].parse::<f64>().unwrap(),
             );
             let acc_bias = DVVector3::new_with(
                 record[14].parse::<f64>().unwrap(),
                 record[15].parse::<f64>().unwrap(),
-                record[16].parse::<f64>().unwrap()
+                record[16].parse::<f64>().unwrap(),
             );
 
             imu_data.initialization.insert(
-                timestamp, 
+                timestamp,
                 ImuInitializationData {
                     pose: Pose::new_with_quaternion_convert(*translation, rotation),
                     velocity,
                     gyro_bias,
-                    acc_bias
-                }
+                    acc_bias,
+                },
             );
         }
 
@@ -325,16 +363,22 @@ impl LoopManager {
     fn read_timestamps_file_kitti(time_stamp_dir: &String) -> Vec<f64> {
         let file = File::open(time_stamp_dir.clone() + "/times.txt")
             .expect("Could not open timestamps file");
-        io::BufReader::new(file).lines()
+        io::BufReader::new(file)
+            .lines()
             .map(|x| x.unwrap().parse::<f64>().unwrap())
             .collect::<Vec<f64>>() // *1e16
     }
 
-    fn read_timestamps_file_euroc(time_stamp_dir: &String, image_dir: String) -> (Vec<f64>, Vec<String>) {
+    fn read_timestamps_file_euroc(
+        time_stamp_dir: &String,
+        image_dir: String,
+    ) -> (Vec<f64>, Vec<String>) {
         info!("Reading timestamps file {}", time_stamp_dir.clone());
         let file = File::open(time_stamp_dir.clone() + "/mav0/cam0/data.csv")
             .expect("Could not open timestamps file");
-        let data = io::BufReader::new(file).lines().skip(1)
+        let data = io::BufReader::new(file)
+            .lines()
+            .skip(1)
             .map(|x| {
                 let x2 = x.unwrap();
                 let mut x3 = x2.split(",");
@@ -354,8 +398,17 @@ impl LoopManager {
         info!("Reading timestamps file {}", time_stamp_dir.clone());
         let file = File::open(time_stamp_dir.clone() + "/rgb.txt")
             .expect("Could not open timestamps file");
-        io::BufReader::new(file).lines().skip(3)
-            .map(|x| x.unwrap().split(' ').next().unwrap().parse::<f64>().unwrap())
+        io::BufReader::new(file)
+            .lines()
+            .skip(3)
+            .map(|x| {
+                x.unwrap()
+                    .split(' ')
+                    .next()
+                    .unwrap()
+                    .parse::<f64>()
+                    .unwrap()
+            })
             .collect::<Vec<f64>>()
     }
 
@@ -378,16 +431,22 @@ impl LoopManager {
 }
 
 impl Iterator for LoopManager {
-    type Item = (String, ImuMeasurements, Option<ImuInitializationData>, f64, u32);
+    type Item = (
+        String,
+        ImuMeasurements,
+        Option<ImuInitializationData>,
+        f64,
+        u32,
+    );
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.current_index as usize == self.image_paths.len() - 1{
+        if self.current_index as usize == self.image_paths.len() - 1 {
             return None;
         }
 
         // SOFIYA TURN OFF LOOP SLEEP TEMPORARILY, SO WE CAN SKIP PAST THE INITIAL FRAMES FASTER
         // // First, sleep until the next timestamp
-        // self.loop_helper.loop_sleep(); 
+        // self.loop_helper.loop_sleep();
 
         let timestamp = self.timestamps[self.current_index as usize];
         let image = self.image_paths[self.current_index as usize].clone();
@@ -398,18 +457,18 @@ impl Iterator for LoopManager {
         if let Some(imu) = &mut self.imu {
             // Load imu measurements from previous frame
             while imu.timestamps[imu.first_imu_idx] <= timestamp {
-                imu_measurements.push_back(ImuPoint{
+                imu_measurements.push_back(ImuPoint {
                     acc: nalgebra::Vector3::new(
                         imu.acceleration[imu.first_imu_idx].x as f64,
                         imu.acceleration[imu.first_imu_idx].y as f64,
-                        imu.acceleration[imu.first_imu_idx].z as f64
+                        imu.acceleration[imu.first_imu_idx].z as f64,
                     ),
                     ang_vel: nalgebra::Vector3::new(
                         imu.gyro[imu.first_imu_idx].x as f64,
                         imu.gyro[imu.first_imu_idx].y as f64,
-                        imu.gyro[imu.first_imu_idx].z as f64
+                        imu.gyro[imu.first_imu_idx].z as f64,
                     ),
-                    timestamp: imu.timestamps[imu.first_imu_idx]
+                    timestamp: imu.timestamps[imu.first_imu_idx],
                 });
                 imu.first_imu_idx += 1;
             }
@@ -417,7 +476,7 @@ impl Iterator for LoopManager {
 
             // Kimera imu initialization values
             let timestamp_convert = (timestamp * 1e9) as i64;
-            let it_low = imu.initialization.range(timestamp_convert..).next();  // closest, non-lesser
+            let it_low = imu.initialization.range(timestamp_convert..).next(); // closest, non-lesser
             if let Some((_timestamp, data)) = it_low {
                 imu_initialization = Some(data);
             } else {
@@ -426,9 +485,8 @@ impl Iterator for LoopManager {
             }
         };
 
-
         // Start next loop
-        self.loop_helper.loop_start(); 
+        self.loop_helper.loop_start();
         self.current_index = self.current_index + 1;
 
         // for i in 0..imu_measurements.len() {
@@ -440,10 +498,15 @@ impl Iterator for LoopManager {
         //     );
         // }
 
-        Some((image, imu_measurements, imu_initialization.cloned(), timestamp, self.current_index))
+        Some((
+            image,
+            imu_measurements,
+            imu_initialization.cloned(),
+            timestamp,
+            self.current_index,
+        ))
     }
 }
-
 
 fn setup_logger(level: &str) -> Result<(), fern::InitError> {
     let colors = ColoredLevelConfig::new()
@@ -471,10 +534,8 @@ fn setup_logger(level: &str) -> Result<(), fern::InitError> {
         .format(move |out, message, record| {
             out.finish(format_args!(
                 "{color_line}[{time} {target}:{line_num} {level}{color_line}] {message}\x1B[0m",
-                color_line = format_args!(
-                    "\x1B[{}m",
-                    colors.get_color(&record.level()).to_fg_str()
-                ),
+                color_line =
+                    format_args!("\x1B[{}m", colors.get_color(&record.level()).to_fg_str()),
                 level = colors.color(record.level()),
                 time = (chrono::Local::now() - start_time).num_milliseconds() as f64 / 1000.0,
                 target = record.file().unwrap_or("unknown"),
@@ -504,10 +565,9 @@ fn setup_logger(level: &str) -> Result<(), fern::InitError> {
     //     );
 
     fern::Dispatch::new()
-    .chain(terminal_output)
-    // .chain(file_output)
-    .apply()?;
-
+        .chain(terminal_output)
+        // .chain(file_output)
+        .apply()?;
 
     Ok(())
 }

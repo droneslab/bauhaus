@@ -1,17 +1,24 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 
-use opencv::prelude::Mat;
-use core::{
-    matrix::{ DVMatrix, DVVectorOfKeyPoint}, system::{ActorMessage, Timestamp},
-};
 use crate::{
-    actors::{tracking_backend::TrackingState, tracking_frontend_gtsam::{TrackedFeatures, TrackedFeaturesIndexMap}},
-    map::{frame::Frame, map::Id, pose::Pose}, modules::imu::{ImuBias, ImuMeasurements}, ImuInitializationData
+    actors::{
+        tracking_backend::TrackingState,
+        tracking_frontend_gtsam::{
+            GtsamFrontendTrackingState, TrackedFeatures, TrackedFeaturesIndexMap,
+        },
+    },
+    map::{frame::Frame, map::Id, pose::Pose},
+    modules::imu::{ImuBias, ImuMeasurements},
+    ImuInitializationData,
 };
-
+use core::{
+    matrix::{DVMatrix, DVVectorOfKeyPoint},
+    system::{ActorMessage, Timestamp},
+};
+use opencv::prelude::Mat;
 
 pub struct Reset {
-    pub map_version: u64
+    pub map_version: u64,
 }
 impl ActorMessage for Reset {
     fn get_map_version(&self) -> u64 {
@@ -20,25 +27,25 @@ impl ActorMessage for Reset {
 }
 
 // * TRACKING FRONTEND **//
-pub struct ImagePathMsg{ 
+pub struct ImagePathMsg {
     pub image_path: String,
     pub imu_measurements: ImuMeasurements,
     pub imu_initialization: Option<ImuInitializationData>,
     pub timestamp: Timestamp,
     pub frame_id: u32,
-    pub map_version: u64
+    pub map_version: u64,
 }
 impl ActorMessage for ImagePathMsg {
     fn get_map_version(&self) -> u64 {
         self.map_version
     }
 }
-pub struct ImageMsg{ 
-    pub image: Mat, 
+pub struct ImageMsg {
+    pub image: Mat,
     pub color_image: Option<Mat>,
     pub imu_measurements: ImuMeasurements,
     pub imu_initialization: Option<ImuInitializationData>,
-    pub timestamp: Timestamp, 
+    pub timestamp: Timestamp,
     pub frame_id: u32,
 }
 impl ActorMessage for ImageMsg {
@@ -47,6 +54,7 @@ impl ActorMessage for ImageMsg {
     }
 }
 pub struct FeatureTracksAndIMUMsg {
+    pub tracker_status: GtsamFrontendTrackingState,
     pub frame: Frame,
     pub imu_measurements: ImuMeasurements,
     pub imu_initialization: Option<ImuInitializationData>,
@@ -60,10 +68,10 @@ impl ActorMessage for FeatureTracksAndIMUMsg {
     }
 }
 
-pub struct TrackingStateMsg{
-    pub state: TrackingState, 
+pub struct TrackingStateMsg {
+    pub state: TrackingState,
     pub init_id: Id,
-    pub map_version: u64
+    pub map_version: u64,
 }
 impl ActorMessage for TrackingStateMsg {
     fn get_map_version(&self) -> u64 {
@@ -72,13 +80,13 @@ impl ActorMessage for TrackingStateMsg {
 }
 
 // * TRACKING BACKEND **//
-pub struct FeatureMsg { 
-    pub keypoints: DVVectorOfKeyPoint, 
-    pub descriptors: DVMatrix, 
-    pub image_width: u32, 
-    pub image_height: u32, 
+pub struct FeatureMsg {
+    pub keypoints: DVVectorOfKeyPoint,
+    pub descriptors: DVMatrix,
+    pub image_width: u32,
+    pub image_height: u32,
     pub imu_measurements: ImuMeasurements,
-    pub timestamp: Timestamp, 
+    pub timestamp: Timestamp,
     pub frame_id: Id,
 }
 impl ActorMessage for FeatureMsg {
@@ -86,13 +94,13 @@ impl ActorMessage for FeatureMsg {
         0
     }
 }
-pub struct MapInitializedMsg { 
-    pub curr_kf_pose: Pose, 
-    pub curr_kf_id: Id, 
-    pub ini_kf_id: Id, 
-    pub local_mappoints: HashSet<Id>, 
+pub struct MapInitializedMsg {
+    pub curr_kf_pose: Pose,
+    pub curr_kf_id: Id,
+    pub ini_kf_id: Id,
+    pub local_mappoints: HashSet<Id>,
     pub curr_kf_timestamp: Timestamp,
-    pub map_version: u64
+    pub map_version: u64,
 }
 impl ActorMessage for MapInitializedMsg {
     fn get_map_version(&self) -> u64 {
@@ -100,20 +108,19 @@ impl ActorMessage for MapInitializedMsg {
     }
 }
 
-pub struct InitKeyFrameMsg { 
+pub struct InitKeyFrameMsg {
     pub kf_id: Id,
-    pub map_version: u64
-    // pub mappoint_matches: 
+    pub map_version: u64, // pub mappoint_matches:
 }
 impl ActorMessage for InitKeyFrameMsg {
     fn get_map_version(&self) -> u64 {
         self.map_version
     }
 }
-pub struct InitKeyFrameMsgGTSAM { 
+pub struct InitKeyFrameMsgGTSAM {
     pub kf_id: Id,
     pub map_version: u64,
-    pub curr_kf_features_map: TrackedFeaturesIndexMap
+    pub curr_kf_features_map: TrackedFeaturesIndexMap,
 }
 impl ActorMessage for InitKeyFrameMsgGTSAM {
     fn get_map_version(&self) -> u64 {
@@ -122,7 +129,7 @@ impl ActorMessage for InitKeyFrameMsgGTSAM {
 }
 
 pub struct LastKeyFrameUpdatedMsg {
-    pub map_version: u64
+    pub map_version: u64,
 }
 impl ActorMessage for LastKeyFrameUpdatedMsg {
     fn get_map_version(&self) -> u64 {
@@ -136,7 +143,7 @@ pub struct UpdateFrameIMUMsg {
     pub imu_bias: ImuBias,
     pub current_kf_id: Id,
     pub imu_initialized: bool,
-    pub map_version: u64
+    pub map_version: u64,
 }
 impl ActorMessage for UpdateFrameIMUMsg {
     fn get_map_version(&self) -> u64 {
@@ -150,7 +157,7 @@ pub struct NewKeyFrameMsg {
     pub tracking_state: TrackingState,
     pub matches_in_tracking: i32,
     pub tracked_mappoint_depths: HashMap<Id, f64>,
-    pub map_version: u64
+    pub map_version: u64,
 }
 impl ActorMessage for NewKeyFrameMsg {
     fn get_map_version(&self) -> u64 {
@@ -161,7 +168,7 @@ impl ActorMessage for NewKeyFrameMsg {
 pub struct NewKeyFrameGTSAMMsg {
     pub keyframe: Frame,
     pub tracking_state: TrackingState,
-    pub map_version: u64
+    pub map_version: u64,
 }
 impl ActorMessage for NewKeyFrameGTSAMMsg {
     fn get_map_version(&self) -> u64 {
@@ -170,9 +177,9 @@ impl ActorMessage for NewKeyFrameGTSAMMsg {
 }
 
 // * LOOP CLOSING */
-pub struct KeyFrameIdMsg { 
+pub struct KeyFrameIdMsg {
     pub kf_id: Id,
-    pub map_version: u64
+    pub map_version: u64,
 }
 impl ActorMessage for KeyFrameIdMsg {
     fn get_map_version(&self) -> u64 {
@@ -185,7 +192,7 @@ pub struct LoopClosureMapPointFusionMsg {
     pub loop_mappoints: Vec<Id>,
     pub keyframes_affected: Vec<Id>,
     pub timestamp: Timestamp,
-    pub map_version: u64
+    pub map_version: u64,
 }
 impl ActorMessage for LoopClosureMapPointFusionMsg {
     fn get_map_version(&self) -> u64 {
@@ -196,7 +203,7 @@ impl ActorMessage for LoopClosureMapPointFusionMsg {
 pub struct LoopClosureEssentialGraphMsg {
     pub relevant_keyframes: HashSet<Id>,
     pub timestamp: Timestamp,
-    pub map_version: u64
+    pub map_version: u64,
 }
 impl ActorMessage for LoopClosureEssentialGraphMsg {
     fn get_map_version(&self) -> u64 {
@@ -207,7 +214,7 @@ impl ActorMessage for LoopClosureEssentialGraphMsg {
 pub struct LoopClosureGBAMsg {
     pub kf_id: Id,
     pub timestamp: Timestamp,
-    pub map_version: u64
+    pub map_version: u64,
 }
 impl ActorMessage for LoopClosureGBAMsg {
     fn get_map_version(&self) -> u64 {
@@ -229,19 +236,19 @@ impl ActorMessage for VisFeaturesMsg {
 pub struct VisFeatureMatchMsg {
     pub matches: opencv::core::Vector<opencv::core::DMatch>,
     pub timestamp: Timestamp,
-    pub map_version: u64
+    pub map_version: u64,
 }
 impl ActorMessage for VisFeatureMatchMsg {
     fn get_map_version(&self) -> u64 {
         self.map_version
     }
 }
-pub struct VisTrajectoryMsg { 
-    pub pose: Pose, 
+pub struct VisTrajectoryMsg {
+    pub pose: Pose,
     pub mappoint_matches: Vec<Option<(i32, bool)>>,
     pub mappoints_in_tracking: BTreeSet<Id>,
     pub timestamp: Timestamp,
-    pub map_version: u64
+    pub map_version: u64,
 }
 impl ActorMessage for VisTrajectoryMsg {
     fn get_map_version(&self) -> u64 {
@@ -249,10 +256,10 @@ impl ActorMessage for VisTrajectoryMsg {
     }
 }
 
-pub struct VisTrajectoryTrackingMsg { 
-    pub pose: Pose, 
+pub struct VisTrajectoryTrackingMsg {
+    pub pose: Pose,
     pub timestamp: Timestamp,
-    pub map_version: u64
+    pub map_version: u64,
 }
 impl ActorMessage for VisTrajectoryTrackingMsg {
     fn get_map_version(&self) -> u64 {
@@ -262,7 +269,7 @@ impl ActorMessage for VisTrajectoryTrackingMsg {
 pub struct VisUpdateMsg {
     pub pose: Pose,
     pub timestamp: Timestamp,
-    pub map_version: u64
+    pub map_version: u64,
 }
 impl ActorMessage for VisUpdateMsg {
     fn get_map_version(&self) -> u64 {
@@ -271,11 +278,11 @@ impl ActorMessage for VisUpdateMsg {
 }
 
 //* Shutdown Actor *//
-pub struct TrajectoryMsg{ 
-    pub pose: Pose, 
-    pub ref_kf_id: Id, 
+pub struct TrajectoryMsg {
+    pub pose: Pose,
+    pub ref_kf_id: Id,
     pub timestamp: Timestamp,
-    pub map_version: u64
+    pub map_version: u64,
 }
 impl ActorMessage for TrajectoryMsg {
     fn get_map_version(&self) -> u64 {
@@ -284,9 +291,9 @@ impl ActorMessage for TrajectoryMsg {
 }
 
 #[derive(Debug)]
-pub struct ShutdownMsg { }
+pub struct ShutdownMsg {}
 impl ActorMessage for ShutdownMsg {
-    fn get_map_version(&self) -> u64 { 0 }
+    fn get_map_version(&self) -> u64 {
+        0
+    }
 }
-
-

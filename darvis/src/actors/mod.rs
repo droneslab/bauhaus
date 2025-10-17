@@ -1,17 +1,17 @@
-pub mod tracking_frontend; // orbslam3 tracking frontend
-pub mod tracking_backend; // orbslam3 tracking backend
 pub mod local_mapping; // orbslam3 local mapping
-pub mod loop_closing; // orbslam3 loop closing.
+pub mod loop_closing;
+pub mod tracking_backend; // orbslam3 tracking backend
+pub mod tracking_frontend; // orbslam3 tracking frontend // orbslam3 loop closing.
 
+pub mod local_mapping_gtsam;
 pub mod tracking_backend_gtsam;
 pub mod tracking_frontend_gtsam;
-pub mod local_mapping_gtsam;
 
 // Bauhaus-defined actors
-pub mod visualizer;
-pub mod shutdown; // handles CTRL+C
+pub mod shutdown;
+pub mod visualizer; // handles CTRL+C
 
 // General messages sent to/from actors
 pub mod messages;
 
-pub mod garbage_tracking; 
+pub mod garbage_tracking;

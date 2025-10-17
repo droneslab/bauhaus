@@ -1,12 +1,29 @@
-use std::{collections::BTreeMap, fmt::Debug, sync::atomic::{AtomicI32, Ordering}};
-use core::{matrix::DVMatrix, config::{SETTINGS, SYSTEM}, sensor::{Sensor, FrameSensor}};
+use core::{
+    config::{SETTINGS, SYSTEM},
+    matrix::DVMatrix,
+    sensor::{FrameSensor, Sensor},
+};
 use log::{error, warn};
+use std::{
+    collections::BTreeMap,
+    fmt::Debug,
+    sync::atomic::{AtomicI32, Ordering},
+};
 extern crate nalgebra as na;
-use crate::{matrix::DVVector3, modules::orbslam_matcher::SCALE_FACTORS, registered_actors::{FEATURE_DETECTION, FEATURE_MATCHING_MODULE}};
-use super::{map::{Id, Map}, keyframe::KeyFrame, pose::DVTranslation};
+use super::{
+    keyframe::KeyFrame,
+    map::{Id, Map},
+    pose::DVTranslation,
+};
+use crate::{
+    matrix::DVVector3,
+    modules::orbslam_matcher::SCALE_FACTORS,
+    registered_actors::{FEATURE_DETECTION, FEATURE_MATCHING_MODULE},
+};
 
 #[derive(Debug)]
-pub struct MapPoint { // Full map item inserted into the map with the following additional fields
+pub struct MapPoint {
+    // Full map item inserted into the map with the following additional fields
     pub id: Id,
     pub position: DVTranslation, // mWorldPos
 
@@ -18,7 +35,7 @@ pub struct MapPoint { // Full map item inserted into the map with the following 
     pub best_descriptor: DVMatrix, // mDescriptor
 
     // Variables used by merging
-    pub normal_vector: DVVector3<f64>,  // mNormalVector ; Mean viewing direction
+    pub normal_vector: DVVector3<f64>, // mNormalVector ; Mean viewing direction
 
     // Scale invariance distances
     max_distance: f64,
@@ -29,25 +46,24 @@ pub struct MapPoint { // Full map item inserted into the map with the following 
     // rather than duplicating all these connections across all the objects and hoping we remember
     // to update them correctly after a map modification
     pub origin_map_id: Id,
-    pub ref_kf_id: Id, // mpRefKF
+    pub ref_kf_id: Id,   // mpRefKF
     pub first_kf_id: Id, // mnFirstKFid
 
     // Set in tracking, used by local mapping to make decision about deleting mappoint
-    found: AtomicI32, //nFound
+    found: AtomicI32,   //nFound
     visible: AtomicI32, // nVisible
 
     // Used by loop closing
     // todo (design, variable locations) can we avoid having these in here and keep it thread local instead?
     //... possibly not, used by imu initialization (local mapping) as well
-    pub ba_global_for_kf: Id, // mnBAGlobalForKF
+    pub ba_global_for_kf: Id,            // mnBAGlobalForKF
     pub gba_pose: Option<DVTranslation>, // mTcwGBA
 
     // Variables in ORBSLAM, DON'T Set these!!
     // mnFirstFrame ... literally never used meaningfully
     // mnLastFrameSeen ... similar to "mnTrackReferenceForFrame" in KeyFrame. redundant and easy to mess up/get out of sync. Search for this globally to see an example of how to avoid using it.
     // mbTrackInView ... only used by tracking to keep track of which mappoints to show. Just keep this data saved in tracking locally
-
-    sensor: Sensor
+    sensor: Sensor,
 }
 
 impl MapPoint {
@@ -84,7 +100,7 @@ impl MapPoint {
     pub fn predict_scale(&self, current_distance: &f64) -> i32 {
         // int MapPoint::PredictScale(const float &currentDist, KeyFrame* pKF)
         let ratio = self.max_distance / current_distance;
-        let scale_factor= SETTINGS.get::<f64>(FEATURE_DETECTION, "scale_factor");
+        let scale_factor = SETTINGS.get::<f64>(FEATURE_DETECTION, "scale_factor");
         let log_scale_factor = scale_factor.log10();
         let scale = (ratio.log10() / log_scale_factor).ceil() as i32;
         let scale_levels = SETTINGS.get::<i32>(FEATURE_DETECTION, "n_levels");
@@ -98,7 +114,6 @@ impl MapPoint {
             return scale;
         }
     }
-
 
     pub fn get_norm_and_depth(&self, map: &Map) -> Option<(f64, f64, DVVector3<f64>)> {
         // Part 1 of void MapPoint::UpdateNormalAndDepth()
@@ -138,18 +153,19 @@ impl MapPoint {
         }
 
         let descriptors = self.compute_descriptors(map);
-        if descriptors.len() == 0 { 
+        if descriptors.len() == 0 {
             error!("mappoint::compute_distinctive_descriptors;No descriptors");
             return None;
-         }
+        }
 
         // Compute distances between them
         let mut distances = vec![vec![i32::MAX; descriptors.len()]; descriptors.len()];
         for i in 0..descriptors.len() {
             distances[i][i] = 0;
 
-            for j in i+1..descriptors.len() {
-                let dist_ij = FEATURE_MATCHING_MODULE.descriptor_distance(&descriptors[i], &descriptors[j]);
+            for j in i + 1..descriptors.len() {
+                let dist_ij =
+                    FEATURE_MATCHING_MODULE.descriptor_distance(&descriptors[i], &descriptors[j]);
 
                 distances[i][j] = dist_ij;
                 distances[j][i] = dist_ij;
@@ -166,7 +182,7 @@ impl MapPoint {
 
             v_dists.sort();
 
-            let median = v_dists[((v_dists.len() - 1)/2) as usize];
+            let median = v_dists[((v_dists.len() - 1) / 2) as usize];
 
             if median < best_median {
                 best_median = median;
@@ -183,28 +199,30 @@ impl MapPoint {
         self.best_descriptor = desc;
     }
 
-    pub fn increase_found(& self, num: i32) {
+    pub fn increase_found(&self, num: i32) {
         self.found.fetch_add(num, Ordering::SeqCst);
     }
-    pub fn increase_visible(& self, num: i32) {
+    pub fn increase_visible(&self, num: i32) {
         self.visible.fetch_add(num, Ordering::SeqCst);
     }
-    pub fn get_found_ratio(& self) -> f32 {
+    pub fn get_found_ratio(&self) -> f32 {
         self.found.load(Ordering::SeqCst) as f32 / self.visible.load(Ordering::SeqCst) as f32
     }
-    pub fn get_found(& self) -> i32 {
+    pub fn get_found(&self) -> i32 {
         self.found.load(Ordering::SeqCst)
     }
-    pub fn get_visible(& self) -> i32 {
+    pub fn get_visible(&self) -> i32 {
         self.visible.load(Ordering::SeqCst)
     }
 
     //** Observations */////////////////////////////////////////////////////////////////////////////////
-    pub fn get_observations(&self) -> &BTreeMap<Id, (i32, i32)> { &self.observations }
-    pub fn get_index_in_keyframe(&self, kf_id: Id) -> (i32, i32) { 
+    pub fn get_observations(&self) -> &BTreeMap<Id, (i32, i32)> {
+        &self.observations
+    }
+    pub fn get_index_in_keyframe(&self, kf_id: Id) -> (i32, i32) {
         match self.observations.get(&kf_id) {
             Some((left, right)) => (*left, *right),
-            None => (-1, -1)
+            None => (-1, -1),
         }
     }
     pub(super) fn delete_observation(&mut self, kf_id: &Id) -> bool {
@@ -237,10 +255,15 @@ impl MapPoint {
         return false;
     }
 
-    pub(super) fn add_observation(&mut self, kf_id: &Id, num_keypoints_left_for_kf: u32, index: u32) {
+    pub(super) fn add_observation(
+        &mut self,
+        kf_id: &Id,
+        num_keypoints_left_for_kf: u32,
+        index: u32,
+    ) {
         let (mut left_index, mut right_index) = match self.observations.get(kf_id) {
             Some((left, right)) => (*left, *right),
-            None => (-1, -1)
+            None => (-1, -1),
         };
 
         match self.sensor.frame() {
@@ -250,8 +273,8 @@ impl MapPoint {
                 } else {
                     left_index = index as i32;
                 }
-            },
-            _ => left_index = index as i32
+            }
+            _ => left_index = index as i32,
         }
         // TODO (Stereo)
         // if(!pKF->mpCamera2 && pKF->mvuRight[idx]>=0)
@@ -263,7 +286,11 @@ impl MapPoint {
         self.observations.insert(*kf_id, (left_index, right_index));
     }
 
-    fn get_obs_normal(&self, map: &Map, position: &DVVector3<f64>) -> (i32, nalgebra::Vector3<f64>) { 
+    fn get_obs_normal(
+        &self,
+        map: &Map,
+        position: &DVVector3<f64>,
+    ) -> (i32, nalgebra::Vector3<f64>) {
         // let _span = tracy_client::span!("UpdateNormalAndDepth");
 
         let mut normal = na::Vector3::<f64>::zeros();
@@ -284,20 +311,22 @@ impl MapPoint {
                     let normali = position_opencv - owi;
                     normal = normal + normali / normali.norm();
                     n += 1;
-                },
+                }
                 _ => {}
             }
         }
         (n, normal)
     }
 
-    fn compute_descriptors(&self, map: &Map) -> Vec::<opencv::core::Mat> {
+    fn compute_descriptors(&self, map: &Map) -> Vec<opencv::core::Mat> {
         let mut descriptors = Vec::<opencv::core::Mat>::new();
         for (id, (index1, index2)) in &self.observations {
             let kf = map.get_keyframe(*id);
             descriptors.push((*kf.features.descriptors.row(*index1 as u32)).clone());
             match self.sensor.frame() {
-                FrameSensor::Stereo => descriptors.push((*kf.features.descriptors.row(*index2 as u32)).clone()),
+                FrameSensor::Stereo => {
+                    descriptors.push((*kf.features.descriptors.row(*index2 as u32)).clone())
+                }
                 _ => {}
             }
         }
@@ -309,11 +338,11 @@ impl MapPoint {
         if *left_index != -1 {
             kf.features.get_octave(*left_index as usize)
         } else {
-            kf.features.get_octave((right_index - kf.features.num_keypoints as i32) as usize)
+            kf.features
+                .get_octave((right_index - kf.features.num_keypoints as i32) as usize)
         }
     }
 }
-
 
 impl Clone for MapPoint {
     fn clone(&self) -> Self {

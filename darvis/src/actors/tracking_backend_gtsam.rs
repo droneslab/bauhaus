@@ -13,7 +13,7 @@ use core::{
     config::*, matrix::*, system::{Actor, MessageBox, System, Timestamp}
 };
 use crate::{
-    actors::{messages::{FeatureTracksAndIMUMsg, ShutdownMsg, TrajectoryMsg, UpdateFrameIMUMsg, VisTrajectoryMsg}, tracking_frontend_gtsam::TrackedFeatures},
+    actors::{messages::{FeatureTracksAndIMUMsg, ShutdownMsg, TrajectoryMsg, UpdateFrameIMUMsg, VisTrajectoryMsg}, tracking_frontend_gtsam::{GtsamFrontendTrackingState, TrackedFeatures}},
     map::{frame::Frame, map::Id, pose::Pose, read_only_lock::ReadWriteMap}, modules::{image::draw_optical_flow, imu::{ImuBias, ImuCalib, ImuMeasurements}}, registered_actors::{CAMERA, IMU, SHUTDOWN_ACTOR, TRACKING_BACKEND, VISUALIZER}, ImuInitializationData
 };
 use num_traits::Pow;
@@ -92,7 +92,7 @@ impl TrackingBackendGTSAM {
         return false;
     }
 
-    fn handle_regular_message(&mut self, mut msg: FeatureTracksAndIMUMsg) -> Result<(), Box<dyn std::error::Error>> {
+    fn handle_regular_message(&mut self, msg: FeatureTracksAndIMUMsg) -> Result<(), Box<dyn std::error::Error>> {
         let _span = tracy_client::span!("track");
         // println!("Imu measurements right now: {:?}", msg.imu_measurements);
 
@@ -253,6 +253,7 @@ impl TrackingBackendGTSAM {
             };
             println!("Updating graph? {}", should_update);
             let optimization_results = self.graph_solver.solve(
+                msg.tracker_status,
                 &mut current_frame,
                 &mut msg.imu_measurements.clone(),
                 &msg.feature_tracks,
@@ -689,7 +690,7 @@ impl GraphSolver {
 
         // Add initial velocity priors.
         let v_noise = gtsam::linear::noise_model::IsotropicNoiseModel::from_dim_and_sigma(3, self.initial_velocity_sigma);
-        self.graph_new.add_prior_factor_vector3(&Symbol::new(b'v', self.ct_state), &prior_state.velocity, &v_noise);
+        self.graph_new.add_prior_factor_vector3_isotropicnoisemodel(&Symbol::new(b'v', self.ct_state), &prior_state.velocity, &v_noise);
 
         // Add initial bias priors:
         let b_noise = gtsam::linear::noise_model::DiagonalNoiseModel::from_sigmas(Vector6::new(
@@ -734,8 +735,9 @@ impl GraphSolver {
 
         params.set_gyroscope_covariance(f64::pow(self.gyro_noise_density, 2));
         params.set_accelerometer_covariance(f64::pow(self.accel_noise_density, 2));
-        params.set_bias_acc_covariance(f64::pow(self.accel_random_walk, 2));
-        params.set_bias_omega_covariance(f64::pow(self.gyro_random_walk, 2));
+        // SOFIYA TODO... removed these because they do not seem to be in kimera?
+        // params.set_bias_acc_covariance(f64::pow(self.accel_random_walk, 2));
+        // params.set_bias_omega_covariance(f64::pow(self.gyro_random_walk, 2));
         // These are not in orbslam but are in kimera:
         params.set_integration_covariance(f64::pow(self.imu_integration_sigma, 2));
         params.set_bias_acc_omega_int(self.init_bias_sigma);
@@ -745,6 +747,7 @@ impl GraphSolver {
     }
 
     fn solve(&mut self,
+        tracker_status: GtsamFrontendTrackingState,
         current_frame : &mut Frame, 
         imu_measurements : &mut ImuMeasurements, new_tracked_features : &TrackedFeatures,
         removed_feature_ids: Vec<u64>,
@@ -799,12 +802,47 @@ impl GraphSolver {
             self.optimize(new_factor_feature_ids, new_affected_keys, removed_feature_ids);
         }
 
-        match &self.optimizer {
-            Optimizer::ISAM2{isam2} => {
-                // debug!("OPTIMIZATION COVARIANCE: {:?}", isam2.get_marginal_covariance(&Symbol::new(b'x', self.ct_state - 1)));
+        match tracker_status {
+            GtsamFrontendTrackingState::LowDisparity => {
+                // Vehicle is not moving
+                debug!("Tracker has a LOW_DISPARITY status. Add zero velocity and no motion factors.");
+                let zero_velocity_noise = {
+                    let precision = SETTINGS.get::<f64>(TRACKING_BACKEND, "zero_velocity_precision");
+                    gtsam::linear::noise_model::DiagonalNoiseModel::from_precisions(
+                        Vector3::new(precision, precision, precision)
+                    )
+                };
+                self.graph_new.add_prior_factor_vector3_diagonalnoisemodel(
+                    &Symbol::new(b'v', self.ct_state),
+                    &gtsam::base::vector::Vector3::new(0.0, 0.0, 0.0),
+                    &zero_velocity_noise
+                );
+                let no_motion_prior_noise = {
+                    let rotation_precision = SETTINGS.get::<f64>(TRACKING_BACKEND, "no_motion_rotation_precision");
+                    let position_precision = SETTINGS.get::<f64>(TRACKING_BACKEND, "no_motion_position_precision");
+                    gtsam::linear::noise_model::DiagonalNoiseModel::from_precisions(
+                        Vector6::new(
+                            rotation_precision, rotation_precision, rotation_precision,
+                            position_precision, position_precision, position_precision)
+                    )
+                };
+                self.graph_new.add_between_factor_pose3(
+                    &Symbol::new(b'x', self.ct_state - 1),
+                    &Symbol::new(b'x', self.ct_state),
+                    &gtsam::geometry::pose3::Pose3::default(),
+                    & no_motion_prior_noise
+                );
             },
             _ => {}
         }
+
+
+        // match &self.optimizer {
+        //     Optimizer::ISAM2{isam2} => {
+        //         debug!("OPTIMIZATION COVARIANCE: {:?}", isam2.get_marginal_covariance(&Symbol::new(b'x', self.ct_state - 1)));
+        //     },
+        //     _ => {}
+        // }
 
         let mut optimization_results = vec![];
         match self.optimizer {
@@ -888,8 +926,7 @@ impl GraphSolver {
         // This will integrate from the current state time up to the new update time
         let _span = tracy_client::span!("create_imu_factor");
 
-        let mut total_tstep = 0.0;
-
+        // let mut total_tstep = 0.0;
         // for i in 1..imu_measurements.len() {
         //     let tstep = imu_measurements[i].timestamp - imu_measurements[i - 1].timestamp;
         //     let acc: Vector3<f64> = imu_measurements[i].acc; // acc
@@ -990,7 +1027,7 @@ impl GraphSolver {
             //     ang_vel.x, ang_vel.y, ang_vel.z, // angVel
             //     tstep
             // );
-            total_tstep += tstep;
+            // total_tstep += tstep;
         }
         // println!("Sofiya, total tstep: {}", total_tstep);
         Ok(())
@@ -1105,7 +1142,7 @@ impl GraphSolver {
         return (new_factor_feature_ids, new_affected_keys);
     }
 
-    fn optimize(&mut self, new_factor_feature_ids: Vec<i32>, new_affected_keys: Vec<DoubleVec>, removed_feature_ids: Vec<u64>) -> Vec<gtsam::sys::Point> {
+    fn optimize(&mut self, new_factor_feature_ids: Vec<i32>, new_affected_keys: Vec<DoubleVec>, _removed_feature_ids: Vec<u64>) -> Vec<gtsam::sys::Point> {
         let _span = tracy_client::span!("optimize");
 
         let mut points = vec![];

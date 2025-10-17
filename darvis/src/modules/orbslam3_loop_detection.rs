@@ -1,25 +1,30 @@
-use core::{config::{SETTINGS, SYSTEM}, sensor::{FrameSensor, ImuSensor, Sensor}};
+use core::{
+    config::{SETTINGS, SYSTEM},
+    sensor::{FrameSensor, ImuSensor, Sensor},
+};
 use std::collections::{HashMap, HashSet};
 
 use log::debug;
 use opencv::core::KeyPointTraitConst;
 
-use crate::{map::{map::Id, pose::Sim3, read_only_lock::ReadWriteMap}, registered_actors::FEATURE_MATCHING_MODULE};
+use crate::{
+    map::{map::Id, pose::Sim3, read_only_lock::ReadWriteMap},
+    registered_actors::FEATURE_MATCHING_MODULE,
+};
 
 use super::{module_definitions::LoopDetectionModule, optimizer, sim3solver::Sim3Solver};
 
 pub struct ORBSLAM3LoopDetection {
     num_coincidences: i32,
-    loop_mps: Vec<Id>, // mvpLoopMPs
+    loop_mps: Vec<Id>,                       // mvpLoopMPs
     current_matched_points: Vec<Option<Id>>, // mvpLoopMatchedMPs
-    loop_slw: Sim3, // mg2oLoopSlw
-    loop_matched_kf: Id, // mpLoopMatchedKF
+    loop_slw: Sim3,                          // mg2oLoopSlw
+    loop_matched_kf: Id,                     // mpLoopMatchedKF
 
-    num_not_found: i32, // mnLoopNumNotFound
+    num_not_found: i32,  // mnLoopNumNotFound
     last_current_kf: Id, // mpLoopLastCurrentKF
 
     sensor: Sensor,
-
 }
 
 impl ORBSLAM3LoopDetection {
@@ -33,16 +38,28 @@ impl ORBSLAM3LoopDetection {
             last_current_kf: -1,
             num_not_found: 0,
             loop_mps: Vec::new(),
-
         }
     }
 
-    fn detect_and_reffine_sim3_from_last_kf(&mut self, map: &ReadWriteMap, current_kf_id: Id, loop_kf: Id, scw: &mut Sim3) -> Result<Option<(Sim3, Vec<Option<i32>>)>, Box<dyn std::error::Error>> {
+    fn detect_and_reffine_sim3_from_last_kf(
+        &mut self,
+        map: &ReadWriteMap,
+        current_kf_id: Id,
+        loop_kf: Id,
+        scw: &mut Sim3,
+    ) -> Result<Option<(Sim3, Vec<Option<i32>>)>, Box<dyn std::error::Error>> {
         // bool LoopClosing::DetectAndReffineSim3FromLastKF(KeyFrame* pCurrentKF, KeyFrame* pMatchedKF, g2o::Sim3 &gScw, int &nNumProjMatches, std::vector<MapPoint*> &vpMPs, std::vector<MapPoint*> &vpMatchedMPs)
         // let _span = tracy_client::span!("detect_and_reffine_sim3_from_last_kf");
 
         let mut matched_mappoints = Vec::new();
-        let num_proj_matches = Self::find_matches_by_projection(&map, current_kf_id, scw, loop_kf, &mut self.loop_mps, &mut matched_mappoints)?;
+        let num_proj_matches = Self::find_matches_by_projection(
+            &map,
+            current_kf_id,
+            scw,
+            loop_kf,
+            &mut self.loop_mps,
+            &mut matched_mappoints,
+        )?;
 
         if num_proj_matches >= 30 {
             let mut scm = {
@@ -51,7 +68,8 @@ impl ORBSLAM3LoopDetection {
                 *scw * twm_as_sim3
             };
 
-            let mut fixed_scale = ! matches!(self.sensor, Sensor(FrameSensor::Mono, ImuSensor::None));
+            let mut fixed_scale =
+                !matches!(self.sensor, Sensor(FrameSensor::Mono, ImuSensor::None));
             if matches!(self.sensor, Sensor(FrameSensor::Mono, ImuSensor::Some)) {
                 if !map.read()?.imu_ba2 {
                     fixed_scale = false;
@@ -60,11 +78,24 @@ impl ORBSLAM3LoopDetection {
             // debug!("Fixed scale is {}", fixed_scale);
 
             let num_opt_matches = optimizer::optimize_sim3(
-                &map, current_kf_id, loop_kf, &mut matched_mappoints, &mut scm, 10, fixed_scale
+                &map,
+                current_kf_id,
+                loop_kf,
+                &mut matched_mappoints,
+                &mut scm,
+                10,
+                fixed_scale,
             )?;
 
             if num_opt_matches > 50 {
-                let num_proj_matches  = Self::find_matches_by_projection(&map, current_kf_id, scw, loop_kf, &mut self.loop_mps, &mut matched_mappoints)?;
+                let num_proj_matches = Self::find_matches_by_projection(
+                    &map,
+                    current_kf_id,
+                    scw,
+                    loop_kf,
+                    &mut self.loop_mps,
+                    &mut matched_mappoints,
+                )?;
                 if num_proj_matches >= 100 {
                     return Ok(Some((*scw, matched_mappoints)));
                 }
@@ -74,22 +105,36 @@ impl ORBSLAM3LoopDetection {
     }
 
     fn find_matches_by_projection(
-        map: & ReadWriteMap, current_kf_id: Id, scw: &mut Sim3, loop_kf: Id, mappoints: &mut Vec<Id>, matched_mappoints: &mut Vec<Option<i32>>,
+        map: &ReadWriteMap,
+        current_kf_id: Id,
+        scw: &mut Sim3,
+        loop_kf: Id,
+        mappoints: &mut Vec<Id>,
+        matched_mappoints: &mut Vec<Option<i32>>,
     ) -> Result<i32, Box<dyn std::error::Error>> {
         // int LoopClosing::FindMatchesByProjection(KeyFrame* pCurrentKF, KeyFrame* pMatchedKFw, g2o::Sim3 &g2oScw, set<MapPoint*> &spMatchedMPinOrigin, vector<MapPoint*> &vpMapPoints, vector<MapPoint*> &vpMatchedMapPoints)
         // let _span = tracy_client::span!("find_matches_by_projection");
 
         let num_covisibles = 10;
-        let mut cov_kf_matched = map.read()?.get_keyframe(loop_kf).get_covisibility_keyframes(num_covisibles); // vpCovKFm
+        let mut cov_kf_matched = map
+            .read()?
+            .get_keyframe(loop_kf)
+            .get_covisibility_keyframes(num_covisibles); // vpCovKFm
         let initial_cov = cov_kf_matched.len();
         cov_kf_matched.push(loop_kf);
 
         let mut check_kfs: HashSet<i32> = HashSet::from_iter(cov_kf_matched.iter().cloned()); // spCheckKFs
-        let current_covisibles = map.read()?.get_keyframe(current_kf_id).get_covisibility_keyframes(i32::MAX); // spCurrentCovisbles
+        let current_covisibles = map
+            .read()?
+            .get_keyframe(current_kf_id)
+            .get_covisibility_keyframes(i32::MAX); // spCurrentCovisbles
 
         if (initial_cov as i32) < num_covisibles {
             for i in 0..initial_cov {
-                let kfs = map.read()?.get_keyframe(cov_kf_matched[i]).get_covisibility_keyframes(num_covisibles);
+                let kfs = map
+                    .read()?
+                    .get_keyframe(cov_kf_matched[i])
+                    .get_covisibility_keyframes(num_covisibles);
                 let mut num_inserted = 0;
                 let mut j = 0;
                 while j < kfs.len() && num_inserted < num_covisibles {
@@ -106,7 +151,13 @@ impl ORBSLAM3LoopDetection {
         let mut sp_map_points = HashSet::new();
         mappoints.clear(); // vpMapPoints
         matched_mappoints.clear(); // vpMatchedMapPoints
-        matched_mappoints.resize_with(map.read()?.get_keyframe(current_kf_id).get_mp_matches().len(), || None);
+        matched_mappoints.resize_with(
+            map.read()?
+                .get_keyframe(current_kf_id)
+                .get_mp_matches()
+                .len(),
+            || None,
+        );
 
         for keyframe in cov_kf_matched {
             let read = map.read()?;
@@ -122,13 +173,24 @@ impl ORBSLAM3LoopDetection {
             }
         }
         let num_matches = FEATURE_MATCHING_MODULE.search_by_projection_for_loop_detection2(
-            &map, &current_kf_id, &scw, &mappoints,  matched_mappoints, 3, 1.5
+            &map,
+            &current_kf_id,
+            &scw,
+            &mappoints,
+            matched_mappoints,
+            3,
+            1.5,
         )?;
 
         return Ok(num_matches);
     }
 
-    fn detect_common_regions_from_bow(&mut self, map: &ReadWriteMap, current_kf_id: Id, bow_cands: &Vec<Id>) -> Result<(Option<Id>, Option<Sim3>), Box<dyn std::error::Error>> {
+    fn detect_common_regions_from_bow(
+        &mut self,
+        map: &ReadWriteMap,
+        current_kf_id: Id,
+        bow_cands: &Vec<Id>,
+    ) -> Result<(Option<Id>, Option<Sim3>), Box<dyn std::error::Error>> {
         // bool LoopClosing::DetectCommonRegionsFromBoW(std::vector<KeyFrame*> &vpBowCand, KeyFrame* &pMatchedKF2, KeyFrame* &pLastCurrentKF, g2o::Sim3 &g2oScw, int &nNumCoincidences, std::vector<MapPoint*> &vpMPs, std::vector<MapPoint*> &vpMatchedMPs)
         // let _span = tracy_client::span!("detect_common_regions_from_bow");
 
@@ -138,7 +200,10 @@ impl ORBSLAM3LoopDetection {
         let proj_matches_threshold = 50; // nProjMatches
         let num_proj_opt_matches_threshold = 80; // nProjOptMatches
 
-        let connected_keyframes = map.read()?.get_keyframe(current_kf_id).get_covisibility_keyframes(i32::MAX); // spConnectedKeyFrames
+        let connected_keyframes = map
+            .read()?
+            .get_keyframe(current_kf_id)
+            .get_covisibility_keyframes(i32::MAX); // spConnectedKeyFrames
         let num_covisibles = 10; // nNumCovisibles
 
         // Varibles to select the best number
@@ -153,7 +218,11 @@ impl ORBSLAM3LoopDetection {
         let mut vn_stage = vec![0; num_candidates]; // vnStage
         let mut vn_matches_stage = vec![0; num_candidates]; // vnMatchesStage
 
-        let num_curr_kf_matches = map.read()?.get_keyframe(current_kf_id).get_mp_matches().len(); 
+        let num_curr_kf_matches = map
+            .read()?
+            .get_keyframe(current_kf_id)
+            .get_mp_matches()
+            .len();
 
         let mut index = 0;
         for kf_i_id in bow_cands {
@@ -162,7 +231,10 @@ impl ORBSLAM3LoopDetection {
             }
 
             // Current KF against KF with covisibles version
-            let mut cov_kf = map.read()?.get_keyframe(*kf_i_id).get_covisibility_keyframes(num_covisibles); // vpCovKFi
+            let mut cov_kf = map
+                .read()?
+                .get_keyframe(*kf_i_id)
+                .get_covisibility_keyframes(num_covisibles); // vpCovKFi
             if cov_kf.len() == 0 {
                 cov_kf.push(*kf_i_id);
             } else {
@@ -179,7 +251,7 @@ impl ORBSLAM3LoopDetection {
                 }
             }
             if abort_by_near_kf {
-                debug!("Check BoW aborted because is close to the matched one");  
+                debug!("Check BoW aborted because is close to the matched one");
                 continue;
             }
 
@@ -188,7 +260,7 @@ impl ORBSLAM3LoopDetection {
             let mut num_bow_matches = 0; // numBoWMatches
             let mut vp_matched_mappoints = HashMap::new(); // vpMatchedPoints
             let mut keyframe_matched_mp = HashMap::new(); // vpKeyFrameMatchedMP
-    
+
             let most_bow_matches_kf = kf_i_id; // pMostBoWMatchesKF
             let mut most_bow_num_matches = 0; // nMostBoWNumMatches
 
@@ -200,7 +272,7 @@ impl ORBSLAM3LoopDetection {
                         curr_kf,
                         read.get_keyframe(cov_kf[j]),
                         true,
-                        0.9
+                        0.9,
                     )?;
                     // debug!("...Matches between {} (frame {}) and {} (frame {}): {}", current_kf_id, read.get_keyframe(current_kf_id).frame_id, cov_kf[j], read.get_keyframe(cov_kf[j]).frame_id, matches.len());
                     if matches.len() > most_bow_num_matches {
@@ -223,7 +295,8 @@ impl ORBSLAM3LoopDetection {
 
             if num_bow_matches >= bow_matches_threshold {
                 // Geometric validation
-                let mut fixed_scale = ! matches!(self.sensor, Sensor(FrameSensor::Mono, ImuSensor::None));
+                let mut fixed_scale =
+                    !matches!(self.sensor, Sensor(FrameSensor::Mono, ImuSensor::None));
                 if matches!(self.sensor, Sensor(FrameSensor::Mono, ImuSensor::Some)) {
                     if !map.read()?.imu_ba2 {
                         fixed_scale = false;
@@ -250,7 +323,10 @@ impl ORBSLAM3LoopDetection {
                     Some((_inliers, _num_inliers)) => {
                         // Match by reprojection
                         cov_kf.clear();
-                        cov_kf = map.read()?.get_keyframe(*most_bow_matches_kf).get_covisibility_keyframes(num_covisibles);
+                        cov_kf = map
+                            .read()?
+                            .get_keyframe(*most_bow_matches_kf)
+                            .get_covisibility_keyframes(num_covisibles);
                         cov_kf.push(*most_bow_matches_kf);
 
                         let mut candidates = Vec::new(); // vpMapPoints
@@ -271,20 +347,31 @@ impl ORBSLAM3LoopDetection {
                         }
 
                         let mut scm = solver.get_estimates(); // gScm
-                        let smw = map.read()?.get_keyframe(*most_bow_matches_kf).get_pose().into(); // gSmw
+                        let smw = map
+                            .read()?
+                            .get_keyframe(*most_bow_matches_kf)
+                            .get_pose()
+                            .into(); // gSmw
                         let scw = scm * smw; // gScw // Similarity matrix of current from the world position
 
                         let mut matched_mps = vec![None; num_curr_kf_matches]; // vpMatchedMP
-                        let (num_proj_matches, _matched_kfs) = FEATURE_MATCHING_MODULE.search_by_projection_for_loop_detection1(
-                            &map, &current_kf_id, &scw, 
-                            &candidates, &kfs_for_candidates, &mut matched_mps,
-                            8, 1.5
-                        )?;
+                        let (num_proj_matches, _matched_kfs) = FEATURE_MATCHING_MODULE
+                            .search_by_projection_for_loop_detection1(
+                                &map,
+                                &current_kf_id,
+                                &scw,
+                                &candidates,
+                                &kfs_for_candidates,
+                                &mut matched_mps,
+                                8,
+                                1.5,
+                            )?;
 
                         if num_proj_matches >= proj_matches_threshold {
                             // Optimize Sim3 transformation with every matches
 
-                            let mut fixed_scale = ! matches!(self.sensor, Sensor(FrameSensor::Mono, ImuSensor::None));
+                            let mut fixed_scale =
+                                !matches!(self.sensor, Sensor(FrameSensor::Mono, ImuSensor::None));
                             if matches!(self.sensor, Sensor(FrameSensor::Mono, ImuSensor::Some)) {
                                 if !map.read()?.imu_ba2 {
                                     fixed_scale = false;
@@ -292,21 +379,35 @@ impl ORBSLAM3LoopDetection {
                             }
                             // debug!("Fixed scale is {}", fixed_scale);
 
-
                             let num_opt_matches = optimizer::optimize_sim3(
-                                &map, current_kf_id, *kf_i_id, &mut matched_mps, &mut scm, 10, fixed_scale
+                                &map,
+                                current_kf_id,
+                                *kf_i_id,
+                                &mut matched_mps,
+                                &mut scm,
+                                10,
+                                fixed_scale,
                             )?;
 
                             if num_opt_matches >= sim3_inliers_threshold {
-                                let smw = map.read()?.get_keyframe(*most_bow_matches_kf).get_pose().into(); // gSmw
+                                let smw = map
+                                    .read()?
+                                    .get_keyframe(*most_bow_matches_kf)
+                                    .get_pose()
+                                    .into(); // gSmw
                                 let scw = scm * smw; // gScw // Similarity matrix of current from the world position
 
                                 let mut matched_mps = vec![None; num_curr_kf_matches]; // vpMatchedMP
-                                let num_proj_opt_matches = FEATURE_MATCHING_MODULE.search_by_projection_for_loop_detection2(
-                                    &map, &current_kf_id, &scw, 
-                                    &candidates, &mut matched_mps,
-                                    5, 1.0
-                                )?;
+                                let num_proj_opt_matches = FEATURE_MATCHING_MODULE
+                                    .search_by_projection_for_loop_detection2(
+                                        &map,
+                                        &current_kf_id,
+                                        &scw,
+                                        &candidates,
+                                        &mut matched_mps,
+                                        5,
+                                        1.0,
+                                    )?;
 
                                 if num_proj_opt_matches >= num_proj_opt_matches_threshold {
                                     let mut max_x = -1.0;
@@ -319,9 +420,14 @@ impl ORBSLAM3LoopDetection {
                                         for matched_mp in &matched_mps {
                                             if let Some(mp_i_id) = matched_mp {
                                                 if let Some(mp_i) = read.mappoints.get(&mp_i_id) {
-                                                    let (index_left, _index_right) = mp_i.get_index_in_keyframe(*kf_i_id);
+                                                    let (index_left, _index_right) =
+                                                        mp_i.get_index_in_keyframe(*kf_i_id);
                                                     if index_left >= 0 {
-                                                        let kp = kf_i.features.get_keypoint(index_left as usize).0.pt();
+                                                        let kp = kf_i
+                                                            .features
+                                                            .get_keypoint(index_left as usize)
+                                                            .0
+                                                            .pt();
                                                         if kp.x < min_x {
                                                             min_x = kp.x;
                                                         }
@@ -339,25 +445,37 @@ impl ORBSLAM3LoopDetection {
                                             }
                                         }
 
-                                        read.get_keyframe(current_kf_id).get_covisibility_keyframes(num_covisibles)
+                                        read.get_keyframe(current_kf_id)
+                                            .get_covisibility_keyframes(num_covisibles)
                                     };
 
                                     let mut num_kfs = 0; // nNumKFs
 
                                     let mut j = 0;
-                                    let current_kf_pose = map.read()?.get_keyframe(current_kf_id).get_pose();
+                                    let current_kf_pose =
+                                        map.read()?.get_keyframe(current_kf_id).get_pose();
                                     while num_kfs < 3 && j < current_cov_kfs.len() {
                                         let mut sjw = {
-                                            let kf_j_pose = map.read()?.get_keyframe(current_cov_kfs[j]).get_pose();
+                                            let kf_j_pose = map
+                                                .read()?
+                                                .get_keyframe(current_cov_kfs[j])
+                                                .get_pose();
                                             let sjc = Sim3 {
                                                 pose: kf_j_pose * current_kf_pose.inverse(),
-                                                scale: 1.0
+                                                scale: 1.0,
                                             };
 
                                             sjc * scw
                                         }; // gSjw
 
-                                        let (valid, _num_proj_matches_j) = self.detect_common_regions_from_last_kf(map, current_kf_id, &mut sjw, *most_bow_matches_kf, &mut candidates)?;
+                                        let (valid, _num_proj_matches_j) = self
+                                            .detect_common_regions_from_last_kf(
+                                                map,
+                                                current_kf_id,
+                                                &mut sjw,
+                                                *most_bow_matches_kf,
+                                                &mut candidates,
+                                            )?;
 
                                         if valid {
                                             num_kfs += 1;
@@ -381,8 +499,8 @@ impl ORBSLAM3LoopDetection {
                                 }
                             }
                         }
-                    },
-                    None => ()
+                    }
+                    None => (),
                 }
             }
             index += 1;
@@ -392,13 +510,13 @@ impl ORBSLAM3LoopDetection {
             self.last_current_kf = current_kf_id; // pLastCurrentKF = mpCurrentKF;
             self.num_coincidences = best_num_coincidences; // nNumCoincidences = nBestNumCoindicendes;
             map.write()?.get_keyframe_mut(best_matched_kf).dont_delete = true; // pMatchedKF2->SetNotErase();
-            self.loop_mps = best_mappoints;  // vpMPs = vpBestMapPoints;
+            self.loop_mps = best_mappoints; // vpMPs = vpBestMapPoints;
             self.current_matched_points = best_matched_mappoints; // vpMatchedMPs = vpBestMatchedMapPoints;
             self.loop_matched_kf = best_matched_kf; // pMatchedKF2 = pBestMatchedKF;
             self.loop_slw = best_scw; // g2oScw = g2oBestScw;
 
             if self.num_coincidences >= 3 {
-                return Ok((Some(best_matched_kf), Some(best_scw)))
+                return Ok((Some(best_matched_kf), Some(best_scw)));
             } else {
                 return Ok((None, Some(best_scw)));
             }
@@ -416,22 +534,48 @@ impl ORBSLAM3LoopDetection {
         return Ok((None, None));
     }
 
-    fn detect_common_regions_from_last_kf(&mut self, map: &ReadWriteMap, current_kf_id: Id, scw: &mut Sim3, loop_kf: Id, mappoints: &mut Vec<Id>) -> Result<(bool, i32), Box<dyn std::error::Error>>{
+    fn detect_common_regions_from_last_kf(
+        &mut self,
+        map: &ReadWriteMap,
+        current_kf_id: Id,
+        scw: &mut Sim3,
+        loop_kf: Id,
+        mappoints: &mut Vec<Id>,
+    ) -> Result<(bool, i32), Box<dyn std::error::Error>> {
         // bool LoopClosing::DetectCommonRegionsFromLastKF(KeyFrame* pCurrentKF, KeyFrame* pMatchedKF, g2o::Sim3 &gScw, int &nNumProjMatches, std::vector<MapPoint*> &vpMPs, std::vector<MapPoint*> &vpMatchedMPs)
         // let _span = tracy_client::span!("detect_common_regions_from_last_kf");
 
         let mut matched_mappoints = Vec::new();
-        let num_proj_matches = Self::find_matches_by_projection(&map, current_kf_id, scw, loop_kf, mappoints, &mut matched_mappoints)?;
+        let num_proj_matches = Self::find_matches_by_projection(
+            &map,
+            current_kf_id,
+            scw,
+            loop_kf,
+            mappoints,
+            &mut matched_mappoints,
+        )?;
         if num_proj_matches >= 30 {
             return Ok((true, num_proj_matches));
         }
         return Ok((false, num_proj_matches));
     }
-
 }
 
 impl LoopDetectionModule for ORBSLAM3LoopDetection {
-    fn detect_loop(&mut self, map: &ReadWriteMap, current_kf_id: Id) -> Result<(Option<Id>, Option<Id>, Option<Sim3>, Vec<Id>, Vec<Option<Id>>), Box<dyn std::error::Error>>{
+    fn detect_loop(
+        &mut self,
+        map: &ReadWriteMap,
+        current_kf_id: Id,
+    ) -> Result<
+        (
+            Option<Id>,
+            Option<Id>,
+            Option<Sim3>,
+            Vec<Id>,
+            Vec<Option<Id>>,
+        ),
+        Box<dyn std::error::Error>,
+    > {
         // bool LoopClosing::NewDetectCommonRegions
         // let _span = tracy_client::span!("detect_common_regions");
 
@@ -452,29 +596,43 @@ impl LoopDetectionModule for ORBSLAM3LoopDetection {
         if self.num_coincidences > 0 {
             // Find from the last KF candidates
             let mut scw = {
-                let tcl = map.read()?.get_keyframe(current_kf_id).get_pose() * map.read()?.get_keyframe(self.last_current_kf).get_pose().inverse();
+                let tcl = map.read()?.get_keyframe(current_kf_id).get_pose()
+                    * map
+                        .read()?
+                        .get_keyframe(self.last_current_kf)
+                        .get_pose()
+                        .inverse();
                 let tcl_as_sim3: Sim3 = tcl.into();
                 tcl_as_sim3 * self.loop_slw
             };
 
-            match self.detect_and_reffine_sim3_from_last_kf(map, current_kf_id, self.loop_matched_kf, &mut scw)? {
+            match self.detect_and_reffine_sim3_from_last_kf(
+                map,
+                current_kf_id,
+                self.loop_matched_kf,
+                &mut scw,
+            )? {
                 Some((scw, current_matched_points)) => {
                     loop_detected_in_kf = true;
 
                     self.num_coincidences += 1;
-                    map.write()?.get_keyframe_mut(self.last_current_kf).dont_delete = false;
+                    map.write()?
+                        .get_keyframe_mut(self.last_current_kf)
+                        .dont_delete = false;
                     self.last_current_kf = current_kf_id;
                     self.loop_slw = scw;
                     self.current_matched_points = current_matched_points;
 
                     loop_detected = self.num_coincidences >= 3;
                     self.num_not_found = 0;
-                },
+                }
                 None => {
                     loop_detected_in_kf = false;
                     self.num_not_found += 1;
                     if self.num_not_found >= 2 {
-                        map.write()?.get_keyframe_mut(self.last_current_kf).dont_delete = false;
+                        map.write()?
+                            .get_keyframe_mut(self.last_current_kf)
+                            .dont_delete = false;
                         // map.write()?.keyframes.get_mut(&self.matched_kf).unwrap().dont_delete = false;
                         self.num_coincidences = 0;
                         self.current_matched_points.clear();
@@ -500,20 +658,27 @@ impl LoopDetectionModule for ORBSLAM3LoopDetection {
             self.current_matched_points.clear(); // mvpLoopMatchedMPs
             self.loop_mps.clear(); // mvpLoopMPs
             self.num_not_found = 0; // mnLoopNumNotFound
-            return Ok((merge_kf, loop_kf, scw, loop_mps_save, current_matched_points_save));
+            return Ok((
+                merge_kf,
+                loop_kf,
+                scw,
+                loop_mps_save,
+                current_matched_points_save,
+            ));
         }
 
         // Extract candidates from the bag of words
         let (merge_bow_cand, loop_bow_cand) = match !merge_detected || !loop_detected_in_kf {
             // Search in BoW
-            true => map.read()?.detect_top_n_loop_candidates(current_kf_id, 3),            false => (Vec::new(), Vec::new())
+            true => map.read()?.detect_top_n_loop_candidates(current_kf_id, 3),
+            false => (Vec::new(), Vec::new()),
         };
 
         // Check the BoW candidates if the geometric candidate list is empty
         // Loop candidates
         (loop_kf, scw) = match !loop_detected_in_kf && !loop_bow_cand.is_empty() {
-            true => self.detect_common_regions_from_bow(map, current_kf_id,  &loop_bow_cand,)?,
-            false => (None, None)
+            true => self.detect_common_regions_from_bow(map, current_kf_id, &loop_bow_cand)?,
+            false => (None, None),
         };
 
         // Merge candidates
@@ -531,12 +696,17 @@ impl LoopDetectionModule for ORBSLAM3LoopDetection {
             self.current_matched_points.clear(); // mvpLoopMatchedMPs
             self.loop_mps.clear(); // mvpLoopMPs
             self.num_not_found = 0; // mnLoopNumNotFound
-            return Ok((merge_kf, loop_kf, scw, loop_mps_save, current_matched_points_save));
+            return Ok((
+                merge_kf,
+                loop_kf,
+                scw,
+                loop_mps_save,
+                current_matched_points_save,
+            ));
         }
 
-        map.write()?.get_keyframe_mut(current_kf_id).dont_delete = false; 
+        map.write()?.get_keyframe_mut(current_kf_id).dont_delete = false;
 
         return Ok((None, None, None, vec![], vec![]));
     }
-
 }

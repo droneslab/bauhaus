@@ -80,8 +80,9 @@ impl NonlinearFactorGraph {
         )
     }
 
-
-    pub fn add_prior_factor_vector3(
+    // TODO these functions can probably be combined into one by taking either type of noise model,
+    // but would probably have to make noisemodel an enum or something
+    pub fn add_prior_factor_vector3_isotropicnoisemodel(
         &mut self,
         symbol: impl IntoKey,
         prior: &Vector3,
@@ -94,6 +95,20 @@ impl NonlinearFactorGraph {
             &model.to_base_model().inner,
         )
     }
+    pub fn add_prior_factor_vector3_diagonalnoisemodel(
+        &mut self,
+        symbol: impl IntoKey,
+        prior: &Vector3,
+        model: &DiagonalNoiseModel,
+    ) {
+        ::sys::nonlinear_factor_graph_add_prior_factor_vector3(
+            self.inner.pin_mut(),
+            symbol.into_key(),
+            &prior.inner,
+            &model.to_base_model().inner,
+        )
+    }
+
 
     pub fn add_combined_imu_factor(
         &mut self,

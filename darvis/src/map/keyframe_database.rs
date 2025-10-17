@@ -1,23 +1,25 @@
 //*** KEYFRAME DATABASE FROM ORBSLAM2 ***/
+use std::collections::{HashMap, HashSet};
 
-use std::collections::{HashSet, HashMap};
-
-use crate::{map::{keyframe::KeyFrame, map::Id}, modules::module_definitions::BoWModule, registered_actors::VOCABULARY_MODULE};
 use crate::modules::module_definitions::VocabularyModule;
+use crate::{
+    map::{keyframe::KeyFrame, map::Id},
+    modules::module_definitions::BoWModule,
+    registered_actors::VOCABULARY_MODULE,
+};
 
 use super::{frame::Frame, map::Map};
 
-
 #[derive(Debug, Clone)]
 pub struct KeyFrameDatabase {
-    inverted_file: Vec<Vec<Id>> // mvInvertedFile
+    inverted_file: Vec<Vec<Id>>, // mvInvertedFile
 }
 
 impl KeyFrameDatabase {
     pub fn new() -> Self {
         let vocab_size = VOCABULARY_MODULE.size();
-        KeyFrameDatabase { 
-            inverted_file: vec![vec![]; vocab_size]
+        KeyFrameDatabase {
+            inverted_file: vec![vec![]; vocab_size],
         }
     }
 
@@ -42,10 +44,16 @@ impl KeyFrameDatabase {
 
     pub fn clear(&mut self) {
         self.inverted_file.clear();
-        self.inverted_file.resize(VOCABULARY_MODULE.size(), Vec::new());
+        self.inverted_file
+            .resize(VOCABULARY_MODULE.size(), Vec::new());
     }
 
-    pub fn detect_n_best_candidates(&self, map: &Map, curr_kf_id: &Id, num_candidates: i32) -> (Vec<Id>, Vec<Id>) {
+    pub fn detect_n_best_candidates(
+        &self,
+        map: &Map,
+        curr_kf_id: &Id,
+        num_candidates: i32,
+    ) -> (Vec<Id>, Vec<Id>) {
         // From ORBSLAM3:
         // void KeyFrameDatabase::DetectNBestCandidates(KeyFrame *pKF, vector<KeyFrame*> &vpLoopCand, vector<KeyFrame*> &vpMergeCand, int nNumCandidates)
 
@@ -56,9 +64,16 @@ impl KeyFrameDatabase {
         let mut place_recognition_words = HashMap::new(); // mnPlaceRecognitionWords
 
         // Search all keyframes that share a word with current frame
-        for word in curr_kf.bow.as_ref().unwrap().get_bow_vec().get_all_word_ids() {
+        for word in curr_kf
+            .bow
+            .as_ref()
+            .unwrap()
+            .get_bow_vec()
+            .get_all_word_ids()
+        {
             for kf_i_id in &self.inverted_file[word as usize] {
-                let different_query = place_recognition_query.get(kf_i_id).is_some() && place_recognition_query[kf_i_id] != curr_kf_id;
+                let different_query = place_recognition_query.get(kf_i_id).is_some()
+                    && place_recognition_query[kf_i_id] != curr_kf_id;
                 let no_query = place_recognition_query.get(kf_i_id).is_none();
 
                 if different_query || no_query {
@@ -86,8 +101,8 @@ impl KeyFrameDatabase {
                         max_common_words = *words;
                         // max_word_kf_id = *kf_id;
                     }
-                },
-                None => continue
+                }
+                None => continue,
             }
         }
 
@@ -97,9 +112,10 @@ impl KeyFrameDatabase {
         // Compute similarity score.
         let mut place_recognition_score = HashMap::new(); // mPlaceRecognitionScore
         for kf_i_id in &kfs_sharing_words {
-            if place_recognition_words[&kf_i_id] > min_common_words  {
+            if place_recognition_words[&kf_i_id] > min_common_words {
                 let kf_i = map.get_keyframe(*kf_i_id);
-                let si = VOCABULARY_MODULE.score(curr_kf.bow.as_ref().unwrap(), kf_i.bow.as_ref().unwrap());
+                let si = VOCABULARY_MODULE
+                    .score(curr_kf.bow.as_ref().unwrap(), kf_i.bow.as_ref().unwrap());
                 place_recognition_score.insert(kf_i_id, si);
                 score_and_match.push((si, kf_i_id));
             }
@@ -120,12 +136,14 @@ impl KeyFrameDatabase {
             let mut best_kf_id = *kf_i_id;
 
             for kf_2_id in neighbor_kfs {
-                if place_recognition_query.get(&kf_2_id).is_some() && place_recognition_query[&kf_2_id] != curr_kf_id {
+                if place_recognition_query.get(&kf_2_id).is_some()
+                    && place_recognition_query[&kf_2_id] != curr_kf_id
+                {
                     continue;
                 }
                 let old_score = *place_recognition_score.get(&kf_2_id).unwrap_or(&0.0);
                 acc_score += old_score;
-                
+
                 if old_score > best_score {
                     best_kf_id = kf_2_id;
                     best_score = old_score;
@@ -152,13 +170,18 @@ impl KeyFrameDatabase {
                 loop_candidates.push(kf_id);
                 already_added_kf.insert(kf_id);
             }
-            i+= 1;
+            i += 1;
         }
 
         return (merge_candidates, loop_candidates);
     }
 
-    pub fn _detect_candidates_above_score(&self, map: &Map, curr_kf_id: &Id, min_score: f32) -> Vec<Id> {
+    pub fn _detect_candidates_above_score(
+        &self,
+        map: &Map,
+        curr_kf_id: &Id,
+        min_score: f32,
+    ) -> Vec<Id> {
         // From ORBSLAM2:
         // vector<KeyFrame*> KeyFrameDatabase::DetectLoopCandidates(KeyFrame* pKF, float minScore)
 
@@ -170,9 +193,16 @@ impl KeyFrameDatabase {
 
         // Search all keyframes that share a word with current keyframes
         // Discard keyframes connected to the query keyframe
-        for word in curr_kf.bow.as_ref().unwrap().get_bow_vec().get_all_word_ids() {
+        for word in curr_kf
+            .bow
+            .as_ref()
+            .unwrap()
+            .get_bow_vec()
+            .get_all_word_ids()
+        {
             for kf_i_id in &self.inverted_file[word as usize] {
-                let different_loop_query = loop_query.get(kf_i_id).is_some() && loop_query[kf_i_id] != curr_kf_id;
+                let different_loop_query =
+                    loop_query.get(kf_i_id).is_some() && loop_query[kf_i_id] != curr_kf_id;
                 let no_loop_query = loop_query.get(kf_i_id).is_none();
 
                 if different_loop_query || no_loop_query {
@@ -200,8 +230,8 @@ impl KeyFrameDatabase {
                         max_common_words = *words;
                         // max_word_kf_id = *kf_id;
                     }
-                },
-                None => continue
+                }
+                None => continue,
             }
         }
 
@@ -211,9 +241,10 @@ impl KeyFrameDatabase {
         // Compute similarity score. Retain the matches whose score is higher than minScore
         let mut loop_score = HashMap::new(); // mLoopScore
         for kf_i_id in &kfs_sharing_words {
-            if loop_words[&kf_i_id] > min_common_words  {
+            if loop_words[&kf_i_id] > min_common_words {
                 let kf_i = map.get_keyframe(*kf_i_id);
-                let si = VOCABULARY_MODULE.score(curr_kf.bow.as_ref().unwrap(), kf_i.bow.as_ref().unwrap());
+                let si = VOCABULARY_MODULE
+                    .score(curr_kf.bow.as_ref().unwrap(), kf_i.bow.as_ref().unwrap());
                 loop_score.insert(kf_i_id, si);
                 if si >= min_score {
                     score_and_match.push((si, kf_i_id));
@@ -245,7 +276,7 @@ impl KeyFrameDatabase {
                 let loop_words = *loop_words.unwrap();
                 let loop_query = *loop_query.unwrap();
                 let loop_score = *loop_score.unwrap();
-                if loop_query == curr_kf_id  && loop_words > min_common_words {
+                if loop_query == curr_kf_id && loop_words > min_common_words {
                     acc_score += loop_score;
                     if loop_score > best_score {
                         best_kf_id = kf_2_id;
@@ -288,7 +319,8 @@ impl KeyFrameDatabase {
             let kfs = &self.inverted_file[word_id as usize];
 
             for kf_i_id in kfs {
-                let different_query = reloc_queries.get(kf_i_id).is_some() && reloc_queries[kf_i_id] != frame.frame_id;
+                let different_query = reloc_queries.get(kf_i_id).is_some()
+                    && reloc_queries[kf_i_id] != frame.frame_id;
                 let no_query = reloc_queries.get(kf_i_id).is_none();
 
                 if different_query || no_query {
@@ -312,8 +344,8 @@ impl KeyFrameDatabase {
                     if *words > max_common_words {
                         max_common_words = *words;
                     }
-                },
-                None => continue
+                }
+                None => continue,
             }
         }
 
@@ -323,9 +355,10 @@ impl KeyFrameDatabase {
         // Compute similarity score
         let mut reloc_score = HashMap::new(); // mRelocScore
         for kf_i_id in &kfs_sharing_words {
-            if reloc_words[&kf_i_id] > min_common_words  {
+            if reloc_words[&kf_i_id] > min_common_words {
                 let kf_i = map.get_keyframe(*kf_i_id);
-                let si = VOCABULARY_MODULE.score(frame.bow.as_ref().unwrap(), kf_i.bow.as_ref().unwrap());
+                let si = VOCABULARY_MODULE
+                    .score(frame.bow.as_ref().unwrap(), kf_i.bow.as_ref().unwrap());
                 reloc_score.insert(kf_i_id, si);
                 score_and_match.push((si, kf_i_id));
             }
@@ -346,7 +379,9 @@ impl KeyFrameDatabase {
             let mut best_kf_id = *kf_i_id;
 
             for kf_2_id in neighbor_kfs {
-                if reloc_queries.get(&kf_2_id).is_some() && reloc_queries[&kf_2_id] != frame.frame_id {
+                if reloc_queries.get(&kf_2_id).is_some()
+                    && reloc_queries[&kf_2_id] != frame.frame_id
+                {
                     continue;
                 }
                 acc_score += *reloc_score.get(&kf_2_id).unwrap();

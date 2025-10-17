@@ -4,32 +4,35 @@ use std::f64::INFINITY;
 use std::iter::FromIterator;
 use std::sync::atomic::AtomicBool;
 
-use core::system::{Actor, MessageBox};
-use core::sensor::{Sensor, FrameSensor, ImuSensor};
-use core::{
-    config::{SETTINGS, SYSTEM},
-    matrix::DVVector3
-};
-use std::thread::sleep;
-use std::time::Duration;
-use log::{debug, warn, info};
-use opencv::prelude::KeyPointTraitConst;
+use super::messages::{InitKeyFrameMsg, KeyFrameIdMsg, NewKeyFrameMsg, ShutdownMsg};
+use super::tracking_backend::TrackingState;
+use crate::actors::messages::{LastKeyFrameUpdatedMsg, UpdateFrameIMUMsg};
 use crate::map::pose::Pose;
 use crate::map::read_only_lock::ReadWriteMap;
 use crate::modules::local_bundle_adjustment::local_inertial_ba;
-use crate::registered_actors::{CAMERA_MODULE, FEATURE_MATCHER, FEATURE_MATCHING_MODULE, LOCAL_MAP_OPTIMIZATION_MODULE, TRACKING_BACKEND};
-use crate::System;
-use crate::actors::messages::{LastKeyFrameUpdatedMsg, UpdateFrameIMUMsg};
-use crate::modules::optimizer::{self, LEVEL_SIGMA2};
-use crate::{
-    modules::{imu::IMU, orbslam_matcher::SCALE_FACTORS, geometric_tools},
-    registered_actors::{FEATURE_DETECTION, LOOP_CLOSING, CAMERA},
-    Id,
-};
 use crate::modules::module_definitions::CameraModule;
 use crate::modules::module_definitions::ImuModule;
-use super::messages::{ShutdownMsg, InitKeyFrameMsg, KeyFrameIdMsg, NewKeyFrameMsg};
-use super::tracking_backend::TrackingState;
+use crate::modules::optimizer::{self, LEVEL_SIGMA2};
+use crate::registered_actors::{
+    CAMERA_MODULE, FEATURE_MATCHER, FEATURE_MATCHING_MODULE, LOCAL_MAP_OPTIMIZATION_MODULE,
+    TRACKING_BACKEND,
+};
+use crate::System;
+use crate::{
+    modules::{geometric_tools, imu::IMU, orbslam_matcher::SCALE_FACTORS},
+    registered_actors::{CAMERA, FEATURE_DETECTION, LOOP_CLOSING},
+    Id,
+};
+use core::sensor::{FrameSensor, ImuSensor, Sensor};
+use core::system::{Actor, MessageBox};
+use core::{
+    config::{SETTINGS, SYSTEM},
+    matrix::DVVector3,
+};
+use log::{debug, info, warn};
+use opencv::prelude::KeyPointTraitConst;
+use std::thread::sleep;
+use std::time::Duration;
 
 // TODO (design, variable locations): It would be nice for this to be a member of LocalMapping instead of floating around in the global namespace, but we can't do that easily because then Tracking would need a reference to the localmapping object.
 pub static LOCAL_MAPPING_IDLE: AtomicBool = AtomicBool::new(true);
@@ -40,13 +43,13 @@ pub struct LocalMapping {
     map: ReadWriteMap,
     sensor: Sensor,
 
-    current_keyframe_id: Id, //mpCurrentKeyFrame
+    current_keyframe_id: Id,               //mpCurrentKeyFrame
     current_tracking_state: TrackingState, // mpCurrentKeyFrame->mTrackingState
     recently_added_mappoints: HashSet<Id>, //mlpRecentAddedMapPoints
 
-    // list of keyframes to delete sent to map. they might not be deleted until later, so we need to 
+    // list of keyframes to delete sent to map. they might not be deleted until later, so we need to
     // keep track of them and avoid doing duplicate work with them
-    discarded_kfs: HashSet<Id>,  // TODO (design) ... kf culling and rates
+    discarded_kfs: HashSet<Id>, // TODO (design) ... kf culling and rates
 
     // Modules
     imu_module: Option<IMU>,
@@ -59,7 +62,7 @@ impl Actor for LocalMapping {
         let sensor: Sensor = SETTINGS.get(SYSTEM, "sensor");
         let imu = match sensor.is_imu() {
             true => Some(IMU::new()),
-            false => None
+            false => None,
         };
 
         let mut actor = LocalMapping {
@@ -99,7 +102,9 @@ impl LocalMapping {
     fn handle_message(&mut self, message: MessageBox) -> Result<bool, Box<dyn std::error::Error>> {
         if message.is::<InitKeyFrameMsg>() {
             LOCAL_MAPPING_IDLE.store(false, std::sync::atomic::Ordering::SeqCst);
-            let msg = message.downcast::<InitKeyFrameMsg>().unwrap_or_else(|_| panic!("Could not downcast local mapping message!"));
+            let msg = message
+                .downcast::<InitKeyFrameMsg>()
+                .unwrap_or_else(|_| panic!("Could not downcast local mapping message!"));
 
             // keyframe may have been deleted in map reset by tracking
             if self.map.read()?.has_keyframe(msg.kf_id) {
@@ -115,16 +120,17 @@ impl LocalMapping {
                 // If because of timing with map reset of tracking, tracking could have deleted map in meantime
                 // Really need to think through this because otherwise we will have to check everywhere
                 self.recently_added_mappoints.extend(
-                    self.map.read()?
-                    .get_keyframe(self.current_keyframe_id)
-                    .get_mp_matches().iter()
-                    .filter(|item| item.is_some())
-                    .map(|item| item.unwrap().0)
-                    .collect::<Vec<Id>>()
+                    self.map
+                        .read()?
+                        .get_keyframe(self.current_keyframe_id)
+                        .get_mp_matches()
+                        .iter()
+                        .filter(|item| item.is_some())
+                        .map(|item| item.unwrap().0)
+                        .collect::<Vec<Id>>(),
                 );
                 self.local_mapping(0, HashMap::new())?;
             }
-
         } else if message.is::<NewKeyFrameMsg>() {
             if LOCAL_MAPPING_PAUSE_SWITCH.load(std::sync::atomic::Ordering::SeqCst) {
                 LOCAL_MAPPING_IDLE.store(true, std::sync::atomic::Ordering::SeqCst);
@@ -141,9 +147,15 @@ impl LocalMapping {
                 return Ok(false);
             }
 
-            let msg = message.downcast::<NewKeyFrameMsg>().unwrap_or_else(|_| panic!("Could not downcast local mapping message!"));
+            let msg = message
+                .downcast::<NewKeyFrameMsg>()
+                .unwrap_or_else(|_| panic!("Could not downcast local mapping message!"));
 
-            info!("Local mapping working on keyframe {}. Queue length: {}", msg.kf_id, self.system.queue_len());
+            info!(
+                "Local mapping working on keyframe {}. Queue length: {}",
+                msg.kf_id,
+                self.system.queue_len()
+            );
 
             self.current_keyframe_id = msg.kf_id;
             self.current_tracking_state = msg.tracking_state;
@@ -159,7 +171,11 @@ impl LocalMapping {
         Ok(false)
     }
 
-   fn local_mapping(&mut self, matches_in_tracking: i32, tracked_mappoint_depths: HashMap<Id, f64>) -> Result<(), Box<dyn std::error::Error>> {
+    fn local_mapping(
+        &mut self,
+        matches_in_tracking: i32,
+        tracked_mappoint_depths: HashMap<Id, f64>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let _span = tracy_client::span!("local_mapping");
 
         match self.sensor.frame() {
@@ -169,7 +185,7 @@ impl LocalMapping {
                 // those stereo mappoints which were added in tracking. The rest of the function
                 // is redundant here because all of it is already computed when inserting a keyframe,
                 // but the part about mlpRecentAddedMapPoints needs to be included.
-            },
+            }
             _ => {}
         }
 
@@ -179,10 +195,12 @@ impl LocalMapping {
         // Triangulate new MapPoints
         let mps_created = self.create_new_mappoints()?;
 
-        self.system.find_actor(TRACKING_BACKEND).send(Box::new(
-            LastKeyFrameUpdatedMsg{map_version: self.map.get_version()}
-        )).unwrap();
-
+        self.system
+            .find_actor(TRACKING_BACKEND)
+            .send(Box::new(LastKeyFrameUpdatedMsg {
+                map_version: self.map.get_version(),
+            }))
+            .unwrap();
 
         if self.system.queue_len() < 1 {
             // Abort additional work if there are too many keyframes in the msg queue.
@@ -201,18 +219,26 @@ impl LocalMapping {
                             let lock = self.map.read()?;
                             let current_kf = lock.get_keyframe(self.current_keyframe_id);
                             let previous_kf = lock.get_keyframe(current_kf.prev_kf_id.unwrap());
-                            let previous_previous_kf = lock.get_keyframe(previous_kf.prev_kf_id.unwrap());
+                            let previous_previous_kf =
+                                lock.get_keyframe(previous_kf.prev_kf_id.unwrap());
                             let dist = {
-                                let first = (*previous_kf.get_camera_center() - *current_kf.get_camera_center()).norm();
-                                let second = (*previous_previous_kf.get_camera_center() - *previous_kf.get_camera_center()).norm();
+                                let first = (*previous_kf.get_camera_center()
+                                    - *current_kf.get_camera_center())
+                                .norm();
+                                let second = (*previous_previous_kf.get_camera_center()
+                                    - *previous_kf.get_camera_center())
+                                .norm();
                                 first + second
                             };
 
                             if dist > 0.05 {
-                                self.imu_module.as_mut().unwrap().timestamp_init += current_kf.timestamp - previous_kf.timestamp;
+                                self.imu_module.as_mut().unwrap().timestamp_init +=
+                                    current_kf.timestamp - previous_kf.timestamp;
                             }
                             if !lock.imu_ba2 {
-                                if self.imu_module.as_ref().unwrap().timestamp_init < 10.0 && dist < 0.02 {
+                                if self.imu_module.as_ref().unwrap().timestamp_init < 10.0
+                                    && dist < 0.02
+                                {
                                     warn!("Not enough motion for IMU initialization. Resetting...");
                                     return Ok(());
                                     // todo!("Multi-maps");
@@ -224,10 +250,18 @@ impl LocalMapping {
 
                             !lock.imu_ba2
                         };
-                        let large = matches_in_tracking > 75 && self.sensor.is_mono() || matches_in_tracking > 100 && !self.sensor.is_mono();
-                        local_inertial_ba(&mut self.map, self.current_keyframe_id, large, rec_init, tracked_mappoint_depths, self.sensor)?;
+                        let large = matches_in_tracking > 75 && self.sensor.is_mono()
+                            || matches_in_tracking > 100 && !self.sensor.is_mono();
+                        local_inertial_ba(
+                            &mut self.map,
+                            self.current_keyframe_id,
+                            large,
+                            rec_init,
+                            tracked_mappoint_depths,
+                            self.sensor,
+                        )?;
                     }
-                },
+                }
                 false => {
                     LOCAL_MAP_OPTIMIZATION_MODULE.optimize(&self.map, self.current_keyframe_id)?;
                 }
@@ -241,45 +275,83 @@ impl LocalMapping {
                 FrameSensor::Stereo | FrameSensor::Rgbd => (1e2, 1e5, true),
             };
 
-            self.imu_module.as_mut().unwrap().initialize(&mut self.map, self.current_keyframe_id, prior_g, prior_a, fiba, Some(self.system.find_actor(TRACKING_BACKEND)))?;
+            self.imu_module.as_mut().unwrap().initialize(
+                &mut self.map,
+                self.current_keyframe_id,
+                prior_g,
+                prior_a,
+                fiba,
+                Some(self.system.find_actor(TRACKING_BACKEND)),
+            )?;
         }
 
         // Check redundant local Keyframes
         let kfs_culled = self.keyframe_culling()?;
 
-        if self.sensor.is_imu() && self.imu_module.as_ref().unwrap().timestamp_init < 50.0 && matches!(self.current_tracking_state, TrackingState::Ok) {
+        if self.sensor.is_imu()
+            && self.imu_module.as_ref().unwrap().timestamp_init < 50.0
+            && matches!(self.current_tracking_state, TrackingState::Ok)
+        {
             // Enter here everytime local-mapping is called
             if self.imu_module.as_mut().unwrap().imu_ba1 {
                 if self.imu_module.as_ref().unwrap().timestamp_init > 5.0 {
                     self.imu_module.as_mut().unwrap().imu_ba1 = true;
-                    self.imu_module.as_mut().unwrap().initialize(&mut self.map, self.current_keyframe_id, 1.0, 1e5, true, Some(self.system.find_actor(TRACKING_BACKEND)))?;
+                    self.imu_module.as_mut().unwrap().initialize(
+                        &mut self.map,
+                        self.current_keyframe_id,
+                        1.0,
+                        1e5,
+                        true,
+                        Some(self.system.find_actor(TRACKING_BACKEND)),
+                    )?;
                 }
             } else if !self.map.read()?.imu_ba2 {
                 if self.imu_module.as_ref().unwrap().timestamp_init > 15.0 {
                     self.map.write()?.imu_ba2 = true;
-                    self.imu_module.as_mut().unwrap().initialize(&mut self.map, self.current_keyframe_id, 0.0, 0.0, true, Some(self.system.find_actor(TRACKING_BACKEND)))?;
+                    self.imu_module.as_mut().unwrap().initialize(
+                        &mut self.map,
+                        self.current_keyframe_id,
+                        0.0,
+                        0.0,
+                        true,
+                        Some(self.system.find_actor(TRACKING_BACKEND)),
+                    )?;
                 }
             }
 
             // scale refinement
             let timestamp_init = self.imu_module.as_ref().unwrap().timestamp_init;
-            if self.map.read()?.num_keyframes() <= 200 &&
-                (timestamp_init > 25.0 && timestamp_init < 25.5) ||
-                (timestamp_init > 35.0 && timestamp_init < 35.5) ||
-                (timestamp_init > 45.0 && timestamp_init < 45.5) ||
-                (timestamp_init > 55.0 && timestamp_init < 55.5) ||
-                (timestamp_init > 65.0 && timestamp_init < 65.5) ||
-                (timestamp_init > 75.0 && timestamp_init < 75.5) {
+            if self.map.read()?.num_keyframes() <= 200
+                && (timestamp_init > 25.0 && timestamp_init < 25.5)
+                || (timestamp_init > 35.0 && timestamp_init < 35.5)
+                || (timestamp_init > 45.0 && timestamp_init < 45.5)
+                || (timestamp_init > 55.0 && timestamp_init < 55.5)
+                || (timestamp_init > 65.0 && timestamp_init < 65.5)
+                || (timestamp_init > 75.0 && timestamp_init < 75.5)
+            {
                 if self.sensor.is_mono() {
                     self.scale_refinement()?;
                 }
             }
         }
 
-        debug!("For keyframe {}, culled {} mappoints, created {} mappoints, culled {} keyframes", self.current_keyframe_id, mps_culled, mps_created, kfs_culled);
-        info!("Map has {} keyframes and {} mappoints" , self.map.read()?.num_keyframes(), self.map.read()?.mappoints.len());
+        debug!(
+            "For keyframe {}, culled {} mappoints, created {} mappoints, culled {} keyframes",
+            self.current_keyframe_id, mps_culled, mps_created, kfs_culled
+        );
+        info!(
+            "Map has {} keyframes and {} mappoints",
+            self.map.read()?.num_keyframes(),
+            self.map.read()?.mappoints.len()
+        );
 
-        self.system.try_send(LOOP_CLOSING, Box::new(KeyFrameIdMsg{ kf_id: self.current_keyframe_id, map_version: self.map.get_version() }));
+        self.system.try_send(
+            LOOP_CLOSING,
+            Box::new(KeyFrameIdMsg {
+                kf_id: self.current_keyframe_id,
+                map_version: self.map.get_version(),
+            }),
+        );
         Ok(())
     }
 
@@ -288,7 +360,7 @@ impl LocalMapping {
 
         let th_obs = match self.sensor.is_mono() {
             true => 2,
-            false => 3
+            false => 3,
         };
 
         let current_kf_id = self.current_keyframe_id;
@@ -307,11 +379,13 @@ impl LocalMapping {
                         lock.discard_mappoint(&mp_id);
                         deleted.insert(mp_id);
                         false
-                    } else if current_kf_id - mappoint.first_kf_id >= 2 && mappoint.get_observations().len() <= th_obs {
+                    } else if current_kf_id - mappoint.first_kf_id >= 2
+                        && mappoint.get_observations().len() <= th_obs
+                    {
                         discard_for_observations += 1;
                         lock.discard_mappoint(&mp_id);
                         deleted.insert(mp_id);
-                        false 
+                        false
                     } else if current_kf_id - mappoint.first_kf_id >= 3 {
                         erased_from_recently_added += 1;
                         false // mappoint should not be deleted, but remove from recently_added_mappoints
@@ -335,7 +409,7 @@ impl LocalMapping {
         // Retrieve neighbor keyframes in covisibility graph
         let nn = match self.sensor.is_mono() {
             true => 30,
-            false => 10
+            false => 10,
         };
         let ratio_factor = 1.5 * SETTINGS.get::<f64>(FEATURE_DETECTION, "scale_factor");
         let fpt = SETTINGS.get::<f64>(FEATURE_MATCHER, "far_points_threshold");
@@ -380,32 +454,38 @@ impl LocalMapping {
                 let baseline = (*ow2 - *ow1).norm();
                 match self.sensor.is_mono() {
                     true => {
-                        let median_depth_neigh = neighbor_kf.compute_scene_median_depth(&lock.mappoints, 2);
+                        let median_depth_neigh =
+                            neighbor_kf.compute_scene_median_depth(&lock.mappoints, 2);
                         if baseline / median_depth_neigh < 0.01 {
-                            continue
+                            continue;
                         }
-                    },
+                    }
                     false => {
                         if baseline < CAMERA_MODULE.stereo_baseline {
-                            continue
+                            continue;
                         }
                     }
                 }
 
                 // Search matches that fullfil epipolar constraint
                 let course = match self.sensor.is_imu() {
-                    true => lock.imu_ba2 && matches!(self.current_tracking_state, TrackingState::RecentlyLost),
-                    false => false
+                    true => {
+                        lock.imu_ba2
+                            && matches!(self.current_tracking_state, TrackingState::RecentlyLost)
+                    }
+                    false => false,
                 };
 
                 let matches = match FEATURE_MATCHING_MODULE.search_for_triangulation(
                     current_kf,
                     neighbor_kf,
-                    false, false, course,
-                    self.sensor
+                    false,
+                    false,
+                    course,
+                    self.sensor,
                 ) {
                     Ok(matches) => matches,
-                    Err(err) => panic!("Problem with search_for_triangulation {}", err)
+                    Err(err) => panic!("Problem with search_for_triangulation {}", err),
                 };
 
                 let mut pose2 = neighbor_kf.get_pose();
@@ -426,24 +506,24 @@ impl LocalMapping {
                         pose1 = current_kf.get_right_pose();
                         ow1 = current_kf.get_right_camera_center();
                         // TODO (STEREO) .. right now just using global CAMERA
-                            // camera1 = mpCurrentKeyFrame->mpCamera2
+                        // camera1 = mpCurrentKeyFrame->mpCamera2
                     } else {
                         pose1 = current_kf.get_pose();
                         ow1 = current_kf.get_camera_center();
                         // TODO (STEREO)
-                            // camera1 = mpCurrentKeyFrame->mpCamera
+                        // camera1 = mpCurrentKeyFrame->mpCamera
                     }
                     if right2 {
                         let _kp2_ur = neighbor_kf.features.get_mv_right(idx2);
                         pose2 = neighbor_kf.get_right_pose();
                         ow2 = neighbor_kf.get_right_camera_center();
                         // TODO (STEREO)
-                            // camera2 = neighbor_kf->mpCamera2
+                        // camera2 = neighbor_kf->mpCamera2
                     } else {
                         pose2 = neighbor_kf.get_pose();
                         ow2 = neighbor_kf.get_camera_center();
                         // TODO (STEREO)
-                            // camera2 = neighbor_kf->mpCamera
+                        // camera2 = neighbor_kf->mpCamera
                     }
 
                     // Check parallax between rays
@@ -452,7 +532,8 @@ impl LocalMapping {
                     let ray1 = rotation_transpose1 * (*xn1);
                     let ray2 = rotation_transpose2 * (*xn2);
                     let cos_parallax_rays = ray1.dot(&ray2) / (ray1.norm() * ray2.norm());
-                    let (cos_parallax_stereo1, cos_parallax_stereo2) = (cos_parallax_rays + 1.0, cos_parallax_rays + 1.0);
+                    let (cos_parallax_stereo1, cos_parallax_stereo2) =
+                        (cos_parallax_rays + 1.0, cos_parallax_rays + 1.0);
                     if right1 {
                         todo!("Stereo");
                         // cosParallaxStereo1 = cos(2*atan2(mpCurrentKeyFrame->mb/2,mpCurrentKeyFrame->mvDepth[idx1]));
@@ -464,22 +545,30 @@ impl LocalMapping {
 
                     let x3_d;
                     {
-                        let good_parallax_with_imu = cos_parallax_rays < 0.9996 && self.sensor.is_imu();
-                        let good_parallax_wo_imu = cos_parallax_rays < 0.9998 && !self.sensor.is_imu();
-                        if cos_parallax_rays < cos_parallax_stereo && cos_parallax_rays > 0.0 && (right1 || right2 || good_parallax_with_imu || good_parallax_wo_imu) {
+                        let good_parallax_with_imu =
+                            cos_parallax_rays < 0.9996 && self.sensor.is_imu();
+                        let good_parallax_wo_imu =
+                            cos_parallax_rays < 0.9998 && !self.sensor.is_imu();
+                        if cos_parallax_rays < cos_parallax_stereo
+                            && cos_parallax_rays > 0.0
+                            && (right1 || right2 || good_parallax_with_imu || good_parallax_wo_imu)
+                        {
                             x3_d = geometric_tools::triangulate(xn1, xn2, pose1, pose2);
                         } else if right1 && cos_parallax_stereo1 < cos_parallax_stereo2 {
-                            x3_d = CAMERA_MODULE.unproject_stereo(lock.get_keyframe(self.current_keyframe_id), idx1);
+                            x3_d = CAMERA_MODULE.unproject_stereo(
+                                lock.get_keyframe(self.current_keyframe_id),
+                                idx1,
+                            );
                         } else if right2 && cos_parallax_stereo2 < cos_parallax_stereo1 {
-                            x3_d = CAMERA_MODULE.unproject_stereo(lock.get_keyframe(neighbor_id), idx2);
+                            x3_d = CAMERA_MODULE
+                                .unproject_stereo(lock.get_keyframe(neighbor_id), idx2);
                         } else {
-                            continue // No stereo and very low parallax
+                            continue; // No stereo and very low parallax
                         }
                         if x3_d.is_none() {
-                            continue
+                            continue;
                         }
                     }
-
 
                     //Check triangulation in front of cameras
                     let x3_d_nalg = *x3_d.unwrap();
@@ -513,8 +602,8 @@ impl LocalMapping {
                         let uv1 = CAMERA_MODULE.project(DVVector3::new_with(x1, y1, z1));
                         let err_x1 = uv1.0 as f32 - kp1.pt().x;
                         let err_y1 = uv1.1 as f32 - kp1.pt().y;
-                        if (err_x1 * err_x1  + err_y1 * err_y1) > 5.991 * sigma_square1 {
-                            continue
+                        if (err_x1 * err_x1 + err_y1 * err_y1) > 5.991 * sigma_square1 {
+                            continue;
                         }
                     }
 
@@ -539,8 +628,8 @@ impl LocalMapping {
                         let uv2 = CAMERA_MODULE.project(DVVector3::new_with(x2, y2, z2));
                         let err_x2 = uv2.0 as f32 - kp2.pt().x;
                         let err_y2 = uv2.1 as f32 - kp2.pt().y;
-                        if (err_x2 * err_x2  + err_y2 * err_y2) > 5.991 * sigma_square2 {
-                            continue
+                        if (err_x2 * err_x2 + err_y2 * err_y2) > 5.991 * sigma_square2 {
+                            continue;
                         }
                     }
 
@@ -560,20 +649,34 @@ impl LocalMapping {
                     }
 
                     let ratio_dist = dist2 / dist1;
-                    let ratio_octave = (SCALE_FACTORS[kp1.octave() as usize] / SCALE_FACTORS[kp2.octave() as usize]) as f64;
-                    if ratio_dist * ratio_factor < ratio_octave || ratio_dist > ratio_octave * ratio_factor {
+                    let ratio_octave = (SCALE_FACTORS[kp1.octave() as usize]
+                        / SCALE_FACTORS[kp2.octave() as usize])
+                        as f64;
+                    if ratio_dist * ratio_factor < ratio_octave
+                        || ratio_dist > ratio_octave * ratio_factor
+                    {
                         continue;
                     }
 
                     // Triangulation is successful
                     let origin_map_id = lock.id;
                     let observations = vec![
-                        (self.current_keyframe_id, lock.get_keyframe(self.current_keyframe_id).features.num_keypoints, idx1),
-                        (neighbor_id, neighbor_kf.features.num_keypoints, idx2)
+                        (
+                            self.current_keyframe_id,
+                            lock.get_keyframe(self.current_keyframe_id)
+                                .features
+                                .num_keypoints,
+                            idx1,
+                        ),
+                        (neighbor_id, neighbor_kf.features.num_keypoints, idx2),
                     ];
 
-                    mps_to_insert.push((x3_d.unwrap(), self.current_keyframe_id, origin_map_id, observations));
-
+                    mps_to_insert.push((
+                        x3_d.unwrap(),
+                        self.current_keyframe_id,
+                        origin_map_id,
+                        observations,
+                    ));
                 }
             }
         }
@@ -581,8 +684,7 @@ impl LocalMapping {
         // let _span = tracy_client::span!("create_new_mappoints::insert_mappoints");
         let mut lock = self.map.write()?;
         for (x3_d, ref_kf_id, origin_map_id, observations) in mps_to_insert {
-            let mp_id = lock.insert_mappoint_to_map(x3_d, ref_kf_id, origin_map_id, observations)
-            ;
+            let mp_id = lock.insert_mappoint_to_map(x3_d, ref_kf_id, origin_map_id, observations);
             self.recently_added_mappoints.insert(mp_id);
             mps_created += 1;
         }
@@ -613,7 +715,10 @@ impl LocalMapping {
                 let kf = map.get_keyframe(*kf_id);
                 let covisible = kf.get_covisibility_keyframes(20);
                 for kf2_id in covisible {
-                    if kf2_id == self.current_keyframe_id || target_kfs.contains(&kf2_id) || new_kfs.contains(&kf2_id) {
+                    if kf2_id == self.current_keyframe_id
+                        || target_kfs.contains(&kf2_id)
+                        || new_kfs.contains(&kf2_id)
+                    {
                         continue;
                     }
                     new_kfs.push(kf2_id);
@@ -633,14 +738,17 @@ impl LocalMapping {
                 if let Some(mut prev_kf_id) = prev_kf_id {
                     let mut prev_kf = map.get_keyframe(prev_kf_id);
                     while target_kfs.len() < 20 {
-                        if fuse_targets_for_kf.contains_key(&prev_kf_id) && *fuse_targets_for_kf.get(&prev_kf_id).unwrap() == self.current_keyframe_id {
+                        if fuse_targets_for_kf.contains_key(&prev_kf_id)
+                            && *fuse_targets_for_kf.get(&prev_kf_id).unwrap()
+                                == self.current_keyframe_id
+                        {
                             match prev_kf.prev_kf_id {
                                 Some(prev_kf_id2) => {
                                     prev_kf_id = prev_kf_id2;
                                     prev_kf = map.get_keyframe(prev_kf_id);
                                     continue;
-                                },
-                                None => break
+                                }
+                                None => break,
                             }
                         }
                         target_kfs.insert(prev_kf_id);
@@ -651,8 +759,8 @@ impl LocalMapping {
                                 prev_kf_id = prev_kf_id2;
                                 prev_kf = map.get_keyframe(prev_kf_id);
                                 continue;
-                            },
-                            None => break
+                            }
+                            None => break,
                         }
                     }
                 }
@@ -666,10 +774,11 @@ impl LocalMapping {
         for kf_id in &target_kfs {
             FEATURE_MATCHING_MODULE.fuse(kf_id, &mappoint_matches, &self.map, 3.0, false)?;
             match self.sensor.frame() {
-                FrameSensor::Stereo => FEATURE_MATCHING_MODULE.fuse(kf_id, &mappoint_matches, &self.map, 3.0, true)?,
+                FrameSensor::Stereo => {
+                    FEATURE_MATCHING_MODULE.fuse(kf_id, &mappoint_matches, &self.map, 3.0, true)?
+                }
                 _ => {}
             }
-
         }
 
         if self.system.queue_len() > 1 {
@@ -692,27 +801,44 @@ impl LocalMapping {
                                 fuse_candidates_vec.push(Some((*mp_id, *is_outlier)));
                                 fuse_candidates_set.insert(*mp_id);
                             }
-                        },
+                        }
                         None => {}
                     }
                 }
             }
         }
-        FEATURE_MATCHING_MODULE.fuse(&self.current_keyframe_id, &fuse_candidates_vec,  &self.map, 3.0, false)?;
+        FEATURE_MATCHING_MODULE.fuse(
+            &self.current_keyframe_id,
+            &fuse_candidates_vec,
+            &self.map,
+            3.0,
+            false,
+        )?;
         match self.sensor.frame() {
-            FrameSensor::Stereo => FEATURE_MATCHING_MODULE.fuse(&self.current_keyframe_id, &fuse_candidates_vec, &self.map, 3.0, true)?,
+            FrameSensor::Stereo => FEATURE_MATCHING_MODULE.fuse(
+                &self.current_keyframe_id,
+                &fuse_candidates_vec,
+                &self.map,
+                3.0,
+                true,
+            )?,
             _ => {}
         }
 
         // Update points
         // Clone needed here for same reason as in map:insert_keyframe_to_map, read explanation there.
-        let mappoint_matches = self.map.read()?.get_keyframe(self.current_keyframe_id).get_mp_matches().clone();
+        let mappoint_matches = self
+            .map
+            .read()?
+            .get_keyframe(self.current_keyframe_id)
+            .get_mp_matches()
+            .clone();
         let mut lock = self.map.write()?;
         for mp_match in mappoint_matches {
             match mp_match {
                 Some((mp_id, _)) => {
                     lock.update_mappoint(mp_id);
-                },
+                }
                 None => {}
             }
         }
@@ -731,7 +857,7 @@ impl LocalMapping {
         let _span = tracy_client::span!("keyframe_culling");
 
         //TODO (mvp)... I think we don't need this because the covisibility keyframes struct organizes itself but double check
-        // mpCurrentKeyFrame->UpdateBestCovisibles(); 
+        // mpCurrentKeyFrame->UpdateBestCovisibles();
 
         let mut to_delete: Vec<(Id, bool)> = vec![]; // Vec<(kf_id, deleted for imu)>
         {
@@ -741,7 +867,7 @@ impl LocalMapping {
 
             let redundant_th = match self.sensor {
                 Sensor(_, ImuSensor::None) | Sensor(FrameSensor::Mono, _) => 0.9,
-                _ => 0.5
+                _ => 0.5,
             };
 
             // Compute last KF from optimizable window:
@@ -756,18 +882,18 @@ impl LocalMapping {
                     }
                     aux_kf.id
                 }
-                false => 0
+                false => 0,
             };
 
             for i in 0..min(100, local_keyframes.len()) {
                 let kf_id = local_keyframes[i];
 
                 if kf_id == read_lock.initial_kf_id {
-                    continue
+                    continue;
                 }
 
                 if kf_id > self.current_keyframe_id - 5 {
-                    continue
+                    continue;
                 }
 
                 let mut num_mps = 0;
@@ -782,12 +908,12 @@ impl LocalMapping {
                             let mv_depth = keyframe.features.get_mv_depth(i as usize).unwrap();
                             let th_depth = SETTINGS.get::<i32>(CAMERA, "thdepth") as f32;
                             if mv_depth > th_depth || mv_depth < 0.0 {
-                                continue
+                                continue;
                             }
                         }
 
                         if !read_lock.mappoints.contains_key(&mp_id) {
-                            continue
+                            continue;
                         }
                         let mp = read_lock.mappoints.get(&mp_id).unwrap();
                         num_mps += 1;
@@ -797,26 +923,34 @@ impl LocalMapping {
                             let mut num_obs = 0;
                             for (obs_kf_id, (left_index, right_index)) in mp.get_observations() {
                                 if *obs_kf_id == kf_id {
-                                    continue
+                                    continue;
                                 }
                                 let obs_kf = read_lock.get_keyframe(*obs_kf_id);
                                 let scale_level_i = match self.sensor.frame() {
                                     FrameSensor::Stereo => {
-                                        let right_level = if *right_index != -1 { obs_kf.features.get_octave(*right_index as usize)} else { -1 };
-                                        let left_level = if *left_index != -1 { obs_kf.features.get_octave(*left_index as usize)} else { -1 };
+                                        let right_level = if *right_index != -1 {
+                                            obs_kf.features.get_octave(*right_index as usize)
+                                        } else {
+                                            -1
+                                        };
+                                        let left_level = if *left_index != -1 {
+                                            obs_kf.features.get_octave(*left_index as usize)
+                                        } else {
+                                            -1
+                                        };
                                         if left_level == -1 || left_level > right_level {
                                             right_level
                                         } else {
                                             left_level
                                         }
-                                    },
-                                    _ => {
-                                        obs_kf.features.get_octave(*left_index as usize)
                                     }
+                                    _ => obs_kf.features.get_octave(*left_index as usize),
                                 };
                                 if scale_level_i <= scale_level + 1 {
                                     num_obs += 1;
-                                    if num_obs > th_obs { break; }
+                                    if num_obs > th_obs {
+                                        break;
+                                    }
                                 }
                             }
 
@@ -847,7 +981,9 @@ impl LocalMapping {
                                     let prev_kf = read_lock.get_keyframe(prev_kf_id);
                                     let t = next_kf.timestamp - prev_kf.timestamp;
 
-                                    if read_lock.imu_initialized && kf_id < last_id && t < 3.0 || t < 0.5 {
+                                    if read_lock.imu_initialized && kf_id < last_id && t < 3.0
+                                        || t < 0.5
+                                    {
                                         self.discarded_kfs.insert(kf_id);
                                         to_delete.push((kf_id, true));
                                     } else if !read_lock.imu_ba2 {
@@ -858,10 +994,10 @@ impl LocalMapping {
                                             self.discarded_kfs.insert(kf_id);
                                         }
                                     }
-                                },
+                                }
                                 _ => {}
                             }
-                        },
+                        }
                         false => {
                             to_delete.push((kf_id, false));
                             self.discarded_kfs.insert(kf_id);
@@ -875,7 +1011,7 @@ impl LocalMapping {
             }
         }
 
-        for (kf_id, deleted_for_imu) in & to_delete {
+        for (kf_id, deleted_for_imu) in &to_delete {
             if *deleted_for_imu {
                 let (kf_imu_preintegrated, next_kf_id, prev_kf_id) = {
                     let lock = self.map.read()?;
@@ -883,13 +1019,18 @@ impl LocalMapping {
                     (
                         kf.imu_data.imu_preintegrated.as_ref().unwrap().clone(),
                         kf.next_kf_id.unwrap(),
-                        kf.prev_kf_id.unwrap()
+                        kf.prev_kf_id.unwrap(),
                     )
                 };
                 let mut lock = self.map.write()?;
                 {
                     let next_kf = lock.get_keyframe_mut(next_kf_id);
-                    next_kf.imu_data.imu_preintegrated.as_mut().unwrap().merge_previous(& kf_imu_preintegrated);
+                    next_kf
+                        .imu_data
+                        .imu_preintegrated
+                        .as_mut()
+                        .unwrap()
+                        .merge_previous(&kf_imu_preintegrated);
                     next_kf.prev_kf_id = Some(prev_kf_id);
                     let prev_kf = lock.get_keyframe_mut(prev_kf_id);
                     prev_kf.next_kf_id = Some(next_kf_id);
@@ -900,7 +1041,6 @@ impl LocalMapping {
                     kf.prev_kf_id = None;
                 }
                 self.discarded_kfs.insert(*kf_id);
-
             }
             self.map.write()?.discard_keyframe(*kf_id);
         }
@@ -942,23 +1082,25 @@ impl LocalMapping {
         }
 
         // Before this line we are not changing the map
-        if (imu.scale - 1.0).abs() > 0.002 || ! self.sensor.is_mono() {
+        if (imu.scale - 1.0).abs() > 0.002 || !self.sensor.is_mono() {
             let tgw = Pose::new_with_default_trans(imu.rwg.transpose());
-            self.map.write()?.apply_scaled_rotation(&tgw, imu.scale, true);
-            self.system.find_actor(TRACKING_BACKEND).send(Box::new(
-                UpdateFrameIMUMsg{
+            self.map
+                .write()?
+                .apply_scaled_rotation(&tgw, imu.scale, true);
+            self.system
+                .find_actor(TRACKING_BACKEND)
+                .send(Box::new(UpdateFrameIMUMsg {
                     scale: imu.scale,
                     imu_bias: kf.imu_data.get_imu_bias().clone(),
                     current_kf_id: self.current_keyframe_id,
                     imu_initialized: true,
-                    map_version: self.map.read()?.version
-                }
-            )).unwrap();
+                    map_version: self.map.read()?.version,
+                }))
+                .unwrap();
         }
 
         // To perform pose-inertial opt w.r.t. last keyframe
         self.map.write()?.map_change_index += 1;
         return Ok(());
     }
- 
 }

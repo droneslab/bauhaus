@@ -1,9 +1,13 @@
 #![allow(dead_code)]
 
-use std::collections::{BTreeMap, HashMap, HashSet};
-use log::{debug, error, info, warn};
-use core::{config::{SETTINGS, SYSTEM}, matrix::DVVector3, sensor::Sensor};
 use crate::map::{keyframe::*, mappoint::*};
+use core::{
+    config::{SETTINGS, SYSTEM},
+    matrix::DVVector3,
+    sensor::Sensor,
+};
+use log::{debug, error, info, warn};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use super::{frame::Frame, keyframe_database::KeyFrameDatabase, pose::Pose};
 
@@ -18,9 +22,9 @@ pub struct Map {
     pub id: Id,
 
     // KeyFrames
-    keyframes: MapItems<KeyFrame>, // = mspKeyFrames
+    keyframes: MapItems<KeyFrame>,       // = mspKeyFrames
     keyframe_database: KeyFrameDatabase, // = mpKeyFrameDB
-    pub last_kf_id: Id, // = mnMaxKFid
+    pub last_kf_id: Id,                  // = mnMaxKFid
     pub initial_kf_id: Id, // TODO (multimaps): this is the initial kf id that was added to this map, when this map is made. should tie together map versioning better, maybe in a single struct
     // If a keyframe is deleted, we may still need to access its old parent and pose when reporting the final trajectory:
     deleted_keyframe_info: MapItems<(Id, Pose)>, // (parent_id, pose_relative_to_parent)
@@ -31,18 +35,17 @@ pub struct Map {
 
     // IMU
     pub imu_initialized: bool, // mbImuInitialized
-    pub imu_ba2: bool, // mbIMU_BA2 
+    pub imu_ba2: bool,         // mbIMU_BA2
 
     // Versioning
     pub map_change_index: i32, // mnMapChange
     pub version: u64,
 
     _sensor: Sensor,
-
     // Following are in orbslam3, not sure if we need:
     // mvpKeyFrameOrigins: Vec<KeyFrame>
     // mvBackupKeyFrameOriginsId: Vec<: u32>
-    // mpFirstRegionKF: KeyFrame* 
+    // mpFirstRegionKF: KeyFrame*
     // mpKFlowerID: KeyFrame*
 
     // Following are in orbslam3, probably don't need
@@ -79,13 +82,13 @@ impl Map {
             print!(";");
             for connection in &kf.get_covisibility_keyframes(i32::MAX) {
                 print!("{},", connection);
-            };
+            }
             print!(";");
             for mp_match in kf.get_mp_matches() {
                 if let Some((_, mp_id)) = mp_match {
                     print!("{},", mp_id);
                 }
-            };
+            }
             debug!("");
         }
         for (id, mp) in &self.mappoints {
@@ -93,23 +96,29 @@ impl Map {
             print!(";");
             for (kf_id, _indexes) in mp.get_observations() {
                 print!("{},", kf_id);
-            };
+            }
             debug!("");
         }
         debug!("PRINT MAP DONE");
     }
 
     pub fn get_keyframe(&self, id: Id) -> &KeyFrame {
-        self.keyframes.get(&id).expect(format!("Keyframe {} not found in map", id).as_str())
+        self.keyframes
+            .get(&id)
+            .expect(format!("Keyframe {} not found in map", id).as_str())
     }
     pub fn get_keyframe_mut(&mut self, id: Id) -> &mut KeyFrame {
-        self.keyframes.get_mut(&id).expect(format!("Keyframe {} not found in map", id).as_str())
+        self.keyframes
+            .get_mut(&id)
+            .expect(format!("Keyframe {} not found in map", id).as_str())
     }
     pub fn has_keyframe(&self, id: Id) -> bool {
         self.keyframes.contains_key(&id)
     }
     pub fn get_first_keyframe(&self) -> &KeyFrame {
-        self.keyframes.get(&self.initial_kf_id).expect(format!("Initial keyframe {} not found in map", self.initial_kf_id).as_str())
+        self.keyframes
+            .get(&self.initial_kf_id)
+            .expect(format!("Initial keyframe {} not found in map", self.initial_kf_id).as_str())
     }
     pub fn num_keyframes(&self) -> usize {
         self.keyframes.len()
@@ -125,14 +134,22 @@ impl Map {
     }
 
     pub fn get_mappoint(&self, id: Id) -> &MapPoint {
-        self.mappoints.get(&id).expect(format!("MapPoint {} not found in map", id).as_str())
+        self.mappoints
+            .get(&id)
+            .expect(format!("MapPoint {} not found in map", id).as_str())
     }
     pub fn has_mappoint(&self, id: Id) -> bool {
         self.mappoints.contains_key(&id)
     }
 
     ////* &mut self */////////////////////////////////////////////////////
-    pub fn insert_mappoint_to_map(&mut self, position: DVVector3<f64>, ref_kf_id: Id, origin_map_id: Id, observations_to_add: Vec<(Id, u32, usize)>) -> Id {
+    pub fn insert_mappoint_to_map(
+        &mut self,
+        position: DVVector3<f64>,
+        ref_kf_id: Id,
+        origin_map_id: Id,
+        observations_to_add: Vec<(Id, u32, usize)>,
+    ) -> Id {
         self.last_mp_id += 1;
         let new_mp_id = self.last_mp_id;
 
@@ -167,7 +184,7 @@ impl Map {
         self.keyframes.insert(new_kf_id, full_keyframe);
 
         // Update mp connections after insertion
-        // Note: This should run during most normal keyframe insertions, but not 
+        // Note: This should run during most normal keyframe insertions, but not
         // when inserting the first two keyframes in initialization, because this
         // already happens when inserting the mappoints in initialization.
         if !is_initialization {
@@ -175,17 +192,31 @@ impl Map {
             // have a get_mut on keyframes as well as a get on mappoints below. Another option is to
             // split up the for loop into 2, one for the keyframe update and one for the mappoint update.
             // Possible that that is faster than cloning.
-            let mp_matches = self.keyframes.get(&new_kf_id).unwrap().get_mp_matches().clone();
+            let mp_matches = self
+                .keyframes
+                .get(&new_kf_id)
+                .unwrap()
+                .get_mp_matches()
+                .clone();
 
             for i in 0..mp_matches.len() {
-                if let Some((mp_id, _is_outlier)) = self.keyframes.get(&new_kf_id).unwrap().get_mp_match(&(i as u32)) {
+                if let Some((mp_id, _is_outlier)) = self
+                    .keyframes
+                    .get(&new_kf_id)
+                    .unwrap()
+                    .get_mp_match(&(i as u32))
+                {
                     // Add observation for mp->kf
                     if let Some(mp) = self.mappoints.get_mut(&mp_id) {
                         mp.add_observation(&new_kf_id, num_keypoints, i as u32);
                     } else {
-                        self.keyframes.get_mut(&new_kf_id).unwrap().mappoint_matches.delete_at_indices((i as i32, -1));
+                        self.keyframes
+                            .get_mut(&new_kf_id)
+                            .unwrap()
+                            .mappoint_matches
+                            .delete_at_indices((i as i32, -1));
                         continue;
-                        // Mappoint was deleted by local mapping but not deleted here yet 
+                        // Mappoint was deleted by local mapping but not deleted here yet
                         // because the kf was not in the map at the time.
                     }
                     self.update_mappoint(mp_id);
@@ -199,21 +230,26 @@ impl Map {
 
         if self.last_kf_id - 1 > 0 {
             self.keyframes.get_mut(&new_kf_id).unwrap().prev_kf_id = Some(self.last_kf_id - 1);
-            self.keyframes.get_mut(&(self.last_kf_id - 1)).unwrap().next_kf_id = Some(new_kf_id);
+            self.keyframes
+                .get_mut(&(self.last_kf_id - 1))
+                .unwrap()
+                .next_kf_id = Some(new_kf_id);
         }
 
         new_kf_id
     }
 
     pub fn discard_mappoint(&mut self, id: &Id) {
-        self.mappoints
-            .remove(id)
-            .map(|mappoint| {
-                let obs = mappoint.get_observations();
-                for (kf_id, indexes) in obs {
-                    self.keyframes.get_mut(&kf_id).unwrap().mappoint_matches.delete_at_indices(*indexes);
-                }
-            });
+        self.mappoints.remove(id).map(|mappoint| {
+            let obs = mappoint.get_observations();
+            for (kf_id, indexes) in obs {
+                self.keyframes
+                    .get_mut(&kf_id)
+                    .unwrap()
+                    .mappoint_matches
+                    .delete_at_indices(*indexes);
+            }
+        });
     }
 
     pub fn discard_keyframe(&mut self, kf_id: Id) {
@@ -244,21 +280,43 @@ impl Map {
             next_kf_id = kf.next_kf_id;
         }
         for conn_kf in connections1 {
-            self.keyframes.get_mut(&conn_kf).expect(&format!("Current kf {} has connection to connected kf {}, but it is deleted", kf_id, conn_kf)).delete_connection(kf_id);
+            self.keyframes
+                .get_mut(&conn_kf)
+                .expect(&format!(
+                    "Current kf {} has connection to connected kf {}, but it is deleted",
+                    kf_id, conn_kf
+                ))
+                .delete_connection(kf_id);
         }
 
         // Update prev_kf_id and next_kf_id of the prev and next kf (used for IMU)
         if let Some(prev_kf_id) = prev_kf_id {
-            self.keyframes.get_mut(&prev_kf_id).expect(&format!("Current kf {} has connection to previous kf kf {}, but it is deleted", kf_id, prev_kf_id)).next_kf_id = next_kf_id;
+            self.keyframes
+                .get_mut(&prev_kf_id)
+                .expect(&format!(
+                    "Current kf {} has connection to previous kf kf {}, but it is deleted",
+                    kf_id, prev_kf_id
+                ))
+                .next_kf_id = next_kf_id;
         }
         if let Some(next_kf_id) = next_kf_id {
-            self.keyframes.get_mut(&next_kf_id).expect(&format!("Current kf {} has connection to next kf {}, but it is deleted", kf_id, next_kf_id)).prev_kf_id = prev_kf_id;
+            self.keyframes
+                .get_mut(&next_kf_id)
+                .expect(&format!(
+                    "Current kf {} has connection to next kf {}, but it is deleted",
+                    kf_id, next_kf_id
+                ))
+                .prev_kf_id = prev_kf_id;
         }
 
         let mut test_just_mp_ids = Vec::new();
         for mp_match in &matches1 {
             if let Some((mp_id, _)) = mp_match {
-                let should_delete_mappoint = self.mappoints.get_mut(&mp_id).unwrap().delete_observation(&kf_id);
+                let should_delete_mappoint = self
+                    .mappoints
+                    .get_mut(&mp_id)
+                    .unwrap()
+                    .delete_observation(&kf_id);
                 if should_delete_mappoint {
                     self.discard_mappoint(&mp_id);
                 }
@@ -270,7 +328,7 @@ impl Map {
         let mut parent_candidates = HashSet::new();
         if parent1.is_some() {
             parent_candidates.insert(parent1.unwrap());
-        } 
+        }
 
         // Assign at each iteration one children with a parent (the pair with highest covisibility weight)
         // Include that children as new parent candidate for the rest
@@ -280,7 +338,7 @@ impl Map {
         let mut teehee = 0;
         let mut connectedkfssize = vec![];
         while !children1.is_empty() {
-            teehee +=1;
+            teehee += 1;
             let (mut max, mut child_id, mut parent_id) = (-1, -1, -1);
 
             for child_kf_id in &children1 {
@@ -306,8 +364,18 @@ impl Map {
 
             if continue_loop {
                 if child_id != -1 {
-                    self.keyframes.get_mut(&child_id).expect(&format!("Could not get child id {} from parent {}", child_id, kf_id)).parent = Some(parent_id);
-                    self.keyframes.get_mut(&parent_id).expect(&format!("Could not get parent id {}", parent_id).to_string()).children.insert(child_id);
+                    self.keyframes
+                        .get_mut(&child_id)
+                        .expect(&format!(
+                            "Could not get child id {} from parent {}",
+                            child_id, kf_id
+                        ))
+                        .parent = Some(parent_id);
+                    self.keyframes
+                        .get_mut(&parent_id)
+                        .expect(&format!("Could not get parent id {}", parent_id).to_string())
+                        .children
+                        .insert(child_id);
                     parent_candidates.insert(parent_id);
                     children1.remove(&child_id);
                 }
@@ -317,21 +385,40 @@ impl Map {
             }
         }
         println!("Teehee: {}", teehee);
-        println!("connectedkfssize: ({}), {:?}", connectedkfssize.len(), connectedkfssize);
-        
+        println!(
+            "connectedkfssize: ({}), {:?}",
+            connectedkfssize.len(),
+            connectedkfssize
+        );
+
         // If a children has no covisibility links with any parent candidate, assign to the original parent of this KF
         for child_id in children1 {
             self.keyframes.get_mut(&child_id).unwrap().parent = parent1;
-            self.keyframes.get_mut(&parent1.unwrap()).expect(&format!("Could not get parent id {}", parent1.unwrap()).to_string()).children.insert(child_id);
+            self.keyframes
+                .get_mut(&parent1.unwrap())
+                .expect(&format!("Could not get parent id {}", parent1.unwrap()).to_string())
+                .children
+                .insert(child_id);
         }
 
         if parent1.is_some() {
-            self.keyframes.get_mut(&parent1.unwrap()).unwrap().children.remove(&kf_id);
+            self.keyframes
+                .get_mut(&parent1.unwrap())
+                .unwrap()
+                .children
+                .remove(&kf_id);
 
             // Save keyframe info for trajectory retrieval later
-            let pose_relative_to_parent = self.keyframes.get(&kf_id).unwrap().get_pose() * self.keyframes.get(&parent1.unwrap()).unwrap().get_pose().inverse();
+            let pose_relative_to_parent = self.keyframes.get(&kf_id).unwrap().get_pose()
+                * self
+                    .keyframes
+                    .get(&parent1.unwrap())
+                    .unwrap()
+                    .get_pose()
+                    .inverse();
 
-            self.deleted_keyframe_info.insert(kf_id, (parent1.unwrap(), pose_relative_to_parent));
+            self.deleted_keyframe_info
+                .insert(kf_id, (parent1.unwrap(), pose_relative_to_parent));
         }
         self.keyframes.remove(&kf_id);
     }
@@ -360,8 +447,8 @@ impl Map {
         }
 
         let th = 15;
-        let (&kf_max, &count_max) = kf_counter.iter().max_by_key(|entry | entry.1).unwrap();
-        kf_counter.retain( |&_, count| *count > th ); //If the counter is greater than threshold add connection
+        let (&kf_max, &count_max) = kf_counter.iter().max_by_key(|entry| entry.1).unwrap();
+        kf_counter.retain(|&_, count| *count > th); //If the counter is greater than threshold add connection
 
         //In case no keyframe counter is over threshold add the one with maximum counter
         if kf_counter.is_empty() {
@@ -369,38 +456,84 @@ impl Map {
         }
 
         for (kf_id, weight) in &kf_counter {
-            self.keyframes.get_mut(&kf_id).unwrap().add_connection(main_kf_id, *weight);
-            self.keyframes.get_mut(&main_kf_id).unwrap().add_connection(*kf_id, *weight);
+            self.keyframes
+                .get_mut(&kf_id)
+                .unwrap()
+                .add_connection(main_kf_id, *weight);
+            self.keyframes
+                .get_mut(&main_kf_id)
+                .unwrap()
+                .add_connection(*kf_id, *weight);
         }
 
-        let parent_kf_id = self.keyframes.get_mut(&main_kf_id).unwrap().add_all_connections(kf_counter, main_kf_id == self.initial_kf_id);
+        let parent_kf_id = self
+            .keyframes
+            .get_mut(&main_kf_id)
+            .unwrap()
+            .add_all_connections(kf_counter, main_kf_id == self.initial_kf_id);
         if parent_kf_id.is_some() {
             parent_kf_id.map(|parent_kf| {
-                self.keyframes.get_mut(&parent_kf).unwrap().children.insert(main_kf_id);
+                self.keyframes
+                    .get_mut(&parent_kf)
+                    .unwrap()
+                    .children
+                    .insert(main_kf_id);
             });
         }
     }
 
     pub fn add_observation(&mut self, kf_id: Id, mp_id: Id, index: u32, is_outlier: bool) {
-        let num_keypoints = self.keyframes.get(&kf_id).expect(&format!("Could not get kf {}", kf_id)).features.num_keypoints;
-        self.mappoints.get_mut(&mp_id).unwrap().add_observation(&kf_id, num_keypoints, index);
+        let num_keypoints = self
+            .keyframes
+            .get(&kf_id)
+            .expect(&format!("Could not get kf {}", kf_id))
+            .features
+            .num_keypoints;
+        self.mappoints
+            .get_mut(&mp_id)
+            .unwrap()
+            .add_observation(&kf_id, num_keypoints, index);
 
-        let old_mp_match = self.keyframes.get_mut(&kf_id).unwrap().mappoint_matches.add(index, mp_id, is_outlier);
+        let old_mp_match = self
+            .keyframes
+            .get_mut(&kf_id)
+            .unwrap()
+            .mappoint_matches
+            .add(index, mp_id, is_outlier);
         match old_mp_match {
             Some(old_mp_id) => {
-                self.mappoints.get_mut(&old_mp_id).unwrap().delete_observation(&kf_id);
-            },
+                self.mappoints
+                    .get_mut(&old_mp_id)
+                    .unwrap()
+                    .delete_observation(&kf_id);
+            }
             None => {}
         }
     }
 
     pub fn delete_observation(&mut self, kf_id: Id, mp_id: Id) {
         if self.mappoints.get(&mp_id).is_none() {
-            warn!("Trying to remove observation from kf {} to mp {} but mp is already deleted!", kf_id, mp_id);
+            warn!(
+                "Trying to remove observation from kf {} to mp {} but mp is already deleted!",
+                kf_id, mp_id
+            );
             return;
         }
-        self.keyframes.get_mut(&kf_id).unwrap().mappoint_matches.delete_at_indices(self.mappoints.get(&mp_id).unwrap().get_index_in_keyframe(kf_id));
-        let should_delete_mappoint = self.mappoints.get_mut(&mp_id).unwrap().delete_observation(&kf_id);
+        self.keyframes
+            .get_mut(&kf_id)
+            .unwrap()
+            .mappoint_matches
+            .delete_at_indices(
+                self.mappoints
+                    .get(&mp_id)
+                    .unwrap()
+                    .get_index_in_keyframe(kf_id),
+            );
+        let should_delete_mappoint = self
+            .mappoints
+            .get_mut(&mp_id)
+            .unwrap()
+            .delete_observation(&kf_id);
         if should_delete_mappoint {
             self.discard_mappoint(&mp_id);
         }
@@ -434,13 +567,30 @@ impl Map {
         for (kf_id, (index_left, index_right)) in observations {
             // Replace measurement in keyframe
             let kf = self.keyframes.get_mut(&kf_id).unwrap();
-            let mp = self.mappoints.get(&mp_id).expect(format!("Could not get mp {}", mp_id).as_str());
+            let mp = self
+                .mappoints
+                .get(&mp_id)
+                .expect(format!("Could not get mp {}", mp_id).as_str());
 
             if !mp.get_observations().contains_key(&kf_id) {
                 if index_left != -1 {
-                    let num_keypoints = self.keyframes.get(&kf_id).expect(&format!("Could not get kf {}", kf_id)).features.num_keypoints;
-                    self.mappoints.get_mut(&mp_id).unwrap().add_observation(&kf_id, num_keypoints, index_left as u32);
-                    let old_mp_match = self.keyframes.get_mut(&kf_id).unwrap().mappoint_matches.add(index_left as u32, mp_id, false);
+                    let num_keypoints = self
+                        .keyframes
+                        .get(&kf_id)
+                        .expect(&format!("Could not get kf {}", kf_id))
+                        .features
+                        .num_keypoints;
+                    self.mappoints.get_mut(&mp_id).unwrap().add_observation(
+                        &kf_id,
+                        num_keypoints,
+                        index_left as u32,
+                    );
+                    let old_mp_match = self
+                        .keyframes
+                        .get_mut(&kf_id)
+                        .unwrap()
+                        .mappoint_matches
+                        .add(index_left as u32, mp_id, false);
                     if let Some(old_mp_id) = old_mp_match {
                         if old_mp_id != mp_to_replace_id {
                             error!("KF ({})'s old MP match ({}) should be the same as the one that is replaced ({}).", kf_id, old_mp_id, mp_to_replace_id);
@@ -451,7 +601,8 @@ impl Map {
                     // TODO (STEREO)
                 }
             } else {
-                kf.mappoint_matches.delete_at_indices((index_left, index_right));
+                kf.mappoint_matches
+                    .delete_at_indices((index_left, index_right));
             }
         }
 
@@ -459,17 +610,25 @@ impl Map {
         mp.increase_found(num_found);
         mp.increase_visible(num_visible);
 
-        let best_descriptor = self.mappoints.get(&mp_id)
-            .and_then(|mp| mp.compute_distinctive_descriptors(&self)).unwrap();
-        self.mappoints.get_mut(&mp_id)
+        let best_descriptor = self
+            .mappoints
+            .get(&mp_id)
+            .and_then(|mp| mp.compute_distinctive_descriptors(&self))
+            .unwrap();
+        self.mappoints
+            .get_mut(&mp_id)
             .map(|mp| mp.update_distinctive_descriptors(best_descriptor));
     }
 
     pub fn update_norm_and_depth(&mut self, mp_id: Id) {
         // Update normal and depth
-        let norm_and_depth = self.mappoints.get(&mp_id)
-            .and_then(|mp| {mp.get_norm_and_depth(&self)}).unwrap();
-        self.mappoints.get_mut(&mp_id)
+        let norm_and_depth = self
+            .mappoints
+            .get(&mp_id)
+            .and_then(|mp| mp.get_norm_and_depth(&self))
+            .unwrap();
+        self.mappoints
+            .get_mut(&mp_id)
             .map(|mp| mp.update_norm_and_depth(norm_and_depth));
     }
 
@@ -479,15 +638,23 @@ impl Map {
         // sequence is put together here so each time you need to do it you can just call this function.
 
         // Compute distinctive descriptors
-        let best_descriptor = self.mappoints.get(&mp_id)
-            .and_then(|mp| mp.compute_distinctive_descriptors(&self)).unwrap();
-        self.mappoints.get_mut(&mp_id)
+        let best_descriptor = self
+            .mappoints
+            .get(&mp_id)
+            .and_then(|mp| mp.compute_distinctive_descriptors(&self))
+            .unwrap();
+        self.mappoints
+            .get_mut(&mp_id)
             .map(|mp| mp.update_distinctive_descriptors(best_descriptor));
 
         // Update normal and depth
-        let norm_and_depth = self.mappoints.get(&mp_id)
-            .and_then(|mp| {mp.get_norm_and_depth(&self)}).unwrap();
-        self.mappoints.get_mut(&mp_id)
+        let norm_and_depth = self
+            .mappoints
+            .get(&mp_id)
+            .and_then(|mp| mp.get_norm_and_depth(&self))
+            .unwrap();
+        self.mappoints
+            .get_mut(&mp_id)
             .map(|mp| mp.update_norm_and_depth(norm_and_depth));
     }
 
@@ -505,28 +672,38 @@ impl Map {
     }
 
     pub fn get_deleted_keyframe_info(&self, kf: Id) -> (Id, Pose) {
-        * self.deleted_keyframe_info.get(&kf).expect(&format!("Keyframe {} deleted, but its `deleted_keyframe_info` was not saved into the map", kf))
+        *self.deleted_keyframe_info.get(&kf).expect(&format!(
+            "Keyframe {} deleted, but its `deleted_keyframe_info` was not saved into the map",
+            kf
+        ))
     }
 
     ////* keyframe database */////////////////////////////////////////////////////
     // Keyframe database sometimes needs a reference to the map, so it's easier to make keyframe_database private in map
     // and call these passthrough functions instead.
     pub fn add_to_kf_database(&mut self, kf_id: Id) {
-        self.keyframe_database.add(self.keyframes.get(&kf_id).unwrap());
+        self.keyframe_database
+            .add(self.keyframes.get(&kf_id).unwrap());
     }
 
-    pub fn detect_top_n_loop_candidates(&self, kf_id: Id, num_candidates: i32) -> (Vec<Id>, Vec<Id>) {
-        self.keyframe_database.detect_n_best_candidates(&self, &kf_id, num_candidates)
+    pub fn detect_top_n_loop_candidates(
+        &self,
+        kf_id: Id,
+        num_candidates: i32,
+    ) -> (Vec<Id>, Vec<Id>) {
+        self.keyframe_database
+            .detect_n_best_candidates(&self, &kf_id, num_candidates)
     }
 
     pub fn _detect_loop_candidates_above_min_score(&self, kf_id: Id, min_score: f32) -> Vec<Id> {
-        self.keyframe_database._detect_candidates_above_score(&self, &kf_id, min_score)
+        self.keyframe_database
+            ._detect_candidates_above_score(&self, &kf_id, min_score)
     }
 
-    pub fn  detect_relocalization_candidates(&self, frame: &Frame) -> Vec<Id> {
-        self.keyframe_database._detect_relocalization_candidates(&self, frame)
+    pub fn detect_relocalization_candidates(&self, frame: &Frame) -> Vec<Id> {
+        self.keyframe_database
+            ._detect_relocalization_candidates(&self, frame)
     }
-
 
     pub fn apply_scaled_rotation(&mut self, t: &Pose, s: f64, b_scaled_vel: bool) {
         // Sofiya: Tested!!
@@ -555,9 +732,10 @@ impl Map {
 
         let mp_ids = self.mappoints.keys().cloned().collect::<Vec<Id>>();
         for mp_id in mp_ids {
-            self.mappoints.get_mut(&mp_id).map(|mp|
-                mp.position = DVVector3::new(t.get_rotation().scale(s) * *mp.position + *t.get_translation()
-            ));
+            self.mappoints.get_mut(&mp_id).map(|mp| {
+                mp.position =
+                    DVVector3::new(t.get_rotation().scale(s) * *mp.position + *t.get_translation())
+            });
             self.update_norm_and_depth(mp_id);
         }
         self.map_change_index += 1;
@@ -578,5 +756,4 @@ impl Map {
         self.version += 1;
         info!("Map reset! Version = {}", self.version);
     }
-
 }

@@ -1,12 +1,29 @@
-use core::{config::{SETTINGS, SYSTEM}, matrix::{DVMatrix, DVMatrix3, DVVector3, DVVectorOfKeyPoint}, sensor::{FrameSensor, Sensor}, system::Timestamp};
+use core::{
+    config::{SETTINGS, SYSTEM},
+    matrix::{DVMatrix, DVMatrix3, DVVector3, DVVectorOfKeyPoint},
+    sensor::{FrameSensor, Sensor},
+    system::Timestamp,
+};
 
-use crate::modules::{imu::{ImuCalib, ImuDataFrame}, module_definitions::VocabularyModule};
+use crate::modules::{
+    imu::{ImuCalib, ImuDataFrame},
+    module_definitions::VocabularyModule,
+};
 
-use crate::{actors::tracking_backend::TrackedMapPointData, modules::bow::DVBoW, registered_actors::{CAMERA_MODULE, VOCABULARY_MODULE}};
+use crate::{
+    actors::tracking_backend::TrackedMapPointData,
+    modules::bow::DVBoW,
+    registered_actors::{CAMERA_MODULE, VOCABULARY_MODULE},
+};
 
-use super::{features::Features, keyframe::MapPointMatches, map::{Id, Map}, mappoint::MapPoint, pose::{DVTranslation, Pose}};
+use super::{
+    features::Features,
+    keyframe::MapPointMatches,
+    map::{Id, Map},
+    mappoint::MapPoint,
+    pose::{DVTranslation, Pose},
+};
 use crate::modules::module_definitions::CameraModule;
-
 
 #[derive(Debug, Clone)]
 pub struct Frame {
@@ -15,9 +32,9 @@ pub struct Frame {
 
     pub image: Option<opencv::core::Mat>,
 
-    pub pose: Option<Pose>, //  == tcw
+    pub pose: Option<Pose>,                //  == tcw
     pub mappoint_matches: MapPointMatches, // mvpmappoints , mvbOutlier
-    pub ref_kf_id: Option<Id>, //mpReferenceKF
+    pub ref_kf_id: Option<Id>,             //mpReferenceKF
 
     // Vision //
     pub features: Features, // KeyPoints, stereo coordinate and descriptors (all associated by an index)
@@ -26,18 +43,22 @@ pub struct Frame {
     // IMU //
     // Imu preintegration from last keyframe
     pub imu_data: ImuDataFrame,
- 
-    sensor: Sensor,
 
+    sensor: Sensor,
     // Don't add these in!! read explanations below
     // mnTrackReferenceForFrame ... used in tracking to decide whether to add a kf/mp into tracking's local map. redundant and easy to mess up/get out of sync. Search for this globally to see an example of how to avoid using it.
 }
 impl Frame {
     pub fn new(
-        frame_id: Id, keypoints_vec: DVVectorOfKeyPoint, descriptors_vec: DVMatrix,
-        im_width: u32, im_height: u32, image: Option<opencv::core::Mat>,
-        prev_frame: Option<& Frame>, map_imu_initialized: bool, 
-        timestamp: Timestamp
+        frame_id: Id,
+        keypoints_vec: DVVectorOfKeyPoint,
+        descriptors_vec: DVMatrix,
+        im_width: u32,
+        im_height: u32,
+        image: Option<opencv::core::Mat>,
+        prev_frame: Option<&Frame>,
+        map_imu_initialized: bool,
+        timestamp: Timestamp,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let sensor = SETTINGS.get::<Sensor>(SYSTEM, "sensor");
         let features = Features::new(keypoints_vec, descriptors_vec, im_width, im_height, sensor)?;
@@ -62,10 +83,10 @@ impl Frame {
     }
 
     pub fn new_no_features(
-        frame_id: Id, 
+        frame_id: Id,
         image: Option<opencv::core::Mat>,
         timestamp: Timestamp,
-        prev_frame: Option<& Frame>
+        prev_frame: Option<&Frame>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let sensor = SETTINGS.get::<Sensor>(SYSTEM, "sensor");
         let features = Features::empty();
@@ -103,38 +124,63 @@ impl Frame {
     pub fn compute_bow(&mut self) {
         if self.bow.is_none() {
             self.bow = Some(DVBoW::new());
-            VOCABULARY_MODULE.transform(&self.features.descriptors, &mut self.bow.as_mut().unwrap());
+            VOCABULARY_MODULE
+                .transform(&self.features.descriptors, &mut self.bow.as_mut().unwrap());
         }
     }
 
-    pub fn replace_features(&mut self, keypoints: DVVectorOfKeyPoint, descriptors: DVMatrix) -> Result<(), Box<dyn std::error::Error>> {
-        self.features = Features::new(keypoints, descriptors, self.features.image_width, self.features.image_height, self.sensor)?;
+    pub fn replace_features(
+        &mut self,
+        keypoints: DVVectorOfKeyPoint,
+        descriptors: DVMatrix,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        self.features = Features::new(
+            keypoints,
+            descriptors,
+            self.features.image_width,
+            self.features.image_height,
+            self.sensor,
+        )?;
         self.mappoint_matches = MapPointMatches::new(self.features.num_keypoints as usize); // Mappoint match length needs to match keypoints length
         Ok(())
     }
 
     pub fn _get_camera_center(&self) -> Option<DVTranslation> {
-        Some(DVTranslation::new(-self.pose?.get_rotation().transpose() * *self.pose?.get_translation()))
+        Some(DVTranslation::new(
+            -self.pose?.get_rotation().transpose() * *self.pose?.get_translation(),
+        ))
     }
 
     pub fn check_close_tracked_mappoints(&self) -> (i32, i32) {
-        self.features.check_close_tracked_mappoints(CAMERA_MODULE.th_depth as f32, &self.mappoint_matches.matches)
+        self.features.check_close_tracked_mappoints(
+            CAMERA_MODULE.th_depth as f32,
+            &self.mappoint_matches.matches,
+        )
     }
 
-    pub fn is_in_frustum(&self, mappoint: &MapPoint, viewing_cos_limit: f64) -> (Option<TrackedMapPointData>, Option<TrackedMapPointData>) {
+    pub fn is_in_frustum(
+        &self,
+        mappoint: &MapPoint,
+        viewing_cos_limit: f64,
+    ) -> (Option<TrackedMapPointData>, Option<TrackedMapPointData>) {
         // Combination of:
         // bool Frame::isInFrustum(MapPoint *pMP, float viewingCosLimit)
         // bool Frame::isInFrustumChecks(MapPoint *pMP, float viewingCosLimit, bool bRight)
 
         let left = self.check_frustum(viewing_cos_limit, &mappoint, false);
         let right = match self.sensor.frame() {
-            FrameSensor::Stereo => { self.check_frustum(viewing_cos_limit, &mappoint, true) },
-            _ => { None }
+            FrameSensor::Stereo => self.check_frustum(viewing_cos_limit, &mappoint, true),
+            _ => None,
         };
         (left, right)
     }
 
-    fn check_frustum(&self, viewing_cos_limit: f64, mappoint: &MapPoint, is_right: bool) -> Option<TrackedMapPointData> {
+    fn check_frustum(
+        &self,
+        viewing_cos_limit: f64,
+        mappoint: &MapPoint,
+        is_right: bool,
+    ) -> Option<TrackedMapPointData> {
         // 3D in absolute coordinates
         let pos = mappoint.position;
 
@@ -157,12 +203,14 @@ impl Frame {
 
         // Check positive depth
         let pc_z = pos_camera[2];
-        let _inv_z = 1.0 / pc_z; // I think used for stereo or rgbd? pMP->mTrackProjXR = uv(0) - mbf*invz; 
-        if pc_z < 0.0 { return None; }
+        let _inv_z = 1.0 / pc_z; // I think used for stereo or rgbd? pMP->mTrackProjXR = uv(0) - mbf*invz;
+        if pc_z < 0.0 {
+            return None;
+        }
 
         let (uvx, uvy) = match is_right {
             true => todo!("Stereo"), //self.camera2.project(pos_camera),
-            false => CAMERA_MODULE.project(DVVector3::new(pos_camera))
+            false => CAMERA_MODULE.project(DVVector3::new(pos_camera)),
         };
         if !self.features.is_in_image(uvx, uvy) {
             return None;
@@ -194,7 +242,6 @@ impl Frame {
         })
     }
 
-
     pub fn delete_mappoint_outliers(&mut self) -> Vec<(Id, usize)> {
         // Should only be called on a Frame.
         // In the chance you might want to call this on a keyframe, you also need to delete the mappoints' observations to the kf!
@@ -220,7 +267,7 @@ impl Frame {
                         if mp.get_observations().len() == 0 {
                             self.mappoint_matches.delete_at_indices((i as i32, -1));
                         }
-                    },
+                    }
                     None => {}
                 }
             }
@@ -233,20 +280,26 @@ impl Frame {
         // Note: in Orbslam this is: (mTwc * mImuCalib.mTcb).rotationMatrix();
         // and mTwc is inverse of the pose
         DVMatrix3::new(
-            *self.pose.expect("Should have pose by now").inverse().get_rotation() * *ImuCalib::new().tcb.get_rotation()
+            *self
+                .pose
+                .expect("Should have pose by now")
+                .inverse()
+                .get_rotation()
+                * *ImuCalib::new().tcb.get_rotation(),
         )
     }
 
     pub fn get_imu_position(&self) -> DVVector3<f64> {
         // Eigen::Matrix<float,3,1> Frame::GetImuPosition() const {
-        // Note: in Orbslam this is: 
+        // Note: in Orbslam this is:
         // mRwc * mImuCalib.mTcb.translation() + mOw;
         // where mOw = twc (inverse of pose translation)
 
         let inverse = self.pose.unwrap().inverse(); // todo should this be old_inverse?
 
         let res = DVVector3::new(
-            *inverse.get_rotation() * *ImuCalib::new().tcb.get_translation() + *inverse.get_translation()
+            *inverse.get_rotation() * *ImuCalib::new().tcb.get_translation()
+                + *inverse.get_translation(),
         );
         res
     }
@@ -258,5 +311,4 @@ impl Frame {
         let inv_pose = twb.inverse(); // Tbw
         self.pose = Some(ImuCalib::new().tcb * inv_pose); //tcw
     }
-
 }

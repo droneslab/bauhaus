@@ -1,6 +1,10 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 
+use log::warn;
+use parking_lot::{
+    MappedRwLockReadGuard, MappedRwLockWriteGuard, RwLock, RwLockReadGuard, RwLockWriteGuard,
+};
 /// *** Structs to wrap map to manage read/write access *** ///
 // ReadOnlyWrapper is used by all actors but the map actor.
 // Trying to write on read-only will give a compilation error.
@@ -14,16 +18,7 @@
 //     RwLockReadGuard, //MappedRwLockReadGuard,
 //     RwLockWriteGuard, //MappedRwLockWriteGuard,
 // };
-
 use std::{sync::Arc, time::Instant};
-use log::warn;
-use parking_lot::{
-    RwLock,
-    MappedRwLockReadGuard,
-    MappedRwLockWriteGuard,
-    RwLockReadGuard,
-    RwLockWriteGuard
-};
 
 use super::map::Map;
 
@@ -67,8 +62,11 @@ impl ReadWriteMap {
         let inner = self.inner.write();
         if inner.version == self.version {
             Ok(RwLockWriteGuard::map(inner, |unlocked| unlocked))
-        } else { 
-            warn!("Map version mismatch: I have {}, map has {}.", self.version, inner.version); // Backtrace::capture()
+        } else {
+            warn!(
+                "Map version mismatch: I have {}, map has {}.",
+                self.version, inner.version
+            ); // Backtrace::capture()
             Err("Map version mismatch".into())
         }
     }
@@ -79,9 +77,12 @@ impl ReadWriteMap {
         // so they can figure out what to do with it (they probably want to abort the loop)
         let inner = self.inner.read();
         if inner.version == self.version {
-            Ok(RwLockReadGuard::map(inner , |unlocked| unlocked))
-        } else { 
-            warn!("Map version mismatch: I have {}, map has {}.", self.version, inner.version); // , Backtrace::capture()
+            Ok(RwLockReadGuard::map(inner, |unlocked| unlocked))
+        } else {
+            warn!(
+                "Map version mismatch: I have {}, map has {}.",
+                self.version, inner.version
+            ); // , Backtrace::capture()
             Err("Map version mismatch".into())
         }
     }

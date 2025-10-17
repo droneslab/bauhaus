@@ -17,7 +17,7 @@ system:
 
       # KIMERA
       # 1100, 482
-      initial_k: 100 # Start processing dataset from frame initial_k. Useful to skip a bunch of images at the beginning (imu calibration).
+      initial_k: 51 # Start processing dataset from frame initial_k. Useful to skip a bunch of images at the beginning (imu calibration).
       final_k: 0 # Finish processing dataset at frame final_k. Last frame to process (to avoid processing the entire dataset), skip last frames. If set to 0 will process everything. 
 
       # RESULTS
@@ -38,106 +38,85 @@ modules:
       #   settings:
       #     - 
 
-      - 
-        name: FEATURE_DETECTION
+      - name: FEATURE_DETECTION
         tag: "orbslam feature detection" # options: ["opencv feature detection", "orbslam feature detection", "good features to track"]
         settings:
-          - 
-            name: max_features
+          - name: max_features
             value: 1000 #1000 in euroc, 2000 in kitti
             type: i32
-          - 
-            name: ini_features
+          - name: ini_features
             value: 5000 # 5000 in euroc, 10000 in kitti
             type: i32
-          - 
-            name: scale_factor
+          - name: scale_factor
             value: 1.2
             type: f64
-          - 
-            name: n_levels
+          - name: n_levels
             value: 8
             type: i32
-          - 
-            name: ini_th_fast
+          - name: ini_th_fast
             value: 20
             type: i32
-          - 
-            name: min_th_fast
+          - name: min_th_fast
             value: 7
             type: i32
 
 
-      -
-        name: FEATURE_MATCHER
+      - name: FEATURE_MATCHER
         tag: "orbslam feature matching"
         settings:
-          - 
-            name: far_points_threshold
+          - name: far_points_threshold
             value: 20.0
             type: f64
-          - 
-            name: high_threshold
+          - name: high_threshold
             value: 100
             type: i32
-          - 
-            name: low_threshold
+          - name: low_threshold
             value: 50
             type: i32
-          - 
-            name: histo_length
+          - name: histo_length
             value: 30
             type: i32
 
-      -
-        name: FEATURES
+      - name: FEATURES
         tag: "features"
         settings:
-          - 
-            name: frame_grid_rows
+          - name: frame_grid_rows
             value: 48
             type: i32
-          - 
-            name: frame_grid_cols
+          - name: frame_grid_cols
             value: 64
             type: i32
 
-      - 
-        name: LOOP_DETECTION
+      - name: LOOP_DETECTION
         tag: "orbslam3 loop detection"
         settings:
           - 
 
-      - 
-        name: LOCAL_MAP_OPTIMIZATION
+      - name: LOCAL_MAP_OPTIMIZATION
         tag: "bundle adjustment"
         settings:
           - 
-      - 
-        name: FULL_MAP_OPTIMIZATION
+
+      - name: FULL_MAP_OPTIMIZATION
         tag: "bundle adjustment"
         settings:
           - 
 
 actors:
-      -
-       name: VISUALIZER
-       tag: visualizer
-       receiver_bound: -1
-       settings:
-          -
-            name: stream # if true, stream to websocket. if false, save to mcap file
+      - name: VISUALIZER
+        tag: visualizer
+        receiver_bound: -1
+        settings:
+          - name: stream # if true, stream to websocket. if false, save to mcap file
             value: true
             type: bool
           - name: port # port used if streaming
             value: 8765
             type: i32
-          - 
-            name: image_draw_type
+          - name: image_draw_type
             value: plain # options are [none, plain, features, featuresandmatches]
             type: string
-          -
-            name: mcap_file_path
+          - name: mcap_file_path
             value: "results/out.mcap"
             type: string
           - name: draw_all_mappoints # Not sure this works right now... If true, draws all mappoints in the map. If false, only draws matches and recently created mappoints. Set to false to save space.
@@ -153,132 +132,106 @@ actors:
             value: false
             type: bool
   
-      -
-       name: TRACKING_FRONTEND
-      #  tag: "garbage tracking"
-       tag: "gtsam tracking frontend"
-       receiver_bound: 10
-       settings:
-        # Good features to track parameters
-          - 
-            name: gftt_k
+      - name: TRACKING_FRONTEND
+        tag: "gtsam tracking frontend"
+        receiver_bound: 10
+        settings:
+          # Good features to track parameters
+          - name: gftt_k
             value: 0.04
             type: f64
-          - 
-            name: gftt_block_size
+          - name: gftt_block_size
             value: 3
             type: i32
-          - 
-            name: gftt_quality_level
+          - name: gftt_quality_level
             value: 0.001
             type: f64
-          - 
-            name: gftt_max_features # max feature number in feature tracking
-            value: 400
+          - name: gftt_max_features # max feature number in feature tracking
+            value: 300
             type: i32
-          -
-            name: gftt_use_harris_corner_detector
+          - name: gftt_use_harris_corner_detector
             value: false
             type: bool
-          -
-            name: gftt_min_distance_btw_tracked_and_detected_features
-            value: 10
+          - name: gftt_min_distance_btw_tracked_and_detected_features
+            value: 20
             type: i32
 
-        # Optical flow parameters
-          - 
-            name: opticalflow_winsize
+          # Optical flow parameters
+          - name: opticalflow_winsize
             value: 24
             type: i32
-          - 
-            name: opticalflow_maxlevel
+          - name: opticalflow_maxlevel
             value: 4
             type: i32
-          - 
-            name: opticalflow_maxiter
+          - name: opticalflow_maxiter
             value: 30
             type: i32
-          - 
-            name: opticalflow_epsilon
+          - name: opticalflow_epsilon
             value: 0.1
             type: f64
-          - 
-            name: opticalflow_termcriteriatype
+          - name: opticalflow_termcriteriatype
             value: 3 # COUNT (1), EPS (2), or COUNT + EPS (3)
             type: i32
-          - 
-            name: opticalflow_maxfeatureage
+          - name: opticalflow_maxfeatureage
             value: 24
             type: i32
 
           # Non-max suppression parameters
-          -
-            name: nonmaxsuppression__max_nr_keypoints_before_anms
+          - name: nonmaxsuppression__max_nr_keypoints_before_anms
             value: 2000
             type: i32
-          -
-            name: nonmaxsuppression__nr_horizontal_bins
+          - name: nonmaxsuppression__nr_horizontal_bins
             value: 7
             type: i32
-          -
-            name: nonmaxsuppression__nr_vertical_bins
+          - name: nonmaxsuppression__nr_vertical_bins
             value: 5
             type: i32
 
-        # Need new KF decision
-          - 
-            name: min_num_features
-            value: 200
-            type: i32
-          - 
-            name: min_frames_to_insert_kf
-            value: 3
-            type: i32
-          -
-            name: max_frames_to_insert_kf
-            value: 10
-            type: i32
-
-        # Subpixel corner refinement for the monocular case
-          -
-            name: subpix_max_iters
+          # Subpixel corner refinement for the monocular case
+          - name: subpix_max_iters
             value: 40
             type: i32
-          -
-            name: subpix_epsilon_error
+          - name: subpix_epsilon_error
             value: 0.001
             type: f64
-          -
-            name: subpix_window_size
+          - name: subpix_window_size
             value: 10
             type: i32
-          -
-            name: subpix_zero_zone
+          - name: subpix_zero_zone
             value: -1
             type: i32
-          -
-            name: subpix_termcriteriatype
+          - name: subpix_termcriteriatype
             value: 3
             type: i32
-
-
-
-
-      -
-       name: TRACKING_BACKEND
-       tag: "gtsam tracking backend"
-       receiver_bound: 10
-       settings:
-          - 
-            name: use_smart_factors # If false, will use genericfactors
-            value: true
-            type: bool
-          - 
-            name: optimizer_type # 0: ISAM2, 1: IncrementalFixedLagSmoother, 2: LevenbergMarquardt
+  
+          # Need new KF decision
+          - name: min_intra_keyframe_time_ns
+            value: 200000000.0
+            type: f64
+          - name: max_intra_keyframe_time_ns
+            value: 10000000000.0
+            type: f64
+          - name: min_num_features
             value: 0
             type: i32
-          -
-            name: isam_update_interval
+          - name: max_disparity_since_lkf
+            value: 200.0
+            type: f64
+          - name: disparity_threshold
+            value: 0.5
+            type: f64
+
+      - name: TRACKING_BACKEND
+        tag: "gtsam tracking backend"
+        receiver_bound: 10
+        settings:
+          - name: use_smart_factors # If false, will use genericfactors
+            value: true
+            type: bool
+          - name: optimizer_type # 0: ISAM2, 1: IncrementalFixedLagSmoother, 2: LevenbergMarquardt
+            value: 0
+            type: i32
+          - name: isam_update_interval
             value: 0
             type: i32
           - name: isam_relinearize_threshold
@@ -293,12 +246,20 @@ actors:
           - name: isam_enable_detailed_results
             value: true
             type: bool
+          - name: zero_velocity_precision
+            value: 1000.0
+            type: f64
+          - name: no_motion_rotation_precision
+            value: 10000.0
+            type: f64
+          - name: no_motion_position_precision
+            value: 1000.0
+            type: f64
 
-      -
-       name: LOCAL_MAPPING
-       tag: "gtsam local mapping"
-       receiver_bound: 3
-       settings:
+      - name: LOCAL_MAPPING
+        tag: "gtsam local mapping"
+        receiver_bound: 3
+        settings:
           - 
 
       # -

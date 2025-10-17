@@ -5,8 +5,10 @@ use dvos3binding::ffi::SVDComputeType;
 use crate::map::pose::Pose;
 
 pub fn triangulate(
-    x_c1: DVVector3<f64>, x_c2: DVVector3<f64>,
-    pose1: Pose, pose2: Pose
+    x_c1: DVVector3<f64>,
+    x_c2: DVVector3<f64>,
+    pose1: Pose,
+    pose2: Pose,
 ) -> Option<DVVector3<f64>> {
     // bool GeometricTools::Triangulate(Eigen::Vector3f &x_c1, Eigen::Vector3f &x_c2,Eigen::Matrix<float,3,4> &Tc1w ,Eigen::Matrix<float,3,4> &Tc2w , Eigen::Vector3f &x3D)
 
@@ -20,7 +22,7 @@ pub fn triangulate(
     matrix.set_row(3, &(x_c2[1] * pose2m.row(2) - pose2m.row(1)));
 
     let svd = dvos3binding::ffi::svd((&DVMatrix4::new(matrix)).into(), SVDComputeType::FullV);
-    let v: DVMatrixDynamic<f64> = (& svd.v).into();
+    let v: DVMatrixDynamic<f64> = (&svd.v).into();
     let x_3d_h = v.row(3);
 
     // Old version using nalgebra:
@@ -35,6 +37,6 @@ pub fn triangulate(
     Some(DVVector3::new_with(
         x_3d_h[0] / x_3d_h[3],
         x_3d_h[1] / x_3d_h[3],
-        x_3d_h[2] / x_3d_h[3]
+        x_3d_h[2] / x_3d_h[3],
     ))
 }

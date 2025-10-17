@@ -25,6 +25,8 @@ pub struct TrackingFrontendGTSAM {
     imu_measurements_since_last_kf: ImuMeasurements,
 
     // Feature IDs
+    tracked_features_last_frame: TrackedFeatures,
+    tracked_features_last_keyframe: TrackedFeatures,
     tracked_features: TrackedFeatures,
     removed_features: Vec<u64>,
 
@@ -33,9 +35,7 @@ pub struct TrackingFrontendGTSAM {
     curr_frame_id: i32,
     current_frame: Frame,
     frames_since_last_kf: i32,
-
-    // Just for drawing
-    tracked_features_last_kf: TrackedFeatures,
+    last_kf_timestamp: Timestamp,
 
     // ORBSLAM map initialization 
     // I know this is hacky but I dont' want to figure out how to merge the gtsam imu preintegration object with the orbslam imu object
@@ -66,14 +66,16 @@ impl Actor for TrackingFrontendGTSAM {
             initialization: Some(MapInitialization::new()),
             state: GtsamFrontendTrackingState::NotInitialized,
             tracked_features: TrackedFeatures::default(),
+            tracked_features_last_frame: TrackedFeatures::default(),
+            tracked_features_last_keyframe: TrackedFeatures::default(),
             imu_for_init: IMU::new(),
             last_frame: Frame::new_no_features(-1, None, 0.0, None).expect("Should be able to make dummy frame"),
             current_frame: Frame::new_no_features(-1, None, 0.0, None).expect("Should be able to make dummy frame"),
             curr_frame_id: 0,
             imu_measurements_since_last_kf: ImuMeasurements::new(),
             frames_since_last_kf: 0,
-            tracked_features_last_kf: TrackedFeatures::default(),
             removed_features: vec![],
+            last_kf_timestamp: 0.0,
         };
         tracy_client::set_thread_name!("tracking frontend gtsam");
 
@@ -150,7 +152,7 @@ impl TrackingFrontendGTSAM {
 
                         true
                 },
-                GtsamFrontendTrackingState::Ok => {
+                GtsamFrontendTrackingState::Ok | GtsamFrontendTrackingState::LowDisparity => {
                     // Regular tracking
                     self.current_frame = Frame::new_no_features(
                         self.curr_frame_id, 
@@ -186,6 +188,7 @@ impl TrackingFrontendGTSAM {
             // }));
 
 
+            println!("Pub this frame? {}", pub_this_frame);
             if pub_this_frame {
                 tracy_client::Client::running()
                     .expect("message! without a running Client")
@@ -193,6 +196,13 @@ impl TrackingFrontendGTSAM {
 
                 // TODO Kimera
                 // self.outlier_rejection();
+                // TODO kimera... this stuff is actually inside the outlier rejection function
+                if let Some(disparity) = self.compute_median_disparity(&self.tracked_features_last_frame, &self.tracked_features) {
+                    if disparity < SETTINGS.get::<f64>(TRACKING_FRONTEND, "disparity_threshold") as f32 {
+                        debug!("Low mono disparity.");
+                        self.state = GtsamFrontendTrackingState::LowDisparity;
+                    }
+                }
 
                 self.extract_new_features().expect("Couldn't extract good features to track?");
 
@@ -201,28 +211,32 @@ impl TrackingFrontendGTSAM {
                 std::mem::swap(&mut self.imu_measurements_since_last_kf, &mut imu_measurements);
 
 
+                println!("Huh? Send to backend");
                 // SEND TO BACKEND!
                 self.system.send(TRACKING_BACKEND, Box::new(FeatureTracksAndIMUMsg {
+                    tracker_status: self.state,
                     frame: self.current_frame.clone(),
                     imu_measurements,
                     feature_tracks: self.tracked_features.clone(),
-                    // last_features: self.tracked_features_last_kf.clone(),
                     removed_feature_ids: self.removed_features.clone(),
                     imu_initialization,
                 }));
 
+                self.last_kf_timestamp = self.current_frame.timestamp;
                 self.removed_features.clear();
+                self.tracked_features_last_keyframe = self.tracked_features.clone();
 
                 if self.last_frame.image.is_some() {
                     // draw_optical_flow(
                     //     self.last_frame.image.as_ref().unwrap(),
                     //     self.current_frame.image.as_ref().unwrap(),
-                    //     & self.tracked_features_last_kf.get_points_as_vector_of_point2f(),
+                    //     & self.tracked_features_last_frame.get_points_as_vector_of_point2f(),
                     //     & self.tracked_features.get_points_as_vector_of_point2f(),
                     //     &format!("results/flow/front{}.png", self.curr_frame_id),
                     // ).unwrap();
-                    // debug!("Frontend, tracked features last: {:?}", self.tracked_features_last_kf);
+                    // debug!("Frontend, tracked features last: {:?}", self.tracked_features_last_frame);
                     // debug!("Frontend, tracked features now: {:?}", self.tracked_features);
+                    
                 }
 
                 self.frames_since_last_kf = 0;
@@ -240,6 +254,8 @@ impl TrackingFrontendGTSAM {
             // Swap current and last frame to avoid cloning current frame into last frame
             // At next iteration, current frame will be immediately overwritten with the real current frame
             std::mem::swap(&mut self.last_frame, &mut self.current_frame);
+            // Keep track of features from last frame
+            self.tracked_features_last_frame = self.tracked_features.clone();
             self.curr_frame_id += 1;
         } else if message.is::<ShutdownMsg>() {
             // Sleep a little to allow other threads to finish
@@ -320,9 +336,6 @@ impl TrackingFrontendGTSAM {
         let mut status = VectorOfu8::new();
         let mut points2 = VectorOfPoint2f::new();
 
-        // Just for drawing, keep track of last last features
-        self.tracked_features_last_kf = self.tracked_features.clone();
-
         // Optical flow
         let window_size = SETTINGS.get::<i32>(TRACKING_FRONTEND, "opticalflow_winsize");
         opencv::video::calc_optical_flow_pyr_lk(
@@ -355,7 +368,8 @@ impl TrackingFrontendGTSAM {
             if !status_ok || pt.x < 0.0 || pt.y < 0.0 {
                 // FEATURE IS NOT TRACKED! Remove from tracked_features
                 let removed_id = self.tracked_features.remove(index_in_mutated);
-                self.tracked_features_last_kf.remove(index_in_mutated);
+                self.tracked_features_last_frame.remove(index_in_mutated);
+                self.tracked_features_last_keyframe.remove(index_in_mutated);
                 index_correction = index_correction + 1;
                 self.removed_features.push(removed_id as u64);
             } else {
@@ -488,32 +502,33 @@ impl TrackingFrontendGTSAM {
             // *matches_ref_cur = outlier_free_matches_ref_cur;
     }
 
-    fn compute_median_disparity(&mut self) {
-        // TODO Kimera
-
+    fn compute_median_disparity(& self, last_features: &TrackedFeatures, current_features: &TrackedFeatures) -> Option<f32> {
         // computeMedianDisparity
-            // Compute disparity:
-            // std::vector<double> disparity_sq;
-            // disparity_sq.reserve(matches_ref_cur.size());
-            // for (const KeypointMatch& rc : matches_ref_cur) {
-            //     KeypointCV px_diff = cur_frame_kpts[rc.second] - ref_frame_kpts[rc.first];
-            //     double px_dist = px_diff.x * px_diff.x + px_diff.y * px_diff.y;
-            //     disparity_sq.push_back(px_dist);
-            // }
+        let mut disparity_sq = vec![];
+        // print!("PX diffs: ");
+        for i in 0..last_features.len() {
+            let px_diff = current_features.get_point(i) - last_features.get_point(i);
+            let px_dist = px_diff.x * px_diff.x + px_diff.y * px_diff.y;
+            // print!("{:?} {}, ", px_diff, px_dist);
+            disparity_sq.push(px_dist);
+        }
 
-            // if (disparity_sq.empty()) {
-            //     LOG(WARNING) << "Have no matches for disparity computation.";
-            //     *median_disparity = 0.0;
-            //     return false;
-            // }
+        if disparity_sq.len() == 0 {
+            warn!("No matches for disparity calculation");
+            return None;
+        }
+        // println!("Disparity_sq: {:?}", disparity_sq);
 
-            // // Compute median:
-            // const size_t center = disparity_sq.size() / 2;
-            // // nth element sorts the array partially until it finds the median.
-            // std::nth_element(
-            //     disparity_sq.begin(), disparity_sq.begin() + center, disparity_sq.end());
-            // *median_disparity = std::sqrt(disparity_sq[center]);
-            // return true;
+        // Compute median:
+        let center = disparity_sq.len() / 2;
+        // nth element sorts the array partially until it finds the median.
+        let (_, median, _) = disparity_sq.select_nth_unstable_by(
+            center,
+            |a, b| a.partial_cmp(b).unwrap()
+        );
+        let median_disparity = median.sqrt();
+        // println!("Median disparity: {} {}", median, median_disparity);
+        return Some(median_disparity);
     }
 
     fn find_matching_keypoints(&mut self) {
@@ -686,6 +701,9 @@ impl TrackingFrontendGTSAM {
         //     quality_level, min_distance, &mut mask, block_size, false, k
         // ).unwrap();
 
+        println!("Current image size: {} x {}", image.cols(), image.rows());
+        println!("Raw number of points detected: {}", keypoints.len());
+
         // Non-max suppression
         let tolerance = 0.1;
         let max_keypoints = self.non_max_suppression(
@@ -724,7 +742,6 @@ impl TrackingFrontendGTSAM {
         // println!("Extracted features:");
         for point in new_corners.iter() {
             self.tracked_features.add(Point2f::new(point.x, point.y));
-            // print!("({}, {}, {}),", point.x, point.y, self.tracked_features_last_kf.last_feature_id);
         }
 
         debug!("Extracted {} new features", new_corners.len());
@@ -831,72 +848,82 @@ impl TrackingFrontendGTSAM {
     }
 
     fn need_new_keyframe(&mut self) -> bool {
-        // Condition 1a: More than "MaxFrames" have passed from last keyframe insertion
-        let c1a = self.frames_since_last_kf >= (SETTINGS.get::<i32>(TRACKING_FRONTEND, "max_frames_to_insert_kf") as i32);
-        // Condition 1b: More than "MinFrames" have passed and Local Mapping is idle
-        let c1b = self.frames_since_last_kf >= (SETTINGS.get::<i32>(TRACKING_FRONTEND, "min_frames_to_insert_kf") as i32) && LOCAL_MAPPING_IDLE.load(Ordering::SeqCst);
-        //Condition 1c: tracking is weak
-        let c1c = (self.tracked_features.len() as u32) < (SETTINGS.get::<i32>(TRACKING_FRONTEND, "min_num_features") as u32);
+        // ORB-SLAM3
+        // // Condition 1a: More than "MaxFrames" have passed from last keyframe insertion
+        // let c1a = self.frames_since_last_kf >= (SETTINGS.get::<i32>(TRACKING_FRONTEND, "max_frames_to_insert_kf") as i32);
+        // // Condition 1b: More than "MinFrames" have passed and Local Mapping is idle
+        // let c1b = self.frames_since_last_kf >= (SETTINGS.get::<i32>(TRACKING_FRONTEND, "min_frames_to_insert_kf") as i32) && LOCAL_MAPPING_IDLE.load(Ordering::SeqCst);
+        // //Condition 1c: tracking is weak
+        // let c1c = (self.tracked_features.len() as u32) < (SETTINGS.get::<i32>(TRACKING_FRONTEND, "min_num_features") as u32);
 
-        // let c1c = ((self.matches_inliers as f32) < tracked_mappoints * 0.5 || need_to_insert_close) ;
-        // // Condition 2: Few tracked points compared to reference keyframe. Lots of visual odometry compared to map matches.
-        // let c2 = (((self.matches_inliers as f32) < (tracked_mappoints * th_ref_ratio) || need_to_insert_close)) && self.matches_inliers > 15;
-        // (c1a||c1b||c1c) && c2
+        // // let c1c = ((self.matches_inliers as f32) < tracked_mappoints * 0.5 || need_to_insert_close) ;
+        // // // Condition 2: Few tracked points compared to reference keyframe. Lots of visual odometry compared to map matches.
+        // // let c2 = (((self.matches_inliers as f32) < (tracked_mappoints * th_ref_ratio) || need_to_insert_close)) && self.matches_inliers > 15;
+        // // (c1a||c1b||c1c) && c2
 
-        debug!("Need new keyframe? {} {} {}", c1a, c1b, c1c);
-
+        // debug!("Need new keyframe? {} {} {}", c1a, c1b, c1c);
+        // c1a || c1b || c1c
 
         // Kimera:
-        // const Timestamp kf_diff_ns = frame.timestamp_ - frame_lkf.timestamp_;
-        // const size_t nr_valid_features = frame.getNrValidKeypoints();
+        let kf_diff_ns = (self.current_frame.timestamp - self.last_kf_timestamp) * 1e9;
+        let nr_valid_features = self.tracked_features.len(); //frame.getNrValidKeypoints();
 
-        // const bool min_time_elapsed =
-        //     kf_diff_ns >= frontend_params_.min_intra_keyframe_time_ns_;
-        // const bool max_time_elapsed =
-        //     kf_diff_ns >= frontend_params_.max_intra_keyframe_time_ns_;
-        // const bool nr_features_low =
-        //     nr_valid_features <= frontend_params_.min_number_features_;
+        let min_time_elapsed = kf_diff_ns >= SETTINGS.get::<f64>(TRACKING_FRONTEND, "min_intra_keyframe_time_ns");
+        let max_time_elapsed = kf_diff_ns >= SETTINGS.get::<f64>(TRACKING_FRONTEND, "max_intra_keyframe_time_ns");
+        let nr_features_low = nr_valid_features as i32 <= SETTINGS.get::<i32>(TRACKING_FRONTEND, "min_num_features");
 
         // KeypointMatches matches_ref_cur;
         // tracker_->findMatchingKeypoints(frame_lkf, frame, &matches_ref_cur);
 
-        // // check for large enough disparity
-        // double disparity;
+        // check for large enough disparity
+        let disparity = self.compute_median_disparity(
+            &self.tracked_features_last_keyframe,
+            &self.tracked_features
+        ).expect("There should already be a keyframe in the map if need_new_keyframe is called.");
         // tracker_->computeMedianDisparity(
         //     frame_lkf.keypoints_, frame.keypoints_, matches_ref_cur, &disparity);
 
-        // const bool is_disparity_low =
-        //     disparity < tracker_->tracker_params_.disparityThreshold_;
-        // const bool disparity_low_first_time =
-        //     is_disparity_low && !(tracker_status_summary_.kfTrackingStatus_mono_ ==
-        //                             TrackingStatus::LOW_DISPARITY);
-        // const bool enough_disparity = !is_disparity_low;
+        let is_disparity_low = disparity < SETTINGS.get::<f64>(TRACKING_FRONTEND, "disparity_threshold") as f32;
+        let disparity_low_first_time = is_disparity_low && !matches!(self.state, GtsamFrontendTrackingState::LowDisparity);
+        let enough_disparity = !is_disparity_low;
 
-        // const bool max_disparity_reached =
-        //     disparity > frontend_params_.max_disparity_since_lkf_;
-        // const bool disparity_flipped =
-        //     ((enough_disparity || disparity_low_first_time) && min_time_elapsed);
+        let max_disparity_reached = disparity > SETTINGS.get::<f64>(TRACKING_FRONTEND, "max_disparity_since_lkf") as f32;
+        let disparity_flipped = (enough_disparity || disparity_low_first_time) && min_time_elapsed;
 
-        // const bool need_new_keyframe = max_time_elapsed || max_disparity_reached ||
-        //                                 disparity_flipped || nr_features_low ||
-        //                                 frame.isKeyframe_;
+        // println!("Max time elapsed: {}, {}", kf_diff_ns, SETTINGS.get::<f64>(TRACKING_FRONTEND, "max_intra_keyframe_time_ns"));
+        // println!("Max disparity reached: {}, {}", disparity, SETTINGS.get::<f64>(TRACKING_FRONTEND, "max_disparity_since_lkf"));
+        // println!("Disparity flipped: {}, {}", enough_disparity, disparity_low_first_time);
+        // println!("Nr features low: {}, {}", nr_valid_features, SETTINGS.get::<i32>(TRACKING_FRONTEND, "min_num_features"));
 
-        // if (!need_new_keyframe) {
-        //     return false;  // no keyframe conditions are met
-        // }
+        // println!("Disparity flipped: {} {} {} {} {}", enough_disparity,disparity_low_first_time, min_time_elapsed, kf_diff_ns, SETTINGS.get::<f64>(TRACKING_FRONTEND, "min_intra_keyframe_time_ns"));
+        // println!(
+        //     "Need new KF? Max time elapsed: {}, max disparity reached: {}, disparity flipped: {}, nr features low: {}",
+        //     max_time_elapsed, max_disparity_reached, disparity_flipped, nr_features_low
+        // );
 
-        // return true;
+        // println!("SOFIYA! Min intra keyframe time: {}", SETTINGS.get::<f64>(TRACKING_FRONTEND, "min_intra_keyframe_time_ns"));
+        // println!("SOFIYA! Max intra keyframe time: {}", SETTINGS.get::<f64>(TRACKING_FRONTEND, "max_intra_keyframe_time_ns"));
+        // println!("SOFIYA! Min num features: {}", SETTINGS.get::<i32>(TRACKING_FRONTEND, "min_num_features"));
+        // println!("SOFIYA! Disparity threshold: {}", SETTINGS.get::<f64>(TRACKING_FRONTEND, "disparity_threshold"));
+        // println!("SOFIYA! MAX disparity since lkf: {}", SETTINGS.get::<f64>(TRACKING_FRONTEND, "max_disparity_since_lkf"));
 
-        c1a || c1b || c1c
+        // println!("Timestamps: {} {}", self.current_frame.timestamp, self.last_kf_timestamp);
+
+        return max_time_elapsed || max_disparity_reached || disparity_flipped || nr_features_low;
+
     }
 
 }
 
 
 #[derive(Debug, Clone, Copy, Default)]
-enum GtsamFrontendTrackingState {
+pub enum GtsamFrontendTrackingState {
     #[default] NotInitialized,
     Ok,
+    LowDisparity,
+    // FewMatches,
+    // Invalid,
+    // Disabled
 }
 
 pub type TrackedFeaturesIndexMap = HashMap<i32, usize>; // feature_id -> index in a frame's features

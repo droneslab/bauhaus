@@ -175,7 +175,7 @@ pub mod ffi {
         type GaussianNoiseModel;
 
         fn from_diagonal_noise_model_sigmas(sigmas: &mut [f64]) -> SharedPtr<DiagonalNoiseModel>;
-
+        fn from_precisions(precisions: &mut [f64]) -> SharedPtr<DiagonalNoiseModel>;
         fn cast_diagonal_noise_model_to_base_noise_model(
             a: &SharedPtr<DiagonalNoiseModel>,
         ) -> SharedPtr<BaseNoiseModel>;
