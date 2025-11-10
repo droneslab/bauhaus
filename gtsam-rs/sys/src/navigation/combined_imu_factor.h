@@ -42,6 +42,8 @@ namespace gtsam
     std::unique_ptr<PreintegratedCombinedMeasurements> new_preintegrated_combined_measurements(
         const std::shared_ptr<PreintegrationCombinedParams> params,
         const imuBias::ConstantBias &bias);
+    std::unique_ptr<PreintegratedCombinedMeasurements> clone_preintegrated_combined_measurements(
+        const PreintegratedCombinedMeasurements &preintegrated_measurements);
 
     rust::Vec<DoubleVec> get_covariance(const PreintegratedCombinedMeasurements &preintegrated_measurements);
 
@@ -52,6 +54,8 @@ namespace gtsam
     std::unique_ptr<NavState> predict(
         const PreintegratedCombinedMeasurements &preintegrated_measurements,
         const NavState &state_i, const imuBias::ConstantBias &bias_i);
+
+    std::unique_ptr<Rot3> get_delta_rij(const PreintegratedCombinedMeasurements &preintegrated_measurements);
 
     void reset_integration_and_set_bias(
         PreintegratedCombinedMeasurements &preintegrated_measurements,

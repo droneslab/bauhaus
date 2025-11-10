@@ -260,6 +260,8 @@ pub mod ffi {
             relinearize_skip: i32,
             cache_linearized_factors: bool,
             enable_detailed_results: bool,
+            wildfire_threshold: f32,
+            find_unused_factor_slots: bool,
         ) -> UniquePtr<ISAM2>;
 
         fn update(
@@ -286,11 +288,13 @@ pub mod ffi {
         type IncrementalFixedLagSmoother;
 
         fn new_incremental_fixed_lag_smoother(
-            smoother_lag: f64,
             relinearize_threshold: f64,
             relinearize_skip: i32,
             cache_linearized_factors: bool,
             enable_detailed_results: bool,
+            wildfire_threshold: f32,
+            find_unused_factor_slots: bool,
+            nr_states: i32
         ) -> UniquePtr<IncrementalFixedLagSmoother>;
 
         // Same as update()... for some reason rust won't let me name it update since isam2
@@ -436,7 +440,10 @@ pub mod ffi {
             params: SharedPtr<PreintegrationCombinedParams>,
             bias: &ConstantBias,
         ) -> UniquePtr<PreintegratedCombinedMeasurements>;
-    
+        fn clone_preintegrated_combined_measurements(
+            preintegrated_measurements: &PreintegratedCombinedMeasurements,
+        ) -> UniquePtr<PreintegratedCombinedMeasurements>;
+
         fn get_covariance(preintegrated_measurements: &PreintegratedCombinedMeasurements) -> Vec<DoubleVec>;
 
         fn integrateMeasurement(
@@ -451,6 +458,8 @@ pub mod ffi {
             navstate: &NavState,
             bias: &ConstantBias,
         ) -> UniquePtr<NavState>;
+
+        fn get_delta_rij(preintegrated_measurements: &PreintegratedCombinedMeasurements) -> UniquePtr<Rot3>;
 
         fn reset_integration_and_set_bias(
             preintegrated_measurements: Pin<&mut PreintegratedCombinedMeasurements>,

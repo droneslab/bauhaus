@@ -16,5 +16,6 @@ pub mod orbslam_extractor; // orb extractor from orbslam3, using bindings to C++
 pub mod orbslam_matcher;
 pub mod relocalization;
 pub mod sim3solver;
+pub mod opengv_translation_only_sac; // Implementation of opengv TranslationOnlySacProblem and Ransac
 
 pub mod module_definitions;

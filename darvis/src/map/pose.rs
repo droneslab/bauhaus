@@ -95,8 +95,9 @@ impl Pose {
         let rot = self.rotation.matrix();
         let trans = self.translation.vector;
         nalgebra::Matrix3x4::<f64>::new(
-            rot[0], rot[1], rot[2], trans[0], rot[3], rot[4], rot[5], trans[1], rot[6], rot[7],
-            rot[8], trans[2],
+            rot[0], rot[3], rot[6], trans[0],
+            rot[1], rot[4], rot[7], trans[1],
+            rot[2], rot[5], rot[8], trans[2],
             // 0.0, 0.0, 0.0, 1.0
         )
     }

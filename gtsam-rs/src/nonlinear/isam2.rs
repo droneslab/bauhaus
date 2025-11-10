@@ -12,7 +12,7 @@ impl Default for ISAM2 {
     fn default() -> Self {
         Self {
             inner: ::sys::default_isam2(
-                0.1, 10, true, false
+                0.1, 1, true, false, 0.001, true,
             ),
         }
     }
@@ -20,11 +20,15 @@ impl Default for ISAM2 {
 
 impl ISAM2 {
     pub fn new(
-        relinearize_threshold: f64, relinearize_skip: i32, cache_linearized_factors: bool, enable_detailed_results: bool
+        relinearize_threshold: f64, relinearize_skip: i32,
+        cache_linearized_factors: bool, enable_detailed_results: bool,
+        wildfire_threshold: f32, find_unused_factor_slots: bool,
     ) -> Self {
         Self {
             inner: ::sys::default_isam2(
-                relinearize_threshold, relinearize_skip, cache_linearized_factors, enable_detailed_results
+                relinearize_threshold, relinearize_skip,
+                cache_linearized_factors, enable_detailed_results,
+                wildfire_threshold, find_unused_factor_slots,
             ),
         }
     }

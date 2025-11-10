@@ -1,12 +1,18 @@
 extern crate g2o;
-use ahash::HashMap;
-use log::{warn, info, debug};
-use std::{cmp::max, sync::atomic::Ordering, thread::sleep, time::Duration};
-use opencv::{core::{Point, Point2f, Scalar, CV_8U}, imgcodecs, imgproc::circle, prelude::*, types::{VectorOfKeyPoint, VectorOfPoint2f, VectorOfu8}};
+use ahash::{HashMap, HashMapExt};
+// use arrsac::Arrsac;
+use gtsam::{imu::imu_bias::ConstantBias, inference::symbol::Symbol, navigation::combined_imu_factor::{PreintegratedCombinedMeasurements, PreintegrationCombinedParams}, sys::Rot3};
+use log::{debug, error, info, warn};
+use nalgebra::{UnitQuaternion, Vector3};
+use std::{cmp::max, collections::VecDeque, sync::atomic::Ordering, thread::sleep, time::Duration};
+use opencv::{core::{Point, Point2f, Scalar, CV_8U}, imgcodecs, imgproc::circle, prelude::*, types::{VectorOfKeyPoint, VectorOfPoint2f, VectorOff32, VectorOfu8}};
 use core::{
     config::*, matrix::*, system::{Actor, MessageBox, System, Timestamp}
 };
 use std::fmt::Debug;
+use num_traits::Pow;
+use crate::{map::pose::{DVRotation, DVTranslation}, modules::{imu::{ImuBias, ImuCalib, PreintegrationGTSAM}, opengv_translation_only_sac::{CentralRelativeAdapter, Ransac, TranslationOnlySacProblem}}, registered_actors::IMU};
+
 use crate::{
     actors::{local_mapping::LOCAL_MAPPING_IDLE, messages::{FeatureTracksAndIMUMsg, ImageMsg, ImagePathMsg, InitKeyFrameMsg, ShutdownMsg, TrajectoryMsg, VisFeaturesMsg}}, map::{frame::Frame, pose::Pose, read_only_lock::ReadWriteMap}, modules::{image::{self, draw_optical_flow}, imu::{ImuMeasurements, IMU}, map_initialization::MapInitialization, module_definitions::{FeatureExtractionModule, MapInitializationModule}}, registered_actors::{new_feature_extraction_module, CAMERA_MODULE, LOCAL_MAPPING, SHUTDOWN_ACTOR, TRACKING_BACKEND, TRACKING_FRONTEND, VISUALIZER}
 };
@@ -34,8 +40,12 @@ pub struct TrackingFrontendGTSAM {
     last_frame: Frame,
     curr_frame_id: i32,
     current_frame: Frame,
+    last_keyframe: Frame,
     frames_since_last_kf: i32,
     last_kf_timestamp: Timestamp,
+
+    preintegration: PreintegrationGTSAM,
+    tbc: Pose, // Transform from camera frame to body frame (IMU)
 
     // ORBSLAM map initialization 
     // I know this is hacky but I dont' want to figure out how to merge the gtsam imu preintegration object with the orbslam imu object
@@ -76,6 +86,9 @@ impl Actor for TrackingFrontendGTSAM {
             frames_since_last_kf: 0,
             removed_features: vec![],
             last_kf_timestamp: 0.0,
+            preintegration: PreintegrationGTSAM::default(),
+            tbc: ImuCalib::new().tbc,
+            last_keyframe: Frame::new_no_features(-1, None, 0.0, None).expect("Should be able to make dummy frame"),
         };
         tracy_client::set_thread_name!("tracking frontend gtsam");
 
@@ -108,11 +121,10 @@ impl TrackingFrontendGTSAM {
                 let msg = message.downcast::<ImageMsg>().unwrap_or_else(|_| panic!("Could not downcast tracking message!"));
                 (msg.image, msg.color_image, msg.timestamp, msg.imu_measurements, msg.imu_initialization)
             };
-            self.imu_measurements_since_last_kf.append(&mut imu_measurements);
 
             debug!("Tracking frontend working on frame {} at timestamp {}", self.curr_frame_id, timestamp);
 
-            let pub_this_frame = match self.state {
+            let (pub_this_frame, kf_r_ref_frame) = match self.state {
                 GtsamFrontendTrackingState::NotInitialized => {
                     // If map is not initialized yet, just extract features and try to initialize
                     // If initialized successsfully,
@@ -127,13 +139,12 @@ impl TrackingFrontendGTSAM {
                         //     imu_initialization.as_mut().unwrap().pose = kf1_pose;
                         //     println!("Set imu initialization pose to: {:?}", kf1_pose);
                         // }
-                        
                         // initialized
 
                     // When turning back on, comment all this out:
                         let (keypoints, descriptors) = self.orb_extractor_ini.as_mut().unwrap().extract(& image).unwrap();
                         let init_pose = imu_initialization.as_ref().unwrap().pose;
-                        
+
                         self.current_frame = Frame::new( 
                             self.curr_frame_id, 
                             keypoints,
@@ -148,11 +159,15 @@ impl TrackingFrontendGTSAM {
                         self.current_frame.pose = Some(init_pose);
                         self.state = GtsamFrontendTrackingState::Ok;
 
+                        self.preintegration.initialize(ImuBias::new());
+
                         println!("INITIALIZED IN FRONTEND!");
 
-                        true
+                        (true, None)
                 },
-                GtsamFrontendTrackingState::Ok | GtsamFrontendTrackingState::LowDisparity => {
+                GtsamFrontendTrackingState::Ok | GtsamFrontendTrackingState::LowDisparity | GtsamFrontendTrackingState::FewMatches | GtsamFrontendTrackingState::Invalid => {
+                    // TODO Kimera not sure all four conditions should be here
+
                     // Regular tracking
                     self.current_frame = Frame::new_no_features(
                         self.curr_frame_id, 
@@ -160,6 +175,17 @@ impl TrackingFrontendGTSAM {
                         timestamp,
                         Some(& self.last_frame)
                     ).expect("Could not create frame!");
+
+                    self.preintegration.preintegrate_kimera(&mut imu_measurements);
+                    let body_r_cam = self.tbc.get_rotation();
+                    let cam_r_body = body_r_cam.try_inverse().unwrap();
+                    let delta_rij = self.preintegration.get_delta_rij();
+                    let kf_r_ref_frame = Some(DVRotation::new(cam_r_body * delta_rij * *body_r_cam));
+
+                    // println!("Body pose cam: {:?}", body_r_cam);
+                    // println!("Cam r body: {:?}", cam_r_body);
+                    // println!("Delta rij: {:?}", delta_rij);
+                    // println!("camlrect_lkf_r_camlrect_k_imu: {:?}", camlrect_lkf_r_camlrect_k_imu);
 
                     // Optical flow
                     self.optical_flow().unwrap();
@@ -172,7 +198,7 @@ impl TrackingFrontendGTSAM {
                     // debug!("OPTICAL FLOW POSE ESTIMATE... {}, {:?}", timestamp * 1e9, new_pose);
 
                     // Determine if frame should be a keyframe
-                    self.need_new_keyframe()
+                    (self.need_new_keyframe(), kf_r_ref_frame)
                     // true
                 }
             };
@@ -194,32 +220,23 @@ impl TrackingFrontendGTSAM {
                     .expect("message! without a running Client")
                     .message("Publish frame!", 2);
 
-                // TODO Kimera
-                // self.outlier_rejection();
-                // TODO kimera... this stuff is actually inside the outlier rejection function
-                if let Some(disparity) = self.compute_median_disparity(&self.tracked_features_last_frame, &self.tracked_features) {
-                    if disparity < SETTINGS.get::<f64>(TRACKING_FRONTEND, "disparity_threshold") as f32 {
-                        debug!("Low mono disparity.");
-                        self.state = GtsamFrontendTrackingState::LowDisparity;
-                    }
+                if let Some(rot) = kf_r_ref_frame {
+                    let (state, tracking_pose) = self.geometric_outlier_rejection(rot);
+                    self.state = state;
+                    println!("AFTER OUTLIER REJECTION, STATE IS {:?}", self.state);
                 }
-
                 self.extract_new_features().expect("Couldn't extract good features to track?");
-
-                // Send current imu measurements to backend, replace with empty ones
-                let mut imu_measurements = ImuMeasurements::new();
-                std::mem::swap(&mut self.imu_measurements_since_last_kf, &mut imu_measurements);
-
 
                 println!("Huh? Send to backend");
                 // SEND TO BACKEND!
                 self.system.send(TRACKING_BACKEND, Box::new(FeatureTracksAndIMUMsg {
                     tracker_status: self.state,
                     frame: self.current_frame.clone(),
-                    imu_measurements,
+                    // imu_measurements,
                     feature_tracks: self.tracked_features.clone(),
-                    removed_feature_ids: self.removed_features.clone(),
+                    // removed_feature_ids: self.removed_features.clone(),
                     imu_initialization,
+                    preintegration: self.preintegration.get_preintegration_clone(),
                 }));
 
                 self.last_kf_timestamp = self.current_frame.timestamp;
@@ -236,10 +253,23 @@ impl TrackingFrontendGTSAM {
                     // ).unwrap();
                     // debug!("Frontend, tracked features last: {:?}", self.tracked_features_last_frame);
                     // debug!("Frontend, tracked features now: {:?}", self.tracked_features);
-                    
                 }
 
+                // Reset preintegration to result of latest optimization
+                let latest_imu_bias = {
+                    let map = self.map.read().unwrap();
+                    if map.last_kf_id != -1 {
+                        let last_kf = map.get_keyframe(map.last_kf_id);
+                        println!("RESET PREINTEGRATION! LAST KF IS {}, BIAS IS: {:?}", last_kf.id, last_kf.imu_data.imu_bias);
+                        last_kf.imu_data.imu_bias.clone()
+                    } else {
+                        // NO KFs yet, set to default
+                        ImuBias::new()
+                    }
+                };
+                self.preintegration.reset_integration_and_set_bias(& latest_imu_bias);
                 self.frames_since_last_kf = 0;
+                self.last_keyframe = self.current_frame.clone();
             } else {
                 self.frames_since_last_kf += 1;
             }
@@ -309,14 +339,14 @@ impl TrackingFrontendGTSAM {
                         })
                     );
 
-                    // SOFIYA TURN OFF LOCAL MAPPING
-                    // Send first two keyframes to local mapping
-                    self.system.send(LOCAL_MAPPING, Box::new(
-                        InitKeyFrameMsg { kf_id: ini_kf_id, map_version: self.map.read()?.version }
-                    ));
-                    self.system.send(LOCAL_MAPPING,Box::new(
-                        InitKeyFrameMsg { kf_id: curr_kf_id, map_version: self.map.read()?.version } 
-                    ));
+                    // // SOFIYA TURN OFF LOCAL MAPPING
+                    // // Send first two keyframes to local mapping
+                    // self.system.send(LOCAL_MAPPING, Box::new(
+                    //     InitKeyFrameMsg { kf_id: ini_kf_id, map_version: self.map.read()?.version }
+                    // ));
+                    // self.system.send(LOCAL_MAPPING,Box::new(
+                    //     InitKeyFrameMsg { kf_id: curr_kf_id, map_version: self.map.read()?.version } 
+                    // ));
                 },
                 None => {
                     panic!("Could not create initial map");
@@ -360,6 +390,7 @@ impl TrackingFrontendGTSAM {
         let mut total_tracked = 0;
 
         // TODO KIMERA: Delete features if they are older than the opticalflow_maxfeatureage: https://github.com/MIT-SPARK/Kimera-VIO/blob/ce8c59b7b273ab5ac29db7e5572e1623760e19c7/src/frontend/Tracker.cpp#L174C23-L174C30
+        // println!("Optical flow...");
         for i in 0..status.len() {
             let index_in_mutated = i - index_correction;
             let pt = points2.get(i)?;
@@ -375,7 +406,10 @@ impl TrackingFrontendGTSAM {
             } else {
                 // FEATURE IS FOUND! Update the point in tracked_features
                 // Not updating current_frame's features yet, we will do this if this frame becomes a new keyframe during the feature extraction step.
-                self.tracked_features.update(index_in_mutated, pt);
+                let bearing_vector = self.get_bearing_vector(&pt);
+                self.tracked_features.update(index_in_mutated, pt, bearing_vector);
+
+                // println!("{:?}, {:?}", pt, bearing_vector);
                 total_tracked += 1;
             }
         }
@@ -385,115 +419,175 @@ impl TrackingFrontendGTSAM {
         Ok(())
     }
 
-    fn outlier_rejection(&mut self, rotation: Option<nalgebra::Matrix3<f64>>) -> Result<(), Box<dyn std::error::Error>> {
-        // TODO Kimera... outlier rejection needs preintegration in frontend.
-        // keyframe_R_cur_frame comes from preintegration!
-    //     // auto tic_full_preint = utils::Timer::tic();
-    //     const ImuFrontend::PimPtr& pim = imu_frontend_->preintegrateImuMeasurements(
-    //         input->getImuStamps(), input->getImuAccGyrs());
-    //     CHECK(pim);
-    //     const gtsam::Rot3 body_R_cam = mono_camera_->getBodyPoseCam().rotation();
-    //     const gtsam::Rot3 cam_R_body = body_R_cam.inverse();
-    //     gtsam::Rot3 camLrectLkf_R_camLrectK_imu =
-    //   cam_R_body * pim->deltaRij() * body_R_cam;
+    fn geometric_outlier_rejection(
+        &mut self, 
+        rotation: DVRotation
+    ) -> (GtsamFrontendTrackingState, Pose) {
+        // Begin void VisionImuFrontend::outlierRejectionMono
+        // Checks inside this are not relevant to euroc monocular
 
+        // Begin TrackingStatusPose Tracker::geometricOutlierRejection2d2d(
+        //    Frame* ref_frame, Frame* cur_frame, const gtsam::Pose3& cam_lkf_Pose_cam_kf)
 
-        // void VisionImuFrontend::outlierRejectionMono(
-        //     const gtsam::Rot3& keyframe_R_cur_frame,
-        //     Frame* frame_lkf,
-        //     Frame* frame_k,
-        //     TrackingStatusPose* status_pose_mono) const {
+        let cam_lkf_pose_cam_kf = Pose::new_with_default_trans(*rotation);
 
-        let given_rot = rotation.is_some();
-        // const bool time_aligned =
-        //     frontend_state_ != FrontendState::InitialTimeAlignment;
-        // const bool imu_ok = given_rot && time_aligned;
-        // let imu_ok = given_rot && time_aligned;
+        // println!("Current keypoints: {:?}", self.tracked_features);
+        // println!("Last keyframe keypoints: {:?}", self.tracked_features_last_keyframe);
 
-        // let pose = if imu_ok {
-        //     // 2-point RANSAC.
-        //     self.geometric_outlier_rejection_2d2d(frame_lkf, frame_k, & Pose::new_with_default_trans(rotation.unwrap()));
-        // } else {
-        //     // 5-point RANSAC.
-        //     //     *status_pose_mono =
-        //     //         tracker_->geometricOutlierRejection2d2d(frame_lkf, frame_k);
+        // Sofiya... think I don't have to do this because of the way I keep track of features
+        // let matches_ref_cur = {
+        //     // Begin void Tracker::findMatchingKeypoints(const Frame& ref_frame,
+        //     //                             const Frame& cur_frame,
+        //     //                             KeypointMatches* matches_ref_cur)
+        //     // Find keypoints that observe the same landmarks in both frames:
+        //     let mut matches: Vec<(usize, usize)> = vec![];
+        //     let ref_lm_index_map: HashMap<i32, usize> = HashMap::new();
+
+        //     for i in 0..self.tracked_features_last_keyframe.len() {
+        //         let kf_point = self.tracked_features_last_keyframe.get_point(i);
+        //         let curr_f_point = self.tracked_features.get_point(i);
+        //         matches.push((kf_point as usize, curr_f_point as usize));
+        //     }
+
+        //     // for (size_t i = 0; i < ref_frame.landmarks_.size(); ++i) {
+        //     //     const LandmarkId& ref_id = ref_frame.landmarks_.at(i);
+        //     //     if (ref_id != -1) {
+        //     //     // Map landmark id -> position in ref_frame.landmarks_
+        //     //     ref_lm_index_map[ref_id] = i;
+        //     //     }
+        //     // }
+
+        //     // // Map of position of landmark j in ref frame to position of landmark j in
+        //     // // cur_frame
+        //     // matches_ref_cur->reserve(ref_lm_index_map.size());
+        //     // for (size_t i = 0; i < cur_frame.landmarks_.size(); ++i) {
+        //     //     const LandmarkId& cur_id = cur_frame.landmarks_.at(i);
+        //     //     if (cur_id != -1) {
+        //     //     auto it = ref_lm_index_map.find(cur_id);
+        //     //     if (it != ref_lm_index_map.end()) {
+        //     //         matches_ref_cur->push_back(std::make_pair(it->second, i));
+        //     //     }
+        //     //     }
+        //     // }
+        //     matches
         // };
 
-        Ok(())
+        if self.tracked_features_last_keyframe.len() == 0 {
+            error!("No matching keypoints from frame {} to frame {}. Mono Tracking Status = INVALID.", self.last_frame.frame_id, self.current_frame.frame_id);
+            return (GtsamFrontendTrackingState::Invalid, Pose::default());
+        } else {
+            let (inliers, state, pose) = self.geometric_outlier_rejection_inner(
+                &cam_lkf_pose_cam_kf
+            );
+
+            // Remove correspondences classified as outliers
+            if !matches!(state, GtsamFrontendTrackingState::FewMatches) {
+                self.remove_outliers(&inliers);
+            }
+
+            // THIS IS ONLY USEFUL if we are completely still...
+            if matches!(state, GtsamFrontendTrackingState::Ok) {
+                // Check enough disparity.
+                if let Some(disparity) = self.compute_median_disparity(&self.tracked_features_last_keyframe, &self.tracked_features) {
+                    println!("Disparity: {} / {}", disparity, SETTINGS.get::<f64>(TRACKING_FRONTEND, "disparity_threshold") as f32);
+                    if disparity < SETTINGS.get::<f64>(TRACKING_FRONTEND, "disparity_threshold") as f32 {
+                        info!("Low mono disparity.");
+                        return (GtsamFrontendTrackingState::LowDisparity, pose);
+                    }
+                } else {
+                    error!("Median disparity calculation failed...");
+                }
+            }
+            return (state, pose);
+        }
     }
 
-    fn geometric_outlier_rejection_2d2d(
-        &mut self, frame_lkf: &Frame, frame_k: &Frame, pose: &Pose
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        // TODO Kimera
+    fn remove_outliers(
+        &mut self,
+        inliers: & Vec<usize>,
+    ) {
+        // void Tracker::removeOutliersMono(const std::vector<int>& inliers,
+        //                          Frame* ref_frame,
+        //                          Frame* cur_frame,
+        //                          KeypointMatches* matches_ref_cur)
 
-        // KeypointMatches matches_ref_cur;
-        // findMatchingKeypoints(*ref_frame, *cur_frame, &matches_ref_cur);
 
-        // TrackingStatusPose result;
+        // println!("Inliers: {:?}", inliers);
+        // println!("Matches ref cur size: {}", self.tracked_features_last_keyframe.len());
 
-        // if (matches_ref_cur.empty()) {
-        //     LOG(ERROR) << "No matching keypoints from frame " << ref_frame->id_
-        //             << " to frame " << cur_frame->id_ << ".\n"
-        //             << "Mono Tracking Status = INVALID.";
-        //     result = std::make_pair(TrackingStatus::INVALID, gtsam::Pose3());
-        // } else {
-        //     std::vector<int> inliers;
-        //     result = geometricOutlierRejection2d2d(ref_frame->versors_,
-        //                                         cur_frame->versors_,
-        //                                         matches_ref_cur,
-        //                                         &inliers,
-        //                                         cam_lkf_Pose_cam_kf);
+        // Find indices of outliers in current frame.
+        let outliers: Vec<usize> = {
+            // void Tracker::findOutliers(const KeypointMatches& matches_ref_cur,
+            //                std::vector<int> inliers,
+            //                std::vector<int>* outliers)
 
-        //     // TODO(Toni): should we remove outliers if few matches?
-        //     //! Remove correspondences classified as outliers
-        //     if (result.first != TrackingStatus::FEW_MATCHES) {
-        //     removeOutliersMono(inliers, ref_frame, cur_frame, &matches_ref_cur);
-        //     }
+            // Get outlier indices from inlier indices.
+            // std::sort(inliers.begin(), inliers.end(), std::less<size_t>());
 
-        //     // THIS IS ONLY USEFUL if we are completely still...
-        //     if (result.first == TrackingStatus::VALID) {
-        //     // TODO(TONI): unrotate due to optical flow before calculating
-        //     // disparity...
-        //     // TODO(TONI): this has no place here... should be somewhere else...
-        //     //! Check enough disparity.
-        //     double disparity;
-        //     if (computeMedianDisparity(ref_frame->keypoints_,
-        //                                 cur_frame->keypoints_,
-        //                                 matches_ref_cur,
-        //                                 &disparity)) {
-        //         if (disparity < tracker_params_.disparityThreshold_) {
-        //         LOG(INFO) << "Low mono disparity.";
-        //         result.first = TrackingStatus::LOW_DISPARITY;
-        //         }
-        //     } else {
-        //         LOG(ERROR) << "Median disparity calculation failed...";
-        //     }
-        //     }
-        // }
+            let mut outliers = vec![];
+                // outliers->reserve(matches_ref_cur.size() - inliers.size());
 
-        // debug_info_.monoRansacTime_ = utils::Timer::toc(start_time_tic).count();
-        // return result;
-        Ok(())
-    }
+            // The following is a complicated way of computing a set difference
+            let mut k = 0;
+            for i in 0..self.tracked_features_last_keyframe.len() {
+                if k < inliers.len() // If we haven't exhaused inliers
+                    && i > inliers[k] // If we are after the inlier[k]
+                {
+                    k += 1; // Check the next inlier
+                }
 
-    fn remove_outliers(&mut self) {
-        // TODO Kimera
+                if k >= inliers.len() || i != inliers[k] { // If i is not an inlier 
+                    outliers.push(i);
+                }
+            }
+            println!("Outliers: {:?}", outliers);
+            outliers
 
-        // removeOutliersMono
-            // // Find indices of outliers in current frame.
-            // std::vector<int> outliers;
-            // findOutliers(*matches_ref_cur, inliers, &outliers);
-            // // Remove outliers.
-            // // outliers cannot be a vector of size_t because opengv uses a vector of
-            // // int.
-            // for (const size_t& out : outliers) {
-            //     const auto& ref_kp_cur_kp = (*matches_ref_cur)[out];
-            //     ref_frame->landmarks_.at(ref_kp_cur_kp.first) = -1;
-            //     cur_frame->landmarks_.at(ref_kp_cur_kp.second) = -1;
+                // for (size_t i = 0u; i < matches_ref_cur.size(); ++i) {
+                //     if (k < inliers.size()                    // If we haven't exhaused inliers
+                //         && static_cast<int>(i) > inliers[k])  // If we are after the inlier[k]
+                //     ++k;                                    // Check the next inlier
+                //     if (k >= inliers.size() ||
+                //         static_cast<int>(i) != inliers[k])  // If i is not an inlier
+                //     outliers->push_back(i);
+                // }
+                // }
+        };
+
+        // Remove outliers.
+        // outliers cannot be a vector of size_t because opengv uses a vector of
+        // int.
+            // for out in outliers {
+            //         // const auto& ref_kp_cur_kp = (*matches_ref_cur)[out];
+            //         // ref_frame->landmarks_.at(ref_kp_cur_kp.first) = -1;
+            //         // cur_frame->landmarks_.at(ref_kp_cur_kp.second) = -1;
             // }
 
-            // // Store only inliers from now on.
+        // Store only inliers from now on.
+        let mut outlier_free_tracked_last_kf = TrackedFeatures::default();
+        let mut outlier_free_tracked_current = TrackedFeatures::default();
+        let mut outlier_free_tracked_last_frame = TrackedFeatures::default();
+
+        for inlier in inliers {
+            outlier_free_tracked_last_kf.add(
+                self.tracked_features_last_keyframe.get_point(*inlier),
+                self.tracked_features_last_keyframe.get_bearing_vector(*inlier),
+            );
+            outlier_free_tracked_current.add(
+                self.tracked_features.get_point(*inlier),
+                self.tracked_features.get_bearing_vector(*inlier),
+            );
+            outlier_free_tracked_last_frame.add(
+                self.tracked_features_last_frame.get_point(*inlier),
+                self.tracked_features_last_frame.get_bearing_vector(*inlier),
+            );
+        }
+        self.tracked_features_last_keyframe = outlier_free_tracked_last_kf;
+        self.tracked_features = outlier_free_tracked_current;
+        self.tracked_features_last_frame = outlier_free_tracked_last_frame;
+
+        println!("Matches after removing outliers: {}", self.tracked_features.len());
+
             // KeypointMatches outlier_free_matches_ref_cur;
             // outlier_free_matches_ref_cur.reserve(inliers.size());
             // for (const size_t& in : inliers) {
@@ -502,14 +596,118 @@ impl TrackingFrontendGTSAM {
             // *matches_ref_cur = outlier_free_matches_ref_cur;
     }
 
+    fn geometric_outlier_rejection_inner(
+        &self,
+        cam_lkf_pose_cam_kf: &Pose,
+    ) -> (Vec<usize>, GtsamFrontendTrackingState, Pose) {
+        // TrackingStatusPose Tracker::geometricOutlierRejection2d2d(
+        //     const BearingVectors& ref_bearings,
+        //     const BearingVectors& cur_bearings,
+        //     const KeypointMatches& matches_ref_cur,
+        //     std::vector<int>* inliers,
+        //     const gtsam::Pose3& cam_lkf_Pose_cam_kf)
+
+        let mut status;
+
+        // NOTE: versors are already in the rectified left camera frame.
+        // No further rectification needed.
+        // Get bearing vectors for opengv.
+        let mut f_ref = vec![];
+        let mut f_cur = vec![];
+        for i in 0..self.tracked_features_last_keyframe.len() {
+            // Reference bearing vector
+            let ref_bearing = self.tracked_features_last_keyframe.get_bearing_vector(i);
+            f_ref.push(*ref_bearing);
+            // Current bearing vector
+            let cur_bearing = self.tracked_features.get_bearing_vector(i);
+            f_cur.push(*cur_bearing);
+        }
+
+        // println!("Ransac.... ref bearings: {}, cur bearings: {}", f_ref.len(), f_cur.len());
+        // println!("Ransac... ref bearings: {:?}", f_ref);
+        // println!("Ransac... cur bearings: {:?}", f_cur);
+
+        // Solve problem.
+        let (success, inliers, mut best_pose) = {
+            // Begin bool runRansac(
+            //   std::shared_ptr<SampleConsensusProblem> sample_consensus_problem_ptr,
+            //   const double& threshold,
+            //   const int& max_iterations,
+            //   const double& probability,
+            //   const bool& do_nonlinear_optimization,
+            //   gtsam::Pose3* best_pose,
+            //   std::vector<int>* inliers)
+
+
+            println!("cam_lkf_pose_cam_kf: {:?}", cam_lkf_pose_cam_kf.get_rotation());
+
+            // Setup adaptor
+            let adapter = CentralRelativeAdapter::new(
+                f_ref,
+                f_cur,
+                cam_lkf_pose_cam_kf.get_rotation(), 
+                cam_lkf_pose_cam_kf.get_translation()
+            );
+                // Adapter2d2d adapter(f_ref, f_cur);
+                // if (tracker_params_.ransac_use_2point_mono_) {
+                //     adapter.setR12(cam_lkf_Pose_cam_kf.rotation().matrix());
+                //     adapter.sett12(cam_lkf_Pose_cam_kf.translation().matrix());
+                // }
+
+
+            // Create ransac
+            let max_iterations = SETTINGS.get::<i32>(TRACKING_FRONTEND, "ransac_max_iterations") as usize;
+            let problem = TranslationOnlySacProblem::new(adapter, false);
+            let mut ransac = Ransac::new(
+                problem,
+                SETTINGS.get::<f64>(TRACKING_FRONTEND, "ransac_threshold_mono"),
+                max_iterations as u32,
+                SETTINGS.get::<f64>(TRACKING_FRONTEND, "ransac_probability"),
+                true,
+                vec![] // Sofiya note, this is empty in kimera too
+            );
+
+            // Run ransac
+            if ransac.compute_model() {
+                if ransac.inliers.is_empty() {
+                    (false, ransac.inliers, Pose::default())
+                } else {
+                    let best_pose = Pose::new(
+                        Vector3::new(
+                            ransac.model_coefficients.translation[0],
+                            ransac.model_coefficients.translation[1],
+                            ransac.model_coefficients.translation[2],
+                        ),
+                        *cam_lkf_pose_cam_kf.get_rotation(),
+                    );
+                    (true, ransac.inliers, best_pose)
+                }
+            } else {
+                (false, vec![], Pose::default())
+            }
+        };
+
+        println!("RANSAC success? {}, inliers: {}", success, inliers.len());
+
+        if !success {
+            status = GtsamFrontendTrackingState::Invalid;
+            best_pose = Pose::default();
+        } else {
+            // Check enough inliers.
+            status = GtsamFrontendTrackingState::Ok;
+            if inliers.len() < SETTINGS.get::<i32>(TRACKING_FRONTEND, "min_nr_mono_inliers") as usize {
+                status = GtsamFrontendTrackingState::FewMatches;
+            }
+        }
+
+        (inliers, status, best_pose)
+    }
+
     fn compute_median_disparity(& self, last_features: &TrackedFeatures, current_features: &TrackedFeatures) -> Option<f32> {
-        // computeMedianDisparity
         let mut disparity_sq = vec![];
-        // print!("PX diffs: ");
         for i in 0..last_features.len() {
             let px_diff = current_features.get_point(i) - last_features.get_point(i);
             let px_dist = px_diff.x * px_diff.x + px_diff.y * px_diff.y;
-            // print!("{:?} {}, ", px_diff, px_dist);
             disparity_sq.push(px_dist);
         }
 
@@ -517,7 +715,6 @@ impl TrackingFrontendGTSAM {
             warn!("No matches for disparity calculation");
             return None;
         }
-        // println!("Disparity_sq: {:?}", disparity_sq);
 
         // Compute median:
         let center = disparity_sq.len() / 2;
@@ -527,150 +724,19 @@ impl TrackingFrontendGTSAM {
             |a, b| a.partial_cmp(b).unwrap()
         );
         let median_disparity = median.sqrt();
-        // println!("Median disparity: {} {}", median, median_disparity);
         return Some(median_disparity);
-    }
-
-    fn find_matching_keypoints(&mut self) {
-        // TODO Kimera
-
-        //FindMatchingKeypoints
-            // // Find keypoints that observe the same landmarks in both frames:
-            // std::map<LandmarkId, size_t> ref_lm_index_map;
-            // for (size_t i = 0; i < ref_frame.landmarks_.size(); ++i) {
-            //     const LandmarkId& ref_id = ref_frame.landmarks_.at(i);
-            //     if (ref_id != -1) {
-            //     // Map landmark id -> position in ref_frame.landmarks_
-            //     ref_lm_index_map[ref_id] = i;
-            //     }
-            // }
-
-            // // Map of position of landmark j in ref frame to position of landmark j in
-            // // cur_frame
-            // matches_ref_cur->reserve(ref_lm_index_map.size());
-            // for (size_t i = 0; i < cur_frame.landmarks_.size(); ++i) {
-            //     const LandmarkId& cur_id = cur_frame.landmarks_.at(i);
-            //     if (cur_id != -1) {
-            //     auto it = ref_lm_index_map.find(cur_id);
-            //     if (it != ref_lm_index_map.end()) {
-            //         matches_ref_cur->push_back(std::make_pair(it->second, i));
-            //     }
-            //     }
-            // }
-    }
-
-    fn geometric_outlier_rejection_inner() {
-        // TODO Kimera
-
-        //   TrackingStatusPose status_pose;
-        // // NOTE: versors are already in the rectified left camera frame.
-        // // No further rectification needed.
-        // //! Get bearing vectors for opengv.
-        // BearingVectors f_ref;
-        // BearingVectors f_cur;
-        // const size_t& n_matches = matches_ref_cur.size();
-        // f_ref.reserve(n_matches);
-        // f_cur.reserve(n_matches);
-        // for (const KeypointMatch& it : matches_ref_cur) {
-        //     //! Reference bearing vector
-        //     CHECK_LT(it.first, ref_bearings.size());
-        //     const auto& ref_bearing = ref_bearings.at(it.first);
-        //     f_ref.push_back(ref_bearing);
-
-        //     //! Current bearing vector
-        //     CHECK_LT(it.second, cur_bearings.size());
-        //     const auto& cur_bearing = cur_bearings.at(it.second);
-        //     f_cur.push_back(cur_bearing);
-        // }
-
-        // //! Setup adapter.
-        // CHECK_GT(f_ref.size(), 0);
-        // CHECK_EQ(f_ref.size(), f_cur.size());
-        // CHECK_EQ(f_ref.size(), n_matches);
-        // Adapter2d2d adapter(f_ref, f_cur);
-        // if (tracker_params_.ransac_use_2point_mono_) {
-        //     adapter.setR12(cam_lkf_Pose_cam_kf.rotation().matrix());
-        //     adapter.sett12(cam_lkf_Pose_cam_kf.translation().matrix());
-        // }
-
-        // //! Solve problem.
-        // gtsam::Pose3 best_pose = gtsam::Pose3();
-        // bool success = false;
-        // if (tracker_params_.ransac_use_2point_mono_) {
-        //     success = runRansac(std::make_shared<Problem2d2dGivenRot>(
-        //                             adapter, tracker_params_.ransac_randomize_),
-        //                         tracker_params_.ransac_threshold_mono_,
-        //                         tracker_params_.ransac_max_iterations_,
-        //                         tracker_params_.ransac_probability_,
-        //                         tracker_params_.optimize_2d2d_pose_from_inliers_,
-        //                         &best_pose,
-        //                         inliers);
-        // } else {
-        //     success = runRansac(
-        //         std::make_shared<Problem2d2d>(adapter,
-        //                                     tracker_params_.pose_2d2d_algorithm_,
-        //                                     tracker_params_.ransac_randomize_),
-        //         tracker_params_.ransac_threshold_mono_,
-        //         tracker_params_.ransac_max_iterations_,
-        //         tracker_params_.ransac_probability_,
-        //         tracker_params_.optimize_2d2d_pose_from_inliers_,
-        //         &best_pose,
-        //         inliers);
-        // }
-
-        // if (!success) {
-        //     status_pose = std::make_pair(TrackingStatus::INVALID, gtsam::Pose3());
-        // } else {
-        //     // TODO(Toni): it seems we are not removing outliers if we send an invalid
-        //     // tracking status (above), but the backend calls addLandmarksToGraph even
-        //     // when we have an invalid status!
-
-        //     // TODO(Toni): check quality of tracking
-        //     //! Check enough inliers.
-        //     TrackingStatus status = TrackingStatus::VALID;
-        //     if (inliers->size() <
-        //         static_cast<size_t>(tracker_params_.minNrMonoInliers_)) {
-        //     CHECK(!inliers->empty());
-        //     status = TrackingStatus::FEW_MATCHES;
-        //     }
-
-        //     // NOTE: 2-point always returns the identity rotation, hence we have to
-        //     // substitute it:
-        //     if (tracker_params_.ransac_use_2point_mono_) {
-        //     CHECK(cam_lkf_Pose_cam_kf.rotation().equals(best_pose.rotation()));
-        //     }
-
-        //     //! Fill debug info.
-        //     debug_info_.nrMonoPutatives_ = adapter.getNumberCorrespondences();
-        //     debug_info_.nrMonoInliers_ = inliers->size();
-        //     debug_info_.monoRansacIters_ = 0;  // no access to ransac from here
-        //     // debug_info_.monoRansacIters_ = ransac->iterations_;
-
-        //     status_pose = std::make_pair(status, best_pose);
-        // }
-
-        // VLOG(5) << "2D2D tracking " << (success ? " success " : " failure ") << ":\n"
-        //         << "- Tracking Status: "
-        //         << TrackerStatusSummary::asString(status_pose.first) << '\n'
-        //         << "- Total Correspondences: " << f_ref.size() << '\n'
-        //         << "\t- # inliers: " << inliers->size() << '\n'
-        //         << "\t- # outliers: " << f_ref.size() - inliers->size() << '\n'
-        //         << "- Best pose: \n"
-        //         << status_pose.second;
-
-        // return status_pose;
     }
 
     fn extract_new_features(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         let _span = tracy_client::span!("extract features");
-
-        print!("max features: {}", SETTINGS.get::<i32>(TRACKING_FRONTEND, "gftt_max_features") as usize);
 
         let num_features_to_find = max(SETTINGS.get::<i32>(TRACKING_FRONTEND, "gftt_max_features") - self.tracked_features.points.len() as i32, 0);
         if num_features_to_find <= 0 {
             warn!("Have enough features ({}), not extracting more", self.tracked_features.points.len());
             return Ok(());
         }
+
+        println!("Feature detector, need {}, max features per frame: {}", num_features_to_find, SETTINGS.get::<i32>(TRACKING_FRONTEND, "gftt_max_features") );
 
         // Mask tracked features
         let mut keypoints = opencv::types::VectorOfKeyPoint::new();
@@ -691,37 +757,35 @@ impl TrackingFrontendGTSAM {
                 -1,
                 0
             ).unwrap();
-            // println!("Masking feature: {:?}", Point::new(point.x as i32, point.y as i32));
         }
 
         // Raw feature detection
         self.gftt.detect(&image, &mut keypoints, &mut mask)?;
-        // opencv::imgproc::good_features_to_track(
-        //     & image, &mut points, num_features_to_find as i32,
-        //     quality_level, min_distance, &mut mask, block_size, false, k
-        // ).unwrap();
 
-        println!("Current image size: {} x {}", image.cols(), image.rows());
         println!("Raw number of points detected: {}", keypoints.len());
 
+        // for kp in keypoints.iter() {
+        //     println!("Extracted kp: {:?} {:?}", kp.pt(), kp.response());
+        // }
+
         // Non-max suppression
-        let tolerance = 0.1;
         let max_keypoints = self.non_max_suppression(
             &keypoints,
             num_features_to_find as i32,
-            tolerance,
             image.cols(),
             image.rows(),
             SETTINGS.get::<i32>(TRACKING_FRONTEND, "nonmaxsuppression__nr_horizontal_bins"),
             SETTINGS.get::<i32>(TRACKING_FRONTEND, "nonmaxsuppression__nr_vertical_bins"),
         )?;
 
+        // for kp in max_keypoints.iter() {
+        //     println!("Nonmax: {:?}", kp.pt());
+        // }
+
         // Corner sub-pix
         let mut new_corners = opencv::types::VectorOfPoint2f::new();
         opencv::core::KeyPoint::convert(&max_keypoints, &mut new_corners, &opencv::core::Vector::<i32>::new())?;
 
-        // TODO(Toni) this takes a ton of time 27ms each time...
-        // Change window_size, and term_criteria to improve timing
         if new_corners.len() > 0 {
             let window_size = SETTINGS.get::<i32>(TRACKING_FRONTEND, "subpix_window_size");
             let zero_zone = SETTINGS.get::<i32>(TRACKING_FRONTEND, "subpix_zero_zone");
@@ -739,9 +803,9 @@ impl TrackingFrontendGTSAM {
             )?;
         }
 
-        // println!("Extracted features:");
         for point in new_corners.iter() {
-            self.tracked_features.add(Point2f::new(point.x, point.y));
+            let bearing_vector = self.get_bearing_vector(&point);
+            self.tracked_features.add(Point2f::new(point.x, point.y), bearing_vector);
         }
 
         debug!("Extracted {} new features", new_corners.len());
@@ -749,29 +813,52 @@ impl TrackingFrontendGTSAM {
         Ok(())
     }
 
+    fn get_bearing_vector(&self, px: & Point2f) -> DVVector3<f64> {
+        // Calibrate pixel.
+        // matrix of px with a single entry, i.e., a single pixel
+        let mut undistorted_keypoint = opencv::types::VectorOfPoint2f::new();
+        opencv::calib3d::undistort_points(
+            &opencv::types::VectorOfPoint2f::from(vec![*px]),
+            &mut undistorted_keypoint,
+            &CAMERA_MODULE.k_matrix.mat(),
+            &VectorOff32::from_iter((*CAMERA_MODULE.dist_coef.as_ref().unwrap()).clone()),
+            &opencv::core::Mat::default(),
+            &opencv::core::Mat::default(),
+        ).unwrap();
+
+        // Transform to unit vector.
+        let versor: Vector3<f64> = Vector3::new(
+            undistorted_keypoint.get(0).unwrap().x as f64,
+            undistorted_keypoint.get(0).unwrap().y  as f64,
+            1.0
+        );
+
+        // Return unit norm vector
+        DVVector3::new(versor.normalize())
+    }
+
     fn non_max_suppression(
         &self, keypoints: & opencv::types::VectorOfKeyPoint, need_n_corners: i32,
-        tolerance: f64, image_cols: i32, image_rows: i32,
+        image_cols: i32, image_rows: i32,
         nr_horizontal_bins: i32, nr_vertical_bins: i32
     ) -> Result<opencv::types::VectorOfKeyPoint, Box<dyn std::error::Error>> {
+        // Note... results here aren't the same as Kimera because somehow the response for every keypoint in kimera is 0, and then they sort by this... To get around the difference, just removed the sort in both for now.
         // Sorting keypoints by deacreasing order of strength
-        let mut response_vector = vec![];
-        for i in 0..keypoints.len() {
-            response_vector.push(keypoints.get(i)?.response());
-        }
-        let mut indx: Vec<usize> = (0..response_vector.len()).collect(); // C++ std::iota
-        indx.sort_by(|&a, &b| b.cmp(&a));
+        // let mut response_vector = vec![];
+        // for i in 0..keypoints.len() {
+        //     response_vector.push(keypoints.get(i)?.response());
+        //     println!("Response: {}", keypoints.get(i)?.response());
+        // }
+        // let mut indx: Vec<usize> = (0..response_vector.len()).collect(); // C++ std::iota
+        // indx.sort_by(|&a, &b| b.cmp(&a));
 
-        // TODO Kimera need to do this sort
-        // std::vector<int> Indx(responseVector.size());
-        // std::iota(std::begin(Indx), std::end(Indx), 0);
-        // cv::sortIdx(responseVector, Indx, cv::SortFlags::SORT_DESCENDING);
-        let mut keypoints_sorted = vec![];
-        for i in 0..keypoints.len() {
-            keypoints_sorted.push(keypoints.get(indx[i] as usize));
-        }
+        // let mut keypoints_sorted = vec![];
+        // for i in 0..keypoints.len() {
+        //     keypoints_sorted.push(keypoints.get(indx[i] as usize));
+        //     println!("Sorted keypoint: {:?}", keypoints.get(indx[i] as usize)?.pt());
+        // }
+        let keypoints_sorted = keypoints;
 
-        
         if need_n_corners as usize > keypoints.len() {
             return Ok(keypoints.clone());
         }
@@ -793,7 +880,7 @@ impl TrackingFrontendGTSAM {
             nr_vertical_bins as usize,
             nr_horizontal_bins as usize);  // store number of kpts for each bin
         for i in 0..keypoints_sorted.len() {
-            let current_kp = keypoints_sorted.get(i).as_ref().unwrap().as_ref().unwrap();
+            let current_kp = keypoints_sorted.get(i).unwrap();
             let bin_row_ind = (current_kp.pt().y / bin_row_size) as usize;
             let bin_col_ind = (current_kp.pt().x / bin_col_size) as usize;
 
@@ -806,7 +893,9 @@ impl TrackingFrontendGTSAM {
         Ok(binned_keypoints)
     }
 
-    fn calculate_transform(&self, new_tracked_features: & TrackedFeatures) -> Result<Pose, Box<dyn std::error::Error>> {
+    fn calculate_transform(&self, new_tracked_features: & TrackedFeatures) 
+        -> Result<Pose, Box<dyn std::error::Error>> 
+    {
         let _span = tracy_client::span!("calculate_transform");
         // recovering the pose and the essential matrix
         let prev_features: VectorOfPoint2f = self.tracked_features.get_points_as_vector_of_point2f();
@@ -848,23 +937,6 @@ impl TrackingFrontendGTSAM {
     }
 
     fn need_new_keyframe(&mut self) -> bool {
-        // ORB-SLAM3
-        // // Condition 1a: More than "MaxFrames" have passed from last keyframe insertion
-        // let c1a = self.frames_since_last_kf >= (SETTINGS.get::<i32>(TRACKING_FRONTEND, "max_frames_to_insert_kf") as i32);
-        // // Condition 1b: More than "MinFrames" have passed and Local Mapping is idle
-        // let c1b = self.frames_since_last_kf >= (SETTINGS.get::<i32>(TRACKING_FRONTEND, "min_frames_to_insert_kf") as i32) && LOCAL_MAPPING_IDLE.load(Ordering::SeqCst);
-        // //Condition 1c: tracking is weak
-        // let c1c = (self.tracked_features.len() as u32) < (SETTINGS.get::<i32>(TRACKING_FRONTEND, "min_num_features") as u32);
-
-        // // let c1c = ((self.matches_inliers as f32) < tracked_mappoints * 0.5 || need_to_insert_close) ;
-        // // // Condition 2: Few tracked points compared to reference keyframe. Lots of visual odometry compared to map matches.
-        // // let c2 = (((self.matches_inliers as f32) < (tracked_mappoints * th_ref_ratio) || need_to_insert_close)) && self.matches_inliers > 15;
-        // // (c1a||c1b||c1c) && c2
-
-        // debug!("Need new keyframe? {} {} {}", c1a, c1b, c1c);
-        // c1a || c1b || c1c
-
-        // Kimera:
         let kf_diff_ns = (self.current_frame.timestamp - self.last_kf_timestamp) * 1e9;
         let nr_valid_features = self.tracked_features.len(); //frame.getNrValidKeypoints();
 
@@ -880,8 +952,6 @@ impl TrackingFrontendGTSAM {
             &self.tracked_features_last_keyframe,
             &self.tracked_features
         ).expect("There should already be a keyframe in the map if need_new_keyframe is called.");
-        // tracker_->computeMedianDisparity(
-        //     frame_lkf.keypoints_, frame.keypoints_, matches_ref_cur, &disparity);
 
         let is_disparity_low = disparity < SETTINGS.get::<f64>(TRACKING_FRONTEND, "disparity_threshold") as f32;
         let disparity_low_first_time = is_disparity_low && !matches!(self.state, GtsamFrontendTrackingState::LowDisparity);
@@ -916,13 +986,14 @@ impl TrackingFrontendGTSAM {
 }
 
 
+
 #[derive(Debug, Clone, Copy, Default)]
 pub enum GtsamFrontendTrackingState {
     #[default] NotInitialized,
     Ok,
     LowDisparity,
-    // FewMatches,
-    // Invalid,
+    Invalid,
+    FewMatches,
     // Disabled
 }
 
@@ -933,6 +1004,7 @@ pub struct TrackedFeatures {
     points: Vec<Point2f>,
     feature_ids: Vec<i32>,
     last_feature_id: i32,
+    versors: Vec<DVVector3<f64>>
 }
 impl TrackedFeatures {
     pub fn default() -> Self {
@@ -940,6 +1012,7 @@ impl TrackedFeatures {
             points: vec![],
             feature_ids: vec![],
             last_feature_id: 0,
+            versors: vec![],
         }
     }
 
@@ -961,13 +1034,19 @@ impl TrackedFeatures {
         self.points[index]
     }
 
-    pub fn update(&mut self, index: usize, point: Point2f) {
-        self.points[index] = point;
+    pub fn get_bearing_vector(&self, index: usize) -> DVVector3<f64> {
+        self.versors[index]
     }
 
-    pub fn add(&mut self, point: Point2f) -> i32 {
+    pub fn update(&mut self, index: usize, point: Point2f, bearing_vector: DVVector3<f64>) {
+        self.points[index] = point;
+        self.versors[index] = bearing_vector;
+    }
+
+    pub fn add(&mut self, point: Point2f, bearing_vector: DVVector3<f64>) -> i32 {
         self.points.push(point);
         self.feature_ids.push(self.last_feature_id);
+        self.versors.push(bearing_vector);
         self.last_feature_id += 1;
 
         return self.last_feature_id - 1;
@@ -976,6 +1055,7 @@ impl TrackedFeatures {
     pub fn remove(&mut self, index: usize) -> i32 {
         let id = self.feature_ids.remove(index);
         self.points.remove(index);
+        self.versors.remove(index);
         id
     }
 }

@@ -8,7 +8,8 @@ namespace gtsam {
 
     std::unique_ptr<ISAM2> default_isam2(
         double relinearizeThreshold, int relinearizeSkip,
-        bool cacheLinearizedFactors, bool enableDetailedResults
+        bool cacheLinearizedFactors, bool enableDetailedResults,
+        float wildfire_threshold, bool find_unused_factor_slots
     );
 
     ISAM2ResultRust update(ISAM2 &isam2, const NonlinearFactorGraph &graph, const Values &initial_values, const rust::Vec<DoubleVec> & new_affected_keys, const rust::Vec<unsigned long int> & keys_to_remove);

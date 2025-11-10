@@ -9,9 +9,11 @@ namespace gtsam {
     void get_foobar(void);
 
     std::unique_ptr<IncrementalFixedLagSmoother> new_incremental_fixed_lag_smoother(
-        double smootherLag,
         double relinearizeThreshold, int relinearizeSkip,
-        bool cacheLinearizedFactors, bool enableDetailedResults
+        bool cacheLinearizedFactors, bool enableDetailedResults,
+        float wildfire_threshold,
+        bool find_unused_factor_slots,
+        int nr_states
     );
 
     // Same as update()... for some reason rust won't let me name it update since isam2

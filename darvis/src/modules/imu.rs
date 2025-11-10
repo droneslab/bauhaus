@@ -4,6 +4,7 @@ use crate::{
     map::{map::Id, pose::group_exp, read_only_lock::ReadWriteMap},
     registered_actors::IMU,
 };
+use core::system::Timestamp;
 use core::{
     config::{SETTINGS, SYSTEM},
     matrix::{DVMatrix3, DVMatrix4, DVVector3},
@@ -18,6 +19,7 @@ use std::{
     collections::{HashMap, VecDeque},
     fmt::Display,
 };
+use num_traits::Pow;
 
 use crate::map::{frame::Frame, pose::Pose};
 
@@ -1176,5 +1178,168 @@ impl ConstraintPoseImu {
         // H = es.eigenvectors()*eigs.asDiagonal()*es.eigenvectors().transpose();
 
         Some(constraint_pose_imu)
+    }
+}
+
+
+#[derive(Default)]
+pub struct PreintegrationGTSAM {
+    preint_gtsam: gtsam::navigation::combined_imu_factor::PreintegratedCombinedMeasurements
+}
+
+impl PreintegrationGTSAM {
+    pub fn initialize(&mut self, init_bias: ImuBias) {
+        let prior_bias = gtsam::imu::imu_bias::ConstantBias::new(
+            &gtsam::base::vector::Vector3::new(init_bias.bax, init_bias.bay, init_bias.baz),
+            &gtsam::base::vector::Vector3::new(init_bias.bwx, init_bias.bwy, init_bias.bwz)
+        );
+        let accel_noise_density = SETTINGS.get::<f64>(IMU, "noise_acc");
+        let gyro_noise_density = SETTINGS.get::<f64>(IMU, "noise_gyro");
+        let accel_random_walk = SETTINGS.get::<f64>(IMU, "acc_walk");
+        let gyro_random_walk = SETTINGS.get::<f64>(IMU, "gyro_walk");
+        let imu_integration_sigma = SETTINGS.get::<f64>(IMU, "imu_integration_sigma");
+        let init_bias_sigma = SETTINGS.get::<f64>(IMU, "imu_bias_init_sigma");
+
+        // Create GTSAM preintegration parameters for use with Foster's version
+        // let mut params = PreintegrationCombinedParams::new(-9.81, 0.0, 0.0);
+        let mut params = gtsam::navigation::combined_imu_factor::PreintegrationCombinedParams::new(0.0, 0.0, -9.81);
+
+        params.set_gyroscope_covariance(f64::pow(gyro_noise_density, 2));
+        params.set_accelerometer_covariance(f64::pow(accel_noise_density, 2));
+        // SOFIYA TODO... removed these because they do not seem to be in kimera?
+        params.set_bias_acc_covariance(f64::pow(accel_random_walk, 2));
+        params.set_bias_omega_covariance(f64::pow(gyro_random_walk, 2));
+        // These are not in orbslam but are in kimera:
+        params.set_integration_covariance(f64::pow(imu_integration_sigma, 2));
+        params.set_bias_acc_omega_int(init_bias_sigma);
+
+        // Actually create the GTSAM preintegration
+        self.preint_gtsam = gtsam::navigation::combined_imu_factor::PreintegratedCombinedMeasurements::new(params, &prior_bias);
+    }
+
+    pub fn preintegrate_kimera(&mut self, imu_measurements: &mut ImuMeasurements){
+        for i in 0..imu_measurements.len() - 1 {
+            let tstep = imu_measurements[i + 1].timestamp - imu_measurements[i].timestamp;
+            let acc: Vector3<f64> = imu_measurements[i].acc; // acc
+            let ang_vel: Vector3<f64> = imu_measurements[i].ang_vel; // angVel
+            // println!("Preintegrating {} measurement:  Acc: {} {} {}, Omega: {} {} {}, dt: {}",
+            //     i,
+            //     acc.x, acc.y, acc.z, // acc
+            //     ang_vel.x, ang_vel.y, ang_vel.z, // angVel
+            //     tstep
+            // );
+
+            self.preint_gtsam.integrate_measurement(&acc.into(), &ang_vel.into(), tstep);
+        }
+
+    }
+
+    pub fn preintegrate_orbslam(&mut self, imu_measurements: &mut ImuMeasurements, current_timestamp: Timestamp, last_timestamp: Timestamp) -> Result<(), Box<dyn std::error::Error>> {
+        // From ORBSLAM:
+        let mut imu_from_last_frame = VecDeque::with_capacity(imu_measurements.len()); // mvImuFromLastFrame
+        let imu_per = 0.001;
+        while !imu_measurements.is_empty() {
+            if imu_measurements.front().unwrap().timestamp < last_timestamp - imu_per {
+                imu_measurements.pop_front();
+            } else if imu_measurements.front().unwrap().timestamp < current_timestamp - imu_per {
+                let msmt = imu_measurements.pop_front().unwrap();
+                imu_from_last_frame.push_back(msmt);
+            } else {
+                let msmt = imu_measurements.pop_front().unwrap();
+                imu_from_last_frame.push_back(msmt);
+                break;
+            }
+        }
+        let n = imu_from_last_frame.len() - 1;
+
+        // Commented out code here from ORBSLAM3 as well
+        for i in 0..n {
+            // let mut tstep = imu_measurements[i + 1].timestamp - imu_measurements[i].timestamp;
+            // let mut acc: Vector3<f64> = imu_measurements[i].acc; // acc
+            // let mut ang_vel: Vector3<f64> = imu_measurements[i].ang_vel; // angVel
+            let mut tstep = 0.0;
+            let mut acc: Vector3<f64> = Vector3::zeros(); // acc
+            let mut ang_vel: Vector3<f64> = Vector3::zeros(); // angVel
+
+            // orbslam:
+            if i == 0 && i < (n - 1) {
+                let tab = imu_from_last_frame[i + 1].timestamp - imu_from_last_frame[i].timestamp;
+                let tini = imu_from_last_frame[i].timestamp - last_timestamp;
+                acc = (
+                    imu_from_last_frame[i].acc + imu_from_last_frame[i + 1].acc -
+                    (imu_from_last_frame[i + 1].acc - imu_from_last_frame[i].acc) * (tini/tab)
+                ) * 0.5;
+                ang_vel = (
+                    imu_from_last_frame[i].ang_vel + imu_from_last_frame[i + 1].ang_vel -
+                    (imu_from_last_frame[i + 1].ang_vel - imu_from_last_frame[i].ang_vel) * (tini/tab)
+                ) * 0.5;
+                tstep = imu_from_last_frame[i + 1].timestamp - last_timestamp;
+                // println!("#1, current timestamp: {}, last timestamp: {}", imu_from_last_frame[i + 1].timestamp, last_timestamp);
+            } else if i < (n - 1) {
+                acc = (imu_from_last_frame[i].acc + imu_from_last_frame[i + 1].acc) * 0.5;
+                ang_vel = (imu_from_last_frame[i].ang_vel + imu_from_last_frame[i + 1].ang_vel) * 0.5;
+                tstep = imu_from_last_frame[i + 1].timestamp - imu_from_last_frame[i].timestamp;
+                // println!("#2, current timestamp: {}, last timestamp: {}", imu_from_last_frame[i + 1].timestamp, imu_from_last_frame[i].timestamp);
+            } else if i > 0 && i == (n - 1) {
+                let tab = imu_from_last_frame[i + 1].timestamp - imu_from_last_frame[i].timestamp;
+                let tend = imu_from_last_frame[i + 1].timestamp - current_timestamp;
+                acc = (
+                    imu_from_last_frame[i].acc + imu_from_last_frame[i + 1].acc -
+                    (imu_from_last_frame[i + 1].acc - imu_from_last_frame[i].acc) * (tend/tab)
+                ) * 0.5;
+                ang_vel = (
+                    imu_from_last_frame[i].ang_vel + imu_from_last_frame[i + 1].ang_vel -
+                    (imu_from_last_frame[i + 1].ang_vel - imu_from_last_frame[i].ang_vel) * (tend/tab)
+                ) * 0.5;
+                tstep = current_timestamp - imu_from_last_frame[i].timestamp;
+                // println!("#3, current timestamp: {}, last timestamp: {}", current_timestamp, imu_from_last_frame[i].timestamp);
+            } else if i == 0 && i == (n - 1) {
+                acc = imu_from_last_frame[i].acc;
+                ang_vel = imu_from_last_frame[i].ang_vel;
+                tstep = current_timestamp - last_timestamp;
+                // println!("#4, current timestamp: {}, last timestamp: {}", current_timestamp, last_timestamp);
+            }
+
+            acc = Vector3::<f64>::new(acc[0], acc[1], acc[2]);
+
+            if tstep == 0.0 {
+                // IMU messages between frames have one overlapping message, so if we have multiple frames
+                // between keyframes then there will be the same message twice in a row. Safe to skip.
+                continue;
+            }
+
+            self.preint_gtsam.integrate_measurement(&acc.into(), &ang_vel.into(), tstep);
+
+            // println!("RAW IMU: Acc: {} {} {}, Omega: {} {} {}",
+            //     imu_from_last_frame[i].acc.x, imu_from_last_frame[i].acc.y, imu_from_last_frame[i].acc.z,
+            //     imu_from_last_frame[i].ang_vel.x, imu_from_last_frame[i].ang_vel.y, imu_from_last_frame[i].ang_vel.z,
+            // );
+            // println!("Preintegrating {} measurement:  Acc: {} {} {}, Omega: {} {} {}, dt: {}",
+            //     i,
+            //     acc.x, acc.y, acc.z, // acc
+            //     ang_vel.x, ang_vel.y, ang_vel.z, // angVel
+            //     tstep
+            // );
+            // total_tstep += tstep;
+        }
+        Ok(())
+    }
+
+    pub fn get_delta_rij(&self) -> nalgebra::Matrix3<f64> {
+        self.preint_gtsam.get_delta_rij().into()
+    }
+
+    pub fn reset_integration_and_set_bias(&mut self, bias: &ImuBias) {
+        let _span = tracy_client::span!("reset integration and set bias");
+        self.preint_gtsam.reset_integration_and_set_bias(
+            & gtsam::imu::imu_bias::ConstantBias::new(
+                &gtsam::base::vector::Vector3::new(bias.bax, bias.bay, bias.baz),
+                &gtsam::base::vector::Vector3::new(bias.bwx, bias.bwy, bias.bwz)
+            )
+        );
+    }
+
+    pub fn get_preintegration_clone(&self) -> gtsam::navigation::combined_imu_factor::PreintegratedCombinedMeasurements {
+        self.preint_gtsam.clone()
     }
 }

@@ -1,4 +1,5 @@
 use cxx::{UniquePtr, SharedPtr};
+use crate::geometry::rot3::Rot3;
 use crate::{base::vector::Vector3, imu::imu_bias::ConstantBias, inference::key::IntoKey};
 use crate::sys::DoubleVec;
 use crate::sys::FakePreintegratedCombinedMeasurements;
@@ -54,6 +55,12 @@ impl PreintegratedCombinedMeasurements {
         }
     }
 
+    pub fn clone(&self) -> Self {
+        Self {
+            inner: ::sys::clone_preintegrated_combined_measurements(&self.inner),
+        }
+    }
+
     pub fn get_covariance(&self) -> Vec<DoubleVec> {
         ::sys::get_covariance(& self.inner)
     }
@@ -82,6 +89,12 @@ impl PreintegratedCombinedMeasurements {
         }
     }
 
+    pub fn get_delta_rij(&self) -> Rot3 {
+        Rot3 {
+            inner: ::sys::get_delta_rij(&self.inner)
+        }
+    }
+
     pub fn reset_integration_and_set_bias(
         &mut self,
         bias : &ConstantBias, ){
@@ -93,6 +106,7 @@ impl PreintegratedCombinedMeasurements {
         ::sys::create_fake_copy_of_preintegrated_measurements(&self.inner)
     }
 }
+unsafe impl Send for PreintegratedCombinedMeasurements {}
 
 pub struct PreintegrationCombinedParams {
     pub(super) inner: SharedPtr<::sys::PreintegrationCombinedParams>,

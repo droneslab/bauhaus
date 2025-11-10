@@ -14,20 +14,27 @@ namespace gtsam
     using symbol_shorthand::X;
 
     std::unique_ptr<IncrementalFixedLagSmoother> new_incremental_fixed_lag_smoother(
-        double smootherLag,
         double relinearizeThreshold, int relinearizeSkip,
-        bool cacheLinearizedFactors, bool enableDetailedResults
+        bool cacheLinearizedFactors, bool enableDetailedResults,
+        float wildfire_threshold,
+        bool find_unused_factor_slots,
+        int nr_states
     )
     {
         ISAM2Params parameters;
+        parameters.cacheLinearizedFactors = cacheLinearizedFactors;
         parameters.relinearizeThreshold = relinearizeThreshold;
         parameters.relinearizeSkip = relinearizeSkip;
-        parameters.cacheLinearizedFactors = cacheLinearizedFactors;
+        parameters.findUnusedFactorSlots = find_unused_factor_slots;
         parameters.enableDetailedResults = enableDetailedResults;
-        parameters.optimizationParams = ISAM2GaussNewtonParams();
-        parameters.findUnusedFactorSlots = true;
+        parameters.factorization = gtsam::ISAM2Params::CHOLESKY;
+
+        gtsam::ISAM2GaussNewtonParams gauss_newton_params;
+        gauss_newton_params.wildfireThreshold = wildfire_threshold;
+        parameters.optimizationParams = gauss_newton_params;
+
         parameters.print();
-        IncrementalFixedLagSmoother * smoother = new IncrementalFixedLagSmoother(smootherLag, parameters);
+        IncrementalFixedLagSmoother * smoother = new IncrementalFixedLagSmoother(nr_states, parameters);
 
         return std::unique_ptr<IncrementalFixedLagSmoother>(smoother);
     }

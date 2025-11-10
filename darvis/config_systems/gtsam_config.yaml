@@ -203,7 +203,21 @@ actors:
           - name: subpix_termcriteriatype
             value: 3
             type: i32
-  
+
+          # Geometric outlier rejection
+          - name: ransac_max_iterations
+            value: 100
+            type: i32
+          - name: ransac_threshold_mono
+            value: 1e-06
+            type: f64
+          - name: min_nr_mono_inliers
+            value: 10
+            type: i32
+          - name: ransac_probability
+            value: 0.995
+            type: f64
+
           # Need new KF decision
           - name: min_intra_keyframe_time_ns
             value: 200000000.0
@@ -229,7 +243,7 @@ actors:
             value: true
             type: bool
           - name: optimizer_type # 0: ISAM2, 1: IncrementalFixedLagSmoother, 2: LevenbergMarquardt
-            value: 0
+            value: 1
             type: i32
           - name: isam_update_interval
             value: 0
@@ -246,6 +260,15 @@ actors:
           - name: isam_enable_detailed_results
             value: true
             type: bool
+          - name: isam_find_unused_factor_slots
+            value: true
+            type: bool
+          - name: isam_wildfire_threshold
+            value: 0.001
+            type: f64
+          - name: isam_nr_states # number of nodes in horizon
+            value: 25
+            type: i32
           - name: zero_velocity_precision
             value: 1000.0
             type: f64
@@ -253,7 +276,7 @@ actors:
             value: 10000.0
             type: f64
           - name: no_motion_position_precision
-            value: 1000.0
+            value: 10000.0
             type: f64
 
       - name: LOCAL_MAPPING

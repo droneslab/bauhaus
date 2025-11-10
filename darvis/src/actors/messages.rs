@@ -15,6 +15,7 @@ use core::{
     matrix::{DVMatrix, DVVectorOfKeyPoint},
     system::{ActorMessage, Timestamp},
 };
+use gtsam::navigation::combined_imu_factor::PreintegratedCombinedMeasurements;
 use opencv::prelude::Mat;
 
 pub struct Reset {
@@ -56,11 +57,12 @@ impl ActorMessage for ImageMsg {
 pub struct FeatureTracksAndIMUMsg {
     pub tracker_status: GtsamFrontendTrackingState,
     pub frame: Frame,
-    pub imu_measurements: ImuMeasurements,
+    // pub imu_measurements: ImuMeasurements,
     pub imu_initialization: Option<ImuInitializationData>,
     pub feature_tracks: TrackedFeatures,
     // pub last_features: TrackedFeatures,
-    pub removed_feature_ids: Vec<u64>,
+    // pub removed_feature_ids: Vec<u64>,
+    pub preintegration: PreintegratedCombinedMeasurements
 }
 impl ActorMessage for FeatureTracksAndIMUMsg {
     fn get_map_version(&self) -> u64 {

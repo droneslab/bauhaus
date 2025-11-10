@@ -107,6 +107,14 @@ namespace gtsam
         return std::make_unique<PreintegratedCombinedMeasurements>(to_boost_ptr(params), bias);
     }
 
+    std::unique_ptr<PreintegratedCombinedMeasurements> clone_preintegrated_combined_measurements(
+        const PreintegratedCombinedMeasurements &preintegrated_measurements
+    )
+    {
+        return std::make_unique<PreintegratedCombinedMeasurements>(preintegrated_measurements);
+    }
+
+
     rust::Vec<DoubleVec> get_covariance(const PreintegratedCombinedMeasurements &preintegrated_measurements)
     {
         return eigenmat_to_rustvec(preintegrated_measurements.preintMeasCov());
@@ -131,6 +139,14 @@ namespace gtsam
         // std::cout << "C++ imu predicted state: " << state.matrix() << std::endl;
         // std::cout << "C++ predicted velocity: " << state.velocity().transpose() << std::endl;
         return std::make_unique<NavState>(state);
+    }
+
+    std::unique_ptr<Rot3> get_delta_rij(const PreintegratedCombinedMeasurements &preintegrated_measurements)
+    {
+        auto delta_rij = preintegrated_measurements.deltaRij();
+        // std::cout << "C++ get delta rij: " << delta_rij << std::endl;
+        // std::cout << "PIM: "; preintegrated_measurements.print("In get_delta_rij");
+        return std::make_unique<Rot3>(delta_rij);
     }
 
     void reset_integration_and_set_bias(

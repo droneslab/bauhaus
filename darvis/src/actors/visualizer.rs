@@ -715,9 +715,7 @@ impl DarvisVisualizer {
                 // so that it doesn't cover up the drawing of the current frame.
                 continue;
             }
-            println!("Visualizer drawing keyframe pose {:?}", kf.get_pose());
-
-            // println!("Drawing kf {} with rotation {:?}", id, curr_pose);
+            // println!("Visualizer drawing keyframe pose {:?}", kf.get_pose());
 
             let points = vec![prev_pose, curr_pose.into()];
             entities_traj.push(self.create_scene_entity(

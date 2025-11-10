@@ -12,7 +12,7 @@ impl Default for IncrementalFixedLagSmoother {
     fn default() -> Self {
         Self {
             inner: ::sys::new_incremental_fixed_lag_smoother(
-                0.0, 0.1, 10, true, false
+                0.1, 1, true, false, 0.001, true, 25
             ),
         }
     }
@@ -21,19 +21,22 @@ impl Default for IncrementalFixedLagSmoother {
 
 impl IncrementalFixedLagSmoother {
     pub fn new(
-        smoother_lag: f64,
         relinearize_threshold: f64,
         relinearize_skip: i32,
         cache_linearized_factors: bool,
         enable_detailed_results: bool,
+        wildfire_threshold: f32, find_unused_factor_slots: bool,
+        nr_states: i32
     ) -> Self {
         Self {
             inner: ::sys::new_incremental_fixed_lag_smoother(
-                smoother_lag,
                 relinearize_threshold,
                 relinearize_skip,
                 cache_linearized_factors,
                 enable_detailed_results,
+                wildfire_threshold,
+                find_unused_factor_slots,
+                nr_states
             ),
         }
     }

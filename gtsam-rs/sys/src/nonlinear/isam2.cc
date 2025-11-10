@@ -9,16 +9,24 @@ namespace gtsam
 
     std::unique_ptr<ISAM2> default_isam2(
         double relinearizeThreshold, int relinearizeSkip,
-        bool cacheLinearizedFactors, bool enableDetailedResults
+        bool cacheLinearizedFactors, bool enableDetailedResults,
+        float wildfire_threshold,
+        bool find_unused_factor_slots
     )
     {
         ISAM2Params parameters;
+        parameters.cacheLinearizedFactors = cacheLinearizedFactors;
         parameters.relinearizeThreshold = relinearizeThreshold;
         parameters.relinearizeSkip = relinearizeSkip;
-        parameters.cacheLinearizedFactors = cacheLinearizedFactors;
+        parameters.findUnusedFactorSlots = find_unused_factor_slots;
         parameters.enableDetailedResults = enableDetailedResults;
-        parameters.optimizationParams = ISAM2GaussNewtonParams();
-        parameters.findUnusedFactorSlots = true;
+        parameters.factorization = gtsam::ISAM2Params::CHOLESKY;
+
+        // parameters.optimizationParams = ISAM2GaussNewtonParams();
+        gtsam::ISAM2GaussNewtonParams gauss_newton_params;
+        gauss_newton_params.wildfireThreshold = wildfire_threshold;
+        parameters.optimizationParams = gauss_newton_params;
+
         parameters.print();
         ISAM2 * isam2 = new ISAM2(parameters);
 
@@ -64,28 +72,28 @@ namespace gtsam
 
         ISAM2Result result = isam2.update(graph, initial_values, updateParams);
 
-        std::cout << "Detailed results:" << std::endl;
-        for (auto keyedStatus : result.detail->variableStatus) {
-            const auto& status = keyedStatus.second;
-            PrintKey(keyedStatus.first);
-            std::cout << " {" << std::endl;
-            std::cout << "reeliminated: " << status.isReeliminated << std::endl;
-            std::cout << "relinearized above thresh: " << status.isAboveRelinThreshold
-                << std::endl;
-            std::cout << "relinearized involved: " << status.isRelinearizeInvolved << std::endl;
-            std::cout << "relinearized: " << status.isRelinearized << std::endl;
-            std::cout << "observed: " << status.isObserved << std::endl;
-            std::cout << "new: " << status.isNew << std::endl;
-            std::cout << "in the root clique: " << status.inRootClique << std::endl;
-            std::cout << "}" << std::endl;
-        }
+        // std::cout << "Detailed results:" << std::endl;
+        // for (auto keyedStatus : result.detail->variableStatus) {
+        //     const auto& status = keyedStatus.second;
+        //     PrintKey(keyedStatus.first);
+        //     std::cout << " {" << std::endl;
+        //     std::cout << "reeliminated: " << status.isReeliminated << std::endl;
+        //     std::cout << "relinearized above thresh: " << status.isAboveRelinThreshold
+        //         << std::endl;
+        //     std::cout << "relinearized involved: " << status.isRelinearizeInvolved << std::endl;
+        //     std::cout << "relinearized: " << status.isRelinearized << std::endl;
+        //     std::cout << "observed: " << status.isObserved << std::endl;
+        //     std::cout << "new: " << status.isNew << std::endl;
+        //     std::cout << "in the root clique: " << status.inRootClique << std::endl;
+        //     std::cout << "}" << std::endl;
+        // }
 
 
         // std::cout << "After update, isam2 has: ";
         // isam2.getLinearizationPoint().print();
 
-        std::cout << "GET FACTORS! ";
-        isam2.getFactorsUnsafe().print();
+        // std::cout << "GET FACTORS! ";
+        // isam2.getFactorsUnsafe().print();
 
         rust::Vec<std::uint64_t> new_factor_indices;
         for (const auto& value : result.newFactorsIndices) {
@@ -119,8 +127,8 @@ namespace gtsam
 
     std::unique_ptr<Values> calculate_estimate(const ISAM2 &isam2) {
         Values estimate = isam2.calculateEstimate();
-        std::cout << "SOFIYA! VALUES ALL: ";
-        estimate.print();
+        // std::cout << "SOFIYA! VALUES ALL: ";
+        // estimate.print();
 
         return std::make_unique<Values>(estimate);
     }
