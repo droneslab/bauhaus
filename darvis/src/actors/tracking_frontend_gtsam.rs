@@ -11,7 +11,7 @@ use core::{
 };
 use std::fmt::Debug;
 use num_traits::Pow;
-use crate::{map::pose::{DVRotation, DVTranslation}, modules::{imu::{ImuBias, ImuCalib, PreintegrationGTSAM}, opengv_translation_only_sac::{CentralRelativeAdapter, Ransac, TranslationOnlySacProblem}}, registered_actors::IMU};
+use crate::{ImuInitializationData, actors::messages::ImuInitializationMsg, map::pose::{DVRotation, DVTranslation}, modules::{imu::{ImuBias, ImuCalib, PreintegrationGTSAM}, opengv_translation_only_sac::{CentralRelativeAdapter, Ransac, TranslationOnlySacProblem}}, registered_actors::IMU};
 
 use crate::{
     actors::{local_mapping::LOCAL_MAPPING_IDLE, messages::{FeatureTracksAndIMUMsg, ImageMsg, ImagePathMsg, InitKeyFrameMsg, ShutdownMsg, TrajectoryMsg, VisFeaturesMsg}}, map::{frame::Frame, pose::Pose, read_only_lock::ReadWriteMap}, modules::{image::{self, draw_optical_flow}, imu::{ImuMeasurements, IMU}, map_initialization::MapInitialization, module_definitions::{FeatureExtractionModule, MapInitializationModule}}, registered_actors::{new_feature_extraction_module, CAMERA_MODULE, LOCAL_MAPPING, SHUTDOWN_ACTOR, TRACKING_BACKEND, TRACKING_FRONTEND, VISUALIZER}
@@ -22,6 +22,8 @@ pub struct TrackingFrontendGTSAM {
     system: System,
     state: GtsamFrontendTrackingState,
     map: ReadWriteMap,
+
+    initialization_data: Option<ImuInitializationData>,
 
     /// Feature extractors
     orb_extractor_ini: Option<Box<dyn FeatureExtractionModule>>,
@@ -46,12 +48,6 @@ pub struct TrackingFrontendGTSAM {
 
     preintegration: PreintegrationGTSAM,
     tbc: Pose, // Transform from camera frame to body frame (IMU)
-
-    // ORBSLAM map initialization 
-    // I know this is hacky but I dont' want to figure out how to merge the gtsam imu preintegration object with the orbslam imu object
-    // Imu_for_init object needed for map initialization but that's it, otherwise should use the GtsamIMUModule
-    imu_for_init: IMU,
-    initialization: Option<MapInitialization>, // data sent to map actor to initialize new map
 }
 
 impl Actor for TrackingFrontendGTSAM {
@@ -69,16 +65,13 @@ impl Actor for TrackingFrontendGTSAM {
 
         let mut actor = TrackingFrontendGTSAM {
             system,
-            // orb_extractor_left: new_feature_extraction_module(false),
             orb_extractor_ini: Some(new_feature_extraction_module(true)),
             gftt: feature_detector,
             map,
-            initialization: Some(MapInitialization::new()),
-            state: GtsamFrontendTrackingState::NotInitialized,
+            state: GtsamFrontendTrackingState::FirstFrame,
             tracked_features: TrackedFeatures::default(),
             tracked_features_last_frame: TrackedFeatures::default(),
             tracked_features_last_keyframe: TrackedFeatures::default(),
-            imu_for_init: IMU::new(),
             last_frame: Frame::new_no_features(-1, None, 0.0, None).expect("Should be able to make dummy frame"),
             current_frame: Frame::new_no_features(-1, None, 0.0, None).expect("Should be able to make dummy frame"),
             curr_frame_id: 0,
@@ -89,6 +82,7 @@ impl Actor for TrackingFrontendGTSAM {
             preintegration: PreintegrationGTSAM::default(),
             tbc: ImuCalib::new().tbc,
             last_keyframe: Frame::new_no_features(-1, None, 0.0, None).expect("Should be able to make dummy frame"),
+            initialization_data: None,
         };
         tracy_client::set_thread_name!("tracking frontend gtsam");
 
@@ -114,7 +108,7 @@ impl TrackingFrontendGTSAM {
                 return false;
             }
 
-            let (image, image_color, timestamp, mut imu_measurements, mut imu_initialization) = if message.is::<ImagePathMsg>() {
+            let (image, image_color, timestamp, mut imu_measurements, imu_initialization) = if message.is::<ImagePathMsg>() {
                 let msg = message.downcast::<ImagePathMsg>().unwrap_or_else(|_| panic!("Could not downcast tracking message!"));
                 (image::read_image_file(&msg.image_path, imgcodecs::IMREAD_GRAYSCALE), None, msg.timestamp, msg.imu_measurements, msg.imu_initialization)
             } else {
@@ -124,46 +118,36 @@ impl TrackingFrontendGTSAM {
 
             debug!("Tracking frontend working on frame {} at timestamp {}", self.curr_frame_id, timestamp);
 
-            let (pub_this_frame, kf_r_ref_frame) = match self.state {
+            match self.state {
+                GtsamFrontendTrackingState::FirstFrame => {
+                    // For first frame, save initialization data
+                    println!("SOFIYA INITIALIZATION, publish first frame at timestamp {}", timestamp);
+                    self.initialization_data = imu_initialization;
+                    self.state = GtsamFrontendTrackingState::NotInitialized;
+                },
                 GtsamFrontendTrackingState::NotInitialized => {
-                    // If map is not initialized yet, just extract features and try to initialize
-                    // If initialized successsfully,
-                    // publish this frame so backend has a reference to the frame associated with the initialization
+                    // Perform first feature extraction
+                    let (keypoints, descriptors) = self.orb_extractor_ini.as_mut().unwrap().extract(& image).unwrap();
+                    let init_pose = imu_initialization.as_ref().unwrap().pose;
 
-                    // SOFIYA TURN OFF MAP INITIALIZATION
-                        // let initialized = self.initialize_map(&image, timestamp).unwrap();
-                        // println!("Timestamp {}. Initialized map? {}. GT Imu init is: {:?}", timestamp, initialized, imu_initialization);
+                    self.current_frame = Frame::new( 
+                        self.curr_frame_id, 
+                        keypoints,
+                        descriptors,
+                        image.cols() as u32,
+                        image.rows() as u32,
+                        Some(image.clone()),
+                        Some(& self.last_frame),
+                        false,
+                        timestamp,
+                    ).expect("Could not create frame!");
+                    self.current_frame.pose = Some(init_pose);
+                    self.state = GtsamFrontendTrackingState::Ok;
 
-                        // if initialized {
-                        //     let kf1_pose = self.map.read().unwrap().get_keyframe(1).get_pose();
-                        //     imu_initialization.as_mut().unwrap().pose = kf1_pose;
-                        //     println!("Set imu initialization pose to: {:?}", kf1_pose);
-                        // }
-                        // initialized
+                    self.preintegration.initialize(ImuBias::new());
 
-                    // When turning back on, comment all this out:
-                        let (keypoints, descriptors) = self.orb_extractor_ini.as_mut().unwrap().extract(& image).unwrap();
-                        let init_pose = imu_initialization.as_ref().unwrap().pose;
-
-                        self.current_frame = Frame::new( 
-                            self.curr_frame_id, 
-                            keypoints,
-                            descriptors,
-                            image.cols() as u32,
-                            image.rows() as u32,
-                            Some(image.clone()),
-                            Some(& self.last_frame),
-                            false,
-                            timestamp,
-                        ).expect("Could not create frame!");
-                        self.current_frame.pose = Some(init_pose);
-                        self.state = GtsamFrontendTrackingState::Ok;
-
-                        self.preintegration.initialize(ImuBias::new());
-
-                        println!("INITIALIZED IN FRONTEND!");
-
-                        (true, None)
+                    println!("SOFIYA INITIALIZATION, publish initial frame at timestamp {}", timestamp);
+                    self.publish_frame(None, self.initialization_data.clone());
                 },
                 GtsamFrontendTrackingState::Ok | GtsamFrontendTrackingState::LowDisparity | GtsamFrontendTrackingState::FewMatches | GtsamFrontendTrackingState::Invalid => {
                     // TODO Kimera not sure all four conditions should be here
@@ -182,97 +166,17 @@ impl TrackingFrontendGTSAM {
                     let delta_rij = self.preintegration.get_delta_rij();
                     let kf_r_ref_frame = Some(DVRotation::new(cam_r_body * delta_rij * *body_r_cam));
 
-                    // println!("Body pose cam: {:?}", body_r_cam);
-                    // println!("Cam r body: {:?}", cam_r_body);
-                    // println!("Delta rij: {:?}", delta_rij);
-                    // println!("camlrect_lkf_r_camlrect_k_imu: {:?}", camlrect_lkf_r_camlrect_k_imu);
-
                     // Optical flow
                     self.optical_flow().unwrap();
 
-                    // Calculate transform from optical flow
-                    // let transform = self.calculate_transform(& new_tracked_features).unwrap();
-                    // let new_trans = *transform.get_translation() * (self.map_scale);
-                    // let new_pose = Pose::new(new_trans, * transform.get_rotation()) * self.last_frame.pose.unwrap();
-                    // self.current_frame.pose = Some(new_pose);
-                    // debug!("OPTICAL FLOW POSE ESTIMATE... {}, {:?}", timestamp * 1e9, new_pose);
-
                     // Determine if frame should be a keyframe
-                    (self.need_new_keyframe(), kf_r_ref_frame)
-                    // true
+                    if self.need_new_keyframe() {
+                        self.publish_frame(kf_r_ref_frame, imu_initialization);
+                    } else {
+                        self.frames_since_last_kf += 1;
+                    }
                 }
             };
-
-            // println!("IMU MEASUREMENTS ARE: {:?}", self.imu_measurements_since_last_kf);
-
-            // self.system.try_send(VISUALIZER, Box::new(VisTrajectoryMsg{
-            //     pose: Pose::default(),
-            //     mappoint_matches: vec![],
-            //     mappoints_in_tracking: BTreeSet::new(),
-            //     timestamp: self.current_frame.timestamp,
-            //     map_version: 1
-            // }));
-
-
-            println!("Pub this frame? {}", pub_this_frame);
-            if pub_this_frame {
-                tracy_client::Client::running()
-                    .expect("message! without a running Client")
-                    .message("Publish frame!", 2);
-
-                if let Some(rot) = kf_r_ref_frame {
-                    let (state, tracking_pose) = self.geometric_outlier_rejection(rot);
-                    self.state = state;
-                    println!("AFTER OUTLIER REJECTION, STATE IS {:?}", self.state);
-                }
-                self.extract_new_features().expect("Couldn't extract good features to track?");
-
-                println!("Huh? Send to backend");
-                // SEND TO BACKEND!
-                self.system.send(TRACKING_BACKEND, Box::new(FeatureTracksAndIMUMsg {
-                    tracker_status: self.state,
-                    frame: self.current_frame.clone(),
-                    // imu_measurements,
-                    feature_tracks: self.tracked_features.clone(),
-                    // removed_feature_ids: self.removed_features.clone(),
-                    imu_initialization,
-                    preintegration: self.preintegration.get_preintegration_clone(),
-                }));
-
-                self.last_kf_timestamp = self.current_frame.timestamp;
-                self.removed_features.clear();
-                self.tracked_features_last_keyframe = self.tracked_features.clone();
-
-                if self.last_frame.image.is_some() {
-                    // draw_optical_flow(
-                    //     self.last_frame.image.as_ref().unwrap(),
-                    //     self.current_frame.image.as_ref().unwrap(),
-                    //     & self.tracked_features_last_frame.get_points_as_vector_of_point2f(),
-                    //     & self.tracked_features.get_points_as_vector_of_point2f(),
-                    //     &format!("results/flow/front{}.png", self.curr_frame_id),
-                    // ).unwrap();
-                    // debug!("Frontend, tracked features last: {:?}", self.tracked_features_last_frame);
-                    // debug!("Frontend, tracked features now: {:?}", self.tracked_features);
-                }
-
-                // Reset preintegration to result of latest optimization
-                let latest_imu_bias = {
-                    let map = self.map.read().unwrap();
-                    if map.last_kf_id != -1 {
-                        let last_kf = map.get_keyframe(map.last_kf_id);
-                        println!("RESET PREINTEGRATION! LAST KF IS {}, BIAS IS: {:?}", last_kf.id, last_kf.imu_data.imu_bias);
-                        last_kf.imu_data.imu_bias.clone()
-                    } else {
-                        // NO KFs yet, set to default
-                        ImuBias::new()
-                    }
-                };
-                self.preintegration.reset_integration_and_set_bias(& latest_imu_bias);
-                self.frames_since_last_kf = 0;
-                self.last_keyframe = self.current_frame.clone();
-            } else {
-                self.frames_since_last_kf += 1;
-            }
 
             self.system.send(VISUALIZER, Box::new(VisFeaturesMsg {
                 keypoints: DVVectorOfKeyPoint::empty(),
@@ -297,68 +201,61 @@ impl TrackingFrontendGTSAM {
         return false;
     }
 
-    fn initialize_map(&mut self, curr_img: &opencv::core::Mat, timestamp: Timestamp) -> Result<bool, Box<dyn std::error::Error>> {
-        let _span = tracy_client::span!("initialize_map");
-        let (keypoints, descriptors) = self.orb_extractor_ini.as_mut().unwrap().extract(& curr_img).unwrap();
+    fn publish_frame(&mut self, kf_r_ref_frame: Option<DVMatrix3<f64>>, imu_initialization: Option<ImuInitializationData>){
+        tracy_client::Client::running()
+            .expect("message! without a running Client")
+            .message("Publish frame!", 2);
 
-        self.current_frame = Frame::new(
-            self.curr_frame_id, 
-            keypoints,
-            descriptors,
-            curr_img.cols() as u32,
-            curr_img.rows() as u32,
-            Some(curr_img.clone()),
-            Some(& self.last_frame),
-            self.map.read()?.imu_initialized,
-            timestamp,
-        ).expect("Could not create frame!");
+        debug!("Publish frame");
 
-        if self.initialization.is_none() {
-            self.initialization = Some(MapInitialization::new());
+        if let Some(rot) = kf_r_ref_frame {
+            let (state, tracking_pose) = self.geometric_outlier_rejection(rot);
+            self.state = state;
+            println!("AFTER OUTLIER REJECTION, STATE IS {:?}", self.state);
         }
-        // TODO SOFIYA Should the self.imu_for_init values be used somewhere after initialization?
-        let init_success = self.initialization.as_mut().unwrap().try_initialize(&self.current_frame, &mut self.imu_for_init.imu_preintegrated_from_last_kf)?;
-        if init_success {
-            println!("Map initialized successfully with frames {:?} and {}", self.initialization.as_ref().unwrap().initial_frame.as_ref().unwrap().frame_id, self.curr_frame_id);
+        self.extract_new_features().expect("Couldn't extract good features to track?");
 
-            match self.initialization.as_mut().unwrap().create_initial_map_monocular(&mut self.map,  &mut self.imu_for_init.imu_preintegrated_from_last_kf)? {
-                Some((curr_kf_pose, curr_kf_id, ini_kf_id, local_mappoints, _curr_kf_timestamp, map_scale)) => {
-                    // Map needs to be initialized before tracking can begin
-                    // Set current frame's updated info from map initialization
-                    self.current_frame.pose = Some(curr_kf_pose);
-                    self.current_frame.ref_kf_id = Some(curr_kf_id);
-                    self.state = GtsamFrontendTrackingState::Ok;
+        // SEND TO BACKEND!
+        self.system.send(TRACKING_BACKEND, Box::new(FeatureTracksAndIMUMsg {
+            tracker_status: self.state,
+            frame: self.current_frame.clone(),
+            feature_tracks: self.tracked_features.clone(),
+            imu_initialization,
+            preintegration: self.preintegration.get_preintegration_clone(),
+        }));
 
-                    // Log initial pose in shutdown actor
-                    self.system.send(SHUTDOWN_ACTOR, 
-                    Box::new(TrajectoryMsg{
-                            pose: self.map.read()?.get_keyframe(ini_kf_id).get_pose(),
-                            ref_kf_id: ini_kf_id,
-                            timestamp: self.map.read()?.get_keyframe(ini_kf_id).timestamp,
-                            map_version: self.map.read()?.version
-                        })
-                    );
+        self.last_kf_timestamp = self.current_frame.timestamp;
+        self.removed_features.clear();
+        self.tracked_features_last_keyframe = self.tracked_features.clone();
 
-                    // // SOFIYA TURN OFF LOCAL MAPPING
-                    // // Send first two keyframes to local mapping
-                    // self.system.send(LOCAL_MAPPING, Box::new(
-                    //     InitKeyFrameMsg { kf_id: ini_kf_id, map_version: self.map.read()?.version }
-                    // ));
-                    // self.system.send(LOCAL_MAPPING,Box::new(
-                    //     InitKeyFrameMsg { kf_id: curr_kf_id, map_version: self.map.read()?.version } 
-                    // ));
-                },
-                None => {
-                    panic!("Could not create initial map");
-                }
-            };
+        // Draw optical flow for debugging
+        // if self.last_frame.image.is_some() {
+            // draw_optical_flow(
+            //     self.last_frame.image.as_ref().unwrap(),
+            //     self.current_frame.image.as_ref().unwrap(),
+            //     & self.tracked_features_last_frame.get_points_as_vector_of_point2f(),
+            //     & self.tracked_features.get_points_as_vector_of_point2f(),
+            //     &format!("results/flow/front{}.png", self.curr_frame_id),
+            // ).unwrap();
+            // debug!("Frontend, tracked features last: {:?}", self.tracked_features_last_frame);
+            // debug!("Frontend, tracked features now: {:?}", self.tracked_features);
+        // }
 
-            self.state = GtsamFrontendTrackingState::Ok;
-            Ok(true)
-        } else {
-            self.state = GtsamFrontendTrackingState::NotInitialized;
-            Ok(false)
-        }
+        // Reset preintegration to result of latest optimization
+        let latest_imu_bias = {
+            let map = self.map.read().unwrap();
+            if map.last_kf_id != -1 {
+                let last_kf = map.get_keyframe(map.last_kf_id);
+                println!("RESET PREINTEGRATION! LAST KF IS {}, BIAS IS: {:?}", last_kf.id, last_kf.imu_data.imu_bias);
+                last_kf.imu_data.imu_bias.clone()
+            } else {
+                // NO KFs yet, set to default
+                ImuBias::new()
+            }
+        };
+        self.preintegration.reset_integration_and_set_bias(& latest_imu_bias);
+        self.frames_since_last_kf = 0;
+        self.last_keyframe = self.current_frame.clone();
     }
 
     fn optical_flow(&mut self) -> Result<(), Box<dyn std::error::Error>> {
@@ -989,15 +886,14 @@ impl TrackingFrontendGTSAM {
 
 #[derive(Debug, Clone, Copy, Default)]
 pub enum GtsamFrontendTrackingState {
-    #[default] NotInitialized,
+    #[default] FirstFrame,
+    NotInitialized,
     Ok,
     LowDisparity,
     Invalid,
     FewMatches,
     // Disabled
 }
-
-pub type TrackedFeaturesIndexMap = HashMap<i32, usize>; // feature_id -> index in a frame's features
 
 #[derive(Clone)]
 pub struct TrackedFeatures {

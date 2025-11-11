@@ -4,7 +4,7 @@ use crate::{
     actors::{
         tracking_backend::TrackingState,
         tracking_frontend_gtsam::{
-            GtsamFrontendTrackingState, TrackedFeatures, TrackedFeaturesIndexMap,
+            GtsamFrontendTrackingState, TrackedFeatures,
         },
     },
     map::{frame::Frame, map::Id, pose::Pose},
@@ -70,6 +70,16 @@ impl ActorMessage for FeatureTracksAndIMUMsg {
     }
 }
 
+pub struct ImuInitializationMsg {
+    pub imu_initialization: ImuInitializationData,
+    pub timestamp: Timestamp
+}
+impl ActorMessage for ImuInitializationMsg {
+    fn get_map_version(&self) -> u64 {
+        0
+    }
+}
+
 pub struct TrackingStateMsg {
     pub state: TrackingState,
     pub init_id: Id,
@@ -115,16 +125,6 @@ pub struct InitKeyFrameMsg {
     pub map_version: u64, // pub mappoint_matches:
 }
 impl ActorMessage for InitKeyFrameMsg {
-    fn get_map_version(&self) -> u64 {
-        self.map_version
-    }
-}
-pub struct InitKeyFrameMsgGTSAM {
-    pub kf_id: Id,
-    pub map_version: u64,
-    pub curr_kf_features_map: TrackedFeaturesIndexMap,
-}
-impl ActorMessage for InitKeyFrameMsgGTSAM {
     fn get_map_version(&self) -> u64 {
         self.map_version
     }

@@ -474,7 +474,7 @@ impl Iterator for LoopManager {
             // Kimera imu initialization values
             // let timestamp_convert = (timestamp * 1e9) as i64;
             let it_low = imu.initialization.range(timestamp..).next(); // closest, non-lesser
-            if let Some((timestamp_found, data)) = it_low {
+            if let Some((_timestamp_found, data)) = it_low {
                 imu_initialization = Some(data);
             } else {
                 debug!("Can't find timestamp! {}", timestamp);
