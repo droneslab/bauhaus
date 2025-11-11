@@ -43,13 +43,13 @@ namespace gtsam
         IncrementalFixedLagSmoother &smoother, const NonlinearFactorGraph &graph,
         const Values &initial_values) //, const rust::Vec<DoubleVec> & new_timestamps)
     {
-        // std::cout << "Before update, isam2 has: ";
-        // isam2.getLinearizationPoint().print();
+        std::cout << "Before update, smoother has: ";
+        smoother.getLinearizationPoint().print();
 
-        // std::cout << "Initial values: ";
-        // initial_values.print();
-        // std::cout << std::endl << "Graph: ";
-        // graph.print();
+        std::cout << "Initial values: ";
+        initial_values.print();
+        std::cout << std::endl << "Graph: ";
+        graph.print();
 
         // ISAM2UpdateParams updateParams;
         // FastMap<FactorIndex, KeySet> factorNewAffectedKeys;

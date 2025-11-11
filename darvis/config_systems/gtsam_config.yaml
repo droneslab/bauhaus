@@ -17,7 +17,7 @@ system:
 
       # KIMERA
       # 1100, 482
-      initial_k: 51 # Start processing dataset from frame initial_k. Useful to skip a bunch of images at the beginning (imu calibration).
+      initial_k: 50 # Start processing dataset from frame initial_k. Useful to skip a bunch of images at the beginning (imu calibration).
       final_k: 0 # Finish processing dataset at frame final_k. Last frame to process (to avoid processing the entire dataset), skip last frames. If set to 0 will process everything. 
 
       # RESULTS

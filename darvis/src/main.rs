@@ -141,7 +141,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         first_actor_tx.send(Box::new(ImageMsg {
             image: image_bw,
             color_image: Some(image_color),
-            timestamp,
+            timestamp: (timestamp as f64) / 1e9,
             imu_measurements,
             imu_initialization,
             frame_id,
@@ -177,7 +177,7 @@ struct ImuInitializationData {
 struct ImuData {
     acceleration: Vec<Point3f>,
     gyro: Vec<Point3f>,
-    timestamps: Vec<f64>,
+    timestamps: Vec<i64>,
     first_imu_idx: usize,
     initialization: BTreeMap<i64, ImuInitializationData>,
 }
@@ -185,7 +185,7 @@ struct ImuData {
 struct LoopManager {
     loop_helper: LoopHelper,
     image_paths: Vec<String>,
-    timestamps: Vec<f64>,
+    timestamps: Vec<i64>,
     current_index: u32,
     imu: Option<ImuData>,
 }
@@ -261,7 +261,7 @@ impl LoopManager {
     fn read_imu(
         imu_filename: String,
         gt_filename: String,
-        camera_timestamps: &mut Vec<f64>,
+        camera_timestamps: &mut Vec<i64>,
         image_paths: &mut Vec<String>,
     ) -> Result<ImuData, Box<dyn std::error::Error>> {
         let imu_file = File::open(imu_filename)?;
@@ -291,7 +291,7 @@ impl LoopManager {
 
             imu_data
                 .timestamps
-                .push(record[0].parse::<f64>().unwrap() / 1000000000.0);
+                .push(record[0].parse::<i64>().unwrap());
         }
 
         // Find first imu to be considered, supposing imu measurements start first
@@ -316,7 +316,7 @@ impl LoopManager {
         for result in rdr.records() {
             let record = result?;
 
-            let timestamp = record[0].parse::<f64>().unwrap() as i64;
+            let timestamp = record[0].parse::<i64>().unwrap();
 
             // let timestamp = (current_frame.timestamp * 1e9) as i64; // Convert to int just so we can hash it
             let translation = DVVector3::new_with(
@@ -360,19 +360,19 @@ impl LoopManager {
         Ok(imu_data)
     }
 
-    fn read_timestamps_file_kitti(time_stamp_dir: &String) -> Vec<f64> {
+    fn read_timestamps_file_kitti(time_stamp_dir: &String) -> Vec<i64> {
         let file = File::open(time_stamp_dir.clone() + "/times.txt")
             .expect("Could not open timestamps file");
         io::BufReader::new(file)
             .lines()
-            .map(|x| x.unwrap().parse::<f64>().unwrap())
-            .collect::<Vec<f64>>() // *1e16
+            .map(|x| x.unwrap().parse::<i64>().unwrap())
+            .collect::<Vec<i64>>() // *1e16
     }
 
     fn read_timestamps_file_euroc(
         time_stamp_dir: &String,
         image_dir: String,
-    ) -> (Vec<f64>, Vec<String>) {
+    ) -> (Vec<i64>, Vec<String>) {
         info!("Reading timestamps file {}", time_stamp_dir.clone());
         let file = File::open(time_stamp_dir.clone() + "/mav0/cam0/data.csv")
             .expect("Could not open timestamps file");
@@ -382,19 +382,16 @@ impl LoopManager {
             .map(|x| {
                 let x2 = x.unwrap();
                 let mut x3 = x2.split(",");
-                let timestamp_before_convert = x3.next().unwrap().parse::<f64>().unwrap();
-                let timestamp = timestamp_before_convert * 1e-9;
+                let timestamp_before_convert = x3.next().unwrap().parse::<i64>().unwrap();
                 let filename = x3.next().unwrap().to_string();
                 let filepath = format!("{}/{}", image_dir, filename);
-
-                // println!("READ TIMESTAMPS FILE, {} {}", timestamp, timestamp_before_convert);
-                (timestamp, filepath)
+                (timestamp_before_convert, filepath)
             })
-            .collect::<Vec<(f64, String)>>();
+            .collect::<Vec<(i64, String)>>();
         data.into_iter().map(|(a, b)| (a, b)).unzip()
     }
 
-    fn read_timestamps_file_tum(time_stamp_dir: &String) -> Vec<f64> {
+    fn read_timestamps_file_tum(time_stamp_dir: &String) -> Vec<i64> {
         info!("Reading timestamps file {}", time_stamp_dir.clone());
         let file = File::open(time_stamp_dir.clone() + "/rgb.txt")
             .expect("Could not open timestamps file");
@@ -406,10 +403,10 @@ impl LoopManager {
                     .split(' ')
                     .next()
                     .unwrap()
-                    .parse::<f64>()
+                    .parse::<i64>()
                     .unwrap()
             })
-            .collect::<Vec<f64>>()
+            .collect::<Vec<i64>>()
     }
 
     fn generate_image_paths(img_dir: String) -> Vec<String> {
@@ -435,7 +432,7 @@ impl Iterator for LoopManager {
         String,
         ImuMeasurements,
         Option<ImuInitializationData>,
-        f64,
+        i64,
         u32,
     );
 
@@ -468,19 +465,19 @@ impl Iterator for LoopManager {
                         imu.gyro[imu.first_imu_idx].y as f64,
                         imu.gyro[imu.first_imu_idx].z as f64,
                     ),
-                    timestamp: imu.timestamps[imu.first_imu_idx],
+                    timestamp: (imu.timestamps[imu.first_imu_idx] as f64) / 1e9,
                 });
                 imu.first_imu_idx += 1;
             }
             imu.first_imu_idx -= 1;
 
             // Kimera imu initialization values
-            let timestamp_convert = (timestamp * 1e9) as i64;
-            let it_low = imu.initialization.range(timestamp_convert..).next(); // closest, non-lesser
-            if let Some((_timestamp, data)) = it_low {
+            // let timestamp_convert = (timestamp * 1e9) as i64;
+            let it_low = imu.initialization.range(timestamp..).next(); // closest, non-lesser
+            if let Some((timestamp_found, data)) = it_low {
                 imu_initialization = Some(data);
             } else {
-                debug!("Can't find timestamp! {}", timestamp_convert);
+                debug!("Can't find timestamp! {}", timestamp);
                 debug!("Hashmap: {:?}", imu.initialization);
             }
         };

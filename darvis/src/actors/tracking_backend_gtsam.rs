@@ -625,6 +625,7 @@ impl GraphSolver {
                 *imu_init.pose.get_translation(),
                 *imu_init.pose.get_rotation()
         );
+        println!("... Initial timestamp: {}", timestamp);
         println!("... Initial pose: {:?}", init_pose);
         println!("... Initial pose rotation matrix: {:?}", init_pose.get_rotation());
         println!("... Initial velocity: {:?}", imu_init.velocity);
@@ -632,7 +633,6 @@ impl GraphSolver {
 
         // Create preintegraiton object and add all priors to graph
         let prior_state = self.add_initial_state(init_pose, imu_init.velocity, init_bias, true)?;
-        // self.create_preintegration(prior_state.bias);
         self.last_timestamp = timestamp;
 
         // Add features to graph
@@ -646,6 +646,8 @@ impl GraphSolver {
     }
 
     fn add_initial_state(&mut self, prior_pose: Pose, init_vel: DVVector3<f64>, init_bias: ImuBias, add_to_all_values: bool) -> Result<GtsamState, Box<dyn std::error::Error>> {
+        // VioBackend::initStateAndSetPriors
+
         // Create prior factor and add it to the graph
         let prior_state = {
             let trans = prior_pose.translation;
@@ -673,7 +675,7 @@ impl GraphSolver {
 
         // Rotate initial uncertainty into local frame, where the uncertainty is
         // specified.
-        let b_rot_w = * prior_pose.get_rotation();
+        let b_rot_w = prior_pose.get_rotation().transpose();
         pose_prior_covariance2 = b_rot_w * pose_prior_covariance2 * b_rot_w.transpose();
 
         let mut pose_prior_covariance = nalgebra::Matrix6::zeros();
@@ -1005,7 +1007,7 @@ impl GraphSolver {
     }
 
     fn optimize(&mut self, new_factor_feature_ids: Vec<i32>, new_affected_keys: Vec<DoubleVec>) -> (Vec<gtsam::sys::Point>, ImuBias) {
-    // , _removed_feature_ids: Vec<u64>) 
+        // VioBackend::optimize
         let _span = tracy_client::span!("optimize");
 
         let mut points = vec![];
