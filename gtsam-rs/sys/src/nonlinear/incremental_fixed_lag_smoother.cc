@@ -40,44 +40,39 @@ namespace gtsam
     }
 
     ISAM2ResultRust update_smoother(
-        IncrementalFixedLagSmoother &smoother, const NonlinearFactorGraph &graph,
-        const Values &initial_values) //, const rust::Vec<DoubleVec> & new_timestamps)
-    {
+        IncrementalFixedLagSmoother &smoother,
+        const gtsam::NonlinearFactorGraph& new_factors,
+        const gtsam::Values& new_values,
+        const rust::Vec<DoubleVec> & timestamps,
+        const rust::Vec<int>&  delete_slots
+    ) {
+        std::map<Key, double> timestamps_gtsam;
+        for (int i = 0; i < timestamps.size(); i++)
+        {
+            rust::Vec<double> row = timestamps[i].vec;
+            timestamps_gtsam[row[0]] = row[1];
+        }
+
         std::cout << "Before update, smoother has: ";
         smoother.getLinearizationPoint().print();
 
         std::cout << "Initial values: ";
-        initial_values.print();
+        new_values.print();
         std::cout << std::endl << "Graph: ";
-        graph.print();
+        new_factors.print();
 
-        // ISAM2UpdateParams updateParams;
-        // FastMap<FactorIndex, KeySet> factorNewAffectedKeys;
+        gtsam::FactorIndices delete_slots_gtsam;
+        for (int i = 0; i < delete_slots.size(); i++)
+        {
+            // std::cout << "C++, removing key: " << keys_to_remove[i] << std::endl;
+            delete_slots_gtsam.push_back(delete_slots[i]);
+        }
 
-        // for (int i = 0; i < new_affected_keys.size(); i++)
-        // {
-        //     rust::Vec<double> row = new_affected_keys[i].vec;
-        //     factorNewAffectedKeys[row[0]].insert(X(row[1]));
-        // }
-        // updateParams.newAffectedKeys = factorNewAffectedKeys;
+        std::cout << "iSAM2 update with " << new_factors.size() << " new factors "
+           << ", " << new_values.size() << " new values "
+           << ", and " << delete_slots.size() << " deleted factors.";
 
-        // FactorIndices removeFactorIndices;
-        // for (int i = 0; i < keys_to_remove.size(); i++)
-        // {
-        //     std::cout << "C++, removing key: " << keys_to_remove[i] << std::endl;
-        //     removeFactorIndices.push_back(keys_to_remove[i]);
-        // }
-        // updateParams.removeFactorIndices = removeFactorIndices;
-
-        // Timestamps newTimestamps;
-        // for (int i = 0; i < new_timestamps.size(); i++)
-        // {
-        //     rust::Vec<double> row = new_timestamps[i].vec;
-        //     newTimestamps[row[0]].insert(X(row[1]));
-        // }
-        // updateParams.newAffectedKeys = factorNewAffectedKeys;
-
-        smoother.update(graph, initial_values); //, new_timestamps);
+        smoother.update(new_factors, new_values, timestamps_gtsam, delete_slots_gtsam);
         ISAM2Result result = smoother.getISAM2Result();
 
         // std::cout << "Detailed results:" << std::endl;

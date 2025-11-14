@@ -437,7 +437,6 @@ impl TrackingFrontendGTSAM {
                     outliers.push(i);
                 }
             }
-            println!("Outliers: {:?}", outliers);
             outliers
 
                 // for (size_t i = 0u; i < matches_ref_cur.size(); ++i) {
@@ -465,27 +464,30 @@ impl TrackingFrontendGTSAM {
         let mut outlier_free_tracked_current = TrackedFeatures::default();
         let mut outlier_free_tracked_last_frame = TrackedFeatures::default();
 
+        println!("Before: Tracking frontend, tracked features length: {} {} {}", self.tracked_features.len(), self.tracked_features_last_keyframe.len(), self.tracked_features_last_frame.len());
+
         for inlier in inliers {
-            outlier_free_tracked_last_kf.add(
+            outlier_free_tracked_last_kf.add_with_id(
+                self.tracked_features_last_keyframe.get_feature_id(*inlier),
                 self.tracked_features_last_keyframe.get_point(*inlier),
                 self.tracked_features_last_keyframe.get_bearing_vector(*inlier),
             );
-            outlier_free_tracked_current.add(
+            outlier_free_tracked_current.add_with_id(
+                self.tracked_features.get_feature_id(*inlier),
                 self.tracked_features.get_point(*inlier),
                 self.tracked_features.get_bearing_vector(*inlier),
             );
-            outlier_free_tracked_last_frame.add(
+            outlier_free_tracked_last_frame.add_with_id(
+                self.tracked_features_last_frame.get_feature_id(*inlier),
                 self.tracked_features_last_frame.get_point(*inlier),
                 self.tracked_features_last_frame.get_bearing_vector(*inlier),
             );
         }
-        self.tracked_features_last_keyframe = outlier_free_tracked_last_kf;
-        self.tracked_features = outlier_free_tracked_current;
-        self.tracked_features_last_frame = outlier_free_tracked_last_frame;
+        self.tracked_features_last_keyframe.rewrite(outlier_free_tracked_last_kf);
+        self.tracked_features.rewrite(outlier_free_tracked_current);
+        self.tracked_features_last_frame.rewrite(outlier_free_tracked_last_frame);
 
-        println!("Matches after removing outliers: {}", self.tracked_features.len());
-
-            // KeypointMatches outlier_free_matches_ref_cur;
+        // KeypointMatches outlier_free_matches_ref_cur;
             // outlier_free_matches_ref_cur.reserve(inliers.size());
             // for (const size_t& in : inliers) {
             //     outlier_free_matches_ref_cur.push_back((*matches_ref_cur)[in]);
@@ -912,6 +914,17 @@ impl TrackedFeatures {
         }
     }
 
+    pub fn rewrite(&mut self, new_struct: TrackedFeatures) {
+        self.points = new_struct.points;
+        self.feature_ids = new_struct.feature_ids;
+        self.versors = new_struct.versors;
+
+        // Note: Don't update last feature id!
+        // New features added to the struct should start incrementing from
+        // the oldest "last_feature_id", even if it technically isn't found in the new struct.
+        // This is because other data structures in the system rely on the IDs being stable.
+    }
+
     pub fn len(&self) -> usize {
         self.points.len()
     }
@@ -947,6 +960,16 @@ impl TrackedFeatures {
 
         return self.last_feature_id - 1;
     }
+
+    pub fn add_with_id(&mut self, id: i32, point: Point2f, bearing_vector: DVVector3<f64>) -> i32 {
+        self.points.push(point);
+        self.feature_ids.push(id);
+        self.versors.push(bearing_vector);
+        self.last_feature_id += 1;
+
+        return self.last_feature_id - 1;
+    }
+
 
     pub fn remove(&mut self, index: usize) -> i32 {
         let id = self.feature_ids.remove(index);

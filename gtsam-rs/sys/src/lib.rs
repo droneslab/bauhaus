@@ -299,12 +299,13 @@ pub mod ffi {
 
         // Same as update()... for some reason rust won't let me name it update since isam2
         // already defines update
-        fn update_smoother(
+        fn 
+        update_smoother(
             smoother: Pin<&mut IncrementalFixedLagSmoother>,
-            graph: &NonlinearFactorGraph,
-            initial_values: &Values,
-            // new_affected_keys: & Vec<DoubleVec>,
-            // keys_to_remove: & Vec<u64>,
+            new_factors: &NonlinearFactorGraph,
+            new_values: &Values,
+            timestamps: &Vec<DoubleVec>,
+            delete_slots: &Vec<i32>
         ) -> ISAM2ResultRust;
 
     }

@@ -43,12 +43,20 @@ impl IncrementalFixedLagSmoother {
 
     pub fn update(
         &mut self,
-        graph: &NonlinearFactorGraph,
-        values: &Values,
+        new_factors: &NonlinearFactorGraph,
+        new_values: &Values,
+        timestamps: & Vec<DoubleVec>,
+        delete_slots: &Vec<i32>
         // new_affected_keys: & Vec<DoubleVec>,
         // keys_to_remove: & Vec<u64>,
     ) -> ISAM2ResultRust {
-        ::sys::update_smoother(self.inner.pin_mut(), &graph.inner, &values.inner)
+        ::sys::update_smoother(
+            self.inner.pin_mut(),
+            &new_factors.inner,
+            &new_values.inner,
+            &timestamps,
+            &delete_slots
+        )
     }
 
 //     // pub fn calculate_estimate(

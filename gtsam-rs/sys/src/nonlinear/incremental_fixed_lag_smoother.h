@@ -19,8 +19,13 @@ namespace gtsam {
     // Same as update()... for some reason rust won't let me name it update since isam2
     // already defines update
     ISAM2ResultRust update_smoother(
-        IncrementalFixedLagSmoother &smoother, const NonlinearFactorGraph &graph,
-        const Values &initial_values);
+        IncrementalFixedLagSmoother &smoother,
+        const gtsam::NonlinearFactorGraph& new_factors,
+        const gtsam::Values& new_values,
+        const rust::Vec<DoubleVec> & timestamps,
+        const rust::Vec<int>&  delete_slots
+    );
+
     std::unique_ptr<Values> calculate_estimate(const IncrementalFixedLagSmoother &smoother);
 
 

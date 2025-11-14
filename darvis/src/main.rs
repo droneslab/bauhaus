@@ -17,7 +17,7 @@ use std::{
 #[macro_use]
 extern crate lazy_static;
 
-use crate::map::map::Id;
+use crate::{map::map::Id, modules::imu::ImuBias};
 use crate::{
     actors::messages::{ImageMsg, ShutdownMsg},
     map::pose::Pose,
@@ -170,8 +170,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 struct ImuInitializationData {
     pose: Pose,
     velocity: DVVector3<f64>,
-    gyro_bias: DVVector3<f64>,
-    acc_bias: DVVector3<f64>,
+    bias: ImuBias,
+    // gyro_bias: DVVector3<f64>,
+    // acc_bias: DVVector3<f64>,
 }
 
 struct ImuData {
@@ -351,8 +352,7 @@ impl LoopManager {
                 ImuInitializationData {
                     pose: Pose::new_with_quaternion_convert(*translation, rotation),
                     velocity,
-                    gyro_bias,
-                    acc_bias,
+                    bias: ImuBias::new_with(gyro_bias, acc_bias),
                 },
             );
         }
