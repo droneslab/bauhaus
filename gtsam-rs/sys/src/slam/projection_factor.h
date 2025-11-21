@@ -18,8 +18,10 @@ namespace gtsam
         const std::shared_ptr<noiseModel::Isotropic> &measurement_noise,
         const std::shared_ptr<Cal3_S2> &K,
         const Pose3 &sensor_P_body);
-        
-    // std::shared_ptr<SmartProjectionFactorCal3_S2> new_smart_projection_factor(
+    std::shared_ptr<SmartProjectionPoseFactorCal3_S2> clone_smart_projection_pose_factor(
+        const std::shared_ptr<SmartProjectionPoseFactorCal3_S2> & old_factor);
+
+        // std::shared_ptr<SmartProjectionFactorCal3_S2> new_smart_projection_factor(
     //     const std::shared_ptr<noiseModel::Isotropic> &measurement_noise,
     //     const std::shared_ptr<Cal3_S2> &K,
     //     const Pose3 &sensor_P_body);

@@ -113,9 +113,10 @@ impl Repository {
         let mut builder = ::cmake::Config::new(&self.path);
         builder
             // NOTE: original GTSAM shows many warnings, ignoring them...
-            .build_arg("-Wdeprecated-copy")
-            .build_arg("-Wdeprecated-declarations")
-            .build_arg("-Wunused-parameter")
+            .build_arg("-Wno-deprecated-copy")
+            .build_arg("-Wno-deprecated-declarations")
+            .build_arg("-Wno-unused-parameter")
+            .build_arg("-w")
             .define("BUILD_SHARED_LIBS", false.to_bool())
             .define("DEBUG", false.to_bool())
             .define("GDB", false.to_bool())

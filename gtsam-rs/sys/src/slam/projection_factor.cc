@@ -3,7 +3,14 @@
 
 namespace gtsam
 {
-    std::shared_ptr<SmartProjectionPoseFactor<gtsam::Cal3_S2>> new_smart_projection_pose_factor(
+    std::shared_ptr<SmartProjectionPoseFactorCal3_S2> clone_smart_projection_pose_factor(
+        const std::shared_ptr<SmartProjectionPoseFactorCal3_S2> & old_factor
+    ) {
+        // SmartStereoFactor::shared_ptr new_factor(new SmartStereoFactor(*old_factor));
+        return std::shared_ptr<SmartProjectionPoseFactorCal3_S2>(new SmartProjectionPoseFactorCal3_S2(*old_factor));
+    }
+
+    std::shared_ptr<SmartProjectionPoseFactorCal3_S2> new_smart_projection_pose_factor(
         const std::shared_ptr<noiseModel::Isotropic> & measurement_noise,
         const std::shared_ptr<Cal3_S2> & K,
         const Pose3 & sensor_P_body)
@@ -33,7 +40,7 @@ namespace gtsam
             params
         );
 
-        return std::unique_ptr<SmartProjectionPoseFactor<gtsam::Cal3_S2>>(new SmartProjectionPoseFactor<gtsam::Cal3_S2>(factor));
+        return std::shared_ptr<SmartProjectionPoseFactor<gtsam::Cal3_S2>>(new SmartProjectionPoseFactor<gtsam::Cal3_S2>(factor));
     }
 
     // std::shared_ptr<SmartProjectionFactor<gtsam::Cal3_S2>> new_smart_projection_factor(
@@ -71,7 +78,7 @@ namespace gtsam
             to_boost_ptr(K),
             sensor_P_body);
 
-        return std::unique_ptr<gtsam::GenericProjectionFactor<Pose3, Point3, Cal3_S2>>(new gtsam::GenericProjectionFactor<Pose3, Point3, Cal3_S2>(factor));
+        return std::shared_ptr<gtsam::GenericProjectionFactor<Pose3, Point3, Cal3_S2>>(new gtsam::GenericProjectionFactor<Pose3, Point3, Cal3_S2>(factor));
     }
 
     void add(std::shared_ptr<SmartProjectionPoseFactorCal3_S2> &factor, const Point2 & point, Key key) {

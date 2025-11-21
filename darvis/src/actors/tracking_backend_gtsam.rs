@@ -230,8 +230,8 @@ pub struct GraphSolver {
     last_timestamp: Timestamp,
 
     // Managing smart factors
-    smartfactors: HashMap<i32, (gtsam::slam::projection_factor::SmartProjectionPoseFactorCal3S2, bool, i32)>, // Smartfactor lookup. feature ID -> (smart factor object, whether it is in the graph or not, number of observations)
-    smartfactor_idx_in_isam2: HashMap<i32, u64>, // (smart factor ID in this object) -> (index in isam2)
+    // smartfactors: HashMap<i32, (gtsam::slam::projection_factor::SmartProjectionPoseFactorCal3S2, bool, i32)>, // Smartfactor lookup. feature ID -> (smart factor object, whether it is in the graph or not, number of observations)
+    feature_tracks: HashMap<i32, FeatureTrack>, // Smartfactor lookup
 
     // Initialization
     accel_noise_density: f64, // accelerometer_noise_density, sigma_a
@@ -297,8 +297,7 @@ impl GraphSolver {
             values_new: ValuesWrapper::default(),
             values_all: ValuesWrapper::default(),
             curr_id: 0,
-            smartfactors: HashMap::new(),
-            smartfactor_idx_in_isam2: HashMap::new(),
+            feature_tracks: HashMap::new(),
             last_timestamp: 0.0,
             inserted_kfs: Vec::new(),
 
@@ -330,10 +329,8 @@ impl GraphSolver {
 
         self.add_initial_state(imu_init.pose, imu_init.velocity, imu_init.bias, true)?;
 
-        let (_, _updated_bias) = self.optimize(
-            vec![],
-            vec![],
-        )?;
+        // Arguments to optimize all have to do with features which we are not inserting here
+        let (_, _updated_bias) = self.optimize(vec![], vec![], vec![],)?;
 
         self.solver_state = GraphSolverState::Ok;
         Ok(())
@@ -496,13 +493,10 @@ impl GraphSolver {
         );
 
         // Add features
-        let (new_factor_feature_ids, new_affected_keys) = self.process_features(feature_tracks);
+        let (new_feature_ids, delete_slots) = self.add_landmarks_to_graph(feature_tracks);
 
         if should_update {
-            self.optimize(
-                new_factor_feature_ids,
-                new_affected_keys
-            )?;
+            self.optimize(new_feature_ids, delete_slots, vec![])?;
         }
 
         match tracker_status {
@@ -625,7 +619,8 @@ impl GraphSolver {
         self.graph_new.add_combined_imu_factor(&imu_factor);
     }
 
-    fn process_features(&mut self, feature_tracks: &TrackedFeatures) -> (Vec<i32>, Vec<DoubleVec>) {
+    fn add_landmarks_to_graph(&mut self, new_feature_tracks: &TrackedFeatures) -> (Vec<i32>, Vec<u64>) {
+        // Combo of addStereoMeasurementsToFeatureTracks and addLandmarksToGraph
         let _span = tracy_client::span!("process_smart_features");
 
         let mut id_notset = 0;
@@ -633,94 +628,120 @@ impl GraphSolver {
         let mut num_updated_landmarks = 0;
         let mut num_skipped = 0;
 
-        let mut new_factor_feature_ids: Vec<i32> = vec![];
-        let mut new_affected_keys: Vec<DoubleVec> = vec![];
+        let mut new_feature_ids: Vec<i32> = vec![];
+        let mut delete_slots = vec![];
 
-        // println!("NEW TRACKED FEATURES: {:?}", new_tracked_features);
-        // println!("New tracked features len? {}", new_tracked_features.len());
-        // for fact in &self.smartfactors {
-        //     println!("Smart factors! {:?} -> ({}, {})", fact.0, fact.1.1, fact.1.2);
-        // }
+        // This is the hack to tell ISAM that we are updating some features.
+        // Alternative to the copying and deleting strategy that I'm actually using below.
+        // Copying/deleting should work for ISAM, but this new_affected_key stuff will not work
+        // for FixedLagSmoother!
+        // let mut new_affected_keys: Vec<DoubleVec> = vec![];
 
-        for i in 0..feature_tracks.len() {
-            let feature_id = feature_tracks.get_feature_id(i as usize);
+        for i in 0..new_feature_tracks.len() {
+            let feature_id = new_feature_tracks.get_feature_id(i as usize);
             if feature_id == -1 {
                 id_notset += 1;
-                warn!("Id not set for feature with point {:?}?", feature_tracks.get_point(i as usize));
+                warn!("Id not set for feature with point {:?}?", new_feature_tracks.get_point(i as usize));
                 continue;
             }
-            let point = feature_tracks.get_point(i as usize);
+            let point = new_feature_tracks.get_point(i as usize);
 
-            match self.smartfactors.get_mut(&feature_id) {
-                Some((smartfactor, is_in_graph, mut num_observations)) => {
+            match self.feature_tracks.get_mut(&feature_id) {
+                Some(feature_track) => {
                     // Feature has been seen before, but not necessarily in the factor graph yet
 
-                    // Insert measurements to existing factor
-                    smartfactor.add(
-                        & Point2::new(point.x as f64, point.y as f64),
-                        &Symbol::new(b'x', self.curr_id)
-                    );
-                    num_observations += 1;
+                    if feature_track.observations.len() >= 2 {
+                        // We have enough observations of the landmark
+                        if !feature_track.is_in_graph {
+                            // The landmark has not yet been added to the graph.
+                            // == RegularVioBackend::addLandmarkToGraph
 
-                    match self.optimizer {
-                        Optimizer::ISAM2{..} => {
-                            // Check for is_in_graph b/c it is possible that the smartfactor is created 
-                            // from a previous keyframe, but not in the graph yet if we are batching updates.
-                            if *is_in_graph {
-                                // Update new_affected_keys to show that this smart factor was updated
-                                // This is sent to the isam2 update function
-                                let index_in_isam2 = self.smartfactor_idx_in_isam2[&feature_id];
-                                new_affected_keys.push(DoubleVec{
-                                        vec: vec![index_in_isam2 as f64, self.curr_id as f64]
-                                });
+                            // Add current observation to the factor
+                            feature_track.update(point, self.curr_id);
+
+                            // Add to graph
+                            self.graph_new.add_smartfactor(&feature_track.smart_factor);
+                            feature_track.is_in_graph = true;
+
+                            num_new_landmarks += 1;
+                        } else {
+                            // The landmark has already been added to the graph.
+                            // == RegularVioBackend::updateLandmarkInGraph, RegularVioBackend::updateExistingSmartFactor
+
+                            // Clone old factor
+                            let new_factor = feature_track.smart_factor.copy();
+                            feature_track.smart_factor = new_factor;
+
+                            // Add current observation to the factor
+                            feature_track.update(point, self.curr_id);
+
+                            // Add new factor to graph
+                            self.graph_new.add_smartfactor(&feature_track.smart_factor);
+
+                            // Tell graph to delete the "old" version of this factor
+                            if feature_track.slot != -1 {
+                                delete_slots.push(feature_track.slot as u64);
+                                // Could add another check on the actual smoother to make sure ti is in the graph
+                                // smoother_->getFactors().exists(slot)
+                            } else {
+                                warn!("If the factor is in the graph, its slot should != -1!");
                             }
-                        },
-                        _ => {}
-                    }
 
-                    // Only add feature if there are more than two observations
-                    if num_observations >= 2 && !*is_in_graph {
-                        self.graph_new.add_smartfactor(&smartfactor);
-                        num_new_landmarks += 1;
-                    } else if num_observations >= 2 && *is_in_graph {
-                        num_updated_landmarks += 1;
+
+                            // !!! This is the version of the code that works with ISAM2:
+                            // Instead of deleting and replacing smart factors, tell ISAM that
+                            // we updated the factor at this index.
+                            // Update new_affected_keys to show that this smart factor was updated
+                            // This is sent to the isam2 update function
+                            // let index_in_isam2 = self.smartfactor_idx_in_isam2[&feature_id];
+                            // new_affected_keys.push(DoubleVec{
+                                // vec: vec![index_in_isam2 as f64, self.curr_id as f64]
+                            // });
+
+                            num_updated_landmarks += 1;
+                        }
+
+                        // Keep track of factors in the order we insert them into the graph
+                        // Needed so we can lookup their smoother idx/slot/location after optimization.
+                        new_feature_ids.push(feature_id);
+
                     } else {
+                        // Not enough observations to insert into graph yet.
                         num_skipped += 1;
                     }
-
-                    continue;
                 },
                 None => {
                     // Feature is newly extracted
-
-                    // Create a smart factor for the new feature
-                    let mut smartfactor = SmartProjectionPoseFactorCal3S2::new(
+                    // Create a smart factor for the new feature, but don't add it to the graph yet.
+                    let mut smart_factor = SmartProjectionPoseFactorCal3S2::new(
                         &self.vision_measurement_noise,
                         &self.k,
                         & self.tbc.into()
                     );
-                    smartfactor.add(
-                        & gtsam::geometry::point2::Point2::new(point.x as f64, point.y as f64),
+                    smart_factor.add(
+                        & Point2::new(point.x as f64, point.y as f64),
                         &Symbol::new(b'x', self.curr_id)
                     );
 
                     // Insert to lookup, so we can find this factor in the next frames
-                    self.smartfactors.insert(feature_id, (smartfactor, false, 1));
+                    self.feature_tracks.insert(
+                        feature_id,
+                        FeatureTrack::new(smart_factor, ((point.x as f64, point.y as f64), self.curr_id))
+                    );
 
-                    // Keep track of factors in the order we insert them in, we will need this after the update in isam2
-                    new_factor_feature_ids.push(feature_id);
                     num_skipped += 1;
                 }
             }
         }
         debug!("Added new features: {}, updated old features: {}, skipped: {}, id not set: {}", num_new_landmarks, num_updated_landmarks, num_skipped, id_notset);
 
-        return (new_factor_feature_ids, new_affected_keys);
+        (new_feature_ids, delete_slots)
     }
 
     fn optimize(
         &mut self,
-        new_factor_feature_ids: Vec<i32>,
+        new_feature_ids: Vec<i32>,
+        delete_slots: Vec<u64>,
         new_affected_keys: Vec<DoubleVec>,
         // timestamps: Vec<DoubleVec>,
     ) -> Result<(Vec<gtsam::sys::Point>, ImuBias), Box<dyn std::error::Error>> {
@@ -740,7 +761,7 @@ impl GraphSolver {
                 // }
 
                 // Perform smoothing update
-                let isam2result = isam2.update(
+                let result = isam2.update(
                     & self.graph_new,
                     & self.values_new.get_values(),
                     & new_affected_keys,
@@ -752,19 +773,19 @@ impl GraphSolver {
                 // sorted by order of smartfactor insertion.
                 // Here, link up inserted smartfactor feature ID with isam2 index. We will need these
                 // links later to tell isam2 that a previously inserted smartfactor has an update
-                for i in 0..new_factor_feature_ids.len() {
-                    let smartfactor_id_here = new_factor_feature_ids[i];
-                    let smartfactor_id_in_isam2 = isam2result.new_factor_indices[i];
-                    self.smartfactor_idx_in_isam2.insert(smartfactor_id_here, smartfactor_id_in_isam2);
-                    self.smartfactors.get_mut(&smartfactor_id_here).unwrap().1 = true; // Mark that this smartfactor is now in the graph
+                for i in 0..new_feature_ids.len() {
+                    let smartfactor_id_here = new_feature_ids[i];
+                    let smartfactor_id_in_isam2 = result.new_factor_indices[i];
+                    if let Some(feature) = self.feature_tracks.get_mut(&smartfactor_id_here) {
+                        feature.slot = smartfactor_id_in_isam2 as i64;
+                        feature.is_in_graph = true;
+                    };
                 }
-                debug!("TEST! After optimize, smartfactor_idx_in_isam2 is: {:?}", self.smartfactor_idx_in_isam2);
 
-                points = isam2result.points;
+                points = result.points;
             },
             Optimizer::IncrementalFixedLagSmoother{smoother} => {
                 // Perform smoothing update
-                // SOFIYA TODO THIS 11/13
 
                 // Use current timestamp for each new value. This timestamp will be used
                 // to determine if the variable should be marginalized.
@@ -776,13 +797,32 @@ impl GraphSolver {
                         vec: vec![*key as f64, self.curr_id as f64]
                     });
                 }
-                
+
                 let result = smoother.update(
                     & self.graph_new,
                     & self.values_new.get_values(),
-                    &timestamps,
-                    &Vec::<i32>::new()
+                    & timestamps,
+                    & delete_slots
                 );
+
+                // BOOKKEEPING: updates the SlotIdx in the smart_factors such that
+                // this idx points to the updated slots in the graph after optimization.
+                // for next iteration to know which slots have to be deleted
+                // before adding the new smart factors.
+                // (VioBackend::updateNewSmartFactorsSlots)
+
+                // Smoother returns vector of indexes for each smartfactor within smoother. 
+                // The vector is sorted by order of smartfactor insertion.
+                // Here, link up inserted smartfactor feature ID with smoother index
+                for i in 0..new_feature_ids.len() {
+                    let smartfactor_id_here = new_feature_ids[i];
+                    let smartfactor_id_in_isam2 = result.new_factor_indices[i];
+                    if let Some(feature) = self.feature_tracks.get_mut(&smartfactor_id_here) {
+                        feature.slot = smartfactor_id_in_isam2 as i64;
+                        feature.is_in_graph = true;
+                    };
+                }
+
             },
             Optimizer::LevenbergMarquadt{} => {
                 let params = LevenbergMarquardtParams::default();
@@ -844,6 +884,34 @@ enum GraphSolverState {
     Ok
 }
 
+
+
+struct FeatureTrack {
+    pub smart_factor: SmartProjectionPoseFactorCal3S2,
+    pub is_in_graph: bool,
+    pub observations: Vec<((f64, f64), u64)>, // ((Point_x, Point_y), state_id)
+    pub slot: i64, // Slot in smoother
+}
+impl FeatureTrack {
+    fn new(
+        smart_factor: SmartProjectionPoseFactorCal3S2,
+        observation: ((f64, f64), u64),
+    ) -> Self {
+        Self {
+            smart_factor: smart_factor,
+            is_in_graph: false,
+            observations: vec![observation],
+            slot: -1
+        }
+    }
+    fn update(&mut self, point: opencv::core::Point2f, state_id: Key) {
+        self.smart_factor.add(
+            & Point2::new(point.x as f64, point.y as f64),
+            &Symbol::new(b'x', state_id)
+        );
+        self.observations.push(((point.x as f64, point.y as f64), state_id));
+    }
+}
 
 struct ValuesWrapper {
     values: Values, // New values that have not been optimized yet. gtsam object

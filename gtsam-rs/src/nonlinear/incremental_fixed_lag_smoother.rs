@@ -46,7 +46,7 @@ impl IncrementalFixedLagSmoother {
         new_factors: &NonlinearFactorGraph,
         new_values: &Values,
         timestamps: & Vec<DoubleVec>,
-        delete_slots: &Vec<i32>
+        delete_slots: &Vec<u64>
         // new_affected_keys: & Vec<DoubleVec>,
         // keys_to_remove: & Vec<u64>,
     ) -> ISAM2ResultRust {

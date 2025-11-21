@@ -21,6 +21,12 @@ impl SmartProjectionPoseFactorCal3S2 {
         }
     }
 
+    pub fn copy(&self) -> Self {
+        Self {
+            inner: ::sys::clone_smart_projection_pose_factor(&self.inner)
+        }
+    }
+
     pub fn add(
         self: &mut Self,
         point: &Point2,
@@ -33,6 +39,7 @@ impl SmartProjectionPoseFactorCal3S2 {
         )
     }
 }
+
 
 // pub struct SmartProjectionFactorCal3S2 {
 //     pub(crate) inner: SharedPtr<::sys::SmartProjectionFactorCal3S2>,

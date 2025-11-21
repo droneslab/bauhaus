@@ -299,13 +299,12 @@ pub mod ffi {
 
         // Same as update()... for some reason rust won't let me name it update since isam2
         // already defines update
-        fn 
-        update_smoother(
+        fn update_smoother(
             smoother: Pin<&mut IncrementalFixedLagSmoother>,
             new_factors: &NonlinearFactorGraph,
             new_values: &Values,
             timestamps: &Vec<DoubleVec>,
-            delete_slots: &Vec<i32>
+            delete_slots: &Vec<u64>
         ) -> ISAM2ResultRust;
 
     }
@@ -490,6 +489,10 @@ pub mod ffi {
             measurement_noise: &SharedPtr<IsotropicNoiseModel>,
             k: &SharedPtr<Cal3_S2>,
             sensor_p_body: &Pose3,
+        ) -> SharedPtr<SmartProjectionPoseFactorCal3_S2>;
+
+        fn clone_smart_projection_pose_factor(
+            old_factor: &SharedPtr<SmartProjectionPoseFactorCal3_S2>
         ) -> SharedPtr<SmartProjectionPoseFactorCal3_S2>;
 
         fn new_generic_projection_factor(

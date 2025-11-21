@@ -23,7 +23,7 @@ namespace gtsam {
         const gtsam::NonlinearFactorGraph& new_factors,
         const gtsam::Values& new_values,
         const rust::Vec<DoubleVec> & timestamps,
-        const rust::Vec<int>&  delete_slots
+        const rust::Vec<unsigned long int>&  delete_slots
     );
 
     std::unique_ptr<Values> calculate_estimate(const IncrementalFixedLagSmoother &smoother);

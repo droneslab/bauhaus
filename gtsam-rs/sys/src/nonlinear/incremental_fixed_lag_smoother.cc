@@ -44,7 +44,7 @@ namespace gtsam
         const gtsam::NonlinearFactorGraph& new_factors,
         const gtsam::Values& new_values,
         const rust::Vec<DoubleVec> & timestamps,
-        const rust::Vec<int>&  delete_slots
+        const rust::Vec<unsigned long int>&  delete_slots
     ) {
         std::map<Key, double> timestamps_gtsam;
         for (int i = 0; i < timestamps.size(); i++)
@@ -53,13 +53,13 @@ namespace gtsam
             timestamps_gtsam[row[0]] = row[1];
         }
 
-        std::cout << "Before update, smoother has: ";
-        smoother.getLinearizationPoint().print();
+        // std::cout << "Before update, smoother has: ";
+        // smoother.getLinearizationPoint().print();
 
-        std::cout << "Initial values: ";
-        new_values.print();
-        std::cout << std::endl << "Graph: ";
-        new_factors.print();
+        // std::cout << "Initial values: ";
+        // new_values.print();
+        // std::cout << std::endl << "Graph: ";
+        // new_factors.print();
 
         gtsam::FactorIndices delete_slots_gtsam;
         for (int i = 0; i < delete_slots.size(); i++)
@@ -75,50 +75,22 @@ namespace gtsam
         smoother.update(new_factors, new_values, timestamps_gtsam, delete_slots_gtsam);
         ISAM2Result result = smoother.getISAM2Result();
 
-        // std::cout << "Detailed results:" << std::endl;
-        // for (auto keyedStatus : result.detail->variableStatus) {
-        //     const auto& status = keyedStatus.second;
-        //     PrintKey(keyedStatus.first);
-        //     std::cout << " {" << std::endl;
-        //     std::cout << "reeliminated: " << status.isReeliminated << std::endl;
-        //     std::cout << "relinearized above thresh: " << status.isAboveRelinThreshold
-        //         << std::endl;
-        //     std::cout << "relinearized involved: " << status.isRelinearizeInvolved << std::endl;
-        //     std::cout << "relinearized: " << status.isRelinearized << std::endl;
-        //     std::cout << "observed: " << status.isObserved << std::endl;
-        //     std::cout << "new: " << status.isNew << std::endl;
-        //     std::cout << "in the root clique: " << status.inRootClique << std::endl;
-        //     std::cout << "}" << std::endl;
-        // }
-
-
         // std::cout << "After update, isam2 has: ";
         // isam2.getLinearizationPoint().print();
 
         // std::cout << "GET FACTORS! ";
         // smoother.getFactorsUnsafe().print();
 
+        // std::cout << "New factor indices: ";
         rust::Vec<std::uint64_t> new_factor_indices;
-        // for (const auto& value : result.newFactorsIndices) {
-        //     new_factor_indices.push_back(value);
-        // }
+        for (const auto& value : result.newFactorsIndices) {
+            new_factor_indices.push_back(value);
+        //     std::cout << value << ", ";
+        }
+        std::cout << std::endl;
+
         rust::Vec<Point> points;
         rust::Vec<std::uint64_t> invalid_points;
-        // auto factors = smoother.getFactorsUnsafe();
-        // for (int i = 0; i < factors.size(); i++) {
-        //     auto factor = factors[i];
-        //     if (auto smartfactor = dynamic_cast<const SmartProjectionPoseFactor<gtsam::Cal3_S2>*>(factor.get())) {
-        //         TriangulationResult res = smartfactor->point();
-        //         if (res.valid()) {
-        //             // std::cout << "Smart factor point: i " << i << ", " << res.get() << std::endl;
-        //             points.push_back(Point{i, res.get()(0), res.get()(1), res.get()(2)});
-        //         } else {
-        //             // std::cout << "Smart factor point not valid" << std::endl;
-        //             invalid_points.push_back(i);
-        //         }
-
-        //     }
-        // }
         ISAM2ResultRust rust_result;
         rust_result.new_factor_indices = new_factor_indices;
         rust_result.points = points;
