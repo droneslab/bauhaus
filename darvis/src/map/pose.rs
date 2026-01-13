@@ -21,6 +21,10 @@ impl Pose {
         Pose(pose)
     }
 
+    pub fn new_from_isometry_matrix(matrix: nalgebra::IsometryMatrix3<f64>) -> Pose {
+        Pose(matrix)
+    }
+
     pub fn new_with_quaternion_convert(
         translation: nalgebra::Vector3<f64>,
         rotation: nalgebra::Vector4<f64>,
@@ -321,8 +325,8 @@ impl std::fmt::Debug for Pose {
 
         write!(
             f,
-            "t[{:.4},{:.4},{:.4}] r[{:.4},{:.4},{:.4},{:.4}]",
-            trans[0], trans[1], trans[2], rot.i, rot.j, rot.k, rot.w,
+            "t[{:.4},{:.4},{:.4}] r[{:.4} (x),{:.4} (y),{:.4} (z),{:.4} (w)]",
+            trans[0], trans[1], trans[2], rot.i , rot.j, rot.k, rot.w,
         )
     }
 }

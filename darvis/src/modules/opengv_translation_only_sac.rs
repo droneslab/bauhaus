@@ -378,19 +378,19 @@ impl<M: SampleConsensusProblem> Ransac<M> {
             // );
 
             if self.iterations > self.max_iterations {
-                warn!(
-                    "[sm::RandomSampleConsensus::computeModel] RANSAC reached the maximum number of trials.\n"
-                );
+                // debug!(
+                //     "[sm::RandomSampleConsensus::computeModel] RANSAC reached the maximum number of trials.\n"
+                // );
                 break;
             }
         }
 
 
-        debug!(
-            "[sm::RandomSampleConsensus::computeModel] Model: {} size, {} inliers.",
-            self.model.len(),
-            n_best_inliers_count
-        );
+        // debug!(
+        //     "[sm::RandomSampleConsensus::computeModel] Model: {} size, {} inliers.",
+        //     self.model.len(),
+        //     n_best_inliers_count
+        // );
 
         if self.model.is_empty() {
             self.inliers.clear();

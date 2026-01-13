@@ -1184,7 +1184,7 @@ impl ConstraintPoseImu {
 
 #[derive(Default)]
 pub struct PreintegrationGTSAM {
-    preint_gtsam: gtsam::navigation::combined_imu_factor::PreintegratedCombinedMeasurements
+    pub preint_gtsam: gtsam::navigation::combined_imu_factor::PreintegratedCombinedMeasurements
 }
 
 impl PreintegrationGTSAM {
@@ -1200,7 +1200,6 @@ impl PreintegrationGTSAM {
         let imu_integration_sigma = SETTINGS.get::<f64>(IMU, "imu_integration_sigma");
         let init_bias_sigma = SETTINGS.get::<f64>(IMU, "imu_bias_init_sigma");
 
-        // Create GTSAM preintegration parameters for use with Foster's version
         // let mut params = PreintegrationCombinedParams::new(-9.81, 0.0, 0.0);
         let mut params = gtsam::navigation::combined_imu_factor::PreintegrationCombinedParams::new(0.0, 0.0, -9.81);
 
@@ -1222,7 +1221,7 @@ impl PreintegrationGTSAM {
             let tstep = imu_measurements[i + 1].timestamp - imu_measurements[i].timestamp;
             let acc: Vector3<f64> = imu_measurements[i].acc; // acc
             let ang_vel: Vector3<f64> = imu_measurements[i].ang_vel; // angVel
-            // println!("Preintegrating {} measurement:  Acc: {} {} {}, Omega: {} {} {}, dt: {}",
+            // debug!("Preintegrating {} measurement:  Acc: {} {} {}, Omega: {} {} {}, dt: {}",
             //     i,
             //     acc.x, acc.y, acc.z, // acc
             //     ang_vel.x, ang_vel.y, ang_vel.z, // angVel
@@ -1231,7 +1230,6 @@ impl PreintegrationGTSAM {
 
             self.preint_gtsam.integrate_measurement(&acc.into(), &ang_vel.into(), tstep);
         }
-
     }
 
     pub fn preintegrate_orbslam(&mut self, imu_measurements: &mut ImuMeasurements, current_timestamp: Timestamp, last_timestamp: Timestamp) -> Result<(), Box<dyn std::error::Error>> {
@@ -1330,7 +1328,7 @@ impl PreintegrationGTSAM {
     }
 
     pub fn reset_integration_and_set_bias(&mut self, bias: &ImuBias) {
-        let _span = tracy_client::span!("reset integration and set bias");
+        // let _span = tracy_client::span!("reset integration and set bias");
         self.preint_gtsam.reset_integration_and_set_bias(
             & gtsam::imu::imu_bias::ConstantBias::new(
                 &gtsam::base::vector::Vector3::new(bias.bax, bias.bay, bias.baz),

@@ -17,7 +17,7 @@ use core::config::SETTINGS;
 use core::sensor::{FrameSensor, Sensor};
 use opencv::core::{KeyPoint, Point2f, Scalar, CV_32F};
 use opencv::prelude::{KeyPointTraitConst, Mat, MatTrait, MatTraitConst};
-use opencv::types::VectorOff32;
+use opencv::types::{VectorOfPoint2f, VectorOff32};
 use std::fmt::Debug;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -405,7 +405,7 @@ impl Features {
         return x >= min_x && x < max_x && y >= min_y && y < max_y;
     }
 
-    fn undistort_keypoints(
+    pub fn undistort_keypoints(
         keypoints: &DVVectorOfKeyPoint,
         dist_coef: &Vec<f32>,
     ) -> Result<DVVectorOfKeyPoint, Box<dyn std::error::Error>> {
@@ -454,6 +454,50 @@ impl Features {
         }
 
         Ok(DVVectorOfKeyPoint::new(keypoints_un))
+    }
+
+    pub fn undistort_points(
+        keypoints: &VectorOfPoint2f,
+        dist_coef: &Vec<f32>,
+    ) -> Result<Vec<Point2f>, Box<dyn std::error::Error>> {
+        // same as undistortkeypoints, but for points object instead
+
+        let num_keypoints = keypoints.len() as i32;
+        // Fill matrix with points
+        let mut mat = Mat::new_rows_cols_with_default(num_keypoints, 2, CV_32F, Scalar::all(0.0))?;
+        for i in 0..num_keypoints {
+            *mat.at_2d_mut::<f32>(i, 0)? = keypoints.get(i as usize)?.x;
+            *mat.at_2d_mut::<f32>(i, 1)? = keypoints.get(i as usize)?.y;
+        }
+
+        // Undistort points
+        mat = mat.reshape(2, 0)?;
+
+        let mut undistorted = mat.clone(); // TODO (timing) ... trying to avoid clone, but can't have &mat and &mut mat at the same time
+        let dist_coefs = VectorOff32::from_iter((*dist_coef).clone());
+        opencv::calib3d::undistort_points(
+            &mat,
+            &mut undistorted,
+            &CAMERA_MODULE.k_matrix.mat(),
+            &dist_coefs,
+            &Mat::default(),
+            &CAMERA_MODULE.k_matrix.mat(),
+        )?;
+
+        undistorted = undistorted.reshape(1, 0)?;
+
+        // Fill undistorted keypoint vector
+        let mut keypoints_un = vec![];
+        for i in 0..num_keypoints {
+            let kp_orig = keypoints.get(i as usize)?;
+            let kp_new = Point2f::new(
+                *undistorted.at_2d::<f32>(i, 0)?,
+                *undistorted.at_2d::<f32>(i, 1)?,
+            );
+            keypoints_un.push(kp_new);
+        }
+
+        Ok(keypoints_un)
     }
 
     fn compute_image_bounds(

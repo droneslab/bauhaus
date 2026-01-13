@@ -1,6 +1,6 @@
 extern crate g2o;
 use log::{warn, info, debug};
-use nalgebra::{Isometry3, Vector3, Vector6};
+use nalgebra::{Isometry3, IsometryMatrix3, Vector3, Vector6};
 use opencv::core::Mat;
 use std::{collections::{BTreeSet, HashMap}, fmt::Debug, thread::sleep, time::Duration};
 use core::{
@@ -10,7 +10,7 @@ use crate::{
     actors::{messages::{FeatureTracksAndIMUMsg, ShutdownMsg, TrajectoryMsg, UpdateFrameIMUMsg, VisTrajectoryMsg}, tracking_frontend_gtsam::{GtsamFrontendTrackingState, TrackedFeatures}},
     map::{frame::Frame, map::Id, pose::Pose, read_only_lock::ReadWriteMap}, modules::{image::draw_optical_flow, imu::{ImuBias, ImuCalib}}, registered_actors::{CAMERA, IMU, SHUTDOWN_ACTOR, TRACKING_BACKEND, VISUALIZER}, ImuInitializationData
 };
-use gtsam::{geometry::{cal3_s2::Cal3S2, point2::Point2, point3::Point3, pose3::Pose3, rot3::Rot3}, imu::imu_bias::ConstantBias, inference::symbol::Symbol, linear::noise_model::{DiagonalNoiseModel, GaussianNoiseModel, IsotropicNoiseModel}, navigation::combined_imu_factor::{CombinedImuFactor, PreintegratedCombinedMeasurements}, nonlinear::{incremental_fixed_lag_smoother::IncrementalFixedLagSmoother, isam2::ISAM2, levenberg_marquardt_optimizer::LevenbergMarquardtOptimizer, levenberg_marquardt_params::LevenbergMarquardtParams, nonlinear_factor_graph::NonlinearFactorGraph, values::Values}, slam::projection_factor::{GenericProjectionFactorPose3Point3Cal3S2, SmartProjectionPoseFactorCal3S2}, sys::{Key, ffi::DoubleVec}};
+use gtsam::{geometry::{cal3_s2::{Cal3S2, Cal3S2Stereo}, point2::{Point2, StereoPoint2}, point3::Point3, pose3::Pose3, rot3::Rot3}, imu::imu_bias::ConstantBias, inference::symbol::Symbol, linear::noise_model::{DiagonalNoiseModel, GaussianNoiseModel, IsotropicNoiseModel}, navigation::combined_imu_factor::{CombinedImuFactor, PreintegratedCombinedMeasurements}, nonlinear::{incremental_fixed_lag_smoother::IncrementalFixedLagSmoother, isam2::ISAM2, levenberg_marquardt_optimizer::LevenbergMarquardtOptimizer, levenberg_marquardt_params::LevenbergMarquardtParams, nonlinear_factor_graph::NonlinearFactorGraph, values::Values}, slam::projection_factor::{GenericProjectionFactorPose3Point3Cal3S2, SmartProjectionPoseFactorCal3S2, SmartStereoProjectionPoseFactor}, sys::{Key, ffi::DoubleVec}};
 
 type GTSAMVector3 = gtsam::base::vector::Vector3; // Also importing a vector3 from nalgebra
 
@@ -20,9 +20,10 @@ pub struct TrackingBackendGTSAM {
 
     last_timestamp: Timestamp,
 
-    // For drawing
-    last_image: Option<Mat>,
-    curr_frame_id: i32,
+    // This is just for drawing optical flow
+    // temp_tracked_features_last_kf: TrackedFeatures,
+    // last_image: Option<Mat>,
+    // curr_frame_id: i32,
 
     // Modules 
     graph_solver: GraphSolver,
@@ -46,9 +47,10 @@ impl Actor for TrackingBackendGTSAM {
             map,
             trajectory_poses: Vec::new(),
             last_timestamp: 0.0,
-            last_image: None,
-            curr_frame_id: 0,
             kf_count: 0,
+            // last_image: None,
+            // curr_frame_id: 0,
+            // temp_tracked_features_last_kf: TrackedFeatures::default(),
         };
         tracy_client::set_thread_name!("tracking backend gtsam");
 
@@ -121,19 +123,56 @@ impl TrackingBackendGTSAM {
 
             self.kf_count = 0;
 
+
+            // This is just for drawing optical flow
+            // self.temp_tracked_features_last_kf = msg.feature_tracks.clone();
+            // self.last_image = current_frame.image.clone();
+            // println!("TRACKING BACKEND! PRIOR (not drawing first frame): {:?}", self.temp_tracked_features_last_kf);
+
+
             current_frame
         } else {
             // If we have previous frames already, can track normally
             let mut current_frame = msg.frame;
-            println!("Current timestamp: {}", current_frame.timestamp);
+            // println!("Current timestamp: {}", current_frame.timestamp);
 
-            // Solve VIO graph. Includes preintegration
+            // Solve VIO graph
             // Option to batch update instead of update each time. Not sure this works correctly
             let should_update = match self.graph_solver.optimizer {
                 Optimizer::ISAM2 {..} => SETTINGS.get::<i32>(TRACKING_BACKEND, "isam_update_interval") == self.kf_count,
                 Optimizer::IncrementalFixedLagSmoother {..} => true,
                 Optimizer::LevenbergMarquadt { } => true,
             };
+
+
+            // This is just for drawing optical flow
+            // if self.temp_tracked_features_last_kf.points.len() != 0 {
+            //     println!("TRACKING BACKEND! PRIOR: {:?}", self.temp_tracked_features_last_kf);
+            //     println!("TRACKING BACKEND! CURRENT: {:?}", msg.feature_tracks);
+            //     let mut new_temp = TrackedFeatures::default();
+
+            //     for index in 0..self.temp_tracked_features_last_kf.len() {
+            //         let id = self.temp_tracked_features_last_kf.feature_ids[index];
+            //         let point = self.temp_tracked_features_last_kf.points[index];
+            //         let versors = self.temp_tracked_features_last_kf.versors[index];
+            //         if msg.feature_tracks.feature_ids.contains(&id) {
+            //             new_temp.add_with_id(
+            //                 id, point, versors
+            //             );
+            //         }
+            //     }
+
+            //     draw_optical_flow(
+            //         self.last_image.as_ref().unwrap(),
+            //         current_frame.image.as_ref().unwrap(),
+            //         & new_temp.get_points_as_vector_of_point2f(),
+            //         & msg.feature_tracks.get_points_as_vector_of_point2f(),
+            //         &format!("results/flow/backend{}.png", current_frame.frame_id),
+            //     ).unwrap();
+            // }
+            // self.temp_tracked_features_last_kf = msg.feature_tracks.clone();
+            // self.last_image = current_frame.image.clone();
+
             let optimization_results = self.graph_solver.solve(
                 msg.tracker_status,
                 &mut current_frame,
@@ -152,7 +191,9 @@ impl TrackingBackendGTSAM {
 
         self.last_timestamp = current_frame.timestamp;
         self.update_trajectory_in_logs(& current_frame).expect("Could not save trajectory");
-        self.curr_frame_id += 1;
+
+        // This is just for drawing optical flow
+        // self.curr_frame_id += 1;
 
         return Ok(())
     }
@@ -223,10 +264,10 @@ pub struct GraphSolver {
     values_new: ValuesWrapper,
 
     // Main graph
-    values_all: ValuesWrapper, // All created nodes
+    pub values_all: ValuesWrapper, // All created nodes
     inserted_kfs: Vec<u64>, // Keyframe IDs that have been inserted into the graph
 
-    curr_id: u64, // Current state ID
+    pub curr_id: u64, // Current state ID
     last_timestamp: Timestamp,
 
     // Managing smart factors
@@ -248,6 +289,7 @@ pub struct GraphSolver {
     imu_integration_sigma: f64,
     init_bias_sigma: f64,
     k: Cal3S2, // Camera intrinsics
+    k_stereo: Cal3S2Stereo,  // Camera intrinsics
     vision_measurement_noise: IsotropicNoiseModel, // Camera measurement noise model
     tbc: Pose, // Transform from camera frame to body (IMU) 
 }
@@ -262,6 +304,15 @@ impl GraphSolver {
             SETTINGS.get::<f64>(CAMERA, "cx"),
             SETTINGS.get::<f64>(CAMERA, "cy"),
         );
+        let k_stereo = Cal3S2Stereo::new(
+            SETTINGS.get::<f64>(CAMERA, "fx"),
+            SETTINGS.get::<f64>(CAMERA, "fy"),
+            0.0,
+            SETTINGS.get::<f64>(CAMERA, "cx"),
+            SETTINGS.get::<f64>(CAMERA, "cy"),
+            0.1
+        );
+
 
         let optimizer = match optimizer_type {
             0 => Optimizer::ISAM2 {
@@ -316,11 +367,12 @@ impl GraphSolver {
             init_bias_sigma: SETTINGS.get::<f64>(IMU, "imu_bias_init_sigma"),
             tbc: ImuCalib::new().tbc,
             k,
+            k_stereo,
             vision_measurement_noise,
         }
     }
 
-    fn initialize(&mut self, timestamp: f64, imu_init: &ImuInitializationData) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn initialize(&mut self, timestamp: f64, imu_init: &ImuInitializationData) -> Result<(), Box<dyn std::error::Error>> {
         println!("... Initial timestamp: {}", timestamp);
         println!("... Initial pose: {:?}", imu_init.pose);
         println!("... Initial pose rotation matrix: {:?}", imu_init.pose.get_rotation());
@@ -448,19 +500,19 @@ impl GraphSolver {
         Ok(())
     }
 
-    fn solve(&mut self,
+    pub fn solve(&mut self,
         tracker_status: GtsamFrontendTrackingState,
         current_frame: &mut Frame,
         preintegration: & PreintegratedCombinedMeasurements, 
         feature_tracks: & TrackedFeatures,
         should_update: bool, // Batch update instead of optimizing each time. Doesn't work well though.
     ) -> Result<Vec<(u64, Pose, nalgebra::Vector3<f64>, ImuBias)>, Box<dyn std::error::Error>> {
-        let _span = tracy_client::span!("solve");
+        // let _span = tracy_client::span!("solve");
 
         let timestamp = (current_frame.timestamp * 1e9) as i64; // Convert to int just so we can hash it
 
         // IMU
-        self.create_imu_factor(& preintegration);
+        let imu_factor = self.create_imu_factor(& preintegration);
         let new_state = self.imu_predict_state(& preintegration);
 
         // Move node count forward in time
@@ -494,10 +546,8 @@ impl GraphSolver {
 
         // Add features
         let (new_feature_ids, delete_slots) = self.add_landmarks_to_graph(feature_tracks);
-
-        if should_update {
-            self.optimize(new_feature_ids, delete_slots, vec![])?;
-        }
+        // Add IMU factor
+        self.graph_new.add_combined_imu_factor(&imu_factor);
 
         match tracker_status {
             GtsamFrontendTrackingState::LowDisparity => {
@@ -534,12 +584,24 @@ impl GraphSolver {
             _ => {}
         }
 
+        if should_update {
+            self.optimize(new_feature_ids, delete_slots, vec![])?;
+        }
+
+        let (pose, velocity, bias) = self.values_all.get_results_from_values(self.curr_id)?;
+        println!("State after optimization: \n {}; \n {:?}; \n {:?}; \n {:?}", timestamp, pose, velocity, bias);
+        println!("Rotation is: {:?}", pose.get_rotation());
 
         let mut optimization_results = vec![];
         match self.optimizer {
             Optimizer::ISAM2{..} | Optimizer::IncrementalFixedLagSmoother{..} => {
                 // If using the smoothers, we need to edit all the prior keyframes with new optimized values
                 self.inserted_kfs.push(self.curr_id);
+
+                // When states go out of the optimization window, remove them from here
+                if self.inserted_kfs.len() > SETTINGS.get::<i32>(TRACKING_BACKEND, "isam_nr_states") as usize {
+                    self.inserted_kfs.remove(0);
+                }
 
                 for state_key in &self.inserted_kfs {
                     let (pose, velocity, bias) = self.values_all.get_results_from_values(*state_key)?;
@@ -550,13 +612,13 @@ impl GraphSolver {
                             velocity
                         );
                         current_frame.imu_data.set_new_bias(bias);
-                        debug!("OPTIMIZED POSE ESTIMATE... {}; {:?}; {:?}; {:?}", timestamp, pose, velocity, current_frame.imu_data.imu_bias);
-                        debug!("STATE KEY: {}, {}.", self.curr_id, timestamp);
+                        debug!("State after optimization: \n {}; \n {:?}; \n {:?}; \n {:?}", timestamp, pose, velocity, current_frame.imu_data.imu_bias);
+                        // debug!("STATE KEY: {}, {}.", self.curr_id, timestamp);
                     } else {
                         optimization_results.push(
                             (*state_key, ImuCalib::new().tcb * pose.inverse(), velocity, bias)
                         );
-                        debug!("OPTIMIZED POSE ESTIMATE... STATE {}; {:?}; {:?}; {:?}", state_key, pose, velocity, current_frame.imu_data.imu_bias);
+                        // debug!("OPTIMIZED POSE ESTIMATE... STATE {}; {:?}; {:?}; {:?}", state_key, pose, velocity, bias);
                     }
                 }
             },
@@ -578,7 +640,7 @@ impl GraphSolver {
     }
 
     fn imu_predict_state(&self, preintegration: & PreintegratedCombinedMeasurements) -> GtsamState {
-        let _span = tracy_client::span!("get_predicted_state");
+        // let _span = tracy_client::span!("get_predicted_state");
         // This function will get the predicted state based on the IMU measurement
 
         // Get the current state (t=k)
@@ -606,7 +668,7 @@ impl GraphSolver {
         return predicted;
     }
 
-    fn create_imu_factor(&mut self, preintegration: & PreintegratedCombinedMeasurements) {
+    fn create_imu_factor(&mut self, preintegration: & PreintegratedCombinedMeasurements) -> CombinedImuFactor{
         let imu_factor = CombinedImuFactor::new(
             &Symbol::new(b'x', self.curr_id),
             &Symbol::new(b'v', self.curr_id),
@@ -616,12 +678,12 @@ impl GraphSolver {
             &Symbol::new(b'b', self.curr_id + 1),
             & preintegration
         );
-        self.graph_new.add_combined_imu_factor(&imu_factor);
+        imu_factor
     }
 
     fn add_landmarks_to_graph(&mut self, new_feature_tracks: &TrackedFeatures) -> (Vec<i32>, Vec<u64>) {
         // Combo of addStereoMeasurementsToFeatureTracks and addLandmarksToGraph
-        let _span = tracy_client::span!("process_smart_features");
+        // let _span = tracy_client::span!("process_smart_features");
 
         let mut id_notset = 0;
         let mut num_new_landmarks = 0;
@@ -644,83 +706,104 @@ impl GraphSolver {
                 warn!("Id not set for feature with point {:?}?", new_feature_tracks.get_point(i as usize));
                 continue;
             }
-            let point = new_feature_tracks.get_point(i as usize);
+            let point = new_feature_tracks.get_undistorted_point(i as usize); // Sofiya changed this to get_point instead of get_undistorted_point
 
             match self.feature_tracks.get_mut(&feature_id) {
                 Some(feature_track) => {
                     // Feature has been seen before, but not necessarily in the factor graph yet
 
-                    if feature_track.observations.len() >= 2 {
-                        // We have enough observations of the landmark
-                        if !feature_track.is_in_graph {
-                            // The landmark has not yet been added to the graph.
-                            // == RegularVioBackend::addLandmarkToGraph
+                    if !feature_track.is_in_graph {
+                        // The landmark has not yet been added to the graph.
+                        // == RegularVioBackend::addLandmarkToGraph
 
-                            // Add current observation to the factor
-                            feature_track.update(point, self.curr_id);
+                        // Add current observation to the factor
+                        feature_track.update(point, self.curr_id, &self.k_stereo);
 
-                            // Add to graph
-                            self.graph_new.add_smartfactor(&feature_track.smart_factor);
+                        // debug!("TRACKED LANDMARKS... {}: {:?} (backend)", feature_id, point);
+
+                        if feature_track.observations.len() >= 2 {
+                            // debug!("(new) Inserting smartfactor {}", feature_id);
+                            // If we have enough observations of the landmark, add to graph
+                            self.graph_new.add_smartstereofactor(&feature_track.smart_factor);
                             feature_track.is_in_graph = true;
-
                             num_new_landmarks += 1;
                         } else {
-                            // The landmark has already been added to the graph.
-                            // == RegularVioBackend::updateLandmarkInGraph, RegularVioBackend::updateExistingSmartFactor
+                            num_skipped += 1;
+                        }
+                    } else {
+                        // The landmark has already been added to the graph.
+                        // == RegularVioBackend::updateLandmarkInGraph, RegularVioBackend::updateExistingSmartFactor
 
-                            // Clone old factor
-                            let new_factor = feature_track.smart_factor.copy();
-                            feature_track.smart_factor = new_factor;
+                        match &mut self.optimizer {
+                            Optimizer::IncrementalFixedLagSmoother{smoother} => {
+                                if !smoother.slot_exists_in_smoother(feature_track.slot as usize) {
+                                    // This should not happen, unless feature tracks are so long
+                                    // (longer than factor graph's time horizon), than the factor has been
+                                    // removed from the optimization.
+                                    // Erase this factor and feature track, as it has gone past the horizon.
+                                    self.feature_tracks.remove(&feature_id);
+                                    num_skipped += 1;
+                                } else {
+                                    // Clone old factor
+                                    let new_factor = feature_track.smart_factor.copy();
+                                    feature_track.smart_factor = new_factor;
 
-                            // Add current observation to the factor
-                            feature_track.update(point, self.curr_id);
+                                    // Add current observation to the factor
+                                    feature_track.update(point, self.curr_id, &self.k_stereo);
 
-                            // Add new factor to graph
-                            self.graph_new.add_smartfactor(&feature_track.smart_factor);
+                                    // debug!("(existing) Inserting smartfactor {} which is at slot {}", feature_id, feature_track.slot);
 
-                            // Tell graph to delete the "old" version of this factor
-                            if feature_track.slot != -1 {
-                                delete_slots.push(feature_track.slot as u64);
-                                // Could add another check on the actual smoother to make sure ti is in the graph
-                                // smoother_->getFactors().exists(slot)
-                            } else {
-                                warn!("If the factor is in the graph, its slot should != -1!");
+                                    // Add new factor to graph
+                                    self.graph_new.add_smartstereofactor(&feature_track.smart_factor);
+
+                                    // Tell graph to delete the "old" version of this factor
+                                    if feature_track.slot != -1 {
+                                        delete_slots.push(feature_track.slot as u64);
+                                        println!("Add delete slot {} for feature {}", feature_track.slot, feature_id);
+                                        // Could add another check on the actual smoother to make sure ti is in the graph
+                                        // smoother_->getFactors().exists(slot)
+                                    } else {
+                                        warn!("If the factor is in the graph, its slot should != -1!");
+                                    }
+
+                                    // !!! This is the version of the code that works with ISAM2:
+                                    // Instead of deleting and replacing smart factors, tell ISAM that
+                                    // we updated the factor at this index.
+                                    // Update new_affected_keys to show that this smart factor was updated
+                                    // This is sent to the isam2 update function
+                                    // let index_in_isam2 = self.smartfactor_idx_in_isam2[&feature_id];
+                                    // new_affected_keys.push(DoubleVec{
+                                        // vec: vec![index_in_isam2 as f64, self.curr_id as f64]
+                                    // });
+
+                                    num_updated_landmarks += 1;
+
+                                    // Keep track of factors in the order we insert them into the graph
+                                    // Needed so we can lookup their smoother idx/slot/location after optimization.
+                                    new_feature_ids.push(feature_id);
+
+                                }
+                            },
+                            _ => {
+                                todo!("Other optimizers, both should have code for incremental fixed lag smoother above, without the slot_exists_in_smoother check");
                             }
 
-
-                            // !!! This is the version of the code that works with ISAM2:
-                            // Instead of deleting and replacing smart factors, tell ISAM that
-                            // we updated the factor at this index.
-                            // Update new_affected_keys to show that this smart factor was updated
-                            // This is sent to the isam2 update function
-                            // let index_in_isam2 = self.smartfactor_idx_in_isam2[&feature_id];
-                            // new_affected_keys.push(DoubleVec{
-                                // vec: vec![index_in_isam2 as f64, self.curr_id as f64]
-                            // });
-
-                            num_updated_landmarks += 1;
                         }
 
-                        // Keep track of factors in the order we insert them into the graph
-                        // Needed so we can lookup their smoother idx/slot/location after optimization.
-                        new_feature_ids.push(feature_id);
-
-                    } else {
-                        // Not enough observations to insert into graph yet.
-                        num_skipped += 1;
                     }
                 },
                 None => {
                     // Feature is newly extracted
                     // Create a smart factor for the new feature, but don't add it to the graph yet.
-                    let mut smart_factor = SmartProjectionPoseFactorCal3S2::new(
+                    let mut smart_factor = SmartStereoProjectionPoseFactor::new(
                         &self.vision_measurement_noise,
-                        &self.k,
                         & self.tbc.into()
                     );
+
                     smart_factor.add(
-                        & Point2::new(point.x as f64, point.y as f64),
-                        &Symbol::new(b'x', self.curr_id)
+                        & StereoPoint2::new(point.x as f64, None, point.y as f64),
+                        &Symbol::new(b'x', self.curr_id),
+                        &self.k_stereo
                     );
 
                     // Insert to lookup, so we can find this factor in the next frames
@@ -746,7 +829,7 @@ impl GraphSolver {
         // timestamps: Vec<DoubleVec>,
     ) -> Result<(Vec<gtsam::sys::Point>, ImuBias), Box<dyn std::error::Error>> {
         // VioBackend::optimize
-        let _span = tracy_client::span!("optimize");
+        // let _span = tracy_client::span!("optimize");
 
         let mut points = vec![];
 
@@ -760,7 +843,6 @@ impl GraphSolver {
                 //     removed_feature_ids_idx_in_isam2.push(self.smartfactor_idx_in_isam2[&(*id as i32)] as u64);
                 // }
 
-                // Perform smoothing update
                 let result = isam2.update(
                     & self.graph_new,
                     & self.values_new.get_values(),
@@ -785,8 +867,6 @@ impl GraphSolver {
                 points = result.points;
             },
             Optimizer::IncrementalFixedLagSmoother{smoother} => {
-                // Perform smoothing update
-
                 // Use current timestamp for each new value. This timestamp will be used
                 // to determine if the variable should be marginalized.
                 // Needs to use DOUBLE because gtsam works with that, but we
@@ -801,9 +881,13 @@ impl GraphSolver {
                 let result = smoother.update(
                     & self.graph_new,
                     & self.values_new.get_values(),
-                    & timestamps,
+                    // & timestamps,
+                    self.curr_id as f64,
                     & delete_slots
                 );
+
+                self.values_all.update(smoother.calculate_estimate());
+
 
                 // BOOKKEEPING: updates the SlotIdx in the smart_factors such that
                 // this idx points to the updated slots in the graph after optimization.
@@ -820,6 +904,7 @@ impl GraphSolver {
                     if let Some(feature) = self.feature_tracks.get_mut(&smartfactor_id_here) {
                         feature.slot = smartfactor_id_in_isam2 as i64;
                         feature.is_in_graph = true;
+                        // debug!("Smartfactor ID {} is at ISAM2 index {}", smartfactor_id_here, smartfactor_id_in_isam2);
                     };
                 }
 
@@ -887,14 +972,14 @@ enum GraphSolverState {
 
 
 struct FeatureTrack {
-    pub smart_factor: SmartProjectionPoseFactorCal3S2,
+    pub smart_factor: SmartStereoProjectionPoseFactor,
     pub is_in_graph: bool,
     pub observations: Vec<((f64, f64), u64)>, // ((Point_x, Point_y), state_id)
     pub slot: i64, // Slot in smoother
 }
 impl FeatureTrack {
     fn new(
-        smart_factor: SmartProjectionPoseFactorCal3S2,
+        smart_factor: SmartStereoProjectionPoseFactor, //SmartProjectionPoseFactorCal3S2,
         observation: ((f64, f64), u64),
     ) -> Self {
         Self {
@@ -904,16 +989,17 @@ impl FeatureTrack {
             slot: -1
         }
     }
-    fn update(&mut self, point: opencv::core::Point2f, state_id: Key) {
+    fn update(&mut self, point: opencv::core::Point2f, state_id: Key, calibration: &Cal3S2Stereo) {
         self.smart_factor.add(
-            & Point2::new(point.x as f64, point.y as f64),
-            &Symbol::new(b'x', state_id)
+            & StereoPoint2::new(point.x as f64, None, point.y as f64),
+            &Symbol::new(b'x', state_id),
+            &calibration
         );
         self.observations.push(((point.x as f64, point.y as f64), state_id));
     }
 }
 
-struct ValuesWrapper {
+pub struct ValuesWrapper {
     values: Values, // New values that have not been optimized yet. gtsam object
     keys: Vec<Key>, // Keys in values_new, for iteration
 }
@@ -986,10 +1072,10 @@ impl ValuesWrapper {
         self.values.get_constantbias(key).ok_or("Could not find bias".into())
     }
 
-    fn get_results_from_values(&self, state_key: u64) -> Result<(Pose, nalgebra::Vector3<f64>, ImuBias), Box<dyn std::error::Error>> {
+    pub fn get_results_from_values(&self, state_key: u64) -> Result<(Pose, nalgebra::Vector3<f64>, ImuBias), Box<dyn std::error::Error>> {
         let pose = {
-            let pose: Isometry3<f64> = self.values.get_pose3(&Symbol::new(b'x', state_key)).unwrap().into();
-            Pose::new_from_isometry(pose)
+            let pose: IsometryMatrix3<f64> = self.values.get_pose3(&Symbol::new(b'x', state_key)).unwrap().into();
+            Pose::new_from_isometry_matrix(pose)
         };
         let velocity = {
             let velocity: GTSAMVector3 = self.values.get_vector3(&Symbol::new(b'v', state_key)).unwrap().into();

@@ -5,13 +5,13 @@ use gtsam::{imu::imu_bias::ConstantBias, inference::symbol::Symbol, navigation::
 use log::{debug, error, info, warn};
 use nalgebra::{UnitQuaternion, Vector3};
 use std::{cmp::max, collections::VecDeque, sync::atomic::Ordering, thread::sleep, time::Duration};
-use opencv::{core::{Point, Point2f, Scalar, CV_8U}, imgcodecs, imgproc::circle, prelude::*, types::{VectorOfKeyPoint, VectorOfPoint2f, VectorOff32, VectorOfu8}};
+use opencv::{core::{CV_8U, CV_32F, Point, Point2f, Scalar}, imgcodecs, imgproc::circle, prelude::*, types::{VectorOfKeyPoint, VectorOfPoint2f, VectorOff32, VectorOfu8}};
 use core::{
     config::*, matrix::*, system::{Actor, MessageBox, System, Timestamp}
 };
 use std::fmt::Debug;
 use num_traits::Pow;
-use crate::{ImuInitializationData, actors::messages::ImuInitializationMsg, map::pose::{DVRotation, DVTranslation}, modules::{imu::{ImuBias, ImuCalib, PreintegrationGTSAM}, opengv_translation_only_sac::{CentralRelativeAdapter, Ransac, TranslationOnlySacProblem}}, registered_actors::IMU};
+use crate::{ImuInitializationData, actors::messages::ImuInitializationMsg, map::{features::Features, pose::{DVRotation, DVTranslation}}, modules::{imu::{ImuBias, ImuCalib, PreintegrationGTSAM}, opengv_translation_only_sac::{CentralRelativeAdapter, Ransac, TranslationOnlySacProblem}}, registered_actors::IMU};
 
 use crate::{
     actors::{local_mapping::LOCAL_MAPPING_IDLE, messages::{FeatureTracksAndIMUMsg, ImageMsg, ImagePathMsg, InitKeyFrameMsg, ShutdownMsg, TrajectoryMsg, VisFeaturesMsg}}, map::{frame::Frame, pose::Pose, read_only_lock::ReadWriteMap}, modules::{image::{self, draw_optical_flow}, imu::{ImuMeasurements, IMU}, map_initialization::MapInitialization, module_definitions::{FeatureExtractionModule, MapInitializationModule}}, registered_actors::{new_feature_extraction_module, CAMERA_MODULE, LOCAL_MAPPING, SHUTDOWN_ACTOR, TRACKING_BACKEND, TRACKING_FRONTEND, VISUALIZER}
@@ -121,7 +121,7 @@ impl TrackingFrontendGTSAM {
             match self.state {
                 GtsamFrontendTrackingState::FirstFrame => {
                     // For first frame, save initialization data
-                    println!("SOFIYA INITIALIZATION, publish first frame at timestamp {}", timestamp);
+                    // debug!("SOFIYA INITIALIZATION, publish first frame at timestamp {}", timestamp);
                     self.initialization_data = imu_initialization;
                     self.state = GtsamFrontendTrackingState::NotInitialized;
                 },
@@ -146,7 +146,7 @@ impl TrackingFrontendGTSAM {
 
                     self.preintegration.initialize(ImuBias::new());
 
-                    println!("SOFIYA INITIALIZATION, publish initial frame at timestamp {}", timestamp);
+                    // debug!("SOFIYA INITIALIZATION, publish initial frame at timestamp {}", timestamp);
                     self.publish_frame(None, self.initialization_data.clone());
                 },
                 GtsamFrontendTrackingState::Ok | GtsamFrontendTrackingState::LowDisparity | GtsamFrontendTrackingState::FewMatches | GtsamFrontendTrackingState::Invalid => {
@@ -206,14 +206,42 @@ impl TrackingFrontendGTSAM {
             .expect("message! without a running Client")
             .message("Publish frame!", 2);
 
-        debug!("Publish frame");
+        // // Draw optical flow for debugging
+        // if self.last_frame.image.is_some() {
+        //     draw_optical_flow(
+        //         self.last_keyframe.image.as_ref().unwrap(),
+        //         self.current_frame.image.as_ref().unwrap(),
+        //         & self.tracked_features_last_keyframe.get_points_as_vector_of_point2f(),
+        //         & self.tracked_features.get_points_as_vector_of_point2f(),
+        //         &format!("results/flow/front{}_before.png", self.curr_frame_id),
+        //     ).unwrap();
+        // }
 
         if let Some(rot) = kf_r_ref_frame {
             let (state, tracking_pose) = self.geometric_outlier_rejection(rot);
             self.state = state;
-            println!("AFTER OUTLIER REJECTION, STATE IS {:?}", self.state);
         }
         self.extract_new_features().expect("Couldn't extract good features to track?");
+
+        // Undistort keypoints
+        if let Some(dist_coef) = &CAMERA_MODULE.dist_coef {
+            self.tracked_features.undistorted_points = Features::undistort_points(&&self.tracked_features.get_points_as_vector_of_point2f(), dist_coef).expect("Could not undistort points");
+        };
+
+        // Draw optical flow for debugging
+        // if self.last_frame.image.is_some() {
+        //     draw_optical_flow(
+        //         self.last_keyframe.image.as_ref().unwrap(),
+        //         self.current_frame.image.as_ref().unwrap(),
+        //         & self.tracked_features_last_keyframe.get_points_as_vector_of_point2f(),
+        //         & self.tracked_features.get_points_as_vector_of_point2f(),
+        //         &format!("results/flow/front{}_after.png", self.curr_frame_id),
+        //     ).unwrap();
+        //     println!("TRACKING FRONTEND! PRIOR: {:?}", self.tracked_features_last_keyframe);
+        //     println!("TRACKING FRONTEND! CURRENT: {:?}", self.tracked_features);
+
+        // }
+
 
         // SEND TO BACKEND!
         self.system.send(TRACKING_BACKEND, Box::new(FeatureTracksAndIMUMsg {
@@ -228,25 +256,12 @@ impl TrackingFrontendGTSAM {
         self.removed_features.clear();
         self.tracked_features_last_keyframe = self.tracked_features.clone();
 
-        // Draw optical flow for debugging
-        // if self.last_frame.image.is_some() {
-            // draw_optical_flow(
-            //     self.last_frame.image.as_ref().unwrap(),
-            //     self.current_frame.image.as_ref().unwrap(),
-            //     & self.tracked_features_last_frame.get_points_as_vector_of_point2f(),
-            //     & self.tracked_features.get_points_as_vector_of_point2f(),
-            //     &format!("results/flow/front{}.png", self.curr_frame_id),
-            // ).unwrap();
-            // debug!("Frontend, tracked features last: {:?}", self.tracked_features_last_frame);
-            // debug!("Frontend, tracked features now: {:?}", self.tracked_features);
-        // }
-
         // Reset preintegration to result of latest optimization
         let latest_imu_bias = {
             let map = self.map.read().unwrap();
             if map.last_kf_id != -1 {
                 let last_kf = map.get_keyframe(map.last_kf_id);
-                println!("RESET PREINTEGRATION! LAST KF IS {}, BIAS IS: {:?}", last_kf.id, last_kf.imu_data.imu_bias);
+                // debug!("RESET PREINTEGRATION! LAST KF IS {}, BIAS IS: {:?}", last_kf.id, last_kf.imu_data.imu_bias);
                 last_kf.imu_data.imu_bias.clone()
             } else {
                 // NO KFs yet, set to default
@@ -306,7 +321,7 @@ impl TrackingFrontendGTSAM {
                 let bearing_vector = self.get_bearing_vector(&pt);
                 self.tracked_features.update(index_in_mutated, pt, bearing_vector);
 
-                // println!("{:?}, {:?}", pt, bearing_vector);
+                // debug!("TRACKED LANDMARKS... {}:{:?} (reference point is: {:?}) (optical flow)", index_in_mutated, pt, self.tracked_features_last_frame.get_point(index_in_mutated));
                 total_tracked += 1;
             }
         }
@@ -327,9 +342,6 @@ impl TrackingFrontendGTSAM {
         //    Frame* ref_frame, Frame* cur_frame, const gtsam::Pose3& cam_lkf_Pose_cam_kf)
 
         let cam_lkf_pose_cam_kf = Pose::new_with_default_trans(*rotation);
-
-        // println!("Current keypoints: {:?}", self.tracked_features);
-        // println!("Last keyframe keypoints: {:?}", self.tracked_features_last_keyframe);
 
         // Sofiya... think I don't have to do this because of the way I keep track of features
         // let matches_ref_cur = {
@@ -386,7 +398,7 @@ impl TrackingFrontendGTSAM {
             if matches!(state, GtsamFrontendTrackingState::Ok) {
                 // Check enough disparity.
                 if let Some(disparity) = self.compute_median_disparity(&self.tracked_features_last_keyframe, &self.tracked_features) {
-                    println!("Disparity: {} / {}", disparity, SETTINGS.get::<f64>(TRACKING_FRONTEND, "disparity_threshold") as f32);
+                    // debug!("Disparity: {} / {}", disparity, SETTINGS.get::<f64>(TRACKING_FRONTEND, "disparity_threshold") as f32);
                     if disparity < SETTINGS.get::<f64>(TRACKING_FRONTEND, "disparity_threshold") as f32 {
                         info!("Low mono disparity.");
                         return (GtsamFrontendTrackingState::LowDisparity, pose);
@@ -464,8 +476,6 @@ impl TrackingFrontendGTSAM {
         let mut outlier_free_tracked_current = TrackedFeatures::default();
         let mut outlier_free_tracked_last_frame = TrackedFeatures::default();
 
-        println!("Before: Tracking frontend, tracked features length: {} {} {}", self.tracked_features.len(), self.tracked_features_last_keyframe.len(), self.tracked_features_last_frame.len());
-
         for inlier in inliers {
             outlier_free_tracked_last_kf.add_with_id(
                 self.tracked_features_last_keyframe.get_feature_id(*inlier),
@@ -537,9 +547,6 @@ impl TrackingFrontendGTSAM {
             //   gtsam::Pose3* best_pose,
             //   std::vector<int>* inliers)
 
-
-            println!("cam_lkf_pose_cam_kf: {:?}", cam_lkf_pose_cam_kf.get_rotation());
-
             // Setup adaptor
             let adapter = CentralRelativeAdapter::new(
                 f_ref,
@@ -586,7 +593,7 @@ impl TrackingFrontendGTSAM {
             }
         };
 
-        println!("RANSAC success? {}, inliers: {}", success, inliers.len());
+        // debug!("RANSAC success? {}, inliers: {}", success, inliers.len());
 
         if !success {
             status = GtsamFrontendTrackingState::Invalid;
@@ -635,7 +642,7 @@ impl TrackingFrontendGTSAM {
             return Ok(());
         }
 
-        println!("Feature detector, need {}, max features per frame: {}", num_features_to_find, SETTINGS.get::<i32>(TRACKING_FRONTEND, "gftt_max_features") );
+        // debug!("Feature detector, need {}, max features per frame: {}", num_features_to_find, SETTINGS.get::<i32>(TRACKING_FRONTEND, "gftt_max_features") );
 
         // Mask tracked features
         let mut keypoints = opencv::types::VectorOfKeyPoint::new();
@@ -661,7 +668,7 @@ impl TrackingFrontendGTSAM {
         // Raw feature detection
         self.gftt.detect(&image, &mut keypoints, &mut mask)?;
 
-        println!("Raw number of points detected: {}", keypoints.len());
+        // debug!("Raw number of points detected: {}", keypoints.len());
 
         // for kp in keypoints.iter() {
         //     println!("Extracted kp: {:?} {:?}", kp.pt(), kp.response());
@@ -836,7 +843,7 @@ impl TrackingFrontendGTSAM {
     }
 
     fn need_new_keyframe(&mut self) -> bool {
-        let kf_diff_ns = (self.current_frame.timestamp - self.last_kf_timestamp) * 1e9;
+        let kf_diff_ns = (self.current_frame.timestamp * 1e9) - (self.last_kf_timestamp * 1e9);
         let nr_valid_features = self.tracked_features.len(); //frame.getNrValidKeypoints();
 
         let min_time_elapsed = kf_diff_ns >= SETTINGS.get::<f64>(TRACKING_FRONTEND, "min_intra_keyframe_time_ns");
@@ -859,25 +866,10 @@ impl TrackingFrontendGTSAM {
         let max_disparity_reached = disparity > SETTINGS.get::<f64>(TRACKING_FRONTEND, "max_disparity_since_lkf") as f32;
         let disparity_flipped = (enough_disparity || disparity_low_first_time) && min_time_elapsed;
 
-        // println!("Max time elapsed: {}, {}", kf_diff_ns, SETTINGS.get::<f64>(TRACKING_FRONTEND, "max_intra_keyframe_time_ns"));
-        // println!("Max disparity reached: {}, {}", disparity, SETTINGS.get::<f64>(TRACKING_FRONTEND, "max_disparity_since_lkf"));
-        // println!("Disparity flipped: {}, {}", enough_disparity, disparity_low_first_time);
-        // println!("Nr features low: {}, {}", nr_valid_features, SETTINGS.get::<i32>(TRACKING_FRONTEND, "min_num_features"));
-
-        // println!("Disparity flipped: {} {} {} {} {}", enough_disparity,disparity_low_first_time, min_time_elapsed, kf_diff_ns, SETTINGS.get::<f64>(TRACKING_FRONTEND, "min_intra_keyframe_time_ns"));
-        // println!(
-        //     "Need new KF? Max time elapsed: {}, max disparity reached: {}, disparity flipped: {}, nr features low: {}",
-        //     max_time_elapsed, max_disparity_reached, disparity_flipped, nr_features_low
-        // );
-
-        // println!("SOFIYA! Min intra keyframe time: {}", SETTINGS.get::<f64>(TRACKING_FRONTEND, "min_intra_keyframe_time_ns"));
-        // println!("SOFIYA! Max intra keyframe time: {}", SETTINGS.get::<f64>(TRACKING_FRONTEND, "max_intra_keyframe_time_ns"));
-        // println!("SOFIYA! Min num features: {}", SETTINGS.get::<i32>(TRACKING_FRONTEND, "min_num_features"));
-        // println!("SOFIYA! Disparity threshold: {}", SETTINGS.get::<f64>(TRACKING_FRONTEND, "disparity_threshold"));
-        // println!("SOFIYA! MAX disparity since lkf: {}", SETTINGS.get::<f64>(TRACKING_FRONTEND, "max_disparity_since_lkf"));
-
-        // println!("Timestamps: {} {}", self.current_frame.timestamp, self.last_kf_timestamp);
-
+        // debug!("Disparity: {} {} {}", enough_disparity, disparity_low_first_time, min_time_elapsed);
+        // debug!("Min time elapsed: {} {}", kf_diff_ns, SETTINGS.get::<f64>(TRACKING_FRONTEND, "min_intra_keyframe_time_ns"));
+        // debug!("Current kf timestamp: {}, last kf timestamp: {}", self.current_frame.timestamp, self.last_kf_timestamp);
+        // debug!("Current timestamp: {}, Need new kf? {} {} {} {}", self.current_frame.timestamp, max_time_elapsed, max_disparity_reached, disparity_flipped, nr_features_low);
         return max_time_elapsed || max_disparity_reached || disparity_flipped || nr_features_low;
 
     }
@@ -899,15 +891,17 @@ pub enum GtsamFrontendTrackingState {
 
 #[derive(Clone)]
 pub struct TrackedFeatures {
-    points: Vec<Point2f>,
-    feature_ids: Vec<i32>,
-    last_feature_id: i32,
-    versors: Vec<DVVector3<f64>>
+    pub points: Vec<Point2f>,
+    pub undistorted_points: Vec<Point2f>,
+    pub feature_ids: Vec<i32>,
+    pub last_feature_id: i32,
+    pub versors: Vec<DVVector3<f64>>
 }
 impl TrackedFeatures {
     pub fn default() -> Self {
         TrackedFeatures {
             points: vec![],
+            undistorted_points: vec![],
             feature_ids: vec![],
             last_feature_id: 0,
             versors: vec![],
@@ -941,6 +935,10 @@ impl TrackedFeatures {
 
     pub fn get_point(&self, index: usize) -> Point2f {
         self.points[index]
+    }
+
+    pub fn get_undistorted_point(&self, index: usize) -> Point2f {
+        self.undistorted_points[index]
     }
 
     pub fn get_bearing_vector(&self, index: usize) -> DVVector3<f64> {
