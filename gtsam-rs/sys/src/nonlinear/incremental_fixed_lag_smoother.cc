@@ -5,12 +5,6 @@
 
 namespace gtsam
 {
-    extern int foobar;
-
-    void get_foobar(void) {
-        std::cout << "Hello from foobar! " << foobar << std::endl;
-    }
-    
     using symbol_shorthand::X;
 
     std::unique_ptr<IncrementalFixedLagSmoother> new_incremental_fixed_lag_smoother(
@@ -43,19 +37,18 @@ namespace gtsam
         IncrementalFixedLagSmoother &smoother,
         const gtsam::NonlinearFactorGraph& new_factors,
         const gtsam::Values& new_values,
-        const rust::Vec<DoubleVec> & timestamps,
+        const double cur_id,
+        // const rust::Vec<DoubleVec> & timestamps,
         const rust::Vec<unsigned long int>&  delete_slots
     ) {
         std::map<Key, double> timestamps_gtsam;
-        for (int i = 0; i < timestamps.size(); i++)
-        {
-            rust::Vec<double> row = timestamps[i].vec;
-            timestamps_gtsam[row[0]] = row[1];
+        for (const auto& key_value : new_values) {
+            timestamps_gtsam[key_value.key] = cur_id;
         }
 
+        // Sofiya uncomment this for further debuggin
         // std::cout << "Before update, smoother has: ";
         // smoother.getLinearizationPoint().print();
-
         // std::cout << "Initial values: ";
         // new_values.print();
         // std::cout << std::endl << "Graph: ";
@@ -68,24 +61,27 @@ namespace gtsam
             delete_slots_gtsam.push_back(delete_slots[i]);
         }
 
-        std::cout << "iSAM2 update with " << new_factors.size() << " new factors "
-           << ", " << new_values.size() << " new values "
-           << ", and " << delete_slots.size() << " deleted factors.";
+        // Sofiya uncomment this for further debuggin
+        // std::cout << "iSAM2 update with " << new_factors.size() << " new factors "
+        //    << ", " << new_values.size() << " new values "
+        //    << ", and " << delete_slots.size() << " deleted factors.";
+
+        // Sofiya uncomment this for further debuggin
+        // std::cout << std::endl << "Delete slots: " ;
+        // for (const auto& slot : delete_slots_gtsam) {
+        //     std::cout << slot << ", ";
+        // }
 
         smoother.update(new_factors, new_values, timestamps_gtsam, delete_slots_gtsam);
         ISAM2Result result = smoother.getISAM2Result();
 
+        // Sofiya uncomment this for further debuggin
         // std::cout << "After update, isam2 has: ";
-        // isam2.getLinearizationPoint().print();
+        // smoother.getLinearizationPoint().print();
 
-        // std::cout << "GET FACTORS! ";
-        // smoother.getFactorsUnsafe().print();
-
-        // std::cout << "New factor indices: ";
         rust::Vec<std::uint64_t> new_factor_indices;
         for (const auto& value : result.newFactorsIndices) {
             new_factor_indices.push_back(value);
-        //     std::cout << value << ", ";
         }
         std::cout << std::endl;
 
@@ -100,12 +96,19 @@ namespace gtsam
         return rust_result;
     }
 
-    std::unique_ptr<Values> calculate_estimate(const IncrementalFixedLagSmoother &smoother) {
+    std::unique_ptr<Values> calculate_estimate_smoother(const IncrementalFixedLagSmoother &smoother) {
         Values estimate = smoother.calculateEstimate();
     //     std::cout << "SOFIYA! VALUES ALL: ";
     //     estimate.print();
 
         return std::make_unique<Values>(estimate);
+    }
+
+    bool slot_exists_in_smoother(
+        const IncrementalFixedLagSmoother &smoother,
+        const size_t slot)
+    {
+        return smoother.getFactors().exists(slot);
     }
 
     // rust::Vec<DoubleVec> get_marginal_covariance(

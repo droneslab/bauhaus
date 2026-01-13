@@ -135,7 +135,7 @@ impl Repository {
             .define("GTSAM_POSE3_EXPMAP", true.to_bool())
             .define("GTSAM_ROT3_EXPMAP", true.to_bool())
             .define("GTSAM_SUPPORT_NESTED_DISSECTION", true.to_bool())
-            .define("GTSAM_TANGENT_PREINTEGRATION", true.to_bool())
+            .define("GTSAM_TANGENT_PREINTEGRATION", false.to_bool())
             .define("GTSAM_THROW_CHEIRALITY_EXCEPTI", true.to_bool())
             .define("GTSAM_UNSTABLE_BUILD_PYTHON", false.to_bool())
             .define("GTSAM_UNSTABLE_INSTALL_MATLAB_TOOLBOX", false.to_bool())

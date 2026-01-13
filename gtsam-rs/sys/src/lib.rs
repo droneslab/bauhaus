@@ -80,12 +80,17 @@ pub mod ffi {
         include!("geometry/point2.h");
 
         type Point2;
+        type StereoPoint2;
 
         fn default_point2() -> UniquePtr<Point2>;
 
         fn new_point2(x: f64, y: f64) -> UniquePtr<Point2>;
-    }
 
+        fn default_stereopoint2() -> UniquePtr<StereoPoint2>;
+
+        fn new_stereopoint2(u_l: f64, u_r: f64, v: f64) -> UniquePtr<StereoPoint2>;
+        fn new_stereopoint2_nour(u_l: f64, v: f64) -> UniquePtr<StereoPoint2>; // Option not a supported type for cxx :(
+    }
 
     unsafe extern "C++" {
         include!("geometry/pose3.h");
@@ -117,9 +122,15 @@ pub mod ffi {
         include!("geometry/cal3_s2.h");
 
         type Cal3_S2;
+        type Cal3_S2Stereo;
 
         fn default_cal3_s2() -> SharedPtr<Cal3_S2>;
         fn new_cal3_s2(fx: f64, fy: f64, s: f64, u0: f64, v0: f64) -> SharedPtr<Cal3_S2>;
+
+        fn new_cal3_s2_stereo(
+            fx: f64, fy: f64, s: f64, u0: f64, v0: f64, b: f64
+        ) -> SharedPtr<Cal3_S2Stereo>;
+
     } 
 
     #[namespace = "gtsam::imuBias"]
@@ -303,10 +314,17 @@ pub mod ffi {
             smoother: Pin<&mut IncrementalFixedLagSmoother>,
             new_factors: &NonlinearFactorGraph,
             new_values: &Values,
-            timestamps: &Vec<DoubleVec>,
+            cur_id: f64,
+            // timestamps: &Vec<DoubleVec>,
             delete_slots: &Vec<u64>
         ) -> ISAM2ResultRust;
 
+        fn calculate_estimate_smoother(smoother: &IncrementalFixedLagSmoother) -> UniquePtr<Values>;
+
+        fn slot_exists_in_smoother(
+            smoother: &IncrementalFixedLagSmoother,
+            slot: usize
+        ) -> bool;
     }
 
     unsafe extern "C++" {
@@ -357,6 +375,12 @@ pub mod ffi {
             graph: Pin<&mut NonlinearFactorGraph>,
             factor: &SharedPtr<SmartProjectionPoseFactorCal3_S2>,
         );
+
+        fn nonlinear_factor_graph_add_smart_stereo_projection_pose_factor(
+            graph: Pin<&mut NonlinearFactorGraph>,
+            factor: &SharedPtr<SmartStereoProjectionPoseFactor>,
+        );
+
 
         fn nonlinear_factor_graph_add_generic_projection_pose_factor(
             graph: Pin<&mut NonlinearFactorGraph>,
@@ -466,7 +490,7 @@ pub mod ffi {
             bias: &ConstantBias,
         );
 
-        fn create_fake_copy_of_preintegrated_measurements(preintegrated_measurements : &PreintegratedCombinedMeasurements)->FakePreintegratedCombinedMeasurements;
+        // fn create_fake_copy_of_preintegrated_measurements(preintegrated_measurements : &PreintegratedCombinedMeasurements)->FakePreintegratedCombinedMeasurements;
     }
 
     unsafe extern "C++" {
@@ -483,6 +507,7 @@ pub mod ffi {
         include!("slam/projection_factor.h");
 
         type SmartProjectionPoseFactorCal3_S2;
+        type SmartStereoProjectionPoseFactor;
         type GenericProjectionFactorPose3Point3Cal3_S2;
 
         fn new_smart_projection_pose_factor(
@@ -495,6 +520,28 @@ pub mod ffi {
             old_factor: &SharedPtr<SmartProjectionPoseFactorCal3_S2>
         ) -> SharedPtr<SmartProjectionPoseFactorCal3_S2>;
 
+        fn add_smart(
+            smartfactor: &mut SharedPtr<SmartProjectionPoseFactorCal3_S2>,
+            point: &Point2,
+            key: u64
+        );
+
+        fn new_smart_stereo_projection_pose_factor(
+            measurement_noise: &SharedPtr<BaseNoiseModel>,
+            sensor_p_body: &Pose3,
+        ) -> SharedPtr<SmartStereoProjectionPoseFactor>;
+
+        fn add_smartstereo(
+            smartfactor: &mut SharedPtr<SmartStereoProjectionPoseFactor>,
+            point: &StereoPoint2,
+            key: u64,
+            k: &SharedPtr<Cal3_S2Stereo>,
+        );
+
+        fn clone_smart_stereo_projection_pose_factor(
+            old_factor: &SharedPtr<SmartStereoProjectionPoseFactor>
+        ) -> SharedPtr<SmartStereoProjectionPoseFactor>;
+
         fn new_generic_projection_factor(
             point: &Point2,
             measurement_noise: &SharedPtr<IsotropicNoiseModel>,
@@ -504,10 +551,5 @@ pub mod ffi {
             sensor_p_body: &Pose3,
         ) -> SharedPtr<GenericProjectionFactorPose3Point3Cal3_S2>;
 
-        fn add(
-            smartfactor: &mut SharedPtr<SmartProjectionPoseFactorCal3_S2>,
-            point: &Point2,
-            key: u64
-        );
     }
 }

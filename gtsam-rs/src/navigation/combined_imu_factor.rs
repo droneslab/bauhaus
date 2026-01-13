@@ -101,10 +101,10 @@ impl PreintegratedCombinedMeasurements {
         ::sys::reset_integration_and_set_bias(self.inner.pin_mut(), &bias.inner)
     }
 
-    pub fn create_fake_copy_of_preintegrated_measurements(&self) -> FakePreintegratedCombinedMeasurements
-    {
-        ::sys::create_fake_copy_of_preintegrated_measurements(&self.inner)
-    }
+    // pub fn create_fake_copy_of_preintegrated_measurements(&self) -> FakePreintegratedCombinedMeasurements
+    // {
+    //     ::sys::create_fake_copy_of_preintegrated_measurements(&self.inner)
+    // }
 }
 unsafe impl Send for PreintegratedCombinedMeasurements {}
 

@@ -12,4 +12,11 @@ namespace gtsam
         return std::make_shared<Cal3_S2>(fx, fy, s, u0, v0);
     }
 
+    std::shared_ptr<Cal3_S2Stereo> new_cal3_s2_stereo(
+        double fx, double fy, double s, double u0, double v0, double b
+    ) {
+        return std::make_shared<Cal3_S2Stereo>(fx, fy, s, u0, v0, b);
+    }
+
+
 } // namespace gtsam

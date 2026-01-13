@@ -61,7 +61,7 @@ namespace gtsam
         PreintegratedCombinedMeasurements &preintegrated_measurements,
         const imuBias::ConstantBias &bias);
 
-    FakePreintegratedCombinedMeasurements create_fake_copy_of_preintegrated_measurements(
-        const PreintegratedCombinedMeasurements &preintegrated_measurements);
+    // FakePreintegratedCombinedMeasurements create_fake_copy_of_preintegrated_measurements(
+    //     const PreintegratedCombinedMeasurements &preintegrated_measurements);
 
 }

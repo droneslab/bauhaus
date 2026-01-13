@@ -45,7 +45,8 @@ impl IncrementalFixedLagSmoother {
         &mut self,
         new_factors: &NonlinearFactorGraph,
         new_values: &Values,
-        timestamps: & Vec<DoubleVec>,
+        // timestamps: & Vec<DoubleVec>,
+        cur_id: f64,
         delete_slots: &Vec<u64>
         // new_affected_keys: & Vec<DoubleVec>,
         // keys_to_remove: & Vec<u64>,
@@ -54,18 +55,26 @@ impl IncrementalFixedLagSmoother {
             self.inner.pin_mut(),
             &new_factors.inner,
             &new_values.inner,
-            &timestamps,
+            cur_id,
+            // &timestamps,
             &delete_slots
         )
     }
 
-//     // pub fn calculate_estimate(
-//     //     &self,
-//     // ) -> Values {
-//     //     Values {
-//     //         inner: ::sys::calculate_estimate(& self.inner),
-//     //     }
-//     // }
+    pub fn calculate_estimate(
+        &self,
+    ) -> Values {
+        Values {
+            inner: ::sys::calculate_estimate_smoother(& self.inner),
+        }
+    }
+
+    pub fn slot_exists_in_smoother(
+        &self,
+        slot: usize,
+    ) -> bool {
+        ::sys::slot_exists_in_smoother(& self.inner, slot)
+    }
 
 //     // pub fn get_marginal_covariance(
 //     //     &self,

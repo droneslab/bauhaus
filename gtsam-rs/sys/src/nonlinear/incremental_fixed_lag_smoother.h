@@ -22,11 +22,16 @@ namespace gtsam {
         IncrementalFixedLagSmoother &smoother,
         const gtsam::NonlinearFactorGraph& new_factors,
         const gtsam::Values& new_values,
-        const rust::Vec<DoubleVec> & timestamps,
+        // const rust::Vec<DoubleVec> & timestamps,
+        const double cur_id,
         const rust::Vec<unsigned long int>&  delete_slots
     );
 
-    std::unique_ptr<Values> calculate_estimate(const IncrementalFixedLagSmoother &smoother);
+    std::unique_ptr<Values> calculate_estimate_smoother(const IncrementalFixedLagSmoother &smoother);
+
+    bool slot_exists_in_smoother(
+        const IncrementalFixedLagSmoother &smoother,
+        const size_t slot);
 
 
     // rust::Vec<DoubleVec> get_marginal_covariance(const ISAM2 &isam2, const Key key);

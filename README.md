@@ -144,7 +144,7 @@ RUSTFLAGS="-Z sanitizer=address" cargo run --target x86_64-unknown-linux-gnu [DA
 Run with valgrind and save output to `log.txt`:
 ```bash
 cargo build # Either debug or release build works
-valgrind target/debug/bindarvis  [DATASET] config.yaml > log.txt 2>&1
+valgrind target/debug/bindarvis  [~/datasets/euroc/MH_01_easy/ config_systems/gtsam_config.yaml config_datasets/EUROC.yaml euroc] > log.txt 2>&1 #Values in [] are typical inputs to bauhaus
 ```
 
 ### Check for deadlocks

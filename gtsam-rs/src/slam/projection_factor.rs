@@ -1,6 +1,6 @@
 use cxx::SharedPtr;
 
-use crate::{geometry::{cal3_s2::Cal3S2, point2::Point2, pose3::Pose3}, inference::key::IntoKey, linear::noise_model::IsotropicNoiseModel};
+use crate::{geometry::{cal3_s2::{Cal3S2, Cal3S2Stereo}, point2::{Point2, StereoPoint2}, pose3::Pose3}, inference::key::IntoKey, linear::noise_model::IsotropicNoiseModel};
 
 pub struct SmartProjectionPoseFactorCal3S2 {
     pub(crate) inner: SharedPtr<::sys::SmartProjectionPoseFactorCal3_S2>,
@@ -32,7 +32,7 @@ impl SmartProjectionPoseFactorCal3S2 {
         point: &Point2,
         key: impl IntoKey
     ) {
-        ::sys::add(
+        ::sys::add_smart(
             &mut self.inner,
             &point.inner,
             key.into_key(),
@@ -40,38 +40,43 @@ impl SmartProjectionPoseFactorCal3S2 {
     }
 }
 
+pub struct SmartStereoProjectionPoseFactor {
+    pub(crate) inner: SharedPtr<::sys::SmartStereoProjectionPoseFactor>,
+}
 
-// pub struct SmartProjectionFactorCal3S2 {
-//     pub(crate) inner: SharedPtr<::sys::SmartProjectionFactorCal3S2>,
-// }
+impl SmartStereoProjectionPoseFactor {
+    pub fn new(
+        measurement_noise: &IsotropicNoiseModel,
+        sensor_p_body: &Pose3,
+    ) -> Self {
+        Self {
+            inner: ::sys::new_smart_stereo_projection_pose_factor(
+                &measurement_noise.to_base_model().inner,
+                &sensor_p_body.inner,
+            ),
+        }
+    }
 
-// impl SmartProjectionFactorCal3S2 {
-//     pub fn new(
-//         measurement_noise: &IsotropicNoiseModel,
-//         k: &Cal3S2,
-//         sensor_p_body: &Pose3,
-//     ) -> Self {
-//         Self {
-//             inner: ::sys::new_smart_projection_pose_factor(
-//                 &measurement_noise.inner,
-//                 &k.inner,
-//                 &sensor_p_body.inner,
-//             ),
-//         }
-//     }
+    pub fn copy(&self) -> Self {
+        Self {
+            inner: ::sys::clone_smart_stereo_projection_pose_factor(&self.inner)
+        }
+    }
 
-//     pub fn add(
-//         self: &mut Self,
-//         point: &Point2,
-//         key: impl IntoKey
-//     ) {
-//         ::sys::add(
-//             &mut self.inner,
-//             &point.inner,
-//             key.into_key(),
-//         )
-//     }
-// }
+    pub fn add(
+        self: &mut Self,
+        point: &StereoPoint2,
+        key: impl IntoKey,
+        k: &Cal3S2Stereo,
+    ) {
+        ::sys::add_smartstereo(
+            &mut self.inner,
+            &point.inner,
+            key.into_key(),
+            &k.inner,
+        )
+    }
+}
 
 
 
