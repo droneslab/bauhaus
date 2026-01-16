@@ -178,11 +178,13 @@ impl TrackingFrontendGTSAM {
                 }
             };
 
-            self.system.send(VISUALIZER, Box::new(VisFeaturesMsg {
-                keypoints: DVVectorOfKeyPoint::empty(),
-                image,
-                timestamp,
-            }));
+            if self.system.actors.get(VISUALIZER).is_some() {
+                self.system.send(VISUALIZER, Box::new(VisFeaturesMsg {
+                    keypoints: DVVectorOfKeyPoint::empty(),
+                    image,
+                    timestamp,
+                }));
+            }
 
             // BOOKKEEPING TO SET LAST_FRAME = CURRENT_FRAME
             // Swap current and last frame to avoid cloning current frame into last frame
@@ -261,7 +263,6 @@ impl TrackingFrontendGTSAM {
             let map = self.map.read().unwrap();
             if map.last_kf_id != -1 {
                 let last_kf = map.get_keyframe(map.last_kf_id);
-                // debug!("RESET PREINTEGRATION! LAST KF IS {}, BIAS IS: {:?}", last_kf.id, last_kf.imu_data.imu_bias);
                 last_kf.imu_data.imu_bias.clone()
             } else {
                 // NO KFs yet, set to default
@@ -302,7 +303,6 @@ impl TrackingFrontendGTSAM {
         let mut total_tracked = 0;
 
         // TODO KIMERA: Delete features if they are older than the opticalflow_maxfeatureage: https://github.com/MIT-SPARK/Kimera-VIO/blob/ce8c59b7b273ab5ac29db7e5572e1623760e19c7/src/frontend/Tracker.cpp#L174C23-L174C30
-        // println!("Optical flow...");
         for i in 0..status.len() {
             let index_in_mutated = i - index_correction;
             let pt = points2.get(i)?;
@@ -327,7 +327,6 @@ impl TrackingFrontendGTSAM {
         }
 
         debug!("Optical flow tracked {} from original {}", total_tracked, status.len());
-        // debug!("Removed: {:?}", self.removed_features);
         Ok(())
     }
 
@@ -398,7 +397,6 @@ impl TrackingFrontendGTSAM {
             if matches!(state, GtsamFrontendTrackingState::Ok) {
                 // Check enough disparity.
                 if let Some(disparity) = self.compute_median_disparity(&self.tracked_features_last_keyframe, &self.tracked_features) {
-                    // debug!("Disparity: {} / {}", disparity, SETTINGS.get::<f64>(TRACKING_FRONTEND, "disparity_threshold") as f32);
                     if disparity < SETTINGS.get::<f64>(TRACKING_FRONTEND, "disparity_threshold") as f32 {
                         info!("Low mono disparity.");
                         return (GtsamFrontendTrackingState::LowDisparity, pose);
@@ -420,21 +418,13 @@ impl TrackingFrontendGTSAM {
         //                          Frame* cur_frame,
         //                          KeypointMatches* matches_ref_cur)
 
-
-        // println!("Inliers: {:?}", inliers);
-        // println!("Matches ref cur size: {}", self.tracked_features_last_keyframe.len());
-
         // Find indices of outliers in current frame.
         let outliers: Vec<usize> = {
             // void Tracker::findOutliers(const KeypointMatches& matches_ref_cur,
             //                std::vector<int> inliers,
             //                std::vector<int>* outliers)
 
-            // Get outlier indices from inlier indices.
-            // std::sort(inliers.begin(), inliers.end(), std::less<size_t>());
-
             let mut outliers = vec![];
-                // outliers->reserve(matches_ref_cur.size() - inliers.size());
 
             // The following is a complicated way of computing a set difference
             let mut k = 0;
@@ -450,26 +440,10 @@ impl TrackingFrontendGTSAM {
                 }
             }
             outliers
-
-                // for (size_t i = 0u; i < matches_ref_cur.size(); ++i) {
-                //     if (k < inliers.size()                    // If we haven't exhaused inliers
-                //         && static_cast<int>(i) > inliers[k])  // If we are after the inlier[k]
-                //     ++k;                                    // Check the next inlier
-                //     if (k >= inliers.size() ||
-                //         static_cast<int>(i) != inliers[k])  // If i is not an inlier
-                //     outliers->push_back(i);
-                // }
-                // }
         };
 
         // Remove outliers.
-        // outliers cannot be a vector of size_t because opengv uses a vector of
-        // int.
-            // for out in outliers {
-            //         // const auto& ref_kp_cur_kp = (*matches_ref_cur)[out];
-            //         // ref_frame->landmarks_.at(ref_kp_cur_kp.first) = -1;
-            //         // cur_frame->landmarks_.at(ref_kp_cur_kp.second) = -1;
-            // }
+        // outliers cannot be a vector of size_t because opengv uses a vector of int.
 
         // Store only inliers from now on.
         let mut outlier_free_tracked_last_kf = TrackedFeatures::default();
@@ -496,13 +470,6 @@ impl TrackingFrontendGTSAM {
         self.tracked_features_last_keyframe.rewrite(outlier_free_tracked_last_kf);
         self.tracked_features.rewrite(outlier_free_tracked_current);
         self.tracked_features_last_frame.rewrite(outlier_free_tracked_last_frame);
-
-        // KeypointMatches outlier_free_matches_ref_cur;
-            // outlier_free_matches_ref_cur.reserve(inliers.size());
-            // for (const size_t& in : inliers) {
-            //     outlier_free_matches_ref_cur.push_back((*matches_ref_cur)[in]);
-            // }
-            // *matches_ref_cur = outlier_free_matches_ref_cur;
     }
 
     fn geometric_outlier_rejection_inner(
@@ -532,10 +499,6 @@ impl TrackingFrontendGTSAM {
             f_cur.push(*cur_bearing);
         }
 
-        // println!("Ransac.... ref bearings: {}, cur bearings: {}", f_ref.len(), f_cur.len());
-        // println!("Ransac... ref bearings: {:?}", f_ref);
-        // println!("Ransac... cur bearings: {:?}", f_cur);
-
         // Solve problem.
         let (success, inliers, mut best_pose) = {
             // Begin bool runRansac(
@@ -554,12 +517,6 @@ impl TrackingFrontendGTSAM {
                 cam_lkf_pose_cam_kf.get_rotation(), 
                 cam_lkf_pose_cam_kf.get_translation()
             );
-                // Adapter2d2d adapter(f_ref, f_cur);
-                // if (tracker_params_.ransac_use_2point_mono_) {
-                //     adapter.setR12(cam_lkf_Pose_cam_kf.rotation().matrix());
-                //     adapter.sett12(cam_lkf_Pose_cam_kf.translation().matrix());
-                // }
-
 
             // Create ransac
             let max_iterations = SETTINGS.get::<i32>(TRACKING_FRONTEND, "ransac_max_iterations") as usize;
@@ -592,8 +549,6 @@ impl TrackingFrontendGTSAM {
                 (false, vec![], Pose::default())
             }
         };
-
-        // debug!("RANSAC success? {}, inliers: {}", success, inliers.len());
 
         if !success {
             status = GtsamFrontendTrackingState::Invalid;
@@ -642,8 +597,6 @@ impl TrackingFrontendGTSAM {
             return Ok(());
         }
 
-        // debug!("Feature detector, need {}, max features per frame: {}", num_features_to_find, SETTINGS.get::<i32>(TRACKING_FRONTEND, "gftt_max_features") );
-
         // Mask tracked features
         let mut keypoints = opencv::types::VectorOfKeyPoint::new();
         let image = self.current_frame.image.as_ref().unwrap();
@@ -668,12 +621,6 @@ impl TrackingFrontendGTSAM {
         // Raw feature detection
         self.gftt.detect(&image, &mut keypoints, &mut mask)?;
 
-        // debug!("Raw number of points detected: {}", keypoints.len());
-
-        // for kp in keypoints.iter() {
-        //     println!("Extracted kp: {:?} {:?}", kp.pt(), kp.response());
-        // }
-
         // Non-max suppression
         let max_keypoints = self.non_max_suppression(
             &keypoints,
@@ -683,10 +630,6 @@ impl TrackingFrontendGTSAM {
             SETTINGS.get::<i32>(TRACKING_FRONTEND, "nonmaxsuppression__nr_horizontal_bins"),
             SETTINGS.get::<i32>(TRACKING_FRONTEND, "nonmaxsuppression__nr_vertical_bins"),
         )?;
-
-        // for kp in max_keypoints.iter() {
-        //     println!("Nonmax: {:?}", kp.pt());
-        // }
 
         // Corner sub-pix
         let mut new_corners = opencv::types::VectorOfPoint2f::new();
@@ -714,7 +657,7 @@ impl TrackingFrontendGTSAM {
             self.tracked_features.add(Point2f::new(point.x, point.y), bearing_vector);
         }
 
-        debug!("Extracted {} new features", new_corners.len());
+        // debug!("Extracted {} new features", new_corners.len());
 
         Ok(())
     }
@@ -750,19 +693,6 @@ impl TrackingFrontendGTSAM {
     ) -> Result<opencv::types::VectorOfKeyPoint, Box<dyn std::error::Error>> {
         // Note... results here aren't the same as Kimera because somehow the response for every keypoint in kimera is 0, and then they sort by this... To get around the difference, just removed the sort in both for now.
         // Sorting keypoints by deacreasing order of strength
-        // let mut response_vector = vec![];
-        // for i in 0..keypoints.len() {
-        //     response_vector.push(keypoints.get(i)?.response());
-        //     println!("Response: {}", keypoints.get(i)?.response());
-        // }
-        // let mut indx: Vec<usize> = (0..response_vector.len()).collect(); // C++ std::iota
-        // indx.sort_by(|&a, &b| b.cmp(&a));
-
-        // let mut keypoints_sorted = vec![];
-        // for i in 0..keypoints.len() {
-        //     keypoints_sorted.push(keypoints.get(indx[i] as usize));
-        //     println!("Sorted keypoint: {:?}", keypoints.get(indx[i] as usize)?.pt());
-        // }
         let keypoints_sorted = keypoints;
 
         if need_n_corners as usize > keypoints.len() {
@@ -850,9 +780,6 @@ impl TrackingFrontendGTSAM {
         let max_time_elapsed = kf_diff_ns >= SETTINGS.get::<f64>(TRACKING_FRONTEND, "max_intra_keyframe_time_ns");
         let nr_features_low = nr_valid_features as i32 <= SETTINGS.get::<i32>(TRACKING_FRONTEND, "min_num_features");
 
-        // KeypointMatches matches_ref_cur;
-        // tracker_->findMatchingKeypoints(frame_lkf, frame, &matches_ref_cur);
-
         // check for large enough disparity
         let disparity = self.compute_median_disparity(
             &self.tracked_features_last_keyframe,
@@ -866,12 +793,7 @@ impl TrackingFrontendGTSAM {
         let max_disparity_reached = disparity > SETTINGS.get::<f64>(TRACKING_FRONTEND, "max_disparity_since_lkf") as f32;
         let disparity_flipped = (enough_disparity || disparity_low_first_time) && min_time_elapsed;
 
-        // debug!("Disparity: {} {} {}", enough_disparity, disparity_low_first_time, min_time_elapsed);
-        // debug!("Min time elapsed: {} {}", kf_diff_ns, SETTINGS.get::<f64>(TRACKING_FRONTEND, "min_intra_keyframe_time_ns"));
-        // debug!("Current kf timestamp: {}, last kf timestamp: {}", self.current_frame.timestamp, self.last_kf_timestamp);
-        // debug!("Current timestamp: {}, Need new kf? {} {} {} {}", self.current_frame.timestamp, max_time_elapsed, max_disparity_reached, disparity_flipped, nr_features_low);
         return max_time_elapsed || max_disparity_reached || disparity_flipped || nr_features_low;
-
     }
 
 }

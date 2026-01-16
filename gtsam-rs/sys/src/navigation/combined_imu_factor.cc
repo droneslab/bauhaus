@@ -156,7 +156,7 @@ namespace gtsam
         PreintegratedCombinedMeasurements &preintegrated_measurements,
         const imuBias::ConstantBias &bias)
     {
-        std::cout << "C++ reset integration and set bias: " << bias << std::endl;
+        // std::cout << "C++ reset integration and set bias: " << bias << std::endl;
         preintegrated_measurements.resetIntegrationAndSetBias(bias);
     }
 

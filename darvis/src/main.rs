@@ -306,10 +306,14 @@ impl LoopManager {
         }
         let first_timestamp_in_camera = camera_timestamps[0];
 
-        while imu_data.timestamps[index] < first_timestamp_in_camera {
+        println!("First timestamp in camera: {}", first_timestamp_in_camera);
+
+
+        while imu_data.timestamps[index] <= first_timestamp_in_camera {
             index += 1;
         }
         imu_data.first_imu_idx = index - 1;
+        println!("First imu index: {}", imu_data.first_imu_idx);
 
         // KIMERA
         let gt_file = File::open(gt_filename).unwrap();
@@ -478,7 +482,7 @@ impl Iterator for LoopManager {
                 imu_initialization = Some(data);
             } else {
                 debug!("Can't find timestamp! {}", timestamp);
-                debug!("Hashmap: {:?}", imu.initialization);
+                // debug!("Hashmap: {:?}", imu.initialization);
             }
         };
 

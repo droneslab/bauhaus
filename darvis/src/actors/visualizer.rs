@@ -310,7 +310,7 @@ impl DarvisVisualizer {
             // SHUTDOWN
             // Sleep a little to allow other threads to finish
             sleep(Duration::from_millis(100));
-            warn!("Closing mcap file");
+            warn!("Closing mcap file/stream.");
             self.writer.finish().expect("Could not close file");
             return Ok(true);
         } else {

@@ -20,11 +20,6 @@ pub struct TrackingBackendGTSAM {
 
     last_timestamp: Timestamp,
 
-    // This is just for drawing optical flow
-    // temp_tracked_features_last_kf: TrackedFeatures,
-    // last_image: Option<Mat>,
-    // curr_frame_id: i32,
-
     // Modules 
     graph_solver: GraphSolver,
 
@@ -48,9 +43,6 @@ impl Actor for TrackingBackendGTSAM {
             trajectory_poses: Vec::new(),
             last_timestamp: 0.0,
             kf_count: 0,
-            // last_image: None,
-            // curr_frame_id: 0,
-            // temp_tracked_features_last_kf: TrackedFeatures::default(),
         };
         tracy_client::set_thread_name!("tracking backend gtsam");
 
@@ -123,18 +115,10 @@ impl TrackingBackendGTSAM {
 
             self.kf_count = 0;
 
-
-            // This is just for drawing optical flow
-            // self.temp_tracked_features_last_kf = msg.feature_tracks.clone();
-            // self.last_image = current_frame.image.clone();
-            // println!("TRACKING BACKEND! PRIOR (not drawing first frame): {:?}", self.temp_tracked_features_last_kf);
-
-
             current_frame
         } else {
             // If we have previous frames already, can track normally
             let mut current_frame = msg.frame;
-            // println!("Current timestamp: {}", current_frame.timestamp);
 
             // Solve VIO graph
             // Option to batch update instead of update each time. Not sure this works correctly
@@ -143,35 +127,6 @@ impl TrackingBackendGTSAM {
                 Optimizer::IncrementalFixedLagSmoother {..} => true,
                 Optimizer::LevenbergMarquadt { } => true,
             };
-
-
-            // This is just for drawing optical flow
-            // if self.temp_tracked_features_last_kf.points.len() != 0 {
-            //     println!("TRACKING BACKEND! PRIOR: {:?}", self.temp_tracked_features_last_kf);
-            //     println!("TRACKING BACKEND! CURRENT: {:?}", msg.feature_tracks);
-            //     let mut new_temp = TrackedFeatures::default();
-
-            //     for index in 0..self.temp_tracked_features_last_kf.len() {
-            //         let id = self.temp_tracked_features_last_kf.feature_ids[index];
-            //         let point = self.temp_tracked_features_last_kf.points[index];
-            //         let versors = self.temp_tracked_features_last_kf.versors[index];
-            //         if msg.feature_tracks.feature_ids.contains(&id) {
-            //             new_temp.add_with_id(
-            //                 id, point, versors
-            //             );
-            //         }
-            //     }
-
-            //     draw_optical_flow(
-            //         self.last_image.as_ref().unwrap(),
-            //         current_frame.image.as_ref().unwrap(),
-            //         & new_temp.get_points_as_vector_of_point2f(),
-            //         & msg.feature_tracks.get_points_as_vector_of_point2f(),
-            //         &format!("results/flow/backend{}.png", current_frame.frame_id),
-            //     ).unwrap();
-            // }
-            // self.temp_tracked_features_last_kf = msg.feature_tracks.clone();
-            // self.last_image = current_frame.image.clone();
 
             let optimization_results = self.graph_solver.solve(
                 msg.tracker_status,
@@ -270,9 +225,8 @@ pub struct GraphSolver {
     pub curr_id: u64, // Current state ID
     last_timestamp: Timestamp,
 
-    // Managing smart factors
-    // smartfactors: HashMap<i32, (gtsam::slam::projection_factor::SmartProjectionPoseFactorCal3S2, bool, i32)>, // Smartfactor lookup. feature ID -> (smart factor object, whether it is in the graph or not, number of observations)
-    feature_tracks: HashMap<i32, FeatureTrack>, // Smartfactor lookup
+    // Smartfactor lookup
+    feature_tracks: HashMap<i32, FeatureTrack>,
 
     // Initialization
     accel_noise_density: f64, // accelerometer_noise_density, sigma_a
@@ -373,11 +327,11 @@ impl GraphSolver {
     }
 
     pub fn initialize(&mut self, timestamp: f64, imu_init: &ImuInitializationData) -> Result<(), Box<dyn std::error::Error>> {
-        println!("... Initial timestamp: {}", timestamp);
-        println!("... Initial pose: {:?}", imu_init.pose);
-        println!("... Initial pose rotation matrix: {:?}", imu_init.pose.get_rotation());
-        println!("... Initial velocity: {:?}", imu_init.velocity);
-        println!("... Initial bias: {:?}", imu_init.bias);
+        // println!("... Initial timestamp: {}", timestamp);
+        // println!("... Initial pose: {:?}", imu_init.pose);
+        // println!("... Initial pose rotation matrix: {:?}", imu_init.pose.get_rotation());
+        // println!("... Initial velocity: {:?}", imu_init.velocity);
+        // println!("... Initial bias: {:?}", imu_init.bias);
 
         self.add_initial_state(imu_init.pose, imu_init.velocity, imu_init.bias, true)?;
 
@@ -507,7 +461,7 @@ impl GraphSolver {
         feature_tracks: & TrackedFeatures,
         should_update: bool, // Batch update instead of optimizing each time. Doesn't work well though.
     ) -> Result<Vec<(u64, Pose, nalgebra::Vector3<f64>, ImuBias)>, Box<dyn std::error::Error>> {
-        // let _span = tracy_client::span!("solve");
+        let _span = tracy_client::span!("solve_graph_backend");
 
         let timestamp = (current_frame.timestamp * 1e9) as i64; // Convert to int just so we can hash it
 
@@ -612,13 +566,11 @@ impl GraphSolver {
                             velocity
                         );
                         current_frame.imu_data.set_new_bias(bias);
-                        debug!("State after optimization: \n {}; \n {:?}; \n {:?}; \n {:?}", timestamp, pose, velocity, current_frame.imu_data.imu_bias);
-                        // debug!("STATE KEY: {}, {}.", self.curr_id, timestamp);
+                        // debug!("State after optimization: \n {}; \n {:?}; \n {:?}; \n {:?}", timestamp, pose, velocity, current_frame.imu_data.imu_bias);
                     } else {
                         optimization_results.push(
                             (*state_key, ImuCalib::new().tcb * pose.inverse(), velocity, bias)
                         );
-                        // debug!("OPTIMIZED POSE ESTIMATE... STATE {}; {:?}; {:?}; {:?}", state_key, pose, velocity, bias);
                     }
                 }
             },
@@ -630,7 +582,6 @@ impl GraphSolver {
                     velocity
                 );
                 current_frame.imu_data.set_new_bias(bias);
-                debug!("OPTIMIZED POSE ESTIMATE... {}; {:?}; {:?}; {:?}", timestamp, pose, velocity, current_frame.imu_data.imu_bias);
             }
         }
 
@@ -719,10 +670,7 @@ impl GraphSolver {
                         // Add current observation to the factor
                         feature_track.update(point, self.curr_id, &self.k_stereo);
 
-                        // debug!("TRACKED LANDMARKS... {}: {:?} (backend)", feature_id, point);
-
                         if feature_track.observations.len() >= 2 {
-                            // debug!("(new) Inserting smartfactor {}", feature_id);
                             // If we have enough observations of the landmark, add to graph
                             self.graph_new.add_smartstereofactor(&feature_track.smart_factor);
                             feature_track.is_in_graph = true;
@@ -750,8 +698,6 @@ impl GraphSolver {
 
                                     // Add current observation to the factor
                                     feature_track.update(point, self.curr_id, &self.k_stereo);
-
-                                    // debug!("(existing) Inserting smartfactor {} which is at slot {}", feature_id, feature_track.slot);
 
                                     // Add new factor to graph
                                     self.graph_new.add_smartstereofactor(&feature_track.smart_factor);
@@ -888,7 +834,6 @@ impl GraphSolver {
 
                 self.values_all.update(smoother.calculate_estimate());
 
-
                 // BOOKKEEPING: updates the SlotIdx in the smart_factors such that
                 // this idx points to the updated slots in the graph after optimization.
                 // for next iteration to know which slots have to be deleted
@@ -904,7 +849,6 @@ impl GraphSolver {
                     if let Some(feature) = self.feature_tracks.get_mut(&smartfactor_id_here) {
                         feature.slot = smartfactor_id_in_isam2 as i64;
                         feature.is_in_graph = true;
-                        // debug!("Smartfactor ID {} is at ISAM2 index {}", smartfactor_id_here, smartfactor_id_in_isam2);
                     };
                 }
 
@@ -979,7 +923,7 @@ struct FeatureTrack {
 }
 impl FeatureTrack {
     fn new(
-        smart_factor: SmartStereoProjectionPoseFactor, //SmartProjectionPoseFactorCal3S2,
+        smart_factor: SmartStereoProjectionPoseFactor,
         observation: ((f64, f64), u64),
     ) -> Self {
         Self {
