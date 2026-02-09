@@ -12,10 +12,9 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use super::{frame::Frame, keyframe_database::KeyFrameDatabase, pose::Pose};
 
 pub type Id = i32;
+pub type MapItems<T> = BTreeMap<Id, T>;
 // pub type MapItems<T> = HashMap<Id, T>;
 // pub type MapItems<T> = HashMap<Id, T, BuildHasherDefault<SeaHasher>>; // faster performance with seahasher
-// FxHashMap
-pub type MapItems<T> = BTreeMap<Id, T>;
 
 #[derive(Debug, Clone)]
 pub struct Map {
@@ -123,13 +122,13 @@ impl Map {
     pub fn num_keyframes(&self) -> usize {
         self.keyframes.len()
     }
-    pub fn get_keyframes_iter(&self) -> std::collections::btree_map::Iter<Id, KeyFrame> {
+    pub fn get_keyframes_iter(&'_ self) -> std::collections::btree_map::Iter<'_, Id, KeyFrame> {
         self.keyframes.iter()
     }
-    pub fn get_keyframe_keys(&self) -> std::collections::btree_map::Keys<Id, KeyFrame> {
+    pub fn get_keyframe_keys(&'_ self) -> std::collections::btree_map::Keys<'_, Id, KeyFrame> {
         self.keyframes.keys()
     }
-    pub fn get_keyframes_iter_mut(&mut self) -> std::collections::btree_map::IterMut<Id, KeyFrame> {
+    pub fn get_keyframes_iter_mut(&'_ mut self) -> std::collections::btree_map::IterMut<'_, Id, KeyFrame> {
         self.keyframes.iter_mut()
     }
 

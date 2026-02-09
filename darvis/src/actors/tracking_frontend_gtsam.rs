@@ -1,20 +1,16 @@
 extern crate g2o;
-use ahash::{HashMap, HashMapExt};
-// use arrsac::Arrsac;
-use gtsam::{imu::imu_bias::ConstantBias, inference::symbol::Symbol, navigation::combined_imu_factor::{PreintegratedCombinedMeasurements, PreintegrationCombinedParams}, sys::Rot3};
 use log::{debug, error, info, warn};
-use nalgebra::{UnitQuaternion, Vector3};
-use std::{cmp::max, collections::VecDeque, sync::atomic::Ordering, thread::sleep, time::Duration};
-use opencv::{core::{CV_8U, CV_32F, Point, Point2f, Scalar}, imgcodecs, imgproc::circle, prelude::*, types::{VectorOfKeyPoint, VectorOfPoint2f, VectorOff32, VectorOfu8}};
+use nalgebra::Vector3;
+use std::{cmp::max, thread::sleep, time::Duration};
+use opencv::{core::{CV_8U, Point, Point2f, Scalar}, imgcodecs, imgproc::circle, prelude::*, types::{VectorOfPoint2f, VectorOff32, VectorOfu8}};
 use core::{
     config::*, matrix::*, system::{Actor, MessageBox, System, Timestamp}
 };
 use std::fmt::Debug;
-use num_traits::Pow;
-use crate::{ImuInitializationData, actors::messages::ImuInitializationMsg, map::{features::Features, pose::{DVRotation, DVTranslation}}, modules::{imu::{ImuBias, ImuCalib, PreintegrationGTSAM}, opengv_translation_only_sac::{CentralRelativeAdapter, Ransac, TranslationOnlySacProblem}}, registered_actors::IMU};
+use crate::{ImuInitializationData, map::{features::Features, pose::DVRotation}, modules::{imu::{ImuBias, ImuCalib, PreintegrationGTSAM}, opengv_translation_only_sac::{CentralRelativeAdapter, Ransac, TranslationOnlySacProblem}}};
 
 use crate::{
-    actors::{local_mapping::LOCAL_MAPPING_IDLE, messages::{FeatureTracksAndIMUMsg, ImageMsg, ImagePathMsg, InitKeyFrameMsg, ShutdownMsg, TrajectoryMsg, VisFeaturesMsg}}, map::{frame::Frame, pose::Pose, read_only_lock::ReadWriteMap}, modules::{image::{self, draw_optical_flow}, imu::{ImuMeasurements, IMU}, map_initialization::MapInitialization, module_definitions::{FeatureExtractionModule, MapInitializationModule}}, registered_actors::{new_feature_extraction_module, CAMERA_MODULE, LOCAL_MAPPING, SHUTDOWN_ACTOR, TRACKING_BACKEND, TRACKING_FRONTEND, VISUALIZER}
+    actors::{messages::{FeatureTracksAndIMUMsg, ImageMsg, ImagePathMsg, ShutdownMsg, VisFeaturesMsg}}, map::{frame::Frame, pose::Pose, read_only_lock::ReadWriteMap}, modules::{image::{self}, module_definitions::FeatureExtractionModule}, registered_actors::{new_feature_extraction_module, CAMERA_MODULE, TRACKING_BACKEND, TRACKING_FRONTEND, VISUALIZER}
 };
 
 
@@ -28,9 +24,6 @@ pub struct TrackingFrontendGTSAM {
     /// Feature extractors
     orb_extractor_left: Box<dyn FeatureExtractionModule>,
     gftt: opencv::core::Ptr<opencv::features2d::GFTTDetector>,
-
-    // IMU
-    imu_measurements_since_last_kf: ImuMeasurements,
 
     // Feature IDs
     tracked_features_last_frame: TrackedFeatures,
@@ -75,7 +68,6 @@ impl Actor for TrackingFrontendGTSAM {
             last_frame: Frame::new_no_features(-1, None, 0.0, None).expect("Should be able to make dummy frame"),
             current_frame: Frame::new_no_features(-1, None, 0.0, None).expect("Should be able to make dummy frame"),
             curr_frame_id: 0,
-            imu_measurements_since_last_kf: ImuMeasurements::new(),
             frames_since_last_kf: 0,
             removed_features: vec![],
             last_kf_timestamp: 0.0,
@@ -108,7 +100,7 @@ impl TrackingFrontendGTSAM {
                 return false;
             }
 
-            let (image, image_color, timestamp, mut imu_measurements, imu_initialization) = if message.is::<ImagePathMsg>() {
+            let (image, _image_color, timestamp, mut imu_measurements, imu_initialization) = if message.is::<ImagePathMsg>() {
                 let msg = message.downcast::<ImagePathMsg>().unwrap_or_else(|_| panic!("Could not downcast tracking message!"));
                 (image::read_image_file(&msg.image_path, imgcodecs::IMREAD_GRAYSCALE), None, msg.timestamp, msg.imu_measurements, msg.imu_initialization)
             } else {
@@ -220,30 +212,15 @@ impl TrackingFrontendGTSAM {
         // }
 
         if let Some(rot) = kf_r_ref_frame {
-            let (state, tracking_pose) = self.geometric_outlier_rejection(rot);
+            let (state, _tracking_pose) = self.geometric_outlier_rejection(rot);
             self.state = state;
         }
-        self.extract_new_features_orb().expect("Couldn't extract good features to track?");
+        self.extract_new_features().expect("Couldn't extract good features to track?");
 
         // Undistort keypoints
         if let Some(dist_coef) = &CAMERA_MODULE.dist_coef {
             self.tracked_features.undistorted_points = Features::undistort_points(&&self.tracked_features.get_points_as_vector_of_point2f(), dist_coef).expect("Could not undistort points");
         };
-
-        // Draw optical flow for debugging
-        // if self.last_frame.image.is_some() {
-        //     draw_optical_flow(
-        //         self.last_keyframe.image.as_ref().unwrap(),
-        //         self.current_frame.image.as_ref().unwrap(),
-        //         & self.tracked_features_last_keyframe.get_points_as_vector_of_point2f(),
-        //         & self.tracked_features.get_points_as_vector_of_point2f(),
-        //         &format!("results/flow/front{}_after.png", self.curr_frame_id),
-        //     ).unwrap();
-        //     println!("TRACKING FRONTEND! PRIOR: {:?}", self.tracked_features_last_keyframe);
-        //     println!("TRACKING FRONTEND! CURRENT: {:?}", self.tracked_features);
-
-        // }
-
 
         // SEND TO BACKEND!
         self.system.send(TRACKING_BACKEND, Box::new(FeatureTracksAndIMUMsg {
@@ -321,7 +298,6 @@ impl TrackingFrontendGTSAM {
                 let bearing_vector = self.get_bearing_vector(&pt);
                 self.tracked_features.update(index_in_mutated, pt, bearing_vector);
 
-                // debug!("TRACKED LANDMARKS... {}:{:?} (reference point is: {:?}) (optical flow)", index_in_mutated, pt, self.tracked_features_last_frame.get_point(index_in_mutated));
                 total_tracked += 1;
             }
         }
@@ -419,7 +395,7 @@ impl TrackingFrontendGTSAM {
         //                          KeypointMatches* matches_ref_cur)
 
         // Find indices of outliers in current frame.
-        let outliers: Vec<usize> = {
+        let _outliers: Vec<usize> = {  // Sofiya todo why is this not used?
             // void Tracker::findOutliers(const KeypointMatches& matches_ref_cur,
             //                std::vector<int> inliers,
             //                std::vector<int>* outliers)
@@ -657,13 +633,11 @@ impl TrackingFrontendGTSAM {
             self.tracked_features.add(Point2f::new(point.x, point.y), bearing_vector);
         }
 
-        // debug!("Extracted {} new features", new_corners.len());
-
         Ok(())
     }
 
 
-    fn extract_new_features_orb(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    fn _extract_new_features_orb(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         let _span = tracy_client::span!("extract features");
 
         let num_features_to_find = max(SETTINGS.get::<i32>(TRACKING_FRONTEND, "gftt_max_features") - self.tracked_features.points.len() as i32, 0);
@@ -692,10 +666,8 @@ impl TrackingFrontendGTSAM {
             ).unwrap();
         }
 
-        let (keypoints, descriptors) = self.orb_extractor_left.extract(&image, Some(mask)).unwrap();
-
         // Raw feature detection
-        // self.gftt.detect(&image, &mut keypoints, &mut mask)?;
+        let (keypoints, _descriptors) = self.orb_extractor_left.extract(&image, Some(mask)).unwrap();
 
         // Non-max suppression
         let max_keypoints = self.non_max_suppression(
@@ -733,11 +705,8 @@ impl TrackingFrontendGTSAM {
             self.tracked_features.add(Point2f::new(point.x, point.y), bearing_vector);
         }
 
-        // debug!("Extracted {} new features", new_corners.len());
-
         Ok(())
     }
-
 
 
     fn get_bearing_vector(&self, px: & Point2f) -> DVVector3<f64> {
@@ -807,7 +776,7 @@ impl TrackingFrontendGTSAM {
         Ok(binned_keypoints)
     }
 
-    fn calculate_transform(&self, new_tracked_features: & TrackedFeatures) 
+    fn _calculate_transform(&self, new_tracked_features: & TrackedFeatures) 
         -> Result<Pose, Box<dyn std::error::Error>> 
     {
         let _span = tracy_client::span!("calculate_transform");
@@ -886,7 +855,6 @@ pub enum GtsamFrontendTrackingState {
     LowDisparity,
     Invalid,
     FewMatches,
-    // Disabled
 }
 
 #[derive(Clone)]

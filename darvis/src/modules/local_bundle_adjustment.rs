@@ -56,12 +56,6 @@ impl LocalMapOptimizationModule for LocalBundleAdjustment {
         let mut edges_kf_body = Vec::<Id>::new(); // vpEdgeKFBody
         let mut kf_vertex_ids = HashMap::new();
 
-        // This is for debugging, can delete later
-        let mut mps_to_optimize = 0;
-        let mut fixed_kfs = 0;
-        let mut kfs_to_optimize = 0;
-        let mut edges = 0;
-
         {
             // Construct factor graph with read lock, but don't have to have lock to optimize.
             let lock = map.read()?;
@@ -152,11 +146,6 @@ impl LocalMapOptimizationModule for LocalBundleAdjustment {
                 if kf.id > max_kf_id {
                     max_kf_id = kf.id;
                 }
-                if set_fixed {
-                    fixed_kfs += 1;
-                } else {
-                    kfs_to_optimize += 1;
-                }
                 // KF could have been deleted during optimization, ok to ignore
             }
 
@@ -170,7 +159,6 @@ impl LocalMapOptimizationModule for LocalBundleAdjustment {
                 if kf.id > max_kf_id {
                     max_kf_id = kf.id;
                 }
-                fixed_kfs += 1;
                 // KF could have been deleted during optimization, ok to ignore
             }
 
@@ -187,7 +175,6 @@ impl LocalMapOptimizationModule for LocalBundleAdjustment {
                     true,
                 );
                 mp_vertex_ids.insert(*mp_id, vertex_id);
-                mps_to_optimize += 1;
 
                 // Set edges
                 for (kf_id, (left_index, _right_index)) in mp.get_observations() {
@@ -292,7 +279,6 @@ impl LocalMapOptimizationModule for LocalBundleAdjustment {
                                         INV_LEVEL_SIGMA2[kp_un.octave() as usize],
                                         th_huber_mono,
                                     );
-                                edges += 1;
                                 edges_kf_body.push(kf.id);
                             }
                         }
@@ -431,10 +417,6 @@ pub fn local_inertial_ba(
 
     // let _span = tracy_client::span!("local_bundle_adjustment (inertial)");
 
-    // Map* pCurrentMap = pKF->GetMap(); // TODO (multi-maps) should use keyframe's map instead of general map
-
-    // let _span_construct = tracy_client::span!("local_bundle_adjustment:construct_factor_graph (inertial)");
-
     let mut max_opt = 10;
     let mut opt_it = 10;
     if large {
@@ -444,10 +426,10 @@ pub fn local_inertial_ba(
     let n_d = min(map.read()?.num_keyframes() as i32 - 2, max_opt);
     let max_kf_id = curr_kf_id;
 
-    let neighbor_kfs = map
-        .read()?
-        .get_keyframe(curr_kf_id)
-        .get_covisibility_keyframes(i32::MAX); // vpNeighsKFs
+    // let neighbor_kfs = map
+    //     .read()?
+    //     .get_keyframe(curr_kf_id)
+    //     .get_covisibility_keyframes(i32::MAX); // vpNeighsKFs
 
     let mut optimizable_kfs: VecDeque<Id> = VecDeque::new(); // vpOptimizableKFs
     optimizable_kfs.push_front(curr_kf_id);
@@ -535,7 +517,7 @@ pub fn local_inertial_ba(
         }
     }
 
-    let non_fixed = fixed_keyframes.len() == 0;
+    // let non_fixed = fixed_keyframes.len() == 0;
 
     // Setup optimizer
     // ... Note... pretty sure camera params aren't necessary for this optimization but throwing them in here anyway just in case

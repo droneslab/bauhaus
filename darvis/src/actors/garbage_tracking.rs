@@ -1,3 +1,5 @@
+// Note: This was just for debugging. Don't use this
+
 extern crate g2o;
 use crate::{
     actors::messages::{ImageMsg, ImagePathMsg, ShutdownMsg, VisFeaturesMsg, VisTrajectoryMsg},
@@ -41,7 +43,7 @@ impl Actor for GarbageTracking {
 impl GarbageTracking {
     fn handle_message(&mut self, message: MessageBox) -> bool {
         if message.is::<ImagePathMsg>() || message.is::<ImageMsg>() {
-            let (image, timestamp, mut imu_measurements, imu_initialization) =
+            let (image, timestamp, imu_measurements, imu_initialization) =
                 if message.is::<ImagePathMsg>() {
                     let msg = message
                         .downcast::<ImagePathMsg>()

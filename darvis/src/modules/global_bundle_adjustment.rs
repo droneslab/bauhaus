@@ -33,8 +33,6 @@ impl FullMapOptimizationModule for GlobalBundleAdjustment {
         robust: bool,
         loop_kf: Id,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        // stop_flag: Option<SharedPtr<bool>>
-        // let _span = tracy_client::span!("global_bundle_adjustment");
         // void Optimizer::GlobalBundleAdjustemnt(Map* pMap, int nIterations, bool* pbStopFlag, const unsigned long nLoopKF, const bool bRobust)
         let sensor: Sensor = SETTINGS.get(SYSTEM, "sensor");
         let fx = SETTINGS.get::<f64>(CAMERA, "fx");
@@ -44,9 +42,6 @@ impl FullMapOptimizationModule for GlobalBundleAdjustment {
         let camera_param = [fx, fy, cx, cy];
 
         let mut optimizer = g2o::ffi::new_sparse_optimizer(1, camera_param, 0.0);
-        // if enable_stop_flag {
-        //     optimizer.enable_stop_flag();
-        // }
 
         let (kf_vertex_ids, mp_vertex_ids) = {
             let lock = map.read()?;

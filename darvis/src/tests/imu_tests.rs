@@ -4225,16 +4225,12 @@ mod imutests {
         // // For debugging ... prints the .g2o file
         // optimizer.save("darvis.g2o\0",1);
 
-        let mut num_bad = 0;
-        let mut num_inliers = 0;
         for iteration in 0..4 {
             optimizer
                 .pin_mut()
                 .optimize(iterations[iteration], false, false);
             optimizer.print_optimized_vertex_pose(vp, VertexPoseRecoverType::Wb);
 
-            num_bad = 0;
-            num_inliers = 0;
 
             let chi2_close = 1.5 * chi2_mono[iteration];
 
@@ -4263,7 +4259,6 @@ mod imutests {
                     // frame.mappoint_matches.set_outlier(mp_idx as usize, true);
                     mappoint_matches[i].1 = true;
                     edge.inner.pin_mut().set_level(1);
-                    num_bad += 1;
                 } else {
                     // frame.mappoint_matches.set_outlier(mp_idx as usize, false);
                     mappoint_matches[i].1 = false;

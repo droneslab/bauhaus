@@ -214,7 +214,6 @@ impl Into<Sim3> for Pose {
 //* bindings with gtsam */
 impl From<Pose> for gtsam::geometry::pose3::Pose3 {
     fn from(pose: Pose) -> Self {
-        // println!("Converting Pose to gtsam::geometry::pose3::Pose3: {:?}", pose.get_rotation());
         gtsam::geometry::pose3::Pose3::from_parts(
             (*pose.get_translation()).into(),
             (*pose.get_quaternion()).into(),
@@ -482,7 +481,6 @@ pub fn group_exp(omega: &nalgebra::Vector3<f64>) -> nalgebra::UnitQuaternion<f64
     let theta;
 
     if theta_sq < EPSILON * EPSILON {
-        // theta = 0.0;
         let theta_po4 = theta_sq * theta_sq;
         imag_factor = 0.5 - 1.0 / 48.0 * theta_sq + 1.0 / 3840.0 * theta_po4;
         real_factor = 1.0 - 1.0 / 8.0 * theta_sq + 1.0 / 384.0 * theta_po4;

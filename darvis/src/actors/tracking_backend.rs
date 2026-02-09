@@ -1556,8 +1556,6 @@ impl TrackingBackend {
             let vwb1 = *last_kf.imu_data.velocity.unwrap();
             let t12 = last_kf.imu_data.imu_preintegrated.as_ref().unwrap().d_t;
 
-            let last_rot = last_frame.pose.unwrap().get_rotation();
-            let last_trans = last_frame.pose.unwrap().get_translation();
             let delta_rot = last_frame
                 .imu_data
                 .imu_preintegrated

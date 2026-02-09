@@ -1,4 +1,5 @@
-// Loop closing implementation from orbslam2, not sure if it works correctly
+// Loop closing implementation from orbslam2, not sure if it works correctly.
+// Use loop_closing.rs instead, that implements the loop closing procedure in orbslam3
 
 // use core::system::Actor;
 // use core::config::{SETTINGS, SYSTEM};

@@ -41,8 +41,7 @@ pub struct Frame {
     pub bow: Option<DVBoW>,
 
     // IMU //
-    // Imu preintegration from last keyframe
-    pub imu_data: ImuDataFrame,
+    pub imu_data: ImuDataFrame, // Imu preintegration from last keyframe
 
     sensor: Sensor,
     // Don't add these in!! read explanations below
@@ -127,22 +126,6 @@ impl Frame {
             VOCABULARY_MODULE
                 .transform(&self.features.descriptors, &mut self.bow.as_mut().unwrap());
         }
-    }
-
-    pub fn replace_features(
-        &mut self,
-        keypoints: DVVectorOfKeyPoint,
-        descriptors: DVMatrix,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        self.features = Features::new(
-            keypoints,
-            descriptors,
-            self.features.image_width,
-            self.features.image_height,
-            self.sensor,
-        )?;
-        self.mappoint_matches = MapPointMatches::new(self.features.num_keypoints as usize); // Mappoint match length needs to match keypoints length
-        Ok(())
     }
 
     pub fn _get_camera_center(&self) -> Option<DVTranslation> {

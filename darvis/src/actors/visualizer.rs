@@ -27,7 +27,7 @@ use crate::{
         pose::{DVRotation, DVTranslation, Pose},
         read_only_lock::ReadWriteMap,
     },
-    modules::{image, imu::ImuMeasurements},
+    modules::image,
     registered_actors::VISUALIZER,
 };
 use core::{
@@ -295,7 +295,7 @@ impl DarvisVisualizer {
             let msg = message
                 .downcast::<LoopClosureMapPointFusionMsg>()
                 .unwrap_or_else(|_| panic!("Could not downcast visualizer message!"));
-            self.update_loop_closure_mappoint_fusion(*msg).await?;
+            self.debug_update_loop_closure_mappoint_fusion(*msg).await?;
         } else if message.is::<LoopClosureGBAMsg>() {
             let msg = message
                 .downcast::<LoopClosureGBAMsg>()
@@ -304,8 +304,8 @@ impl DarvisVisualizer {
                 .await
                 .expect("Visualizer could not draw mappoints!");
         } else if message.is::<LoopClosureEssentialGraphMsg>() {
-            // let msg = message.downcast::<LoopClosureEssentialGraphMsg>().unwrap_or_else(|_| panic!("Could not downcast visualizer message!"));
-            // self.update_loop_closure_essential_graph(&mut writer,*msg).await;
+            let msg = message.downcast::<LoopClosureEssentialGraphMsg>().unwrap_or_else(|_| panic!("Could not downcast visualizer message!"));
+            self.debug_update_loop_closure_essential_graph(*msg).await?;
         } else if message.is::<ShutdownMsg>() {
             // SHUTDOWN
             // Sleep a little to allow other threads to finish
@@ -319,7 +319,7 @@ impl DarvisVisualizer {
         return Ok(false);
     }
 
-    async fn _update_loop_closure_essential_graph(
+    async fn debug_update_loop_closure_essential_graph(
         &mut self,
         msg: LoopClosureEssentialGraphMsg,
     ) -> Result<(), Box<dyn std::error::Error>> {
@@ -363,7 +363,7 @@ impl DarvisVisualizer {
         Ok(())
     }
 
-    async fn update_loop_closure_mappoint_fusion(
+    async fn debug_update_loop_closure_mappoint_fusion(
         &mut self,
         msg: LoopClosureMapPointFusionMsg,
     ) -> Result<(), Box<dyn std::error::Error>> {
@@ -917,7 +917,7 @@ impl DarvisVisualizer {
         Ok(())
     }
 
-    async fn draw_points(
+    async fn _draw_points(
         &mut self,
         points: &Vec<gtsam::sys::Point>,
         timestamp: Timestamp,
@@ -1210,7 +1210,7 @@ impl DarvisVisualizer {
         }
     }
 
-    fn create_frame_scene_entity_with_vector_rotation(
+    fn _create_frame_scene_entity_with_vector_rotation(
         &self,
         timestamp: Timestamp,
         frame_id: &str,
@@ -1345,7 +1345,7 @@ pub enum FoxGloveWriter {
         channels: HashMap<String, u16>,
     },
     Stream {
-        server: foxglove_ws::FoxgloveWebSocket,
+        _server: foxglove_ws::FoxgloveWebSocket,
         channels: HashMap<String, foxglove_ws::Channel>,
     },
 }
@@ -1396,7 +1396,7 @@ impl FoxGloveWriter {
 
             channels.insert(topic.to_string(), channel);
         }
-        Ok(FoxGloveWriter::Stream { server, channels })
+        Ok(FoxGloveWriter::Stream { _server: server, channels })
     }
 
     pub async fn write<T: prost::Message>(
@@ -1422,7 +1422,7 @@ impl FoxGloveWriter {
                 )?)
             }
             FoxGloveWriter::Stream {
-                server: _,
+                _server: _,
                 channels,
             } => {
                 let channel = channels.get(channel_name).expect("Could not find channel");
@@ -1440,7 +1440,7 @@ impl FoxGloveWriter {
                 channels: _,
             } => Ok(writer.finish()?),
             FoxGloveWriter::Stream {
-                server: _,
+                _server: _,
                 channels: _,
             } => Ok(()),
         }

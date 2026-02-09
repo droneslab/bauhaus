@@ -22,7 +22,7 @@ pub enum CameraType {
 
 #[derive(Debug, Clone, Default)]
 pub struct Camera {
-    pub camera_type: CameraType,
+    pub _camera_type: CameraType,
 
     // Three diff ways of representing K...
     pub k_matrix: DVMatrix,
@@ -33,7 +33,7 @@ pub struct Camera {
     pub cy: f64,
 
     // Constants
-    pub stereo_baseline_times_fx: f64, // mbf
+    pub _stereo_baseline_times_fx: f64, // mbf
     pub stereo_baseline: f64,          //mb
     pub th_depth: i32,                 //mThDepth
     pub dist_coef: Option<Vec<f32>>,   //mDistCoef
@@ -214,10 +214,10 @@ impl Camera {
         let stereo_baseline = stereo_baseline_times_fx / fx;
 
         Ok(Camera {
-            camera_type,
+            _camera_type: camera_type,
             k_matrix: DVMatrix::new(k),
             k_matrix_nalgebra,
-            stereo_baseline_times_fx,
+            _stereo_baseline_times_fx: stereo_baseline_times_fx,
             stereo_baseline,
             th_depth,
             dist_coef,

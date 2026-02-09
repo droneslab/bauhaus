@@ -319,7 +319,7 @@ impl MapInitialization {
         )))
     }
 
-    pub fn create_initial_map_stereo(
+    pub fn _create_initial_map_stereo(
         &mut self,
     ) -> Result<Option<(Pose, i32, i32, BTreeSet<Id>, Timestamp, f64)>, Box<dyn std::error::Error>>
     {

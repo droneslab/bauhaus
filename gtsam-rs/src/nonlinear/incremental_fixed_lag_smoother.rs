@@ -1,7 +1,6 @@
 use cxx::UniquePtr;
 
-use crate::{inference::key::IntoKey, nonlinear::{nonlinear_factor_graph::NonlinearFactorGraph, values::Values}};
-use crate::sys::DoubleVec;
+use crate::{nonlinear::{nonlinear_factor_graph::NonlinearFactorGraph, values::Values}};
 use crate::sys::ISAM2ResultRust;
 
 pub struct IncrementalFixedLagSmoother {

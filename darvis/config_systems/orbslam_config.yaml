@@ -25,7 +25,7 @@ system:
       keyframe_trajectory_file_name: "keyframe_trajectory.txt"
 
       # DEBUGGING
-      log_level: debug # options are [trace, debug, info, warn, error]
+      log_level: info # options are [trace, debug, info, warn, error]
       check_deadlocks: false # Spawns a new thread to check for deadlocks every 2 secs, but slows stuff down.
       # To enable profiling, set features = ["enable"] for tracy-client in Cargo.toml
       # To turn on visualizer, uncomment visualizer actor below

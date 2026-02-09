@@ -33,13 +33,11 @@ pub struct KeyFrame {
     pub origin_map_id: Id,                        // mnOriginMapId
     connections: ConnectedKeyFrames,              // Parent, children, neighbors
     pub(super) mappoint_matches: MapPointMatches, // mvpmappoints , mvbOutlier
-    pub ref_kf_id: Option<Id>,                    //mpReferenceKF
     pub parent: Option<Id>,
     pub children: HashSet<Id>,
     pub(super) loop_edges: HashSet<Id>, // mvpLoopEdges
     pub prev_kf_id: Option<Id>,         // mpPrevKF
     pub next_kf_id: Option<Id>,         // mpNextKF
-    // pub pose_relative_to_parent: Option<Pose>, // mTcp. Pose relative to parent (this is computed when KF is deleted)
 
     // Vision //
     pub features: Features, // KeyPoints, stereo coordinate and descriptors (all associated by an index)
@@ -63,10 +61,12 @@ pub struct KeyFrame {
     pub vwb_gba: Option<DVVector3<f64>>, // mVwbGBA
     pub vwb_bef_gba: Option<DVVector3<f64>>, // mVwbBefGBA
 
-                                         // DON'T SET THESE! Either never used, or moved into actor implementation
-                                         // mbCurrentPlaceRecognition
-                                         // // Variables used by loop closing
-                                         // pub mnBAGlobalForKF: u64,
+    // DON'T SET THESE! Either never used, or moved into actor implementation
+    // mbCurrentPlaceRecognition
+    // mpReferenceKF
+    // mTcp // Pose relative to parent (this is computed when KF is deleted)
+    // // Variables used by loop closing
+    // pub mnBAGlobalForKF: u64,
 }
 impl KeyFrame {
     pub fn new(frame: Frame, origin_map_id: Id, id: Id, map_imu_initialized: bool) -> Self {
@@ -93,7 +93,6 @@ impl KeyFrame {
             id,
             origin_map_id,
             connections: ConnectedKeyFrames::new(),
-            ref_kf_id: frame.ref_kf_id,
             sensor: SETTINGS.get::<Sensor>(SYSTEM, "sensor"),
             parent: None,
             children: HashSet::new(),
@@ -341,7 +340,7 @@ impl MapPointMatches {
         indices: (i32, i32),
     ) -> (Option<(Id, bool)>, Option<(Id, bool)>) {
         // Indices are (left, right). Right should be -1 for mono. Maybe we can rewrite this to make it more clear?
-        // TODO (mvp): removed the code that set's mappoint's last_frame_seen to the frame ID. Is that ok or does it need to be in here?
+        // TODO (mvp): removed the code that sets mappoint's last_frame_seen to the frame ID. Is that ok or does it need to be in here?
         let (mut first_mp_id, mut second_mp_id) = (None, None);
         if indices.0 != -1 {
             first_mp_id = self.matches[indices.0 as usize];

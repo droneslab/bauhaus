@@ -137,8 +137,8 @@ impl ImuModule for IMU {
         previous_frame: &mut Frame,
         last_keyframe_id: Id,
     ) -> bool {
-        // Sofiya: Tested!!
         // void Tracking::PreintegrateIMU()
+        // Sofiya: Tested!!
 
         // let _span = tracy_client::span!("IMU preintegration");
 
@@ -384,7 +384,6 @@ impl ImuModule for IMU {
                             .imu_bias
                             .clone(),
                         current_kf_id: current_keyframe_id,
-                        imu_initialized: false,
                         map_version: map.read()?.version,
                     }))
                     .unwrap();
@@ -397,7 +396,6 @@ impl ImuModule for IMU {
                         scale: 1.0,
                         imu_bias: first_kf.imu_data.imu_bias.clone(),
                         current_kf_id: current_keyframe_id,
-                        imu_initialized: false,
                         map_version: map.read()?.version,
                     }))
                     .unwrap();
@@ -1032,7 +1030,7 @@ impl Into<g2o::ffi::RustImuBias> for ImuBias {
 }
 
 pub struct IntegratedRotation {
-    pub delta_t: f64,          // deltaT // integration time
+    pub _delta_t: f64,          // deltaT // integration time
     pub delta_r: Matrix3<f64>, // deltaR
     pub right_j: Matrix3<f64>, // rightJ // right jacobian
 }
@@ -1050,13 +1048,13 @@ impl IntegratedRotation {
 
         if d < 1e-4 {
             Self {
-                delta_t: time,
+                _delta_t: time,
                 delta_r: Matrix3::identity() + w,
                 right_j: Matrix3::identity(),
             }
         } else {
             Self {
-                delta_t: time,
+                _delta_t: time,
                 delta_r: Matrix3::identity() + w * (d.sin() / d) + w * w * ((1.0 - d.cos()) / d2),
                 right_j: Matrix3::identity() - w * ((1.0 - d.cos()) / d2)
                     + w * w * ((d - d.sin()) / (d2 * d)),
@@ -1067,12 +1065,12 @@ impl IntegratedRotation {
 
 pub fn normalize_rotation(mat: Matrix3<f64>) -> DVMatrix3<f64> {
     // Eigen::Matrix3f NormalizeRotation(const Eigen::Matrix3f &R)
+
+    // Note: The commented code SHOULD produce the same result as the bindings (bindings call the same code in eigen)
+    // but for some reason it doesn't, so we'll just call C++.
+
     // let svd = SVD::new(mat, true, true);
     // Some(svd.u? * svd.v_t?.transpose())
-
-    // I know this is gross but I'm just trying to get it done
-    // The above code SHOULD produce the same result as below (bindings to C++ calling the same code in eigen)
-    // but for some reason it doesn't, so we'll just call C++.
 
     let res = dvos3binding::ffi::normalize_rotation(mat.into());
     res.into()
@@ -1232,7 +1230,7 @@ impl PreintegrationGTSAM {
         }
     }
 
-    pub fn preintegrate_orbslam(&mut self, imu_measurements: &mut ImuMeasurements, current_timestamp: Timestamp, last_timestamp: Timestamp) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn _preintegrate_orbslam(&mut self, imu_measurements: &mut ImuMeasurements, current_timestamp: Timestamp, last_timestamp: Timestamp) -> Result<(), Box<dyn std::error::Error>> {
         // From ORBSLAM:
         let mut imu_from_last_frame = VecDeque::with_capacity(imu_measurements.len()); // mvImuFromLastFrame
         let imu_per = 0.001;
@@ -1272,12 +1270,10 @@ impl PreintegrationGTSAM {
                     (imu_from_last_frame[i + 1].ang_vel - imu_from_last_frame[i].ang_vel) * (tini/tab)
                 ) * 0.5;
                 tstep = imu_from_last_frame[i + 1].timestamp - last_timestamp;
-                // println!("#1, current timestamp: {}, last timestamp: {}", imu_from_last_frame[i + 1].timestamp, last_timestamp);
             } else if i < (n - 1) {
                 acc = (imu_from_last_frame[i].acc + imu_from_last_frame[i + 1].acc) * 0.5;
                 ang_vel = (imu_from_last_frame[i].ang_vel + imu_from_last_frame[i + 1].ang_vel) * 0.5;
                 tstep = imu_from_last_frame[i + 1].timestamp - imu_from_last_frame[i].timestamp;
-                // println!("#2, current timestamp: {}, last timestamp: {}", imu_from_last_frame[i + 1].timestamp, imu_from_last_frame[i].timestamp);
             } else if i > 0 && i == (n - 1) {
                 let tab = imu_from_last_frame[i + 1].timestamp - imu_from_last_frame[i].timestamp;
                 let tend = imu_from_last_frame[i + 1].timestamp - current_timestamp;
@@ -1290,12 +1286,10 @@ impl PreintegrationGTSAM {
                     (imu_from_last_frame[i + 1].ang_vel - imu_from_last_frame[i].ang_vel) * (tend/tab)
                 ) * 0.5;
                 tstep = current_timestamp - imu_from_last_frame[i].timestamp;
-                // println!("#3, current timestamp: {}, last timestamp: {}", current_timestamp, imu_from_last_frame[i].timestamp);
             } else if i == 0 && i == (n - 1) {
                 acc = imu_from_last_frame[i].acc;
                 ang_vel = imu_from_last_frame[i].ang_vel;
                 tstep = current_timestamp - last_timestamp;
-                // println!("#4, current timestamp: {}, last timestamp: {}", current_timestamp, last_timestamp);
             }
 
             acc = Vector3::<f64>::new(acc[0], acc[1], acc[2]);
@@ -1308,17 +1302,6 @@ impl PreintegrationGTSAM {
 
             self.preint_gtsam.integrate_measurement(&acc.into(), &ang_vel.into(), tstep);
 
-            // println!("RAW IMU: Acc: {} {} {}, Omega: {} {} {}",
-            //     imu_from_last_frame[i].acc.x, imu_from_last_frame[i].acc.y, imu_from_last_frame[i].acc.z,
-            //     imu_from_last_frame[i].ang_vel.x, imu_from_last_frame[i].ang_vel.y, imu_from_last_frame[i].ang_vel.z,
-            // );
-            // println!("Preintegrating {} measurement:  Acc: {} {} {}, Omega: {} {} {}, dt: {}",
-            //     i,
-            //     acc.x, acc.y, acc.z, // acc
-            //     ang_vel.x, ang_vel.y, ang_vel.z, // angVel
-            //     tstep
-            // );
-            // total_tstep += tstep;
         }
         Ok(())
     }

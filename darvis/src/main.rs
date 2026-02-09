@@ -136,8 +136,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .expect("Could not resize image!");
         }
 
-        // println!("Reading image {}", image_path);
-
         first_actor_tx.send(Box::new(ImageMsg {
             image: image_bw,
             color_image: Some(image_color),
@@ -153,10 +151,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         current_index += 1;
 
-        // SOFIYA WHEN LOOP SLEEP IS TURNED OFF, SLEEPING HERE INSTEAD, SO WE CAN SKIP PAST THE INITIAL FRAMES FASTER
-        sleep(Duration::from_millis(
-            1000 / SETTINGS.get::<f64>(SYSTEM, "fps") as u64,
-        ));
+        // NOTE: WHEN LOOP SLEEP IS TURNED OFF, SLEEPING HERE INSTEAD, SO WE CAN SKIP PAST THE INITIAL FRAMES FASTER
+        // sleep(Duration::from_millis(
+        //     1000 / SETTINGS.get::<f64>(SYSTEM, "fps") as u64,
+        // ));
     }
 
     info!("Done with dataset! Shutting down.");
@@ -171,8 +169,6 @@ struct ImuInitializationData {
     pose: Pose,
     velocity: DVVector3<f64>,
     bias: ImuBias,
-    // gyro_bias: DVVector3<f64>,
-    // acc_bias: DVVector3<f64>,
 }
 
 struct ImuData {
@@ -218,7 +214,6 @@ impl LoopManager {
                 None
             } else {
                 if dataset == "kitti" {
-                    // warn!("KITTI dataset does not have IMU data.");
                     let imu_file = dataset_dir.clone() + "imu.txt";
                     let gt_file = dataset_dir.clone() + "gt.txt";
                     Some(
@@ -445,9 +440,8 @@ impl Iterator for LoopManager {
             return None;
         }
 
-        // SOFIYA TURN OFF LOOP SLEEP TEMPORARILY, SO WE CAN SKIP PAST THE INITIAL FRAMES FASTER
-        // // First, sleep until the next timestamp
-        // self.loop_helper.loop_sleep();
+        // First, sleep until the next timestamp
+        self.loop_helper.loop_sleep();
 
         let timestamp = self.timestamps[self.current_index as usize];
         let image = self.image_paths[self.current_index as usize].clone();
@@ -482,22 +476,12 @@ impl Iterator for LoopManager {
                 imu_initialization = Some(data);
             } else {
                 debug!("Can't find timestamp! {}", timestamp);
-                // debug!("Hashmap: {:?}", imu.initialization);
             }
         };
 
         // Start next loop
         self.loop_helper.loop_start();
         self.current_index = self.current_index + 1;
-
-        // for i in 0..imu_measurements.len() {
-        //     let meas = imu_measurements[i].clone();
-        //     debug!("Iterator, timestamp {} measurements are: Acc: {} {} {}, Omega: {} {} {}",
-        //         i,
-        //         meas.acc.x, meas.acc.y, meas.acc.z, // acc
-        //         meas.ang_vel.x, meas.ang_vel.y, meas.ang_vel.z, // angVel
-        //     );
-        // }
 
         Some((
             image,
@@ -515,8 +499,6 @@ fn setup_logger(level: &str) -> Result<(), fern::InitError> {
         .warn(Color::Yellow)
         .error(Color::Red)
         .trace(Color::Magenta);
-
-    let results_folder = SETTINGS.get::<String>(SYSTEM, "results_folder");
 
     let log_level = match level {
         "trace" => log::LevelFilter::Trace,
@@ -546,28 +528,8 @@ fn setup_logger(level: &str) -> Result<(), fern::InitError> {
         })
         .chain(std::io::stdout());
 
-    // let file_output = fern::Dispatch::new()
-    //     .level(log_level)
-    //     .format(move |out, message, record| {
-    //         out.finish(format_args!(
-    //             "[{time} {target}:{line_num} {level}] {message}",
-    //             time = (chrono::Local::now() - start_time).num_milliseconds() as f64  / 1000.0,
-    //             target = record.file().unwrap_or("unknown"),
-    //             line_num = record.line().unwrap_or(0),
-    //             level = record.level(),
-    //             message = message
-    //         ))
-    //     })
-    //     .chain(OpenOptions::new()
-    //         .write(true)
-    //         .truncate(true)
-    //         .create(true)
-    //         .open(Path::new(&results_folder).join("output.log"))?
-    //     );
-
     fern::Dispatch::new()
         .chain(terminal_output)
-        // .chain(file_output)
         .apply()?;
 
     Ok(())
