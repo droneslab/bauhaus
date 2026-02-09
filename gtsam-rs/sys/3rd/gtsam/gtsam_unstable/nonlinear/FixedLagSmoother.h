@@ -66,15 +66,15 @@ public:
   FixedLagSmoother(double smootherLag = 0.0) : smootherLag_(smootherLag) { }
 
   /** destructor */
-  virtual ~FixedLagSmoother() { }
+  ~FixedLagSmoother() { }
 
   /** Print the factor for debugging and testing (implementing Testable) */
-  virtual void print(
+  void print(
       const std::string& s = "FixedLagSmoother:\n",
       const KeyFormatter& keyFormatter = DefaultKeyFormatter) const;
 
   /** Check if two IncrementalFixedLagSmoother Objects are equal */
-  virtual bool equals(const FixedLagSmoother& rhs, double tol = 1e-9) const;
+  bool equals(const FixedLagSmoother& rhs, double tol = 1e-9) const;
 
   /** read the current smoother lag */
   double smootherLag() const {

@@ -88,7 +88,7 @@
 //                         ];
 //                         let scale = split[10].parse::<f64>().unwrap();
 
-//                         g2o::ffi::RustSim3 { 
+//                         g2o::ffi::RustSim3 {
 //                             translation,
 //                             rotation,
 //                             scale
@@ -123,7 +123,7 @@
 //                         ];
 //                         let scale = split[11].parse::<f64>().unwrap();
 
-//                         g2o::ffi::RustSim3 { 
+//                         g2o::ffi::RustSim3 {
 //                             translation,
 //                             rotation,
 //                             scale
@@ -139,8 +139,6 @@
 //                 }
 //             }
 //         }
-
-
 
 //         optimizer.save("DARVIS_BEFORE_OPTIMIZATION.g2o\0", 0 as i32);
 
@@ -223,7 +221,7 @@
 
 //         // Create frame
 //         let mut frame = Frame::new(
-//             0, 
+//             0,
 //             DVVectorOfKeyPoint::new(keypoints.kp_ptr.kp_ptr),
 //             DVMatrix::new(descriptors.mat_ptr.mat_ptr),
 //             image_cols,

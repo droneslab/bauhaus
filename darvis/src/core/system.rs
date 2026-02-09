@@ -1,7 +1,6 @@
-/// *** Defines actor channels and messages, module object which holds module info, and "system" object which stores references to actors/modules. *** //
-
-use std::collections::HashMap;
 use crossbeam_channel::RecvError;
+/// *** Defines actor channels and messages, module object which holds module info, and "system" object which stores references to actors/modules. *** //
+use std::collections::HashMap;
 
 use downcast_rs::{impl_downcast, Downcast};
 use log::error;
@@ -24,7 +23,9 @@ pub struct System {
 
 impl System {
     pub fn find_actor(&self, name: &str) -> &Sender {
-        self.actors.get(name).expect(format!("Could not find actor {}", name).as_str())
+        self.actors
+            .get(name)
+            .expect(format!("Could not find actor {}", name).as_str())
     }
 
     pub fn try_send(&self, actor_name: &str, message: MessageBox) -> Option<()> {
@@ -32,7 +33,9 @@ impl System {
     }
 
     pub fn send(&self, actor_name: &str, message: MessageBox) {
-        self.find_actor(actor_name).send(message).unwrap_or_else(|_| panic!("Could not send message to actor {}", actor_name));
+        self.find_actor(actor_name)
+            .send(message)
+            .unwrap_or_else(|_| panic!("Could not send message to actor {}", actor_name));
     }
 
     pub fn receive(&self) -> Result<MessageBox, RecvError> {
@@ -51,7 +54,7 @@ impl System {
         //         }
         //         Ok(result)
         //     },
-        //    None => 
+        //    None =>
         self.receiver.recv()
     }
 
@@ -60,7 +63,7 @@ impl System {
     }
 
     pub fn queue_full(&self) -> bool {
-        self.receiver.len() > self.max_queue_size 
+        self.receiver.len() > self.max_queue_size
     }
 
     pub fn copy_transmitters(&self, actor_name: &String) -> HashMap<String, Sender> {
@@ -74,20 +77,19 @@ impl System {
     }
 }
 
-pub struct NullActor { }
+pub struct NullActor {}
 impl NullActor {
     pub fn new() -> Self {
-        NullActor{}
+        NullActor {}
     }
 }
 impl Actor for NullActor {
     type MapRef = ();
 
-    fn spawn(_system: System, _map: Self::MapRef)  {
+    fn spawn(_system: System, _map: Self::MapRef) {
         error!("Actor Not Implemented!!");
     }
 }
-
 
 pub trait ActorMessage: Downcast + Send {
     fn get_map_version(&self) -> u64;
@@ -97,14 +99,13 @@ impl_downcast!(ActorMessage);
 pub trait Base: Downcast {}
 impl_downcast!(Base);
 
-
 pub trait Actor {
     type MapRef;
 
     fn spawn(system: System, map: Self::MapRef);
 }
 
-pub trait Module { }
+pub trait Module {}
 
 // unsafe impl Send for Module {}
 // unsafe impl Sync for Module {}

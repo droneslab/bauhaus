@@ -1,6 +1,12 @@
+use crate::map::{
+    frame::Frame,
+    map::{Id, Map},
+};
+use core::{
+    config::{SETTINGS, SYSTEM},
+    system::Timestamp,
+};
 use derivative::Derivative;
-use core::{config::{SETTINGS, SYSTEM}, system::Timestamp};
-use crate::map::{frame::Frame, map::{Id, Map}};
 
 use super::module_definitions::RelocalizationModule;
 
@@ -15,7 +21,11 @@ impl RelocalizationModule for Relocalization {
     type Timestamp = Timestamp;
     type Map = Map;
 
-    fn run(&self, _current_frame: &mut Frame, _map: &Map) -> Result<bool, Box<dyn std::error::Error>> {
+    fn run(
+        &self,
+        _current_frame: &mut Frame,
+        _map: &Map,
+    ) -> Result<bool, Box<dyn std::error::Error>> {
         // Relocalization is performed when tracking is lost
         // Track Lost: Query KeyFrame Database for keyframe candidates for relocalisation
         // let candidate_kfs = map.detect_relocalization_candidates(current_frame);
@@ -148,7 +158,6 @@ impl RelocalizationModule for Relocalization {
         //                 }
         //             }
 
-
         //             // If the pose is supported by enough inliers stop ransacs and continue
         //             if(nGood>=50)
         //             {
@@ -170,8 +179,6 @@ impl RelocalizationModule for Relocalization {
         //     return true;
         // }
 
-
-
         todo!("Relocalization");
     }
     fn sec_since_lost(&self, current_frame: &Frame) -> Timestamp {
@@ -185,7 +192,7 @@ impl RelocalizationModule for Relocalization {
 
 impl Relocalization {
     pub fn _past_cutoff(&self, current_frame: &Frame) -> bool {
-        self.sec_since_lost(current_frame) > SETTINGS.get::<i32>(SYSTEM, "recently_lost_cutoff") as f64
+        self.sec_since_lost(current_frame)
+            > SETTINGS.get::<i32>(SYSTEM, "recently_lost_cutoff") as f64
     }
-
 }

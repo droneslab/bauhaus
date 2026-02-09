@@ -14,4 +14,6 @@ new_levenberg_marquardt_optimizer(const NonlinearFactorGraph &graph,
                                   const Values &initial_values,
                                   const LevenbergMarquardtParams &params);
 
+std::unique_ptr<Values> optimize_safely(LevenbergMarquardtOptimizer &optimizer);
+
 } // namespace gtsam

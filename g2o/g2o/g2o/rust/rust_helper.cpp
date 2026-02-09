@@ -846,7 +846,7 @@ namespace g2o {
         return deleted_indexes;
     }
 
-    RustSim3 BridgeSparseOptimizer::recover_optimized_sim3(int vertex_id) const {
+    void BridgeSparseOptimizer::recover_optimized_sim3(int vertex_id, RustSim3 & sim3) const {
         g2o::VertexSim3Expmap* vSim3_recov = static_cast<g2o::VertexSim3Expmap*>(optimizer->vertex(vertex_id));
 
         g2o::Sim3 g2oS12= vSim3_recov->estimate();
@@ -855,20 +855,16 @@ namespace g2o {
         Quaterniond rotation = g2oS12.rotation();
         double scale = g2oS12.scale();
 
-        RustSim3 format_sim3;
-        format_sim3.translation = {
-            (double) translation[0],
-            (double) translation[1],
-            (double) translation[2]
-        };
-        format_sim3.rotation = {
-            (double) rotation.w(), 
-            (double) rotation.x(),
-            (double) rotation.y(),
-            (double) rotation.z()
-        };
-        format_sim3.scale = scale;
-        return format_sim3;
+        sim3.translation = {
+            (double)translation[0],
+            (double)translation[1],
+            (double)translation[2]};
+        sim3.rotation = {
+            (double)rotation.w(),
+            (double)rotation.x(),
+            (double)rotation.y(),
+            (double)rotation.z()};
+        sim3.scale = scale;
     }
 
     array<array<double, 24>, 24> BridgeSparseOptimizer::get_hessian_from_edge_inertial(int edge_idx) const {

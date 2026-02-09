@@ -1170,10 +1170,10 @@ namespace orb_slam3 {
         return 0;
     }
 
-    int ORBextractor::extract_rust(const orb_slam3::WrapBindCVMat & image, orb_slam3::WrapBindCVKeyPoints & keypoints, orb_slam3::WrapBindCVMat & descriptors) {
+    int ORBextractor::extract_rust(const orb_slam3::WrapBindCVMat & image, orb_slam3::WrapBindCVKeyPoints & keypoints, orb_slam3::WrapBindCVMat & descriptors, const orb_slam3::WrapBindCVMat & mask) {
         vector<int> lapping = {overlap_begin, overlap_end};
 
-        auto num_extracted = extract(*image.mat_ptr, cv::Mat(), *keypoints.kp_ptr, *descriptors.mat_ptr, lapping);
+        auto num_extracted = extract(*image.mat_ptr, *mask.mat_ptr, *keypoints.kp_ptr, *descriptors.mat_ptr, lapping);
 
         // Assign data from cpp to rust variables
         // cout << "keypoints" << endl;

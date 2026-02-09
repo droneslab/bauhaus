@@ -8,8 +8,11 @@
 #[cfg(test)]
 mod sim3solver_tests {
     use core::matrix::DVVector3;
+    use opencv::core::{
+        no_array, norm, Mat, MatExprResult, MatExprTraitConst, MatTraitConst, MatTraitConstManual,
+        Range, Scalar, CV_64F, NORM_L2,
+    };
     use std::cmp::{max, min};
-    use opencv::core::{no_array, norm, Mat, MatExprResult, MatExprTraitConst, MatTraitConst, MatTraitConstManual, Range, Scalar, CV_64F, NORM_L2};
 
     use crate::map::pose::{DVRotation, DVTranslation, Pose, Sim3};
 
@@ -19,15 +22,21 @@ mod sim3solver_tests {
             pose: Pose::new(
                 nalgebra::Vector3::new(-0.289838, 0.0579359, 1.17659),
                 nalgebra::Matrix3::new(
-                    0.999724, 0.0119505, 0.0202439,
-                    -0.0118632, 0.99992, -0.00443018,
-                    -0.0202952, 0.0041888, 0.999785
-                )
+                    0.999724,
+                    0.0119505,
+                    0.0202439,
+                    -0.0118632,
+                    0.99992,
+                    -0.00443018,
+                    -0.0202952,
+                    0.0041888,
+                    0.999785,
+                ),
             ),
-            scale: 1.0
+            scale: 1.0,
         };
         let vector = DVVector3::new(nalgebra::Vector3::new(-0.448621, -0.163819, 0.27061));
-        let map = * sim3.map(&vector);
+        let map = *sim3.map(&vector);
 
         let expected_map = nalgebra::Vector3::new(-0.734815, -0.101746, 1.45556);
         assert_eq!(map, expected_map);
@@ -41,7 +50,7 @@ mod sim3solver_tests {
             let epsilon = (min_inliers as f32) / (num_matches as f32);
             let iterations = match min_inliers == num_matches as i32 {
                 true => 1,
-                false => ((1.0 - probability).ln() / (1.0 - epsilon.powf(3.0)).ln()).ceil() as i32
+                false => ((1.0 - probability).ln() / (1.0 - epsilon.powf(3.0)).ln()).ceil() as i32,
             };
             max(1, min(iterations, max_iterations))
         }
@@ -56,18 +65,17 @@ mod sim3solver_tests {
         let p = Mat::from_slice_2d(&[
             &[-1.9746182, 0.5801363, 0.63902175],
             &[0.15127298, 0.10896853, 0.66591078],
-            &[2.7354946, 1.382499, 6.5072355]
-        ]).unwrap();
+            &[2.7354946, 1.382499, 6.5072355],
+        ])
+        .unwrap();
         let (pr, o) = compute_centroid(&p).unwrap();
         let expected_pr = Mat::from_slice_2d(&[
             &[-1.7227981, 0.83195639, 0.89084184],
             &[-0.15744445, -0.1997489, 0.35719335],
-            &[-0.80624843, -2.1592441, 2.9654925]
-        ]).unwrap();
-        let expected_o = Mat::from_slice_2d(&[
-            &[-0.25182006],
-            &[0.30871743],
-            &[3.541743]]).unwrap();
+            &[-0.80624843, -2.1592441, 2.9654925],
+        ])
+        .unwrap();
+        let expected_o = Mat::from_slice_2d(&[&[-0.25182006], &[0.30871743], &[3.541743]]).unwrap();
 
         assert!(compare_mats(&pr, &expected_pr));
         assert!(compare_mats(&o, &expected_o));
@@ -76,19 +84,17 @@ mod sim3solver_tests {
         let p = Mat::from_slice_2d(&[
             &[0.41103709, 0.53878003, -0.22131743],
             &[-0.063558668, -0.056068808, 0.16040552],
-            &[1.0883108, 3.5505676, 0.94109428]
-        ]).unwrap();
+            &[1.0883108, 3.5505676, 0.94109428],
+        ])
+        .unwrap();
         let (pr, o) = compute_centroid(&p).unwrap();
         let expected_pr = Mat::from_slice_2d(&[
             &[0.16820385, 0.29594678, -0.46415067],
             &[-0.077151351, -0.069661491, 0.14681284],
-            &[-0.77168012, 1.6905767, -0.91889668]
-        ]).unwrap();
-        let expected_o = Mat::from_slice_2d(&[
-            &[0.24283324],
-            &[0.013592681],
-            &[ 1.859991],
-        ]).unwrap();
+            &[-0.77168012, 1.6905767, -0.91889668],
+        ])
+        .unwrap();
+        let expected_o = Mat::from_slice_2d(&[&[0.24283324], &[0.013592681], &[1.859991]]).unwrap();
 
         assert!(compare_mats(&pr, &expected_pr));
         assert!(compare_mats(&o, &expected_o));
@@ -100,39 +106,41 @@ mod sim3solver_tests {
         let p1 = Mat::from_slice_2d(&[
             &[0.6906426, 1.0464532, -0.18071842],
             &[-0.64418668, -0.029071447, 0.13930871],
-            &[6.7210565, 2.4318123, 0.79204011]
-        ]).unwrap();
+            &[6.7210565, 2.4318123, 0.79204011],
+        ])
+        .unwrap();
         let p2 = Mat::from_slice_2d(&[
             &[0.29090601, 0.48953232, -0.089658424],
             &[-0.26681289, -0.015115698, 0.067958578],
-            &[2.8357472, 1.1394876, 0.39604735]
-        ]).unwrap();
+            &[2.8357472, 1.1394876, 0.39604735],
+        ])
+        .unwrap();
 
         let estimate = compute_sim3(&p1, &p2, false).unwrap();
 
         let expected_r12i = Mat::from_slice_2d(&[
             &[0.99996179, -0.008439796, 0.0022765258],
             &[0.0084298803, 0.99995512, 0.0043306849],
-            &[-0.0023129736, -0.0043113283, 0.99998802]
-        ]).unwrap();
-        let expected_t12i = Mat::from_slice_2d(&[
-            &[-0.050236207],
-            &[-0.02472719],
-            &[-0.22514816]
-        ]).unwrap();
+            &[-0.0023129736, -0.0043113283, 0.99998802],
+        ])
+        .unwrap();
+        let expected_t12i =
+            Mat::from_slice_2d(&[&[-0.050236207], &[-0.02472719], &[-0.22514816]]).unwrap();
         let expected_s12i = 2.42998;
         let expected_T12i = Mat::from_slice_2d(&[
             &[2.4298859, -0.020508524, 0.0055319089, -0.050236207],
             &[0.020484429, 2.4298697, 0.010523472, -0.02472719],
             &[-0.0056204763, -0.010476436, 2.4299495, -0.22514816],
-            &[0.0, 0.0, 0.0, 1.0]
-        ]).unwrap();
+            &[0.0, 0.0, 0.0, 1.0],
+        ])
+        .unwrap();
         let expected_T21i = Mat::from_slice_2d(&[
             &[0.41151053, 0.0034691172, -0.00095184939, 0.020544203],
             &[-0.0034731978, 0.41150779, -0.0017742248, 0.0096014868],
             &[0.00093685015, 0.0017821905, 0.41152135, 0.092744403],
-            &[0.0, 0.0, 0.0, 1.0]
-        ]).unwrap();
+            &[0.0, 0.0, 0.0, 1.0],
+        ])
+        .unwrap();
 
         assert!(compare_mats(&estimate.r_12_i, &expected_r12i));
         assert!(compare_mats(&estimate.t_12_i, &expected_t12i));
@@ -145,39 +153,40 @@ mod sim3solver_tests {
             &[0.41103709, 0.53878003, -0.22131743],
             &[-0.063558668, -0.056068808, 0.16040552],
             &[1.0883108, 3.5505676, 0.94109428],
-        ]).unwrap();
+        ])
+        .unwrap();
         let p2 = Mat::from_slice_2d(&[
             &[0.30070734, 0.56627846, -0.099854946],
             &[-0.040380079, -0.037358671, 0.098534502],
-            &[0.59360749, 2.1250362, 0.56619376]
-        ]).unwrap();
+            &[0.59360749, 2.1250362, 0.56619376],
+        ])
+        .unwrap();
 
         let estimate = compute_sim3(&p1, &p2, false).unwrap();
 
         let expected_r12i = Mat::from_slice_2d(&[
             &[0.99265927, 0.0027340269, -0.12091367],
             &[-0.002506749, 0.99999481, 0.0020317393],
-            &[ 0.12091859, -0.0017137246, 0.99266094],
-        ]).unwrap();
-        let expected_t12i = Mat::from_slice_2d(&[
-            &[0.04896332],
-            &[3.2030152e-07],
-            &[ 0.075745225],
-        ]).unwrap();
+            &[0.12091859, -0.0017137246, 0.99266094],
+        ])
+        .unwrap();
+        let expected_t12i =
+            Mat::from_slice_2d(&[&[0.04896332], &[3.2030152e-07], &[0.075745225]]).unwrap();
         let expected_s12i = 1.59619;
         let expected_T12i = Mat::from_slice_2d(&[
             &[1.5844687, 0.0043640151, -0.1930007, 0.04896332],
             &[-0.0040012375, 1.5961777, 0.0032430338, 3.2030152e-07],
             &[0.19300856, -0.0027354229, 1.5844715, 0.075745225],
-            &[0.0, 0.0, 0.0, 1.0]
-        ]).unwrap();
+            &[0.0, 0.0, 0.0, 1.0],
+        ])
+        .unwrap();
         let expected_T21i = Mat::from_slice_2d(&[
             &[0.62189454, -0.0015704619, 0.07575471, -0.036188077],
             &[0.0017128499, 0.62649018, -0.0010736373, -2.7445867e-06],
             &[-0.075751625, 0.0012728714, 0.62189555, -0.043396566],
-            &[0.0, 0.0, 0.0, 1.0]
-        ]).unwrap();
-
+            &[0.0, 0.0, 0.0, 1.0],
+        ])
+        .unwrap();
 
         assert!(compare_mats(&estimate.r_12_i, &expected_r12i));
         assert!(compare_mats(&estimate.t_12_i, &expected_t12i));
@@ -185,7 +194,7 @@ mod sim3solver_tests {
         assert!(compare_mats(&estimate.T12_i, &expected_T12i));
         assert!(compare_mats(&estimate.T21_i, &expected_T21i));
     }
-    
+
     fn compute_centroid(p: &Mat) -> Result<(opencv::core::Mat, opencv::core::Mat), opencv::Error> {
         let mut c = Mat::default();
         opencv::core::reduce(&p, &mut c, 1, opencv::core::REDUCE_SUM, CV_64F)?;
@@ -209,10 +218,10 @@ mod sim3solver_tests {
             r_12_i: Mat::default(),
             t_12_i: Mat::default(),
             s_12_i: 0.0,
-            T12_i: Mat::new_rows_cols_with_default(4,4, CV_64F, Scalar::all(0.0))?,
-            T21_i: Mat::new_rows_cols_with_default(4,4, CV_64F, Scalar::all(0.0))?,
+            T12_i: Mat::new_rows_cols_with_default(4, 4, CV_64F, Scalar::all(0.0))?,
+            T21_i: Mat::new_rows_cols_with_default(4, 4, CV_64F, Scalar::all(0.0))?,
             inliers_i: vec![],
-            inliers_count: 0
+            inliers_count: 0,
         };
 
         // Custom implementation of:
@@ -232,16 +241,20 @@ mod sim3solver_tests {
 
         // Step 3: Compute N matrix
         let n_mat = {
-            let n11 = m_mat.at_2d::<f64>(0,0)? + m_mat.at_2d::<f64>(1,1)? + m_mat.at_2d::<f64>(2,2)?;
-            let n12 = m_mat.at_2d::<f64>(1,2)? - m_mat.at_2d::<f64>(2,1)?;
-            let n13 = m_mat.at_2d::<f64>(2,0)? - m_mat.at_2d::<f64>(0,2)?;
-            let n14 = m_mat.at_2d::<f64>(0,1)? - m_mat.at_2d::<f64>(1,0)?;
-            let n22 = m_mat.at_2d::<f64>(0,0)? - m_mat.at_2d::<f64>(1,1)? - m_mat.at_2d::<f64>(2,2)?;
-            let n23 = m_mat.at_2d::<f64>(0,1)? + m_mat.at_2d::<f64>(1,0)?;
-            let n24 = m_mat.at_2d::<f64>(2,0)? + m_mat.at_2d::<f64>(0,2)?;
-            let n33 = -m_mat.at_2d::<f64>(0,0)? + m_mat.at_2d::<f64>(1,1)? - m_mat.at_2d::<f64>(2,2)?;
-            let n34 = m_mat.at_2d::<f64>(1,2)? + m_mat.at_2d::<f64>(2,1)?;
-            let n44 = -m_mat.at_2d::<f64>(0,0)? - m_mat.at_2d::<f64>(1,1)? + m_mat.at_2d::<f64>(2,2)?;
+            let n11 =
+                m_mat.at_2d::<f64>(0, 0)? + m_mat.at_2d::<f64>(1, 1)? + m_mat.at_2d::<f64>(2, 2)?;
+            let n12 = m_mat.at_2d::<f64>(1, 2)? - m_mat.at_2d::<f64>(2, 1)?;
+            let n13 = m_mat.at_2d::<f64>(2, 0)? - m_mat.at_2d::<f64>(0, 2)?;
+            let n14 = m_mat.at_2d::<f64>(0, 1)? - m_mat.at_2d::<f64>(1, 0)?;
+            let n22 =
+                m_mat.at_2d::<f64>(0, 0)? - m_mat.at_2d::<f64>(1, 1)? - m_mat.at_2d::<f64>(2, 2)?;
+            let n23 = m_mat.at_2d::<f64>(0, 1)? + m_mat.at_2d::<f64>(1, 0)?;
+            let n24 = m_mat.at_2d::<f64>(2, 0)? + m_mat.at_2d::<f64>(0, 2)?;
+            let n33 = -m_mat.at_2d::<f64>(0, 0)? + m_mat.at_2d::<f64>(1, 1)?
+                - m_mat.at_2d::<f64>(2, 2)?;
+            let n34 = m_mat.at_2d::<f64>(1, 2)? + m_mat.at_2d::<f64>(2, 1)?;
+            let n44 = -m_mat.at_2d::<f64>(0, 0)? - m_mat.at_2d::<f64>(1, 1)?
+                + m_mat.at_2d::<f64>(2, 2)?;
 
             Mat::from_slice_2d(&[
                 [n11, n12, n13, n14],
@@ -258,17 +271,20 @@ mod sim3solver_tests {
         opencv::core::eigen(&n_mat, &mut eval, &mut evec)?; //evec[0] is the quaternion of the desired rotation
 
         let mut vec = Mat::new_rows_cols_with_default(0, 3, CV_64F, Scalar::all(0.0))?;
-        evec.row(0)?.col_range(& opencv::core::Range::new(1,4)?)?.copy_to(&mut vec)?; //extract imaginary part of the quaternion (sin*axis)
+        evec.row(0)?
+            .col_range(&opencv::core::Range::new(1, 4)?)?
+            .copy_to(&mut vec)?; //extract imaginary part of the quaternion (sin*axis)
 
         // Rotation angle. sin is the norm of the imaginary part, cos is the real part
-        let ang = norm(&vec, NORM_L2, &Mat::default())?.atan2(* evec.at_2d::<f64>(0,0)?);
+        let ang = norm(&vec, NORM_L2, &Mat::default())?.atan2(*evec.at_2d::<f64>(0, 0)?);
         vec = {
             let top = res_to_mat(2.0 * ang * &vec)?;
             let bottom = norm(&vec, NORM_L2, &Mat::default())?;
             res_to_mat(top / bottom)? //Angle-axis representation. quaternion angle is the half
         };
 
-        current_estimation.r_12_i = Mat::new_rows_cols_with_default(0, 3, CV_64F, Scalar::all(0.0))?;
+        current_estimation.r_12_i =
+            Mat::new_rows_cols_with_default(0, 3, CV_64F, Scalar::all(0.0))?;
 
         vec = res_to_mat(2.0 * ang * &vec / norm(&vec, NORM_L2, &Mat::default())?)?;
         opencv::calib3d::rodrigues(&vec, &mut current_estimation.r_12_i, &mut no_array())?; // computes the rotation matrix from angle-axis
@@ -284,7 +300,7 @@ mod sim3solver_tests {
             let mut den = 0.0;
             for i in 0..aux_p3.rows() {
                 for j in 0..aux_p3.cols() {
-                    den += aux_p3.at_2d::<f64>(i,j)?;
+                    den += aux_p3.at_2d::<f64>(i, j)?;
                 }
             }
             current_estimation.s_12_i = norm / den;
@@ -301,41 +317,46 @@ mod sim3solver_tests {
         // Step 8: Transformation
 
         // Step 8.1 T12
-        current_estimation.T12_i = Mat::new_rows_cols_with_default(4,4, CV_64F, Scalar::all(0.0))?;
+        current_estimation.T12_i = Mat::new_rows_cols_with_default(4, 4, CV_64F, Scalar::all(0.0))?;
         let s_r = res_to_mat(current_estimation.s_12_i * &current_estimation.r_12_i)?;
 
         s_r.copy_to(
-            &mut current_estimation.T12_i
-            .row_range(&Range::new(0,3)?)?
-            .col_range(&Range::new(0,3)?)?
+            &mut current_estimation
+                .T12_i
+                .row_range(&Range::new(0, 3)?)?
+                .col_range(&Range::new(0, 3)?)?,
         )?;
 
-        current_estimation.t_12_i.copy_to(
-            &mut current_estimation.T12_i
-            .col(0)?
-        )?;
+        current_estimation
+            .t_12_i
+            .copy_to(&mut current_estimation.T12_i.col(0)?)?;
 
         // Step 8.2 T21
-        let s_r_inv = res_to_mat((1.0 / current_estimation.s_12_i) * current_estimation.r_12_i.t()?)?;
+        let s_r_inv =
+            res_to_mat((1.0 / current_estimation.s_12_i) * current_estimation.r_12_i.t()?)?;
 
         s_r_inv.copy_to(
-            &mut current_estimation.T21_i
-            .row_range(&Range::new(0,3)?)?
-            .col_range(&Range::new(0,3)?)?
+            &mut current_estimation
+                .T21_i
+                .row_range(&Range::new(0, 3)?)?
+                .col_range(&Range::new(0, 3)?)?,
         )?;
 
         let neg_s_r_inv = s_r_inv.mul(&-1., 1.)?.to_mat()?;
         let tinv = res_to_mat(neg_s_r_inv * &current_estimation.t_12_i)?;
         tinv.copy_to(
-            &mut current_estimation.T21_i
-            .row_range(&Range::new(0,3)?)?
-            .col(3)?
+            &mut current_estimation
+                .T21_i
+                .row_range(&Range::new(0, 3)?)?
+                .col(3)?,
         )?;
-        
+
         Ok(current_estimation)
     }
 
-    fn res_to_mat<T: opencv::prelude::MatExprTraitConst>(res: MatExprResult<T>) -> Result<Mat, opencv::Error> {
+    fn res_to_mat<T: opencv::prelude::MatExprTraitConst>(
+        res: MatExprResult<T>,
+    ) -> Result<Mat, opencv::Error> {
         // Can't be an into() because both input and output are not defined in this crate
         res.into_result()?.to_mat()
     }
@@ -350,15 +371,13 @@ mod sim3solver_tests {
     }
 
     #[derive(Debug)]
-    struct Sim3Estimation{
-        r_12_i: Mat, // mR12i
-        t_12_i: Mat, // mt12i
-        s_12_i: f64, // ms12i
-        T12_i: Mat, // mT12i
-        T21_i: Mat, // mT21i
+    struct Sim3Estimation {
+        r_12_i: Mat,          // mR12i
+        t_12_i: Mat,          // mt12i
+        s_12_i: f64,          // ms12i
+        T12_i: Mat,           // mT12i
+        T21_i: Mat,           // mT21i
         inliers_i: Vec<bool>, // mvbInliersi
-        inliers_count: i32, // mnInliersi
+        inliers_count: i32,   // mnInliersi
     }
-
-
 }

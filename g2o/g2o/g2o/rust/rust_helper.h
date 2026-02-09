@@ -126,7 +126,7 @@ namespace g2o {
         Pose recover_optimized_frame_pose(int vertex_id) const;
         Pose recover_optimized_vertex_pose(int vertex_id, VertexPoseRecoverType recover_type) const;
         Position recover_optimized_mappoint_pose(int vertex_id) const;
-        RustSim3 recover_optimized_sim3(int vertex_id) const;
+        void recover_optimized_sim3(int vertex_id, RustSim3 & sim3) const;
         InertialEstimate recover_optimized_inertial(int vg, int va, int vs, int vgdir) const;
         array<double, 3>
             recover_optimized_vertex_velocity(int vertex_id) const;

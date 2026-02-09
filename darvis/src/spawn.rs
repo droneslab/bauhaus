@@ -1,22 +1,31 @@
-use std::{collections::HashMap, sync::{Arc, Mutex}, thread::{self, JoinHandle}};
 use crossbeam_channel::unbounded;
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+    thread::{self, JoinHandle},
+};
 
 use core::{
-    config::{ActorConf, ModuleConf}, system::{Receiver, Sender, System} 
+    config::{ActorConf, ModuleConf},
+    system::{Receiver, Sender, System},
 };
 use log::{info, warn};
 
-use crate::{
-    actors::messages::ShutdownMsg, map::{map::Map, read_only_lock::ReadWriteMap}, registered_actors::{self, SHUTDOWN_ACTOR, VOCABULARY_MODULE}
-};
 use crate::modules::module_definitions::VocabularyModule;
-
+use crate::{
+    actors::messages::ShutdownMsg,
+    map::{map::Map, read_only_lock::ReadWriteMap},
+    registered_actors::{self, SHUTDOWN_ACTOR, VOCABULARY_MODULE},
+};
 
 // Initialize actor system using config file.
 // Returns mutex to shutdown flag and transmitters for first actor and shutdown actor.
 // You probably don't want to change this code.
-pub fn launch_system(actor_config: Vec<ActorConf>, module_config: Vec<ModuleConf>, first_actor_name: String) 
-    -> Result<(Arc<std::sync::Mutex<bool>>, Sender, Sender, JoinHandle<()>), Box<dyn std::error::Error>> 
+pub fn launch_system(
+    actor_config: Vec<ActorConf>,
+    module_config: Vec<ModuleConf>,
+    first_actor_name: String,
+) -> Result<(Arc<std::sync::Mutex<bool>>, Sender, Sender, JoinHandle<()>), Box<dyn std::error::Error>>
 {
     // * SET UP CHANNELS *//
     // Create transmitters and receivers for user-defined actors
@@ -25,7 +34,12 @@ pub fn launch_system(actor_config: Vec<ActorConf>, module_config: Vec<ModuleConf
     for actor_conf in &actor_config {
         let (tx, rx) = unbounded(); // Note: bounded channels block on send if channel is full, so use unbounded and handle drops in receive()
         transmitters.insert(actor_conf.name.clone(), tx);
-        receivers.push((actor_conf.name.clone(), actor_conf.tag.clone(), actor_conf.receiver_bound.clone(), rx));
+        receivers.push((
+            actor_conf.name.clone(),
+            actor_conf.tag.clone(),
+            actor_conf.receiver_bound.clone(),
+            rx,
+        ));
     }
 
     for module_conf in &module_config {
@@ -47,24 +61,40 @@ pub fn launch_system(actor_config: Vec<ActorConf>, module_config: Vec<ModuleConf
     // * SPAWN USER-DEFINED ACTORS *//
     for (actor_name, actor_tag, max_queue_size, receiver) in receivers {
         let max_queue_size = max_queue_size.unwrap_or(100);
-        spawn_actor(actor_tag, actor_name, &transmitters, receiver, max_queue_size, Some(&writeable_map));
+        spawn_actor(
+            actor_tag,
+            actor_name,
+            &transmitters,
+            receiver,
+            max_queue_size,
+            Some(&writeable_map),
+        );
     }
 
     // * SPAWN DARVIS SYSTEM ACTORS *//
     // Ctrl+c shutdown actor
-    let (shutdown_join, shutdown_flag) = spawn_shutdown_actor(&transmitters, shutdown_rx, &writeable_map);
+    let (shutdown_join, shutdown_flag) =
+        spawn_shutdown_actor(&transmitters, shutdown_rx, &writeable_map);
 
     //* Return transmitters for the shutdown actor and first actor in the pipeline, and the ctrl+c handler flag */
     let first_actor_tx = transmitters.get(&first_actor_name).unwrap().clone();
     let shutdown_actor_tx = transmitters.get(SHUTDOWN_ACTOR).unwrap().clone();
 
-    Ok((shutdown_flag, first_actor_tx, shutdown_actor_tx, shutdown_join))
+    Ok((
+        shutdown_flag,
+        first_actor_tx,
+        shutdown_actor_tx,
+        shutdown_join,
+    ))
 }
 
 fn spawn_actor(
-    actor_tag: String, actor_name: String, 
-    transmitters: &HashMap<String, Sender>, receiver: Receiver, max_queue_size: usize, 
-    writeable_map: Option<&ReadWriteMap>
+    actor_tag: String,
+    actor_name: String,
+    transmitters: &HashMap<String, Sender>,
+    receiver: Receiver,
+    max_queue_size: usize,
+    writeable_map: Option<&ReadWriteMap>,
 ) {
     info!("Spawning actor '{}' with name {}", &actor_tag, &actor_name);
 
@@ -72,7 +102,7 @@ fn spawn_actor(
     // call map.create_read_only(). Otherwise all actors can access the write lock.
     let map_clone = match writeable_map {
         Some(map) => Some(map.clone()),
-        None => None
+        None => None,
     };
 
     let mut txs = HashMap::new();
@@ -85,16 +115,19 @@ fn spawn_actor(
         receiver,
         max_queue_size,
         actors: txs,
-        my_name: actor_name.clone()
+        my_name: actor_name.clone(),
     };
 
-    thread::spawn(move || { 
+    thread::spawn(move || {
         registered_actors::spawn_actor(actor_tag, system, map_clone);
-    } );
+    });
 }
 
-
-fn spawn_shutdown_actor(transmitters: &HashMap<String, Sender>, receiver: Receiver, writeable_map: &ReadWriteMap) -> (JoinHandle<()>, Arc<Mutex<bool>>) {
+fn spawn_shutdown_actor(
+    transmitters: &HashMap<String, Sender>,
+    receiver: Receiver,
+    writeable_map: &ReadWriteMap,
+) -> (JoinHandle<()>, Arc<Mutex<bool>>) {
     let shutdown_flag = Arc::new(Mutex::new(false));
     let flag_clone = shutdown_flag.clone();
 
@@ -108,19 +141,20 @@ fn spawn_shutdown_actor(transmitters: &HashMap<String, Sender>, receiver: Receiv
         receiver,
         max_queue_size: 100,
         actors: txs,
-        my_name: SHUTDOWN_ACTOR.to_string()};
+        my_name: SHUTDOWN_ACTOR.to_string(),
+    };
 
     let map_clone = writeable_map.clone();
 
-    let join_handle = thread::spawn(move || { 
+    let join_handle = thread::spawn(move || {
         registered_actors::spawn_actor(SHUTDOWN_ACTOR.to_string(), system, Some(map_clone));
-    } );
+    });
 
     let shutdown_transmitter = transmitters.get(SHUTDOWN_ACTOR).unwrap().clone();
     ctrlc::set_handler(move || {
         warn!("received Ctrl+C!");
         *shutdown_flag.lock().unwrap() = true;
-        shutdown_transmitter.send(Box::new(ShutdownMsg{})).unwrap();
+        shutdown_transmitter.send(Box::new(ShutdownMsg {})).unwrap();
     })
     .expect("Error setting Ctrl-C handler");
 

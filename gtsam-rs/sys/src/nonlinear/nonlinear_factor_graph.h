@@ -9,6 +9,8 @@
 #include <gtsam/nonlinear/NonlinearFactorGraph.h>
 #include <gtsam/slam/BetweenFactor.h>
 #include <gtsam/slam/SmartProjectionPoseFactor.h>
+#include <gtsam_unstable/slam/SmartStereoProjectionPoseFactor.h>
+#include <gtsam/slam/ProjectionFactor.h>
 
 #include <memory>
 
@@ -46,6 +48,15 @@ namespace gtsam {
 
     void nonlinear_factor_graph_add_smart_projection_pose_factor(
         NonlinearFactorGraph &graph,
-        const gtsam::SmartProjectionPoseFactor<gtsam::Cal3_S2> &factor);
+        const std::shared_ptr<gtsam::SmartProjectionPoseFactor<gtsam::Cal3_S2>> &factor);
+
+    void nonlinear_factor_graph_add_smart_stereo_projection_pose_factor(
+        NonlinearFactorGraph &graph,
+        const std::shared_ptr<gtsam::SmartStereoProjectionPoseFactor> &factor);
+
+    void nonlinear_factor_graph_add_generic_projection_pose_factor(
+        NonlinearFactorGraph &graph,
+        const std::shared_ptr<gtsam::GenericProjectionFactor<Pose3, Point3, Cal3_S2>> &factor);
+
 }
 // namespace gtsam

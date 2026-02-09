@@ -1,8 +1,8 @@
-use std::fmt;
-use cxx::{UniquePtr, let_cxx_string};
-use log::info;
-use core::matrix::DVMatrix;
 use crate::modules::module_definitions::VocabularyModule;
+use core::matrix::DVMatrix;
+use cxx::{let_cxx_string, UniquePtr};
+use log::info;
+use std::fmt;
 
 use super::module_definitions::BoWModule;
 
@@ -30,14 +30,14 @@ impl VocabularyModule for Vocabulary {
         self.vocabulary.size()
     }
 
-    fn transform(&self, descriptors: &DVMatrix, bow: & mut DVBoW) {
+    fn transform(&self, descriptors: &DVMatrix, bow: &mut DVBoW) {
         let descriptors2: dvos3binding::ffi::WrapBindCVMat = descriptors.into();
 
         self.vocabulary.transform(
-            & descriptors2,
+            &descriptors2,
             bow.bow_vec.pin_mut(),
             bow.feat_vec.pin_mut(),
-            4
+            4,
         );
     }
 
@@ -45,7 +45,6 @@ impl VocabularyModule for Vocabulary {
         self.vocabulary.score(&bow1.bow_vec, &bow2.bow_vec)
     }
 }
-
 
 pub struct DVBoW {
     bow_vec: UniquePtr<dvos3binding::ffi::BowVector>, // mBowVec
@@ -75,9 +74,7 @@ impl DVBoW {
             feat_vec: self.feat_vec.clone(),
         }
     }
-
 }
-
 
 // Note: need to implement functions that would typically be derived
 // because we can't derive them for a UniquePtr
@@ -89,8 +86,8 @@ impl Clone for Vocabulary {
 impl fmt::Debug for Vocabulary {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("DVVocabulary")
-         .field("filename", &self.filename)
-         .finish()
+            .field("filename", &self.filename)
+            .finish()
     }
 }
 impl Clone for DVBoW {
@@ -104,7 +101,7 @@ impl fmt::Debug for DVBoW {
     }
 }
 impl Default for DVBoW {
-    fn default() -> Self { 
+    fn default() -> Self {
         DVBoW::new()
     }
 }

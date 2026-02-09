@@ -4,7 +4,7 @@ pub use self::ffi::*;
 pub type Key = u64;
 
 #[cxx::bridge(namespace = "gtsam")]
-mod ffi {
+pub mod ffi {
 
     // DoubleVec is the same thing in the orbslam bindings crate, but I don't want to link
     // that as a dependency here so I guess we will just have two DoubleVecs
@@ -12,11 +12,25 @@ mod ffi {
     // {
     //     type DoubleVec = orb_slam3::DoubleVec;
     // }
-
     #[derive(Debug)]
-    struct DoubleVec
+    pub struct DoubleVec
     {
         vec: Vec<f64>,
+    }
+
+    pub struct Point
+    {
+        id: u64,
+        x: f64,
+        y: f64,
+        z: f64,
+    }
+
+    pub struct ISAM2ResultRust
+    {
+        pub new_factor_indices: Vec<u64>,
+        pub points: Vec<Point>,
+        pub invalid_points: Vec<u64>
     }
 
     // Note: PreintegratedCombinedMeasurements cannot be passed between threads safely.
@@ -66,12 +80,17 @@ mod ffi {
         include!("geometry/point2.h");
 
         type Point2;
+        type StereoPoint2;
 
         fn default_point2() -> UniquePtr<Point2>;
 
         fn new_point2(x: f64, y: f64) -> UniquePtr<Point2>;
-    }
 
+        fn default_stereopoint2() -> UniquePtr<StereoPoint2>;
+
+        fn new_stereopoint2(u_l: f64, u_r: f64, v: f64) -> UniquePtr<StereoPoint2>;
+        fn new_stereopoint2_nour(u_l: f64, v: f64) -> UniquePtr<StereoPoint2>; // Option not a supported type for cxx :(
+    }
 
     unsafe extern "C++" {
         include!("geometry/pose3.h");
@@ -103,9 +122,15 @@ mod ffi {
         include!("geometry/cal3_s2.h");
 
         type Cal3_S2;
+        type Cal3_S2Stereo;
 
         fn default_cal3_s2() -> SharedPtr<Cal3_S2>;
         fn new_cal3_s2(fx: f64, fy: f64, s: f64, u0: f64, v0: f64) -> SharedPtr<Cal3_S2>;
+
+        fn new_cal3_s2_stereo(
+            fx: f64, fy: f64, s: f64, u0: f64, v0: f64, b: f64
+        ) -> SharedPtr<Cal3_S2Stereo>;
+
     } 
 
     #[namespace = "gtsam::imuBias"]
@@ -161,7 +186,7 @@ mod ffi {
         type GaussianNoiseModel;
 
         fn from_diagonal_noise_model_sigmas(sigmas: &mut [f64]) -> SharedPtr<DiagonalNoiseModel>;
-
+        fn from_precisions(precisions: &mut [f64]) -> SharedPtr<DiagonalNoiseModel>;
         fn cast_diagonal_noise_model_to_base_noise_model(
             a: &SharedPtr<DiagonalNoiseModel>,
         ) -> SharedPtr<BaseNoiseModel>;
@@ -191,7 +216,7 @@ mod ffi {
             params: &LevenbergMarquardtParams,
         ) -> UniquePtr<LevenbergMarquardtOptimizer>;
 
-        fn optimizeSafely(self: Pin<&mut Self>) -> &Values;
+        fn optimize_safely(optimizer: Pin<&mut LevenbergMarquardtOptimizer>) -> UniquePtr<Values>;
     }
 
     unsafe extern "C++" {
@@ -241,13 +266,22 @@ mod ffi {
 
         type ISAM2;
 
-        fn default_isam2() -> UniquePtr<ISAM2>;
+        fn default_isam2(
+            relinearize_threshold: f64,
+            relinearize_skip: i32,
+            cache_linearized_factors: bool,
+            enable_detailed_results: bool,
+            wildfire_threshold: f32,
+            find_unused_factor_slots: bool,
+        ) -> UniquePtr<ISAM2>;
 
-        fn update_noresults(
+        fn update(
             isam2: Pin<&mut ISAM2>,
             graph: &NonlinearFactorGraph,
             initial_values: &Values,
-        );
+            new_affected_keys: & Vec<DoubleVec>,
+            keys_to_remove: & Vec<u64>,
+        ) -> ISAM2ResultRust;
 
         fn calculate_estimate(isam2: &ISAM2) -> UniquePtr<Values>;
 
@@ -255,6 +289,42 @@ mod ffi {
             isam2: &ISAM2,
             key: u64,
         ) -> Vec<DoubleVec>;
+    }
+
+    unsafe extern "C++" {
+        include!("nonlinear/incremental_fixed_lag_smoother.h");
+
+        fn get_foobar();
+
+        type IncrementalFixedLagSmoother;
+
+        fn new_incremental_fixed_lag_smoother(
+            relinearize_threshold: f64,
+            relinearize_skip: i32,
+            cache_linearized_factors: bool,
+            enable_detailed_results: bool,
+            wildfire_threshold: f32,
+            find_unused_factor_slots: bool,
+            nr_states: i32
+        ) -> UniquePtr<IncrementalFixedLagSmoother>;
+
+        // Same as update()... for some reason rust won't let me name it update since isam2
+        // already defines update
+        fn update_smoother(
+            smoother: Pin<&mut IncrementalFixedLagSmoother>,
+            new_factors: &NonlinearFactorGraph,
+            new_values: &Values,
+            cur_id: f64,
+            // timestamps: &Vec<DoubleVec>,
+            delete_slots: &Vec<u64>
+        ) -> ISAM2ResultRust;
+
+        fn calculate_estimate_smoother(smoother: &IncrementalFixedLagSmoother) -> UniquePtr<Values>;
+
+        fn slot_exists_in_smoother(
+            smoother: &IncrementalFixedLagSmoother,
+            slot: usize
+        ) -> bool;
     }
 
     unsafe extern "C++" {
@@ -303,7 +373,18 @@ mod ffi {
 
         fn nonlinear_factor_graph_add_smart_projection_pose_factor(
             graph: Pin<&mut NonlinearFactorGraph>,
-            factor: &SmartProjectionPoseFactorCal3_S2,
+            factor: &SharedPtr<SmartProjectionPoseFactorCal3_S2>,
+        );
+
+        fn nonlinear_factor_graph_add_smart_stereo_projection_pose_factor(
+            graph: Pin<&mut NonlinearFactorGraph>,
+            factor: &SharedPtr<SmartStereoProjectionPoseFactor>,
+        );
+
+
+        fn nonlinear_factor_graph_add_generic_projection_pose_factor(
+            graph: Pin<&mut NonlinearFactorGraph>,
+            factor: &SharedPtr<GenericProjectionFactorPose3Point3Cal3_S2>,
         );
     }
 
@@ -329,7 +410,6 @@ mod ffi {
         fn values_insert_constant_bias(values: Pin<&mut Values>, key: u64, value: &ConstantBias);
 
         fn values_insert_vector3(values: Pin<&mut Values>, key: u64, value: &Vector3);
-
     }
 
     unsafe extern "C++"{
@@ -349,7 +429,10 @@ mod ffi {
 
 
         type PreintegrationCombinedParams;
+        fn new_preintegrated_combined_params(x: f64, y: f64, z: f64) -> SharedPtr<PreintegrationCombinedParams>;
         fn new_preintegrated_combined_params_makesharedu() -> SharedPtr<PreintegrationCombinedParams>;
+        fn new_preintegrated_combined_params_negativeyup() -> SharedPtr<PreintegrationCombinedParams>;
+        fn new_preintegrated_combined_params_positivexup() -> SharedPtr<PreintegrationCombinedParams>;
         fn set_accelerometer_covariance(
             params: &mut SharedPtr<PreintegrationCombinedParams>,
             sigma_a_sq: f64,
@@ -381,7 +464,10 @@ mod ffi {
             params: SharedPtr<PreintegrationCombinedParams>,
             bias: &ConstantBias,
         ) -> UniquePtr<PreintegratedCombinedMeasurements>;
-    
+        fn clone_preintegrated_combined_measurements(
+            preintegrated_measurements: &PreintegratedCombinedMeasurements,
+        ) -> UniquePtr<PreintegratedCombinedMeasurements>;
+
         fn get_covariance(preintegrated_measurements: &PreintegratedCombinedMeasurements) -> Vec<DoubleVec>;
 
         fn integrateMeasurement(
@@ -397,12 +483,14 @@ mod ffi {
             bias: &ConstantBias,
         ) -> UniquePtr<NavState>;
 
+        fn get_delta_rij(preintegrated_measurements: &PreintegratedCombinedMeasurements) -> UniquePtr<Rot3>;
+
         fn reset_integration_and_set_bias(
             preintegrated_measurements: Pin<&mut PreintegratedCombinedMeasurements>,
             bias: &ConstantBias,
         );
 
-        fn create_fake_copy_of_preintegrated_measurements(preintegrated_measurements : &PreintegratedCombinedMeasurements)->FakePreintegratedCombinedMeasurements;
+        // fn create_fake_copy_of_preintegrated_measurements(preintegrated_measurements : &PreintegratedCombinedMeasurements)->FakePreintegratedCombinedMeasurements;
     }
 
     unsafe extern "C++" {
@@ -419,17 +507,49 @@ mod ffi {
         include!("slam/projection_factor.h");
 
         type SmartProjectionPoseFactorCal3_S2;
+        type SmartStereoProjectionPoseFactor;
+        type GenericProjectionFactorPose3Point3Cal3_S2;
 
         fn new_smart_projection_pose_factor(
             measurement_noise: &SharedPtr<IsotropicNoiseModel>,
             k: &SharedPtr<Cal3_S2>,
             sensor_p_body: &Pose3,
-        ) -> UniquePtr<SmartProjectionPoseFactorCal3_S2>;
+        ) -> SharedPtr<SmartProjectionPoseFactorCal3_S2>;
 
-        fn add(
-            smartfactor: Pin<&mut SmartProjectionPoseFactorCal3_S2>,
+        fn clone_smart_projection_pose_factor(
+            old_factor: &SharedPtr<SmartProjectionPoseFactorCal3_S2>
+        ) -> SharedPtr<SmartProjectionPoseFactorCal3_S2>;
+
+        fn add_smart(
+            smartfactor: &mut SharedPtr<SmartProjectionPoseFactorCal3_S2>,
             point: &Point2,
             key: u64
         );
+
+        fn new_smart_stereo_projection_pose_factor(
+            measurement_noise: &SharedPtr<BaseNoiseModel>,
+            sensor_p_body: &Pose3,
+        ) -> SharedPtr<SmartStereoProjectionPoseFactor>;
+
+        fn add_smartstereo(
+            smartfactor: &mut SharedPtr<SmartStereoProjectionPoseFactor>,
+            point: &StereoPoint2,
+            key: u64,
+            k: &SharedPtr<Cal3_S2Stereo>,
+        );
+
+        fn clone_smart_stereo_projection_pose_factor(
+            old_factor: &SharedPtr<SmartStereoProjectionPoseFactor>
+        ) -> SharedPtr<SmartStereoProjectionPoseFactor>;
+
+        fn new_generic_projection_factor(
+            point: &Point2,
+            measurement_noise: &SharedPtr<IsotropicNoiseModel>,
+            pose_key: u64,
+            point_key: u64,
+            k: &SharedPtr<Cal3_S2>,
+            sensor_p_body: &Pose3,
+        ) -> SharedPtr<GenericProjectionFactorPose3Point3Cal3_S2>;
+
     }
 }

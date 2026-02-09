@@ -1,11 +1,25 @@
-use core::{config::{SETTINGS, SYSTEM}, matrix::{DVMatrix3, DVMatrix4, DVVector3}, sensor::{FrameSensor, Sensor}, system::Sender};
-use std::{collections::{HashMap, VecDeque}, fmt::Display};
-use log::{debug, warn};
+use crate::modules::global_bundle_adjustment::full_inertial_ba;
+use crate::{
+    actors::messages::UpdateFrameIMUMsg,
+    map::{map::Id, pose::group_exp, read_only_lock::ReadWriteMap},
+    registered_actors::IMU,
+};
+use core::system::Timestamp;
+use core::{
+    config::{SETTINGS, SYSTEM},
+    matrix::{DVMatrix3, DVMatrix4, DVVector3},
+    sensor::{FrameSensor, Sensor},
+    system::Sender,
+};
+use log::info;
 use nalgebra::{Matrix3, SMatrix, Vector3};
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
-use crate::{actors::messages::UpdateFrameIMUMsg, map::{map::Id, pose::group_exp, read_only_lock::ReadWriteMap}, registered_actors::IMU};
-use crate::modules::global_bundle_adjustment::full_inertial_ba;
+use std::{
+    collections::{HashMap, VecDeque},
+    fmt::Display,
+};
+use num_traits::Pow;
 
 use crate::map::{frame::Frame, pose::Pose};
 
@@ -16,13 +30,13 @@ pub const GRAVITY_VALUE: f64 = 9.81;
 #[derive(Debug, Clone)]
 pub struct IMU {
     pub velocity: Option<Pose>,
-    pub imu_ba1: bool, // mbIMU_BA1
+    pub imu_ba1: bool,                                    // mbIMU_BA1
     pub imu_preintegrated_from_last_kf: ImuPreIntegrated, // mpImuPreintegratedFromLastKF
-    pub rwg: Matrix3<f64>, // mRwg
-    pub scale: f64, // mScale
-    pub timestamp_init: f64, // mTinit // used by local mapping
+    pub rwg: Matrix3<f64>,                                // mRwg
+    pub scale: f64,                                       // mScale
+    pub timestamp_init: f64,                              // mTinit // used by local mapping
 
-    sensor: Sensor
+    sensor: Sensor,
 }
 impl ImuModule for IMU {
     fn ready(&self, map: &ReadWriteMap) -> Result<bool, Box<dyn std::error::Error>> {
@@ -38,63 +52,97 @@ impl ImuModule for IMU {
         self.timestamp_init = 0.0;
     }
 
-    fn predict_state_last_keyframe(&self, map: &ReadWriteMap, current_frame: &mut Frame, last_keyframe_id: Id) -> Result<bool, Box<dyn std::error::Error>> {
+    fn predict_state_last_keyframe(
+        &self,
+        map: &ReadWriteMap,
+        current_frame: &mut Frame,
+        last_keyframe_id: Id,
+    ) -> Result<bool, Box<dyn std::error::Error>> {
         // bool Tracking::PredictStateIMU()
         // Split into two functions: predict_state_last_keyframe predict_state_last_frame
         let lock = map.read()?;
         let kf = lock.get_keyframe(last_keyframe_id);
-        let twb1 = * kf.get_imu_position();
-        let rwb1 = * kf.get_imu_rotation();
-        let vwb1 = * kf.imu_data.velocity.unwrap();
+        let twb1 = *kf.get_imu_position();
+        let rwb1 = *kf.get_imu_rotation();
+        let vwb1 = *kf.imu_data.velocity.unwrap();
 
         let gz = Vector3::new(0.0, 0.0, -GRAVITY_VALUE);
         let t12 = self.imu_preintegrated_from_last_kf.d_t;
 
         let bias = kf.imu_data.get_imu_bias();
 
-        let rwb2 = *normalize_rotation(rwb1 * self.imu_preintegrated_from_last_kf.get_delta_rotation(bias));
-        let twb2 = twb1 + vwb1*t12 + (0.5*t12*t12*gz) + (rwb1 * self.imu_preintegrated_from_last_kf.get_delta_position(bias));
-        let vwb2 = vwb1 + t12 * gz + rwb1 * self.imu_preintegrated_from_last_kf.get_delta_velocity(bias);
+        let rwb2 = *normalize_rotation(
+            rwb1 * self.imu_preintegrated_from_last_kf.get_delta_rotation(bias),
+        );
+        let twb2 = twb1
+            + vwb1 * t12
+            + (0.5 * t12 * t12 * gz)
+            + (rwb1 * self.imu_preintegrated_from_last_kf.get_delta_position(bias));
+        let vwb2 =
+            vwb1 + t12 * gz + rwb1 * self.imu_preintegrated_from_last_kf.get_delta_velocity(bias);
         current_frame.set_imu_pose_velocity(Pose::new(twb2, rwb2), vwb2);
 
         current_frame.imu_data.set_new_bias(bias);
 
-        debug!("PREDICT STATE LAST KEYFRAME NEW POSE = {:?}", current_frame.pose);
         // Predbias is never used anywhere??
         // mCurrentFrame.mPredBias = mCurrentFrame.mImuBias;
         return Ok(true);
-
     }
 
-    fn predict_state_last_frame(&self, current_frame: &mut Frame, last_frame: &mut Frame) -> Option<bool> {
+    fn predict_state_last_frame(
+        &self,
+        current_frame: &mut Frame,
+        last_frame: &mut Frame,
+    ) -> Option<bool> {
         // bool Tracking::PredictStateIMU()
-        let twb1 = * last_frame.get_imu_position();
-        let rwb1 = * last_frame.get_imu_rotation();
-        let vwb1 = * last_frame.imu_data.velocity.unwrap();
+        let twb1 = *last_frame.get_imu_position();
+        let rwb1 = *last_frame.get_imu_rotation();
+        let vwb1 = *last_frame.imu_data.velocity.unwrap();
         let gz = Vector3::new(0.0, 0.0, -GRAVITY_VALUE);
         let t12 = current_frame.imu_data.imu_preintegrated_frame.as_ref()?.d_t;
 
-        let rwb2 = *normalize_rotation(rwb1 * current_frame.imu_data.imu_preintegrated_frame.as_ref()?.get_delta_rotation(last_frame.imu_data.imu_bias));
-        let twb2 = twb1 + vwb1*t12 + (0.5*t12*t12*gz) + (rwb1 * self.imu_preintegrated_from_last_kf.get_delta_position(last_frame.imu_data.imu_bias));
-        let vwb2 = vwb1 + t12 * gz + rwb1 * self.imu_preintegrated_from_last_kf.get_delta_velocity(last_frame.imu_data.imu_bias);
+        let rwb2 = *normalize_rotation(
+            rwb1 * current_frame
+                .imu_data
+                .imu_preintegrated_frame
+                .as_ref()?
+                .get_delta_rotation(last_frame.imu_data.imu_bias),
+        );
+        let twb2 = twb1
+            + vwb1 * t12
+            + (0.5 * t12 * t12 * gz)
+            + (rwb1
+                * self
+                    .imu_preintegrated_from_last_kf
+                    .get_delta_position(last_frame.imu_data.imu_bias));
+        let vwb2 = vwb1
+            + t12 * gz
+            + rwb1
+                * self
+                    .imu_preintegrated_from_last_kf
+                    .get_delta_velocity(last_frame.imu_data.imu_bias);
         current_frame.set_imu_pose_velocity(Pose::new(twb2, rwb2), vwb2);
 
         current_frame.imu_data.imu_bias = last_frame.imu_data.imu_bias;
         // Predbias is never used anywhere??
         // mCurrentFrame.mPredBias = mCurrentFrame.mImuBias;
-        debug!("PREDICT STATE NEW POSE = {:?}", current_frame.pose);
 
         return Some(true);
     }
 
-    fn preintegrate(&mut self, measurements: &mut ImuMeasurements, current_frame: &mut Frame, previous_frame: &mut Frame, last_keyframe_id: Id) -> bool{
+    fn preintegrate(
+        &mut self,
+        measurements: &mut ImuMeasurements,
+        current_frame: &mut Frame,
+        previous_frame: &mut Frame,
+        last_keyframe_id: Id,
+    ) -> bool {
         // Sofiya: Tested!!
         // void Tracking::PreintegrateIMU()
 
-        let _span = tracy_client::span!("IMU preintegration");
+        // let _span = tracy_client::span!("IMU preintegration");
 
         if measurements.is_empty() {
-            warn!("No IMU data!");
             return false;
         }
 
@@ -114,11 +162,11 @@ impl ImuModule for IMU {
 
         let n = imu_from_last_frame.len() - 1;
         if n == 0 {
-            warn!("Empty IMU measurements vector!");
             return false;
         }
 
-        let mut imu_preintegrated_from_last_frame = ImuPreIntegrated::new(previous_frame.imu_data.imu_bias);
+        let mut imu_preintegrated_from_last_frame =
+            ImuPreIntegrated::new(previous_frame.imu_data.imu_bias);
 
         for i in 0..n {
             let mut tstep = 0.0;
@@ -128,53 +176,61 @@ impl ImuModule for IMU {
             if i == 0 && i < (n - 1) {
                 let tab = imu_from_last_frame[i + 1].timestamp - imu_from_last_frame[i].timestamp;
                 let tini = imu_from_last_frame[i].timestamp - previous_frame.timestamp;
-                acc = (
-                    imu_from_last_frame[i].acc + imu_from_last_frame[i + 1].acc -
-                    (imu_from_last_frame[i + 1].acc - imu_from_last_frame[i].acc) * (tini/tab)
-                ) * 0.5;
-                ang_vel = (
-                    imu_from_last_frame[i].ang_vel + imu_from_last_frame[i + 1].ang_vel -
-                    (imu_from_last_frame[i + 1].ang_vel - imu_from_last_frame[i].ang_vel) * (tini/tab)
-                ) * 0.5;
+                acc = (imu_from_last_frame[i].acc + imu_from_last_frame[i + 1].acc
+                    - (imu_from_last_frame[i + 1].acc - imu_from_last_frame[i].acc) * (tini / tab))
+                    * 0.5;
+                ang_vel = (imu_from_last_frame[i].ang_vel + imu_from_last_frame[i + 1].ang_vel
+                    - (imu_from_last_frame[i + 1].ang_vel - imu_from_last_frame[i].ang_vel)
+                        * (tini / tab))
+                    * 0.5;
                 tstep = imu_from_last_frame[i + 1].timestamp - previous_frame.timestamp;
             } else if i < (n - 1) {
                 acc = (imu_from_last_frame[i].acc + imu_from_last_frame[i + 1].acc) * 0.5;
-                ang_vel = (imu_from_last_frame[i].ang_vel + imu_from_last_frame[i + 1].ang_vel) * 0.5;
+                ang_vel =
+                    (imu_from_last_frame[i].ang_vel + imu_from_last_frame[i + 1].ang_vel) * 0.5;
                 tstep = imu_from_last_frame[i + 1].timestamp - imu_from_last_frame[i].timestamp;
             } else if i > 0 && i == (n - 1) {
                 let tab = imu_from_last_frame[i + 1].timestamp - imu_from_last_frame[i].timestamp;
                 let tend = imu_from_last_frame[i + 1].timestamp - current_frame.timestamp;
-                acc = (
-                    imu_from_last_frame[i].acc + imu_from_last_frame[i + 1].acc -
-                    (imu_from_last_frame[i + 1].acc - imu_from_last_frame[i].acc) * (tend/tab)
-                ) * 0.5;
-                ang_vel = (
-                    imu_from_last_frame[i].ang_vel + imu_from_last_frame[i + 1].ang_vel -
-                    (imu_from_last_frame[i + 1].ang_vel - imu_from_last_frame[i].ang_vel) * (tend/tab)
-                ) * 0.5;
+                acc = (imu_from_last_frame[i].acc + imu_from_last_frame[i + 1].acc
+                    - (imu_from_last_frame[i + 1].acc - imu_from_last_frame[i].acc) * (tend / tab))
+                    * 0.5;
+                ang_vel = (imu_from_last_frame[i].ang_vel + imu_from_last_frame[i + 1].ang_vel
+                    - (imu_from_last_frame[i + 1].ang_vel - imu_from_last_frame[i].ang_vel)
+                        * (tend / tab))
+                    * 0.5;
                 tstep = current_frame.timestamp - imu_from_last_frame[i].timestamp;
             } else if i == 0 && i == (n - 1) {
                 acc = imu_from_last_frame[i].acc;
                 ang_vel = imu_from_last_frame[i].ang_vel;
                 tstep = current_frame.timestamp - previous_frame.timestamp;
             }
-            // tstep = tstep * 1e9; 
+            // tstep = tstep * 1e9;
 
-            self.imu_preintegrated_from_last_kf.integrate_new_measurement(acc, ang_vel, tstep);
+            self.imu_preintegrated_from_last_kf
+                .integrate_new_measurement(acc, ang_vel, tstep);
             imu_preintegrated_from_last_frame.integrate_new_measurement(acc, ang_vel, tstep);
-
         }
 
-        current_frame.imu_data.imu_preintegrated = Some(self.imu_preintegrated_from_last_kf.clone());
+        current_frame.imu_data.imu_preintegrated =
+            Some(self.imu_preintegrated_from_last_kf.clone());
         current_frame.imu_data.imu_preintegrated_frame = Some(imu_preintegrated_from_last_frame);
         current_frame.imu_data.prev_keyframe = Some(last_keyframe_id);
 
         return true;
     }
 
-    fn initialize(&self, map: &mut ReadWriteMap, current_keyframe_id: Id, prior_g: f64, prior_a: f64, fiba: bool, tracking_backend: Option<&Sender>) -> Result<(), Box<dyn std::error::Error>> {
+    fn initialize(
+        &self,
+        map: &mut ReadWriteMap,
+        current_keyframe_id: Id,
+        prior_g: f64,
+        prior_a: f64,
+        fiba: bool,
+        tracking_backend: Option<&Sender>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         //void LocalMapping::InitializeIMU(float priorG, float priorA, bool bFIBA)
-        let _span = tracy_client::span!("IMU initialization");
+        // let _span = tracy_client::span!("IMU initialization");
 
         let (min_time, min_kf) = match self.sensor.frame() {
             FrameSensor::Mono => (2.0, 10),
@@ -186,7 +242,6 @@ impl ImuModule for IMU {
             let lock = map.read()?;
 
             if lock.num_keyframes() < min_kf {
-                debug!("IMU: Early return not enough KFs ({})", lock.num_keyframes());
                 return Ok(());
             }
 
@@ -200,16 +255,14 @@ impl ImuModule for IMU {
                 }
                 keyframes.push_front(kf.id);
                 keyframes
-            }; 
+            };
             if keyframes.len() < min_kf {
-                debug!("IMU:  Early return not enough KFs #2 ({})", keyframes.len());
                 return Ok(());
             }
 
-            let first_timestamp = lock.get_keyframe( keyframes[0]).timestamp; // mFirstTs
+            let first_timestamp = lock.get_keyframe(keyframes[0]).timestamp; // mFirstTs
             let current_timestamp = lock.get_keyframe(current_keyframe_id).timestamp; // mpCurrentKeyFrame->mTimeStamp
             if (current_timestamp - first_timestamp) < min_time {
-                debug!("IMU:  Early return timestamps ({})... current keyframe is {}, first keyframe is {}", (current_timestamp - first_timestamp), current_keyframe_id, keyframes[0]);
                 return Ok(());
             }
         }
@@ -235,27 +288,31 @@ impl ImuModule for IMU {
         let mut mba: DVVector3<f64> = DVVector3::new_with(0.0, 0.0, 0.0); // mba
         let mut dir_g: Vector3<f64> = Vector3::zeros(); // dirG
 
-        let _span2 = tracy_client::span!("InitializeIMU_InertialOptimization");
+        // let _span2 = tracy_client::span!("InitializeIMU_InertialOptimization");
         if !map.read()?.imu_initialized {
             for kf_id in keyframes.iter() {
                 let (velocity, prev_kf_id) = {
                     let lock = map.read()?;
                     let kf = lock.get_keyframe(*kf_id);
-                    if ! kf.prev_kf_id.is_some() {
+                    if !kf.prev_kf_id.is_some() {
                         continue;
                     }
                     let prev_kf = lock.get_keyframe(kf.prev_kf_id.unwrap());
                     let imu_preintegrated = match kf.imu_data.imu_preintegrated.as_ref() {
                         Some(imu_preintegrated) => imu_preintegrated,
-                        None => continue
+                        None => continue,
                     };
 
-                    dir_g = dir_g - (*prev_kf.get_imu_rotation() * imu_preintegrated.get_updated_delta_velocity());
-                    
-                    debug!("curr kf imu pos: {:?}, prev kf imu pos: {:?}, d_t: {}", kf.get_imu_position(), prev_kf.get_imu_position(), imu_preintegrated.d_t);
+                    dir_g = dir_g
+                        - (*prev_kf.get_imu_rotation()
+                            * imu_preintegrated.get_updated_delta_velocity());
+
                     (
-                        DVVector3::new((*kf.get_imu_position() - *prev_kf.get_imu_position()) / imu_preintegrated.d_t),
-                        kf.prev_kf_id.unwrap()
+                        DVVector3::new(
+                            (*kf.get_imu_position() - *prev_kf.get_imu_position())
+                                / imu_preintegrated.d_t,
+                        ),
+                        kf.prev_kf_id.unwrap(),
                     )
                 };
                 let mut lock = map.write()?;
@@ -272,16 +329,24 @@ impl ImuModule for IMU {
             let vzg = v * ang / nv;
 
             rwg = {
-                let unit_quat = group_exp(& nalgebra::Vector3::new(vzg.x, vzg.y, vzg.z));
-                DVMatrix3::new(* unit_quat.to_rotation_matrix().matrix())
+                let unit_quat = group_exp(&nalgebra::Vector3::new(vzg.x, vzg.y, vzg.z));
+                DVMatrix3::new(*unit_quat.to_rotation_matrix().matrix())
             };
         } else {
             rwg = DVMatrix3::identity();
-            mbg = map.read()?.get_keyframe(current_keyframe_id).imu_data.imu_bias.get_gyro_bias();
-            mba = map.read()?.get_keyframe(current_keyframe_id).imu_data.imu_bias.get_acc_bias();
+            mbg = map
+                .read()?
+                .get_keyframe(current_keyframe_id)
+                .imu_data
+                .imu_bias
+                .get_gyro_bias();
+            mba = map
+                .read()?
+                .get_keyframe(current_keyframe_id)
+                .imu_data
+                .imu_bias
+                .get_acc_bias();
         }
-
-        debug!("IMU: Begin initialization optimization");
 
         let mut scale = 1.0; // mScale
         optimizer::inertial_optimization_initialization(
@@ -295,10 +360,9 @@ impl ImuModule for IMU {
             prior_a,
         )?;
 
-        drop(_span2);
+        // drop(_span2);
 
         if scale < 1e-1 {
-            warn!("IMU: Scale too small. Early return");
             return Ok(());
         }
 
@@ -306,54 +370,61 @@ impl ImuModule for IMU {
         {
             if (scale - 1.0).abs() > 0.00001 || !self.sensor.is_mono() {
                 let twg = Pose::new(nalgebra::Vector3::zeros(), *rwg);
+
                 map.write()?.apply_scaled_rotation(&twg, scale, true);
 
-                tracking_backend.unwrap().send(Box::new(
-                    UpdateFrameIMUMsg{
+                tracking_backend
+                    .unwrap()
+                    .send(Box::new(UpdateFrameIMUMsg {
                         scale,
-                        imu_bias: map.read()?.get_keyframe(keyframes[0]).imu_data.imu_bias.clone(),
+                        imu_bias: map
+                            .read()?
+                            .get_keyframe(keyframes[0])
+                            .imu_data
+                            .imu_bias
+                            .clone(),
                         current_kf_id: current_keyframe_id,
                         imu_initialized: false,
-                        map_version: map.read()?.version
-                    }
-                )).unwrap();
+                        map_version: map.read()?.version,
+                    }))
+                    .unwrap();
             } else {
                 let lock = map.read()?;
                 let first_kf = lock.get_keyframe(keyframes[0]);
-                tracking_backend.unwrap().send(Box::new(
-                    UpdateFrameIMUMsg{
+                tracking_backend
+                    .unwrap()
+                    .send(Box::new(UpdateFrameIMUMsg {
                         scale: 1.0,
                         imu_bias: first_kf.imu_data.imu_bias.clone(),
                         current_kf_id: current_keyframe_id,
                         imu_initialized: false,
-                        map_version: map.read()?.version
-                    }
-                )).unwrap();
+                        map_version: map.read()?.version,
+                    }))
+                    .unwrap();
             }
 
             // Check if initialization OK
             if !map.read()?.imu_initialized {
                 for i in 0..num_kfs {
-                    map.write()?.get_keyframe_mut(keyframes[i]).imu_data.is_imu_initialized = true;
+                    map.write()?
+                        .get_keyframe_mut(keyframes[i])
+                        .imu_data
+                        .is_imu_initialized = true;
                 }
             }
         }
 
-
         if !map.read()?.imu_initialized {
             let mut lock = map.write()?;
-            lock.get_keyframe_mut(current_keyframe_id).imu_data.is_imu_initialized = true;
-
-        } else {
-            warn!("IMU: Map already initialized? #1");
+            lock.get_keyframe_mut(current_keyframe_id)
+                .imu_data
+                .is_imu_initialized = true;
         }
 
         if fiba {
             if prior_a != 0.0 {
-                debug!("FULL INERTIAL BA TYPE 1");
                 full_inertial_ba(map, 100, false, current_keyframe_id, true, prior_g, prior_a)?;
             } else {
-                debug!("FULL INERTIAL BA TYPE 2");
                 full_inertial_ba(map, 100, false, current_keyframe_id, false, 0.0, 0.0)?;
             }
         }
@@ -368,21 +439,21 @@ impl ImuModule for IMU {
         // }
 
         {
-            let _span2 = tracy_client::span!("InitializeIMU_UpdateMap");
+            // let _span2 = tracy_client::span!("InitializeIMU_UpdateMap");
             let mut lock = map.write()?;
             // Correct keyframes starting at map first keyframe
             let mut kfs_to_check = vec![lock.initial_kf_id];
             let mut i = 0;
             while i < kfs_to_check.len() {
                 let curr_kf_id = kfs_to_check[i];
-                let children = lock.get_keyframe( curr_kf_id).children.clone();
+                let children = lock.get_keyframe(curr_kf_id).children.clone();
 
                 let (curr_kf_pose_inverse, curr_kf_gba_pose) = {
                     let curr_kf = lock.get_keyframe(curr_kf_id);
                     (curr_kf.get_pose().inverse(), curr_kf.gba_pose.clone())
                 };
 
-                for child_id in & children {
+                for child_id in &children {
                     let child = lock.get_keyframe_mut(*child_id);
 
                     if child.ba_global_for_kf != current_keyframe_id {
@@ -403,24 +474,17 @@ impl ImuModule for IMU {
                     kfs_to_check.push(*child_id);
                 }
 
-
-
                 let kf = lock.get_keyframe_mut(curr_kf_id);
                 kf.tcw_bef_gba = Some(kf.get_pose());
                 kf.set_pose(kf.gba_pose.unwrap().clone());
 
                 i += 1;
-                debug!("IMU: post-fiba, KF {} translation: {:?}, old translation: {:?}", kf.id, kf.get_pose().get_translation(),  kf.tcw_bef_gba.unwrap().get_translation());
 
                 if kf.imu_data.is_imu_initialized {
                     kf.vwb_bef_gba = Some(kf.imu_data.velocity.unwrap());
                     kf.imu_data.velocity = kf.vwb_gba.clone();
                     kf.imu_data.set_new_bias(kf.bias_gba.unwrap().clone());
-                    debug!("IMU: post-fiba, kf {} velocity: {:?}", kf.id, kf.imu_data.velocity.unwrap());
-                } else {
-                    warn!("KF {} not set to inertial!!", curr_kf_id);
                 }
-
             }
 
             // Correct MapPoints
@@ -445,7 +509,6 @@ impl ImuModule for IMU {
                         // let tcw = tcw_bef_gba_for_ref_kf.get_translation();
                         // let xc = *rcw * *mp.position + *tcw;
 
-
                         // Backproject using corrected camera
                         // let twc = ref_kf.get_pose().group_inverse();
                         // let rwc = twc.get_rotation();
@@ -457,14 +520,13 @@ impl ImuModule for IMU {
                 mps_to_update
             };
 
-
             for (mp_id, gba_pose) in mps_to_update {
                 lock.mappoints.get_mut(&mp_id).unwrap().position = gba_pose;
             }
         }
         map.write()?.map_change_index += 1;
         map.write()?.imu_initialized = true;
-        println!("IMU INITIALIZATION SUCCESSFUL!!!!!!!!!!!");
+        info!("IMU initialization successful!");
         return Ok(());
     }
 }
@@ -483,14 +545,13 @@ impl IMU {
     }
 }
 
-
-pub type ImuMeasurements =  VecDeque<ImuPoint>;
+pub type ImuMeasurements = VecDeque<ImuPoint>;
 
 #[derive(Clone)]
 pub struct ImuPoint {
-    pub acc: Vector3<f64>,  // a
+    pub acc: Vector3<f64>,     // a
     pub ang_vel: Vector3<f64>, // w
-    pub timestamp: f64
+    pub timestamp: f64,
 }
 impl Debug for ImuPoint {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -510,7 +571,7 @@ pub struct ImuCalib {
     pub cov_walk: SMatrix<f64, 6, 6>,
 }
 impl ImuCalib {
-    pub fn new() -> Self{
+    pub fn new() -> Self {
         let imu_frequency = SETTINGS.get::<f64>(IMU, "frequency");
         let na = SETTINGS.get::<f64>(IMU, "noise_acc");
         let ngw = SETTINGS.get::<f64>(IMU, "gyro_walk");
@@ -520,15 +581,21 @@ impl ImuCalib {
         let tbc = {
             let tbc = SETTINGS.get::<DVMatrix4<f64>>(IMU, "T_b_c1");
             let rot = Matrix3::new(
-                tbc[(0, 0)], tbc[(1, 0)], tbc[(2, 0)],
-                tbc[(0, 1)], tbc[(1, 1)], tbc[(2, 1)],
-                tbc[(0, 2)], tbc[(1, 2)], tbc[(2, 2)]
+                tbc[(0, 0)],
+                tbc[(1, 0)],
+                tbc[(2, 0)],
+                tbc[(0, 1)],
+                tbc[(1, 1)],
+                tbc[(2, 1)],
+                tbc[(0, 2)],
+                tbc[(1, 2)],
+                tbc[(2, 2)],
             );
             let trans = Vector3::new(tbc[(3, 0)], tbc[(3, 1)], tbc[(3, 2)]);
             Pose::new(trans, rot)
         };
 
-        ImuCalib::new_internal(tbc,ng * sf,na * sf, ngw / sf, naw / sf)
+        ImuCalib::new_internal(tbc, ng * sf, na * sf, ngw / sf, naw / sf)
     }
 
     fn new_internal(tbc: Pose, ng: f64, na: f64, ngw: f64, naw: f64) -> Self {
@@ -540,21 +607,15 @@ impl ImuCalib {
         let naw2 = naw * naw;
 
         let cov: SMatrix<f64, 6, 6> = SMatrix::from_row_slice(&[
-            ng2, 0.0, 0.0, 0.0, 0.0, 0.0,
-            0.0, ng2, 0.0, 0.0, 0.0, 0.0,
-            0.0, 0.0, ng2, 0.0, 0.0, 0.0,
-            0.0, 0.0, 0.0, na2, 0.0, 0.0,
-            0.0, 0.0, 0.0, 0.0, na2, 0.0,
-            0.0, 0.0, 0.0, 0.0, 0.0, na2,
+            ng2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, ng2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, ng2, 0.0, 0.0,
+            0.0, 0.0, 0.0, 0.0, na2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, na2, 0.0, 0.0, 0.0, 0.0, 0.0,
+            0.0, na2,
         ]);
 
         let cov_walk: SMatrix<f64, 6, 6> = SMatrix::from_row_slice(&[
-            ngw2, 0.0, 0.0, 0.0, 0.0, 0.0,
-            0.0, ngw2, 0.0, 0.0, 0.0, 0.0,
-            0.0, 0.0, ngw2, 0.0, 0.0, 0.0,
-            0.0, 0.0, 0.0, naw2, 0.0, 0.0,
-            0.0, 0.0, 0.0, 0.0, naw2, 0.0,
-            0.0, 0.0, 0.0, 0.0, 0.0, naw2,
+            ngw2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, ngw2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, ngw2, 0.0, 0.0,
+            0.0, 0.0, 0.0, 0.0, naw2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, naw2, 0.0, 0.0, 0.0, 0.0, 0.0,
+            0.0, naw2,
         ]);
 
         Self {
@@ -566,33 +627,32 @@ impl ImuCalib {
     }
 }
 
-
 #[derive(Debug, Clone)]
 pub struct Integrable {
     a: Vector3<f64>, // acceleration
     w: Vector3<f64>, // angular velocity
-    t: f64
+    t: f64,
 }
 
 #[derive(Debug, Clone)]
 pub struct ImuPreIntegrated {
-    pub d_t: f64, // dT
-    pub c: SMatrix<f64, 15, 15>, // Eigen::Matrix<float,15,15> C;
-    pub info: SMatrix<f64, 15, 15>, // Eigen::Matrix<float,15,15> Info;
+    pub d_t: f64,                     // dT
+    pub c: SMatrix<f64, 15, 15>,      // Eigen::Matrix<float,15,15> C;
+    pub info: SMatrix<f64, 15, 15>,   // Eigen::Matrix<float,15,15> Info;
     pub nga_walk: SMatrix<f64, 6, 6>, // Eigen::DiagonalMatrix<float,6> Nga, NgaWalk
-    pub nga: SMatrix<f64, 6, 6>, // Eigen::DiagonalMatrix<float,6> Nga, NgaWalk
+    pub nga: SMatrix<f64, 6, 6>,      // Eigen::DiagonalMatrix<float,6> Nga, NgaWalk
 
     // Values for the original bias (when integration was computed)
     pub b: ImuBias,
 
-    pub d_r: Matrix3<f64>, // Eigen::Matrix3f dR;
-    pub d_v: Vector3<f64>, // Eigen::Vector3f dV;
-    pub d_p: Vector3<f64>, // Eigen::Vector3f dP;
-    pub jrg: Matrix3<f64>, // Eigen::Matrix3f JRg;
-    pub jvg: Matrix3<f64>, // Eigen::Matrix3f JVg;
-    pub jva: Matrix3<f64>, // Eigen::Matrix3f JVa;
-    pub jpg: Matrix3<f64>, // Eigen::Matrix3f JPg;
-    pub jpa: Matrix3<f64>, // Eigen::Matrix3f JPa;
+    pub d_r: Matrix3<f64>,   // Eigen::Matrix3f dR;
+    pub d_v: Vector3<f64>,   // Eigen::Vector3f dV;
+    pub d_p: Vector3<f64>,   // Eigen::Vector3f dP;
+    pub jrg: Matrix3<f64>,   // Eigen::Matrix3f JRg;
+    pub jvg: Matrix3<f64>,   // Eigen::Matrix3f JVg;
+    pub jva: Matrix3<f64>,   // Eigen::Matrix3f JVa;
+    pub jpg: Matrix3<f64>,   // Eigen::Matrix3f JPg;
+    pub jpa: Matrix3<f64>,   // Eigen::Matrix3f JPa;
     pub avg_a: Vector3<f64>, // Eigen::Vector3f avgA;
     pub avg_w: Vector3<f64>, // Eigen::Vector3f avgW;
 
@@ -661,11 +721,20 @@ impl ImuPreIntegrated {
         }
     }
 
-    pub fn integrate_new_measurement(&mut self, acceleration: Vector3<f64>, ang_vel: Vector3<f64>, dt: f64) {
+    pub fn integrate_new_measurement(
+        &mut self,
+        acceleration: Vector3<f64>,
+        ang_vel: Vector3<f64>,
+        dt: f64,
+    ) {
         // Sofiya: Tested!!
 
         // void Preintegrated::IntegrateNewMeasurement(const Eigen::Vector3f &acceleration, const Eigen::Vector3f &angVel, const float &dt)
-        self.measurements.push(Integrable{a: acceleration, w: ang_vel, t: dt});
+        self.measurements.push(Integrable {
+            a: acceleration,
+            w: ang_vel,
+            t: dt,
+        });
 
         // Position is updated firstly, as it depends on previously computed velocity and rotation.
         // Velocity is updated secondly, as it depends on previously computed rotation.
@@ -686,18 +755,24 @@ impl ImuPreIntegrated {
         self.d_v = self.d_v + self.d_r * acc * dt;
 
         // Compute velocity and position parts of matrices A and B (rely on non-updated delta rotation)
-        let wacc = hat(& acc);
-        cov_a.fixed_view_mut::<3, 3>(3, 0).copy_from(&(-self.d_r * dt * wacc));
-        cov_a.fixed_view_mut::<3, 3>(6, 0).copy_from(&(-0.5 * self.d_r * dt * dt * wacc));
-        cov_a.fixed_view_mut::<3, 3>(6, 3).copy_from(
-            &SMatrix::from_row_slice(&[
-                dt, 0.0, 0.0,
-                0.0, dt, 0.0,
-                0.0, 0.0, dt,
-            ]
-        ));
-        cov_b.fixed_view_mut::<3, 3>(3, 3).copy_from(&(self.d_r * dt));
-        cov_b.fixed_view_mut::<3, 3>(6, 3).copy_from(&(self.d_r.scale(0.5) * dt * dt));
+        let wacc = hat(&acc);
+        cov_a
+            .fixed_view_mut::<3, 3>(3, 0)
+            .copy_from(&(-self.d_r * dt * wacc));
+        cov_a
+            .fixed_view_mut::<3, 3>(6, 0)
+            .copy_from(&(-0.5 * self.d_r * dt * dt * wacc));
+        cov_a
+            .fixed_view_mut::<3, 3>(6, 3)
+            .copy_from(&SMatrix::from_row_slice(&[
+                dt, 0.0, 0.0, 0.0, dt, 0.0, 0.0, 0.0, dt,
+            ]));
+        cov_b
+            .fixed_view_mut::<3, 3>(3, 3)
+            .copy_from(&(self.d_r * dt));
+        cov_b
+            .fixed_view_mut::<3, 3>(6, 3)
+            .copy_from(&(self.d_r.scale(0.5) * dt * dt));
 
         // Update position and velocity jacobians wrt bias correction
         self.jpa = self.jpa + self.jva * dt - 0.5 * self.d_r * dt * dt;
@@ -707,20 +782,25 @@ impl ImuPreIntegrated {
 
         // Update delta rotation
         let d_ri = IntegratedRotation::new(ang_vel, self.b, dt);
-        self.d_r = * normalize_rotation(self.d_r * d_ri.delta_r);
+        self.d_r = *normalize_rotation(self.d_r * d_ri.delta_r);
 
         // Compute rotation parts of matrices A and B
-        cov_a.fixed_view_mut::<3, 3>(0, 0).copy_from(&d_ri.delta_r.transpose());
-        cov_b.fixed_view_mut::<3, 3>(0, 0).copy_from(&(d_ri.right_j * dt));
+        cov_a
+            .fixed_view_mut::<3, 3>(0, 0)
+            .copy_from(&d_ri.delta_r.transpose());
+        cov_b
+            .fixed_view_mut::<3, 3>(0, 0)
+            .copy_from(&(d_ri.right_j * dt));
 
         // Update covariance
         {
-            let temp = cov_a * self.c.fixed_view::<9, 9>(0, 0) * cov_a.transpose() + cov_b * self.nga * cov_b.transpose();
+            let temp = cov_a * self.c.fixed_view::<9, 9>(0, 0) * cov_a.transpose()
+                + cov_b * self.nga * cov_b.transpose();
             self.c.fixed_view_mut::<9, 9>(0, 0).copy_from(&(temp));
         }
         {
             let temp = self.c.fixed_view::<6, 6>(9, 9) + self.nga_walk;
-            self.c.fixed_view_mut::<6, 6>(9, 9).copy_from(& temp);
+            self.c.fixed_view_mut::<6, 6>(9, 9).copy_from(&temp);
         }
 
         // Update rotation jacobian wrt bias correction
@@ -728,7 +808,6 @@ impl ImuPreIntegrated {
 
         // Total integrated time
         self.d_t += dt;
-
     }
 
     pub fn merge_previous(&mut self, prev: &ImuPreIntegrated) {
@@ -743,10 +822,18 @@ impl ImuPreIntegrated {
 
         self.initialize(bav);
         for i in 0..prev.measurements.len() {
-            self.integrate_new_measurement(prev.measurements[i].a, prev.measurements[i].w, prev.measurements[i].t);
+            self.integrate_new_measurement(
+                prev.measurements[i].a,
+                prev.measurements[i].w,
+                prev.measurements[i].t,
+            );
         }
         for i in 0..self.measurements.len() {
-            self.integrate_new_measurement(self.measurements[i].a, self.measurements[i].w, self.measurements[i].t);
+            self.integrate_new_measurement(
+                self.measurements[i].a,
+                self.measurements[i].w,
+                self.measurements[i].t,
+            );
         }
     }
 
@@ -767,29 +854,49 @@ impl ImuPreIntegrated {
 
     pub fn get_delta_rotation(&self, b_: ImuBias) -> Matrix3<f64> {
         // Preintegrated::GetDeltaRotation
-        let dbg = Vector3::new(b_.bwx - self.b.bwx, b_.bwy - self.b.bwy, b_.bwz - self.b.bwz);
-        let part2 = group_exp(& (self.jrg * dbg));
+        let dbg = Vector3::new(
+            b_.bwx - self.b.bwx,
+            b_.bwy - self.b.bwy,
+            b_.bwz - self.b.bwz,
+        );
+        let part2 = group_exp(&(self.jrg * dbg));
         let part2_mat = part2.to_rotation_matrix();
-        * normalize_rotation(self.d_r * part2_mat)
+        *normalize_rotation(self.d_r * part2_mat)
     }
     pub fn get_delta_velocity(&self, b_: ImuBias) -> Vector3<f64> {
         // Preintegrated::GetDeltaVelocity
-        let dbg = Vector3::new(b_.bwx - self.b.bwx, b_.bwy - self.b.bwy, b_.bwz - self.b.bwz);
-        let dba = Vector3::new(b_.bax - self.b.bax, b_.bay - self.b.bay, b_.baz - self.b.baz);
+        let dbg = Vector3::new(
+            b_.bwx - self.b.bwx,
+            b_.bwy - self.b.bwy,
+            b_.bwz - self.b.bwz,
+        );
+        let dba = Vector3::new(
+            b_.bax - self.b.bax,
+            b_.bay - self.b.bay,
+            b_.baz - self.b.baz,
+        );
         self.d_v + self.jvg * dbg + self.jva * dba
     }
     pub fn get_delta_position(&self, b_: ImuBias) -> Vector3<f64> {
         // Preintegrated::GetDeltaPosition
-        let dbg = Vector3::new(b_.bwx - self.b.bwx, b_.bwy - self.b.bwy, b_.bwz - self.b.bwz);
-        let dba = Vector3::new(b_.bax - self.b.bax, b_.bay - self.b.bay, b_.baz - self.b.baz);
+        let dbg = Vector3::new(
+            b_.bwx - self.b.bwx,
+            b_.bwy - self.b.bwy,
+            b_.bwz - self.b.bwz,
+        );
+        let dba = Vector3::new(
+            b_.bax - self.b.bax,
+            b_.bay - self.b.bay,
+            b_.baz - self.b.baz,
+        );
         self.d_p + self.jpg * dbg + self.jpa * dba
     }
     pub fn get_updated_delta_rotation(&self) -> Matrix3<f64> {
         // Preintegrated::GetUpdatedDeltaRotation
         // return NormalizeRotation(dR * Sophus::SO3f::exp(JRg*db.head(3)).matrix());
-        let part2 = group_exp(& (self.jrg * self.d_b.fixed_rows::<3>(0)));
+        let part2 = group_exp(&(self.jrg * self.d_b.fixed_rows::<3>(0)));
         let part2_mat = part2.to_rotation_matrix();
-        * normalize_rotation(self.d_r * part2_mat)
+        *normalize_rotation(self.d_r * part2_mat)
     }
     pub fn get_updated_delta_velocity(&self) -> Vector3<f64> {
         // Preintegrated::GetUpdatedDeltaVelocity
@@ -801,7 +908,7 @@ impl ImuPreIntegrated {
         // return dP + JPg*db.head(3) + JPa*db.tail(3);
         self.d_p + self.jpg * self.d_b.fixed_rows::<3>(0) + self.jpa * self.d_b.fixed_rows::<3>(3)
     }
-    pub fn get_original_delta_rotation(&self) -> Matrix3<f64>{
+    pub fn get_original_delta_rotation(&self) -> Matrix3<f64> {
         // Preintegrated::GetOriginalDeltaRotation
         self.d_r
     }
@@ -822,9 +929,9 @@ impl ImuPreIntegrated {
         self.bu
     }
 }
-impl Into<g2o::ffi::RustImuPreintegrated> for & ImuPreIntegrated {
+impl Into<g2o::ffi::RustImuPreintegrated> for &ImuPreIntegrated {
     fn into(self) -> g2o::ffi::RustImuPreintegrated {
-        let mut c: [[f32; 15]; 15] = [[0.0;15]; 15];
+        let mut c: [[f32; 15]; 15] = [[0.0; 15]; 15];
         for i in 0..15 {
             for j in 0..15 {
                 c[i][j] = self.c[(i, j)] as f32;
@@ -837,19 +944,33 @@ impl Into<g2o::ffi::RustImuPreintegrated> for & ImuPreIntegrated {
             jpg: (&DVMatrix3::new(self.jpg)).into(),
             jva: (&DVMatrix3::new(self.jva)).into(),
             jpa: (&DVMatrix3::new(self.jpa)).into(),
-            db: [self.d_b[0] as f32, self.d_b[1] as f32, self.d_b[2] as f32, self.d_b[3] as f32, self.d_b[4] as f32, self.d_b[5] as f32],
+            db: [
+                self.d_b[0] as f32,
+                self.d_b[1] as f32,
+                self.d_b[2] as f32,
+                self.d_b[3] as f32,
+                self.d_b[4] as f32,
+                self.d_b[5] as f32,
+            ],
             dv: [self.d_v[0] as f32, self.d_v[1] as f32, self.d_v[2] as f32],
-            avga: [self.avg_a[0] as f32, self.avg_a[1] as f32, self.avg_a[2] as f32],
-            avgw: [self.avg_w[0] as f32, self.avg_w[1] as f32, self.avg_w[2] as f32],
+            avga: [
+                self.avg_a[0] as f32,
+                self.avg_a[1] as f32,
+                self.avg_a[2] as f32,
+            ],
+            avgw: [
+                self.avg_w[0] as f32,
+                self.avg_w[1] as f32,
+                self.avg_w[2] as f32,
+            ],
             dr: (&DVMatrix3::new(self.d_r)).into(),
             bias: self.b.into(),
             t: self.d_t as f64,
             dp: [self.d_p[0] as f32, self.d_p[1] as f32, self.d_p[2] as f32],
-            c
+            c,
         }
     }
 }
-
 
 #[derive(Clone, Debug, Copy, Serialize, Deserialize)]
 pub struct ImuBias {
@@ -890,7 +1011,11 @@ impl ImuBias {
 }
 impl Display for ImuBias {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}, {}, {}, {}, {}, {}", self.bax, self.bay, self.baz, self.bwx, self.bwy, self.bwz)
+        write!(
+            f,
+            "{}, {}, {}, {}, {}, {}",
+            self.bax, self.bay, self.baz, self.bwx, self.bwy, self.bwz
+        )
     }
 }
 impl Into<g2o::ffi::RustImuBias> for ImuBias {
@@ -907,7 +1032,7 @@ impl Into<g2o::ffi::RustImuBias> for ImuBias {
 }
 
 pub struct IntegratedRotation {
-    pub delta_t: f64, // deltaT // integration time
+    pub delta_t: f64,          // deltaT // integration time
     pub delta_r: Matrix3<f64>, // deltaR
     pub right_j: Matrix3<f64>, // rightJ // right jacobian
 }
@@ -917,7 +1042,7 @@ impl IntegratedRotation {
         let y = (ang_vel[1] - imu_bias.bwy) * time;
         let z = (ang_vel[2] - imu_bias.bwz) * time;
 
-        let d2 = x*x + y*y + z*z;
+        let d2 = x * x + y * y + z * z;
         let d = d2.sqrt();
 
         let v = Vector3::new(x, y, z);
@@ -927,19 +1052,20 @@ impl IntegratedRotation {
             Self {
                 delta_t: time,
                 delta_r: Matrix3::identity() + w,
-                right_j: Matrix3::identity()
+                right_j: Matrix3::identity(),
             }
         } else {
             Self {
                 delta_t: time,
                 delta_r: Matrix3::identity() + w * (d.sin() / d) + w * w * ((1.0 - d.cos()) / d2),
-                right_j: Matrix3::identity() - w * ((1.0 - d.cos()) / d2) + w * w * ((d - d.sin()) / (d2 * d))
+                right_j: Matrix3::identity() - w * ((1.0 - d.cos()) / d2)
+                    + w * w * ((d - d.sin()) / (d2 * d)),
             }
         }
     }
 }
 
-pub fn normalize_rotation(mat: Matrix3<f64>) ->  DVMatrix3<f64> {
+pub fn normalize_rotation(mat: Matrix3<f64>) -> DVMatrix3<f64> {
     // Eigen::Matrix3f NormalizeRotation(const Eigen::Matrix3f &R)
     // let svd = SVD::new(mat, true, true);
     // Some(svd.u? * svd.v_t?.transpose())
@@ -952,11 +1078,9 @@ pub fn normalize_rotation(mat: Matrix3<f64>) ->  DVMatrix3<f64> {
     res.into()
 }
 
-pub fn hat(vec: & Vector3<f64>) -> Matrix3<f64> {
+pub fn hat(vec: &Vector3<f64>) -> Matrix3<f64> {
     Matrix3::from_row_slice(&[
-        0.0, -vec[2], vec[1],
-        vec[2], 0.0, -vec[0],
-        -vec[1], vec[0], 0.0
+        0.0, -vec[2], vec[1], vec[2], 0.0, -vec[0], -vec[1], vec[0], 0.0,
     ])
 
     // Should be equal to:
@@ -971,15 +1095,15 @@ pub struct ImuDataFrame {
     // Preintegrated IMU measurements from previous keyframe
     pub is_imu_initialized: bool, // bImu
     pub imu_bias: ImuBias,
-    pub imu_preintegrated: Option<ImuPreIntegrated>,  // mpImuPreintegrated
+    pub imu_preintegrated: Option<ImuPreIntegrated>, // mpImuPreintegrated
     pub imu_preintegrated_frame: Option<ImuPreIntegrated>, // mpImuPreintegratedFrame
-    pub velocity: Option<DVVector3<f64>>, // mVw
+    pub velocity: Option<DVVector3<f64>>,            // mVw
     pub constraint_pose_imu: Option<ConstraintPoseImu>, // mpcpi
-    pub prev_keyframe: Option<Id>, // mpLastKeyFrame
+    pub prev_keyframe: Option<Id>,                   // mpLastKeyFrame
 }
 
 impl ImuDataFrame {
-    pub fn new(prev_frame: Option<& Frame>, ) -> Self {
+    pub fn new(prev_frame: Option<&Frame>) -> Self {
         let mut velocity = None;
         if let Some(prev_frame) = prev_frame {
             if let Some(vel) = prev_frame.imu_data.velocity {
@@ -993,7 +1117,7 @@ impl ImuDataFrame {
             imu_preintegrated_frame: None,
             velocity,
             constraint_pose_imu: None,
-            prev_keyframe: None
+            prev_keyframe: None,
         }
     }
     pub fn set_new_bias(&mut self, bias: ImuBias) {
@@ -1016,14 +1140,14 @@ pub struct ConstraintPoseImu {
     pub vwb: Vector3<f64>,
     pub bg: DVVector3<f64>,
     pub ba: DVVector3<f64>,
-    pub h: nalgebra::SMatrix<f64, 15, 15>
+    pub h: nalgebra::SMatrix<f64, 15, 15>,
 }
 impl ConstraintPoseImu {
     pub fn new(
         pose: Pose,
         velocity: Vector3<f64>,
         bias: ImuBias,
-        h: nalgebra::SMatrix<f64, 15, 15>
+        h: nalgebra::SMatrix<f64, 15, 15>,
     ) -> Option<Self> {
         let mut constraint_pose_imu = Self {
             rwb: pose.get_rotation().into(),
@@ -1031,7 +1155,7 @@ impl ConstraintPoseImu {
             vwb: velocity,
             bg: bias.get_gyro_bias(),
             ba: bias.get_acc_bias(),
-            h
+            h,
         };
 
         constraint_pose_imu.h = (h + h).scale(1.0 / 2.0);
@@ -1042,7 +1166,9 @@ impl ConstraintPoseImu {
                 eigenvalues[i] = 0.0;
             }
         }
-        constraint_pose_imu.h = decomp.eigenvectors * nalgebra::Matrix::from_diagonal(& eigenvalues) * decomp.eigenvectors.transpose();
+        constraint_pose_imu.h = decomp.eigenvectors
+            * nalgebra::Matrix::from_diagonal(&eigenvalues)
+            * decomp.eigenvectors.transpose();
         // H = (H+H)/2;
         // Eigen::SelfAdjointEigenSolver<Eigen::Matrix<double,15,15> > es(H);
         // Eigen::Matrix<double,15,1> eigs = es.eigenvalues();
@@ -1051,10 +1177,167 @@ impl ConstraintPoseImu {
         //         eigs[i]=0;
         // H = es.eigenvectors()*eigs.asDiagonal()*es.eigenvectors().transpose();
 
-        debug!("H after eigen stuff: {:?}", constraint_pose_imu.h);
-        debug!("Eigenvalues: {:?}", eigenvalues);
-        debug!("Eigenvectors: {:?}", decomp.eigenvectors);
-        
         Some(constraint_pose_imu)
+    }
+}
+
+
+#[derive(Default)]
+pub struct PreintegrationGTSAM {
+    pub preint_gtsam: gtsam::navigation::combined_imu_factor::PreintegratedCombinedMeasurements
+}
+
+impl PreintegrationGTSAM {
+    pub fn initialize(&mut self, init_bias: ImuBias) {
+        let prior_bias = gtsam::imu::imu_bias::ConstantBias::new(
+            &gtsam::base::vector::Vector3::new(init_bias.bax, init_bias.bay, init_bias.baz),
+            &gtsam::base::vector::Vector3::new(init_bias.bwx, init_bias.bwy, init_bias.bwz)
+        );
+        let accel_noise_density = SETTINGS.get::<f64>(IMU, "noise_acc");
+        let gyro_noise_density = SETTINGS.get::<f64>(IMU, "noise_gyro");
+        let accel_random_walk = SETTINGS.get::<f64>(IMU, "acc_walk");
+        let gyro_random_walk = SETTINGS.get::<f64>(IMU, "gyro_walk");
+        let imu_integration_sigma = SETTINGS.get::<f64>(IMU, "imu_integration_sigma");
+        let init_bias_sigma = SETTINGS.get::<f64>(IMU, "imu_bias_init_sigma");
+
+        // let mut params = PreintegrationCombinedParams::new(-9.81, 0.0, 0.0);
+        let mut params = gtsam::navigation::combined_imu_factor::PreintegrationCombinedParams::new(0.0, 0.0, -9.81);
+
+        params.set_gyroscope_covariance(f64::pow(gyro_noise_density, 2));
+        params.set_accelerometer_covariance(f64::pow(accel_noise_density, 2));
+        // SOFIYA TODO... removed these because they do not seem to be in kimera?
+        params.set_bias_acc_covariance(f64::pow(accel_random_walk, 2));
+        params.set_bias_omega_covariance(f64::pow(gyro_random_walk, 2));
+        // These are not in orbslam but are in kimera:
+        params.set_integration_covariance(f64::pow(imu_integration_sigma, 2));
+        params.set_bias_acc_omega_int(init_bias_sigma);
+
+        // Actually create the GTSAM preintegration
+        self.preint_gtsam = gtsam::navigation::combined_imu_factor::PreintegratedCombinedMeasurements::new(params, &prior_bias);
+    }
+
+    pub fn preintegrate_kimera(&mut self, imu_measurements: &mut ImuMeasurements){
+        for i in 0..imu_measurements.len() - 1 {
+            let tstep = imu_measurements[i + 1].timestamp - imu_measurements[i].timestamp;
+            let acc: Vector3<f64> = imu_measurements[i].acc; // acc
+            let ang_vel: Vector3<f64> = imu_measurements[i].ang_vel; // angVel
+            // debug!("Preintegrating {} measurement:  Acc: {} {} {}, Omega: {} {} {}, dt: {}",
+            //     i,
+            //     acc.x, acc.y, acc.z, // acc
+            //     ang_vel.x, ang_vel.y, ang_vel.z, // angVel
+            //     tstep
+            // );
+
+            self.preint_gtsam.integrate_measurement(&acc.into(), &ang_vel.into(), tstep);
+        }
+    }
+
+    pub fn preintegrate_orbslam(&mut self, imu_measurements: &mut ImuMeasurements, current_timestamp: Timestamp, last_timestamp: Timestamp) -> Result<(), Box<dyn std::error::Error>> {
+        // From ORBSLAM:
+        let mut imu_from_last_frame = VecDeque::with_capacity(imu_measurements.len()); // mvImuFromLastFrame
+        let imu_per = 0.001;
+        while !imu_measurements.is_empty() {
+            if imu_measurements.front().unwrap().timestamp < last_timestamp - imu_per {
+                imu_measurements.pop_front();
+            } else if imu_measurements.front().unwrap().timestamp < current_timestamp - imu_per {
+                let msmt = imu_measurements.pop_front().unwrap();
+                imu_from_last_frame.push_back(msmt);
+            } else {
+                let msmt = imu_measurements.pop_front().unwrap();
+                imu_from_last_frame.push_back(msmt);
+                break;
+            }
+        }
+        let n = imu_from_last_frame.len() - 1;
+
+        // Commented out code here from ORBSLAM3 as well
+        for i in 0..n {
+            // let mut tstep = imu_measurements[i + 1].timestamp - imu_measurements[i].timestamp;
+            // let mut acc: Vector3<f64> = imu_measurements[i].acc; // acc
+            // let mut ang_vel: Vector3<f64> = imu_measurements[i].ang_vel; // angVel
+            let mut tstep = 0.0;
+            let mut acc: Vector3<f64> = Vector3::zeros(); // acc
+            let mut ang_vel: Vector3<f64> = Vector3::zeros(); // angVel
+
+            // orbslam:
+            if i == 0 && i < (n - 1) {
+                let tab = imu_from_last_frame[i + 1].timestamp - imu_from_last_frame[i].timestamp;
+                let tini = imu_from_last_frame[i].timestamp - last_timestamp;
+                acc = (
+                    imu_from_last_frame[i].acc + imu_from_last_frame[i + 1].acc -
+                    (imu_from_last_frame[i + 1].acc - imu_from_last_frame[i].acc) * (tini/tab)
+                ) * 0.5;
+                ang_vel = (
+                    imu_from_last_frame[i].ang_vel + imu_from_last_frame[i + 1].ang_vel -
+                    (imu_from_last_frame[i + 1].ang_vel - imu_from_last_frame[i].ang_vel) * (tini/tab)
+                ) * 0.5;
+                tstep = imu_from_last_frame[i + 1].timestamp - last_timestamp;
+                // println!("#1, current timestamp: {}, last timestamp: {}", imu_from_last_frame[i + 1].timestamp, last_timestamp);
+            } else if i < (n - 1) {
+                acc = (imu_from_last_frame[i].acc + imu_from_last_frame[i + 1].acc) * 0.5;
+                ang_vel = (imu_from_last_frame[i].ang_vel + imu_from_last_frame[i + 1].ang_vel) * 0.5;
+                tstep = imu_from_last_frame[i + 1].timestamp - imu_from_last_frame[i].timestamp;
+                // println!("#2, current timestamp: {}, last timestamp: {}", imu_from_last_frame[i + 1].timestamp, imu_from_last_frame[i].timestamp);
+            } else if i > 0 && i == (n - 1) {
+                let tab = imu_from_last_frame[i + 1].timestamp - imu_from_last_frame[i].timestamp;
+                let tend = imu_from_last_frame[i + 1].timestamp - current_timestamp;
+                acc = (
+                    imu_from_last_frame[i].acc + imu_from_last_frame[i + 1].acc -
+                    (imu_from_last_frame[i + 1].acc - imu_from_last_frame[i].acc) * (tend/tab)
+                ) * 0.5;
+                ang_vel = (
+                    imu_from_last_frame[i].ang_vel + imu_from_last_frame[i + 1].ang_vel -
+                    (imu_from_last_frame[i + 1].ang_vel - imu_from_last_frame[i].ang_vel) * (tend/tab)
+                ) * 0.5;
+                tstep = current_timestamp - imu_from_last_frame[i].timestamp;
+                // println!("#3, current timestamp: {}, last timestamp: {}", current_timestamp, imu_from_last_frame[i].timestamp);
+            } else if i == 0 && i == (n - 1) {
+                acc = imu_from_last_frame[i].acc;
+                ang_vel = imu_from_last_frame[i].ang_vel;
+                tstep = current_timestamp - last_timestamp;
+                // println!("#4, current timestamp: {}, last timestamp: {}", current_timestamp, last_timestamp);
+            }
+
+            acc = Vector3::<f64>::new(acc[0], acc[1], acc[2]);
+
+            if tstep == 0.0 {
+                // IMU messages between frames have one overlapping message, so if we have multiple frames
+                // between keyframes then there will be the same message twice in a row. Safe to skip.
+                continue;
+            }
+
+            self.preint_gtsam.integrate_measurement(&acc.into(), &ang_vel.into(), tstep);
+
+            // println!("RAW IMU: Acc: {} {} {}, Omega: {} {} {}",
+            //     imu_from_last_frame[i].acc.x, imu_from_last_frame[i].acc.y, imu_from_last_frame[i].acc.z,
+            //     imu_from_last_frame[i].ang_vel.x, imu_from_last_frame[i].ang_vel.y, imu_from_last_frame[i].ang_vel.z,
+            // );
+            // println!("Preintegrating {} measurement:  Acc: {} {} {}, Omega: {} {} {}, dt: {}",
+            //     i,
+            //     acc.x, acc.y, acc.z, // acc
+            //     ang_vel.x, ang_vel.y, ang_vel.z, // angVel
+            //     tstep
+            // );
+            // total_tstep += tstep;
+        }
+        Ok(())
+    }
+
+    pub fn get_delta_rij(&self) -> nalgebra::Matrix3<f64> {
+        self.preint_gtsam.get_delta_rij().into()
+    }
+
+    pub fn reset_integration_and_set_bias(&mut self, bias: &ImuBias) {
+        // let _span = tracy_client::span!("reset integration and set bias");
+        self.preint_gtsam.reset_integration_and_set_bias(
+            & gtsam::imu::imu_bias::ConstantBias::new(
+                &gtsam::base::vector::Vector3::new(bias.bax, bias.bay, bias.baz),
+                &gtsam::base::vector::Vector3::new(bias.bwx, bias.bwy, bias.bwz)
+            )
+        );
+    }
+
+    pub fn get_preintegration_clone(&self) -> gtsam::navigation::combined_imu_factor::PreintegratedCombinedMeasurements {
+        self.preint_gtsam.clone()
     }
 }

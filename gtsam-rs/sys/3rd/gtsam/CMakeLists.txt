@@ -29,6 +29,8 @@ set (CMAKE_PROJECT_VERSION_MAJOR ${GTSAM_VERSION_MAJOR})
 set (CMAKE_PROJECT_VERSION_MINOR ${GTSAM_VERSION_MINOR})
 set (CMAKE_PROJECT_VERSION_PATCH ${GTSAM_VERSION_PATCH})
 
+add_definitions(-DEIGEN_DONT_ALIGN)
+
 ###############################################################################
 # Gather information, perform checks, set defaults
 
@@ -86,9 +88,9 @@ add_subdirectory(examples)
 add_subdirectory(timing)
 
 # Build gtsam_unstable
-if (GTSAM_BUILD_UNSTABLE)
+#if (GTSAM_BUILD_UNSTABLE)
     add_subdirectory(gtsam_unstable)
-endif()
+#endif()
 
 # This is the new wrapper
 if(GTSAM_BUILD_PYTHON OR GTSAM_INSTALL_MATLAB_TOOLBOX)

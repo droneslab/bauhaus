@@ -15,3 +15,17 @@ impl Cal3S2 {
         }
     }
 }
+
+
+
+pub struct Cal3S2Stereo {
+    pub(crate) inner: cxx::SharedPtr<sys::Cal3_S2Stereo>,
+}
+
+impl Cal3S2Stereo {
+    pub fn new(fx: f64, fy: f64, s: f64, u0: f64, v0: f64, b: f64) -> Self {
+        Self {
+            inner: sys::new_cal3_s2_stereo(fx, fy, s, u0, v0, b)
+        }
+    }
+}

@@ -11,7 +11,7 @@
 
 //     use super::*;
 
-//     //* Test that feature detection gives same results as ORBSLAM3 
+//     //* Test that feature detection gives same results as ORBSLAM3
 //     //* Expected results generated from running ORBSLAM3 on image/000000.png from the KITTI 00 dataset
 //     #[test]
 //     fn test_ini_feature_detection() {
@@ -45,7 +45,6 @@
 //         // or it doesn't mark as correct
 //         // assert_eq!(real_kps_string, expected_kps);
 //     }
-
 
 //     fn read_image(image_path: &str) -> (opencv::core::Mat, i32, i32){
 //         let image = imgcodecs::imread(&image_path, imgcodecs::IMREAD_GRAYSCALE).unwrap();

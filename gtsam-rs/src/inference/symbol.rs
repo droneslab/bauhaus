@@ -20,7 +20,7 @@ impl Symbol {
         }
     }
 
-    pub(crate) fn key(&self) -> Key {
+    pub fn key(&self) -> Key {
         self.inner.key()
     }
 }
