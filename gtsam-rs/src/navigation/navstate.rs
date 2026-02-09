@@ -1,5 +1,5 @@
-use cxx::{UniquePtr, SharedPtr};
-use crate::{base::vector::{Vector3, Vector3Ref}, geometry::pose3::{Pose3, Pose3Ref}};
+use cxx::UniquePtr;
+use crate::{base::vector::{Vector3, Vector3Ref}, geometry::pose3::Pose3};
 
 pub struct NavState {
     pub inner: UniquePtr<::sys::NavState>,

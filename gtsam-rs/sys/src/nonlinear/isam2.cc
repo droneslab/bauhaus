@@ -1,21 +1,136 @@
 #include "isam2.h"
 #include "../base/rust.hpp"
+#include <gtsam/inference/Symbol.h>
+#include "../../target/cxxbridge/gtsam-sys/src/lib.rs.h"
 
 namespace gtsam
 {
+    using symbol_shorthand::X;
 
-    std::unique_ptr<ISAM2> default_isam2()
+    std::unique_ptr<ISAM2> default_isam2(
+        double relinearizeThreshold, int relinearizeSkip,
+        bool cacheLinearizedFactors, bool enableDetailedResults,
+        float wildfire_threshold,
+        bool find_unused_factor_slots
+    )
     {
-        return std::make_unique<ISAM2>();
+        ISAM2Params parameters;
+        parameters.cacheLinearizedFactors = cacheLinearizedFactors;
+        parameters.relinearizeThreshold = relinearizeThreshold;
+        parameters.relinearizeSkip = relinearizeSkip;
+        parameters.findUnusedFactorSlots = find_unused_factor_slots;
+        parameters.enableDetailedResults = enableDetailedResults;
+        parameters.factorization = gtsam::ISAM2Params::CHOLESKY;
+
+        // parameters.optimizationParams = ISAM2GaussNewtonParams();
+        gtsam::ISAM2GaussNewtonParams gauss_newton_params;
+        gauss_newton_params.wildfireThreshold = wildfire_threshold;
+        parameters.optimizationParams = gauss_newton_params;
+
+        parameters.print();
+        ISAM2 * isam2 = new ISAM2(parameters);
+
+        return std::unique_ptr<ISAM2>(isam2);
+
+        // return std::make_unique<ISAM2>();
     }
 
-    void update_noresults(ISAM2 &isam2, const NonlinearFactorGraph &graph, const Values &initial_values)
+    ISAM2ResultRust update(ISAM2 &isam2, const NonlinearFactorGraph &graph, const Values &initial_values, const rust::Vec<DoubleVec> & new_affected_keys, const rust::Vec<unsigned long int> & keys_to_remove)
     {
-        ISAM2Result result = isam2.update(graph, initial_values);
+        // std::cout << "Before update, isam2 has: ";
+        // isam2.getLinearizationPoint().print();
+
+        // std::cout << "Initial values: ";
+        // initial_values.print();
+        // std::cout << std::endl << "Graph: ";
+        // graph.print();
+
+        ISAM2UpdateParams updateParams;
+        FastMap<FactorIndex, KeySet> factorNewAffectedKeys;
+
+        for (int i = 0; i < new_affected_keys.size(); i++)
+        {
+            rust::Vec<double> row = new_affected_keys[i].vec;
+            factorNewAffectedKeys[row[0]].insert(X(row[1]));
+        }
+        updateParams.newAffectedKeys = factorNewAffectedKeys;
+
+        // std::cout << "New affected keys in C++: ";
+        // for (const auto& pair : factorNewAffectedKeys) {
+        //     std::cout << "  Key: " << pair.first;
+        //     gtsam::PrintKeySet(pair.second, "Values: ");
+        // }
+
+
+        FactorIndices removeFactorIndices;
+        for (int i = 0; i < keys_to_remove.size(); i++)
+        {
+            std::cout << "C++, removing key: " << keys_to_remove[i] << std::endl;
+            removeFactorIndices.push_back(keys_to_remove[i]);
+        }
+        updateParams.removeFactorIndices = removeFactorIndices;
+
+        ISAM2Result result = isam2.update(graph, initial_values, updateParams);
+
+        // std::cout << "Detailed results:" << std::endl;
+        // for (auto keyedStatus : result.detail->variableStatus) {
+        //     const auto& status = keyedStatus.second;
+        //     PrintKey(keyedStatus.first);
+        //     std::cout << " {" << std::endl;
+        //     std::cout << "reeliminated: " << status.isReeliminated << std::endl;
+        //     std::cout << "relinearized above thresh: " << status.isAboveRelinThreshold
+        //         << std::endl;
+        //     std::cout << "relinearized involved: " << status.isRelinearizeInvolved << std::endl;
+        //     std::cout << "relinearized: " << status.isRelinearized << std::endl;
+        //     std::cout << "observed: " << status.isObserved << std::endl;
+        //     std::cout << "new: " << status.isNew << std::endl;
+        //     std::cout << "in the root clique: " << status.inRootClique << std::endl;
+        //     std::cout << "}" << std::endl;
+        // }
+
+
+        // std::cout << "After update, isam2 has: ";
+        // isam2.getLinearizationPoint().print();
+
+        // std::cout << "GET FACTORS! ";
+        // isam2.getFactorsUnsafe().print();
+
+        rust::Vec<std::uint64_t> new_factor_indices;
+        for (const auto& value : result.newFactorsIndices) {
+            new_factor_indices.push_back(value);
+        }
+        rust::Vec<Point> points;
+        rust::Vec<std::uint64_t> invalid_points;
+        auto factors = isam2.getFactorsUnsafe();
+        for (int i = 0; i < factors.size(); i++) {
+            auto factor = factors[i];
+            if (auto smartfactor = dynamic_cast<const SmartProjectionPoseFactor<gtsam::Cal3_S2>*>(factor.get())) {
+                TriangulationResult res = smartfactor->point();
+                if (res.valid()) {
+                    // std::cout << "Smart factor point: i " << i << ", " << res.get() << std::endl;
+                    points.push_back(Point{i, res.get()(0), res.get()(1), res.get()(2)});
+                } else {
+                    // std::cout << "Smart factor point not valid" << std::endl;
+                    invalid_points.push_back(i);
+                }
+
+            }
+        }
+        ISAM2ResultRust rust_result;
+        rust_result.new_factor_indices = new_factor_indices;
+        rust_result.points = points;
+        rust_result.invalid_points = invalid_points;
+
+
+        return rust_result;
     }
 
     std::unique_ptr<Values> calculate_estimate(const ISAM2 &isam2) {
-        return std::make_unique<Values>(isam2.calculateEstimate());
+        Values estimate = isam2.calculateEstimate();
+        // std::cout << "SOFIYA! VALUES ALL: ";
+        // estimate.print();
+
+        return std::make_unique<Values>(estimate);
     }
 
     rust::Vec<DoubleVec> get_marginal_covariance(

@@ -14,8 +14,11 @@ namespace gtsam
         Key pose_i, Key vel_i, Key pose_j, Key vel_j, Key bias_i, Key bias_j,
         const PreintegratedCombinedMeasurements & preintegratedMeasurements);
 
-
+    std::shared_ptr<PreintegrationCombinedParams> new_preintegrated_combined_params(double x, double y, double z);
     std::shared_ptr<PreintegrationCombinedParams> new_preintegrated_combined_params_makesharedu();
+    std::shared_ptr<PreintegrationCombinedParams> new_preintegrated_combined_params_negativeyup();
+    std::shared_ptr<PreintegrationCombinedParams> new_preintegrated_combined_params_positivexup();
+
     void set_accelerometer_covariance(
         std::shared_ptr<PreintegrationCombinedParams> &params,
         double sigma_a_sq);
@@ -39,6 +42,8 @@ namespace gtsam
     std::unique_ptr<PreintegratedCombinedMeasurements> new_preintegrated_combined_measurements(
         const std::shared_ptr<PreintegrationCombinedParams> params,
         const imuBias::ConstantBias &bias);
+    std::unique_ptr<PreintegratedCombinedMeasurements> clone_preintegrated_combined_measurements(
+        const PreintegratedCombinedMeasurements &preintegrated_measurements);
 
     rust::Vec<DoubleVec> get_covariance(const PreintegratedCombinedMeasurements &preintegrated_measurements);
 
@@ -50,11 +55,13 @@ namespace gtsam
         const PreintegratedCombinedMeasurements &preintegrated_measurements,
         const NavState &state_i, const imuBias::ConstantBias &bias_i);
 
+    std::unique_ptr<Rot3> get_delta_rij(const PreintegratedCombinedMeasurements &preintegrated_measurements);
+
     void reset_integration_and_set_bias(
         PreintegratedCombinedMeasurements &preintegrated_measurements,
         const imuBias::ConstantBias &bias);
 
-    FakePreintegratedCombinedMeasurements create_fake_copy_of_preintegrated_measurements(
-        const PreintegratedCombinedMeasurements &preintegrated_measurements);
+    // FakePreintegratedCombinedMeasurements create_fake_copy_of_preintegrated_measurements(
+    //     const PreintegratedCombinedMeasurements &preintegrated_measurements);
 
 }

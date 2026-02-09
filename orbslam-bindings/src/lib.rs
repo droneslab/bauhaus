@@ -211,7 +211,8 @@ pub mod ffi {
             self: Pin<&mut ORBextractor>,
             image: &WrapBindCVMat,
             keypoints: &mut WrapBindCVKeyPoints,
-            descriptors: &mut WrapBindCVMat
+            descriptors: &mut WrapBindCVMat,
+            mask: & WrapBindCVMat
         ) -> i32;
         fn extract2(
             self: Pin<&mut ORBextractor>,

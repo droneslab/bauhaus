@@ -16,6 +16,12 @@ impl DiagonalNoiseModel {
         }
     }
 
+    pub fn from_precisions<const D: usize>(mut precision: SVector<f64, D>) -> Self {
+        Self {
+            inner: ::sys::from_precisions(precision.data.as_mut_slice()),
+        }
+    }
+
     pub(crate) fn to_base_model(&self) -> BaseNoiseModel {
         BaseNoiseModel {
             inner: ::sys::cast_diagonal_noise_model_to_base_noise_model(&self.inner),

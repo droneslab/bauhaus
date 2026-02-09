@@ -10,6 +10,11 @@ void clear_values(Values &values) {
 
 const Pose3 &values_at_pose3(const Values &values, Key key) {
     // std::cout << "POSE IN c++: " << values.at(key).cast<Pose3>() << std::endl;
+    auto pose = values.at(key).cast<Pose3>().rotation();
+//     std::cout << "ROTATION AT POSE 3 (C++): " << values.at(key).cast<Pose3>().rotation() << std::endl;
+//   std::cout << "State after optimization (quaternion):  " << pose.quaternion().w() 
+//   << "w, " << pose.quaternion().x() << "x, " << pose.quaternion().y() << "y, " << pose.quaternion().z() << "z" << std::endl;
+
     return values.at(key).cast<Pose3>();
 }
 

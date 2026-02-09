@@ -22,9 +22,22 @@
 #include <gtsam_unstable/nonlinear/IncrementalFixedLagSmoother.h>
 #include <gtsam/base/debug.h>
 
+
 namespace gtsam {
 
+int foobar = 42;
+
 /* ************************************************************************* */
+/** default constructor */
+IncrementalFixedLagSmoother::IncrementalFixedLagSmoother(double smootherLag,
+    const ISAM2Params& parameters) :
+    FixedLagSmoother(smootherLag), isam_(parameters) {
+}
+
+/** destructor */
+IncrementalFixedLagSmoother::~IncrementalFixedLagSmoother() {
+}
+
 void recursiveMarkAffectedKeys(const Key& key,
     const ISAM2Clique::shared_ptr& clique, std::set<Key>& additionalKeys) {
 

@@ -69,7 +69,7 @@ class GTSAM_UNSTABLE_EXPORT SmartProjectionPoseFactorRollingShutter
   FastVector<size_t> cameraIds_;
 
  public:
-  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+//   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
   static const int DimBlock =
       12;  ///< size of the variable stacking 2 poses from which the observation

@@ -1,6 +1,7 @@
 use cxx::UniquePtr;
+use sys::ISAM2ResultRust;
 
-use crate::{inference::key::IntoKey, nonlinear::{nonlinear_factor_graph::NonlinearFactorGraph, values::{Values, ValuesRef}}};
+use crate::{inference::key::IntoKey, nonlinear::{nonlinear_factor_graph::NonlinearFactorGraph, values::Values}};
 use crate::sys::DoubleVec;
 
 pub struct ISAM2 {
@@ -10,18 +11,36 @@ pub struct ISAM2 {
 impl Default for ISAM2 {
     fn default() -> Self {
         Self {
-            inner: ::sys::default_isam2(),
+            inner: ::sys::default_isam2(
+                0.1, 1, true, false, 0.001, true,
+            ),
         }
     }
 }
 
 impl ISAM2 {
-    pub fn update_noresults(
+    pub fn new(
+        relinearize_threshold: f64, relinearize_skip: i32,
+        cache_linearized_factors: bool, enable_detailed_results: bool,
+        wildfire_threshold: f32, find_unused_factor_slots: bool,
+    ) -> Self {
+        Self {
+            inner: ::sys::default_isam2(
+                relinearize_threshold, relinearize_skip,
+                cache_linearized_factors, enable_detailed_results,
+                wildfire_threshold, find_unused_factor_slots,
+            ),
+        }
+    }
+
+    pub fn update(
         &mut self,
         graph: &NonlinearFactorGraph,
         values: &Values,
-    ) {
-        ::sys::update_noresults(self.inner.pin_mut(), &graph.inner, &values.inner);
+        new_affected_keys: & Vec<DoubleVec>,
+        keys_to_remove: & Vec<u64>,
+    ) -> ISAM2ResultRust {
+        ::sys::update(self.inner.pin_mut(), &graph.inner, &values.inner, & new_affected_keys, & keys_to_remove)
     }
 
     pub fn calculate_estimate(

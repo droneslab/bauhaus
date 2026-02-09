@@ -1,5 +1,5 @@
 use cxx::UniquePtr;
-use nalgebra::{Isometry3, Translation, UnitQuaternion, Vector3};
+use nalgebra::{Isometry3, IsometryMatrix3, UnitQuaternion, Vector3};
 use std::fmt::{Debug, Formatter, Result};
 
 use super::{
@@ -66,9 +66,17 @@ pub struct Pose3Ref<'a> {
     pub(crate) inner: &'a ::sys::Pose3,
 }
 
-impl<'a> From<Pose3Ref<'a>> for Isometry3<f64> {
+impl<'a> From<Pose3Ref<'a>> for IsometryMatrix3<f64> {
     fn from(value: Pose3Ref<'a>) -> Self {
-        Isometry3::from_parts(value.translation().into(), value.rotation().into())
+
+        let trans = {
+            let temp: nalgebra::Vector3<f64> = value.translation().into();
+            nalgebra::Translation3::from(temp)
+        };
+        let rot = nalgebra::Rotation3::from_matrix_unchecked(value.rotation().into());
+        // println!("Rotation in isometrymatrix: {:?}", rot);
+        // println!("...Quaternion is: {:?}", UnitQuaternion::from_rotation_matrix(&rot));
+        nalgebra::IsometryMatrix3::from_parts(trans, rot)
     }
 }
 

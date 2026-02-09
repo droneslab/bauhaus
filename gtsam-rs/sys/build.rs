@@ -68,6 +68,7 @@ impl Default for Repository {
 
     #[cfg(not(feature = "download"))]
     fn default() -> Self {
+        // gtsam
         let src_dir = format!("{}/3rd/gtsam", env!("CARGO_MANIFEST_DIR"));
         let dst_dir = get_out_dir();
 
@@ -81,11 +82,11 @@ impl Default for Repository {
         if !path.exists() {
             ::fs_extra::dir::copy(src_dir, dst_dir, &options).expect("failed to copy source files");
         }
+
         Self { path }
     }
 }
 
-#[cfg(feature = "build")]
 impl Repository {
     fn build(&self) -> Library {
         trait CmakeFlag {
@@ -112,9 +113,10 @@ impl Repository {
         let mut builder = ::cmake::Config::new(&self.path);
         builder
             // NOTE: original GTSAM shows many warnings, ignoring them...
-            .build_arg("-Wdeprecated-copy")
-            .build_arg("-Wdeprecated-declarations")
-            .build_arg("-Wunused-parameter")
+            .build_arg("-Wno-deprecated-copy")
+            .build_arg("-Wno-deprecated-declarations")
+            .build_arg("-Wno-unused-parameter")
+            .build_arg("-w")
             .define("BUILD_SHARED_LIBS", false.to_bool())
             .define("DEBUG", false.to_bool())
             .define("GDB", false.to_bool())
@@ -133,7 +135,7 @@ impl Repository {
             .define("GTSAM_POSE3_EXPMAP", true.to_bool())
             .define("GTSAM_ROT3_EXPMAP", true.to_bool())
             .define("GTSAM_SUPPORT_NESTED_DISSECTION", true.to_bool())
-            .define("GTSAM_TANGENT_PREINTEGRATION", true.to_bool())
+            .define("GTSAM_TANGENT_PREINTEGRATION", false.to_bool())
             .define("GTSAM_THROW_CHEIRALITY_EXCEPTI", true.to_bool())
             .define("GTSAM_UNSTABLE_BUILD_PYTHON", false.to_bool())
             .define("GTSAM_UNSTABLE_INSTALL_MATLAB_TOOLBOX", false.to_bool())
@@ -163,7 +165,7 @@ impl Repository {
 
         // Configure Sub-packages
         builder
-            .define("GTSAM_BUILD_UNSTABLE", false.to_bool())
+            .define("GTSAM_BUILD_UNSTABLE", true.to_bool())
             .define("GTSAM_USE_SYSTEM_EIGEN", USE_SYSTEM_EIGEN.to_bool());
             // .define("GTSAM_USE_SYSTEM_METIS", USE_SYSTEM_METIS.to_bool());
 
@@ -188,6 +190,7 @@ impl Library {
         "boost_serialization",
         "boost_timer",
         "gtsam",
+        "gtsam_unstable"
     ];
     const EXTERNAL_DYNAMIC_LIBS: &'static [&'static str] = &[
         #[cfg(feature = "link-metis")]
@@ -320,15 +323,15 @@ fn main() {
     println!("cargo:rerun-if-changed=./build.rs");
     println!("cargo:rerun-if-changed=./Cargo.toml");
 
-    let mut library = match Library::find("gtsam") {
-        Ok(library) => library,
-        #[cfg(feature = "build")]
-        Err(_) => {
+    let mut library = {// match Library::find("gtsam") {
+    //     Ok(library) => library,
+    //     #[cfg(feature = "build")]
+    //     Err(_) => {
             let repo = Repository::default();
             repo.build()
-        }
-        #[cfg(not(feature = "build"))]
-        Err(error) => panic!("failed to find \"gtsam\" library; you can enable \"build\" feature to skip the step: {error}"),
+        // }
+        // #[cfg(not(feature = "build"))]
+        // Err(error) => panic!("failed to find \"gtsam\" library; you can enable \"build\" feature to skip the step: {error}"),
     };
 
     library.build();

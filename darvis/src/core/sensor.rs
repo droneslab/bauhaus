@@ -6,19 +6,21 @@ use std::fmt;
 
 #[derive(Clone, Copy, Debug, Default)]
 pub enum FrameSensor {
-    #[default] Mono,
+    #[default]
+    Mono,
     Stereo,
     Rgbd,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
 pub enum ImuSensor {
-    #[default] None,
-    Some
+    #[default]
+    None,
+    Some,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
-pub struct Sensor (pub FrameSensor, pub ImuSensor);
+pub struct Sensor(pub FrameSensor, pub ImuSensor);
 
 impl Sensor {
     pub fn is_mono(&self) -> bool {

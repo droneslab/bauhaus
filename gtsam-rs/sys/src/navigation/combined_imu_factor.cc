@@ -14,8 +14,30 @@ namespace gtsam
         Key pose_i, Key vel_i, Key pose_j, Key vel_j, Key bias_i, Key bias_j,
         const PreintegratedCombinedMeasurements & preintegratedMeasurements)
     {
+
+        // std::cout << "When creating combined imu factor, preintegrated measurements are: ";
+        // preintegratedMeasurements.print();
         return std::make_shared<CombinedImuFactor>(
             pose_i, vel_i, pose_j, vel_j, bias_i, bias_j, preintegratedMeasurements);
+    }
+
+    std::shared_ptr<PreintegrationCombinedParams> new_preintegrated_combined_params(double x, double y, double z)
+    {
+        return to_std_ptr(
+            boost::shared_ptr<PreintegrationCombinedParams>(new PreintegrationCombinedParams(Vector3(x, y, z))));
+    }
+
+    std::shared_ptr<PreintegrationCombinedParams> new_preintegrated_combined_params_negativeyup() {
+        return to_std_ptr(
+            boost::shared_ptr<PreintegrationCombinedParams>(new PreintegrationCombinedParams(Vector3(0, 9.81, 0)))
+        );
+    }
+
+    std::shared_ptr<PreintegrationCombinedParams> new_preintegrated_combined_params_positivexup()
+    {
+        return to_std_ptr(
+            boost::shared_ptr<PreintegrationCombinedParams>(new PreintegrationCombinedParams(Vector3(-9.81, 0, 0)))
+        );
     }
 
     std::shared_ptr<PreintegrationCombinedParams> new_preintegrated_combined_params_makesharedu()
@@ -31,6 +53,7 @@ namespace gtsam
         double sigma_a_sq)
     {
         params->setAccelerometerCovariance(gtsam::I_3x3 * sigma_a_sq);
+        // std::cout << "set_accelerometer_covariance: " << sigma_a_sq << std::endl;
     }
 
     void set_gyroscope_covariance(
@@ -38,6 +61,7 @@ namespace gtsam
         double sigma_g_sq)
     {
         params->setGyroscopeCovariance(gtsam::I_3x3 * sigma_g_sq);
+        // std::cout << "set_gyroscope_covariance: " << sigma_g_sq << std::endl;
     }
 
     void bias_acc_covariance(
@@ -45,6 +69,7 @@ namespace gtsam
         double sigma_wa_sq)
     {
         params->biasAccCovariance = sigma_wa_sq * gtsam::Matrix33::Identity(3, 3);
+        // std::cout << "bias_acc_covariance: " << sigma_wa_sq << std::endl;
     }
 
     void bias_omega_covariance(
@@ -52,6 +77,7 @@ namespace gtsam
         double sigma_wg_sq)
     {
         params->biasOmegaCovariance = sigma_wg_sq * gtsam::Matrix33::Identity(3, 3);
+        // std::cout << "bias_omega_covariance: " << sigma_wg_sq << std::endl;
     }
 
     void set_integration_covariance(
@@ -59,6 +85,7 @@ namespace gtsam
         double val)
     {
         params->setIntegrationCovariance(gtsam::I_3x3 * val);
+        // std::cout << "set_integration_covariance: " << val << std::endl;
     }
 
     void bias_acc_omega_int(
@@ -66,6 +93,7 @@ namespace gtsam
         double val)
     {
         params->biasAccOmegaInt = val * gtsam::Matrix66::Identity(6, 6);
+        // std::cout << "bias_acc_omega_int: " << val << std::endl;
     }
 
     std::unique_ptr<PreintegratedCombinedMeasurements> default_preintegrated_combined_measurements()
@@ -78,8 +106,17 @@ namespace gtsam
         const imuBias::ConstantBias &bias)
     {
         // PreintegratedCombinedMeasurements * msmts = new PreintegratedCombinedMeasurements(to_boost_ptr(params));
+        // params->print();
         return std::make_unique<PreintegratedCombinedMeasurements>(to_boost_ptr(params), bias);
     }
+
+    std::unique_ptr<PreintegratedCombinedMeasurements> clone_preintegrated_combined_measurements(
+        const PreintegratedCombinedMeasurements &preintegrated_measurements
+    )
+    {
+        return std::make_unique<PreintegratedCombinedMeasurements>(preintegrated_measurements);
+    }
+
 
     rust::Vec<DoubleVec> get_covariance(const PreintegratedCombinedMeasurements &preintegrated_measurements)
     {
@@ -92,8 +129,9 @@ namespace gtsam
         const Vector3 &measuredOmega,
         const double dt)
     {
-        // std::cout << "C++ integrate measurement with acceleration " << measuredAcc.transpose() << ", omega " << measuredOmega.transpose() << ", and dt " << dt << std::endl;
+        // std::cout << "C++ integrate measurement with acceleration " << measuredAcc.transpose() << ", omega " << measuredOmega.transpose() << ", dt " << dt << std::endl;
         preintegrated_measurements.integrateMeasurement(measuredAcc, measuredOmega, dt);
+        // preintegrated_measurements.print("Preint meas cov: ");
     }
 
     std::unique_ptr<NavState> predict(
@@ -101,52 +139,62 @@ namespace gtsam
         const NavState &state_i, const imuBias::ConstantBias & bias_i)
     {
         NavState state = preintegrated_measurements.predict(state_i, bias_i);
+        // std::cout << "C++ imu predicted state: " << state.matrix() << std::endl;
+        // std::cout << "C++ predicted velocity: " << state.velocity().transpose() << std::endl;
         return std::make_unique<NavState>(state);
+    }
+
+    std::unique_ptr<Rot3> get_delta_rij(const PreintegratedCombinedMeasurements &preintegrated_measurements)
+    {
+        auto delta_rij = preintegrated_measurements.deltaRij();
+        // std::cout << "C++ get delta rij: " << delta_rij << std::endl;
+        // std::cout << "PIM: "; preintegrated_measurements.print("In get_delta_rij");
+        return std::make_unique<Rot3>(delta_rij);
     }
 
     void reset_integration_and_set_bias(
         PreintegratedCombinedMeasurements &preintegrated_measurements,
         const imuBias::ConstantBias &bias)
     {
-            preintegrated_measurements.resetIntegrationAndSetBias(bias);
+        // std::cout << "C++ reset integration and set bias: " << bias << std::endl;
+        preintegrated_measurements.resetIntegrationAndSetBias(bias);
     }
 
 
+    // FakePreintegratedCombinedMeasurements create_fake_copy_of_preintegrated_measurements(const PreintegratedCombinedMeasurements &preintegrated_measurements)
+    // {
+    //     // PreintegrationBase
+    //     imuBias::ConstantBias bias = preintegrated_measurements.biasHat();
+    //     Vector3 accel_bias = bias.accelerometer();
+    //     Vector3 gyro_bias = bias.gyroscope();
+    //     double deltaTij = preintegrated_measurements.deltaTij();
+    //     // WARNING: Skipping params! Reconstruct it yourself
 
-    FakePreintegratedCombinedMeasurements create_fake_copy_of_preintegrated_measurements(const PreintegratedCombinedMeasurements &preintegrated_measurements)
-    {
-        // PreintegrationBase
-        imuBias::ConstantBias bias = preintegrated_measurements.biasHat();
-        Vector3 accel_bias = bias.accelerometer();
-        Vector3 gyro_bias = bias.gyroscope();
-        double deltaTij = preintegrated_measurements.deltaTij();
-        // WARNING: Skipping params! Reconstruct it yourself
+    //     // TangentPreintegration
+    //     rust::Vec<DoubleVec> preintegrated = eigenmat_to_rustvec(preintegrated_measurements.preintegrated());
+    //     rust::Vec<DoubleVec> preintegrated_H_biasAcc = eigenmat_to_rustvec(preintegrated_measurements.preintegrated_H_biasAcc());
+    //     rust::Vec<DoubleVec> preintegrated_H_biasOmega = eigenmat_to_rustvec(preintegrated_measurements.preintegrated_H_biasOmega());
 
-        // TangentPreintegration
-        rust::Vec<DoubleVec> preintegrated = eigenmat_to_rustvec(preintegrated_measurements.preintegrated());
-        rust::Vec<DoubleVec> preintegrated_H_biasAcc = eigenmat_to_rustvec(preintegrated_measurements.preintegrated_H_biasAcc());
-        rust::Vec<DoubleVec> preintegrated_H_biasOmega = eigenmat_to_rustvec(preintegrated_measurements.preintegrated_H_biasOmega());
+    //     // PreintegratedCombinedMeasurements
+    //     rust::Vec<DoubleVec> preint_meas_cov = eigenmat_to_rustvec(preintegrated_measurements.preintMeasCov());
 
-        // PreintegratedCombinedMeasurements
-        rust::Vec<DoubleVec> preint_meas_cov = eigenmat_to_rustvec(preintegrated_measurements.preintMeasCov());
+    //     FakePreintegratedCombinedMeasurements fake;
+    //     fake.bias_acc = {
+    //         (double)accel_bias[0],
+    //         (double)accel_bias[1],
+    //         (double)accel_bias[2]};
+    //     fake.bias_gyro = {
+    //         (double)gyro_bias[0],
+    //         (double)gyro_bias[1],
+    //         (double)gyro_bias[2]};
+    //     fake.delta_tij = deltaTij;
+    //     fake.preintegrated = preintegrated;
+    //     fake.preintegrated_H_biasAcc = preintegrated_H_biasAcc;
+    //     fake.preintegrated_H_biasOmega = preintegrated_H_biasOmega;
+    //     fake.preint_meas_cov = preint_meas_cov;
 
-        FakePreintegratedCombinedMeasurements fake;
-        fake.bias_acc = {
-            (double)accel_bias[0],
-            (double)accel_bias[1],
-            (double)accel_bias[2]};
-        fake.bias_gyro = {
-            (double)gyro_bias[0],
-            (double)gyro_bias[1],
-            (double)gyro_bias[2]};
-        fake.delta_tij = deltaTij;
-        fake.preintegrated = preintegrated;
-        fake.preintegrated_H_biasAcc = preintegrated_H_biasAcc;
-        fake.preintegrated_H_biasOmega = preintegrated_H_biasOmega;
-        fake.preint_meas_cov = preint_meas_cov;
-
-        return fake;
-    }
+    //     return fake;
+    // }
 
     // Eigen::MatrixXd rustvec_to_eigenmat(rust::Vec<DoubleVec> mat)
     // {

@@ -1,5 +1,5 @@
 // In ORBSLAM, there are a lot of extra variables that are set to 0 or null
-// because they are only used in stereo or IMU cases. This encapsulates 
+// because they are only used in stereo or IMU cases. This encapsulates
 // "all feature data" into a struct that has different variables depending
 // on the type of sensor.
 
@@ -7,20 +7,19 @@
 // But at the same time it's nice to hide a lot of this logic away from the keyframe. It would be good to
 // re-factor this eventually but it isn't high priority.
 
-use core::config::SETTINGS;
-use std::fmt::Debug;
-use core::sensor::{Sensor, FrameSensor};
-use opencv::prelude::{Mat, MatTraitConst, MatTrait, KeyPointTraitConst};
-use opencv::types::VectorOff32;
-use opencv::core::{KeyPoint, CV_32F, Scalar, Point2f};
 use crate::registered_actors::{CAMERA_MODULE, FEATURES};
 use crate::{
-    matrix::{DVMatrix, DVVectorOfKeyPoint},
     map::map::Id,
+    matrix::{DVMatrix, DVVectorOfKeyPoint},
 };
-use std::sync::atomic::{AtomicBool, Ordering};
 use atomic_float::AtomicF32;
-use log::debug;
+use core::config::SETTINGS;
+use core::sensor::{FrameSensor, Sensor};
+use opencv::core::{KeyPoint, Point2f, Scalar, CV_32F};
+use opencv::prelude::{KeyPointTraitConst, Mat, MatTrait, MatTraitConst};
+use opencv::types::{VectorOfPoint2f, VectorOff32};
+use std::fmt::Debug;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 // Equal to:
 //   bool Frame::mbInitialComputations=true;
@@ -37,15 +36,14 @@ static IMAGE_MAX_Y: AtomicF32 = AtomicF32::new(0.0);
 static IMAGE_GRID_ELEMENT_WIDTH_INV: AtomicF32 = AtomicF32::new(0.0);
 static IMAGE_GRID_ELEMENT_HEIGHT_INV: AtomicF32 = AtomicF32::new(0.0);
 
-
-
 #[derive(Clone, Debug, Default)]
 enum KeyPoints {
-    #[default] Empty,
-    Mono { 
-        keypoints_un: DVVectorOfKeyPoint // Undistorted keypoints actually used by the system. For stereo, this is redundant bc images must be rectified
+    #[default]
+    Empty,
+    Mono {
+        keypoints_un: DVVectorOfKeyPoint, // Undistorted keypoints actually used by the system. For stereo, this is redundant bc images must be rectified
     },
-    Stereo { 
+    Stereo {
         keypoints_left: DVVectorOfKeyPoint,
         keypoints_left_cutoff: u32, // Nleft, if stereo and index passed in is < keypoints_left_cutoff, need to get keypoint from keypoints_right instead of keypoints
         keypoints_right: DVVectorOfKeyPoint,
@@ -54,14 +52,13 @@ enum KeyPoints {
     },
     Rgbd {
         keypoints_un: DVVectorOfKeyPoint, // Undistorted keypoints actually used by the system. For stereo, this is redundant bc images must be rectified
-        mv_depth: Vec<f32>, //mvDepth
-    }
+        mv_depth: Vec<f32>,               //mvDepth
+    },
 }
 
 #[derive(Clone, Debug, Default)]
 pub struct Features {
     // Common across all sensor types
-
     pub num_keypoints: u32, // N
     keypoints: KeyPoints,
     pub descriptors: DVMatrix, // mDescriptors
@@ -73,11 +70,9 @@ pub struct Features {
     grid: Vec<Vec<Vec<usize>>>, // mGrid
 
     // Settings
-    frame_grid_cols: i32, 
+    frame_grid_cols: i32,
     frame_grid_rows: i32,
-
 }
-
 
 // Function to find minimum of two f32 values
 fn min_float(a: f32, b: f32) -> f32 {
@@ -98,7 +93,7 @@ fn max_float(a: f32, b: f32) -> f32 {
 }
 
 impl Features {
-    pub fn empty() -> Self{
+    pub fn empty() -> Self {
         Features {
             num_keypoints: 0,
             keypoints: KeyPoints::Empty,
@@ -107,15 +102,16 @@ impl Features {
             image_height: 0,
             grid: vec![],
             frame_grid_cols: 0,
-            frame_grid_rows: 0
+            frame_grid_rows: 0,
         }
     }
 
     pub fn new(
         keypoints: DVVectorOfKeyPoint,
         descriptors: DVMatrix,
-        im_width: u32, im_height: u32,
-        sensor: Sensor
+        im_width: u32,
+        im_height: u32,
+        sensor: Sensor,
     ) -> Result<Features, Box<dyn std::error::Error>> {
         // Grid
         let frame_grid_cols = SETTINGS.get::<i32>(FEATURES, "frame_grid_cols");
@@ -138,17 +134,26 @@ impl Features {
 
                     IMAGE_GRID_ELEMENT_WIDTH_INV.store(
                         (frame_grid_cols as f32)
-                        / (IMAGE_MAX_X.load(Ordering::SeqCst) - IMAGE_MIN_X.load(Ordering::SeqCst))
-                    , Ordering::SeqCst);
+                            / (IMAGE_MAX_X.load(Ordering::SeqCst)
+                                - IMAGE_MIN_X.load(Ordering::SeqCst)),
+                        Ordering::SeqCst,
+                    );
                     IMAGE_GRID_ELEMENT_HEIGHT_INV.store(
                         (frame_grid_rows as f32)
-                        / (IMAGE_MAX_Y.load(Ordering::SeqCst) - IMAGE_MIN_Y.load(Ordering::SeqCst))
-                    , Ordering::SeqCst);
+                            / (IMAGE_MAX_Y.load(Ordering::SeqCst)
+                                - IMAGE_MIN_Y.load(Ordering::SeqCst)),
+                        Ordering::SeqCst,
+                    );
                     SHOULD_COMPUTE_IMAGE_BOUNDS.store(false, Ordering::SeqCst);
                 }
 
                 // assign features to grid
-                Self::assign_features_to_grid(&mut grid, & keypoints_un, frame_grid_rows, frame_grid_cols);
+                Self::assign_features_to_grid(
+                    &mut grid,
+                    &keypoints_un,
+                    frame_grid_rows,
+                    frame_grid_cols,
+                );
 
                 let features = Features {
                     num_keypoints,
@@ -158,38 +163,44 @@ impl Features {
                     frame_grid_cols,
                     frame_grid_rows,
                     image_width: im_width,
-                    image_height: im_height
+                    image_height: im_height,
                 };
 
                 Ok(features)
-            },
+            }
             FrameSensor::Rgbd => {
                 todo!("RGBD");
                 // mv_right and mv_depth size should be same as keypoints, if there isn't a value for an index it should be 0
-            },
+            }
             FrameSensor::Stereo => {
                 todo!("Stereo");
                 // mv_right and mv_depth size should be same as keypoints, if there isn't a value for an index it should be 0
             }
-
         }
     }
 
     pub fn _has_left_kp(&self) -> Option<u32> {
         match &self.keypoints {
-            KeyPoints::Stereo{keypoints_left_cutoff, ..} => Some(*keypoints_left_cutoff),
-            _ => None
+            KeyPoints::Stereo {
+                keypoints_left_cutoff,
+                ..
+            } => Some(*keypoints_left_cutoff),
+            _ => None,
         }
     }
 
     pub fn get_all_keypoints(&self) -> &DVVectorOfKeyPoint {
         match &self.keypoints {
-            KeyPoints::Mono{keypoints_un, ..} | KeyPoints::Rgbd{keypoints_un, ..} => keypoints_un,
-            KeyPoints::Stereo{  ..} => { 
-                todo!("Stereo, need to concat keypoints_left and keypoints_right
-                    but can we do this without copying?")
-            },
-            KeyPoints::Empty => panic!("Keypoints should not be empty")
+            KeyPoints::Mono { keypoints_un, .. } | KeyPoints::Rgbd { keypoints_un, .. } => {
+                keypoints_un
+            }
+            KeyPoints::Stereo { .. } => {
+                todo!(
+                    "Stereo, need to concat keypoints_left and keypoints_right
+                    but can we do this without copying?"
+                )
+            }
+            KeyPoints::Empty => panic!("Keypoints should not be empty"),
         }
     }
 
@@ -197,59 +208,77 @@ impl Features {
         // equivalent to mvKeysUn[leftIndex] or mvKeysUn[rightIndex]
         // Return keypoint and whether it is in the right frame or not
         match &self.keypoints {
-            KeyPoints::Mono{keypoints_un, ..} | KeyPoints::Rgbd{keypoints_un, ..} => (keypoints_un.get(index).unwrap(), false),
-            KeyPoints::Stereo{keypoints_left, keypoints_left_cutoff, keypoints_right, ..} => {
+            KeyPoints::Mono { keypoints_un, .. } | KeyPoints::Rgbd { keypoints_un, .. } => {
+                (keypoints_un.get(index).unwrap(), false)
+            }
+            KeyPoints::Stereo {
+                keypoints_left,
+                keypoints_left_cutoff,
+                keypoints_right,
+                ..
+            } => {
                 if index < *keypoints_left_cutoff as usize {
                     (keypoints_left.get(index).unwrap(), false)
                 } else {
                     (keypoints_right.get(index).unwrap(), true)
                 }
-            },
-            KeyPoints::Empty => panic!("Keypoints should not be empty")
+            }
+            KeyPoints::Empty => panic!("Keypoints should not be empty"),
         }
     }
 
-    pub fn _replace_keypoints_and_descriptors(&mut self, keypoints: opencv::types::VectorOfKeyPoint, descriptors: Mat) {
+    pub fn _replace_keypoints_and_descriptors(
+        &mut self,
+        keypoints: opencv::types::VectorOfKeyPoint,
+        descriptors: Mat,
+    ) {
         match &self.keypoints {
-            KeyPoints::Mono{..} => {
+            KeyPoints::Mono { .. } => {
                 self.num_keypoints = keypoints.len() as u32;
-                self.keypoints = KeyPoints::Mono { keypoints_un: DVVectorOfKeyPoint::new(keypoints) };
+                self.keypoints = KeyPoints::Mono {
+                    keypoints_un: DVVectorOfKeyPoint::new(keypoints),
+                };
                 self.descriptors = DVMatrix::new(descriptors);
-            },
-            KeyPoints::Rgbd{ ..} => todo!("RGBD"),
-            KeyPoints::Stereo{  ..} => todo!("Stereo"), 
-            KeyPoints::Empty => panic!("Keypoints should not be empty")
+            }
+            KeyPoints::Rgbd { .. } => todo!("RGBD"),
+            KeyPoints::Stereo { .. } => todo!("Stereo"),
+            KeyPoints::Empty => panic!("Keypoints should not be empty"),
         };
     }
 
     pub fn _remove_keypoint(&mut self, index: usize) -> Result<(), Box<dyn std::error::Error>> {
         // NOTE: THIS DOES NOT REMOVE THE DESCRIPTOR!
         match self.keypoints {
-            KeyPoints::Mono{ref mut keypoints_un, ..} => {
+            KeyPoints::Mono {
+                ref mut keypoints_un,
+                ..
+            } => {
                 keypoints_un.remove(index)?;
                 self.num_keypoints -= 1;
                 Ok(())
-            },
-            KeyPoints::Rgbd{ ..} => todo!("RGBD"),
-            KeyPoints::Stereo{  ..} => todo!("Stereo"), 
-            KeyPoints::Empty => panic!("Keypoints should not be empty")
+            }
+            KeyPoints::Rgbd { .. } => todo!("RGBD"),
+            KeyPoints::Stereo { .. } => todo!("Stereo"),
+            KeyPoints::Empty => panic!("Keypoints should not be empty"),
         }
     }
 
     pub fn get_mv_depth(&self, i: usize) -> Option<f32> {
         match &self.keypoints {
-            KeyPoints::Mono{..}  => None,
-            KeyPoints::Stereo{mv_depth, ..} | KeyPoints::Rgbd{mv_depth, ..} => Some(mv_depth[i]),
-            KeyPoints::Empty => panic!("Keypoints should not be empty")
+            KeyPoints::Mono { .. } => None,
+            KeyPoints::Stereo { mv_depth, .. } | KeyPoints::Rgbd { mv_depth, .. } => {
+                Some(mv_depth[i])
+            }
+            KeyPoints::Empty => panic!("Keypoints should not be empty"),
         }
     }
 
     pub fn get_mv_right(&self, i: usize) -> Option<f32> {
         // mvuRight
         match &self.keypoints {
-            KeyPoints::Mono{..} | KeyPoints::Rgbd{..}  => None,
-            KeyPoints::Stereo{mv_right, ..}  => Some(mv_right[i]),
-            KeyPoints::Empty => panic!("Keypoints should not be empty")
+            KeyPoints::Mono { .. } | KeyPoints::Rgbd { .. } => None,
+            KeyPoints::Stereo { mv_right, .. } => Some(mv_right[i]),
+            KeyPoints::Empty => panic!("Keypoints should not be empty"),
         }
     }
 
@@ -261,10 +290,14 @@ impl Features {
         self.get_keypoint(index).0.octave()
     }
 
-    pub fn check_close_tracked_mappoints( &self, th_depth: f32, mappoint_matches: &Vec<Option<(Id, bool)>> ) -> (i32, i32) {
+    pub fn check_close_tracked_mappoints(
+        &self,
+        th_depth: f32,
+        mappoint_matches: &Vec<Option<(Id, bool)>>,
+    ) -> (i32, i32) {
         match &self.keypoints {
-            KeyPoints::Mono{..}  => (0,0),
-            KeyPoints::Stereo{mv_depth, ..} | KeyPoints::Rgbd{mv_depth, ..} => {
+            KeyPoints::Mono { .. } => (0, 0),
+            KeyPoints::Stereo { mv_depth, .. } | KeyPoints::Rgbd { mv_depth, .. } => {
                 let (mut tracked_close, mut non_tracked_close) = (0, 0);
                 for i in 0..self.num_keypoints as u32 {
                     let depth = mv_depth[i as usize];
@@ -278,13 +311,19 @@ impl Features {
                         }
                     }
                 }
-                (tracked_close, non_tracked_close) 
-            },
-            KeyPoints::Empty => panic!("Keypoints should not be empty")
+                (tracked_close, non_tracked_close)
+            }
+            KeyPoints::Empty => panic!("Keypoints should not be empty"),
         }
     }
 
-    pub fn get_features_in_area(&self, x: &f64, y: &f64, r: f64, levels: Option<(i32, i32)>,) -> Vec<u32> {
+    pub fn get_features_in_area(
+        &self,
+        x: &f64,
+        y: &f64,
+        r: f64,
+        levels: Option<(i32, i32)>,
+    ) -> Vec<u32> {
         //GetFeaturesInArea
         let mut indices = vec![];
 
@@ -296,24 +335,35 @@ impl Features {
         let factor_x = r;
         let factor_y = r;
 
-        let min_cell_x = i64::max(0, ((x-min_x-factor_x)*grid_element_width_inv).floor() as i64);
-        let max_cell_x = i64::min((self.frame_grid_cols-1) as i64, ((x-min_x+factor_x)*grid_element_width_inv).ceil() as i64);
-        let min_cell_y = i64::max(0, ((y-min_y-factor_y)*grid_element_height_inv).floor() as i64);
-        let max_cell_y = i64::min((self.frame_grid_rows-1) as i64, ((y-min_y+factor_y)*grid_element_height_inv).ceil() as i64);
+        let min_cell_x = i64::max(
+            0,
+            ((x - min_x - factor_x) * grid_element_width_inv).floor() as i64,
+        );
+        let max_cell_x = i64::min(
+            (self.frame_grid_cols - 1) as i64,
+            ((x - min_x + factor_x) * grid_element_width_inv).ceil() as i64,
+        );
+        let min_cell_y = i64::max(
+            0,
+            ((y - min_y - factor_y) * grid_element_height_inv).floor() as i64,
+        );
+        let max_cell_y = i64::min(
+            (self.frame_grid_rows - 1) as i64,
+            ((y - min_y + factor_y) * grid_element_height_inv).ceil() as i64,
+        );
 
-        // println!("Min_cell_x: {}, x: {}, min_x: {}, factor_x: {}, grid_element_width_inv: {}", min_cell_x, x, min_x, factor_x, grid_element_width_inv);
-
-        if !self.is_in_image(min_cell_x as f64, min_cell_y as f64) || !self.is_in_image(max_cell_x as f64, max_cell_y as f64) {
+        if !self.is_in_image(min_cell_x as f64, min_cell_y as f64)
+            || !self.is_in_image(max_cell_x as f64, max_cell_y as f64)
+        {
             return indices;
         }
 
-        let check_levels = levels.is_some() && (levels.unwrap().0>0 || levels.unwrap().1>=0);
+        let check_levels = levels.is_some() && (levels.unwrap().0 > 0 || levels.unwrap().1 >= 0);
 
-        // debug!("Get features in area... min cell x: {}, max cell x: {}, min cell y: {}, max cell y: {}", min_cell_x, max_cell_x, min_cell_y, max_cell_y);
         for ix in min_cell_x..max_cell_x + 1 {
             for iy in min_cell_y..max_cell_y + 1 {
-                let v_cell  =&self.grid[ix as usize][iy as usize];
-                // TODO (STEREO) 
+                let v_cell = &self.grid[ix as usize][iy as usize];
+                // TODO (STEREO)
                 //const vector<size_t> vCell = (!bRight) ? mGrid[ix][iy] : mGridRight[ix][iy];
 
                 if v_cell.is_empty() {
@@ -337,7 +387,7 @@ impl Features {
                     let distx = kp_un.pt().x - (*x as f32);
                     let disty = kp_un.pt().y - (*y as f32);
 
-                    if distx.abs()<(factor_x as f32) && disty.abs() < (factor_y as f32)  {
+                    if distx.abs() < (factor_x as f32) && disty.abs() < (factor_y as f32) {
                         indices.push(v_cell[j] as u32);
                     }
                 }
@@ -355,8 +405,10 @@ impl Features {
         return x >= min_x && x < max_x && y >= min_y && y < max_y;
     }
 
-
-    fn undistort_keypoints(keypoints: &DVVectorOfKeyPoint, dist_coef: & Vec<f32>) -> Result<DVVectorOfKeyPoint, Box<dyn std::error::Error>> {
+    pub fn undistort_keypoints(
+        keypoints: &DVVectorOfKeyPoint,
+        dist_coef: &Vec<f32>,
+    ) -> Result<DVVectorOfKeyPoint, Box<dyn std::error::Error>> {
         // void Frame::UndistortKeyPoints()
 
         let num_keypoints = keypoints.len();
@@ -388,15 +440,70 @@ impl Features {
         for i in 0..num_keypoints {
             let kp_orig = keypoints.get(i as usize)?;
             let kp_new = KeyPoint::new_point(
-                Point2f::new(*undistorted.at_2d::<f32>(i, 0)?,  *undistorted.at_2d::<f32>(i, 1)?),
-                kp_orig.size(), kp_orig.angle(), kp_orig.response(), kp_orig.octave(), kp_orig.class_id())?;
+                Point2f::new(
+                    *undistorted.at_2d::<f32>(i, 0)?,
+                    *undistorted.at_2d::<f32>(i, 1)?,
+                ),
+                kp_orig.size(),
+                kp_orig.angle(),
+                kp_orig.response(),
+                kp_orig.octave(),
+                kp_orig.class_id(),
+            )?;
             keypoints_un.push(kp_new);
         }
 
         Ok(DVVectorOfKeyPoint::new(keypoints_un))
     }
 
-    fn compute_image_bounds(im_width: u32, im_height: u32) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn undistort_points(
+        keypoints: &VectorOfPoint2f,
+        dist_coef: &Vec<f32>,
+    ) -> Result<Vec<Point2f>, Box<dyn std::error::Error>> {
+        // same as undistortkeypoints, but for points object instead
+
+        let num_keypoints = keypoints.len() as i32;
+        // Fill matrix with points
+        let mut mat = Mat::new_rows_cols_with_default(num_keypoints, 2, CV_32F, Scalar::all(0.0))?;
+        for i in 0..num_keypoints {
+            *mat.at_2d_mut::<f32>(i, 0)? = keypoints.get(i as usize)?.x;
+            *mat.at_2d_mut::<f32>(i, 1)? = keypoints.get(i as usize)?.y;
+        }
+
+        // Undistort points
+        mat = mat.reshape(2, 0)?;
+
+        let mut undistorted = mat.clone(); // TODO (timing) ... trying to avoid clone, but can't have &mat and &mut mat at the same time
+        let dist_coefs = VectorOff32::from_iter((*dist_coef).clone());
+        opencv::calib3d::undistort_points(
+            &mat,
+            &mut undistorted,
+            &CAMERA_MODULE.k_matrix.mat(),
+            &dist_coefs,
+            &Mat::default(),
+            &CAMERA_MODULE.k_matrix.mat(),
+        )?;
+
+        undistorted = undistorted.reshape(1, 0)?;
+
+        // Fill undistorted keypoint vector
+        let mut keypoints_un = vec![];
+        for i in 0..num_keypoints {
+            let kp_orig = keypoints.get(i as usize)?;
+            let kp_new = Point2f::new(
+                *undistorted.at_2d::<f32>(i, 0)?,
+                *undistorted.at_2d::<f32>(i, 1)?,
+            );
+            keypoints_un.push(kp_new);
+        }
+
+        Ok(keypoints_un)
+    }
+
+    fn compute_image_bounds(
+        im_width: u32,
+        im_height: u32,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         if let Some(dist_coeffs) = &CAMERA_MODULE.dist_coef {
             let points = vec![
                 Point2f::new(0.0, 0.0),
@@ -406,7 +513,9 @@ impl Features {
             ];
 
             // Reshape points
-            let mut mat = Mat::from_slice_2d(&points.iter().map(|p| vec![p.x, p.y]).collect::<Vec<_>>()).unwrap();
+            let mut mat =
+                Mat::from_slice_2d(&points.iter().map(|p| vec![p.x, p.y]).collect::<Vec<_>>())
+                    .unwrap();
             mat = mat.reshape(2, 0).unwrap();
 
             // Undistort points
@@ -454,18 +563,28 @@ impl Features {
         Ok(())
     }
 
-    fn assign_features_to_grid(grid: &mut Vec<Vec<Vec<usize>>>, keypoints_un: & DVVectorOfKeyPoint, frame_grid_rows: i32, frame_grid_cols: i32) {
+    fn assign_features_to_grid(
+        grid: &mut Vec<Vec<Vec<usize>>>,
+        keypoints_un: &DVVectorOfKeyPoint,
+        frame_grid_rows: i32,
+        frame_grid_cols: i32,
+    ) {
         let min_x = IMAGE_MIN_X.load(Ordering::SeqCst);
         let min_y = IMAGE_MIN_Y.load(Ordering::SeqCst);
-        let grid_element_width_inv =  IMAGE_GRID_ELEMENT_WIDTH_INV.load(Ordering::SeqCst) as f64;
+        let grid_element_width_inv = IMAGE_GRID_ELEMENT_WIDTH_INV.load(Ordering::SeqCst) as f64;
         let grid_element_height_inv = IMAGE_GRID_ELEMENT_HEIGHT_INV.load(Ordering::SeqCst) as f64;
 
         for i in 0..keypoints_un.len() as usize {
             let kp = &keypoints_un.get(i).unwrap();
-            let pos_x = ((kp.pt().x-(min_x as f32))*grid_element_width_inv as f32).round() as i32;
-            let pos_y = ((kp.pt().y-(min_y as f32))*grid_element_height_inv as f32).round() as i32;
+            let pos_x =
+                ((kp.pt().x - (min_x as f32)) * grid_element_width_inv as f32).round() as i32;
+            let pos_y =
+                ((kp.pt().y - (min_y as f32)) * grid_element_height_inv as f32).round() as i32;
 
-            let not_in_bounds = pos_x<0 || pos_x>=frame_grid_cols as i32 || pos_y<0 || pos_y>=frame_grid_rows as i32;
+            let not_in_bounds = pos_x < 0
+                || pos_x >= frame_grid_cols as i32
+                || pos_y < 0
+                || pos_y >= frame_grid_rows as i32;
 
             //Keypoint's coordinates are undistorted, which could cause to go out of the image
             if not_in_bounds {
@@ -474,8 +593,5 @@ impl Features {
                 grid[pos_x as usize][pos_y as usize].push(i);
             }
         }
-
     }
-    
 }
-

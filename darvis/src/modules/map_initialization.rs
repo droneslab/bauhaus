@@ -1,25 +1,26 @@
-use core::config::{SETTINGS, SYSTEM};
-use core::matrix::{DVVector3, DVVectorOfPoint2f};
-use core::sensor::{Sensor, FrameSensor, ImuSensor};
-use core::system::Timestamp;
-use std::collections::BTreeSet;
-use log::{debug, info, warn};
-use core::matrix::DVVectorOfPoint3f;
-use opencv::prelude::KeyPointTraitConst;
+use super::imu::{ImuBias, ImuPreIntegrated};
+use super::module_definitions::MapInitializationModule;
 use crate::map::map::Id;
 use crate::map::read_only_lock::ReadWriteMap;
 use crate::map::{frame::Frame, pose::Pose};
-use crate::registered_actors::{CAMERA_MODULE, FEATURE_MATCHING_MODULE, FULL_MAP_OPTIMIZATION_MODULE};
 use crate::modules::module_definitions::CameraModule;
-use super::imu::{ImuBias, ImuPreIntegrated};
-use super::module_definitions::MapInitializationModule;
-
+use crate::registered_actors::{
+    CAMERA_MODULE, FEATURE_MATCHING_MODULE, FULL_MAP_OPTIMIZATION_MODULE,
+};
+use core::config::{SETTINGS, SYSTEM};
+use core::matrix::DVVectorOfPoint3f;
+use core::matrix::{DVVector3, DVVectorOfPoint2f};
+use core::sensor::{FrameSensor, ImuSensor, Sensor};
+use core::system::Timestamp;
+use log::info;
+use opencv::prelude::KeyPointTraitConst;
+use std::collections::BTreeSet;
 
 pub struct MapInitialization {
     // Monocular
-    pub mp_matches: Vec<i32>,// ini_matches .. mvIniMatches;
-    pub prev_matched: DVVectorOfPoint2f,// std::vector<cv::Point2f> mvbPrevMatched;
-    pub p3d: DVVectorOfPoint3f,// std::vector<cv::Point3f> mvIniP3D;
+    pub mp_matches: Vec<i32>,            // ini_matches .. mvIniMatches;
+    pub prev_matched: DVVectorOfPoint2f, // std::vector<cv::Point2f> mvbPrevMatched;
+    pub p3d: DVVectorOfPoint3f,          // std::vector<cv::Point3f> mvIniP3D;
     pub ready_to_initialize: bool,
     pub initial_frame: Option<Frame>,
     pub last_frame: Option<Frame>,
@@ -29,19 +30,19 @@ pub struct MapInitialization {
 impl MapInitializationModule for MapInitialization {
     type Frame = Frame;
     type Map = ReadWriteMap;
-    type InitializationResult = Result<Option<(Pose, i32, i32, BTreeSet<Id>, Timestamp, f64)>, Box<dyn std::error::Error>>;
+    type InitializationResult =
+        Result<Option<(Pose, i32, i32, BTreeSet<Id>, Timestamp, f64)>, Box<dyn std::error::Error>>;
 
-    fn try_initialize(&mut self, current_frame: &Frame, imu_preintegrated_from_last_kf: &mut ImuPreIntegrated) -> Result<bool, Box<dyn std::error::Error>> {
+    fn try_initialize(
+        &mut self,
+        current_frame: &Frame,
+        imu_preintegrated_from_last_kf: &mut ImuPreIntegrated,
+    ) -> Result<bool, Box<dyn std::error::Error>> {
         match self.sensor.frame() {
-            FrameSensor::Mono => self.monocular_initialization(current_frame, imu_preintegrated_from_last_kf),
-            _ => self.stereo_initialization()
-        }
-    }
-
-    fn create_initial_map(&mut self, map: &mut Self::Map, imu_preintegrated_from_last_kf: &mut  ImuPreIntegrated) -> Self::InitializationResult {
-        match self.sensor.frame() {
-            FrameSensor::Mono => self.create_initial_map_monocular(map, imu_preintegrated_from_last_kf),
-            _ => self.create_initial_map_stereo()
+            FrameSensor::Mono => {
+                self.monocular_initialization(current_frame, imu_preintegrated_from_last_kf)
+            }
+            _ => self.stereo_initialization(),
         }
     }
 }
@@ -57,11 +58,15 @@ impl MapInitialization {
             initial_frame: None,
             last_frame: None,
             current_frame: None,
-            sensor
+            sensor,
         }
     }
 
-    fn monocular_initialization(&mut self, current_frame: &Frame, imu_preintegrated_from_last_kf: &mut  ImuPreIntegrated) -> Result<bool, Box<dyn std::error::Error>> {
+    fn monocular_initialization(
+        &mut self,
+        current_frame: &Frame,
+        imu_preintegrated_from_last_kf: &mut ImuPreIntegrated,
+    ) -> Result<bool, Box<dyn std::error::Error>> {
         // Ref code: https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/master/src/Tracking.cc#L2448
 
         self.current_frame = Some(current_frame.clone());
@@ -71,7 +76,8 @@ impl MapInitialization {
             // Set Reference Frame
             self.prev_matched.clear();
             for i in 0..current_frame.features.num_keypoints as usize {
-                self.prev_matched.push(current_frame.features.get_keypoint(i).0.pt().clone());
+                self.prev_matched
+                    .push(current_frame.features.get_keypoint(i).0.pt().clone());
             }
 
             self.initial_frame = Some(current_frame.clone());
@@ -79,40 +85,49 @@ impl MapInitialization {
 
             if self.sensor.is_imu() {
                 *imu_preintegrated_from_last_kf = ImuPreIntegrated::new(ImuBias::new());
-                self.current_frame.as_mut().unwrap().imu_data.imu_preintegrated = Some(imu_preintegrated_from_last_kf.clone());
+                self.current_frame
+                    .as_mut()
+                    .unwrap()
+                    .imu_data
+                    .imu_preintegrated = Some(imu_preintegrated_from_last_kf.clone());
             }
 
             self.ready_to_initialize = true;
             return Ok(false);
         } else {
-            if current_frame.features.num_keypoints <=100 || self.sensor.is_imu() && (self.last_frame.as_ref().unwrap().timestamp - self.initial_frame.as_ref().unwrap().timestamp) > 1.0 {
-                debug!("QUIT: Timestamp too high?");
+            if current_frame.features.num_keypoints <= 100
+                || self.sensor.is_imu()
+                    && (self.last_frame.as_ref().unwrap().timestamp
+                        - self.initial_frame.as_ref().unwrap().timestamp)
+                        > 1.0
+            {
                 self.ready_to_initialize = false;
                 return Ok(false);
             }
 
             // Find correspondences
             let (mut num_matches, mp_matches) = FEATURE_MATCHING_MODULE.search_for_initialization(
-                &self.initial_frame.as_ref().unwrap(), 
+                &self.initial_frame.as_ref().unwrap(),
                 &current_frame,
                 &mut self.prev_matched,
-                100
+                100,
             );
             self.mp_matches = mp_matches;
 
             // Check if there are enough correspondences
             if num_matches < 100 {
-                println!("QUIT: Matches too low... {} matches, {} prev_matched, initial frame id {}, current frame id {}", num_matches, self.prev_matched.len(), self.initial_frame.as_ref().unwrap().frame_id, current_frame.frame_id);
                 self.ready_to_initialize = false;
                 return Ok(false);
             };
 
-            println!("Matches... {} matches, {} prev_matched, initial frame id {}, current frame id {}", num_matches, self.prev_matched.len(), self.initial_frame.as_ref().unwrap().frame_id, current_frame.frame_id);
-
             if let Some((tcw, v_p3d, vb_triangulated)) = CAMERA_MODULE.two_view_reconstruction(
-                self.initial_frame.as_ref().unwrap().features.get_all_keypoints(),
+                self.initial_frame
+                    .as_ref()
+                    .unwrap()
+                    .features
+                    .get_all_keypoints(),
                 current_frame.features.get_all_keypoints(),
-                & self.mp_matches,
+                &self.mp_matches,
             ) {
                 self.p3d = v_p3d;
 
@@ -128,7 +143,7 @@ impl MapInitialization {
 
                 return Ok(true);
             } else {
-                debug!("MonocularInitialization, ReconstructWithTwoViews... failure");
+                // debug!("MonocularInitialization, ReconstructWithTwoViews... failure");
                 return Ok(false);
             }
         }
@@ -139,8 +154,11 @@ impl MapInitialization {
     }
 
     pub fn create_initial_map_monocular(
-        &mut self, map: &mut ReadWriteMap, imu_preintegrated_from_last_kf: &mut  ImuPreIntegrated
-    ) -> Result<Option<(Pose, i32, i32, BTreeSet<Id>, Timestamp, f64)>, Box<dyn std::error::Error>> {
+        &mut self,
+        map: &mut ReadWriteMap,
+        imu_preintegrated_from_last_kf: &mut ImuPreIntegrated,
+    ) -> Result<Option<(Pose, i32, i32, BTreeSet<Id>, Timestamp, f64)>, Box<dyn std::error::Error>>
+    {
         // TODO (design, rust issues) - we have to do some pretty gross things with calling functions in this section
         // so that we can have multiple references to parts of the map. This should get cleaned up, but I'm not sure how.
 
@@ -160,14 +178,8 @@ impl MapInitialization {
             std::mem::swap(&mut current_frame, &mut self.current_frame);
 
             // Create KeyFrames
-            let initial_kf_id = lock.insert_keyframe_to_map(
-                initial_frame.unwrap(),
-                true
-            );
-            let curr_kf_id = lock.insert_keyframe_to_map(
-                current_frame.unwrap(),
-                true
-            );
+            let initial_kf_id = lock.insert_keyframe_to_map(initial_frame.unwrap(), true);
+            let curr_kf_id = lock.insert_keyframe_to_map(current_frame.unwrap(), true);
 
             let mut count = 0;
             for kf1_index in 0..self.mp_matches.len() {
@@ -176,7 +188,7 @@ impl MapInitialization {
                 if kf2_index == -1 {
                     continue;
                 }
-                count +=1;
+                count += 1;
 
                 // Create mappoint
                 // This also adds the observations from mappoint -> keyframe and keyframe -> mappoint
@@ -184,13 +196,19 @@ impl MapInitialization {
                 let world_pos = DVVector3::new_with(point.x as f64, point.y as f64, point.z as f64);
                 let origin_map_id = lock.id;
                 let _id = lock.insert_mappoint_to_map(
-                    world_pos, 
-                    curr_kf_id, 
+                    world_pos,
+                    curr_kf_id,
                     origin_map_id,
-                    vec![(initial_kf_id, num_keypoints, kf1_index), (curr_kf_id, num_keypoints, kf2_index as usize)]
+                    vec![
+                        (initial_kf_id, num_keypoints, kf1_index),
+                        (curr_kf_id, num_keypoints, kf2_index as usize),
+                    ],
                 );
             }
-            info!("Monocular initialization created new map with {} mappoints", count);
+            info!(
+                "Monocular initialization created new map with {} mappoints",
+                count
+            );
 
             // Update Connections
             lock.update_connections(initial_kf_id);
@@ -203,20 +221,21 @@ impl MapInitialization {
 
         let median_depth = {
             let lock = map.read()?;
-            lock.get_keyframe(initial_kf_id).compute_scene_median_depth(& lock.mappoints, 2)
+            lock.get_keyframe(initial_kf_id)
+                .compute_scene_median_depth(&lock.mappoints, 2)
         };
         let inverse_median_depth = match self.sensor {
             Sensor(FrameSensor::Mono, ImuSensor::Some) => 4.0 / median_depth,
-            _ => 1.0 / median_depth
+            _ => 1.0 / median_depth,
         };
 
         let tracked_mappoints = {
             let lock = map.read()?;
-            lock.get_keyframe(curr_kf_id).get_tracked_mappoints(&lock, 1)
+            lock.get_keyframe(curr_kf_id)
+                .get_tracked_mappoints(&lock, 1)
         };
         if median_depth < 0.0 || tracked_mappoints < 50 {
             // reset active map
-            warn!("map::create_initial_map_monocular;wrong initialization");
             return Ok(None);
         }
 
@@ -231,7 +250,11 @@ impl MapInitialization {
         }
 
         // Scale points
-        let mp_matches = map.write()?.get_keyframe_mut(initial_kf_id).get_mp_matches().clone();
+        let mp_matches = map
+            .write()?
+            .get_keyframe_mut(initial_kf_id)
+            .get_mp_matches()
+            .clone();
         for item in mp_matches {
             if let Some((mp_id, _)) = item {
                 {
@@ -240,12 +263,16 @@ impl MapInitialization {
                     mp.position = DVVector3::new((*mp.position) * inverse_median_depth);
                 }
 
-                let norm_and_depth =  {
+                let norm_and_depth = {
                     let lock = map.read()?;
-                    lock.mappoints.get(&mp_id)
-                        .and_then(|mp| {mp.get_norm_and_depth(& lock)}).unwrap()
+                    lock.mappoints
+                        .get(&mp_id)
+                        .and_then(|mp| mp.get_norm_and_depth(&lock))
+                        .unwrap()
                 };
-                map.write()?.mappoints.get_mut(&mp_id)
+                map.write()?
+                    .mappoints
+                    .get_mut(&mp_id)
                     .map(|mp| mp.update_norm_and_depth(norm_and_depth));
             }
         }
@@ -256,30 +283,21 @@ impl MapInitialization {
                 {
                     let curr_kf = lock.get_keyframe_mut(curr_kf_id);
                     curr_kf.prev_kf_id = Some(initial_kf_id);
-                    curr_kf.imu_data.imu_preintegrated = Some(imu_preintegrated_from_last_kf.clone());
+                    curr_kf.imu_data.imu_preintegrated =
+                        Some(imu_preintegrated_from_last_kf.clone());
                     *imu_preintegrated_from_last_kf = ImuPreIntegrated::new(ImuBias::new());
                 }
                 {
                     let ini_kf = lock.get_keyframe_mut(initial_kf_id);
                     ini_kf.next_kf_id = Some(curr_kf_id);
                 }
-            },
+            }
             _ => {}
         };
 
-        // TODO (mvp): commented this out because I don't think they ever use it??
-        // Compute here initial velocity
-        // let delta_t = self.get_keyframe(&self.last_kf_id).unwrap().pose * self.get_keyframe(&1).unwrap().pose.inverse();
-        // let velocity = false;
-        // Eigen::Vector3f phi = deltaT.so3().log(); need to convert to rust
-        // let initial_frame_ts = inidata.initial_frame.as_ref().unwrap().timestamp;
-        // let curr_frame_ts = inidata.current_frame.as_ref().unwrap().timestamp;
-        // let last_frame_ts = inidata.last_frame.as_ref().unwrap().timestamp;
-        // let aux = (curr_frame_ts - last_frame_ts).to_std().unwrap().as_secs() / (curr_frame_ts - initial_frame_ts).to_std().unwrap().as_secs();
-        // phi *= aux;
-
         // TODO (multimaps)
         // mpAtlas->GetCurrentMap()->mvpKeyFrameOrigins.push_back(pKFini)
+
         let (curr_kf_pose, relevant_mappoints, curr_kf_timestamp) = {
             let lock = map.read()?;
 
@@ -291,12 +309,20 @@ impl MapInitialization {
             (curr_kf_pose, relevant_mappoints, curr_kf_timestamp)
         };
 
-        println!("After initialization, pose is {:?}", curr_kf_pose);
-        Ok(Some((curr_kf_pose, curr_kf_id, initial_kf_id, relevant_mappoints, curr_kf_timestamp, inverse_median_depth)))
+        Ok(Some((
+            curr_kf_pose,
+            curr_kf_id,
+            initial_kf_id,
+            relevant_mappoints,
+            curr_kf_timestamp,
+            inverse_median_depth,
+        )))
     }
 
-    pub fn create_initial_map_stereo(&mut self) -> Result<Option<(Pose, i32, i32, BTreeSet<Id>, Timestamp, f64)>, Box<dyn std::error::Error>> {
+    pub fn create_initial_map_stereo(
+        &mut self,
+    ) -> Result<Option<(Pose, i32, i32, BTreeSet<Id>, Timestamp, f64)>, Box<dyn std::error::Error>>
+    {
         todo!("Stereo: create_initial_map_stereo");
     }
-    
 }

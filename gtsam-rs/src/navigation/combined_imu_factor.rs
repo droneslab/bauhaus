@@ -1,4 +1,5 @@
 use cxx::{UniquePtr, SharedPtr};
+use crate::geometry::rot3::Rot3;
 use crate::{base::vector::Vector3, imu::imu_bias::ConstantBias, inference::key::IntoKey};
 use crate::sys::DoubleVec;
 use crate::sys::FakePreintegratedCombinedMeasurements;
@@ -54,6 +55,12 @@ impl PreintegratedCombinedMeasurements {
         }
     }
 
+    pub fn clone(&self) -> Self {
+        Self {
+            inner: ::sys::clone_preintegrated_combined_measurements(&self.inner),
+        }
+    }
+
     pub fn get_covariance(&self) -> Vec<DoubleVec> {
         ::sys::get_covariance(& self.inner)
     }
@@ -82,27 +89,51 @@ impl PreintegratedCombinedMeasurements {
         }
     }
 
+    pub fn get_delta_rij(&self) -> Rot3 {
+        Rot3 {
+            inner: ::sys::get_delta_rij(&self.inner)
+        }
+    }
+
     pub fn reset_integration_and_set_bias(
         &mut self,
         bias : &ConstantBias, ){
-        ::sys::reset_integration_and_set_bias(self.inner.pin_mut(), &bias.inner)}
-
-    pub fn create_fake_copy_of_preintegrated_measurements(&self) -> FakePreintegratedCombinedMeasurements
-    {
-        ::sys::create_fake_copy_of_preintegrated_measurements(&self.inner)
+        ::sys::reset_integration_and_set_bias(self.inner.pin_mut(), &bias.inner)
     }
+
+    // pub fn create_fake_copy_of_preintegrated_measurements(&self) -> FakePreintegratedCombinedMeasurements
+    // {
+    //     ::sys::create_fake_copy_of_preintegrated_measurements(&self.inner)
+    // }
 }
+unsafe impl Send for PreintegratedCombinedMeasurements {}
 
 pub struct PreintegrationCombinedParams {
     pub(super) inner: SharedPtr<::sys::PreintegrationCombinedParams>,
 }
 
 impl PreintegrationCombinedParams {
+    pub fn new(x: f64, y: f64, z: f64) -> Self {
+        Self {
+            inner: ::sys::new_preintegrated_combined_params(x, y, z),
+        }
+    }
     pub fn makesharedu() -> Self {
         Self {
             inner: ::sys::new_preintegrated_combined_params_makesharedu(),
         }
     }
+    pub fn make_negative_y_up() -> Self {
+        Self {
+            inner: ::sys::new_preintegrated_combined_params_negativeyup(),
+        }
+    }
+    pub fn make_positive_x_up() -> Self {
+        Self {
+            inner: ::sys::new_preintegrated_combined_params_positivexup(),
+        }
+    }
+
     pub fn set_accelerometer_covariance(&mut self, sigma_a_sq: f64) {
         ::sys::set_accelerometer_covariance(&mut self.inner, sigma_a_sq);
     }

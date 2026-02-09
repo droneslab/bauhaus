@@ -1,7 +1,9 @@
 use cxx::UniquePtr;
 
 use crate::{
-    base::vector::Vector3, geometry::pose3::Pose3, imu::imu_bias::ConstantBias, inference::key::IntoKey, linear::noise_model::{DiagonalNoiseModel, GaussianNoiseModel, IsotropicNoiseModel}, navigation::combined_imu_factor::CombinedImuFactor, slam::projection_factor::SmartProjectionPoseFactorCal3S2
+    base::vector::Vector3, geometry::pose3::Pose3, imu::imu_bias::ConstantBias, inference::key::IntoKey, linear::noise_model::{DiagonalNoiseModel, GaussianNoiseModel, IsotropicNoiseModel}, navigation::combined_imu_factor::CombinedImuFactor, slam::projection_factor::SmartProjectionPoseFactorCal3S2,
+    slam::projection_factor::GenericProjectionFactorPose3Point3Cal3S2,
+    slam::projection_factor::SmartStereoProjectionPoseFactor,
 };
 
 pub struct NonlinearFactorGraph {
@@ -79,8 +81,9 @@ impl NonlinearFactorGraph {
         )
     }
 
-
-    pub fn add_prior_factor_vector3(
+    // TODO these functions can probably be combined into one by taking either type of noise model,
+    // but would probably have to make noisemodel an enum or something
+    pub fn add_prior_factor_vector3_isotropicnoisemodel(
         &mut self,
         symbol: impl IntoKey,
         prior: &Vector3,
@@ -93,6 +96,20 @@ impl NonlinearFactorGraph {
             &model.to_base_model().inner,
         )
     }
+    pub fn add_prior_factor_vector3_diagonalnoisemodel(
+        &mut self,
+        symbol: impl IntoKey,
+        prior: &Vector3,
+        model: &DiagonalNoiseModel,
+    ) {
+        ::sys::nonlinear_factor_graph_add_prior_factor_vector3(
+            self.inner.pin_mut(),
+            symbol.into_key(),
+            &prior.inner,
+            &model.to_base_model().inner,
+        )
+    }
+
 
     pub fn add_combined_imu_factor(
         &mut self,
@@ -108,4 +125,12 @@ impl NonlinearFactorGraph {
         ::sys::nonlinear_factor_graph_add_smart_projection_pose_factor(self.inner.pin_mut(), &factor.inner)
     }
 
+    pub fn add_smartstereofactor(&mut self, factor: &SmartStereoProjectionPoseFactor) {
+        ::sys::nonlinear_factor_graph_add_smart_stereo_projection_pose_factor(self.inner.pin_mut(), &factor.inner)
+    }
+
+
+    pub fn add_generic_factor(&mut self, factor: &GenericProjectionFactorPose3Point3Cal3S2) {
+        ::sys::nonlinear_factor_graph_add_generic_projection_pose_factor(self.inner.pin_mut(), &factor.inner)
+    }
 }

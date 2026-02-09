@@ -22,6 +22,7 @@ void nonlinear_factor_graph_add_between_factor_pose3(
 void nonlinear_factor_graph_add_prior_factor_pose3(
     NonlinearFactorGraph &graph, Key key, const Pose3 &prior,
     const std::shared_ptr<noiseModel::Base> &model) {
+        // std::cout << "Add prior pose with rotation: " << prior << std::endl;
   return graph.addPrior(key, prior, to_boost_ptr(model));
 }
 
@@ -41,14 +42,30 @@ void nonlinear_factor_graph_add_prior_factor_vector3(
 
 void nonlinear_factor_graph_add_combined_imu_factor(
     NonlinearFactorGraph &graph, const std::shared_ptr<CombinedImuFactor> &factor) {
+    // factor->print();
     return graph.add(to_boost_ptr(factor));
 }
 
 void nonlinear_factor_graph_add_smart_projection_pose_factor(
     NonlinearFactorGraph &graph,
-    const gtsam::SmartProjectionPoseFactor<gtsam::Cal3_S2> &factor)
+    const std::shared_ptr<gtsam::SmartProjectionPoseFactor<gtsam::Cal3_S2>> &factor)
 {
-    return graph.add(factor);
+    return graph.add(to_boost_ptr(factor));
+}
+
+void nonlinear_factor_graph_add_smart_stereo_projection_pose_factor(
+    NonlinearFactorGraph &graph,
+    const std::shared_ptr<gtsam::SmartStereoProjectionPoseFactor> &factor)
+{
+    return graph.add(to_boost_ptr(factor));
+}
+
+
+void nonlinear_factor_graph_add_generic_projection_pose_factor(
+    NonlinearFactorGraph &graph,
+    const std::shared_ptr<gtsam::GenericProjectionFactor<Pose3, Point3, Cal3_S2>> &factor)
+{
+    return graph.add(to_boost_ptr(factor));
 }
 
 } // namespace gtsam
