@@ -134,10 +134,22 @@ impl TrackingBackendGTSAM {
                 should_update
             )?;
 
+            {
+                let map = self.map.read()?;
+                self.system.try_send(VISUALIZER, Box::new(VisTrajectoryMsg{
+                    pose: current_frame.pose.unwrap(),
+                    mappoint_matches: vec![],
+                    mappoints_in_tracking: BTreeSet::new(),
+                    timestamp: current_frame.timestamp,
+                    map_version: map.version
+                }));
+            }
+
             let _new_kf_id = self.create_new_keyframe(&mut current_frame).expect("Could not create new keyframe");
 
             // If using isam, we need to update all keyframes' poses because they are optimized each time
             self.kf_count = if should_update { 0 } else { self.kf_count + 1 };
+
 
             current_frame
         };
@@ -529,7 +541,7 @@ impl GraphSolver {
         }
 
         let (pose, velocity, bias) = self.values_all.get_results_from_values(self.curr_id)?;
-        debug!("Optimizer finished. State after optimization: \n {}; \n {:?}; \n {:?}; \n {:?}", timestamp, pose, velocity, bias);
+        info!("Optimizer finished. State after optimization: \n {}; \n {:?}; \n {:?}; \n {:?}", timestamp, pose, velocity, bias);
 
         let mut optimization_results = vec![];
         match self.optimizer {

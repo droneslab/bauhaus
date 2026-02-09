@@ -41,7 +41,6 @@ pub struct Map {
     pub version: u64,
 
     _sensor: Sensor,
-
     // Following are in orbslam3, not sure if we need:
     // mvpKeyFrameOrigins: Vec<KeyFrame>
     // mvBackupKeyFrameOriginsId: Vec<: u32>

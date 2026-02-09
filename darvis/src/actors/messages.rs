@@ -134,6 +134,7 @@ impl ActorMessage for NewKeyFrameMsg {
     }
 }
 
+
 // * LOOP CLOSING */
 pub struct KeyFrameIdMsg {
     pub kf_id: Id,

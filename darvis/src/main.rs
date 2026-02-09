@@ -445,6 +445,7 @@ impl Iterator for LoopManager {
 
         let timestamp = self.timestamps[self.current_index as usize];
         let image = self.image_paths[self.current_index as usize].clone();
+        // debug!("TIMESTAMP IS {}", timestamp);
 
         let mut imu_measurements = VecDeque::new();
         let mut imu_initialization = None;

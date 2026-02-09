@@ -75,7 +75,6 @@ impl ORBSLAM3LoopDetection {
                     fixed_scale = false;
                 }
             }
-
             let num_opt_matches = optimizer::optimize_sim3(
                 &map,
                 current_kf_id,

@@ -656,6 +656,8 @@ impl DarvisVisualizer {
         let mut entities_traj = vec![]; // keyframes, frames, and trajectory
         let inverse_frame_pose = frame_pose.inverse();
 
+        // println!("Visualizer drawing frame pose {:?}", frame_pose);
+
         // Draw current pose
         // This entity is overwritten at every update, so only one camera is in view at all times
         entities_traj.push(self.create_frame_scene_entity(
@@ -713,6 +715,7 @@ impl DarvisVisualizer {
                 // so that it doesn't cover up the drawing of the current frame.
                 continue;
             }
+            // println!("Visualizer drawing keyframe pose {:?}", kf.get_pose());
 
             let points = vec![prev_pose, curr_pose.into()];
             entities_traj.push(self.create_scene_entity(
