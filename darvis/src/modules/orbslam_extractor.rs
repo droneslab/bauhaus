@@ -6,7 +6,7 @@ use core::{
 use std::{fmt, fmt::Debug};
 
 use cxx::UniquePtr;
-use opencv::{core::Mat, types::VectorOfPoint2f};
+use opencv::core::Mat;
 
 use crate::registered_actors::{CAMERA, FEATURE_DETECTION};
 
@@ -42,41 +42,32 @@ impl FeatureExtractionModule for ORBExtractor {
         ))
     }
 
-    fn extract_amount(
-        &mut self,
-        _image: &Mat,
-        _max_features: i32,
-        _min_distance: f64,
-    ) -> Result<VectorOfPoint2f, Box<dyn std::error::Error>> {
-        todo!("Not implemented")
-    }
+    // fn extract_with_existing_points(
+    //     &mut self,
+    //     image: &Mat,
+    //     points: &VectorOfPoint2f,
+    // ) -> Result<(DVVectorOfKeyPoint, DVMatrix), Box<dyn std::error::Error>> {
+    //     let image_dv: dvos3binding::ffi::WrapBindCVMat = (&DVMatrix::new(image.clone())).into();
+    //     let mut descriptors: dvos3binding::ffi::WrapBindCVMat = (&DVMatrix::default()).into();
+    //     let mut keypoints: dvos3binding::ffi::WrapBindCVKeyPoints =
+    //         DVVectorOfKeyPoint::empty().into();
+    //     let points: dvos3binding::ffi::BindCVVectorOfPoint2f =
+    //         dvos3binding::ffi::BindCVVectorOfPoint2f {
+    //             vec_ptr: points.clone(),
+    //         };
 
-    fn extract_with_existing_points(
-        &mut self,
-        image: &Mat,
-        points: &VectorOfPoint2f,
-    ) -> Result<(DVVectorOfKeyPoint, DVMatrix), Box<dyn std::error::Error>> {
-        let image_dv: dvos3binding::ffi::WrapBindCVMat = (&DVMatrix::new(image.clone())).into();
-        let mut descriptors: dvos3binding::ffi::WrapBindCVMat = (&DVMatrix::default()).into();
-        let mut keypoints: dvos3binding::ffi::WrapBindCVKeyPoints =
-            DVVectorOfKeyPoint::empty().into();
-        let points: dvos3binding::ffi::BindCVVectorOfPoint2f =
-            dvos3binding::ffi::BindCVVectorOfPoint2f {
-                vec_ptr: points.clone(),
-            };
+    //     let _num_extracted = self.extractor.pin_mut().extract_with_existing_points(
+    //         &image_dv,
+    //         &points,
+    //         &mut keypoints,
+    //         &mut descriptors,
+    //     );
 
-        let _num_extracted = self.extractor.pin_mut().extract_with_existing_points(
-            &image_dv,
-            &points,
-            &mut keypoints,
-            &mut descriptors,
-        );
-
-        Ok((
-            DVVectorOfKeyPoint::new(keypoints.kp_ptr.kp_ptr),
-            DVMatrix::new(descriptors.mat_ptr.mat_ptr),
-        ))
-    }
+    //     Ok((
+    //         DVVectorOfKeyPoint::new(keypoints.kp_ptr.kp_ptr),
+    //         DVMatrix::new(descriptors.mat_ptr.mat_ptr),
+    //     ))
+    // }
 }
 
 impl ORBExtractor {

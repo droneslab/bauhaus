@@ -33,7 +33,7 @@ impl Values {
         ::sys::values_exists(&self.inner, key.into_key())
     }
 
-    pub fn get_pose3(&self, key: impl IntoKey) -> Option<Pose3Ref> {
+    pub fn get_pose3(&'_ self, key: impl IntoKey) -> Option<Pose3Ref<'_>> {
         let key = key.into_key();
 
         if ::sys::values_exists(&self.inner, key) {
@@ -44,7 +44,7 @@ impl Values {
             None
         }
     }
-    pub fn get_vector3(&self, key: impl IntoKey) -> Option<Vector3Ref> {
+    pub fn get_vector3(&'_ self, key: impl IntoKey) -> Option<Vector3Ref<'_>> {
         let key = key.into_key();
 
         if ::sys::values_exists(&self.inner, key) {
@@ -56,7 +56,7 @@ impl Values {
         }
     }
 
-    pub fn get_constantbias(&self, key: impl IntoKey) -> Option<imu_bias::ConstantBiasRef> {
+    pub fn get_constantbias(&'_ self, key: impl IntoKey) -> Option<imu_bias::ConstantBiasRef<'_>> {
         let key = key.into_key();
 
         if ::sys::values_exists(&self.inner, key) {
@@ -75,7 +75,7 @@ pub struct ValuesRef<'a> {
 }
 
 impl<'a> ValuesRef<'a> {
-    pub fn get_pose3(&self, key: impl IntoKey) -> Option<Pose3Ref> {
+    pub fn get_pose3(&'_ self, key: impl IntoKey) -> Option<Pose3Ref<'_>> {
         let key = key.into_key();
 
         if ::sys::values_exists(self.inner, key) {

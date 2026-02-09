@@ -239,9 +239,6 @@ actors:
         tag: "gtsam tracking backend"
         receiver_bound: 10
         settings:
-          - name: use_smart_factors # If false, will use genericfactors
-            value: true
-            type: bool
           - name: optimizer_type # 0: ISAM2, 1: IncrementalFixedLagSmoother, 2: LevenbergMarquardt
             value: 1
             type: i32

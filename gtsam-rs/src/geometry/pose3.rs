@@ -44,12 +44,12 @@ impl Pose3 {
         }
     }
 
-    pub fn translation(&self) -> Point3Ref {
+    pub fn translation(&'_ self) -> Point3Ref<'_> {
         Point3Ref {
             inner: ::sys::pose3_translation(self.inner.as_ref().unwrap()),
         }
     }
-    pub fn rotation(&self) -> Rot3Ref {
+    pub fn rotation(&'_ self) -> Rot3Ref<'_> {
         Rot3Ref {
             inner: ::sys::pose3_rotation(self.inner.as_ref().unwrap()),
         }
@@ -81,13 +81,13 @@ impl<'a> From<Pose3Ref<'a>> for IsometryMatrix3<f64> {
 }
 
 impl<'a> Pose3Ref<'a> {
-    pub fn rotation(&self) -> Rot3Ref {
+    pub fn rotation(&'_ self) -> Rot3Ref<'_> {
         Rot3Ref {
             inner: ::sys::pose3_rotation(self.inner),
         }
     }
 
-    pub fn translation<'b>(&self) -> Point3Ref {
+    pub fn translation<'b>(&'_ self) -> Point3Ref<'_> {
         Point3Ref {
             inner: ::sys::pose3_translation(self.inner),
         }

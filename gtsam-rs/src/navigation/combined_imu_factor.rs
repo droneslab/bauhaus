@@ -2,7 +2,6 @@ use cxx::{UniquePtr, SharedPtr};
 use crate::geometry::rot3::Rot3;
 use crate::{base::vector::Vector3, imu::imu_bias::ConstantBias, inference::key::IntoKey};
 use crate::sys::DoubleVec;
-use crate::sys::FakePreintegratedCombinedMeasurements;
 
 use super::navstate::NavState;
 

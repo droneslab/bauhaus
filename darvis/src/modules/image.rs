@@ -45,7 +45,6 @@ pub fn write_features(image: &Mat, keypoints: &VectorOfKeyPoint) -> Result<Mat, 
     )?;
 
     Ok(dst_img)
-
     // opencv::imgcodecs::imwrite(path, &dst_img, &opencv::core::Vector::default()).unwrap();
 }
 

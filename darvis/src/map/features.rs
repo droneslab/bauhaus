@@ -63,9 +63,6 @@ pub struct Features {
     keypoints: KeyPoints,
     pub descriptors: DVMatrix, // mDescriptors
 
-    pub image_width: u32,
-    pub image_height: u32,
-
     // Keypoints are assigned to cells in a grid to reduce matching complexity when projecting MapPoints.
     grid: Vec<Vec<Vec<usize>>>, // mGrid
 
@@ -98,8 +95,6 @@ impl Features {
             num_keypoints: 0,
             keypoints: KeyPoints::Empty,
             descriptors: DVMatrix::empty(),
-            image_width: 0,
-            image_height: 0,
             grid: vec![],
             frame_grid_cols: 0,
             frame_grid_rows: 0,
@@ -162,8 +157,6 @@ impl Features {
                     grid,
                     frame_grid_cols,
                     frame_grid_rows,
-                    image_width: im_width,
-                    image_height: im_height,
                 };
 
                 Ok(features)
@@ -489,7 +482,6 @@ impl Features {
         // Fill undistorted keypoint vector
         let mut keypoints_un = vec![];
         for i in 0..num_keypoints {
-            let kp_orig = keypoints.get(i as usize)?;
             let kp_new = Point2f::new(
                 *undistorted.at_2d::<f32>(i, 0)?,
                 *undistorted.at_2d::<f32>(i, 1)?,

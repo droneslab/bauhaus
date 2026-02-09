@@ -3,7 +3,6 @@ pub mod loop_closing;
 pub mod tracking_backend; // orbslam3 tracking backend
 pub mod tracking_frontend; // orbslam3 tracking frontend // orbslam3 loop closing.
 
-pub mod local_mapping_gtsam;
 pub mod tracking_backend_gtsam;
 pub mod tracking_frontend_gtsam;
 

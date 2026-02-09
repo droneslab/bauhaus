@@ -138,7 +138,7 @@ impl ORBMatcher {
         (ind_1, ind_2, ind_3)
     }
 
-    fn lower_bound(&self, vec1: &Vec<u32>, vec2: &Vec<u32>, i: usize, j: usize) -> usize {
+    fn lower_bound(&self, vec1: &Vec<u32>, vec2: &Vec<u32>, _i: usize, j: usize) -> usize {
         vec1.binary_search_by(|element| match element.cmp(&vec2[j]) {
             // Since we try to find position of first element,
             // we treat all equal values as greater to move left.
@@ -172,22 +172,6 @@ impl DescriptorDistanceTrait for ORBMatcher {
             },
             false,
         );
-
-        // let mut dist = 0;
-        // unsafe {
-        //     let mut pa = desc1.ptr(0).unwrap().cast::<i32>();
-        //     let mut pb = desc2.ptr(0).unwrap().cast::<i32>();
-
-        //     for _ in 0..8 {
-        //         let mut v = *pa ^ *pb;
-        //         v = v - ((v >> 1) & 0x55555555);
-        //         v = (v & 0x33333333) + ((v >> 2) & 0x33333333);
-        //         dist += (((v + (v >> 4)) & 0xF0F0F0F) * 0x1010101) >> 24;
-
-        //         pa.wrapping_add(1);
-        //         pb.wrapping_add(1);
-        //     }
-        // }
 
         return orbslam;
     }
@@ -967,15 +951,6 @@ impl FeatureMatchingModule for ORBMatcher {
         let mut num_matches = 0;
 
         // For each Candidate MapPoint Project and Match
-        let mut n_already_found = 0;
-        let mut n_depth = 0;
-        let mut n_not_in_image = 0;
-        let mut n_wrong_dist = 0;
-        let mut n_viewing_angle = 0;
-        let mut n_indices = 0;
-        let mut n_levels = 0;
-        let mut n_final_dist_too_low = 0;
-
         let mut matched_kfs = vec![None; matches.len()];
 
         for i in 0..candidates.len() {
@@ -988,7 +963,6 @@ impl FeatureMatchingModule for ORBMatcher {
                 None => continue,
             };
             if already_found.get(&mp_id).is_some() {
-                n_already_found += 1;
                 continue;
             }
 
@@ -1000,7 +974,6 @@ impl FeatureMatchingModule for ORBMatcher {
 
             // Depth must be positive
             if p3dc[2] < 0.0 {
-                n_depth += 1;
                 continue;
             }
 
@@ -1015,7 +988,6 @@ impl FeatureMatchingModule for ORBMatcher {
             // Point must be inside the image
             let kf = lock.get_keyframe(*kf_id);
             if !kf.features.is_in_image(u, v) {
-                n_not_in_image += 1;
                 continue;
             }
 
@@ -1026,14 +998,12 @@ impl FeatureMatchingModule for ORBMatcher {
             let dist = po.norm();
 
             if dist < min_distance || dist > max_distance {
-                n_wrong_dist += 1;
                 continue;
             }
 
             // Viewing angle must be less than 60 deg
             let pn = &mp.normal_vector;
             if po.dot(&pn) < 0.5 * dist {
-                n_viewing_angle += 1;
                 continue;
             }
 
@@ -1047,7 +1017,6 @@ impl FeatureMatchingModule for ORBMatcher {
                 .get_features_in_area(&u, &v, radius as f64, None);
 
             if indices.is_empty() {
-                n_indices += 1;
                 continue;
             }
 
@@ -1059,7 +1028,6 @@ impl FeatureMatchingModule for ORBMatcher {
             for idx in indices {
                 let kp_level = kf.features.get_octave(idx as usize);
                 if kp_level < n_predicted_level - 1 || kp_level > n_predicted_level {
-                    n_levels += 1;
                     continue;
                 }
 
@@ -1074,12 +1042,8 @@ impl FeatureMatchingModule for ORBMatcher {
                 matches[best_idx as usize] = Some(mp_id);
                 matched_kfs[best_idx as usize] = Some(kf_i);
                 num_matches += 1;
-            } else {
-                n_final_dist_too_low += 1;
             }
         }
-
-        // debug!("...Search by projection for loop detection: already found {}, depth {}, not in image {}, wrong dist {}, viewing angle {}, indices {}, levels {}, final dist too low {}", n_already_found, n_depth, n_not_in_image, n_wrong_dist, n_viewing_angle, n_indices, n_levels, n_final_dist_too_low);
 
         Ok((num_matches, matched_kfs))
     }

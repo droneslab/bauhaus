@@ -4,10 +4,9 @@ use core::{
 };
 use std::{fmt, fmt::Debug};
 
-use opencv::{core::Mat, types::VectorOfPoint2f};
+use opencv::core::Mat;
 
 use super::module_definitions::FeatureExtractionModule;
-use opencv::core::no_array;
 
 pub struct GoodFeaturesExtractor {}
 impl Module for GoodFeaturesExtractor {}
@@ -20,37 +19,29 @@ impl FeatureExtractionModule for GoodFeaturesExtractor {
         todo!("Not implemented")
     }
 
-    fn extract_amount(
-        &mut self,
-        image: &Mat,
-        max_features: i32,
-        min_distance: f64,
-    ) -> Result<VectorOfPoint2f, Box<dyn std::error::Error>> {
-        let mut corners = opencv::types::VectorOfPoint2f::new();
+    // fn extract_amount(
+    //     &mut self,
+    //     image: &Mat,
+    //     max_features: i32,
+    //     min_distance: f64,
+    // ) -> Result<VectorOfPoint2f, Box<dyn std::error::Error>> {
+    //     let mut corners = opencv::types::VectorOfPoint2f::new();
 
-        opencv::imgproc::good_features_to_track(
-            image,
-            &mut corners,
-            max_features,
-            0.01,
-            min_distance,
-            &no_array(),
-            3,
-            false,
-            0.00,
-        )
-        .unwrap();
+    //     opencv::imgproc::good_features_to_track(
+    //         image,
+    //         &mut corners,
+    //         max_features,
+    //         0.01,
+    //         min_distance,
+    //         &no_array(),
+    //         3,
+    //         false,
+    //         0.00,
+    //     )
+    //     .unwrap();
 
-        Ok(corners)
-    }
-
-    fn extract_with_existing_points(
-        &mut self,
-        _image: &Mat,
-        _points: &VectorOfPoint2f,
-    ) -> Result<(DVVectorOfKeyPoint, DVMatrix), Box<dyn std::error::Error>> {
-        todo!("Not implemented!")
-    }
+    //     Ok(corners)
+    // }
 }
 
 impl GoodFeaturesExtractor {

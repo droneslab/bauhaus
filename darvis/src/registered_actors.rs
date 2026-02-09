@@ -47,7 +47,7 @@ pub static SHUTDOWN_ACTOR: &str = "SHUTDOWN";
 
 // Modules without internal state ... can have one global instance since we don't have to worry about sharing data between threads
 lazy_static! {
-    pub static ref CAMERA_MODULE: Camera = { Camera::new(CameraType::Pinhole).unwrap() };
+    pub static ref CAMERA_MODULE: Camera = Camera::new(CameraType::Pinhole).unwrap();
     pub static ref VOCABULARY_MODULE: Vocabulary = {
         let filename = SETTINGS.get::<String>(SYSTEM, "vocabulary_file");
         Vocabulary::load(filename)
@@ -88,7 +88,7 @@ lazy_static! {
             }
         }
     };
-    pub static ref IMU_MODULE: Arc<RwLock<IMU>> = { Arc::new(RwLock::new(IMU::new())) };
+    pub static ref IMU_MODULE: Arc<RwLock<IMU>> = Arc::new(RwLock::new(IMU::new()));
 }
 
 pub fn spawn_actor(actor_tag: String, system: System, map: Option<ReadWriteMap>) {
@@ -139,12 +139,6 @@ pub fn spawn_actor(actor_tag: String, system: System, map: Option<ReadWriteMap>)
             crate::actors::tracking_backend_gtsam::TrackingBackendGTSAM::spawn(
                 system,
                 map.expect("Tracking needs the map!"),
-            )
-        }
-        str if str == "gtsam local mapping".to_string() => {
-            crate::actors::local_mapping_gtsam::LocalMappingGTSAM::spawn(
-                system,
-                map.expect("Local mapping needs the map!"),
             )
         }
         str if str == SHUTDOWN_ACTOR.to_string() => crate::actors::shutdown::ShutdownActor::spawn(

@@ -1,16 +1,15 @@
 extern crate g2o;
 use log::{warn, info, debug};
-use nalgebra::{Isometry3, IsometryMatrix3, Vector3, Vector6};
-use opencv::core::Mat;
+use nalgebra::{IsometryMatrix3, Vector3, Vector6};
 use std::{collections::{BTreeSet, HashMap}, fmt::Debug, thread::sleep, time::Duration};
 use core::{
     config::*, matrix::*, system::{Actor, MessageBox, System, Timestamp}
 };
 use crate::{
     actors::{messages::{FeatureTracksAndIMUMsg, ShutdownMsg, TrajectoryMsg, UpdateFrameIMUMsg, VisTrajectoryMsg}, tracking_frontend_gtsam::{GtsamFrontendTrackingState, TrackedFeatures}},
-    map::{frame::Frame, map::Id, pose::Pose, read_only_lock::ReadWriteMap}, modules::{image::draw_optical_flow, imu::{ImuBias, ImuCalib}}, registered_actors::{CAMERA, IMU, SHUTDOWN_ACTOR, TRACKING_BACKEND, VISUALIZER}, ImuInitializationData
+    map::{frame::Frame, map::Id, pose::Pose, read_only_lock::ReadWriteMap}, modules::{imu::{ImuBias, ImuCalib}}, registered_actors::{CAMERA, IMU, SHUTDOWN_ACTOR, TRACKING_BACKEND, VISUALIZER}, ImuInitializationData
 };
-use gtsam::{geometry::{cal3_s2::{Cal3S2, Cal3S2Stereo}, point2::{Point2, StereoPoint2}, point3::Point3, pose3::Pose3, rot3::Rot3}, imu::imu_bias::ConstantBias, inference::symbol::Symbol, linear::noise_model::{DiagonalNoiseModel, GaussianNoiseModel, IsotropicNoiseModel}, navigation::combined_imu_factor::{CombinedImuFactor, PreintegratedCombinedMeasurements}, nonlinear::{incremental_fixed_lag_smoother::IncrementalFixedLagSmoother, isam2::ISAM2, levenberg_marquardt_optimizer::LevenbergMarquardtOptimizer, levenberg_marquardt_params::LevenbergMarquardtParams, nonlinear_factor_graph::NonlinearFactorGraph, values::Values}, slam::projection_factor::{GenericProjectionFactorPose3Point3Cal3S2, SmartProjectionPoseFactorCal3S2, SmartStereoProjectionPoseFactor}, sys::{Key, ffi::DoubleVec}};
+use gtsam::{geometry::{cal3_s2::Cal3S2Stereo, point2::StereoPoint2, point3::Point3, pose3::Pose3, rot3::Rot3}, imu::imu_bias::ConstantBias, inference::symbol::Symbol, linear::noise_model::{DiagonalNoiseModel, GaussianNoiseModel, IsotropicNoiseModel}, navigation::combined_imu_factor::{CombinedImuFactor, PreintegratedCombinedMeasurements}, nonlinear::{incremental_fixed_lag_smoother::IncrementalFixedLagSmoother, isam2::ISAM2, levenberg_marquardt_optimizer::LevenbergMarquardtOptimizer, levenberg_marquardt_params::LevenbergMarquardtParams, nonlinear_factor_graph::NonlinearFactorGraph, values::Values}, slam::projection_factor::{SmartStereoProjectionPoseFactor}, sys::{Key, ffi::DoubleVec}};
 
 type GTSAMVector3 = gtsam::base::vector::Vector3; // Also importing a vector3 from nalgebra
 
@@ -34,11 +33,10 @@ impl Actor for TrackingBackendGTSAM {
 
     fn spawn(system: System, map: Self::MapRef) {
         let optimizer_type = SETTINGS.get::<i32>(TRACKING_BACKEND, "optimizer_type");
-        let use_smart_factors = SETTINGS.get::<bool>(TRACKING_BACKEND, "use_smart_factors");
 
         let mut actor = TrackingBackendGTSAM {
             system,
-            graph_solver: GraphSolver::new(optimizer_type, use_smart_factors),
+            graph_solver: GraphSolver::new(optimizer_type),
             map,
             trajectory_poses: Vec::new(),
             last_timestamp: 0.0,
@@ -128,7 +126,7 @@ impl TrackingBackendGTSAM {
                 Optimizer::LevenbergMarquadt { } => true,
             };
 
-            let optimization_results = self.graph_solver.solve(
+            let _optimization_results = self.graph_solver.solve(
                 msg.tracker_status,
                 &mut current_frame,
                 & msg.preintegration,
@@ -146,9 +144,6 @@ impl TrackingBackendGTSAM {
 
         self.last_timestamp = current_frame.timestamp;
         self.update_trajectory_in_logs(& current_frame).expect("Could not save trajectory");
-
-        // This is just for drawing optical flow
-        // self.curr_frame_id += 1;
 
         return Ok(())
     }
@@ -210,7 +205,6 @@ enum Optimizer {
 
 pub struct GraphSolver {
     solver_state: GraphSolverState,
-    use_smart_factors: bool,
 
     optimizer: Optimizer,
 
@@ -229,35 +223,29 @@ pub struct GraphSolver {
     feature_tracks: HashMap<i32, FeatureTrack>,
 
     // Initialization
-    accel_noise_density: f64, // accelerometer_noise_density, sigma_a
-    gyro_noise_density: f64, // gyroscope_noise_density, sigma_g
-    accel_random_walk: f64, // accelerometer_random_walk, sigma_wa
-    gyro_random_walk: f64, // gyroscope_random_walk, sigma_wg
-    sampling_frequency: f64, // sqrt(imu frequency)
     initial_position_sigma: f64,
     initial_roll_pitch_sigma: f64,
     initial_yaw_sigma: f64,
     initial_velocity_sigma: f64,
     initial_acc_bias_sigma: f64,
     initial_gyro_bias_sigma: f64,
-    imu_integration_sigma: f64,
-    init_bias_sigma: f64,
-    k: Cal3S2, // Camera intrinsics
     k_stereo: Cal3S2Stereo,  // Camera intrinsics
     vision_measurement_noise: IsotropicNoiseModel, // Camera measurement noise model
     tbc: Pose, // Transform from camera frame to body (IMU) 
+
+    // Not using:
+    // accel_noise_density: f64, // accelerometer_noise_density, sigma_a
+    // gyro_noise_density: f64, // gyroscope_noise_density, sigma_g
+    // accel_random_walk: f64, // accelerometer_random_walk, sigma_wa
+    // gyro_random_walk: f64, // gyroscope_random_walk, sigma_wg
+    // sampling_frequency: f64, // sqrt(imu frequency)
+    // imu_integration_sigma: f64,
+    // init_bias_sigma: f64,
 }
 
 impl GraphSolver {
-    pub fn new(optimizer_type: i32, use_smart_factors: bool) -> Self {
+    pub fn new(optimizer_type: i32) -> Self {
         let vision_measurement_noise = IsotropicNoiseModel::from_dim_and_sigma(3, 3.0);
-        let k = Cal3S2::new(
-            SETTINGS.get::<f64>(CAMERA, "fx"),
-            SETTINGS.get::<f64>(CAMERA, "fy"),
-            0.0,
-            SETTINGS.get::<f64>(CAMERA, "cx"),
-            SETTINGS.get::<f64>(CAMERA, "cy"),
-        );
         let k_stereo = Cal3S2Stereo::new(
             SETTINGS.get::<f64>(CAMERA, "fx"),
             SETTINGS.get::<f64>(CAMERA, "fy"),
@@ -296,7 +284,6 @@ impl GraphSolver {
 
         Self {
             optimizer,
-            use_smart_factors,
             solver_state: GraphSolverState::NotInitialized,
             graph_new: NonlinearFactorGraph::default(),
             values_new: ValuesWrapper::default(),
@@ -312,21 +299,20 @@ impl GraphSolver {
             initial_velocity_sigma: SETTINGS.get::<f64>(IMU, "initialVelocitySigma"),
             initial_acc_bias_sigma: SETTINGS.get::<f64>(IMU, "initialAccBiasSigma"),
             initial_gyro_bias_sigma: SETTINGS.get::<f64>(IMU, "initialGyroBiasSigma"),
-            accel_noise_density: SETTINGS.get::<f64>(IMU, "noise_acc"),
-            gyro_noise_density: SETTINGS.get::<f64>(IMU, "noise_gyro"),
-            sampling_frequency: SETTINGS.get::<f64>(IMU, "frequency").sqrt(),
-            accel_random_walk: SETTINGS.get::<f64>(IMU, "acc_walk"),
-            gyro_random_walk: SETTINGS.get::<f64>(IMU, "gyro_walk"),
-            imu_integration_sigma: SETTINGS.get::<f64>(IMU, "imu_integration_sigma"),
-            init_bias_sigma: SETTINGS.get::<f64>(IMU, "imu_bias_init_sigma"),
+            // accel_noise_density: SETTINGS.get::<f64>(IMU, "noise_acc"),
+            // gyro_noise_density: SETTINGS.get::<f64>(IMU, "noise_gyro"),
+            // sampling_frequency: SETTINGS.get::<f64>(IMU, "frequency").sqrt(),
+            // accel_random_walk: SETTINGS.get::<f64>(IMU, "acc_walk"),
+            // gyro_random_walk: SETTINGS.get::<f64>(IMU, "gyro_walk"),
+            // imu_integration_sigma: SETTINGS.get::<f64>(IMU, "imu_integration_sigma"),
+            // init_bias_sigma: SETTINGS.get::<f64>(IMU, "imu_bias_init_sigma"),
             tbc: ImuCalib::new().tbc,
-            k,
             k_stereo,
             vision_measurement_noise,
         }
     }
 
-    pub fn initialize(&mut self, timestamp: f64, imu_init: &ImuInitializationData) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn initialize(&mut self, _timestamp: f64, imu_init: &ImuInitializationData) -> Result<(), Box<dyn std::error::Error>> {
         // println!("... Initial timestamp: {}", timestamp);
         // println!("... Initial pose: {:?}", imu_init.pose);
         // println!("... Initial pose rotation matrix: {:?}", imu_init.pose.get_rotation());
@@ -543,8 +529,7 @@ impl GraphSolver {
         }
 
         let (pose, velocity, bias) = self.values_all.get_results_from_values(self.curr_id)?;
-        println!("State after optimization: \n {}; \n {:?}; \n {:?}; \n {:?}", timestamp, pose, velocity, bias);
-        println!("Rotation is: {:?}", pose.get_rotation());
+        debug!("Optimizer finished. State after optimization: \n {}; \n {:?}; \n {:?}; \n {:?}", timestamp, pose, velocity, bias);
 
         let mut optimization_results = vec![];
         match self.optimizer {
@@ -566,7 +551,6 @@ impl GraphSolver {
                             velocity
                         );
                         current_frame.imu_data.set_new_bias(bias);
-                        // debug!("State after optimization: \n {}; \n {:?}; \n {:?}; \n {:?}", timestamp, pose, velocity, current_frame.imu_data.imu_bias);
                     } else {
                         optimization_results.push(
                             (*state_key, ImuCalib::new().tcb * pose.inverse(), velocity, bias)

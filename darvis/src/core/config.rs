@@ -414,9 +414,6 @@ fn load_camera_settings(camera_fn: &String, module_println: &mut Vec<ModuleConf>
             &yaml_document["imu__T_b_c1_row4"],
         ],
     );
-    //     },
-    //     _ => {}
-    // };
 
     // KIMERA
     add_setting_f64("CAMERA", "imu_rate", &yaml_document["imu__frequency"]);

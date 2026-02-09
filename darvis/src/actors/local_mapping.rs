@@ -1093,7 +1093,6 @@ impl LocalMapping {
                     scale: imu.scale,
                     imu_bias: kf.imu_data.get_imu_bias().clone(),
                     current_kf_id: self.current_keyframe_id,
-                    imu_initialized: true,
                     map_version: self.map.read()?.version,
                 }))
                 .unwrap();

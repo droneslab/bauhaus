@@ -8,7 +8,7 @@ use std::{
     fmt::Debug,
 };
 
-use opencv::{core::Mat, types::VectorOfPoint2f};
+use opencv::core::Mat;
 
 use crate::{
     actors::tracking_backend::TrackedMapPointData,
@@ -115,17 +115,6 @@ pub trait FeatureExtractionModule {
         &mut self,
         image: &Mat,
         mask: Option<Mat>,
-    ) -> Result<(DVVectorOfKeyPoint, DVMatrix), Box<dyn std::error::Error>>;
-    fn extract_amount(
-        &mut self,
-        image: &Mat,
-        max_features: i32,
-        min_distance: f64,
-    ) -> Result<VectorOfPoint2f, Box<dyn std::error::Error>>;
-    fn extract_with_existing_points(
-        &mut self,
-        image: &Mat,
-        points: &VectorOfPoint2f,
     ) -> Result<(DVVectorOfKeyPoint, DVMatrix), Box<dyn std::error::Error>>;
 }
 

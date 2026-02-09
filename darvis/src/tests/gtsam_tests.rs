@@ -47,7 +47,7 @@ mod gtsamtests {
                 DVVector3::new_with(-0.025266, 0000.1367, 00.075598),
             )
         };
-        let mut graph_solver = GraphSolver::new(1, true);
+        let mut graph_solver = GraphSolver::new(1);
         graph_solver.initialize(
             init_timestamp,
             &init_imu,

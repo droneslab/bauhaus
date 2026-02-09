@@ -21,6 +21,7 @@ pub fn triangulate(
     matrix.set_row(2, &(x_c2[0] * pose2m.row(2) - pose2m.row(0)));
     matrix.set_row(3, &(x_c2[1] * pose2m.row(2) - pose2m.row(1)));
 
+    // Note: Doing this because it is somehow like 10x faster than nalgebra's version
     let svd = dvos3binding::ffi::svd((&DVMatrix4::new(matrix)).into(), SVDComputeType::FullV);
     let v: DVMatrixDynamic<f64> = (&svd.v).into();
     let x_3d_h = v.row(3);

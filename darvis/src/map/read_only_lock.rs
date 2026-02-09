@@ -28,7 +28,7 @@ pub struct ReadOnlyMap<T> {
     version: u64,
 }
 impl<T> ReadOnlyMap<T> {
-    pub fn read(&self) -> MappedRwLockReadGuard<T> {
+    pub fn read(&'_ self) -> MappedRwLockReadGuard<'_, T> {
         let now = Instant::now();
         let guard = RwLockReadGuard::map(self.inner.read(), |unlocked| unlocked);
         let elapsed = now.elapsed().as_millis();
@@ -55,7 +55,7 @@ impl ReadWriteMap {
         }
     }
 
-    pub fn write(&self) -> Result<MappedRwLockWriteGuard<Map>, Box<dyn std::error::Error>> {
+    pub fn write(&'_ self) -> Result<MappedRwLockWriteGuard<'_, Map>, Box<dyn std::error::Error>> {
         // If the current thread's version of the map is different (older) than the map's version,
         // then it means the map has been reset by another thread. Send this info back to the caller
         // so they can figure out what to do with it (they probably want to abort the loop)
@@ -71,7 +71,7 @@ impl ReadWriteMap {
         }
     }
 
-    pub fn read(&self) -> Result<MappedRwLockReadGuard<Map>, Box<dyn std::error::Error>> {
+    pub fn read(&'_ self) -> Result<MappedRwLockReadGuard<'_, Map>, Box<dyn std::error::Error>> {
         // If the current thread's version of the map is different (older) than the map's version,
         // then it means the map has been reset by another thread. Send this info back to the caller
         // so they can figure out what to do with it (they probably want to abort the loop)

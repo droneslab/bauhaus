@@ -1,7 +1,7 @@
 use core::matrix::{DVMatrix3, DVVector3};
 
-use log::{debug, error, warn};
-use nalgebra::{Matrix, Matrix2, Matrix3, MatrixXx3, Rotation3, SVD, Unit, Vector2, Vector3, Vector4};
+use log::{error, warn};
+use nalgebra::{Matrix2, Matrix3, Vector2, Vector3, Vector4};
 use rand::Rng;
 use crate::map::pose::{DVRotation, DVTranslation, Pose};
 
@@ -58,7 +58,7 @@ pub struct TranslationOnlySacProblem {
     indices: Vec<usize>,
     shuffled_indices: Vec<usize>,
     adapter: CentralRelativeAdapter,
-    ransac_randomize: bool, // Not using this currently but keeping for completeness
+    _ransac_randomize: bool, // Not using this currently but keeping for completeness
     sample_size: usize,
 }
 
@@ -75,7 +75,7 @@ impl TranslationOnlySacProblem {
 
         Self {
             adapter,
-            ransac_randomize,
+            _ransac_randomize: ransac_randomize,
             shuffled_indices: indices.clone(),
             indices,
             sample_size: 2,
@@ -261,7 +261,7 @@ impl SampleConsensusProblem for TranslationOnlySacProblem {
         *samples = vec![0 as usize; self.sample_size];
         let max_sample_checks = max_sample_checks.unwrap_or(10);
 
-        for i in 0..max_sample_checks {
+        for _ in 0..max_sample_checks {
             self.draw_index_sample(samples);
 
             // If it's a good sample, stop here
@@ -284,7 +284,7 @@ pub struct Ransac<M: SampleConsensusProblem> {
     threshold: f64, // the threshold for classifying inliers
     max_iterations: u32,
     probability: f64, // the current probability (defines remaining iterations)
-    optimize_2d2d_pose_from_inliers: bool, // Not using this currently but keeping for completeness
+    _optimize_2d2d_pose_from_inliers: bool, // Not using this currently but keeping for completeness
 
     // Modified during ransac operation
     iterations: u32, // the current number of iterations
@@ -305,7 +305,7 @@ impl<M: SampleConsensusProblem> Ransac<M> {
             threshold,
             max_iterations,
             probability,
-            optimize_2d2d_pose_from_inliers,
+            _optimize_2d2d_pose_from_inliers: optimize_2d2d_pose_from_inliers,
             inliers,
             iterations: 0,
             model: vec![],
@@ -349,8 +349,6 @@ impl<M: SampleConsensusProblem> Ransac<M> {
             }
 
             n_inliers_count = self.sac_model.count_within_distance(&model_coefficients, self.threshold);
-                //     n_inliers_count = sac_model_->countWithinDistance(
-                //         model_coefficients, threshold_ );
 
             // Better match ?
             if n_inliers_count > n_best_inliers_count {
@@ -362,8 +360,6 @@ impl<M: SampleConsensusProblem> Ransac<M> {
 
                 // Compute the k parameter (k=log(z)/log(1-w^n))
                 let w = (n_best_inliers_count as f64) / (self.sac_model.get_indices().len() as f64);
-                    // double w = static_cast<double> (n_best_inliers_count) /
-                    //     static_cast<double> (sac_model_->getIndices()->size());
                 let mut p_no_outliers = 1.0 - (num_traits::pow(w, selection.len()) as f64);
                 p_no_outliers = f64::max(f64::EPSILON, p_no_outliers); // Avoid division by -Inf
                 p_no_outliers = f64::min(1.0 - f64::EPSILON, p_no_outliers); // Avoid division by 0.
@@ -399,7 +395,6 @@ impl<M: SampleConsensusProblem> Ransac<M> {
 
         // Get the set of inliers that correspond to the best model found so far
         self.inliers = self.sac_model.select_within_distance(&self.model_coefficients, self.threshold);
-            // sac_model_->selectWithinDistance( model_coefficients_, threshold_, inliers_ );
 
         return true;
     }

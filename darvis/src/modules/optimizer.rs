@@ -436,14 +436,7 @@ pub fn pose_inertial_optimization_last_frame(
     let h_i: nalgebra::SMatrix<f64, 24, 24> = optimizer.get_hessian_from_edge_inertial(0).into();
     h.view_mut((0, 0), (24, 24)).add_assign(&h_i); // Only one edge was created in this case
 
-    // H.block<24,24>(0,0)+= ei->GetHessian();
-    // ei from:
-    // EdgeInertial* ei = new EdgeInertial(pFrame->mpImuPreintegratedFrame);
-
     let hgr: nalgebra::SMatrix<f64, 6, 6> = optimizer.get_hessian_from_edge_gyro().into();
-    // Eigen::Matrix<double,6,6> Hgr = egr->GetHessian();
-    // egr from:
-    // EdgeGyroRW* egr = new EdgeGyroRW();
     h.view_mut((9, 9), (3, 3))
         .add_assign(&hgr.view((0, 0), (3, 3)));
     h.view_mut((9, 24), (3, 3))
@@ -454,9 +447,6 @@ pub fn pose_inertial_optimization_last_frame(
         .add_assign(&hgr.view((3, 3), (3, 3)));
 
     let hgr: nalgebra::SMatrix<f64, 6, 6> = optimizer.get_hessian_from_edge_acc().into();
-    // Eigen::Matrix<double,6,6> Har = ear->GetHessian();
-    // ear from:
-    // EdgeAccRW* ear = new EdgeAccRW();
     h.view_mut((12, 12), (3, 3))
         .add_assign(&hgr.view((0, 0), (3, 3)));
     h.view_mut((12, 27), (3, 3))
@@ -468,9 +458,6 @@ pub fn pose_inertial_optimization_last_frame(
 
     let h_ep: nalgebra::SMatrix<f64, 15, 15> = optimizer.get_hessian_from_edge_prior().into();
     h.view_mut((0, 0), (15, 15)).add_assign(&h_ep);
-    // H.block<15,15>(0,0) += ep->GetHessian();
-    // ep from:
-    // EdgePriorPoseImu* ep = new EdgePriorPoseImu(pFp->mpcpi);
 
     let mut i = 0;
     for mut edge in optimizer.pin_mut().get_mut_mono_onlypose_edges().iter_mut() {

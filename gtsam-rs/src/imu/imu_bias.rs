@@ -43,13 +43,13 @@ pub struct ConstantBiasRef<'a> {
 }
 
 impl<'a> ConstantBiasRef<'a> {
-    pub fn accel_bias(&self) -> Vector3Ref {
+    pub fn accel_bias(&'_ self) -> Vector3Ref<'_> {
         Vector3Ref {
             inner: ::sys::accel_bias(&self.inner)
         }
     }
 
-    pub fn gyro_bias(&self) -> Vector3Ref {
+    pub fn gyro_bias(&'_ self) -> Vector3Ref<'_> {
         Vector3Ref {
             inner: ::sys::gyro_bias(&self.inner)
         }

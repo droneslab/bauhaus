@@ -75,7 +75,6 @@ impl ORBSLAM3LoopDetection {
                     fixed_scale = false;
                 }
             }
-            // debug!("Fixed scale is {}", fixed_scale);
 
             let num_opt_matches = optimizer::optimize_sim3(
                 &map,
@@ -274,7 +273,6 @@ impl ORBSLAM3LoopDetection {
                         true,
                         0.9,
                     )?;
-                    // debug!("...Matches between {} (frame {}) and {} (frame {}): {}", current_kf_id, read.get_keyframe(current_kf_id).frame_id, cov_kf[j], read.get_keyframe(cov_kf[j]).frame_id, matches.len());
                     if matches.len() > most_bow_num_matches {
                         most_bow_num_matches = matches.len();
                     }
@@ -302,7 +300,6 @@ impl ORBSLAM3LoopDetection {
                         fixed_scale = false;
                     }
                 }
-                // debug!("Fixed scale is {}", fixed_scale);
 
                 let mut solver = Sim3Solver::new(
                     &map,
@@ -377,7 +374,6 @@ impl ORBSLAM3LoopDetection {
                                     fixed_scale = false;
                                 }
                             }
-                            // debug!("Fixed scale is {}", fixed_scale);
 
                             let num_opt_matches = optimizer::optimize_sim3(
                                 &map,
@@ -522,11 +518,9 @@ impl ORBSLAM3LoopDetection {
             }
         } else {
             let mut max_stage = -1;
-            // let mut max_matched = 0;
             for i in 0..vn_stage.len() {
                 if vn_stage[i] > max_stage {
                     max_stage = vn_stage[i];
-                    // max_matched = vn_matches_stage[i];
                 }
             }
         }

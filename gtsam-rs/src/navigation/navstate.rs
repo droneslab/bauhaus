@@ -20,7 +20,7 @@ impl NavState {
         }
     }
 
-    pub fn get_velocity(&self) -> Vector3Ref {
+    pub fn get_velocity(&'_ self) -> Vector3Ref<'_> {
         Vector3Ref {
             inner: ::sys::get_velocity(&self.inner)
         }

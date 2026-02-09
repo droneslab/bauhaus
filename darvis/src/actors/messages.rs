@@ -18,15 +18,6 @@ use core::{
 use gtsam::navigation::combined_imu_factor::PreintegratedCombinedMeasurements;
 use opencv::prelude::Mat;
 
-pub struct Reset {
-    pub map_version: u64,
-}
-impl ActorMessage for Reset {
-    fn get_map_version(&self) -> u64 {
-        self.map_version
-    }
-}
-
 // * TRACKING FRONTEND **//
 pub struct ImagePathMsg {
     pub image_path: String,
@@ -70,16 +61,6 @@ impl ActorMessage for FeatureTracksAndIMUMsg {
     }
 }
 
-pub struct ImuInitializationMsg {
-    pub imu_initialization: ImuInitializationData,
-    pub timestamp: Timestamp
-}
-impl ActorMessage for ImuInitializationMsg {
-    fn get_map_version(&self) -> u64 {
-        0
-    }
-}
-
 pub struct TrackingStateMsg {
     pub state: TrackingState,
     pub init_id: Id,
@@ -104,19 +85,6 @@ pub struct FeatureMsg {
 impl ActorMessage for FeatureMsg {
     fn get_map_version(&self) -> u64 {
         0
-    }
-}
-pub struct MapInitializedMsg {
-    pub curr_kf_pose: Pose,
-    pub curr_kf_id: Id,
-    pub ini_kf_id: Id,
-    pub local_mappoints: HashSet<Id>,
-    pub curr_kf_timestamp: Timestamp,
-    pub map_version: u64,
-}
-impl ActorMessage for MapInitializedMsg {
-    fn get_map_version(&self) -> u64 {
-        self.map_version
     }
 }
 
@@ -144,7 +112,6 @@ pub struct UpdateFrameIMUMsg {
     pub scale: f64,
     pub imu_bias: ImuBias,
     pub current_kf_id: Id,
-    pub imu_initialized: bool,
     pub map_version: u64,
 }
 impl ActorMessage for UpdateFrameIMUMsg {
@@ -162,17 +129,6 @@ pub struct NewKeyFrameMsg {
     pub map_version: u64,
 }
 impl ActorMessage for NewKeyFrameMsg {
-    fn get_map_version(&self) -> u64 {
-        self.map_version
-    }
-}
-
-pub struct NewKeyFrameGTSAMMsg {
-    pub keyframe: Frame,
-    pub tracking_state: TrackingState,
-    pub map_version: u64,
-}
-impl ActorMessage for NewKeyFrameGTSAMMsg {
     fn get_map_version(&self) -> u64 {
         self.map_version
     }
@@ -264,16 +220,6 @@ pub struct VisTrajectoryTrackingMsg {
     pub map_version: u64,
 }
 impl ActorMessage for VisTrajectoryTrackingMsg {
-    fn get_map_version(&self) -> u64 {
-        self.map_version
-    }
-}
-pub struct VisUpdateMsg {
-    pub pose: Pose,
-    pub timestamp: Timestamp,
-    pub map_version: u64,
-}
-impl ActorMessage for VisUpdateMsg {
     fn get_map_version(&self) -> u64 {
         self.map_version
     }
