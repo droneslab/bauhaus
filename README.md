@@ -1,6 +1,7 @@
-# Bauhaus
+# Bauhaus: A Modular, Memory-Safe Framework for Next-Generation Visual SLAM Systems 
 
-A Modular Framework for Next-Generation Visual SLAM Systems 
+<img width="1700" height="1336" alt="bauhaus orbslam" src="https://github.com/user-attachments/assets/db85cc6e-f979-4bac-a1ed-9415f49f9e00" />
+
 
 # 1. Installation
 ```bash
