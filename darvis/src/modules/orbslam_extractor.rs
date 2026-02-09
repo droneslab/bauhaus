@@ -21,17 +21,21 @@ impl FeatureExtractionModule for ORBExtractor {
     fn extract(
         &mut self,
         image: &Mat,
+        mask: Option<Mat>,
     ) -> Result<(DVVectorOfKeyPoint, DVMatrix), Box<dyn std::error::Error>> {
         let image_dv: dvos3binding::ffi::WrapBindCVMat = (&DVMatrix::new(image.clone())).into();
         let mut descriptors: dvos3binding::ffi::WrapBindCVMat = (&DVMatrix::default()).into();
         let mut keypoints: dvos3binding::ffi::WrapBindCVKeyPoints =
             DVVectorOfKeyPoint::empty().into();
+        let mask: dvos3binding::ffi::WrapBindCVMat = match mask {
+            Some(m) => (&DVMatrix::new(m)).into(),
+            None => (&DVMatrix::default()).into(),
+        };
 
         let _num_extracted =
             self.extractor
                 .pin_mut()
-                .extract(&image_dv, &mut keypoints, &mut descriptors);
-
+                .extract(&image_dv, &mut keypoints, &mut descriptors, &mask);
         Ok((
             DVVectorOfKeyPoint::new(keypoints.kp_ptr.kp_ptr),
             DVMatrix::new(descriptors.mat_ptr.mat_ptr),

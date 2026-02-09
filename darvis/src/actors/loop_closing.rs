@@ -111,6 +111,7 @@ impl LoopClosing {
     }
 
     fn loop_closing(&mut self, current_kf_id: Id) -> Result<(), Box<dyn std::error::Error>> {
+        let _span = tracy_client::span!("loop_closing");
         // Avoid that a keyframe can be erased while it is being process by this thread
         // TODO (design, fine-grained locking) would be great if we could just lock this keyframe
         self.map
@@ -183,7 +184,7 @@ impl LoopClosing {
         loop_mappoints: Vec<Id>,
         current_matched_points: Vec<Option<Id>>,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        // let _span = tracy_client::span!("correct_loop");
+        let _span = tracy_client::span!("correct_loop");
 
         set_switches(Switches::CorrectLoopBeginning);
 
@@ -455,7 +456,7 @@ impl LoopClosing {
 
 fn run_gba(map: &mut ReadWriteMap, loop_kf: Id) -> Result<(), Box<dyn std::error::Error>> {
     // void LoopClosing::RunGlobalBundleAdjustment(unsigned long nLoopKF)
-    // let _span = tracy_client::span!("run_gba_in_thread");
+    let _span = tracy_client::span!("run_gba_in_thread");
     info!("Starting Global Bundle Adjustment");
 
     set_switches(Switches::GbaBeginning);

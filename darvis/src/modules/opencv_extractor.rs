@@ -20,12 +20,17 @@ impl FeatureExtractionModule for OpenCVExtractor {
     fn extract(
         &mut self,
         image: &Mat,
+        mask: Option<Mat>,
     ) -> Result<(DVVectorOfKeyPoint, DVMatrix), Box<dyn std::error::Error>> {
         let mut descriptors = opencv::core::Mat::default();
         let mut keypoints = opencv::types::VectorOfKeyPoint::new();
+        let mask = match mask {
+            Some(m) => opencv::core::no_array(), // Todo this should take a real mask
+            None => opencv::core::no_array(),
+        };
 
         self.extractor
-            .detect(&*image, &mut keypoints, &opencv::core::no_array())?;
+            .detect(&*image, &mut keypoints, &mask)?;
         self.extractor
             .compute(&*image, &mut keypoints, &mut descriptors)?;
 

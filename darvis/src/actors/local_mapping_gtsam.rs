@@ -186,7 +186,7 @@ impl LocalMappingGTSAM {
         let (keypoints, descriptors) = self
             .orb_extractor_left
             .as_mut()
-            .extract(&frame.image.as_ref().unwrap())
+            .extract(&frame.image.as_ref().unwrap(), None)
             .unwrap();
         frame.replace_features(keypoints, descriptors)?;
         frame.compute_bow();

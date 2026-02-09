@@ -334,11 +334,8 @@ impl Map {
         // Include that children as new parent candidate for the rest
         let mut continue_loop = false;
 
-        println!("Shake something loose?");
-        let mut teehee = 0;
         let mut connectedkfssize = vec![];
         while !children1.is_empty() {
-            teehee += 1;
             let (mut max, mut child_id, mut parent_id) = (-1, -1, -1);
 
             for child_kf_id in &children1 {
@@ -384,12 +381,6 @@ impl Map {
                 break;
             }
         }
-        println!("Teehee: {}", teehee);
-        println!(
-            "connectedkfssize: ({}), {:?}",
-            connectedkfssize.len(),
-            connectedkfssize
-        );
 
         // If a children has no covisibility links with any parent candidate, assign to the original parent of this KF
         for child_id in children1 {

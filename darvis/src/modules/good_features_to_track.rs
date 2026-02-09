@@ -15,6 +15,7 @@ impl FeatureExtractionModule for GoodFeaturesExtractor {
     fn extract(
         &mut self,
         _image: &Mat,
+        _mask: Option<Mat>,
     ) -> Result<(DVVectorOfKeyPoint, DVMatrix), Box<dyn std::error::Error>> {
         todo!("Not implemented")
     }

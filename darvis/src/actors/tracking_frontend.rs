@@ -179,10 +179,10 @@ impl TrackingFrontEnd {
                     self.orb_extractor_ini
                         .as_mut()
                         .unwrap()
-                        .extract(image)
+                        .extract(image, None)
                         .unwrap()
                 } else {
-                    self.orb_extractor_left.extract(&image).unwrap()
+                    self.orb_extractor_left.extract(&image, None).unwrap()
                 }
             }
             _ => {

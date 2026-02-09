@@ -56,7 +56,7 @@ public:
     // Compute the ORB features and descriptors on an image.
     // ORB are dispersed on the image using an octree.
     // Mask is ignored in the current implementation.
-    int extract_rust(const orb_slam3::WrapBindCVMat & image, orb_slam3::WrapBindCVKeyPoints & keypoints, orb_slam3::WrapBindCVMat & descriptors);
+    int extract_rust(const orb_slam3::WrapBindCVMat & image, orb_slam3::WrapBindCVKeyPoints & keypoints, orb_slam3::WrapBindCVMat & descriptors, const orb_slam3::WrapBindCVMat & mask);
     int extract_with_existing_points_rust(const orb_slam3::WrapBindCVMat &image,
                                           const orb_slam3::BindCVVectorOfPoint2f &points,
                                           orb_slam3::WrapBindCVKeyPoints &keypoints,

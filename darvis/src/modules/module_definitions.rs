@@ -114,6 +114,7 @@ pub trait FeatureExtractionModule {
     fn extract(
         &mut self,
         image: &Mat,
+        mask: Option<Mat>,
     ) -> Result<(DVVectorOfKeyPoint, DVMatrix), Box<dyn std::error::Error>>;
     fn extract_amount(
         &mut self,

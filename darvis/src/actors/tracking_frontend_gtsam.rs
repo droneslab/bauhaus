@@ -26,7 +26,7 @@ pub struct TrackingFrontendGTSAM {
     initialization_data: Option<ImuInitializationData>,
 
     /// Feature extractors
-    orb_extractor_ini: Option<Box<dyn FeatureExtractionModule>>,
+    orb_extractor_left: Box<dyn FeatureExtractionModule>,
     gftt: opencv::core::Ptr<opencv::features2d::GFTTDetector>,
 
     // IMU
@@ -65,7 +65,7 @@ impl Actor for TrackingFrontendGTSAM {
 
         let mut actor = TrackingFrontendGTSAM {
             system,
-            orb_extractor_ini: Some(new_feature_extraction_module(true)),
+            orb_extractor_left: new_feature_extraction_module(false),
             gftt: feature_detector,
             map,
             state: GtsamFrontendTrackingState::FirstFrame,
@@ -127,7 +127,7 @@ impl TrackingFrontendGTSAM {
                 },
                 GtsamFrontendTrackingState::NotInitialized => {
                     // Perform first feature extraction
-                    let (keypoints, descriptors) = self.orb_extractor_ini.as_mut().unwrap().extract(& image).unwrap();
+                    let (keypoints, descriptors) = self.orb_extractor_left.as_mut().extract(& image, None).unwrap();
                     let init_pose = imu_initialization.as_ref().unwrap().pose;
 
                     self.current_frame = Frame::new( 
@@ -223,7 +223,7 @@ impl TrackingFrontendGTSAM {
             let (state, tracking_pose) = self.geometric_outlier_rejection(rot);
             self.state = state;
         }
-        self.extract_new_features().expect("Couldn't extract good features to track?");
+        self.extract_new_features_orb().expect("Couldn't extract good features to track?");
 
         // Undistort keypoints
         if let Some(dist_coef) = &CAMERA_MODULE.dist_coef {
@@ -661,6 +661,84 @@ impl TrackingFrontendGTSAM {
 
         Ok(())
     }
+
+
+    fn extract_new_features_orb(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        let _span = tracy_client::span!("extract features");
+
+        let num_features_to_find = max(SETTINGS.get::<i32>(TRACKING_FRONTEND, "gftt_max_features") - self.tracked_features.points.len() as i32, 0);
+        if num_features_to_find <= 0 {
+            warn!("Have enough features ({}), not extracting more", self.tracked_features.points.len());
+            return Ok(());
+        }
+
+        // Mask tracked features
+        let image = self.current_frame.image.as_ref().unwrap();
+        let mut mask = opencv::core::Mat::new_rows_cols_with_default(
+            image.rows(),
+            image.cols(),
+            CV_8U,
+            Scalar::all(255.0)
+        ).unwrap();
+        for point in self.tracked_features.points.iter() {
+            circle(
+                &mut mask,
+                Point::new(point.x as i32, point.y as i32),
+                SETTINGS.get::<i32>(TRACKING_FRONTEND, "gftt_min_distance_btw_tracked_and_detected_features"),
+                Scalar::all(0.0),
+                -1,
+                -1,
+                0
+            ).unwrap();
+        }
+
+        let (keypoints, descriptors) = self.orb_extractor_left.extract(&image, Some(mask)).unwrap();
+
+        // Raw feature detection
+        // self.gftt.detect(&image, &mut keypoints, &mut mask)?;
+
+        // Non-max suppression
+        let max_keypoints = self.non_max_suppression(
+            &keypoints,
+            num_features_to_find as i32,
+            image.cols(),
+            image.rows(),
+            SETTINGS.get::<i32>(TRACKING_FRONTEND, "nonmaxsuppression__nr_horizontal_bins"),
+            SETTINGS.get::<i32>(TRACKING_FRONTEND, "nonmaxsuppression__nr_vertical_bins"),
+        )?;
+
+        // Corner sub-pix
+        let mut new_corners = opencv::types::VectorOfPoint2f::new();
+        opencv::core::KeyPoint::convert(&max_keypoints, &mut new_corners, &opencv::core::Vector::<i32>::new())?;
+
+        if new_corners.len() > 0 {
+            let window_size = SETTINGS.get::<i32>(TRACKING_FRONTEND, "subpix_window_size");
+            let zero_zone = SETTINGS.get::<i32>(TRACKING_FRONTEND, "subpix_zero_zone");
+
+            opencv::imgproc::corner_sub_pix(
+                image,
+                &mut new_corners,
+                opencv::core::Size::new(window_size, window_size),
+                opencv::core::Size::new(zero_zone, zero_zone),
+                opencv::core::TermCriteria {
+                    typ: SETTINGS.get::<i32>(TRACKING_FRONTEND, "subpix_termcriteriatype"),
+                    max_count: SETTINGS.get::<i32>(TRACKING_FRONTEND, "subpix_max_iters"),
+                    epsilon: SETTINGS.get::<f64>(TRACKING_FRONTEND, "subpix_epsilon_error"),
+                },
+            )?;
+        }
+
+        for point in new_corners.iter() {
+            let bearing_vector = self.get_bearing_vector(&point);
+            self.tracked_features.add(Point2f::new(point.x, point.y), bearing_vector);
+        }
+
+        // debug!("Extracted {} new features", new_corners.len());
+
+        Ok(())
+    }
+
+
 
     fn get_bearing_vector(&self, px: & Point2f) -> DVVector3<f64> {
         // Calibrate pixel.

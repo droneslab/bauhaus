@@ -26,7 +26,7 @@ system:
       keyframe_trajectory_file_name: "keyframe_trajectory.txt"
 
       # DEBUGGING
-      log_level: debug # options are [trace, debug, info, warn, error]
+      log_level: warn # options are [trace, debug, info, warn, error]
       check_deadlocks: false # Spawns a new thread to check for deadlocks every 2 secs, but slows stuff down.
       # To enable profiling, set features = ["enable"] for tracy-client in Cargo.toml
       # To turn on visualizer, uncomment visualizer actor below
@@ -42,7 +42,7 @@ modules:
         tag: "orbslam feature detection" # options: ["opencv feature detection", "orbslam feature detection", "good features to track"]
         settings:
           - name: max_features
-            value: 1000 #1000 in euroc, 2000 in kitti
+            value: 500 #1000 in euroc, 2000 in kitti
             type: i32
           - name: ini_features
             value: 5000 # 5000 in euroc, 10000 in kitti
