@@ -5,7 +5,7 @@
 mod imutests {
     use core::{
         config::{load_config, SETTINGS},
-        matrix::{DVMatrix, DVMatrix3, DVVector3, DVVectorOfKeyPoint},
+        matrix::{BHMatrix, BHMatrix3, BHVector3, BHVectorOfKeyPoint},
         sensor::{FrameSensor, ImuSensor, Sensor},
         system::{Actor, System, Timestamp},
     };
@@ -85,7 +85,7 @@ mod imutests {
     fn test_triangulate2() {
         // triangulate2
         let mut adapter = get_central_relative_adapter();
-        adapter.t12 = DVVector3::new_with(-0.0023119442899574741, -0.90299672699084821, -0.42964120607480788);
+        adapter.t12 = BHVector3::new_with(-0.0023119442899574741, -0.90299672699084821, -0.42964120607480788);
         let index = 0;
 
         let res = triangulate2(&adapter, index);
@@ -1044,12 +1044,12 @@ mod imutests {
             Vector3::new(-0.441713,00.388938,00.808466
             ), 
         ];
-        let r12 = DVMatrix3::new(Matrix3::new(
+        let r12 = BHMatrix3::new(Matrix3::new(
             0.999871, -0.0159879, 0.00140649,
         0.0160383, 0.998621, -0.0499894,
         -0.000605324, 0.0500055, 0.998749,
         ));
-        let t12 = DVVector3::new_with(0.0, 0.0, 0.0);
+        let t12 = BHVector3::new_with(0.0, 0.0, 0.0);
 
         CentralRelativeAdapter::new(bearing_vectors1, bearing_vectors2, r12, t12)
 

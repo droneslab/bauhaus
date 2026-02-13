@@ -22,7 +22,7 @@
 #include "dvos3binding/src/lib.rs.h"
 
 
-struct DVKeyPoint;
+struct BHKeyPoint;
 
 namespace DBoW2 {
 

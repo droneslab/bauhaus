@@ -1,5 +1,5 @@
 use crate::modules::module_definitions::VocabularyModule;
-use core::matrix::DVMatrix;
+use core::matrix::BHMatrix;
 use cxx::{let_cxx_string, UniquePtr};
 use log::info;
 use std::fmt;
@@ -12,7 +12,7 @@ pub struct Vocabulary {
 }
 impl VocabularyModule for Vocabulary {
     type BoWModule = DVBoW;
-    type Descriptors = DVMatrix;
+    type Descriptors = BHMatrix;
 
     fn access(&self) {}
     fn load(filename: String) -> Self {
@@ -30,7 +30,7 @@ impl VocabularyModule for Vocabulary {
         self.vocabulary.size()
     }
 
-    fn transform(&self, descriptors: &DVMatrix, bow: &mut DVBoW) {
+    fn transform(&self, descriptors: &BHMatrix, bow: &mut DVBoW) {
         let descriptors2: dvos3binding::ffi::WrapBindCVMat = descriptors.into();
 
         self.vocabulary.transform(

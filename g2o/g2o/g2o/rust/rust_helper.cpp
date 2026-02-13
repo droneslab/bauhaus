@@ -494,7 +494,7 @@ namespace g2o {
         rust_edge.mappoint_id = mp_id;
         this->mono_onlypose_edges.emplace(this->mono_onlypose_edges.end(), std::move(rust_edge));
 
-        // std::cout << "POSE OPT! Add edge mono... MapPointDummy { id: " << mp_id << ", position: DVVector3::new_with(" << worldpos_vec.transpose() << "), kp: (" << obs.transpose() << ", " << inv_sigma2 << ") }, " << std::endl;
+        // std::cout << "POSE OPT! Add edge mono... MapPointDummy { id: " << mp_id << ", position: BHVector3::new_with(" << worldpos_vec.transpose() << "), kp: (" << obs.transpose() << ", " << inv_sigma2 << ") }, " << std::endl;
     }
 
 

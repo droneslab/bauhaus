@@ -1,4 +1,4 @@
-use core::matrix::{DVMatrix3, DVVector3};
+use core::matrix::{BHMatrix3, BHVector3};
 
 use log::{error, warn};
 use nalgebra::{Matrix2, Matrix3, Vector2, Vector3, Vector4};
@@ -142,8 +142,8 @@ impl SampleConsensusProblem for TranslationOnlySacProblem {
 
         let translation = model.translation;
         let rotation = model.rotation;
-        self.adapter.t12 = DVVector3::new(translation);
-        self.adapter.r12 = DVMatrix3::new(rotation);
+        self.adapter.t12 = BHVector3::new(translation);
+        self.adapter.r12 = BHMatrix3::new(rotation);
 
         let inverse_solution = {
             let rot_transpose = rotation.transpose();

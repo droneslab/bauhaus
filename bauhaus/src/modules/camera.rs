@@ -1,12 +1,12 @@
 use crate::modules::module_definitions::CameraModule;
 use crate::{
     map::{keyframe::KeyFrame, pose::Pose},
-    matrix::DVVectorOfKeyPoint,
+    matrix::BHVectorOfKeyPoint,
     registered_actors::CAMERA,
 };
 use core::{
     config::*,
-    matrix::{DVMatrix, DVMatrix3, DVVector3, DVVectorOfPoint3f},
+    matrix::{BHMatrix, BHMatrix3, BHVector3, BHVectorOfPoint3f},
     sensor::Sensor,
 };
 use opencv::{
@@ -25,7 +25,7 @@ pub struct Camera {
     pub _camera_type: CameraType,
 
     // Three diff ways of representing K...
-    pub k_matrix: DVMatrix,
+    pub k_matrix: BHMatrix,
     k_matrix_nalgebra: nalgebra::Matrix3<f64>,
     pub fx: f64,
     pub fy: f64,
@@ -41,9 +41,9 @@ pub struct Camera {
 }
 
 impl CameraModule for Camera {
-    type Keys = DVVectorOfKeyPoint;
+    type Keys = BHVectorOfKeyPoint;
     type Pose = Pose;
-    type ResultPoints = DVVectorOfPoint3f;
+    type ResultPoints = BHVectorOfPoint3f;
     type ResultTriangulated = Vec<bool>;
     type KeyPoint = opencv::core::KeyPoint;
     type KeyFrame = KeyFrame;
@@ -52,10 +52,10 @@ impl CameraModule for Camera {
 
     fn two_view_reconstruction(
         &self,
-        v_keys1: &DVVectorOfKeyPoint,
-        v_keys2: &DVVectorOfKeyPoint,
+        v_keys1: &BHVectorOfKeyPoint,
+        v_keys2: &BHVectorOfKeyPoint,
         matches: &Vec<i32>,
-    ) -> Option<(Pose, DVVectorOfPoint3f, Vec<bool>)> {
+    ) -> Option<(Pose, BHVectorOfPoint3f, Vec<bool>)> {
         let mut tvr = dvos3binding::ffi::new_two_view_reconstruction(
             self.fx as f32,
             self.cx as f32,
@@ -70,7 +70,7 @@ impl CameraModule for Camera {
             rotation: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
         };
         let mut v_p3d: dvos3binding::ffi::WrapBindCVVectorOfPoint3f =
-            DVVectorOfPoint3f::empty().into();
+            BHVectorOfPoint3f::empty().into();
         let mut vb_triangulated = Vec::new();
 
         // TODO (timing) ... cloning vkeys1 and 2
@@ -90,18 +90,18 @@ impl CameraModule for Camera {
         }
     }
 
-    fn unproject_eig(&self, kp: &opencv::core::Point2f) -> DVVector3<f64> {
+    fn unproject_eig(&self, kp: &opencv::core::Point2f) -> BHVector3<f64> {
         // Eigen::Vector3f Pinhole::unprojectEig(const cv::Point2f &p2D)
         // mvParameters in orbslam are:
         // 0 = fx, 1 = fy, 2 = cx, 3 = cy
-        DVVector3::new_with(
+        BHVector3::new_with(
             (kp.x as f64 - self.cx) / self.fx,
             (kp.y as f64 - self.cy) / self.fy,
             1.0,
         )
     }
 
-    fn unproject_stereo(&self, _kf: &KeyFrame, _idx: usize) -> Option<DVVector3<f64>> {
+    fn unproject_stereo(&self, _kf: &KeyFrame, _idx: usize) -> Option<BHVector3<f64>> {
         todo!("TODO (Stereo)");
         // bool KeyFrame::UnprojectStereo(int i, Eigen::Vector3f &x3D)
         // {
@@ -123,7 +123,7 @@ impl CameraModule for Camera {
         // }
     }
 
-    fn project(&self, pos: DVVector3<f64>) -> (f64, f64) {
+    fn project(&self, pos: BHVector3<f64>) -> (f64, f64) {
         // Eigen::Vector2f Pinhole::project(const Eigen::Vector3f &v3D)
         let u = (self.fx * pos[0]) / pos[2] + self.cx;
         let v = (self.fy * pos[1]) / pos[2] + self.cy;
@@ -134,8 +134,8 @@ impl CameraModule for Camera {
         &self,
         kp1: &KeyPoint,
         kp2: &KeyPoint,
-        r12: &DVMatrix3<f64>,
-        t12: &DVVector3<f64>,
+        r12: &BHMatrix3<f64>,
+        t12: &BHVector3<f64>,
         unc: f32,
     ) -> bool {
         // bool Pinhole::epipolarConstrain(GeometricCamera* pCamera2,  const cv::KeyPoint &kp1, const cv::KeyPoint &kp2, const Eigen::Matrix3f& R12, const Eigen::Vector3f& t12, const float sigmaLevel, const float unc) {
@@ -215,7 +215,7 @@ impl Camera {
 
         Ok(Camera {
             _camera_type: camera_type,
-            k_matrix: DVMatrix::new(k),
+            k_matrix: BHMatrix::new(k),
             k_matrix_nalgebra,
             _stereo_baseline_times_fx: stereo_baseline_times_fx,
             stereo_baseline,

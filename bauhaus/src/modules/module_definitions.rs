@@ -1,5 +1,5 @@
 use core::{
-    matrix::{DVMatrix, DVMatrix3, DVVector3, DVVectorOfKeyPoint, DVVectorOfPoint2f},
+    matrix::{BHMatrix, BHMatrix3, BHVector3, BHVectorOfKeyPoint, BHVectorOfPoint2f},
     sensor::Sensor,
     system::{Module, Sender},
 };
@@ -41,15 +41,15 @@ pub trait CameraModule {
         v_keys2: &Self::Keys,
         matches: &Self::Matches,
     ) -> Option<(Self::Pose, Self::ResultPoints, Self::ResultTriangulated)>;
-    fn unproject_eig(&self, kp: &Self::Point) -> DVVector3<f64>;
-    fn unproject_stereo(&self, kf: &Self::KeyFrame, _idx: usize) -> Option<DVVector3<f64>>;
-    fn project(&self, pos: DVVector3<f64>) -> (f64, f64);
+    fn unproject_eig(&self, kp: &Self::Point) -> BHVector3<f64>;
+    fn unproject_stereo(&self, kf: &Self::KeyFrame, _idx: usize) -> Option<BHVector3<f64>>;
+    fn project(&self, pos: BHVector3<f64>) -> (f64, f64);
     fn epipolar_constrain(
         &self,
         kp1: &Self::KeyPoint,
         kp2: &Self::KeyPoint,
-        r12: &DVMatrix3<f64>,
-        t12: &DVVector3<f64>,
+        r12: &BHMatrix3<f64>,
+        t12: &BHVector3<f64>,
         unc: f32,
     ) -> bool;
 }
@@ -115,7 +115,7 @@ pub trait FeatureExtractionModule {
         &mut self,
         image: &Mat,
         mask: Option<Mat>,
-    ) -> Result<(DVVectorOfKeyPoint, DVMatrix), Box<dyn std::error::Error>>;
+    ) -> Result<(BHVectorOfKeyPoint, BHMatrix), Box<dyn std::error::Error>>;
 }
 
 impl Module for dyn FeatureExtractionModule {}
@@ -253,7 +253,7 @@ pub trait SearchForInitializationTrait {
         &self,
         f1: &Frame,
         f2: &Frame,
-        vb_prev_matched: &mut DVVectorOfPoint2f,
+        vb_prev_matched: &mut BHVectorOfPoint2f,
         window_size: i32,
     ) -> (i32, Vec<i32>);
 }

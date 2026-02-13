@@ -10,7 +10,7 @@
 use crate::registered_actors::{CAMERA_MODULE, FEATURES};
 use crate::{
     map::map::Id,
-    matrix::{DVMatrix, DVVectorOfKeyPoint},
+    matrix::{BHMatrix, BHVectorOfKeyPoint},
 };
 use atomic_float::AtomicF32;
 use core::config::SETTINGS;
@@ -41,17 +41,17 @@ enum KeyPoints {
     #[default]
     Empty,
     Mono {
-        keypoints_un: DVVectorOfKeyPoint, // Undistorted keypoints actually used by the system. For stereo, this is redundant bc images must be rectified
+        keypoints_un: BHVectorOfKeyPoint, // Undistorted keypoints actually used by the system. For stereo, this is redundant bc images must be rectified
     },
     Stereo {
-        keypoints_left: DVVectorOfKeyPoint,
+        keypoints_left: BHVectorOfKeyPoint,
         keypoints_left_cutoff: u32, // Nleft, if stereo and index passed in is < keypoints_left_cutoff, need to get keypoint from keypoints_right instead of keypoints
-        keypoints_right: DVVectorOfKeyPoint,
+        keypoints_right: BHVectorOfKeyPoint,
         mv_right: Vec<f32>, // mvuRight
         mv_depth: Vec<f32>, //mvDepth
     },
     Rgbd {
-        keypoints_un: DVVectorOfKeyPoint, // Undistorted keypoints actually used by the system. For stereo, this is redundant bc images must be rectified
+        keypoints_un: BHVectorOfKeyPoint, // Undistorted keypoints actually used by the system. For stereo, this is redundant bc images must be rectified
         mv_depth: Vec<f32>,               //mvDepth
     },
 }
@@ -61,7 +61,7 @@ pub struct Features {
     // Common across all sensor types
     pub num_keypoints: u32, // N
     keypoints: KeyPoints,
-    pub descriptors: DVMatrix, // mDescriptors
+    pub descriptors: BHMatrix, // mDescriptors
 
     // Keypoints are assigned to cells in a grid to reduce matching complexity when projecting MapPoints.
     grid: Vec<Vec<Vec<usize>>>, // mGrid
@@ -94,7 +94,7 @@ impl Features {
         Features {
             num_keypoints: 0,
             keypoints: KeyPoints::Empty,
-            descriptors: DVMatrix::empty(),
+            descriptors: BHMatrix::empty(),
             grid: vec![],
             frame_grid_cols: 0,
             frame_grid_rows: 0,
@@ -102,8 +102,8 @@ impl Features {
     }
 
     pub fn new(
-        keypoints: DVVectorOfKeyPoint,
-        descriptors: DVMatrix,
+        keypoints: BHVectorOfKeyPoint,
+        descriptors: BHMatrix,
         im_width: u32,
         im_height: u32,
         sensor: Sensor,
@@ -182,7 +182,7 @@ impl Features {
         }
     }
 
-    pub fn get_all_keypoints(&self) -> &DVVectorOfKeyPoint {
+    pub fn get_all_keypoints(&self) -> &BHVectorOfKeyPoint {
         match &self.keypoints {
             KeyPoints::Mono { keypoints_un, .. } | KeyPoints::Rgbd { keypoints_un, .. } => {
                 keypoints_un
@@ -229,9 +229,9 @@ impl Features {
             KeyPoints::Mono { .. } => {
                 self.num_keypoints = keypoints.len() as u32;
                 self.keypoints = KeyPoints::Mono {
-                    keypoints_un: DVVectorOfKeyPoint::new(keypoints),
+                    keypoints_un: BHVectorOfKeyPoint::new(keypoints),
                 };
-                self.descriptors = DVMatrix::new(descriptors);
+                self.descriptors = BHMatrix::new(descriptors);
             }
             KeyPoints::Rgbd { .. } => todo!("RGBD"),
             KeyPoints::Stereo { .. } => todo!("Stereo"),
@@ -399,9 +399,9 @@ impl Features {
     }
 
     pub fn undistort_keypoints(
-        keypoints: &DVVectorOfKeyPoint,
+        keypoints: &BHVectorOfKeyPoint,
         dist_coef: &Vec<f32>,
-    ) -> Result<DVVectorOfKeyPoint, Box<dyn std::error::Error>> {
+    ) -> Result<BHVectorOfKeyPoint, Box<dyn std::error::Error>> {
         // void Frame::UndistortKeyPoints()
 
         let num_keypoints = keypoints.len();
@@ -446,7 +446,7 @@ impl Features {
             keypoints_un.push(kp_new);
         }
 
-        Ok(DVVectorOfKeyPoint::new(keypoints_un))
+        Ok(BHVectorOfKeyPoint::new(keypoints_un))
     }
 
     pub fn undistort_points(
@@ -557,7 +557,7 @@ impl Features {
 
     fn assign_features_to_grid(
         grid: &mut Vec<Vec<Vec<usize>>>,
-        keypoints_un: &DVVectorOfKeyPoint,
+        keypoints_un: &BHVectorOfKeyPoint,
         frame_grid_rows: i32,
         frame_grid_cols: i32,
     ) {

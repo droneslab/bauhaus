@@ -6,6 +6,6 @@ pub mod config;
 // Sensor data structures.
 pub mod sensor;
 
-// Wrapping opencv/algebra structs with our own (ie DVMatrix) so that we can
+// Wrapping opencv/algebra structs with our own (ie BHMatrix) so that we can
 // implement traits on them. Notably, serialize/deserialize.
 pub mod matrix;

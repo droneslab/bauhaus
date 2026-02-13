@@ -7,7 +7,7 @@
 namespace orb_slam3
 {
     struct Grid;
-    struct DVKeyPoint;
+    struct BHKeyPoint;
     struct DVPoint2f;
 
     struct BindCVKeyPoints {

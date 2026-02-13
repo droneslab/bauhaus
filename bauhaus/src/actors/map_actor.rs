@@ -1,6 +1,6 @@
 // NOT USING THIS RIGHT NOW!!!!!!!!!!!!!
 
-// use core::{actor::{ActorChannels, ActorMessage, Actor}, matrix::DVVectorOfPoint3f};
+// use core::{actor::{ActorChannels, ActorMessage, Actor}, matrix::BHVectorOfPoint3f};
 // use log::{info, warn, debug};
 // use logging_timer::{timer, finish};
 
@@ -145,7 +145,7 @@
 //     // BulkMsg{msgs: Vec<MapWriteMsg>}
 
 //     CreateInitialMap{
-//         mp_matches: Vec<i32>, p3d: DVVectorOfPoint3f, initial_frame: Frame, 
+//         mp_matches: Vec<i32>, p3d: BHVectorOfPoint3f, initial_frame: Frame, 
 //         current_frame: Frame
 //     },
 //     KeyFrame__New{kf: Frame},

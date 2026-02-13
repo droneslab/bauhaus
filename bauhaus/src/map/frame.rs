@@ -1,6 +1,6 @@
 use core::{
     config::{SETTINGS, SYSTEM},
-    matrix::{DVMatrix, DVMatrix3, DVVector3, DVVectorOfKeyPoint},
+    matrix::{BHMatrix, BHMatrix3, BHVector3, BHVectorOfKeyPoint},
     sensor::{FrameSensor, Sensor},
     system::Timestamp,
 };
@@ -50,8 +50,8 @@ pub struct Frame {
 impl Frame {
     pub fn new(
         frame_id: Id,
-        keypoints_vec: DVVectorOfKeyPoint,
-        descriptors_vec: DVMatrix,
+        keypoints_vec: BHVectorOfKeyPoint,
+        descriptors_vec: BHMatrix,
         im_width: u32,
         im_height: u32,
         image: Option<opencv::core::Mat>,
@@ -193,7 +193,7 @@ impl Frame {
 
         let (uvx, uvy) = match is_right {
             true => todo!("Stereo"), //self.camera2.project(pos_camera),
-            false => CAMERA_MODULE.project(DVVector3::new(pos_camera)),
+            false => CAMERA_MODULE.project(BHVector3::new(pos_camera)),
         };
         if !self.features.is_in_image(uvx, uvy) {
             return None;
@@ -258,11 +258,11 @@ impl Frame {
     }
 
     // *IMU *//
-    pub fn get_imu_rotation(&self) -> DVMatrix3<f64> {
+    pub fn get_imu_rotation(&self) -> BHMatrix3<f64> {
         // Eigen::Matrix3f KeyFrame::GetImuRotation()
         // Note: in Orbslam this is: (mTwc * mImuCalib.mTcb).rotationMatrix();
         // and mTwc is inverse of the pose
-        DVMatrix3::new(
+        BHMatrix3::new(
             *self
                 .pose
                 .expect("Should have pose by now")
@@ -272,7 +272,7 @@ impl Frame {
         )
     }
 
-    pub fn get_imu_position(&self) -> DVVector3<f64> {
+    pub fn get_imu_position(&self) -> BHVector3<f64> {
         // Eigen::Matrix<float,3,1> Frame::GetImuPosition() const {
         // Note: in Orbslam this is:
         // mRwc * mImuCalib.mTcb.translation() + mOw;
@@ -280,7 +280,7 @@ impl Frame {
 
         let inverse = self.pose.unwrap().inverse(); // todo should this be old_inverse?
 
-        let res = DVVector3::new(
+        let res = BHVector3::new(
             *inverse.get_rotation() * *ImuCalib::new().tcb.get_translation()
                 + *inverse.get_translation(),
         );
@@ -290,7 +290,7 @@ impl Frame {
     pub fn set_imu_pose_velocity(&mut self, twb: Pose, vwb: nalgebra::Vector3<f64>) {
         // void Frame::SetImuPoseVelocity(const Eigen::Matrix3f &Rwb, const Eigen::Vector3f &twb, const Eigen::Vector3f &Vwb)
 
-        self.imu_data.velocity = Some(DVVector3::new(vwb));
+        self.imu_data.velocity = Some(BHVector3::new(vwb));
         let inv_pose = twb.inverse(); // Tbw
         self.pose = Some(ImuCalib::new().tcb * inv_pose); //tcw
     }

@@ -1,10 +1,10 @@
-use core::matrix::{DVMatrix3, DVVector3};
+use core::matrix::{BHMatrix3, BHVector3};
 use nalgebra::{Quaternion, UnitQuaternion};
 use num_traits::abs;
 use std::ops::{Deref, Mul};
 
-pub type DVTranslation = DVVector3<f64>;
-pub type DVRotation = DVMatrix3<f64>;
+pub type DVTranslation = BHVector3<f64>;
+pub type DVRotation = BHMatrix3<f64>;
 
 #[derive(Clone, Copy, Default)]
 // Note: I'm not sure that Isometry3 is thread safe, could be the same problem
@@ -395,8 +395,8 @@ impl Sim3 {
             scale: 1.0 / self.scale,
         }
     }
-    pub fn map(&self, other: &DVVector3<f64>) -> DVVector3<f64> {
-        DVVector3::new(
+    pub fn map(&self, other: &BHVector3<f64>) -> BHVector3<f64> {
+        BHVector3::new(
             (*self.pose.get_rotation() * **other).mul(self.scale) + *self.pose.get_translation(),
         )
     }

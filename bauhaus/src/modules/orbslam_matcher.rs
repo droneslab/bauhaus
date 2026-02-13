@@ -6,7 +6,7 @@ use crate::modules::module_definitions::CameraModule;
 use crate::modules::optimizer::LEVEL_SIGMA2;
 use crate::registered_actors::{CAMERA, CAMERA_MODULE, FEATURE_DETECTION, FEATURE_MATCHER};
 use core::config::SETTINGS;
-use core::matrix::{DVVector3, DVVectorOfPoint2f};
+use core::matrix::{BHVector3, BHVectorOfPoint2f};
 use core::sensor::{FrameSensor, Sensor};
 use log::error;
 use opencv::core::KeyPoint;
@@ -431,7 +431,7 @@ impl SearchForInitializationTrait for ORBMatcher {
         &self,
         f1: &Frame,
         f2: &Frame,
-        vb_prev_matched: &mut DVVectorOfPoint2f,
+        vb_prev_matched: &mut BHVectorOfPoint2f,
         window_size: i32,
     ) -> (i32, Vec<i32>) {
         let nnratio = 0.9;
@@ -1195,7 +1195,7 @@ impl SearchForTriangulationTrait for ORBMatcher {
         let t2w = *kf_2.get_pose().get_translation(); //t2w
         let c2 = r2w * cw + t2w; //C2
 
-        let ep = CAMERA_MODULE.project(DVVector3::new(c2));
+        let ep = CAMERA_MODULE.project(BHVector3::new(c2));
 
         let (r12, t12);
         if matches!(sensor.frame(), FrameSensor::Stereo) {
@@ -1479,7 +1479,7 @@ impl FuseTrait for ORBMatcher {
                 }
 
                 // Project into Image
-                let (u, v) = CAMERA_MODULE.project(DVVector3::new(p3dc));
+                let (u, v) = CAMERA_MODULE.project(BHVector3::new(p3dc));
 
                 // Point must be inside the image
                 if !current_kf.features.is_in_image(u, v) {
@@ -1490,7 +1490,7 @@ impl FuseTrait for ORBMatcher {
                 let max_distance = mappoint.get_max_distance_invariance();
                 let min_distance = mappoint.get_min_distance_invariance();
                 let po = *p3dw - *ow;
-                // let po = DVMatrix::new_expr((p3dw - ow.mat()).into_result()?);
+                // let po = BHMatrix::new_expr((p3dw - ow.mat()).into_result()?);
                 let dist_3d = po.norm();
 
                 if dist_3d < min_distance || dist_3d > max_distance {
@@ -1618,7 +1618,7 @@ impl FuseTrait for ORBMatcher {
                 }
 
                 let _inv_z = 1.0 / p_3d_c[2]; // Used by stereo below
-                let uv = CAMERA_MODULE.project(DVVector3::new(p_3d_c));
+                let uv = CAMERA_MODULE.project(BHVector3::new(p_3d_c));
 
                 // Point must be inside the image
                 if !lock.get_keyframe(*kf_id).features.is_in_image(uv.0, uv.1) {

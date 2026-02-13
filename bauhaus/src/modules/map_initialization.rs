@@ -8,8 +8,8 @@ use crate::registered_actors::{
     CAMERA_MODULE, FEATURE_MATCHING_MODULE, FULL_MAP_OPTIMIZATION_MODULE,
 };
 use core::config::{SETTINGS, SYSTEM};
-use core::matrix::DVVectorOfPoint3f;
-use core::matrix::{DVVector3, DVVectorOfPoint2f};
+use core::matrix::BHVectorOfPoint3f;
+use core::matrix::{BHVector3, BHVectorOfPoint2f};
 use core::sensor::{FrameSensor, ImuSensor, Sensor};
 use core::system::Timestamp;
 use log::info;
@@ -19,8 +19,8 @@ use std::collections::BTreeSet;
 pub struct MapInitialization {
     // Monocular
     pub mp_matches: Vec<i32>,            // ini_matches .. mvIniMatches;
-    pub prev_matched: DVVectorOfPoint2f, // std::vector<cv::Point2f> mvbPrevMatched;
-    pub p3d: DVVectorOfPoint3f,          // std::vector<cv::Point3f> mvIniP3D;
+    pub prev_matched: BHVectorOfPoint2f, // std::vector<cv::Point2f> mvbPrevMatched;
+    pub p3d: BHVectorOfPoint3f,          // std::vector<cv::Point3f> mvIniP3D;
     pub ready_to_initialize: bool,
     pub initial_frame: Option<Frame>,
     pub last_frame: Option<Frame>,
@@ -52,8 +52,8 @@ impl MapInitialization {
         let sensor: Sensor = SETTINGS.get(SYSTEM, "sensor");
         Self {
             mp_matches: Vec::new(),
-            prev_matched: DVVectorOfPoint2f::empty(),
-            p3d: DVVectorOfPoint3f::empty(),
+            prev_matched: BHVectorOfPoint2f::empty(),
+            p3d: BHVectorOfPoint3f::empty(),
             ready_to_initialize: false,
             initial_frame: None,
             last_frame: None,
@@ -193,7 +193,7 @@ impl MapInitialization {
                 // Create mappoint
                 // This also adds the observations from mappoint -> keyframe and keyframe -> mappoint
                 let point = self.p3d.get(kf1_index).unwrap();
-                let world_pos = DVVector3::new_with(point.x as f64, point.y as f64, point.z as f64);
+                let world_pos = BHVector3::new_with(point.x as f64, point.y as f64, point.z as f64);
                 let origin_map_id = lock.id;
                 let _id = lock.insert_mappoint_to_map(
                     world_pos,
@@ -260,7 +260,7 @@ impl MapInitialization {
                 {
                     let mut lock = map.write()?;
                     let mp = lock.mappoints.get_mut(&mp_id).unwrap();
-                    mp.position = DVVector3::new((*mp.position) * inverse_median_depth);
+                    mp.position = BHVector3::new((*mp.position) * inverse_median_depth);
                 }
 
                 let norm_and_depth = {

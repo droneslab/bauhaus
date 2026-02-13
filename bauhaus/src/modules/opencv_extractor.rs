@@ -1,6 +1,6 @@
 use core::{
     config::SETTINGS,
-    matrix::{DVMatrix, DVVectorOfKeyPoint},
+    matrix::{BHMatrix, BHVectorOfKeyPoint},
     system::Module,
 };
 use std::{fmt, fmt::Debug};
@@ -21,7 +21,7 @@ impl FeatureExtractionModule for OpenCVExtractor {
         &mut self,
         image: &Mat,
         mask: Option<Mat>,
-    ) -> Result<(DVVectorOfKeyPoint, DVMatrix), Box<dyn std::error::Error>> {
+    ) -> Result<(BHVectorOfKeyPoint, BHMatrix), Box<dyn std::error::Error>> {
         let mut descriptors = opencv::core::Mat::default();
         let mut keypoints = opencv::types::VectorOfKeyPoint::new();
         let mask = match mask {
@@ -35,8 +35,8 @@ impl FeatureExtractionModule for OpenCVExtractor {
             .compute(&*image, &mut keypoints, &mut descriptors)?;
 
         Ok((
-            DVVectorOfKeyPoint::new(keypoints),
-            DVMatrix::new(descriptors),
+            BHVectorOfKeyPoint::new(keypoints),
+            BHMatrix::new(descriptors),
         ))
     }
 }

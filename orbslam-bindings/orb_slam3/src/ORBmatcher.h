@@ -34,7 +34,7 @@
 namespace orb_slam3
 {
 
-    struct DVKeyPoint;
+    struct BHKeyPoint;
     struct DVPoint2f;
     struct Grid;
     struct VectorOfDVPoint2f;

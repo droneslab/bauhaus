@@ -37,22 +37,22 @@ fn main() {
     // let path = args[1].to_owned();
 
     // let image = imgcodecs::imread(&path, imgcodecs::IMREAD_GRAYSCALE).expect("Could not read image.");
-    // let image_dv: dvos3binding::ffi::WrapBindCVMat = DVMatrix::new((&image).clone()).into();
+    // let image_dv: dvos3binding::ffi::WrapBindCVMat = BHMatrix::new((&image).clone()).into();
 
     // // let params = Vector::new();
     // // let _ = imgcodecs::imwrite("results/BLA.png", &image, &params).expect("Could not read image.");
 
-    // let mut descriptors: dvos3binding::ffi::WrapBindCVMat = DVMatrix::default().into();
-    // let mut keypoints: dvos3binding::ffi::WrapBindCVKeyPoints = DVVectorOfKeyPoint::empty().into();
+    // let mut descriptors: dvos3binding::ffi::WrapBindCVMat = BHMatrix::default().into();
+    // let mut keypoints: dvos3binding::ffi::WrapBindCVKeyPoints = BHVectorOfKeyPoint::empty().into();
     // let mut orb_extractor = DVORBextractor::new(2000*5);
     // orb_extractor.extractor.pin_mut().extract(&image_dv, &mut keypoints, &mut descriptors);
 }
 
 
 // #[derive(Clone, Debug, Default)]
-// pub struct DVMatrix (opencv::core::Mat);
-// unsafe impl Sync for DVMatrix {}
-// impl DVMatrix {
+// pub struct BHMatrix (opencv::core::Mat);
+// unsafe impl Sync for BHMatrix {}
+// impl BHMatrix {
 //     pub fn empty() -> Self {
 //         Self ( Mat::default() )
 //     }
@@ -62,15 +62,15 @@ fn main() {
 //     pub fn mat(&self) -> &opencv::core::Mat { &self.0 }
 //     pub fn row(&self, index: u32) -> Result<Mat, opencv::Error> { self.0.row(index as i32) }
 // }
-// impl Deref for DVMatrix {
+// impl Deref for BHMatrix {
 //     type Target = opencv::core::Mat;
 //     fn deref(&self) -> &Self::Target {
 //         &self.0
 //     }
 // }
 // // For interop with custom C++ bindings to ORBSLAM
-// impl From<DVMatrix> for dvos3binding::ffi::WrapBindCVMat {
-//     fn from(mat: DVMatrix) -> dvos3binding::ffi::WrapBindCVMat {
+// impl From<BHMatrix> for dvos3binding::ffi::WrapBindCVMat {
+//     fn from(mat: BHMatrix) -> dvos3binding::ffi::WrapBindCVMat {
 //         dvos3binding::ffi::WrapBindCVMat { 
 //             mat_ptr: dvos3binding::BindCVMat {
 //                 mat_ptr: mat.0
@@ -78,13 +78,13 @@ fn main() {
 //         }
 //     }
 // }
-// impl From<dvos3binding::ffi::WrapBindCVMat> for DVMatrix {
-//     fn from(mat: dvos3binding::ffi::WrapBindCVMat) -> DVMatrix {
-//         DVMatrix::new(mat.mat_ptr.mat_ptr)
+// impl From<dvos3binding::ffi::WrapBindCVMat> for BHMatrix {
+//     fn from(mat: dvos3binding::ffi::WrapBindCVMat) -> BHMatrix {
+//         BHMatrix::new(mat.mat_ptr.mat_ptr)
 //     }
 // }
-// impl From<&DVMatrix> for dvos3binding::ffi::WrapBindCVRawPtr {
-//     fn from(mat: &DVMatrix) -> dvos3binding::ffi::WrapBindCVRawPtr {
+// impl From<&BHMatrix> for dvos3binding::ffi::WrapBindCVRawPtr {
+//     fn from(mat: &BHMatrix) -> dvos3binding::ffi::WrapBindCVRawPtr {
 //         dvos3binding::ffi::WrapBindCVRawPtr { 
 //             raw_ptr: dvos3binding::BindCVRawPtr {
 //                 raw_ptr: mat.0.as_raw()
@@ -92,8 +92,8 @@ fn main() {
 //         }
 //     }
 // }
-// impl<'a> From<&'a DVMatrix> for dvos3binding::BindCVMatRef<'a> {
-//     fn from(mat: &'a DVMatrix) -> dvos3binding::BindCVMatRef<'a> {
+// impl<'a> From<&'a BHMatrix> for dvos3binding::BindCVMatRef<'a> {
+//     fn from(mat: &'a BHMatrix) -> dvos3binding::BindCVMatRef<'a> {
 //         dvos3binding::BindCVMatRef { 
 //             mat_ptr: mat
 //         }
@@ -101,9 +101,9 @@ fn main() {
 // }
 
 
-// pub struct DVVectorOfKeyPoint ( opencv::types::VectorOfKeyPoint );
-// unsafe impl Sync for DVVectorOfKeyPoint {}
-// impl DVVectorOfKeyPoint {
+// pub struct BHVectorOfKeyPoint ( opencv::types::VectorOfKeyPoint );
+// unsafe impl Sync for BHVectorOfKeyPoint {}
+// impl BHVectorOfKeyPoint {
 //     // Constructors
 //     pub fn empty() -> Self {
 //         Self ( VectorOfKeyPoint::new() )
@@ -111,7 +111,7 @@ fn main() {
 //     pub fn new(vec: opencv::types::VectorOfKeyPoint) -> Self {
 //         Self ( vec )
 //     }
-//     pub fn clone(&self) -> DVVectorOfKeyPoint {
+//     pub fn clone(&self) -> BHVectorOfKeyPoint {
 //         Self ( self.0.clone() )
 //     }
 
@@ -123,19 +123,19 @@ fn main() {
 
 //     pub fn clear(&mut self) { self.0.clear() }
 // }
-// impl Deref for DVVectorOfKeyPoint {
+// impl Deref for BHVectorOfKeyPoint {
 //     type Target = opencv::types::VectorOfKeyPoint;
 //     fn deref(&self) -> &Self::Target {
 //         &self.0
 //     }
 // }
 // // From implementations to make it easier to pass this into opencv functions
-// impl From<DVVectorOfKeyPoint> for opencv::types::VectorOfKeyPoint {
-//     fn from(vec: DVVectorOfKeyPoint) -> opencv::types::VectorOfKeyPoint { vec.0 }
+// impl From<BHVectorOfKeyPoint> for opencv::types::VectorOfKeyPoint {
+//     fn from(vec: BHVectorOfKeyPoint) -> opencv::types::VectorOfKeyPoint { vec.0 }
 // }
 // // For interop with custom C++ bindings to ORBSLAM
-// impl From<DVVectorOfKeyPoint> for dvos3binding::ffi::WrapBindCVKeyPoints {
-//     fn from(kp: DVVectorOfKeyPoint) -> dvos3binding::ffi::WrapBindCVKeyPoints {
+// impl From<BHVectorOfKeyPoint> for dvos3binding::ffi::WrapBindCVKeyPoints {
+//     fn from(kp: BHVectorOfKeyPoint) -> dvos3binding::ffi::WrapBindCVKeyPoints {
 //         dvos3binding::ffi::WrapBindCVKeyPoints { 
 //             kp_ptr: dvos3binding::BindCVKeyPoints {
 //                 kp_ptr: kp.0
@@ -143,13 +143,13 @@ fn main() {
 //         }
 //     }
 // }
-// impl From<dvos3binding::ffi::WrapBindCVKeyPoints> for DVVectorOfKeyPoint {
-//     fn from(kp: dvos3binding::ffi::WrapBindCVKeyPoints) -> DVVectorOfKeyPoint {
-//         DVVectorOfKeyPoint::new(kp.kp_ptr.kp_ptr)
+// impl From<dvos3binding::ffi::WrapBindCVKeyPoints> for BHVectorOfKeyPoint {
+//     fn from(kp: dvos3binding::ffi::WrapBindCVKeyPoints) -> BHVectorOfKeyPoint {
+//         BHVectorOfKeyPoint::new(kp.kp_ptr.kp_ptr)
 //     }
 // }
-// impl From<&DVVectorOfKeyPoint> for dvos3binding::ffi::WrapBindCVRawPtr {
-//     fn from(kp: &DVVectorOfKeyPoint) -> dvos3binding::ffi::WrapBindCVRawPtr {
+// impl From<&BHVectorOfKeyPoint> for dvos3binding::ffi::WrapBindCVRawPtr {
+//     fn from(kp: &BHVectorOfKeyPoint) -> dvos3binding::ffi::WrapBindCVRawPtr {
 //         dvos3binding::ffi::WrapBindCVRawPtr { 
 //             raw_ptr: dvos3binding::BindCVRawPtr {
 //                 raw_ptr: kp.0.as_raw()
@@ -158,8 +158,8 @@ fn main() {
 //     }
 // }
 
-// impl<'a> From<&'a DVVectorOfKeyPoint> for dvos3binding::BindCVKeyPointsRef<'a> {
-//     fn from(kp: &'a DVVectorOfKeyPoint) -> dvos3binding::BindCVKeyPointsRef<'a> {
+// impl<'a> From<&'a BHVectorOfKeyPoint> for dvos3binding::BindCVKeyPointsRef<'a> {
+//     fn from(kp: &'a BHVectorOfKeyPoint) -> dvos3binding::BindCVKeyPointsRef<'a> {
 //         dvos3binding::BindCVKeyPointsRef { 
 //             kp_ptr: kp
 //         }

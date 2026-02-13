@@ -170,7 +170,7 @@ impl TrackingFrontEnd {
         return false;
     }
 
-    fn extract_features(&mut self, image: &Mat) -> (DVVectorOfKeyPoint, DVMatrix) {
+    fn extract_features(&mut self, image: &Mat) -> (BHVectorOfKeyPoint, BHMatrix) {
         let _span = tracy_client::span!("extract_features");
 
         let (keypoints, descriptors) = match self.sensor {
@@ -201,8 +201,8 @@ impl TrackingFrontEnd {
 
     fn send_to_backend(
         &self,
-        keypoints: DVVectorOfKeyPoint,
-        descriptors: DVMatrix,
+        keypoints: BHVectorOfKeyPoint,
+        descriptors: BHMatrix,
         image_width: u32,
         image_height: u32,
         imu_measurements: ImuMeasurements,
@@ -229,7 +229,7 @@ impl TrackingFrontEnd {
 
     fn send_to_visualizer(
         &mut self,
-        keypoints: DVVectorOfKeyPoint,
+        keypoints: BHVectorOfKeyPoint,
         image: Mat,
         timestamp: Timestamp,
     ) {

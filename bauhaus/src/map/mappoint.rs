@@ -1,6 +1,6 @@
 use core::{
     config::{SETTINGS, SYSTEM},
-    matrix::DVMatrix,
+    matrix::BHMatrix,
     sensor::{FrameSensor, Sensor},
 };
 use log::{error, warn};
@@ -16,7 +16,7 @@ use super::{
     pose::DVTranslation,
 };
 use crate::{
-    matrix::DVVector3,
+    matrix::BHVector3,
     modules::orbslam_matcher::SCALE_FACTORS,
     registered_actors::{FEATURE_DETECTION, FEATURE_MATCHING_MODULE},
 };
@@ -32,10 +32,10 @@ pub struct MapPoint {
     pub num_obs: i32,
 
     // Best descriptor used for fast matching
-    pub best_descriptor: DVMatrix, // mDescriptor
+    pub best_descriptor: BHMatrix, // mDescriptor
 
     // Variables used by merging
-    pub normal_vector: DVVector3<f64>, // mNormalVector ; Mean viewing direction
+    pub normal_vector: BHVector3<f64>, // mNormalVector ; Mean viewing direction
 
     // Scale invariance distances
     max_distance: f64,
@@ -67,7 +67,7 @@ pub struct MapPoint {
 }
 
 impl MapPoint {
-    pub(super) fn new(position: DVVector3<f64>, ref_kf_id: Id, origin_map_id: Id, id: Id) -> Self {
+    pub(super) fn new(position: BHVector3<f64>, ref_kf_id: Id, origin_map_id: Id, id: Id) -> Self {
         Self {
             position,
             origin_map_id,
@@ -78,10 +78,10 @@ impl MapPoint {
             sensor: SETTINGS.get(SYSTEM, "sensor"),
             id,
             observations: BTreeMap::new(),
-            normal_vector: DVVector3::zeros::<f64>(),
+            normal_vector: BHVector3::zeros::<f64>(),
             max_distance: 0.0,
             min_distance: 0.0,
-            best_descriptor: DVMatrix::empty(),
+            best_descriptor: BHMatrix::empty(),
             gba_pose: None,
             num_obs: 0,
             ba_global_for_kf: 0,
@@ -115,7 +115,7 @@ impl MapPoint {
         }
     }
 
-    pub fn get_norm_and_depth(&self, map: &Map) -> Option<(f64, f64, DVVector3<f64>)> {
+    pub fn get_norm_and_depth(&self, map: &Map) -> Option<(f64, f64, BHVector3<f64>)> {
         // Part 1 of void MapPoint::UpdateNormalAndDepth()
         if self.observations.is_empty() {
             return None;
@@ -133,19 +133,19 @@ impl MapPoint {
 
         let max_distance = dist * level_scale_factor;
         let min_distance = max_distance / (SCALE_FACTORS[(n_levels - 1) as usize] as f64);
-        let normal_vector = DVVector3::new(normal / (n as f64));
+        let normal_vector = BHVector3::new(normal / (n as f64));
 
         Some((max_distance, min_distance, normal_vector))
     }
 
-    pub fn update_norm_and_depth(&mut self, vals: (f64, f64, DVVector3<f64>)) {
+    pub fn update_norm_and_depth(&mut self, vals: (f64, f64, BHVector3<f64>)) {
         // Part 2 of void MapPoint::UpdateNormalAndDepth()
         self.max_distance = vals.0;
         self.min_distance = vals.1;
         self.normal_vector = vals.2;
     }
 
-    pub fn compute_distinctive_descriptors(&self, map: &Map) -> Option<DVMatrix> {
+    pub fn compute_distinctive_descriptors(&self, map: &Map) -> Option<BHMatrix> {
         // Part 1 of void MapPoint::ComputeDistinctiveDescriptors()
         if self.num_obs == 0 {
             error!("mappoint::compute_distinctive_descriptors;No observations");
@@ -191,10 +191,10 @@ impl MapPoint {
         }
 
         // TODO (timing) ... this clone might take a while
-        Some(DVMatrix::new(descriptors[best_idx].clone()))
+        Some(BHMatrix::new(descriptors[best_idx].clone()))
     }
 
-    pub fn update_distinctive_descriptors(&mut self, desc: DVMatrix) {
+    pub fn update_distinctive_descriptors(&mut self, desc: BHMatrix) {
         // Part 2 of void MapPoint::ComputeDistinctiveDescriptors()
         self.best_descriptor = desc;
     }
@@ -289,7 +289,7 @@ impl MapPoint {
     fn get_obs_normal(
         &self,
         map: &Map,
-        position: &DVVector3<f64>,
+        position: &BHVector3<f64>,
     ) -> (i32, nalgebra::Vector3<f64>) {
         // let _span = tracy_client::span!("UpdateNormalAndDepth");
 

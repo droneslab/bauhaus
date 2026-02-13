@@ -32,7 +32,7 @@ use crate::{
 };
 use core::{
     config::SETTINGS,
-    matrix::{DVMatrix3, DVVector3, DVVectorOfKeyPoint},
+    matrix::{BHMatrix3, BHVector3, BHVectorOfKeyPoint},
     system::{Actor, MessageBox, System, Timestamp},
 };
 
@@ -145,8 +145,8 @@ pub struct BauhausVisualizer {
     image_draw_type: ImageDrawType,
     current_image: Option<Mat>,
     prev_image: Option<Mat>,
-    current_keypoints: Option<DVVectorOfKeyPoint>,
-    prev_keypoints: Option<DVVectorOfKeyPoint>,
+    current_keypoints: Option<BHVectorOfKeyPoint>,
+    prev_keypoints: Option<BHVectorOfKeyPoint>,
     previous_mappoints: HashSet<Id>,
     previous_keyframes: HashSet<Id>,
 
@@ -1135,12 +1135,12 @@ impl BauhausVisualizer {
             init_point1: (f64, f64, f64),
             init_point2: (f64, f64, f64),
             rot: &DVRotation,
-            trans: &DVVector3<f64>,
+            trans: &BHVector3<f64>,
             color: &Color,
         ) -> LinePrimitive {
             let point1 = {
                 let temp =
-                    **rot * *DVVector3::new_with(init_point1.0, init_point1.1, init_point1.2);
+                    **rot * *BHVector3::new_with(init_point1.0, init_point1.1, init_point1.2);
                 Point3 {
                     x: temp.x + trans.x,
                     y: temp.y + trans.y,
@@ -1149,7 +1149,7 @@ impl BauhausVisualizer {
             };
             let point2 = {
                 let temp =
-                    **rot * *DVVector3::new_with(init_point2.0, init_point2.1, init_point2.2);
+                    **rot * *BHVector3::new_with(init_point2.0, init_point2.1, init_point2.2);
                 Point3 {
                     x: temp.x + trans.x,
                     y: temp.y + trans.y,
@@ -1216,19 +1216,19 @@ impl BauhausVisualizer {
         frame_id: &str,
         entity_id: String,
         trans: &DVTranslation,
-        u: &DVVector3<f64>,
+        u: &BHVector3<f64>,
         color: Color,
     ) -> SceneEntity {
         fn create_line(
             init_point1: (f64, f64, f64),
             init_point2: (f64, f64, f64),
             rot: &DVRotation,
-            trans: &DVVector3<f64>,
+            trans: &BHVector3<f64>,
             color: &Color,
         ) -> LinePrimitive {
             let point1 = {
                 let temp =
-                    **rot * *DVVector3::new_with(init_point1.0, init_point1.1, init_point1.2);
+                    **rot * *BHVector3::new_with(init_point1.0, init_point1.1, init_point1.2);
                 Point3 {
                     x: temp.x + trans.x,
                     y: temp.y + trans.y,
@@ -1237,7 +1237,7 @@ impl BauhausVisualizer {
             };
             let point2 = {
                 let temp =
-                    **rot * *DVVector3::new_with(init_point2.0, init_point2.1, init_point2.2);
+                    **rot * *BHVector3::new_with(init_point2.0, init_point2.1, init_point2.2);
                 Point3 {
                     x: temp.x + trans.x,
                     y: temp.y + trans.y,
@@ -1259,13 +1259,13 @@ impl BauhausVisualizer {
 
         let (seconds, nanos) = convert_timestamp(timestamp);
 
-        let x_axis = DVVector3::new_with(1.0, 0.0, 0.0); // x-axis in world frame
+        let x_axis = BHVector3::new_with(1.0, 0.0, 0.0); // x-axis in world frame
         let v = x_axis.cross(u); // rotation axis
         let s = v.norm(); // sin(angle)
         let c = x_axis.dot(u); // cos(angle)
         let vx = nalgebra::Matrix3::new(0.0, -v.z, v.y, v.z, 0.0, -v.x, -v.y, v.x, 0.0);
         let rot =
-            DVMatrix3::new(nalgebra::Matrix3::identity() + vx + vx * vx * ((1.0 - c) / (s * s)));
+            BHMatrix3::new(nalgebra::Matrix3::identity() + vx + vx * vx * ((1.0 - c) / (s * s)));
 
         let w = 0.075;
         let h = 0.05;

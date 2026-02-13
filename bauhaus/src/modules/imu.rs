@@ -7,7 +7,7 @@ use crate::{
 use core::system::Timestamp;
 use core::{
     config::{SETTINGS, SYSTEM},
-    matrix::{DVMatrix3, DVMatrix4, DVVector3},
+    matrix::{BHMatrix3, BHMatrix4, BHVector3},
     sensor::{FrameSensor, Sensor},
     system::Sender,
 };
@@ -284,8 +284,8 @@ impl ImuModule for IMU {
 
         // Compute and KF velocities mRwg estimation
         let mut rwg; // mRwg
-        let mut mbg: DVVector3<f64> = DVVector3::new_with(0.0, 0.0, 0.0); // mbg
-        let mut mba: DVVector3<f64> = DVVector3::new_with(0.0, 0.0, 0.0); // mba
+        let mut mbg: BHVector3<f64> = BHVector3::new_with(0.0, 0.0, 0.0); // mbg
+        let mut mba: BHVector3<f64> = BHVector3::new_with(0.0, 0.0, 0.0); // mba
         let mut dir_g: Vector3<f64> = Vector3::zeros(); // dirG
 
         // let _span2 = tracy_client::span!("InitializeIMU_InertialOptimization");
@@ -308,7 +308,7 @@ impl ImuModule for IMU {
                             * imu_preintegrated.get_updated_delta_velocity());
 
                     (
-                        DVVector3::new(
+                        BHVector3::new(
                             (*kf.get_imu_position() - *prev_kf.get_imu_position())
                                 / imu_preintegrated.d_t,
                         ),
@@ -330,10 +330,10 @@ impl ImuModule for IMU {
 
             rwg = {
                 let unit_quat = group_exp(&nalgebra::Vector3::new(vzg.x, vzg.y, vzg.z));
-                DVMatrix3::new(*unit_quat.to_rotation_matrix().matrix())
+                BHMatrix3::new(*unit_quat.to_rotation_matrix().matrix())
             };
         } else {
-            rwg = DVMatrix3::identity();
+            rwg = BHMatrix3::identity();
             mbg = map
                 .read()?
                 .get_keyframe(current_keyframe_id)
@@ -577,7 +577,7 @@ impl ImuCalib {
         let ng = SETTINGS.get::<f64>(IMU, "noise_gyro");
         let sf = imu_frequency.sqrt();
         let tbc = {
-            let tbc = SETTINGS.get::<DVMatrix4<f64>>(IMU, "T_b_c1");
+            let tbc = SETTINGS.get::<BHMatrix4<f64>>(IMU, "T_b_c1");
             let rot = Matrix3::new(
                 tbc[(0, 0)],
                 tbc[(1, 0)],
@@ -937,11 +937,11 @@ impl Into<g2o::ffi::RustImuPreintegrated> for &ImuPreIntegrated {
         }
 
         g2o::ffi::RustImuPreintegrated {
-            jrg: (&DVMatrix3::new(self.jrg)).into(),
-            jvg: (&DVMatrix3::new(self.jvg)).into(),
-            jpg: (&DVMatrix3::new(self.jpg)).into(),
-            jva: (&DVMatrix3::new(self.jva)).into(),
-            jpa: (&DVMatrix3::new(self.jpa)).into(),
+            jrg: (&BHMatrix3::new(self.jrg)).into(),
+            jvg: (&BHMatrix3::new(self.jvg)).into(),
+            jpg: (&BHMatrix3::new(self.jpg)).into(),
+            jva: (&BHMatrix3::new(self.jva)).into(),
+            jpa: (&BHMatrix3::new(self.jpa)).into(),
             db: [
                 self.d_b[0] as f32,
                 self.d_b[1] as f32,
@@ -961,7 +961,7 @@ impl Into<g2o::ffi::RustImuPreintegrated> for &ImuPreIntegrated {
                 self.avg_w[1] as f32,
                 self.avg_w[2] as f32,
             ],
-            dr: (&DVMatrix3::new(self.d_r)).into(),
+            dr: (&BHMatrix3::new(self.d_r)).into(),
             bias: self.b.into(),
             t: self.d_t as f64,
             dp: [self.d_p[0] as f32, self.d_p[1] as f32, self.d_p[2] as f32],
@@ -990,7 +990,7 @@ impl ImuBias {
             bwz: 0.0,
         }
     }
-    pub fn new_with(gyro_bias: DVVector3<f64>, acc_bias: DVVector3<f64>) -> Self {
+    pub fn new_with(gyro_bias: BHVector3<f64>, acc_bias: BHVector3<f64>) -> Self {
         Self {
             bax: acc_bias.x,
             bay: acc_bias.y,
@@ -1000,11 +1000,11 @@ impl ImuBias {
             bwz: gyro_bias.z,
         }
     }
-    pub fn get_gyro_bias(&self) -> DVVector3<f64> {
-        DVVector3::new_with(self.bwx, self.bwy, self.bwz)
+    pub fn get_gyro_bias(&self) -> BHVector3<f64> {
+        BHVector3::new_with(self.bwx, self.bwy, self.bwz)
     }
-    pub fn get_acc_bias(&self) -> DVVector3<f64> {
-        DVVector3::new_with(self.bax, self.bay, self.baz)
+    pub fn get_acc_bias(&self) -> BHVector3<f64> {
+        BHVector3::new_with(self.bax, self.bay, self.baz)
     }
 }
 impl Display for ImuBias {
@@ -1063,7 +1063,7 @@ impl IntegratedRotation {
     }
 }
 
-pub fn normalize_rotation(mat: Matrix3<f64>) -> DVMatrix3<f64> {
+pub fn normalize_rotation(mat: Matrix3<f64>) -> BHMatrix3<f64> {
     // Eigen::Matrix3f NormalizeRotation(const Eigen::Matrix3f &R)
 
     // Note: The commented code SHOULD produce the same result as the bindings (bindings call the same code in eigen)
@@ -1095,7 +1095,7 @@ pub struct ImuDataFrame {
     pub imu_bias: ImuBias,
     pub imu_preintegrated: Option<ImuPreIntegrated>, // mpImuPreintegrated
     pub imu_preintegrated_frame: Option<ImuPreIntegrated>, // mpImuPreintegratedFrame
-    pub velocity: Option<DVVector3<f64>>,            // mVw
+    pub velocity: Option<BHVector3<f64>>,            // mVw
     pub constraint_pose_imu: Option<ConstraintPoseImu>, // mpcpi
     pub prev_keyframe: Option<Id>,                   // mpLastKeyFrame
 }
@@ -1133,11 +1133,11 @@ impl ImuDataFrame {
 
 #[derive(Debug, Clone)]
 pub struct ConstraintPoseImu {
-    pub rwb: DVMatrix3<f64>,
-    pub twb: DVVector3<f64>,
+    pub rwb: BHMatrix3<f64>,
+    pub twb: BHVector3<f64>,
     pub vwb: Vector3<f64>,
-    pub bg: DVVector3<f64>,
-    pub ba: DVVector3<f64>,
+    pub bg: BHVector3<f64>,
+    pub ba: BHVector3<f64>,
     pub h: nalgebra::SMatrix<f64, 15, 15>,
 }
 impl ConstraintPoseImu {

@@ -20,7 +20,7 @@ use yaml_rust::yaml;
 use yaml_rust::yaml::Yaml;
 
 use crate::{
-    matrix::DVMatrix4,
+    matrix::BHMatrix4,
     sensor::{FrameSensor, ImuSensor, Sensor},
 };
 
@@ -125,11 +125,11 @@ impl OverloadedSetting<i32> for Settings {
     }
 }
 
-impl OverloadedSetting<DVMatrix4<f64>> for Settings {
-    fn get_value_from_box(&self, boxed_value: &SettingBox) -> DVMatrix4<f64> {
+impl OverloadedSetting<BHMatrix4<f64>> for Settings {
+    fn get_value_from_box(&self, boxed_value: &SettingBox) -> BHMatrix4<f64> {
         return boxed_value.matrix_field.as_ref().unwrap().clone(); // TODO Can we get rid of this clone?
     }
-    fn make_box_from_value(&self, value: DVMatrix4<f64>) -> SettingBox {
+    fn make_box_from_value(&self, value: BHMatrix4<f64>) -> SettingBox {
         return SettingBox {
             string_field: None,
             bool_field: None,
@@ -168,7 +168,7 @@ pub struct SettingBox {
     float_field: Option<f64>,
     int_field: Option<i32>,
     sensor_field: Option<Sensor>,
-    matrix_field: Option<DVMatrix4<f64>>,
+    matrix_field: Option<BHMatrix4<f64>>,
 }
 
 // * LOADING CONFIGURATION FROM FILE *//
@@ -524,7 +524,7 @@ fn add_setting_imu_matrix(namespace: &str, key: &str, matrix_rows: Vec<&Yaml>) {
     }
 
     let mat = nalgebra::Matrix4::from(array);
-    let matrix: DVMatrix4<f64> = DVMatrix4::<f64>::new(mat);
+    let matrix: BHMatrix4<f64> = BHMatrix4::<f64>::new(mat);
 
     SETTINGS.insert(&namespace, &key, matrix);
 }

@@ -1,6 +1,6 @@
 // #[cfg(test)]
 // mod loopclosing_tests {
-//     use core::{config::{self, load_config, SETTINGS}, matrix::{DVMatrix, DVVectorOfKeyPoint}};
+//     use core::{config::{self, load_config, SETTINGS}, matrix::{BHMatrix, BHVectorOfKeyPoint}};
 //     use std::{env, fs::{self, File}, io::{self, BufRead}, path::Path};
 
 //     use nalgebra::{UnitQuaternion, Vector3};
@@ -214,16 +214,16 @@
 //             0,
 //             1000
 //         );
-//         let image_dv: dvos3binding::ffi::WrapBindCVMat = (&DVMatrix::new(image)).into();
-//         let mut descriptors: dvos3binding::ffi::WrapBindCVMat = (&DVMatrix::default()).into();
-//         let mut keypoints: dvos3binding::ffi::WrapBindCVKeyPoints = DVVectorOfKeyPoint::empty().into();
+//         let image_dv: dvos3binding::ffi::WrapBindCVMat = (&BHMatrix::new(image)).into();
+//         let mut descriptors: dvos3binding::ffi::WrapBindCVMat = (&BHMatrix::default()).into();
+//         let mut keypoints: dvos3binding::ffi::WrapBindCVKeyPoints = BHVectorOfKeyPoint::empty().into();
 //         orb_extractor.pin_mut().extract(&image_dv, &mut keypoints, &mut descriptors);
 
 //         // Create frame
 //         let mut frame = Frame::new(
 //             0,
-//             DVVectorOfKeyPoint::new(keypoints.kp_ptr.kp_ptr),
-//             DVMatrix::new(descriptors.mat_ptr.mat_ptr),
+//             BHVectorOfKeyPoint::new(keypoints.kp_ptr.kp_ptr),
+//             BHMatrix::new(descriptors.mat_ptr.mat_ptr),
 //             image_cols,
 //             image_rows,
 //             0.0

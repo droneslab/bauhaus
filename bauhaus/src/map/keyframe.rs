@@ -12,7 +12,7 @@ use crate::{
 };
 use core::{
     config::{SETTINGS, SYSTEM},
-    matrix::{DVMatrix3, DVVector3},
+    matrix::{BHMatrix3, BHVector3},
     sensor::Sensor,
     system::Timestamp,
 };
@@ -46,7 +46,7 @@ pub struct KeyFrame {
     // IMU //
     // Preintegrated IMU measurements from previous keyframe
     pub imu_data: ImuDataFrame,
-    pub imu_position: Option<DVVector3<f64>>, // mOwb
+    pub imu_position: Option<BHVector3<f64>>, // mOwb
     pub sensor: Sensor,
 
     // todo (design, fine-grained locking) I would like to get rid of this but until we have fine-grained locking this is the only way to prevent deletion without taking the entire map
@@ -58,8 +58,8 @@ pub struct KeyFrame {
     pub tcw_bef_gba: Option<Pose>,       // mTcwBefGBA
     pub gba_pose: Option<Pose>,          // mTcwGBA
     pub bias_gba: Option<ImuBias>,       // mBiasGBA
-    pub vwb_gba: Option<DVVector3<f64>>, // mVwbGBA
-    pub vwb_bef_gba: Option<DVVector3<f64>>, // mVwbBefGBA
+    pub vwb_gba: Option<BHVector3<f64>>, // mVwbGBA
+    pub vwb_bef_gba: Option<BHVector3<f64>>, // mVwbBefGBA
 
     // DON'T SET THESE! Either never used, or moved into actor implementation
     // mbCurrentPlaceRecognition
@@ -136,7 +136,7 @@ impl KeyFrame {
 
         if self.sensor.is_imu() {
             let pose_inverse = self.pose.inverse();
-            self.imu_position = Some(DVVector3::new(
+            self.imu_position = Some(BHVector3::new(
                 *pose_inverse.get_rotation() * *ImuCalib::new().tcb.get_translation()
                     + *pose_inverse.get_translation(),
             ));
@@ -201,13 +201,13 @@ impl KeyFrame {
         self.mappoint_matches.debug_count
     }
 
-    pub fn get_camera_center(&self) -> DVVector3<f64> {
+    pub fn get_camera_center(&self) -> BHVector3<f64> {
         self.pose.inverse().get_translation()
         // Note: In Orbslam, this is: mTwc.translation()
         // and mTwc is inverse of the pose
     }
 
-    pub fn get_right_camera_center(&self) -> DVVector3<f64> {
+    pub fn get_right_camera_center(&self) -> BHVector3<f64> {
         todo!("Stereo");
         // Not sure what mTlr is, it comes from the settings but might get updated somewhere.
         //    return (mTwc * mTlr).translation();
@@ -286,13 +286,13 @@ impl KeyFrame {
     }
 
     // *IMU *//
-    pub fn get_imu_rotation(&self) -> DVMatrix3<f64> {
+    pub fn get_imu_rotation(&self) -> BHMatrix3<f64> {
         // Eigen::Matrix3f KeyFrame::GetImuRotation()
         // Note: in Orbslam this is: (mTwc * mImuCalib.mTcb).rotationMatrix();
         // and mTwc is inverse of the pose
-        DVMatrix3::new(*self.pose.inverse().get_rotation() * *ImuCalib::new().tcb.get_rotation())
+        BHMatrix3::new(*self.pose.inverse().get_rotation() * *ImuCalib::new().tcb.get_rotation())
     }
-    pub fn get_imu_position(&self) -> DVVector3<f64> {
+    pub fn get_imu_position(&self) -> BHVector3<f64> {
         // Eigen::Vector3f KeyFrame::GetImuPosition()
         self.imu_position.expect("IMU position not set")
     }

@@ -37,7 +37,7 @@ namespace orb_slam3
 {
     TwoViewReconstruction::~TwoViewReconstruction() {}
 
-    // bool TwoViewReconstruction::GetCVKeypoints(const std::vector<orb_slam3::DVKeyPoint> &vKeys1, std::vector<cv::KeyPoint> &cvvKeys1){}
+    // bool TwoViewReconstruction::GetCVKeypoints(const std::vector<orb_slam3::BHKeyPoint> &vKeys1, std::vector<cv::KeyPoint> &cvvKeys1){}
 
     bool TwoViewReconstruction::reconstruct_rust(
         const orb_slam3::WrapBindCVKeyPoints &vKeys1,

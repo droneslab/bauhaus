@@ -45,8 +45,8 @@ fn main() {
     
     unsafe{
 
-        let  kps1cv = kps_cv1.into_raw() as *const CxxVector<dvos3binding::ffi::DVKeyPoint>;
-        let  kps2cv = kps_cv2.into_raw() as *const CxxVector<dvos3binding::ffi::DVKeyPoint>;
+        let  kps1cv = kps_cv1.into_raw() as *const CxxVector<dvos3binding::ffi::BHKeyPoint>;
+        let  kps2cv = kps_cv2.into_raw() as *const CxxVector<dvos3binding::ffi::BHKeyPoint>;
 
 
         let  desc1cv = desc1.into_raw() as *const dvos3binding::ffi::BindCVMat;

@@ -3,7 +3,7 @@
 use crate::map::{keyframe::*, mappoint::*};
 use core::{
     config::{SETTINGS, SYSTEM},
-    matrix::DVVector3,
+    matrix::BHVector3,
     sensor::Sensor,
 };
 use log::{debug, error, info, warn};
@@ -144,7 +144,7 @@ impl Map {
     ////* &mut self */////////////////////////////////////////////////////
     pub fn insert_mappoint_to_map(
         &mut self,
-        position: DVVector3<f64>,
+        position: BHVector3<f64>,
         ref_kf_id: Id,
         origin_map_id: Id,
         observations_to_add: Vec<(Id, u32, usize)>,
@@ -714,9 +714,9 @@ impl Map {
 
             let vw = keyframe.imu_data.velocity.unwrap();
             if !b_scaled_vel {
-                keyframe.imu_data.velocity = Some(DVVector3::new(*t.get_rotation() * *vw));
+                keyframe.imu_data.velocity = Some(BHVector3::new(*t.get_rotation() * *vw));
             } else {
-                keyframe.imu_data.velocity = Some(DVVector3::new(*t.get_rotation() * *vw * s));
+                keyframe.imu_data.velocity = Some(BHVector3::new(*t.get_rotation() * *vw * s));
             }
         }
 
@@ -724,7 +724,7 @@ impl Map {
         for mp_id in mp_ids {
             self.mappoints.get_mut(&mp_id).map(|mp| {
                 mp.position =
-                    DVVector3::new(t.get_rotation().scale(s) * *mp.position + *t.get_translation())
+                    BHVector3::new(t.get_rotation().scale(s) * *mp.position + *t.get_translation())
             });
             self.update_norm_and_depth(mp_id);
         }

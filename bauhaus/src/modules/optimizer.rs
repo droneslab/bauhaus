@@ -13,7 +13,7 @@ use crate::{
 };
 use core::{
     config::{SETTINGS, SYSTEM},
-    matrix::{DVMatrix3, DVMatrixDynamic, DVVector3},
+    matrix::{BHMatrix3, BHMatrixDynamic, BHVector3},
     sensor::{FrameSensor, Sensor},
 };
 use cxx::UniquePtr;
@@ -909,10 +909,10 @@ pub fn pose_inertial_optimization_last_keyframe(
 
 pub fn inertial_optimization_initialization(
     map: &ReadWriteMap,
-    rwg: &mut DVMatrix3<f64>,
+    rwg: &mut BHMatrix3<f64>,
     scale: &mut f64,
-    bg: &mut DVVector3<f64>,
-    ba: &mut DVVector3<f64>,
+    bg: &mut BHVector3<f64>,
+    ba: &mut BHVector3<f64>,
     is_mono: bool,
     prior_g: f64,
     prior_a: f64,
@@ -1951,13 +1951,13 @@ pub fn marginalize(
         .copy_from(&h.view((a, a), (b, b)));
 
     // Perform marginalization (Schur complement)
-    let hn_vec = DVMatrixDynamic::new(hn.view((a + c, a + c), (b, b)).into_owned());
+    let hn_vec = BHMatrixDynamic::new(hn.view((a + c, a + c), (b, b)).into_owned());
 
     let svd_result = dvos3binding::ffi::svd((&hn_vec).into(), SVDComputeType::ThinUThinV);
     let mut singular_values_inv = nalgebra::DVector::from_row_slice(&svd_result.singular_values);
     let v = {
         // Note: All this instead of :
-        // let v: DVMatrixDynamic<f64> = (& svd_result.v).into();
+        // let v: BHMatrixDynamic<f64> = (& svd_result.v).into();
         // Because then we are not allowed to dereference v
         // Probably an easy workaround somewhere
         let mat = svd_result.v;
@@ -1975,7 +1975,7 @@ pub fn marginalize(
         }
         res
     };
-    let u: DVMatrixDynamic<f64> = (&svd_result.u).into();
+    let u: BHMatrixDynamic<f64> = (&svd_result.u).into();
 
     for i in 0..b {
         if singular_values_inv[i] > 1e-6 {

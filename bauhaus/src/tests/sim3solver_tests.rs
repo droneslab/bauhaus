@@ -7,7 +7,7 @@
 
 #[cfg(test)]
 mod sim3solver_tests {
-    use core::matrix::DVVector3;
+    use core::matrix::BHVector3;
     use opencv::core::{
         no_array, norm, Mat, MatExprResult, MatExprTraitConst, MatTraitConst, MatTraitConstManual,
         Range, Scalar, CV_64F, NORM_L2,
@@ -35,7 +35,7 @@ mod sim3solver_tests {
             ),
             scale: 1.0,
         };
-        let vector = DVVector3::new(nalgebra::Vector3::new(-0.448621, -0.163819, 0.27061));
+        let vector = BHVector3::new(nalgebra::Vector3::new(-0.448621, -0.163819, 0.27061));
         let map = *sim3.map(&vector);
 
         let expected_map = nalgebra::Vector3::new(-0.734815, -0.101746, 1.45556);

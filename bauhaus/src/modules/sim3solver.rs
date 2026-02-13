@@ -1,4 +1,4 @@
-// Everything in this function uses opencv::Mat objects instead of nalgebra or DVMatrix (which wraps nalgebra) objects
+// Everything in this function uses opencv::Mat objects instead of nalgebra or BHMatrix (which wraps nalgebra) objects
 #![allow(non_snake_case)]
 
 use std::{

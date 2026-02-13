@@ -27,7 +27,7 @@ use core::sensor::{FrameSensor, ImuSensor, Sensor};
 use core::system::{Actor, MessageBox};
 use core::{
     config::{SETTINGS, SYSTEM},
-    matrix::DVVector3,
+    matrix::BHVector3,
 };
 use log::{debug, info, warn};
 use opencv::prelude::KeyPointTraitConst;
@@ -599,7 +599,7 @@ impl LocalMapping {
                         //     continue
                         // }
                     } else {
-                        let uv1 = CAMERA_MODULE.project(DVVector3::new_with(x1, y1, z1));
+                        let uv1 = CAMERA_MODULE.project(BHVector3::new_with(x1, y1, z1));
                         let err_x1 = uv1.0 as f32 - kp1.pt().x;
                         let err_y1 = uv1.1 as f32 - kp1.pt().y;
                         if (err_x1 * err_x1 + err_y1 * err_y1) > 5.991 * sigma_square1 {
@@ -625,7 +625,7 @@ impl LocalMapping {
                         //     continue
                         // }
                     } else {
-                        let uv2 = CAMERA_MODULE.project(DVVector3::new_with(x2, y2, z2));
+                        let uv2 = CAMERA_MODULE.project(BHVector3::new_with(x2, y2, z2));
                         let err_x2 = uv2.0 as f32 - kp2.pt().x;
                         let err_y2 = uv2.1 as f32 - kp2.pt().y;
                         if (err_x2 * err_x2 + err_y2 * err_y2) > 5.991 * sigma_square2 {

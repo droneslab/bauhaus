@@ -1,6 +1,6 @@
 use core::{
     config::SETTINGS,
-    matrix::{DVMatrix, DVVectorOfKeyPoint},
+    matrix::{BHMatrix, BHVectorOfKeyPoint},
     system::Module,
 };
 use std::{fmt, fmt::Debug};
@@ -22,14 +22,14 @@ impl FeatureExtractionModule for ORBExtractor {
         &mut self,
         image: &Mat,
         mask: Option<Mat>,
-    ) -> Result<(DVVectorOfKeyPoint, DVMatrix), Box<dyn std::error::Error>> {
-        let image_dv: dvos3binding::ffi::WrapBindCVMat = (&DVMatrix::new(image.clone())).into();
-        let mut descriptors: dvos3binding::ffi::WrapBindCVMat = (&DVMatrix::default()).into();
+    ) -> Result<(BHVectorOfKeyPoint, BHMatrix), Box<dyn std::error::Error>> {
+        let image_dv: dvos3binding::ffi::WrapBindCVMat = (&BHMatrix::new(image.clone())).into();
+        let mut descriptors: dvos3binding::ffi::WrapBindCVMat = (&BHMatrix::default()).into();
         let mut keypoints: dvos3binding::ffi::WrapBindCVKeyPoints =
-            DVVectorOfKeyPoint::empty().into();
+            BHVectorOfKeyPoint::empty().into();
         let mask: dvos3binding::ffi::WrapBindCVMat = match mask {
-            Some(m) => (&DVMatrix::new(m)).into(),
-            None => (&DVMatrix::default()).into(),
+            Some(m) => (&BHMatrix::new(m)).into(),
+            None => (&BHMatrix::default()).into(),
         };
 
         let _num_extracted =
@@ -37,8 +37,8 @@ impl FeatureExtractionModule for ORBExtractor {
                 .pin_mut()
                 .extract(&image_dv, &mut keypoints, &mut descriptors, &mask);
         Ok((
-            DVVectorOfKeyPoint::new(keypoints.kp_ptr.kp_ptr),
-            DVMatrix::new(descriptors.mat_ptr.mat_ptr),
+            BHVectorOfKeyPoint::new(keypoints.kp_ptr.kp_ptr),
+            BHMatrix::new(descriptors.mat_ptr.mat_ptr),
         ))
     }
 
@@ -46,11 +46,11 @@ impl FeatureExtractionModule for ORBExtractor {
     //     &mut self,
     //     image: &Mat,
     //     points: &VectorOfPoint2f,
-    // ) -> Result<(DVVectorOfKeyPoint, DVMatrix), Box<dyn std::error::Error>> {
-    //     let image_dv: dvos3binding::ffi::WrapBindCVMat = (&DVMatrix::new(image.clone())).into();
-    //     let mut descriptors: dvos3binding::ffi::WrapBindCVMat = (&DVMatrix::default()).into();
+    // ) -> Result<(BHVectorOfKeyPoint, BHMatrix), Box<dyn std::error::Error>> {
+    //     let image_dv: dvos3binding::ffi::WrapBindCVMat = (&BHMatrix::new(image.clone())).into();
+    //     let mut descriptors: dvos3binding::ffi::WrapBindCVMat = (&BHMatrix::default()).into();
     //     let mut keypoints: dvos3binding::ffi::WrapBindCVKeyPoints =
-    //         DVVectorOfKeyPoint::empty().into();
+    //         BHVectorOfKeyPoint::empty().into();
     //     let points: dvos3binding::ffi::BindCVVectorOfPoint2f =
     //         dvos3binding::ffi::BindCVVectorOfPoint2f {
     //             vec_ptr: points.clone(),
@@ -64,8 +64,8 @@ impl FeatureExtractionModule for ORBExtractor {
     //     );
 
     //     Ok((
-    //         DVVectorOfKeyPoint::new(keypoints.kp_ptr.kp_ptr),
-    //         DVMatrix::new(descriptors.mat_ptr.mat_ptr),
+    //         BHVectorOfKeyPoint::new(keypoints.kp_ptr.kp_ptr),
+    //         BHMatrix::new(descriptors.mat_ptr.mat_ptr),
     //     ))
     // }
 }

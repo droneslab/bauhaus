@@ -343,7 +343,7 @@ impl GraphSolver {
     fn add_initial_state(
         &mut self,
         prior_pose: Pose,
-        init_vel: DVVector3<f64>,
+        init_vel: BHVector3<f64>,
         init_bias: ImuBias,
         add_to_all_values: bool
     ) -> Result<(), Box<dyn std::error::Error>> {
@@ -868,8 +868,8 @@ impl GraphSolver {
             let gyro_bias = constant_bias.gyro_bias().get_raw();
             let accel_bias = constant_bias.accel_bias().get_raw();
             ImuBias::new_with(
-                DVVector3::new_with(gyro_bias[0], gyro_bias[1], gyro_bias[2]),
-                DVVector3::new_with(accel_bias[0], accel_bias[1], accel_bias[2])
+                BHVector3::new_with(gyro_bias[0], gyro_bias[1], gyro_bias[2]),
+                BHVector3::new_with(accel_bias[0], accel_bias[1], accel_bias[2])
             )
         } else {
             warn!("Bias wasn't optimized?");

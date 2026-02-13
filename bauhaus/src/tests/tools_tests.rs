@@ -4,7 +4,7 @@
 
 #[cfg(test)]
 mod tools_tests {
-    use core::matrix::DVVector3;
+    use core::matrix::BHVector3;
 
     use crate::{map::pose::Pose, modules::geometric_tools};
 
@@ -37,8 +37,8 @@ mod tools_tests {
             -0.00338372,
             0.998594,
         );
-        let c1 = DVVector3::new_with(-0.345261, -0.0295131, 1.0);
-        let c2 = DVVector3::new_with(-0.317161, -0.0189408, 1.0);
+        let c1 = BHVector3::new_with(-0.345261, -0.0295131, 1.0);
+        let c2 = BHVector3::new_with(-0.317161, -0.0189408, 1.0);
 
         let result = geometric_tools::triangulate(
             c1,
@@ -53,7 +53,7 @@ mod tools_tests {
             f64::trunc(result[2] * 10000.0) / 10000.0,
         );
 
-        let expected = DVVector3::new_with(-5.2549, -0.2957, 14.6811);
+        let expected = BHVector3::new_with(-5.2549, -0.2957, 14.6811);
         assert_eq!(result_trun, (expected[0], expected[1], expected[2]));
     }
 }

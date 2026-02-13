@@ -38,8 +38,8 @@ fn main() {
 
         let mut vbTriangulated =  Vec::new().as_mut_ptr() as *mut dvos3binding::ffi::VectorOfDVBool; 
         
-        let  kps1cv = kps_cv1.into_raw() as *const CxxVector<dvos3binding::ffi::DVKeyPoint>;
-        let  kps2cv = kps_cv2.into_raw() as *const CxxVector<dvos3binding::ffi::DVKeyPoint>;
+        let  kps1cv = kps_cv1.into_raw() as *const CxxVector<dvos3binding::ffi::BHKeyPoint>;
+        let  kps2cv = kps_cv2.into_raw() as *const CxxVector<dvos3binding::ffi::BHKeyPoint>;
 
         
         let mut vP3D  = dvos3binding::ffi::VectorOfDVPoint3f{vec:Vec::new() };

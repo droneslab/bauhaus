@@ -125,7 +125,7 @@ impl GarbageTracking {
             self.system.send(
                 VISUALIZER,
                 Box::new(VisFeaturesMsg {
-                    keypoints: DVVectorOfKeyPoint::empty(),
+                    keypoints: BHVectorOfKeyPoint::empty(),
                     image,
                     timestamp,
                 }),

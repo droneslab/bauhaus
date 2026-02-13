@@ -23,7 +23,7 @@ use crate::{
     map::pose::Pose,
     modules::image,
 };
-use core::{config::*, matrix::DVVector3, sensor::Sensor, system::System, *};
+use core::{config::*, matrix::BHVector3, sensor::Sensor, system::System, *};
 
 mod actors;
 mod map;
@@ -167,7 +167,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 #[derive(Debug, Clone)]
 struct ImuInitializationData {
     pose: Pose,
-    velocity: DVVector3<f64>,
+    velocity: BHVector3<f64>,
     bias: ImuBias,
 }
 
@@ -319,7 +319,7 @@ impl LoopManager {
             let timestamp = record[0].parse::<i64>().unwrap();
 
             // let timestamp = (current_frame.timestamp * 1e9) as i64; // Convert to int just so we can hash it
-            let translation = DVVector3::new_with(
+            let translation = BHVector3::new_with(
                 record[1].parse::<f64>().unwrap(),
                 record[2].parse::<f64>().unwrap(),
                 record[3].parse::<f64>().unwrap(),
@@ -330,17 +330,17 @@ impl LoopManager {
                 record[6].parse::<f64>().unwrap(), // y
                 record[7].parse::<f64>().unwrap(), // z
             );
-            let velocity = DVVector3::new_with(
+            let velocity = BHVector3::new_with(
                 record[8].parse::<f64>().unwrap(),
                 record[9].parse::<f64>().unwrap(),
                 record[10].parse::<f64>().unwrap(),
             );
-            let gyro_bias = DVVector3::new_with(
+            let gyro_bias = BHVector3::new_with(
                 record[11].parse::<f64>().unwrap(),
                 record[12].parse::<f64>().unwrap(),
                 record[13].parse::<f64>().unwrap(),
             );
-            let acc_bias = DVVector3::new_with(
+            let acc_bias = BHVector3::new_with(
                 record[14].parse::<f64>().unwrap(),
                 record[15].parse::<f64>().unwrap(),
                 record[16].parse::<f64>().unwrap(),

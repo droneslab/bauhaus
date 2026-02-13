@@ -12,7 +12,7 @@ use std::ops::{Deref, DerefMut};
 /// Note: multiplication/addition/etc doesn't work on these objects.
 /// Currently two options:
 /// 1 - struct.vec() + struct2.vec()
-/// 2 - do operations on interim opencv/nalgebra structs, then save to DV struct.
+/// 2 - do operations on interim opencv/nalgebra structs, then save to BH struct.
 /// Currently using option 2 more. First option doesn't work when it requires
 /// that the shape constraint trait is satisfied, which is private in nalgebra...
 /// We can fix this but honestly I don't think it's worth it.
@@ -31,7 +31,7 @@ use opencv::{core::*, hub_prelude::MatExprTraitConst, prelude::*};
 //////////////////////////* OPENCV TYPES //////////////////////////
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct DVKeyPoint {
+pub struct BHKeyPoint {
     p2f: Vec<f32>,
     size: f32,
     angle: f32,
@@ -41,9 +41,9 @@ pub struct DVKeyPoint {
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct DVMatrix(opencv::core::Mat);
-unsafe impl Sync for DVMatrix {}
-impl DVMatrix {
+pub struct BHMatrix(opencv::core::Mat);
+unsafe impl Sync for BHMatrix {}
+impl BHMatrix {
     pub fn empty() -> Self {
         Self(Mat::default())
     }
@@ -65,18 +65,18 @@ impl DVMatrix {
     pub fn mat(&self) -> &opencv::core::Mat {
         &self.0
     }
-    pub fn row(&self, index: u32) -> DVMatrix {
-        DVMatrix::new(self.0.row(index as i32).unwrap())
+    pub fn row(&self, index: u32) -> BHMatrix {
+        BHMatrix::new(self.0.row(index as i32).unwrap())
     }
-    pub fn row_range(&self, start: i32, end: i32) -> DVMatrix {
-        DVMatrix::new(self.0.row_range(&Range::new(start, end).unwrap()).unwrap())
+    pub fn row_range(&self, start: i32, end: i32) -> BHMatrix {
+        BHMatrix::new(self.0.row_range(&Range::new(start, end).unwrap()).unwrap())
     }
-    pub fn col_range(&self, start: i32, end: i32) -> DVMatrix {
-        DVMatrix::new(self.0.col_range(&Range::new(start, end).unwrap()).unwrap())
+    pub fn col_range(&self, start: i32, end: i32) -> BHMatrix {
+        BHMatrix::new(self.0.col_range(&Range::new(start, end).unwrap()).unwrap())
     }
-    pub fn divide_by_scalar(&self, scalar: f32) -> DVMatrix {
+    pub fn divide_by_scalar(&self, scalar: f32) -> BHMatrix {
         // Should be equal to self.0 / scalar
-        DVMatrix::new(
+        BHMatrix::new(
             self.0
                 .mul(&((1.0 / scalar) as f64), 1.)
                 .unwrap()
@@ -84,8 +84,8 @@ impl DVMatrix {
                 .unwrap(),
         )
     }
-    pub fn neg(&self) -> DVMatrix {
-        DVMatrix::new(self.0.mul(&(-1.0 as f64), 1.).unwrap().to_mat().unwrap())
+    pub fn neg(&self) -> BHMatrix {
+        BHMatrix::new(self.0.mul(&(-1.0 as f64), 1.).unwrap().to_mat().unwrap())
     }
     pub fn norm(&self) -> f64 {
         norm(&self.0, NORM_L2, &Mat::default()).unwrap()
@@ -97,17 +97,17 @@ impl DVMatrix {
         *self.0.at_2d::<f64>(row, col).unwrap()
     }
 }
-impl Deref for DVMatrix {
+impl Deref for BHMatrix {
     type Target = opencv::core::Mat;
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
-impl std::ops::Mul<&DVMatrix> for DVMatrix {
-    type Output = DVMatrix;
+impl std::ops::Mul<&BHMatrix> for BHMatrix {
+    type Output = BHMatrix;
 
-    fn mul(self, rhs: &DVMatrix) -> DVMatrix {
-        DVMatrix::new_expr_res(self.mat() * rhs.mat())
+    fn mul(self, rhs: &BHMatrix) -> BHMatrix {
+        BHMatrix::new_expr_res(self.mat() * rhs.mat())
     }
 }
 
@@ -119,8 +119,8 @@ pub fn mat_to_wrapbindcvmat(mat: &Mat) -> dvos3binding::ffi::WrapBindCVMat {
         },
     }
 }
-impl From<&DVMatrix> for dvos3binding::ffi::WrapBindCVMat {
-    fn from(mat: &DVMatrix) -> dvos3binding::ffi::WrapBindCVMat {
+impl From<&BHMatrix> for dvos3binding::ffi::WrapBindCVMat {
+    fn from(mat: &BHMatrix) -> dvos3binding::ffi::WrapBindCVMat {
         dvos3binding::ffi::WrapBindCVMat {
             mat_ptr: dvos3binding::BindCVMat {
                 mat_ptr: mat.0.clone(),
@@ -128,13 +128,13 @@ impl From<&DVMatrix> for dvos3binding::ffi::WrapBindCVMat {
         }
     }
 }
-impl From<dvos3binding::ffi::WrapBindCVMat> for DVMatrix {
-    fn from(mat: dvos3binding::ffi::WrapBindCVMat) -> DVMatrix {
-        DVMatrix::new(mat.mat_ptr.mat_ptr)
+impl From<dvos3binding::ffi::WrapBindCVMat> for BHMatrix {
+    fn from(mat: dvos3binding::ffi::WrapBindCVMat) -> BHMatrix {
+        BHMatrix::new(mat.mat_ptr.mat_ptr)
     }
 }
-impl From<&DVMatrix> for dvos3binding::ffi::WrapBindCVRawPtr {
-    fn from(mat: &DVMatrix) -> dvos3binding::ffi::WrapBindCVRawPtr {
+impl From<&BHMatrix> for dvos3binding::ffi::WrapBindCVRawPtr {
+    fn from(mat: &BHMatrix) -> dvos3binding::ffi::WrapBindCVRawPtr {
         dvos3binding::ffi::WrapBindCVRawPtr {
             raw_ptr: dvos3binding::BindCVRawPtr {
                 raw_ptr: mat.0.as_raw(),
@@ -142,19 +142,19 @@ impl From<&DVMatrix> for dvos3binding::ffi::WrapBindCVRawPtr {
         }
     }
 }
-impl<'a> From<&'a DVMatrix> for dvos3binding::BindCVMatRef<'a> {
-    fn from(mat: &'a DVMatrix) -> dvos3binding::BindCVMatRef<'a> {
+impl<'a> From<&'a BHMatrix> for dvos3binding::BindCVMatRef<'a> {
+    fn from(mat: &'a BHMatrix) -> dvos3binding::BindCVMatRef<'a> {
         dvos3binding::BindCVMatRef { mat_ptr: mat }
     }
 }
-impl From<&DVVector3<f64>> for opencv::core::Mat {
-    fn from(mat: &DVVector3<f64>) -> opencv::core::Mat {
+impl From<&BHVector3<f64>> for opencv::core::Mat {
+    fn from(mat: &BHVector3<f64>) -> opencv::core::Mat {
         Mat::from_slice_2d(&[[mat[0]], [mat[1]], [mat[2]]]).unwrap()
     }
 }
 
-impl From<&DVMatrix3<f64>> for opencv::core::Mat {
-    fn from(mat: &DVMatrix3<f64>) -> opencv::core::Mat {
+impl From<&BHMatrix3<f64>> for opencv::core::Mat {
+    fn from(mat: &BHMatrix3<f64>) -> opencv::core::Mat {
         Mat::from_slice_2d(&[
             [mat[0], mat[3], mat[6]],
             [mat[1], mat[4], mat[7]],
@@ -163,9 +163,9 @@ impl From<&DVMatrix3<f64>> for opencv::core::Mat {
         .unwrap()
     }
 }
-impl<T: opencv::prelude::DataType> From<&DVMatrix4<T>> for DVMatrix {
-    fn from(mat: &DVMatrix4<T>) -> DVMatrix {
-        DVMatrix::new(
+impl<T: opencv::prelude::DataType> From<&BHMatrix4<T>> for BHMatrix {
+    fn from(mat: &BHMatrix4<T>) -> BHMatrix {
+        BHMatrix::new(
             Mat::from_slice_2d(&[
                 [mat[0], mat[1], mat[2], mat[3]],
                 [mat[4], mat[5], mat[6], mat[7]],
@@ -176,9 +176,9 @@ impl<T: opencv::prelude::DataType> From<&DVMatrix4<T>> for DVMatrix {
         )
     }
 }
-impl<T: nalgebra::ComplexField> From<[T; 3]> for DVVector3<T> {
-    fn from(vec: [T; 3]) -> DVVector3<T> {
-        DVVector3::new(nalgebra::Vector3::<T>::new(
+impl<T: nalgebra::ComplexField> From<[T; 3]> for BHVector3<T> {
+    fn from(vec: [T; 3]) -> BHVector3<T> {
+        BHVector3::new(nalgebra::Vector3::<T>::new(
             vec[0].clone(),
             vec[1].clone(),
             vec[2].clone(),
@@ -187,9 +187,9 @@ impl<T: nalgebra::ComplexField> From<[T; 3]> for DVVector3<T> {
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct DVVectorOfKeyPoint(opencv::types::VectorOfKeyPoint);
-unsafe impl Sync for DVVectorOfKeyPoint {}
-impl DVVectorOfKeyPoint {
+pub struct BHVectorOfKeyPoint(opencv::types::VectorOfKeyPoint);
+unsafe impl Sync for BHVectorOfKeyPoint {}
+impl BHVectorOfKeyPoint {
     // Constructors
     pub fn empty() -> Self {
         Self(opencv::types::VectorOfKeyPoint::new())
@@ -197,7 +197,7 @@ impl DVVectorOfKeyPoint {
     pub fn new(vec: opencv::types::VectorOfKeyPoint) -> Self {
         Self(vec)
     }
-    pub fn clone(&self) -> DVVectorOfKeyPoint {
+    pub fn clone(&self) -> BHVectorOfKeyPoint {
         Self(self.0.clone())
     }
 
@@ -219,39 +219,39 @@ impl DVVectorOfKeyPoint {
         self.0.clear()
     }
 }
-impl Deref for DVVectorOfKeyPoint {
+impl Deref for BHVectorOfKeyPoint {
     type Target = opencv::types::VectorOfKeyPoint;
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
-impl DerefMut for DVVectorOfKeyPoint {
+impl DerefMut for BHVectorOfKeyPoint {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
 }
 
 // From implementations to make it easier to pass this into opencv functions
-impl From<DVVectorOfKeyPoint> for opencv::types::VectorOfKeyPoint {
-    fn from(vec: DVVectorOfKeyPoint) -> opencv::types::VectorOfKeyPoint {
+impl From<BHVectorOfKeyPoint> for opencv::types::VectorOfKeyPoint {
+    fn from(vec: BHVectorOfKeyPoint) -> opencv::types::VectorOfKeyPoint {
         vec.0
     }
 }
 // For interop with custom C++ bindings to ORBSLAM
-impl From<DVVectorOfKeyPoint> for dvos3binding::ffi::WrapBindCVKeyPoints {
-    fn from(kp: DVVectorOfKeyPoint) -> dvos3binding::ffi::WrapBindCVKeyPoints {
+impl From<BHVectorOfKeyPoint> for dvos3binding::ffi::WrapBindCVKeyPoints {
+    fn from(kp: BHVectorOfKeyPoint) -> dvos3binding::ffi::WrapBindCVKeyPoints {
         dvos3binding::ffi::WrapBindCVKeyPoints {
             kp_ptr: dvos3binding::BindCVKeyPoints { kp_ptr: kp.0 },
         }
     }
 }
-impl From<dvos3binding::ffi::WrapBindCVKeyPoints> for DVVectorOfKeyPoint {
-    fn from(kp: dvos3binding::ffi::WrapBindCVKeyPoints) -> DVVectorOfKeyPoint {
-        DVVectorOfKeyPoint::new(kp.kp_ptr.kp_ptr)
+impl From<dvos3binding::ffi::WrapBindCVKeyPoints> for BHVectorOfKeyPoint {
+    fn from(kp: dvos3binding::ffi::WrapBindCVKeyPoints) -> BHVectorOfKeyPoint {
+        BHVectorOfKeyPoint::new(kp.kp_ptr.kp_ptr)
     }
 }
-impl From<&DVVectorOfKeyPoint> for dvos3binding::ffi::WrapBindCVRawPtr {
-    fn from(kp: &DVVectorOfKeyPoint) -> dvos3binding::ffi::WrapBindCVRawPtr {
+impl From<&BHVectorOfKeyPoint> for dvos3binding::ffi::WrapBindCVRawPtr {
+    fn from(kp: &BHVectorOfKeyPoint) -> dvos3binding::ffi::WrapBindCVRawPtr {
         dvos3binding::ffi::WrapBindCVRawPtr {
             raw_ptr: dvos3binding::BindCVRawPtr {
                 raw_ptr: kp.0.as_raw(),
@@ -260,16 +260,16 @@ impl From<&DVVectorOfKeyPoint> for dvos3binding::ffi::WrapBindCVRawPtr {
     }
 }
 
-impl<'a> From<&'a DVVectorOfKeyPoint> for dvos3binding::BindCVKeyPointsRef<'a> {
-    fn from(kp: &'a DVVectorOfKeyPoint) -> dvos3binding::BindCVKeyPointsRef<'a> {
+impl<'a> From<&'a BHVectorOfKeyPoint> for dvos3binding::BindCVKeyPointsRef<'a> {
+    fn from(kp: &'a BHVectorOfKeyPoint) -> dvos3binding::BindCVKeyPointsRef<'a> {
         dvos3binding::BindCVKeyPointsRef { kp_ptr: kp }
     }
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct DVVectorOfPoint3f(opencv::types::VectorOfPoint3f);
-unsafe impl Sync for DVVectorOfPoint3f {}
-impl DVVectorOfPoint3f {
+pub struct BHVectorOfPoint3f(opencv::types::VectorOfPoint3f);
+unsafe impl Sync for BHVectorOfPoint3f {}
+impl BHVectorOfPoint3f {
     // Constructors
     pub fn empty() -> Self {
         Self(opencv::types::VectorOfPoint3f::new())
@@ -277,7 +277,7 @@ impl DVVectorOfPoint3f {
     pub fn new(vec: opencv::types::VectorOfPoint3f) -> Self {
         Self(vec)
     }
-    pub fn clone(&self) -> DVVectorOfPoint3f {
+    pub fn clone(&self) -> BHVectorOfPoint3f {
         Self(self.0.clone())
     }
     pub fn get(&self, i: usize) -> Result<opencv::core::Point3f, opencv::Error> {
@@ -293,23 +293,23 @@ impl DVVectorOfPoint3f {
     }
 }
 // For interop with custom C++ bindings to ORBSLAM
-impl From<DVVectorOfPoint3f> for dvos3binding::ffi::WrapBindCVVectorOfPoint3f {
-    fn from(vec: DVVectorOfPoint3f) -> dvos3binding::ffi::WrapBindCVVectorOfPoint3f {
+impl From<BHVectorOfPoint3f> for dvos3binding::ffi::WrapBindCVVectorOfPoint3f {
+    fn from(vec: BHVectorOfPoint3f) -> dvos3binding::ffi::WrapBindCVVectorOfPoint3f {
         dvos3binding::ffi::WrapBindCVVectorOfPoint3f {
             vec_ptr: dvos3binding::BindCVVectorOfPoint3f { vec_ptr: vec.0 },
         }
     }
 }
-impl From<dvos3binding::ffi::WrapBindCVVectorOfPoint3f> for DVVectorOfPoint3f {
-    fn from(vec: dvos3binding::ffi::WrapBindCVVectorOfPoint3f) -> DVVectorOfPoint3f {
-        DVVectorOfPoint3f::new(vec.vec_ptr.vec_ptr)
+impl From<dvos3binding::ffi::WrapBindCVVectorOfPoint3f> for BHVectorOfPoint3f {
+    fn from(vec: dvos3binding::ffi::WrapBindCVVectorOfPoint3f) -> BHVectorOfPoint3f {
+        BHVectorOfPoint3f::new(vec.vec_ptr.vec_ptr)
     }
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct DVVectorOfPoint2f(opencv::types::VectorOfPoint2f);
-unsafe impl Sync for DVVectorOfPoint2f {}
-impl DVVectorOfPoint2f {
+pub struct BHVectorOfPoint2f(opencv::types::VectorOfPoint2f);
+unsafe impl Sync for BHVectorOfPoint2f {}
+impl BHVectorOfPoint2f {
     pub fn empty() -> Self {
         Self(opencv::types::VectorOfPoint2f::new())
     }
@@ -333,20 +333,20 @@ impl DVVectorOfPoint2f {
     }
 }
 // For interop with custom C++ bindings to ORBSLAM
-impl From<DVVectorOfPoint2f> for dvos3binding::ffi::WrapBindCVVectorOfPoint2f {
-    fn from(vec: DVVectorOfPoint2f) -> dvos3binding::ffi::WrapBindCVVectorOfPoint2f {
+impl From<BHVectorOfPoint2f> for dvos3binding::ffi::WrapBindCVVectorOfPoint2f {
+    fn from(vec: BHVectorOfPoint2f) -> dvos3binding::ffi::WrapBindCVVectorOfPoint2f {
         dvos3binding::ffi::WrapBindCVVectorOfPoint2f {
             vec_ptr: dvos3binding::BindCVVectorOfPoint2f { vec_ptr: vec.0 },
         }
     }
 }
-impl From<dvos3binding::ffi::WrapBindCVVectorOfPoint2f> for DVVectorOfPoint2f {
-    fn from(vec: dvos3binding::ffi::WrapBindCVVectorOfPoint2f) -> DVVectorOfPoint2f {
-        DVVectorOfPoint2f::new(vec.vec_ptr.vec_ptr)
+impl From<dvos3binding::ffi::WrapBindCVVectorOfPoint2f> for BHVectorOfPoint2f {
+    fn from(vec: dvos3binding::ffi::WrapBindCVVectorOfPoint2f) -> BHVectorOfPoint2f {
+        BHVectorOfPoint2f::new(vec.vec_ptr.vec_ptr)
     }
 }
-impl<'a> From<&'a mut DVVectorOfPoint2f> for dvos3binding::BindCVVectorOfPoint2fRef<'a> {
-    fn from(vec: &'a mut DVVectorOfPoint2f) -> dvos3binding::BindCVVectorOfPoint2fRef<'a> {
+impl<'a> From<&'a mut BHVectorOfPoint2f> for dvos3binding::BindCVVectorOfPoint2fRef<'a> {
+    fn from(vec: &'a mut BHVectorOfPoint2f) -> dvos3binding::BindCVVectorOfPoint2fRef<'a> {
         dvos3binding::BindCVVectorOfPoint2fRef {
             vec_ptr: &mut vec.0,
         }
@@ -354,9 +354,9 @@ impl<'a> From<&'a mut DVVectorOfPoint2f> for dvos3binding::BindCVVectorOfPoint2f
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct DVVectorOfi32(opencv::types::VectorOfi32);
-unsafe impl Sync for DVVectorOfi32 {}
-impl DVVectorOfi32 {
+pub struct BHVectorOfi32(opencv::types::VectorOfi32);
+unsafe impl Sync for BHVectorOfi32 {}
+impl BHVectorOfi32 {
     pub fn empty() -> Self {
         Self(opencv::types::VectorOfi32::new())
     }
@@ -367,27 +367,27 @@ impl DVVectorOfi32 {
         self.0.set(index, val)
     }
 }
-impl Deref for DVVectorOfi32 {
+impl Deref for BHVectorOfi32 {
     type Target = opencv::types::VectorOfi32;
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 // For interop with custom C++ bindings to ORBSLAM
-impl From<DVVectorOfi32> for dvos3binding::ffi::WrapBindCVVectorOfi32 {
-    fn from(vec: DVVectorOfi32) -> dvos3binding::ffi::WrapBindCVVectorOfi32 {
+impl From<BHVectorOfi32> for dvos3binding::ffi::WrapBindCVVectorOfi32 {
+    fn from(vec: BHVectorOfi32) -> dvos3binding::ffi::WrapBindCVVectorOfi32 {
         dvos3binding::ffi::WrapBindCVVectorOfi32 {
             vec_ptr: dvos3binding::BindCVVectorOfi32 { vec_ptr: vec.0 },
         }
     }
 }
-impl From<dvos3binding::ffi::WrapBindCVVectorOfi32> for DVVectorOfi32 {
-    fn from(vec: dvos3binding::ffi::WrapBindCVVectorOfi32) -> DVVectorOfi32 {
-        DVVectorOfi32::new(vec.vec_ptr.vec_ptr)
+impl From<dvos3binding::ffi::WrapBindCVVectorOfi32> for BHVectorOfi32 {
+    fn from(vec: dvos3binding::ffi::WrapBindCVVectorOfi32) -> BHVectorOfi32 {
+        BHVectorOfi32::new(vec.vec_ptr.vec_ptr)
     }
 }
-impl From<&DVVectorOfi32> for dvos3binding::ffi::WrapBindCVRawPtr {
-    fn from(vec: &DVVectorOfi32) -> dvos3binding::ffi::WrapBindCVRawPtr {
+impl From<&BHVectorOfi32> for dvos3binding::ffi::WrapBindCVRawPtr {
+    fn from(vec: &BHVectorOfi32) -> dvos3binding::ffi::WrapBindCVRawPtr {
         dvos3binding::ffi::WrapBindCVRawPtr {
             raw_ptr: dvos3binding::BindCVRawPtr {
                 raw_ptr: vec.0.as_raw(),
@@ -399,23 +399,23 @@ impl From<&DVVectorOfi32> for dvos3binding::ffi::WrapBindCVRawPtr {
 //////////////////////////* Nalgebra TYPES //////////////////////////
 
 #[derive(Clone, Copy, Debug)]
-pub struct DVVector3<T>(nalgebra::Vector3<T>); // 3 dimensional column vector
+pub struct BHVector3<T>(nalgebra::Vector3<T>); // 3 dimensional column vector
 
 impl<
         T: Debug + Clone + nalgebra::Scalar + num_traits::identities::Zero + nalgebra::ComplexField,
-    > DVVector3<T>
+    > BHVector3<T>
 {
     pub fn new(vec: nalgebra::Vector3<T>) -> Self {
-        DVVector3(vec)
+        BHVector3(vec)
     }
     pub fn new_with(x: T, y: T, z: T) -> Self {
-        DVVector3(nalgebra::Vector3::<T>::new(x, y, z))
+        BHVector3(nalgebra::Vector3::<T>::new(x, y, z))
     }
     pub fn zeros<T2: Debug + Clone + nalgebra::Scalar + num_traits::identities::Zero>() -> Self {
-        DVVector3(nalgebra::Vector3::<T>::zeros())
+        BHVector3(nalgebra::Vector3::<T>::zeros())
     }
     pub fn clone(&self) -> Self {
-        DVVector3(self.0.clone())
+        BHVector3(self.0.clone())
     }
 
     pub fn is_zero(&self) -> bool {
@@ -427,14 +427,14 @@ impl<
     // pub fn norm(&self) -> T { self.vec.norm() }
     // pub fn div_assign(&mut self, divisor: T) { self.vec.div_assign(divisor) }
 }
-impl<T> Deref for DVVector3<T> {
+impl<T> Deref for BHVector3<T> {
     type Target = nalgebra::Vector3<T>;
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 // From implementations ... not sure why I need to have a separate
-// from for DVVector3 and &DVVector3 though.
+// from for BHVector3 and &BHVector3 though.
 impl<
         T: Debug
             + Clone
@@ -442,9 +442,9 @@ impl<
             + nalgebra::Scalar
             + num_traits::identities::Zero
             + nalgebra::ComplexField,
-    > From<DVVector3<T>> for [T; 3]
+    > From<BHVector3<T>> for [T; 3]
 {
-    fn from(vec: DVVector3<T>) -> [T; 3] {
+    fn from(vec: BHVector3<T>) -> [T; 3] {
         [vec[0], vec[1], vec[2]]
     }
 }
@@ -455,46 +455,46 @@ impl<
             + nalgebra::Scalar
             + num_traits::identities::Zero
             + nalgebra::ComplexField,
-    > From<&DVVector3<T>> for [T; 3]
+    > From<&BHVector3<T>> for [T; 3]
 {
-    fn from(vec: &DVVector3<T>) -> [T; 3] {
+    fn from(vec: &BHVector3<T>) -> [T; 3] {
         [vec[0], vec[1], vec[2]]
     }
 }
-impl<T: Debug + Clone + nalgebra::Scalar + num_traits::identities::Zero> From<DVVector3<T>>
+impl<T: Debug + Clone + nalgebra::Scalar + num_traits::identities::Zero> From<BHVector3<T>>
     for nalgebra::Vector3<T>
 {
-    fn from(vec: DVVector3<T>) -> nalgebra::Vector3<T> {
+    fn from(vec: BHVector3<T>) -> nalgebra::Vector3<T> {
         vec.0.clone()
     }
 }
-impl<T: Debug + Clone + nalgebra::Scalar + num_traits::identities::Zero> From<&DVVector3<T>>
+impl<T: Debug + Clone + nalgebra::Scalar + num_traits::identities::Zero> From<&BHVector3<T>>
     for nalgebra::Vector3<T>
 {
-    fn from(vec: &DVVector3<T>) -> nalgebra::Vector3<T> {
+    fn from(vec: &BHVector3<T>) -> nalgebra::Vector3<T> {
         vec.0.clone()
     }
 }
-impl From<DVVector3<f32>> for [f64; 3] {
-    fn from(vec: DVVector3<f32>) -> [f64; 3] {
+impl From<BHVector3<f32>> for [f64; 3] {
+    fn from(vec: BHVector3<f32>) -> [f64; 3] {
         [vec[0] as f64, vec[1] as f64, vec[2] as f64]
     }
 }
-impl From<nalgebra::Vector3<f64>> for DVVector3<f64> {
-    fn from(vec: nalgebra::Vector3<f64>) -> DVVector3<f64> {
-        DVVector3::new(vec)
+impl From<nalgebra::Vector3<f64>> for BHVector3<f64> {
+    fn from(vec: nalgebra::Vector3<f64>) -> BHVector3<f64> {
+        BHVector3::new(vec)
     }
 }
 // So we can do vector3[i] without having to call a getter or setter function
-impl<T> Index<usize> for DVVector3<T> {
+impl<T> Index<usize> for BHVector3<T> {
     type Output = T;
     fn index(&self, i: usize) -> &Self::Output {
         &self.0[i]
     }
 }
-impl From<&opencv::core::Mat> for DVVector3<f64> {
-    fn from(mat: &opencv::core::Mat) -> DVVector3<f64> {
-        DVVector3::new(nalgebra::Vector3::<f64>::new(
+impl From<&opencv::core::Mat> for BHVector3<f64> {
+    fn from(mat: &opencv::core::Mat) -> BHVector3<f64> {
+        BHVector3::new(nalgebra::Vector3::<f64>::new(
             *mat.at::<f64>(0).unwrap(),
             *mat.at::<f64>(1).unwrap(),
             *mat.at::<f64>(2).unwrap(),
@@ -503,7 +503,7 @@ impl From<&opencv::core::Mat> for DVVector3<f64> {
 }
 
 #[derive(Clone, Debug)]
-pub struct DVMatrix3<T>(nalgebra::Matrix3<T>); // 3x3 matrix
+pub struct BHMatrix3<T>(nalgebra::Matrix3<T>); // 3x3 matrix
 
 impl<
         T: Debug
@@ -512,16 +512,16 @@ impl<
             + num_traits::identities::Zero
             + num_traits::One
             + nalgebra::ComplexField,
-    > DVMatrix3<T>
+    > BHMatrix3<T>
 {
     pub fn new(vec: nalgebra::Matrix3<T>) -> Self {
-        DVMatrix3(vec)
+        BHMatrix3(vec)
     }
     pub fn zeros() -> Self {
-        DVMatrix3::new(nalgebra::Matrix3::<T>::zeros())
+        BHMatrix3::new(nalgebra::Matrix3::<T>::zeros())
     }
     pub fn identity() -> Self {
-        DVMatrix3::new(nalgebra::Matrix3::<T>::identity())
+        BHMatrix3::new(nalgebra::Matrix3::<T>::identity())
     }
 
     pub fn is_zero(&self) -> bool {
@@ -542,26 +542,26 @@ impl<
         self.0.neg_mut()
     }
 }
-impl<T> Deref for DVMatrix3<T> {
+impl<T> Deref for BHMatrix3<T> {
     type Target = nalgebra::Matrix3<T>;
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 // From implementations...
-impl<T: Clone> From<DVMatrix3<T>> for nalgebra::Matrix3<T> {
-    fn from(vec: DVMatrix3<T>) -> nalgebra::Matrix3<T> {
+impl<T: Clone> From<BHMatrix3<T>> for nalgebra::Matrix3<T> {
+    fn from(vec: BHMatrix3<T>) -> nalgebra::Matrix3<T> {
         vec.0.clone()
     }
 }
-impl<T: Clone> From<&DVMatrix3<T>> for nalgebra::Matrix3<T> {
-    fn from(vec: &DVMatrix3<T>) -> nalgebra::Matrix3<T> {
+impl<T: Clone> From<&BHMatrix3<T>> for nalgebra::Matrix3<T> {
+    fn from(vec: &BHMatrix3<T>) -> nalgebra::Matrix3<T> {
         vec.0.clone()
     }
 }
-impl From<opencv::core::Mat> for DVMatrix3<f64> {
-    fn from(mat: opencv::core::Mat) -> DVMatrix3<f64> {
-        DVMatrix3::new(nalgebra::Matrix3::<f64>::new(
+impl From<opencv::core::Mat> for BHMatrix3<f64> {
+    fn from(mat: opencv::core::Mat) -> BHMatrix3<f64> {
+        BHMatrix3::new(nalgebra::Matrix3::<f64>::new(
             *mat.at_2d::<f64>(0, 0).unwrap(),
             *mat.at_2d::<f64>(0, 1).unwrap(),
             *mat.at_2d::<f64>(0, 2).unwrap(),
@@ -574,10 +574,10 @@ impl From<opencv::core::Mat> for DVMatrix3<f64> {
         ))
     }
 }
-impl<T: nalgebra::ComplexField> From<[[T; 3]; 3]> for DVMatrix3<T> {
-    fn from(mat: [[T; 3]; 3]) -> DVMatrix3<T> {
+impl<T: nalgebra::ComplexField> From<[[T; 3]; 3]> for BHMatrix3<T> {
+    fn from(mat: [[T; 3]; 3]) -> BHMatrix3<T> {
         // Sofiya: STOP FLIPPING THESE! This is correct
-        DVMatrix3::new(nalgebra::Matrix3::<T>::new(
+        BHMatrix3::new(nalgebra::Matrix3::<T>::new(
             mat[0][0].clone(),
             mat[1][0].clone(),
             mat[2][0].clone(),
@@ -590,8 +590,8 @@ impl<T: nalgebra::ComplexField> From<[[T; 3]; 3]> for DVMatrix3<T> {
         ))
     }
 }
-impl<T: nalgebra::ComplexField> From<&DVMatrix3<T>> for [[T; 3]; 3] {
-    fn from(mat: &DVMatrix3<T>) -> [[T; 3]; 3] {
+impl<T: nalgebra::ComplexField> From<&BHMatrix3<T>> for [[T; 3]; 3] {
+    fn from(mat: &BHMatrix3<T>) -> [[T; 3]; 3] {
         // Sofiya: STOP FLIPPING THESE! This is correct
         [
             [
@@ -612,8 +612,8 @@ impl<T: nalgebra::ComplexField> From<&DVMatrix3<T>> for [[T; 3]; 3] {
         ]
     }
 }
-impl<T: nalgebra::ComplexField> From<&mut DVMatrix3<T>> for [[T; 3]; 3] {
-    fn from(mat: &mut DVMatrix3<T>) -> [[T; 3]; 3] {
+impl<T: nalgebra::ComplexField> From<&mut BHMatrix3<T>> for [[T; 3]; 3] {
+    fn from(mat: &mut BHMatrix3<T>) -> [[T; 3]; 3] {
         // Sofiya: STOP FLIPPING THESE! This is correct
         [
             [
@@ -634,8 +634,8 @@ impl<T: nalgebra::ComplexField> From<&mut DVMatrix3<T>> for [[T; 3]; 3] {
         ]
     }
 }
-impl From<&DVMatrix3<f64>> for [[f32; 3]; 3] {
-    fn from(mat: &DVMatrix3<f64>) -> [[f32; 3]; 3] {
+impl From<&BHMatrix3<f64>> for [[f32; 3]; 3] {
+    fn from(mat: &BHMatrix3<f64>) -> [[f32; 3]; 3] {
         // Sofiya: STOP FLIPPING THESE! This is correct
         [
             [
@@ -658,14 +658,14 @@ impl From<&DVMatrix3<f64>> for [[f32; 3]; 3] {
 }
 
 // Two index implementations, one for matrix3[(x,y)] and one for [(x)]
-impl<T> Index<(usize, usize)> for DVMatrix3<T> {
+impl<T> Index<(usize, usize)> for BHMatrix3<T> {
     type Output = T;
 
     fn index(&self, i: (usize, usize)) -> &Self::Output {
         &self.0[i]
     }
 }
-impl<T> Index<usize> for DVMatrix3<T> {
+impl<T> Index<usize> for BHMatrix3<T> {
     type Output = T;
 
     fn index(&self, i: usize) -> &Self::Output {
@@ -674,7 +674,7 @@ impl<T> Index<usize> for DVMatrix3<T> {
 }
 
 #[derive(Clone, Debug)]
-pub struct DVMatrix4<T>(nalgebra::Matrix4<T>); // 4x4 matrix
+pub struct BHMatrix4<T>(nalgebra::Matrix4<T>); // 4x4 matrix
 
 impl<
         T: Debug
@@ -683,19 +683,19 @@ impl<
             + num_traits::identities::Zero
             + num_traits::One
             + nalgebra::ComplexField,
-    > DVMatrix4<T>
+    > BHMatrix4<T>
 {
     pub fn new(vec: nalgebra::Matrix4<T>) -> Self {
-        DVMatrix4(vec)
+        BHMatrix4(vec)
     }
     pub fn zeros<T2: Debug + Clone + nalgebra::Scalar + num_traits::identities::Zero>() -> Self {
-        DVMatrix4::new(nalgebra::Matrix4::<T>::zeros())
+        BHMatrix4::new(nalgebra::Matrix4::<T>::zeros())
     }
     pub fn identity() -> Self {
-        DVMatrix4::new(nalgebra::Matrix4::<T>::identity())
+        BHMatrix4::new(nalgebra::Matrix4::<T>::identity())
     }
     pub fn inverse(&self) -> Self {
-        DVMatrix4::new(self.0.clone().try_inverse().unwrap())
+        BHMatrix4::new(self.0.clone().try_inverse().unwrap())
     }
 
     pub fn is_zero(&self) -> bool {
@@ -716,25 +716,25 @@ impl<
         self.0.neg_mut()
     }
 }
-impl<T> Deref for DVMatrix4<T> {
+impl<T> Deref for BHMatrix4<T> {
     type Target = nalgebra::Matrix4<T>;
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 // From implementations...
-impl<T: Clone> From<DVMatrix4<T>> for nalgebra::Matrix4<T> {
-    fn from(vec: DVMatrix4<T>) -> nalgebra::Matrix4<T> {
+impl<T: Clone> From<BHMatrix4<T>> for nalgebra::Matrix4<T> {
+    fn from(vec: BHMatrix4<T>) -> nalgebra::Matrix4<T> {
         vec.0.clone()
     }
 }
-impl<T: Clone> From<&DVMatrix4<T>> for nalgebra::Matrix4<T> {
-    fn from(vec: &DVMatrix4<T>) -> nalgebra::Matrix4<T> {
+impl<T: Clone> From<&BHMatrix4<T>> for nalgebra::Matrix4<T> {
+    fn from(vec: &BHMatrix4<T>) -> nalgebra::Matrix4<T> {
         vec.0.clone()
     }
 }
-impl From<&DVMatrix4<f64>> for Vec<dvos3binding::ffi::DoubleVec> {
-    fn from(mat: &DVMatrix4<f64>) -> Vec<dvos3binding::ffi::DoubleVec> {
+impl From<&BHMatrix4<f64>> for Vec<dvos3binding::ffi::DoubleVec> {
+    fn from(mat: &BHMatrix4<f64>) -> Vec<dvos3binding::ffi::DoubleVec> {
         let mut res = Vec::new();
 
         for i in 0..mat.0.nrows() {
@@ -750,21 +750,21 @@ impl From<&DVMatrix4<f64>> for Vec<dvos3binding::ffi::DoubleVec> {
     }
 }
 // Two index implementations, one for matrix3[(x,y)] and one for [(x)]
-impl<T> Index<(usize, usize)> for DVMatrix4<T> {
+impl<T> Index<(usize, usize)> for BHMatrix4<T> {
     type Output = T;
 
     fn index(&self, i: (usize, usize)) -> &Self::Output {
         &self.0[i]
     }
 }
-impl<T> Index<usize> for DVMatrix4<T> {
+impl<T> Index<usize> for BHMatrix4<T> {
     type Output = T;
 
     fn index(&self, i: usize) -> &Self::Output {
         &self.0[i]
     }
 }
-pub struct DVMatrix7x7<T>(nalgebra::SMatrix<T, 7, 7>); // 7x7 matrix
+pub struct BHMatrix7x7<T>(nalgebra::SMatrix<T, 7, 7>); // 7x7 matrix
 impl<
         T: Debug
             + Clone
@@ -772,16 +772,16 @@ impl<
             + num_traits::identities::Zero
             + num_traits::One
             + nalgebra::ComplexField,
-    > DVMatrix7x7<T>
+    > BHMatrix7x7<T>
 {
     pub fn new(vec: nalgebra::SMatrix<T, 7, 7>) -> Self {
-        DVMatrix7x7(vec)
+        BHMatrix7x7(vec)
     }
     pub fn zeros<T2: Debug + Clone + nalgebra::Scalar + num_traits::identities::Zero>() -> Self {
-        DVMatrix7x7::new(nalgebra::SMatrix::<T, 7, 7>::zeros())
+        BHMatrix7x7::new(nalgebra::SMatrix::<T, 7, 7>::zeros())
     }
     pub fn identity() -> Self {
-        DVMatrix7x7::new(nalgebra::SMatrix::<T, 7, 7>::identity())
+        BHMatrix7x7::new(nalgebra::SMatrix::<T, 7, 7>::identity())
     }
 
     pub fn is_zero(&self) -> bool {
@@ -802,32 +802,32 @@ impl<
         self.0.neg_mut()
     }
 }
-impl<T> Deref for DVMatrix7x7<T> {
+impl<T> Deref for BHMatrix7x7<T> {
     type Target = nalgebra::SMatrix<T, 7, 7>;
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 // From implementations...
-impl<T: Clone> From<DVMatrix7x7<T>> for nalgebra::SMatrix<T, 7, 7> {
-    fn from(vec: DVMatrix7x7<T>) -> nalgebra::SMatrix<T, 7, 7> {
+impl<T: Clone> From<BHMatrix7x7<T>> for nalgebra::SMatrix<T, 7, 7> {
+    fn from(vec: BHMatrix7x7<T>) -> nalgebra::SMatrix<T, 7, 7> {
         vec.0.clone()
     }
 }
-impl<T: Clone> From<&DVMatrix7x7<T>> for nalgebra::SMatrix<T, 7, 7> {
-    fn from(vec: &DVMatrix7x7<T>) -> nalgebra::SMatrix<T, 7, 7> {
+impl<T: Clone> From<&BHMatrix7x7<T>> for nalgebra::SMatrix<T, 7, 7> {
+    fn from(vec: &BHMatrix7x7<T>) -> nalgebra::SMatrix<T, 7, 7> {
         vec.0.clone()
     }
 }
 // Two index implementations, one for matrix7x7[(x,y)] and one for [(x)]
-impl<T> Index<(usize, usize)> for DVMatrix7x7<T> {
+impl<T> Index<(usize, usize)> for BHMatrix7x7<T> {
     type Output = T;
 
     fn index(&self, i: (usize, usize)) -> &Self::Output {
         &self.0[i]
     }
 }
-impl<T> Index<usize> for DVMatrix7x7<T> {
+impl<T> Index<usize> for BHMatrix7x7<T> {
     type Output = T;
 
     fn index(&self, i: usize) -> &Self::Output {
@@ -836,21 +836,21 @@ impl<T> Index<usize> for DVMatrix7x7<T> {
 }
 
 #[derive(Clone, Debug)]
-pub struct DVMatrixDynamic<T>(nalgebra::DMatrix<T>);
+pub struct BHMatrixDynamic<T>(nalgebra::DMatrix<T>);
 
-impl<T> DVMatrixDynamic<T> {
+impl<T> BHMatrixDynamic<T> {
     // Constructors
     pub fn new(vec: nalgebra::DMatrix<T>) -> Self {
-        DVMatrixDynamic(vec)
+        BHMatrixDynamic(vec)
     }
 }
-// DVMatrixDynamic<u8> is used for greyscale images!
-// &DVMatrixDynamic implemented instead of DVMatrixDynamic because this avoids having to take
+// BHMatrixDynamic<u8> is used for greyscale images!
+// &BHMatrixDynamic implemented instead of BHMatrixDynamic because this avoids having to take
 // ownership of the matrix when calling .into() ... this is useful because this matrix is usually
 // inside an Arc<ImageMsg> and you cannot move out of an arc. Alternatively, we could copy the matrix
 // but that takes too much time/memory.
-impl From<&DVMatrixDynamic<u8>> for opencv::core::Mat {
-    fn from(mat: &DVMatrixDynamic<u8>) -> opencv::core::Mat {
+impl From<&BHMatrixDynamic<u8>> for opencv::core::Mat {
+    fn from(mat: &BHMatrixDynamic<u8>) -> opencv::core::Mat {
         let mut new_mat = Mat::new_rows_cols_with_default(
             mat.0.nrows().try_into().unwrap(),
             mat.0.ncols().try_into().unwrap(),
@@ -873,8 +873,8 @@ impl From<&DVMatrixDynamic<u8>> for opencv::core::Mat {
         new_mat
     }
 }
-impl From<opencv::core::Mat> for DVMatrixDynamic<u8> {
-    fn from(mat: opencv::core::Mat) -> DVMatrixDynamic<u8> {
+impl From<opencv::core::Mat> for BHMatrixDynamic<u8> {
+    fn from(mat: opencv::core::Mat) -> BHMatrixDynamic<u8> {
         let mut dmat = nalgebra::DMatrix::from_element(
             mat.rows().try_into().unwrap(),
             mat.cols().try_into().unwrap(),
@@ -888,12 +888,12 @@ impl From<opencv::core::Mat> for DVMatrixDynamic<u8> {
                 dmat[(r, c)] = val;
             }
         }
-        DVMatrixDynamic(dmat)
+        BHMatrixDynamic(dmat)
     }
 }
 
-impl From<&DVMatrixDynamic<f64>> for Vec<dvos3binding::ffi::DoubleVec> {
-    fn from(mat: &DVMatrixDynamic<f64>) -> Vec<dvos3binding::ffi::DoubleVec> {
+impl From<&BHMatrixDynamic<f64>> for Vec<dvos3binding::ffi::DoubleVec> {
+    fn from(mat: &BHMatrixDynamic<f64>) -> Vec<dvos3binding::ffi::DoubleVec> {
         let mut res = Vec::new();
 
         for i in 0..mat.0.nrows() {
@@ -908,8 +908,8 @@ impl From<&DVMatrixDynamic<f64>> for Vec<dvos3binding::ffi::DoubleVec> {
         res
     }
 }
-impl From<&Vec<dvos3binding::ffi::DoubleVec>> for DVMatrixDynamic<f64> {
-    fn from(mat: &Vec<dvos3binding::ffi::DoubleVec>) -> DVMatrixDynamic<f64> {
+impl From<&Vec<dvos3binding::ffi::DoubleVec>> for BHMatrixDynamic<f64> {
+    fn from(mat: &Vec<dvos3binding::ffi::DoubleVec>) -> BHMatrixDynamic<f64> {
         let rows = mat.len();
         let cols = mat[0].vec.len();
         let mut res = nalgebra::DMatrix::zeros(rows, cols);
@@ -922,10 +922,10 @@ impl From<&Vec<dvos3binding::ffi::DoubleVec>> for DVMatrixDynamic<f64> {
                 res[(c, r)] = mat[i].vec[j];
             }
         }
-        DVMatrixDynamic::<f64>::new(res)
+        BHMatrixDynamic::<f64>::new(res)
     }
 }
-impl<T: Clone> Deref for DVMatrixDynamic<T> {
+impl<T: Clone> Deref for BHMatrixDynamic<T> {
     type Target = nalgebra::DMatrix<T>;
     fn deref(&self) -> &Self::Target {
         &self.0

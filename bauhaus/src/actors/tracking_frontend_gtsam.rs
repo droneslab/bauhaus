@@ -172,7 +172,7 @@ impl TrackingFrontendGTSAM {
 
             if self.system.actors.get(VISUALIZER).is_some() {
                 self.system.send(VISUALIZER, Box::new(VisFeaturesMsg {
-                    keypoints: DVVectorOfKeyPoint::empty(),
+                    keypoints: BHVectorOfKeyPoint::empty(),
                     image,
                     timestamp,
                 }));
@@ -195,7 +195,7 @@ impl TrackingFrontendGTSAM {
         return false;
     }
 
-    fn publish_frame(&mut self, kf_r_ref_frame: Option<DVMatrix3<f64>>, imu_initialization: Option<ImuInitializationData>){
+    fn publish_frame(&mut self, kf_r_ref_frame: Option<BHMatrix3<f64>>, imu_initialization: Option<ImuInitializationData>){
         tracy_client::Client::running()
             .expect("message! without a running Client")
             .message("Publish frame!", 2);
@@ -709,7 +709,7 @@ impl TrackingFrontendGTSAM {
     }
 
 
-    fn get_bearing_vector(&self, px: & Point2f) -> DVVector3<f64> {
+    fn get_bearing_vector(&self, px: & Point2f) -> BHVector3<f64> {
         // Calibrate pixel.
         // matrix of px with a single entry, i.e., a single pixel
         let mut undistorted_keypoint = opencv::types::VectorOfPoint2f::new();
@@ -730,7 +730,7 @@ impl TrackingFrontendGTSAM {
         );
 
         // Return unit norm vector
-        DVVector3::new(versor.normalize())
+        BHVector3::new(versor.normalize())
     }
 
     fn non_max_suppression(
@@ -863,7 +863,7 @@ pub struct TrackedFeatures {
     pub undistorted_points: Vec<Point2f>,
     pub feature_ids: Vec<i32>,
     pub last_feature_id: i32,
-    pub versors: Vec<DVVector3<f64>>
+    pub versors: Vec<BHVector3<f64>>
 }
 impl TrackedFeatures {
     pub fn default() -> Self {
@@ -909,16 +909,16 @@ impl TrackedFeatures {
         self.undistorted_points[index]
     }
 
-    pub fn get_bearing_vector(&self, index: usize) -> DVVector3<f64> {
+    pub fn get_bearing_vector(&self, index: usize) -> BHVector3<f64> {
         self.versors[index]
     }
 
-    pub fn update(&mut self, index: usize, point: Point2f, bearing_vector: DVVector3<f64>) {
+    pub fn update(&mut self, index: usize, point: Point2f, bearing_vector: BHVector3<f64>) {
         self.points[index] = point;
         self.versors[index] = bearing_vector;
     }
 
-    pub fn add(&mut self, point: Point2f, bearing_vector: DVVector3<f64>) -> i32 {
+    pub fn add(&mut self, point: Point2f, bearing_vector: BHVector3<f64>) -> i32 {
         self.points.push(point);
         self.feature_ids.push(self.last_feature_id);
         self.versors.push(bearing_vector);
@@ -927,7 +927,7 @@ impl TrackedFeatures {
         return self.last_feature_id - 1;
     }
 
-    pub fn add_with_id(&mut self, id: i32, point: Point2f, bearing_vector: DVVector3<f64>) -> i32 {
+    pub fn add_with_id(&mut self, id: i32, point: Point2f, bearing_vector: BHVector3<f64>) -> i32 {
         self.points.push(point);
         self.feature_ids.push(id);
         self.versors.push(bearing_vector);

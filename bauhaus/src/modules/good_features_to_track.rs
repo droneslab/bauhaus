@@ -1,5 +1,5 @@
 use core::{
-    matrix::{DVMatrix, DVVectorOfKeyPoint},
+    matrix::{BHMatrix, BHVectorOfKeyPoint},
     system::Module,
 };
 use std::{fmt, fmt::Debug};
@@ -15,7 +15,7 @@ impl FeatureExtractionModule for GoodFeaturesExtractor {
         &mut self,
         _image: &Mat,
         _mask: Option<Mat>,
-    ) -> Result<(DVVectorOfKeyPoint, DVMatrix), Box<dyn std::error::Error>> {
+    ) -> Result<(BHVectorOfKeyPoint, BHMatrix), Box<dyn std::error::Error>> {
         todo!("Not implemented")
     }
 

@@ -1,6 +1,6 @@
 // #[cfg(test)]
 // mod vision_tests {
-//     use core::{config::{self, load_config, SETTINGS}, matrix::{DVMatrix, DVVector3, DVVectorOfKeyPoint}, sensor::{FrameSensor, ImuSensor, Sensor}};
+//     use core::{config::{self, load_config, SETTINGS}, matrix::{BHMatrix, BHVector3, BHVectorOfKeyPoint}, sensor::{FrameSensor, ImuSensor, Sensor}};
 //     use dvos3binding::ffi::WrapBindCVMat;
 //     use opencv::{imgcodecs, prelude::{MatTraitConst, KeyPointTraitConst}, core::{CV_8U, CV_8UC1}};
 
@@ -57,16 +57,16 @@
 //         )
 //     }
 
-//     fn extract_features(image: opencv::core::Mat, max_features: i32) -> (DVVectorOfKeyPoint, DVMatrix) {
+//     fn extract_features(image: opencv::core::Mat, max_features: i32) -> (BHVectorOfKeyPoint, BHMatrix) {
 //         let mut orb_extractor = DVORBextractor::new(max_features);
 //         let (keypoints, descriptors) = orb_extractor.extract(image).unwrap();
 //         (
-//             DVVectorOfKeyPoint::new(keypoints),
-//             DVMatrix::new(descriptors)
+//             BHVectorOfKeyPoint::new(keypoints),
+//             BHMatrix::new(descriptors)
 //         )
 //     }
 
-//     fn compute_bow(keypoints: DVVectorOfKeyPoint, descriptors: DVMatrix, image_cols: u32, image_rows: u32) -> (Features, DVBoW) {
+//     fn compute_bow(keypoints: BHVectorOfKeyPoint, descriptors: BHMatrix, image_cols: u32, image_rows: u32) -> (Features, DVBoW) {
 //         let sensor = Sensor(FrameSensor::Mono, ImuSensor::None);
 //         let features = Features::new(keypoints, descriptors, image_cols, image_rows, sensor).unwrap();
 //         let mut bow = DVBoW::new();

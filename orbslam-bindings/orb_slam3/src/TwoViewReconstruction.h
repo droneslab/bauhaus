@@ -31,7 +31,7 @@
 namespace orb_slam3
 {
 
-    struct DVKeyPoint;
+    struct BHKeyPoint;
     struct DVPoint3f;
     struct Pose;
     struct DVbool;

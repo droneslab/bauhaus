@@ -5,7 +5,7 @@
 mod imutests {
     use core::{
         config::{load_config, SETTINGS},
-        matrix::{DVMatrix, DVMatrix3, DVVector3, DVVectorOfKeyPoint},
+        matrix::{BHMatrix, BHMatrix3, BHVector3, BHVectorOfKeyPoint},
         sensor::{FrameSensor, ImuSensor, Sensor},
         system::{Actor, System, Timestamp},
     };
@@ -61,7 +61,7 @@ mod imutests {
         // Current frame setup
         let mut frame =
             Frame::new_no_features(1, None, 1.0, None).expect("Could not create frame!");
-        frame.imu_data.velocity = Some(DVVector3::new_with(
+        frame.imu_data.velocity = Some(BHVector3::new_with(
             0.011479953303933144,
             -0.075038671493530273,
             -0.34997481107711792,
@@ -95,7 +95,7 @@ mod imutests {
         ));
 
         // Previous frame setup
-        let prev_frame_vel = DVVector3::new_with(
+        let prev_frame_vel = BHVector3::new_with(
             0.029266273602843285,
             -0.07059381902217865,
             -0.36965271830558777,
@@ -127,7 +127,7 @@ mod imutests {
             ),
         );
         let prev_frame_imu_pos =
-            DVVector3::new_with(0.91726499795913696, 1.0282348394393921, -4.072176456451416);
+            BHVector3::new_with(0.91726499795913696, 1.0282348394393921, -4.072176456451416);
         let prev_frame_imu_rot = Matrix3::from_row_slice(&[
             -0.018700409680604935,
             0.99961179494857788,
@@ -731,13 +731,13 @@ mod imutests {
         // Mappoint setup
         struct MapPointDummy {
             id: Id,
-            position: DVVector3<f64>,
+            position: BHVector3<f64>,
             kp: (f32, f32, f32),
         }
         let mappoints: Vec<MapPointDummy> = vec![
             MapPointDummy {
                 id: 2,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.989371657371521,
                     1.7192119359970093,
                     -4.4630284309387207,
@@ -746,7 +746,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 3,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.1176275014877319,
                     1.9252352714538574,
                     -4.4637231826782227,
@@ -755,7 +755,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 4,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.84887510538101196,
                     1.5444146394729614,
                     -4.503817081451416,
@@ -764,7 +764,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 10,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.97509509325027466,
                     3.7946271896362305,
                     -4.7597007751464844,
@@ -773,7 +773,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 13,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.60465842485427856,
                     1.6329430341720581,
                     -4.4456229209899902,
@@ -782,7 +782,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 15,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.40983757376670837,
                     1.5837751626968384,
                     -4.3861346244812012,
@@ -791,7 +791,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 16,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.63063192367553711,
                     1.7800017595291138,
                     -4.4738626480102539,
@@ -800,7 +800,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 17,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.58077836036682129,
                     1.3794240951538086,
                     -4.4836068153381348,
@@ -809,7 +809,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 19,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -1.3919718265533447,
                     4.9325852394104004,
                     -4.4409360885620117,
@@ -818,7 +818,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 20,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.34498110413551331,
                     1.669356107711792,
                     -4.447761058807373,
@@ -827,7 +827,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 24,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.3291796445846558,
                     1.6864689588546753,
                     -4.4365367889404297,
@@ -836,7 +836,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 26,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.17594489455223083,
                     4.2213015556335449,
                     -4.7250823974609375,
@@ -845,7 +845,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 28,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.47816339135169983,
                     4.1801929473876953,
                     -4.6151118278503418,
@@ -854,7 +854,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 30,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.6007213592529297,
                     5.8540921211242676,
                     -4.5306820869445801,
@@ -863,7 +863,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 32,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     2.3059103488922119,
                     6.3097062110900879,
                     -4.8496999740600586,
@@ -872,7 +872,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 34,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.96339619159698486,
                     5.2440166473388672,
                     -4.5715351104736328,
@@ -881,7 +881,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 37,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.6510096788406372,
                     3.8457951545715332,
                     -4.6697478294372559,
@@ -890,7 +890,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 43,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.0234123468399048,
                     4.3348932266235352,
                     -4.7576479911804199,
@@ -899,7 +899,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 46,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.57136207818984985,
                     1.626153826713562,
                     -4.4494800567626953,
@@ -908,7 +908,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 50,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.2123838663101196,
                     1.8005995750427246,
                     -4.4859833717346191,
@@ -917,7 +917,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 52,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.1815917491912842,
                     1.6949398517608643,
                     -4.4902911186218262,
@@ -926,7 +926,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 55,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.22538262605667114,
                     4.2699799537658691,
                     -4.7282662391662598,
@@ -935,7 +935,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 56,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.29469552636146545,
                     4.0949554443359375,
                     -4.562859058380127,
@@ -944,7 +944,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 57,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -1.3329663276672363,
                     5.5568609237670898,
                     -4.5251951217651367,
@@ -953,7 +953,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 58,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -1.4595928192138672,
                     5.533808708190918,
                     -5.2721309661865234,
@@ -962,7 +962,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 61,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.2963976860046387,
                     1.6097366809844971,
                     -4.4936151504516602,
@@ -971,7 +971,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 62,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.93172568082809448,
                     1.8642324209213257,
                     -4.6485996246337891,
@@ -980,7 +980,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 63,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.1483191251754761,
                     1.8863210678100586,
                     -4.4556694030761719,
@@ -989,7 +989,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 64,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.72814548015594482,
                     1.9543082714080811,
                     -4.5710759162902832,
@@ -998,7 +998,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 65,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.0732734203338623,
                     1.5447095632553101,
                     -4.4761037826538086,
@@ -1007,7 +1007,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 69,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.58049356937408447,
                     2.1574258804321289,
                     -4.6290264129638672,
@@ -1016,7 +1016,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 72,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.42741492390632629,
                     4.2716379165649414,
                     -5.052248477935791,
@@ -1025,7 +1025,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 73,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.15946981310844421,
                     4.2222566604614258,
                     -5.1129145622253418,
@@ -1034,7 +1034,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 76,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.039970219135284424,
                     2.2030220031738281,
                     -4.5329608917236328,
@@ -1043,7 +1043,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 77,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.43646430969238281,
                     1.7479497194290161,
                     -4.3738389015197754,
@@ -1052,7 +1052,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 80,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.0430541038513184,
                     5.5935654640197754,
                     -4.8646769523620605,
@@ -1061,7 +1061,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 81,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.6740539073944092,
                     5.7512264251708984,
                     -4.4906268119812012,
@@ -1070,7 +1070,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 85,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.55097037553787231,
                     6.7278141975402832,
                     -4.7267279624938965,
@@ -1079,7 +1079,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 86,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.371168851852417,
                     1.7474442720413208,
                     -4.4724822044372559,
@@ -1088,7 +1088,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 89,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.4127708673477173,
                     1.6833318471908569,
                     -4.468043327331543,
@@ -1097,7 +1097,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 90,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.57676213979721069,
                     1.4699951410293579,
                     -4.4493408203125,
@@ -1106,7 +1106,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 93,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.651996910572052,
                     1.4706108570098877,
                     -4.5080580711364746,
@@ -1115,7 +1115,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 96,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.6564013957977295,
                     5.5591092109680176,
                     -4.8558530807495117,
@@ -1124,7 +1124,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 97,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     2.8819694519042969,
                     6.7314944267272949,
                     -4.7464823722839355,
@@ -1133,7 +1133,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 98,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.99539643526077271,
                     3.6290600299835205,
                     -4.7132678031921387,
@@ -1142,7 +1142,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 105,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.4656224250793457,
                     1.4750145673751831,
                     -4.3702163696289062,
@@ -1151,7 +1151,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 106,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.2470372915267944,
                     1.8021049499511719,
                     -4.4498400688171387,
@@ -1160,7 +1160,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 108,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.1968716382980347,
                     1.6829452514648438,
                     -4.4888787269592285,
@@ -1169,7 +1169,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 109,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.204419732093811,
                     1.8169115781784058,
                     -4.4783535003662109,
@@ -1178,7 +1178,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 110,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.49472111463546753,
                     1.4170557260513306,
                     -4.4018335342407227,
@@ -1187,7 +1187,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 111,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.5647469162940979,
                     1.3768950700759888,
                     -4.4786911010742188,
@@ -1196,7 +1196,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 113,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.61914080381393433,
                     1.4588351249694824,
                     -4.4782161712646484,
@@ -1205,7 +1205,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 114,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.47464802861213684,
                     4.2480063438415527,
                     -5.0419626235961914,
@@ -1214,7 +1214,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 115,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.91712766885757446,
                     3.0809216499328613,
                     -4.9291963577270508,
@@ -1223,7 +1223,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 117,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.88040345907211304,
                     3.1245923042297363,
                     -4.948850154876709,
@@ -1232,7 +1232,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 118,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.1937583684921265,
                     2.3256750106811523,
                     -4.4191088676452637,
@@ -1241,7 +1241,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 119,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.7186120748519897,
                     3.5494480133056641,
                     -4.727872371673584,
@@ -1250,7 +1250,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 122,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.27310413122177124,
                     7.5534811019897461,
                     -4.5432395935058594,
@@ -1259,7 +1259,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 123,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.5826493501663208,
                     6.0853610038757324,
                     -4.8621258735656738,
@@ -1268,7 +1268,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 134,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.3228878974914551,
                     1.5881562232971191,
                     -4.4982519149780273,
@@ -1277,7 +1277,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 135,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.92789763212203979,
                     1.808968186378479,
                     -4.617342472076416,
@@ -1286,7 +1286,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 137,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.94752562046051025,
                     1.3757106065750122,
                     -4.47332763671875,
@@ -1295,7 +1295,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 139,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     8.3918437957763672,
                     14.938901901245117,
                     -3.366879940032959,
@@ -1304,7 +1304,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 142,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.59350121021270752,
                     2.1377053260803223,
                     -4.6171059608459473,
@@ -1313,7 +1313,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 143,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.30313101410865784,
                     3.982391357421875,
                     -4.5510668754577637,
@@ -1322,7 +1322,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 145,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.2270509004592896,
                     6.3407363891601562,
                     -4.7119631767272949,
@@ -1331,7 +1331,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 148,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.4767026901245117,
                     5.337338924407959,
                     -4.4879693984985352,
@@ -1340,7 +1340,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 151,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.47043517231941223,
                     4.1686272621154785,
                     -4.6180529594421387,
@@ -1349,7 +1349,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 153,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.48664805293083191,
                     1.4267938137054443,
                     -4.412684440612793,
@@ -1358,7 +1358,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 154,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.54787510633468628,
                     1.4517000913619995,
                     -4.4370718002319336,
@@ -1367,7 +1367,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 155,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.53591310977935791,
                     1.3505507707595825,
                     -4.4727239608764648,
@@ -1376,7 +1376,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 159,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.49446573853492737,
                     1.4370595216751099,
                     -4.4486079216003418,
@@ -1385,7 +1385,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 160,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.48664188385009766,
                     1.5065479278564453,
                     -4.3931455612182617,
@@ -1394,7 +1394,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 161,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.48461613059043884,
                     4.0322117805480957,
                     -4.9588289260864258,
@@ -1403,7 +1403,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 163,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.44060465693473816,
                     3.8831732273101807,
                     -5.046562671661377,
@@ -1412,7 +1412,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 166,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.60280585289001465,
                     1.4875837564468384,
                     -4.4461660385131836,
@@ -1421,7 +1421,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 169,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.2851289510726929,
                     1.8124490976333618,
                     -4.4738388061523438,
@@ -1430,7 +1430,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 172,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.4109995365142822,
                     1.6814333200454712,
                     -4.4697141647338867,
@@ -1439,7 +1439,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 173,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.0597325563430786,
                     5.3324756622314453,
                     -5.0315628051757812,
@@ -1448,7 +1448,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 178,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.22366461157798767,
                     1.9773023128509521,
                     -4.470088005065918,
@@ -1457,7 +1457,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 179,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.5330049991607666,
                     1.5241408348083496,
                     -4.4276113510131836,
@@ -1466,7 +1466,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 181,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.66817194223403931,
                     1.474324107170105,
                     -4.4729461669921875,
@@ -1475,7 +1475,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 184,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.80290377140045166,
                     1.2930548191070557,
                     -4.4470500946044922,
@@ -1484,7 +1484,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 186,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.2074233293533325,
                     1.7478361129760742,
                     -4.5228524208068848,
@@ -1493,7 +1493,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 187,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.2008609771728516,
                     1.686631441116333,
                     -4.4888725280761719,
@@ -1502,7 +1502,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 193,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.7369133234024048,
                     6.0329222679138184,
                     -4.9382143020629883,
@@ -1511,7 +1511,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 199,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.81057864427566528,
                     1.3439666032791138,
                     -4.4379019737243652,
@@ -1520,7 +1520,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 200,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -1.9711552858352661,
                     5.4991049766540527,
                     -5.0241236686706543,
@@ -1529,7 +1529,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 201,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.30184271931648254,
                     1.8574056625366211,
                     -4.4156990051269531,
@@ -1538,7 +1538,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 202,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.46968841552734375,
                     1.5483173131942749,
                     -4.3797807693481445,
@@ -1547,7 +1547,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 208,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.17818401753902435,
                     4.217219352722168,
                     -4.717552661895752,
@@ -1556,7 +1556,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 212,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -1.078572154045105,
                     5.9002647399902344,
                     -4.1125435829162598,
@@ -1565,7 +1565,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 216,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.78183943033218384,
                     5.2599773406982422,
                     -4.9208998680114746,
@@ -1574,7 +1574,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 217,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.42034530639648438,
                     1.7753366231918335,
                     -4.376680850982666,
@@ -1583,7 +1583,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 218,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.61542659997940063,
                     2.816253662109375,
                     -4.9595203399658203,
@@ -1592,7 +1592,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 219,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.87666893005371094,
                     2.8455944061279297,
                     -4.8692307472229004,
@@ -1601,7 +1601,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 220,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.74711328744888306,
                     1.8021855354309082,
                     -4.6290698051452637,
@@ -1610,7 +1610,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 222,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.3882439136505127,
                     1.7525219917297363,
                     -4.4862699508666992,
@@ -1619,7 +1619,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 224,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.1198863983154297,
                     1.9062788486480713,
                     -4.4648871421813965,
@@ -1628,7 +1628,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 225,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.90441548824310303,
                     1.3712605237960815,
                     -4.4530715942382812,
@@ -1637,7 +1637,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 226,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.175373911857605,
                     1.6892274618148804,
                     -4.4811391830444336,
@@ -1646,7 +1646,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 228,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.7799224853515625,
                     8.9657535552978516,
                     -3.6255490779876709,
@@ -1655,7 +1655,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 232,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.2905261218547821,
                     1.7148828506469727,
                     -4.4999642372131348,
@@ -1664,7 +1664,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 233,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.39957842230796814,
                     1.605128288269043,
                     -4.357330322265625,
@@ -1673,7 +1673,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 234,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.48296865820884705,
                     1.4288399219512939,
                     -4.4127798080444336,
@@ -1682,7 +1682,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 235,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.49337783455848694,
                     1.5452291965484619,
                     -4.4082474708557129,
@@ -1691,7 +1691,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 236,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.54822993278503418,
                     1.4526007175445557,
                     -4.4360451698303223,
@@ -1700,7 +1700,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 237,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.60170102119445801,
                     1.4606250524520874,
                     -4.4596567153930664,
@@ -1709,7 +1709,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 238,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.5842556357383728,
                     1.3810907602310181,
                     -4.4863343238830566,
@@ -1718,7 +1718,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 239,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.60636121034622192,
                     1.4097640514373779,
                     -4.517754077911377,
@@ -1727,7 +1727,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 242,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.44765719771385193,
                     1.3493679761886597,
                     -4.4457826614379883,
@@ -1736,7 +1736,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 248,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.65188580751419067,
                     1.4671515226364136,
                     -4.4595155715942383,
@@ -1745,7 +1745,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 252,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.45850002765655518,
                     1.74683678150177,
                     -4.4528355598449707,
@@ -1754,7 +1754,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 256,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.47879618406295776,
                     4.0998387336730957,
                     -4.9728188514709473,
@@ -1763,7 +1763,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 258,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.45704823732376099,
                     3.8211801052093506,
                     -5.0323543548583984,
@@ -1772,7 +1772,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 259,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.67603617906570435,
                     3.5954890251159668,
                     -5.0605111122131348,
@@ -1781,7 +1781,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 265,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.2925817966461182,
                     1.6073894500732422,
                     -4.4914507865905762,
@@ -1790,7 +1790,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 267,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -1.2692364454269409,
                     5.0695953369140625,
                     -5.1299266815185547,
@@ -1799,7 +1799,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 270,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.3988671600818634,
                     4.1821732521057129,
                     -5.0231285095214844,
@@ -1808,7 +1808,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 272,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     4.3813591003417969,
                     12.190286636352539,
                     -3.6048541069030762,
@@ -1817,7 +1817,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 273,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.8513097763061523,
                     6.2091474533081055,
                     -4.5217666625976562,
@@ -1826,7 +1826,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 275,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.2520736455917358,
                     1.7909009456634521,
                     -4.4502921104431152,
@@ -1835,7 +1835,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 279,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.88802260160446167,
                     1.4340642690658569,
                     -4.4478158950805664,
@@ -1844,7 +1844,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 283,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -1.8006994724273682,
                     6.5702028274536133,
                     -3.947124719619751,
@@ -1853,7 +1853,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 285,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -1.2859526872634888,
                     5.0481195449829102,
                     -4.1682910919189453,
@@ -1862,7 +1862,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 291,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.66185665130615234,
                     7.6998720169067383,
                     -3.6563966274261475,
@@ -1871,7 +1871,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 292,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.81578165292739868,
                     7.5924100875854492,
                     -3.9149100780487061,
@@ -1880,7 +1880,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 298,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.68027472496032715,
                     1.5853352546691895,
                     -4.4787807464599609,
@@ -1889,7 +1889,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 299,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -2.147484302520752,
                     5.8270940780639648,
                     -5.1377849578857422,
@@ -1898,7 +1898,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 300,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -2.599576473236084,
                     5.3103694915771484,
                     -5.543612003326416,
@@ -1907,7 +1907,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 302,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.73162424564361572,
                     1.9411790370941162,
                     -4.560854434967041,
@@ -1916,7 +1916,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 303,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.88066947460174561,
                     2.0794827938079834,
                     -4.4922242164611816,
@@ -1925,7 +1925,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 304,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.76055556535720825,
                     1.710844874382019,
                     -4.5572271347045898,
@@ -1934,7 +1934,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 305,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.80853933095932007,
                     1.9447455406188965,
                     -4.6583137512207031,
@@ -1943,7 +1943,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 308,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.1427828073501587,
                     2.3743691444396973,
                     -4.5320768356323242,
@@ -1952,7 +1952,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 312,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.061893165111541748,
                     4.3925457000732422,
                     -5.0840082168579102,
@@ -1961,7 +1961,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 313,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -2.3396041393280029,
                     5.1268343925476074,
                     -3.7626729011535645,
@@ -1970,7 +1970,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 314,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -1.9858825206756592,
                     5.2451305389404297,
                     -3.999323844909668,
@@ -1979,7 +1979,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 320,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     2.103754997253418,
                     2.4946300983428955,
                     -4.5737557411193848,
@@ -1988,7 +1988,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 322,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     6.2506284713745117,
                     12.350873947143555,
                     -3.4742212295532227,
@@ -1997,7 +1997,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 323,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     3.7712173461914062,
                     7.5317025184631348,
                     -4.635251522064209,
@@ -2006,7 +2006,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 330,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.43627175688743591,
                     1.4392704963684082,
                     -4.4319424629211426,
@@ -2015,7 +2015,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 332,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.51305127143859863,
                     1.4144523143768311,
                     -4.425201416015625,
@@ -2024,7 +2024,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 335,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.53275424242019653,
                     1.352665901184082,
                     -4.4753050804138184,
@@ -2033,7 +2033,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 338,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.56785297393798828,
                     1.3745813369750977,
                     -4.4811062812805176,
@@ -2042,7 +2042,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 339,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.64881432056427002,
                     1.4784653186798096,
                     -4.5164828300476074,
@@ -2051,7 +2051,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 343,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.2589548826217651,
                     5.2867980003356934,
                     -4.1877846717834473,
@@ -2060,7 +2060,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 344,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.1303330659866333,
                     5.0176773071289062,
                     -4.5197453498840332,
@@ -2069,7 +2069,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 345,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.4538141489028931,
                     5.3313813209533691,
                     -4.4713177680969238,
@@ -2078,7 +2078,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 348,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.51776045560836792,
                     1.527569055557251,
                     -4.414604663848877,
@@ -2087,7 +2087,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 352,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.47273966670036316,
                     4.1671018600463867,
                     -4.6142239570617676,
@@ -2096,7 +2096,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 357,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.65888750553131104,
                     4.1950559616088867,
                     -4.9388313293457031,
@@ -2105,7 +2105,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 359,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.67668014764785767,
                     4.0124707221984863,
                     -4.8997807502746582,
@@ -2114,7 +2114,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 360,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.78346484899520874,
                     1.6928186416625977,
                     -4.5872507095336914,
@@ -2123,7 +2123,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 363,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.85122960805892944,
                     1.3835687637329102,
                     -4.446387767791748,
@@ -2132,7 +2132,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 368,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -1.1701736450195312,
                     5.0298771858215332,
                     -3.6965382099151611,
@@ -2141,7 +2141,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 369,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -1.5785365104675293,
                     6.4813628196716309,
                     -3.9750018119812012,
@@ -2150,7 +2150,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 372,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     2.0583794116973877,
                     6.4584345817565918,
                     -4.1053800582885742,
@@ -2159,7 +2159,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 373,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     5.4824414253234863,
                     15.464504241943359,
                     -3.5273177623748779,
@@ -2168,7 +2168,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 375,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     2.857006311416626,
                     7.2691187858581543,
                     -4.6079859733581543,
@@ -2177,7 +2177,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 380,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.2616387605667114,
                     1.8103080987930298,
                     -4.4614882469177246,
@@ -2186,7 +2186,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 382,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.2012525796890259,
                     1.6716912984848022,
                     -4.4833335876464844,
@@ -2195,7 +2195,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 385,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.73179376125335693,
                     6.9894461631774902,
                     -4.1320514678955078,
@@ -2204,7 +2204,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 387,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.26477688550949097,
                     4.1383819580078125,
                     -4.5766811370849609,
@@ -2213,7 +2213,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 390,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.4073499441146851,
                     1.6808520555496216,
                     -4.4673557281494141,
@@ -2222,7 +2222,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 393,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.65820890665054321,
                     1.9138420820236206,
                     -4.5059752464294434,
@@ -2231,7 +2231,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 397,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.3261222243309021,
                     1.671642541885376,
                     -4.3486599922180176,
@@ -2240,7 +2240,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 400,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.92746955156326294,
                     3.2051835060119629,
                     -4.9907498359680176,
@@ -2249,7 +2249,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 402,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.78587371110916138,
                     2.0235371589660645,
                     -4.7069082260131836,
@@ -2258,7 +2258,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 406,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.94879424571990967,
                     4.9390377998352051,
                     -4.8949642181396484,
@@ -2267,7 +2267,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 407,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.1472695916891098,
                     4.3298301696777344,
                     -4.7586855888366699,
@@ -2276,7 +2276,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 408,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.17650434374809265,
                     4.1751909255981445,
                     -5.102452278137207,
@@ -2285,7 +2285,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 410,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -2.563281774520874,
                     5.4069609642028809,
                     -3.730877161026001,
@@ -2298,7 +2298,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 416,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     6.8466849327087402,
                     13.633502960205078,
                     -3.3999288082122803,
@@ -2307,7 +2307,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 417,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     7.7324509620666504,
                     13.603082656860352,
                     -3.4624693393707275,
@@ -2316,7 +2316,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 419,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.0929741859436035,
                     1.4889955520629883,
                     -4.4589724540710449,
@@ -2325,7 +2325,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 421,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.1027754545211792,
                     1.3686316013336182,
                     -4.4561405181884766,
@@ -2334,7 +2334,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 423,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.1993308067321777,
                     1.7553369998931885,
                     -4.4538331031799316,
@@ -2343,7 +2343,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 424,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.0001727342605591,
                     1.6195347309112549,
                     -4.4498577117919922,
@@ -2352,7 +2352,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 430,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.2309247255325317,
                     1.8897547721862793,
                     -4.7417149543762207,
@@ -2361,7 +2361,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 432,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.006604790687561,
                     1.3497393131256104,
                     -4.4590120315551758,
@@ -2370,7 +2370,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 433,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.88976526260375977,
                     1.4367829561233521,
                     -4.4491987228393555,
@@ -2379,7 +2379,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 434,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.91985636949539185,
                     1.4904510974884033,
                     -4.4493427276611328,
@@ -2388,7 +2388,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 435,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.90431493520736694,
                     1.3696334362030029,
                     -4.4521822929382324,
@@ -2397,7 +2397,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 438,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.92378181219100952,
                     1.773115873336792,
                     -4.596977710723877,
@@ -2406,7 +2406,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 442,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.46635821461677551,
                     1.5559917688369751,
                     -4.3837180137634277,
@@ -2415,7 +2415,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 444,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.648497462272644,
                     5.5201296806335449,
                     -4.8153777122497559,
@@ -2424,7 +2424,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 448,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.68690657615661621,
                     1.4652159214019775,
                     -4.5073137283325195,
@@ -2433,7 +2433,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 453,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.6119721531867981,
                     1.3973186016082764,
                     -4.5083913803100586,
@@ -2442,7 +2442,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 457,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.4917830228805542,
                     1.6479983329772949,
                     -4.3618812561035156,
@@ -2451,7 +2451,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 459,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -3.676915168762207,
                     5.8194212913513184,
                     -4.9192814826965332,
@@ -2460,7 +2460,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 462,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.28884771466255188,
                     1.7811139822006226,
                     -4.350677490234375,
@@ -2469,7 +2469,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 463,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -2.114717960357666,
                     6.2829527854919434,
                     -3.6944053173065186,
@@ -2478,7 +2478,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 464,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -1.503008246421814,
                     5.9440150260925293,
                     -3.9748990535736084,
@@ -2487,7 +2487,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 466,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -1.2242000102996826,
                     5.0646777153015137,
                     -4.4196286201477051,
@@ -2496,7 +2496,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 467,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -2.6360104084014893,
                     5.5292601585388184,
                     -3.7913987636566162,
@@ -2509,7 +2509,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 468,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -2.3617959022521973,
                     5.714818000793457,
                     -3.6982462406158447,
@@ -2518,7 +2518,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 471,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.60809856653213501,
                     4.5123519897460938,
                     -4.6267695426940918,
@@ -2527,7 +2527,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 472,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.65644615888595581,
                     4.2252583503723145,
                     -4.9167819023132324,
@@ -2536,7 +2536,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 476,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.26600044965744019,
                     4.1159939765930176,
                     -4.584139347076416,
@@ -2545,7 +2545,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 479,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.49829119443893433,
                     4.2207942008972168,
                     -4.2136163711547852,
@@ -2554,7 +2554,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 482,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -1.0141656398773193,
                     7.4357223510742188,
                     -3.8902983665466309,
@@ -2563,7 +2563,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 483,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.61477792263031006,
                     7.5726399421691895,
                     -3.9607760906219482,
@@ -2572,7 +2572,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 484,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.63199156522750854,
                     5.0107665061950684,
                     -4.8533515930175781,
@@ -2581,7 +2581,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 486,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.55930858850479126,
                     1.4407444000244141,
                     -4.4281659126281738,
@@ -2590,7 +2590,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 490,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.5013965368270874,
                     1.3643753528594971,
                     -4.4792280197143555,
@@ -2599,7 +2599,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 491,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.50139302015304565,
                     1.5336296558380127,
                     -4.4042043685913086,
@@ -2608,7 +2608,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 495,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.48285868763923645,
                     1.4603010416030884,
                     -4.4050960540771484,
@@ -2617,7 +2617,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 496,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.75944292545318604,
                     1.7240245342254639,
                     -4.5665230751037598,
@@ -2626,7 +2626,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 504,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.74447840452194214,
                     1.9259976148605347,
                     -4.5761394500732422,
@@ -2635,7 +2635,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 506,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.81153392791748047,
                     1.9318548440933228,
                     -4.6562924385070801,
@@ -2644,7 +2644,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 507,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.037948418408632278,
                     3.2832705974578857,
                     -5.0742893218994141,
@@ -2653,7 +2653,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 508,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.61771231889724731,
                     2.0708942413330078,
                     -4.5936775207519531,
@@ -2662,7 +2662,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 513,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.0026179552078247,
                     1.7031351327896118,
                     -4.3448295593261719,
@@ -2671,7 +2671,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 523,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.2777067422866821,
                     5.4657092094421387,
                     -4.0778098106384277,
@@ -2680,7 +2680,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 536,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     9.7912912368774414,
                     14.678839683532715,
                     -4.421781063079834,
@@ -2689,7 +2689,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 538,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     7.6198811531066895,
                     15.225091934204102,
                     -3.3056702613830566,
@@ -2698,7 +2698,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 540,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     3.115039587020874,
                     6.6136927604675293,
                     -4.6733746528625488,
@@ -2707,7 +2707,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 545,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.99611371755599976,
                     1.3370134830474854,
                     -4.453432559967041,
@@ -2716,7 +2716,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 546,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.89054912328720093,
                     1.4406147003173828,
                     -4.4501886367797852,
@@ -2725,7 +2725,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 548,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.90548300743103027,
                     1.3711199760437012,
                     -4.4530029296875,
@@ -2734,7 +2734,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 549,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.94753772020339966,
                     1.379935622215271,
                     -4.4766130447387695,
@@ -2743,7 +2743,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 550,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.1438320875167847,
                     1.8890292644500732,
                     -4.4533071517944336,
@@ -2752,7 +2752,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 551,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.1465930938720703,
                     1.8795785903930664,
                     -4.4544568061828613,
@@ -2761,7 +2761,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 560,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.3757853507995605,
                     2.0085301399230957,
                     -4.8134636878967285,
@@ -2770,7 +2770,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 564,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.3735743761062622,
                     1.7162460088729858,
                     -4.4782290458679199,
@@ -2779,7 +2779,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 566,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.4173901081085205,
                     1.6908363103866577,
                     -4.4717926979064941,
@@ -2788,7 +2788,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 569,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.2983441352844238,
                     1.7720887660980225,
                     -4.4601478576660156,
@@ -2797,7 +2797,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 571,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.2922697067260742,
                     1.60447096824646,
                     -4.4875893592834473,
@@ -2806,7 +2806,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 577,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.432669997215271,
                     1.5115770101547241,
                     -4.3755936622619629,
@@ -2815,7 +2815,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 591,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.62193477153778076,
                     1.4552304744720459,
                     -4.4777970314025879,
@@ -2824,7 +2824,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 595,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.49493032693862915,
                     1.4057990312576294,
                     -4.4019989967346191,
@@ -2833,7 +2833,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 597,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.52984786033630371,
                     1.5300819873809814,
                     -4.4317779541015625,
@@ -2842,7 +2842,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 599,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.5567583441734314,
                     1.5130293369293213,
                     -4.4371438026428223,
@@ -2851,7 +2851,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 608,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -1.7615950107574463,
                     5.2553415298461914,
                     -5.0251321792602539,
@@ -2860,7 +2860,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 610,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.4571300745010376,
                     1.6536129713058472,
                     -4.3472943305969238,
@@ -2869,7 +2869,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 611,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.51270419359207153,
                     4.36651611328125,
                     -5.0706982612609863,
@@ -2878,7 +2878,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 613,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -2.96533203125,
                     5.6777987480163574,
                     -5.6769561767578125,
@@ -2887,7 +2887,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 615,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -1.9917302131652832,
                     6.0637903213500977,
                     -3.7093081474304199,
@@ -2896,7 +2896,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 616,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -1.7946993112564087,
                     5.6378836631774902,
                     -4.5087146759033203,
@@ -2905,7 +2905,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 617,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -1.0794404745101929,
                     5.0819249153137207,
                     -4.4531950950622559,
@@ -2914,7 +2914,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 622,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.46813803911209106,
                     4.1412291526794434,
                     -4.5934228897094727,
@@ -2923,7 +2923,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 623,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.68441951274871826,
                     3.7459478378295898,
                     -4.8090944290161133,
@@ -2932,7 +2932,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 624,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.48303219676017761,
                     4.1842598915100098,
                     -4.9908938407897949,
@@ -2941,7 +2941,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 625,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.67611807584762573,
                     3.6669707298278809,
                     -5.0830798149108887,
@@ -2950,7 +2950,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 626,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.39458033442497253,
                     4.3778996467590332,
                     -4.7377805709838867,
@@ -2959,7 +2959,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 628,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.40456041693687439,
                     4.2616205215454102,
                     -5.0631132125854492,
@@ -2968,7 +2968,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 633,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.86847251653671265,
                     6.9208741188049316,
                     -3.9202816486358643,
@@ -2977,7 +2977,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 634,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.870719313621521,
                     7.4619121551513672,
                     -4.1670031547546387,
@@ -2986,7 +2986,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 635,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.91353249549865723,
                     6.9175868034362793,
                     -4.1566343307495117,
@@ -2995,7 +2995,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 636,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.2906954288482666,
                     4.0057516098022461,
                     -4.5313105583190918,
@@ -3004,7 +3004,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 637,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.55339246988296509,
                     1.3987935781478882,
                     -4.444941520690918,
@@ -3013,7 +3013,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 641,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.78693592548370361,
                     1.67628014087677,
                     -4.5747981071472168,
@@ -3022,7 +3022,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 643,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.80539840459823608,
                     1.3137357234954834,
                     -4.452728271484375,
@@ -3031,7 +3031,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 645,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.72051316499710083,
                     1.5084733963012695,
                     -4.5568680763244629,
@@ -3040,7 +3040,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 647,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.72904056310653687,
                     1.969462513923645,
                     -4.570467472076416,
@@ -3049,7 +3049,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 649,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.74929803609848022,
                     1.7935053110122681,
                     -4.6306319236755371,
@@ -3058,7 +3058,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 651,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.10504781454801559,
                     3.4470224380493164,
                     -5.1557860374450684,
@@ -3067,7 +3067,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 652,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.60006064176559448,
                     2.1741774082183838,
                     -4.6346650123596191,
@@ -3076,7 +3076,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 658,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.3114418983459473,
                     2.3928656578063965,
                     -4.4870963096618652,
@@ -3085,7 +3085,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 664,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     2.9850161075592041,
                     7.6267600059509277,
                     -4.6355247497558594,
@@ -3094,7 +3094,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 668,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     9.991856575012207,
                     14.990682601928711,
                     -6.2039241790771484,
@@ -3103,7 +3103,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 677,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     12.818780899047852,
                     16.857442855834961,
                     -4.0002856254577637,
@@ -3112,7 +3112,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 683,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.99087440967559814,
                     1.4511668682098389,
                     -4.4602394104003906,
@@ -3121,7 +3121,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 684,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.1478869915008545,
                     1.6961886882781982,
                     -4.5782175064086914,
@@ -3130,7 +3130,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 685,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.99745583534240723,
                     1.3393293619155884,
                     -4.4547882080078125,
@@ -3139,7 +3139,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 686,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.96957045793533325,
                     1.3477445840835571,
                     -4.4727210998535156,
@@ -3148,7 +3148,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 687,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.89019495248794556,
                     1.4335945844650269,
                     -4.4458298683166504,
@@ -3157,7 +3157,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 689,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.90550601482391357,
                     1.371013879776001,
                     -4.4514102935791016,
@@ -3166,7 +3166,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 691,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.1435796022415161,
                     1.857507586479187,
                     -4.441615104675293,
@@ -3175,7 +3175,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 692,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.1797835826873779,
                     1.6958011388778687,
                     -4.4825692176818848,
@@ -3184,7 +3184,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 693,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.001325249671936,
                     1.6196128129959106,
                     -4.4494161605834961,
@@ -3193,7 +3193,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 695,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.98299026489257812,
                     1.6898328065872192,
                     -4.4565162658691406,
@@ -3202,7 +3202,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 707,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.4112250804901123,
                     1.6863726377487183,
                     -4.4681086540222168,
@@ -3211,7 +3211,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 708,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.532915472984314,
                     1.6251336336135864,
                     -4.4889326095581055,
@@ -3220,7 +3220,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 709,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.26160728931427,
                     1.8080182075500488,
                     -4.4605879783630371,
@@ -3229,7 +3229,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 710,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.3096706867218018,
                     1.7893285751342773,
                     -4.4688606262207031,
@@ -3238,7 +3238,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 711,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.2010917663574219,
                     1.6649572849273682,
                     -4.4796657562255859,
@@ -3247,7 +3247,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 712,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.3831303119659424,
                     1.7305622100830078,
                     -4.4899921417236328,
@@ -3256,7 +3256,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 718,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.68237251043319702,
                     1.4695630073547363,
                     -4.5288639068603516,
@@ -3265,7 +3265,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 723,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.44820514321327209,
                     1.5236284732818604,
                     -4.3673715591430664,
@@ -3274,7 +3274,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 724,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.45630791783332825,
                     1.5687228441238403,
                     -4.3903627395629883,
@@ -3283,7 +3283,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 731,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.55374181270599365,
                     1.4414215087890625,
                     -4.4297323226928711,
@@ -3292,7 +3292,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 733,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.35895028710365295,
                     1.5165132284164429,
                     -4.4292416572570801,
@@ -3301,7 +3301,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 734,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.45490080118179321,
                     1.4510980844497681,
                     -4.4053139686584473,
@@ -3310,7 +3310,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 735,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.40457826852798462,
                     1.4417111873626709,
                     -4.4345970153808594,
@@ -3319,7 +3319,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 737,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.49225500226020813,
                     1.3513181209564209,
                     -4.4624176025390625,
@@ -3328,7 +3328,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 738,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.52773982286453247,
                     1.3615226745605469,
                     -4.4874281883239746,
@@ -3337,7 +3337,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 742,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.52083933353424072,
                     1.3402931690216064,
                     -4.4479231834411621,
@@ -3346,7 +3346,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 746,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.1199660301208496,
                     5.0345597267150879,
                     -4.1696987152099609,
@@ -3355,7 +3355,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 748,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.1351145505905151,
                     5.0306105613708496,
                     -4.5455965995788574,
@@ -3364,7 +3364,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 757,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.59592372179031372,
                     1.4662201404571533,
                     -4.4621720314025879,
@@ -3373,7 +3373,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 759,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.61495965719223022,
                     1.4225459098815918,
                     -4.4841079711914062,
@@ -3382,7 +3382,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 760,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.58812105655670166,
                     1.4446274042129517,
                     -4.4621801376342773,
@@ -3391,7 +3391,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 761,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.4363833665847778,
                     5.2094006538391113,
                     -4.8279142379760742,
@@ -3400,7 +3400,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 762,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.7402443885803223,
                     5.9680213928222656,
                     -4.8986678123474121,
@@ -3409,7 +3409,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 769,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.57256472110748291,
                     1.3838802576065063,
                     -4.4945473670959473,
@@ -3418,7 +3418,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 779,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.60728919506072998,
                     1.4841055870056152,
                     -4.4511489868164062,
@@ -3427,7 +3427,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 783,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.65024596452713013,
                     1.475877046585083,
                     -4.5131211280822754,
@@ -3436,7 +3436,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 784,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.6859092116355896,
                     1.4715021848678589,
                     -4.510709285736084,
@@ -3445,7 +3445,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 785,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -1.3652635812759399,
                     6.240851879119873,
                     -3.8432939052581787,
@@ -3454,7 +3454,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 786,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -1.4183154106140137,
                     6.9561247825622559,
                     -3.7703011035919189,
@@ -3463,7 +3463,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 787,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -1.7496134042739868,
                     6.0840249061584473,
                     -3.8233931064605713,
@@ -3472,7 +3472,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 791,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.79194939136505127,
                     4.6530299186706543,
                     -5.101839542388916,
@@ -3481,7 +3481,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 793,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -1.7484291791915894,
                     5.2624006271362305,
                     -5.0375986099243164,
@@ -3490,7 +3490,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 796,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.63768905401229858,
                     1.4161053895950317,
                     -4.111903190612793,
@@ -3499,7 +3499,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 798,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -2.5184004306793213,
                     5.3182668685913086,
                     -3.719473123550415,
@@ -3508,7 +3508,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 799,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -2.3803422451019287,
                     5.7274589538574219,
                     -3.6920058727264404,
@@ -3517,7 +3517,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 800,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -2.4643573760986328,
                     5.259979248046875,
                     -4.0202469825744629,
@@ -3526,7 +3526,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 801,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.28519496321678162,
                     3.9852204322814941,
                     -4.5790400505065918,
@@ -3535,7 +3535,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 804,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.61288630962371826,
                     3.84588623046875,
                     -5.0839266777038574,
@@ -3544,7 +3544,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 806,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.026521917432546616,
                     4.3976612091064453,
                     -4.6303896903991699,
@@ -3553,7 +3553,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 808,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.063977770507335663,
                     4.2177300453186035,
                     -5.0490875244140625,
@@ -3562,7 +3562,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 809,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.022174039855599403,
                     8.6118631362915039,
                     -3.591871976852417,
@@ -3571,7 +3571,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 812,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.92602163553237915,
                     6.9419465065002441,
                     -3.7500565052032471,
@@ -3580,7 +3580,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 813,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.67070609331130981,
                     7.166353702545166,
                     -3.9257731437683105,
@@ -3589,7 +3589,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 814,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -1.360001802444458,
                     6.8111014366149902,
                     -4.2070460319519043,
@@ -3598,7 +3598,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 817,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.79993969202041626,
                     1.6924530267715454,
                     -4.5971064567565918,
@@ -3607,7 +3607,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 818,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.85463613271713257,
                     1.42950439453125,
                     -4.4491338729858398,
@@ -3616,7 +3616,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 823,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.75974583625793457,
                     1.7264213562011719,
                     -4.5685667991638184,
@@ -3625,7 +3625,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 826,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.59460306167602539,
                     2.136824369430542,
                     -4.6183481216430664,
@@ -3634,7 +3634,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 828,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     2.0273232460021973,
                     6.3199295997619629,
                     -4.8251681327819824,
@@ -3643,7 +3643,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 835,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     5.2352852821350098,
                     14.563922882080078,
                     -3.5550031661987305,
@@ -3652,7 +3652,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 838,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.7989473342895508,
                     6.0103778839111328,
                     -4.1668167114257812,
@@ -3661,7 +3661,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 851,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     5.9966316223144531,
                     12.969595909118652,
                     -2.6917226314544678,
@@ -3670,7 +3670,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 852,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     7.7359652519226074,
                     13.470765113830566,
                     -3.5194432735443115,
@@ -3679,7 +3679,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 853,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     3.7598042488098145,
                     7.3864398002624512,
                     -4.6293082237243652,
@@ -3688,7 +3688,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 857,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.99619889259338379,
                     1.3373959064483643,
                     -4.4535908699035645,
@@ -3697,7 +3697,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 858,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.96796220541000366,
                     1.4800724983215332,
                     -4.4466452598571777,
@@ -3706,7 +3706,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 859,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.90721374750137329,
                     1.3766857385635376,
                     -4.4558320045471191,
@@ -3715,7 +3715,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 860,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.94743525981903076,
                     1.380412220954895,
                     -4.4767847061157227,
@@ -3724,7 +3724,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 863,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.98771107196807861,
                     1.5356408357620239,
                     -4.4485816955566406,
@@ -3733,7 +3733,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 865,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.95384997129440308,
                     3.429999828338623,
                     -5.0977339744567871,
@@ -3742,7 +3742,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 866,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.98407864570617676,
                     1.6945120096206665,
                     -4.4572558403015137,
@@ -3751,7 +3751,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 867,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.90291130542755127,
                     1.5115984678268433,
                     -4.4030885696411133,
@@ -3760,7 +3760,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 872,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.0889253616333008,
                     1.4784245491027832,
                     -4.454897403717041,
@@ -3769,7 +3769,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 874,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.1052500009536743,
                     1.3678423166275024,
                     -4.4574027061462402,
@@ -3778,7 +3778,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 877,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     2.3487064838409424,
                     2.5099198818206787,
                     -4.7552614212036133,
@@ -3787,7 +3787,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 878,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.4020265340805054,
                     1.6747874021530151,
                     -4.462740421295166,
@@ -3796,7 +3796,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 883,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.2919336557388306,
                     1.6070891618728638,
                     -4.4884514808654785,
@@ -3805,7 +3805,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 886,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.42588990926742554,
                     1.5497047901153564,
                     -4.3846950531005859,
@@ -3814,7 +3814,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 893,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.41063365340232849,
                     1.505195140838623,
                     -4.4419798851013184,
@@ -3823,7 +3823,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 897,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.66491621732711792,
                     1.4830865859985352,
                     -4.4851717948913574,
@@ -3832,7 +3832,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 902,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.52045285701751709,
                     1.339206337928772,
                     -4.4467983245849609,
@@ -3841,7 +3841,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 905,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.53137511014938354,
                     1.3592416048049927,
                     -4.4864711761474609,
@@ -3850,7 +3850,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 906,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.51723849773406982,
                     1.345971941947937,
                     -4.4938135147094727,
@@ -3859,7 +3859,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 915,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.58450448513031006,
                     1.5013610124588013,
                     -4.3949322700500488,
@@ -3868,7 +3868,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 928,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.5647510290145874,
                     1.3828500509262085,
                     -4.4878115653991699,
@@ -3877,7 +3877,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 934,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.62456154823303223,
                     1.4691267013549805,
                     -4.4491252899169922,
@@ -3886,7 +3886,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 940,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.53790050745010376,
                     1.4710601568222046,
                     -4.457341194152832,
@@ -3895,7 +3895,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 942,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.53730183839797974,
                     1.3923699855804443,
                     -4.4374837875366211,
@@ -3904,7 +3904,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 949,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.4697822630405426,
                     1.5133782625198364,
                     -4.4098086357116699,
@@ -3913,7 +3913,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 950,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.51807183027267456,
                     1.4066497087478638,
                     -4.4203281402587891,
@@ -3922,7 +3922,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 952,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -1.737601637840271,
                     6.1971535682678223,
                     -3.5657496452331543,
@@ -3931,7 +3931,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 953,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -1.249487042427063,
                     6.352386474609375,
                     -3.8146941661834717,
@@ -3940,7 +3940,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 954,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -1.5476477146148682,
                     6.0228147506713867,
                     -3.986621618270874,
@@ -3949,7 +3949,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 955,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -1.496224045753479,
                     6.6165471076965332,
                     -3.8709473609924316,
@@ -3958,7 +3958,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 956,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.0879948139190674,
                     5.1216754913330078,
                     -4.2439031600952148,
@@ -3967,7 +3967,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 957,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.2727899551391602,
                     5.4418087005615234,
                     -4.1975522041320801,
@@ -3976,7 +3976,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 963,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.63970494270324707,
                     1.4482452869415283,
                     -4.4901242256164551,
@@ -3985,7 +3985,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 965,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.7183098793029785,
                     5.8044009208679199,
                     -4.8683938980102539,
@@ -3994,7 +3994,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 977,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.75439250469207764,
                     4.7228145599365234,
                     -4.2134780883789062,
@@ -4003,7 +4003,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 979,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.83976238965988159,
                     4.7352514266967773,
                     -4.4920954704284668,
@@ -4012,7 +4012,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 989,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.37077042460441589,
                     1.4950482845306396,
                     -4.3781261444091797,
@@ -4021,7 +4021,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 990,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.43079289793968201,
                     1.5132358074188232,
                     -4.3734045028686523,
@@ -4030,7 +4030,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 994,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     2.6921751499176025,
                     5.9115715026855469,
                     -4.6598834991455078,
@@ -4039,7 +4039,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 996,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.3007360696792603,
                     10.049713134765625,
                     -3.4826014041900635,
@@ -4048,7 +4048,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 1006,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.96421003341674805,
                     1.5660934448242188,
                     -4.4606771469116211,
@@ -4330,7 +4330,7 @@ mod imutests {
         // Current frame setup
         let mut frame =
             Frame::new_no_features(1, None, 1.0, None).expect("Could not create frame!");
-        frame.imu_data.velocity = Some(DVVector3::new_with(
+        frame.imu_data.velocity = Some(BHVector3::new_with(
             0.015814872458577156,
             -0.037813838571310043,
             -0.34750723838806152,
@@ -4717,7 +4717,7 @@ mod imutests {
                 -0.36978340148925781,
             ),
         );
-        let prev_kf_velocity = DVVector3::new_with(
+        let prev_kf_velocity = BHVector3::new_with(
             0.0086180632933974266,
             -0.0059173018671572208,
             -0.62755674123764038,
@@ -4731,7 +4731,7 @@ mod imutests {
             baz: 0.01062155794352293,
         };
 
-        let prev_kf_imu_pos = DVVector3::new_with(
+        let prev_kf_imu_pos = BHVector3::new_with(
             -0.055552847683429718,
             0.020967910066246986,
             0.33425852656364441,
@@ -4751,13 +4751,13 @@ mod imutests {
         // Mappoint setup
         struct MapPointDummy {
             id: Id,
-            position: DVVector3<f64>,
+            position: BHVector3<f64>,
             kp: (f32, f32, f32),
         }
         let mappoints: Vec<MapPointDummy> = vec![
             MapPointDummy {
                 id: 0,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.09767952561378479,
                     0.68526345491409302,
                     -0.065448686480522156,
@@ -4766,7 +4766,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 1,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.4038008451461792,
                     0.56497257947921753,
                     -0.11451762914657593,
@@ -4775,7 +4775,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 2,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.067786462604999542,
                     0.32883754372596741,
                     -0.068166285753250122,
@@ -4784,7 +4784,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 7,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.29777368903160095,
                     0.6280788779258728,
                     -0.096555285155773163,
@@ -4793,7 +4793,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 8,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.26207083463668823,
                     0.81697696447372437,
                     -0.058389648795127869,
@@ -4802,7 +4802,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 9,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.22817100584506989,
                     0.55733007192611694,
                     -0.065083019435405731,
@@ -4811,7 +4811,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 11,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.086722828447818756,
                     0.25675448775291443,
                     -0.079594507813453674,
@@ -4820,7 +4820,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 12,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.34352821111679077,
                     0.51201790571212769,
                     -0.056062519550323486,
@@ -4829,7 +4829,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 17,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.47601443529129028,
                     0.54816138744354248,
                     0.00016228177992161363,
@@ -4838,7 +4838,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 19,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.24082081019878387,
                     1.184069037437439,
                     -0.23283396661281586,
@@ -4847,7 +4847,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 21,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.2663249671459198,
                     0.50113624334335327,
                     -0.11755894869565964,
@@ -4856,7 +4856,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 32,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.37164157629013062,
                     0.38664788007736206,
                     -0.12826775014400482,
@@ -4865,7 +4865,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 36,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.50584369897842407,
                     3.7454102039337158,
                     -0.54141432046890259,
@@ -4874,7 +4874,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 42,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -1.7168319225311279,
                     4.3635568618774414,
                     0.25844550132751465,
@@ -4883,7 +4883,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 45,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.39892333745956421,
                     0.74027007818222046,
                     -0.080379962921142578,
@@ -4892,7 +4892,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 50,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.0060924594290554523,
                     1.9714736938476562,
                     -0.68921613693237305,
@@ -4901,7 +4901,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 51,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.16796356439590454,
                     1.5767900943756104,
                     -0.45089119672775269,
@@ -4910,7 +4910,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 52,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.07459559291601181,
                     0.71495413780212402,
                     -0.10840129852294922,
@@ -4919,7 +4919,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 53,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.094419874250888824,
                     3.2208876609802246,
                     -0.62805676460266113,
@@ -4928,7 +4928,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 54,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.062020357698202133,
                     0.67152047157287598,
                     -0.13302314281463623,
@@ -4937,7 +4937,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 57,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.70137697458267212,
                     3.2624838352203369,
                     -0.6965983510017395,
@@ -4946,7 +4946,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 58,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.26760518550872803,
                     2.9839916229248047,
                     -0.14639896154403687,
@@ -4955,7 +4955,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 59,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.64888811111450195,
                     4.0358209609985352,
                     -0.22543513774871826,
@@ -4964,7 +4964,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 61,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.066520348191261292,
                     0.32574498653411865,
                     -0.066838674247264862,
@@ -4973,7 +4973,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 64,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.12487941235303879,
                     0.27467361092567444,
                     -0.098788149654865265,
@@ -4982,7 +4982,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 65,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.027447639033198357,
                     0.3629976212978363,
                     -0.061377812176942825,
@@ -4991,7 +4991,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 67,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.07631915807723999,
                     0.39414680004119873,
                     -0.059730444103479385,
@@ -5000,7 +5000,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 68,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.033368021249771118,
                     0.3363376259803772,
                     -0.080603644251823425,
@@ -5009,7 +5009,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 69,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     7.2825899124145508,
                     9.7301759719848633,
                     -1.5492205619812012,
@@ -5018,7 +5018,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 72,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.28364089131355286,
                     0.84350627660751343,
                     -0.067553095519542694,
@@ -5027,7 +5027,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 73,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.22917063534259796,
                     0.46375212073326111,
                     -0.12230536341667175,
@@ -5036,7 +5036,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 74,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.24664771556854248,
                     0.46448376774787903,
                     -0.1275629848241806,
@@ -5045,7 +5045,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 75,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.074826240539550781,
                     0.40551277995109558,
                     -0.047919876873493195,
@@ -5054,7 +5054,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 76,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.40869003534317017,
                     0.71478462219238281,
                     0.04865323007106781,
@@ -5063,7 +5063,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 77,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -1.5538575649261475,
                     4.2717933654785156,
                     -0.066557988524436951,
@@ -5072,7 +5072,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 78,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.40007275342941284,
                     0.39803192019462585,
                     -0.084767095744609833,
@@ -5081,7 +5081,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 81,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.30444195866584778,
                     0.33579385280609131,
                     -0.094203464686870575,
@@ -5090,7 +5090,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 83,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.26633858680725098,
                     0.49771150946617126,
                     -0.071210779249668121,
@@ -5099,7 +5099,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 85,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.29107052087783813,
                     0.4731745719909668,
                     -0.075444884598255157,
@@ -5108,7 +5108,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 88,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.20811104774475098,
                     0.49569010734558105,
                     -0.049476370215415955,
@@ -5117,7 +5117,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 89,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.23035044968128204,
                     0.72119009494781494,
                     -0.05819818377494812,
@@ -5126,7 +5126,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 90,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.4120769202709198,
                     0.46271470189094543,
                     -0.034562069922685623,
@@ -5135,7 +5135,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 91,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.37224367260932922,
                     0.49449014663696289,
                     -0.045414872467517853,
@@ -5144,7 +5144,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 92,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.42376580834388733,
                     0.55167496204376221,
                     -3.022023236098903e-07,
@@ -5153,7 +5153,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 95,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     2.5783944129943848,
                     5.2924184799194336,
                     -0.34924641251564026,
@@ -5162,7 +5162,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 97,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.38909661769866943,
                     1.348950982093811,
                     -0.050750471651554108,
@@ -5171,7 +5171,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 99,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.20987868309021,
                     4.2910947799682617,
                     -0.074731424450874329,
@@ -5180,7 +5180,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 100,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.31530803442001343,
                     2.9845476150512695,
                     -0.39242377877235413,
@@ -5189,7 +5189,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 102,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.091112472116947174,
                     3.1259288787841797,
                     -0.20938047766685486,
@@ -5198,7 +5198,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 104,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.085971139371395111,
                     2.7171261310577393,
                     -0.28212150931358337,
@@ -5207,7 +5207,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 105,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.0167826414108276,
                     6.2915740013122559,
                     -1.1082470417022705,
@@ -5216,7 +5216,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 108,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.26800021529197693,
                     0.55165040493011475,
                     -0.032298360019922256,
@@ -5225,7 +5225,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 110,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.9006267786026001,
                     6.1557459831237793,
                     0.17994530498981476,
@@ -5234,7 +5234,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 111,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.86806720495223999,
                     3.9769737720489502,
                     -0.44983872771263123,
@@ -5243,7 +5243,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 112,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.54228287935256958,
                     8.720458984375,
                     -1.1628580093383789,
@@ -5252,7 +5252,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 113,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.53197157382965088,
                     0.68647325038909912,
                     0.017737176269292831,
@@ -5261,7 +5261,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 114,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.65446501970291138,
                     0.96958088874816895,
                     -0.0036444664001464844,
@@ -5270,7 +5270,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 115,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.50745874643325806,
                     0.54781299829483032,
                     -0.026630241423845291,
@@ -5279,7 +5279,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 116,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.37343153357505798,
                     0.58280760049819946,
                     -0.054110009223222733,
@@ -5288,7 +5288,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 119,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.85715645551681519,
                     1.2079998254776001,
                     -0.2215007096529007,
@@ -5297,7 +5297,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 120,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.1555267572402954,
                     1.8354345560073853,
                     -0.21623027324676514,
@@ -5306,7 +5306,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 123,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.12740868330001831,
                     0.89658266305923462,
                     -0.14263640344142914,
@@ -5315,7 +5315,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 126,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.071780562400817871,
                     0.63924014568328857,
                     -0.051108416169881821,
@@ -5324,7 +5324,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 127,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.13779938220977783,
                     0.29209521412849426,
                     -0.051746528595685959,
@@ -5333,7 +5333,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 131,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.54617691040039062,
                     0.63021659851074219,
                     -0.09903012216091156,
@@ -5342,7 +5342,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 132,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.45571008324623108,
                     0.64222627878189087,
                     -0.064787842333316803,
@@ -5351,7 +5351,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 134,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.39155468344688416,
                     0.54814422130584717,
                     -0.10377404093742371,
@@ -5360,7 +5360,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 135,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.46014824509620667,
                     0.56738805770874023,
                     -0.15937043726444244,
@@ -5369,7 +5369,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 142,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.0031865776982158422,
                     0.47882813215255737,
                     -0.058721262961626053,
@@ -5378,7 +5378,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 143,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.27309146523475647,
                     0.90276986360549927,
                     -0.084262236952781677,
@@ -5387,7 +5387,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 144,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.18748728930950165,
                     0.26258134841918945,
                     -0.060119029134511948,
@@ -5396,7 +5396,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 145,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.10603948682546616,
                     0.6982073187828064,
                     -0.19527128338813782,
@@ -5405,7 +5405,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 147,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.39778125286102295,
                     0.36808609962463379,
                     -0.08372575044631958,
@@ -5414,7 +5414,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 155,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.33664619922637939,
                     0.49898630380630493,
                     -0.057518083602190018,
@@ -5423,7 +5423,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 156,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.29479879140853882,
                     0.47743883728981018,
                     -0.081619881093502045,
@@ -5432,7 +5432,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 160,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.0473929643630981,
                     4.214564323425293,
                     -0.09285399317741394,
@@ -5441,7 +5441,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 164,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -1.0462080240249634,
                     3.7138607501983643,
                     -0.7453758716583252,
@@ -5450,7 +5450,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 165,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.34546542167663574,
                     0.57593256235122681,
                     -0.01586584746837616,
@@ -5459,7 +5459,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 166,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.25956729054450989,
                     0.59926003217697144,
                     -0.068868532776832581,
@@ -5468,7 +5468,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 167,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.66518956422805786,
                     0.76266962289810181,
                     -0.039636489003896713,
@@ -5477,7 +5477,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 168,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.33594772219657898,
                     0.48315805196762085,
                     -0.070543132722377777,
@@ -5486,7 +5486,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 169,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.38061133027076721,
                     0.39847490191459656,
                     -0.048014253377914429,
@@ -5495,7 +5495,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 170,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.34463503956794739,
                     0.41644629836082458,
                     -0.094544567167758942,
@@ -5504,7 +5504,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 173,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.24674589931964874,
                     0.85099852085113525,
                     -0.12168589234352112,
@@ -5513,7 +5513,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 174,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.22061018645763397,
                     0.59974724054336548,
                     -0.082881450653076172,
@@ -5522,7 +5522,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 175,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.50661206245422363,
                     0.67797553539276123,
                     0.033554680645465851,
@@ -5531,7 +5531,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 177,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.39492663741111755,
                     0.47119221091270447,
                     0.089126139879226685,
@@ -5540,7 +5540,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 178,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.3710385262966156,
                     0.55496072769165039,
                     -0.030816525220870972,
@@ -5549,7 +5549,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 182,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.38251423835754395,
                     0.5400664210319519,
                     -0.099921718239784241,
@@ -5558,7 +5558,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 186,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.69906020164489746,
                     1.6244493722915649,
                     -0.16334651410579681,
@@ -5567,7 +5567,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 190,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.028201239183545113,
                     0.70262825489044189,
                     -0.15805158019065857,
@@ -5576,7 +5576,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 194,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.51883834600448608,
                     0.95140957832336426,
                     -0.19988258183002472,
@@ -5585,7 +5585,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 197,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.22385147213935852,
                     0.46284574270248413,
                     -0.10201071202754974,
@@ -5594,7 +5594,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 198,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.2770974338054657,
                     0.54161906242370605,
                     -0.093520551919937134,
@@ -5603,7 +5603,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 199,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.31117585301399231,
                     0.37354999780654907,
                     -0.11231212317943573,
@@ -5612,7 +5612,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 203,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.12109152227640152,
                     0.97429555654525757,
                     -0.18850430846214294,
@@ -5621,7 +5621,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 206,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.41142505407333374,
                     0.72595548629760742,
                     0.047717321664094925,
@@ -5630,7 +5630,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 211,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.39093458652496338,
                     0.79980593919754028,
                     -0.22934754192829132,
@@ -5639,7 +5639,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 212,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.20189119875431061,
                     0.4916364848613739,
                     -0.083514802157878876,
@@ -5648,7 +5648,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 213,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.072509065270423889,
                     0.33041498064994812,
                     -0.069993287324905396,
@@ -5657,7 +5657,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 219,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.28311964869499207,
                     3.0101089477539062,
                     -0.15444199740886688,
@@ -5666,7 +5666,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 220,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.23453593254089355,
                     1.1722941398620605,
                     -0.23285625874996185,
@@ -5675,7 +5675,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 221,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.38246166706085205,
                     3.3904228210449219,
                     -0.34733512997627258,
@@ -5684,7 +5684,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 222,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.34264639019966125,
                     0.79562336206436157,
                     -0.32256025075912476,
@@ -5693,7 +5693,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 224,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.1335567831993103,
                     0.30362293124198914,
                     -0.053043343126773834,
@@ -5702,7 +5702,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 225,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.31245070695877075,
                     0.48336899280548096,
                     -0.063849858939647675,
@@ -5711,7 +5711,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 227,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.31545689702033997,
                     0.44203248620033264,
                     -0.10204136371612549,
@@ -5720,7 +5720,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 237,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.50413012504577637,
                     0.67520654201507568,
                     0.034117240458726883,
@@ -5729,7 +5729,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 239,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.48536869883537292,
                     0.57996976375579834,
                     0.013573884032666683,
@@ -5738,7 +5738,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 240,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.39065366983413696,
                     0.56946384906768799,
                     -0.022860074415802956,
@@ -5747,7 +5747,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 241,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.4380437433719635,
                     0.47664549946784973,
                     -0.020232988521456718,
@@ -5756,7 +5756,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 242,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.37119853496551514,
                     0.49294418096542358,
                     -0.045497868210077286,
@@ -5765,7 +5765,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 243,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.40291538834571838,
                     0.39939954876899719,
                     -0.086024940013885498,
@@ -5774,7 +5774,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 244,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.35245051980018616,
                     0.39213839173316956,
                     -0.077956065535545349,
@@ -5783,7 +5783,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 246,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.0432218313217163,
                     4.2420573234558105,
                     -0.081208951771259308,
@@ -5792,7 +5792,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 247,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.058480244129896164,
                     1.108494758605957,
                     -0.098161779344081879,
@@ -5801,7 +5801,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 248,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.73318511247634888,
                     4.2188277244567871,
                     -0.15794140100479126,
@@ -5810,7 +5810,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 250,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.19804780185222626,
                     0.53262728452682495,
                     -0.11244148015975952,
@@ -5819,7 +5819,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 251,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.23080876469612122,
                     0.48971128463745117,
                     -0.11775704473257065,
@@ -5828,7 +5828,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 255,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.099545352160930634,
                     3.0799849033355713,
                     -0.20244438946247101,
@@ -5837,7 +5837,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 257,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.094032198190689087,
                     3.1470427513122559,
                     -0.58787810802459717,
@@ -5846,7 +5846,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 259,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.13787932693958282,
                     0.92596155405044556,
                     -0.16435942053794861,
@@ -5855,7 +5855,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 260,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.2378619909286499,
                     2.1856551170349121,
                     -0.60663747787475586,
@@ -5864,7 +5864,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 263,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.16689908504486084,
                     0.53730463981628418,
                     -0.046177536249160767,
@@ -5873,7 +5873,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 265,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.51287221908569336,
                     0.70043694972991943,
                     -0.10737498104572296,
@@ -5882,7 +5882,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 267,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.38977324962615967,
                     0.54837560653686523,
                     -0.10306584089994431,
@@ -5891,7 +5891,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 270,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     2.4421172142028809,
                     5.4536967277526855,
                     -0.19373273849487305,
@@ -5900,7 +5900,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 275,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.28474605083465576,
                     0.64799332618713379,
                     -0.093931823968887329,
@@ -5909,7 +5909,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 277,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.12427280843257904,
                     0.67737412452697754,
                     -0.14742103219032288,
@@ -5918,7 +5918,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 278,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.084312185645103455,
                     1.0372927188873291,
                     -0.39289954304695129,
@@ -5927,7 +5927,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 279,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.12515118718147278,
                     0.34965407848358154,
                     -0.050498820841312408,
@@ -5936,7 +5936,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 284,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.16503360867500305,
                     0.44137006998062134,
                     -0.060400024056434631,
@@ -5945,7 +5945,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 286,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.076292216777801514,
                     0.33201292157173157,
                     -0.070508219301700592,
@@ -5954,7 +5954,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 288,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -1.7357350587844849,
                     4.361548900604248,
                     0.23859909176826477,
@@ -5963,7 +5963,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 290,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.42118778824806213,
                     0.74844533205032349,
                     0.044059593230485916,
@@ -5972,7 +5972,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 291,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -1.6604446172714233,
                     4.1982517242431641,
                     -0.7001338005065918,
@@ -5981,7 +5981,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 295,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.70954972505569458,
                     4.5194883346557617,
                     -0.42072942852973938,
@@ -5990,7 +5990,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 296,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     3.5309643745422363,
                     5.9476532936096191,
                     -0.2467796802520752,
@@ -5999,7 +5999,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 300,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.32059153914451599,
                     0.46347931027412415,
                     0.14008040726184845,
@@ -6008,7 +6008,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 303,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.41662943363189697,
                     0.52178245782852173,
                     -0.10699537396430969,
@@ -6017,7 +6017,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 304,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.17863863706588745,
                     0.34525784850120544,
                     -0.072979457676410675,
@@ -6026,7 +6026,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 308,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.035031966865062714,
                     0.42638584971427917,
                     -0.055462617427110672,
@@ -6035,7 +6035,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 309,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.10133855044841766,
                     0.60168105363845825,
                     -0.060577835887670517,
@@ -6044,7 +6044,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 311,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.027580209076404572,
                     0.36187684535980225,
                     -0.060998093336820602,
@@ -6053,7 +6053,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 312,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.2723628282546997,
                     4.2120065689086914,
                     -0.4915081262588501,
@@ -6062,7 +6062,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 313,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.28215083479881287,
                     0.84054744243621826,
                     -0.066491879522800446,
@@ -6071,7 +6071,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 314,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.089736469089984894,
                     0.67098033428192139,
                     -0.064904287457466125,
@@ -6080,7 +6080,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 316,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -2.7541966438293457,
                     4.4927477836608887,
                     0.3727777898311615,
@@ -6089,7 +6089,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 317,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -2.6522002220153809,
                     4.8107724189758301,
                     0.32253053784370422,
@@ -6098,7 +6098,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 319,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.13106891512870789,
                     0.29085195064544678,
                     -0.072415322065353394,
@@ -6107,7 +6107,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 320,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.13258969783782959,
                     0.23205141723155975,
                     -0.097754940390586853,
@@ -6116,7 +6116,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 322,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.070059716701507568,
                     0.28149008750915527,
                     -0.071458719670772552,
@@ -6125,7 +6125,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 323,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.11651747673749924,
                     0.26701286435127258,
                     -0.094866529107093811,
@@ -6134,7 +6134,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 330,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.32414019107818604,
                     0.51050049066543579,
                     -0.075131304562091827,
@@ -6143,7 +6143,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 331,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.29479938745498657,
                     0.47965425252914429,
                     -0.083765439689159393,
@@ -6152,7 +6152,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 333,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.41272300481796265,
                     0.38855069875717163,
                     -0.096874892711639404,
@@ -6161,7 +6161,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 336,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.49293673038482666,
                     0.65310102701187134,
                     0.037208262830972672,
@@ -6170,7 +6170,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 338,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.47820091247558594,
                     0.56816130876541138,
                     0.016358030959963799,
@@ -6179,7 +6179,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 345,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.33681809902191162,
                     0.499198317527771,
                     -0.062005501240491867,
@@ -6188,7 +6188,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 346,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.72356802225112915,
                     4.3239917755126953,
                     -0.084612138569355011,
@@ -6197,7 +6197,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 347,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.1112744808197021,
                     4.4972529411315918,
                     -0.10365054756402969,
@@ -6206,7 +6206,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 352,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.12146053463220596,
                     0.9648699164390564,
                     -0.1725388765335083,
@@ -6215,7 +6215,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 354,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.23103184998035431,
                     3.4778940677642822,
                     0.19543623924255371,
@@ -6224,7 +6224,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 355,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.32769128680229187,
                     3.7542541027069092,
                     -0.11412043124437332,
@@ -6233,7 +6233,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 358,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.21310749650001526,
                     1.0253756046295166,
                     -0.16351217031478882,
@@ -6242,7 +6242,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 362,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.501733660697937,
                     4.904700756072998,
                     -0.13124927878379822,
@@ -6251,7 +6251,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 363,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     2.5965032577514648,
                     6.2067732810974121,
                     -0.40486899018287659,
@@ -6260,7 +6260,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 369,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.51083827018737793,
                     0.60407006740570068,
                     -0.078322023153305054,
@@ -6269,7 +6269,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 370,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.12590759992599487,
                     0.68917977809906006,
                     -0.15412166714668274,
@@ -6278,7 +6278,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 371,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.048985887318849564,
                     0.95938879251480103,
                     -0.276815265417099,
@@ -6287,7 +6287,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 379,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -1.9335016012191772,
                     4.8593487739562988,
                     0.25942814350128174,
@@ -6296,7 +6296,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 381,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.41472572088241577,
                     0.70759624242782593,
                     -0.071250647306442261,
@@ -6305,7 +6305,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 382,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.90927690267562866,
                     1.2283457517623901,
                     -0.24252964556217194,
@@ -6314,7 +6314,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 384,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.3014298677444458,
                     0.61889177560806274,
                     -0.093223787844181061,
@@ -6323,7 +6323,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 387,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     9.7278337478637695,
                     13.606895446777344,
                     -1.733525276184082,
@@ -6332,7 +6332,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 388,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.32311874628067017,
                     0.79594200849533081,
                     -0.30822348594665527,
@@ -6341,7 +6341,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 389,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.059975605458021164,
                     0.31847730278968811,
                     -0.063983932137489319,
@@ -6350,7 +6350,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 393,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -1.0944266319274902,
                     4.2418842315673828,
                     -0.46676698327064514,
@@ -6359,7 +6359,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 394,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.29985854029655457,
                     3.1729981899261475,
                     -0.18052996695041656,
@@ -6368,7 +6368,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 395,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     11.073477745056152,
                     13.112693786621094,
                     -0.065808586776256561,
@@ -6377,7 +6377,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 405,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.31130531430244446,
                     1.2428466081619263,
                     -0.11437743157148361,
@@ -6386,7 +6386,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 406,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -2.6673946380615234,
                     4.7416801452636719,
                     0.62243455648422241,
@@ -6399,7 +6399,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 410,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.17602790892124176,
                     0.34016242623329163,
                     -0.07025492936372757,
@@ -6408,7 +6408,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 414,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.025356702506542206,
                     0.36442914605140686,
                     -0.062618106603622437,
@@ -6417,7 +6417,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 416,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.016795994713902473,
                     0.36757749319076538,
                     -0.086405433714389801,
@@ -6426,7 +6426,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 417,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.034679342061281204,
                     0.33467000722885132,
                     -0.082820780575275421,
@@ -6435,7 +6435,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 418,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.060084961354732513,
                     0.28635385632514954,
                     -0.084116160869598389,
@@ -6444,7 +6444,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 419,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.083054617047309875,
                     0.27140852808952332,
                     -0.091491334140300751,
@@ -6453,7 +6453,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 421,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.074395567178726196,
                     0.28529325127601624,
                     -0.074805043637752533,
@@ -6462,7 +6462,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 424,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.13356438279151917,
                     0.31268054246902466,
                     -0.05852123349905014,
@@ -6471,7 +6471,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 426,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.012175034731626511,
                     0.26019161939620972,
                     -0.067820124328136444,
@@ -6480,7 +6480,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 429,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.18569090962409973,
                     0.25567895174026489,
                     -0.054789058864116669,
@@ -6489,7 +6489,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 432,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.38462579250335693,
                     0.36685597896575928,
                     -0.11658293008804321,
@@ -6498,7 +6498,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 434,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.26728576421737671,
                     0.50552517175674438,
                     -0.1268763542175293,
@@ -6507,7 +6507,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 435,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.23179551959037781,
                     0.49607124924659729,
                     -0.12174087762832642,
@@ -6516,7 +6516,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 447,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.40499123930931091,
                     0.57758361101150513,
                     -0.010238507762551308,
@@ -6525,7 +6525,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 448,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.46043220162391663,
                     0.58927524089813232,
                     -0.0010510010179132223,
@@ -6534,7 +6534,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 450,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.45026910305023193,
                     0.45063111186027527,
                     -0.032525189220905304,
@@ -6543,7 +6543,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 451,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.40690362453460693,
                     0.45253339409828186,
                     -0.030926216393709183,
@@ -6552,7 +6552,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 452,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.46379026770591736,
                     0.46281954646110535,
                     -0.024103922769427299,
@@ -6561,7 +6561,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 456,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.38413932919502258,
                     0.55698651075363159,
                     -0.017770912498235703,
@@ -6570,7 +6570,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 458,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.4616062343120575,
                     0.57818299531936646,
                     0.020899150520563126,
@@ -6579,7 +6579,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 460,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -2.197807788848877,
                     5.5122971534729004,
                     0.83339226245880127,
@@ -6588,7 +6588,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 461,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -1.8498494625091553,
                     5.3372478485107422,
                     0.42866992950439453,
@@ -6597,7 +6597,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 463,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -1.6546125411987305,
                     4.3033151626586914,
                     -0.021349115297198296,
@@ -6606,7 +6606,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 464,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -2.8011734485626221,
                     4.5700602531433105,
                     0.66712671518325806,
@@ -6619,7 +6619,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 465,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -2.7000789642333984,
                     5.1090006828308105,
                     0.70668309926986694,
@@ -6632,7 +6632,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 466,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.088664345443248749,
                     3.2178325653076172,
                     -0.60446900129318237,
@@ -6641,7 +6641,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 468,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.12346437573432922,
                     0.97312247753143311,
                     -0.17467567324638367,
@@ -6650,7 +6650,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 470,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.22346620261669159,
                     0.60011839866638184,
                     -0.078081175684928894,
@@ -6659,7 +6659,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 472,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.22684042155742645,
                     1.1181513071060181,
                     -0.20869866013526917,
@@ -6668,7 +6668,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 474,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.058141287416219711,
                     3.2671859264373779,
                     0.17714245617389679,
@@ -6677,7 +6677,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 475,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.34465649724006653,
                     3.7657735347747803,
                     -0.10836279392242432,
@@ -6686,7 +6686,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 476,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.29449149966239929,
                     3.0299408435821533,
                     -0.17941693961620331,
@@ -6695,7 +6695,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 478,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -1.2540479898452759,
                     5.9062833786010742,
                     0.4871114194393158,
@@ -6704,7 +6704,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 479,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.94000667333602905,
                     6.3029799461364746,
                     0.23052254319190979,
@@ -6713,7 +6713,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 480,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.65736138820648193,
                     2.7158610820770264,
                     -0.23209385573863983,
@@ -6722,7 +6722,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 481,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.65107405185699463,
                     4.043846607208252,
                     -0.36584460735321045,
@@ -6731,7 +6731,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 488,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.40552565455436707,
                     0.40015700459480286,
                     -0.083135619759559631,
@@ -6740,7 +6740,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 491,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.13261866569519043,
                     0.2245737612247467,
                     -0.065221332013607025,
@@ -6749,7 +6749,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 494,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.18561474978923798,
                     0.26353415846824646,
                     -0.060235396027565002,
@@ -6758,7 +6758,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 503,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.27875760197639465,
                     0.88871276378631592,
                     -0.082420788705348969,
@@ -6767,7 +6767,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 504,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.11653009802103043,
                     0.74594610929489136,
                     -0.085669383406639099,
@@ -6776,7 +6776,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 505,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.25418362021446228,
                     0.7202683687210083,
                     -0.060747966170310974,
@@ -6785,7 +6785,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 506,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.60809844732284546,
                     3.9723939895629883,
                     -0.62439697980880737,
@@ -6794,7 +6794,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 513,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.82889962196350098,
                     4.1612615585327148,
                     0.20333153009414673,
@@ -6803,7 +6803,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 518,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.38788554072380066,
                     0.54427129030227661,
                     -0.098266005516052246,
@@ -6812,7 +6812,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 524,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     11.410810470581055,
                     13.425519943237305,
                     -0.088713519275188446,
@@ -6821,7 +6821,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 526,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     12.443612098693848,
                     14.718995094299316,
                     -2.1736505031585693,
@@ -6830,7 +6830,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 537,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.061370335519313812,
                     0.23464463651180267,
                     -0.08168473094701767,
@@ -6839,7 +6839,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 538,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.051217380911111832,
                     0.40606209635734558,
                     -0.056483518332242966,
@@ -6848,7 +6848,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 544,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.077640227973461151,
                     0.38405135273933411,
                     -0.055586721748113632,
@@ -6857,7 +6857,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 545,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.071485251188278198,
                     0.51676851511001587,
                     -0.097356751561164856,
@@ -6866,7 +6866,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 548,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.13382327556610107,
                     0.23033745586872101,
                     -0.096380390226840973,
@@ -6875,7 +6875,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 551,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.11560551077127457,
                     0.26457792520523071,
                     -0.09358060359954834,
@@ -6884,7 +6884,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 552,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.026856454089283943,
                     0.20111539959907532,
                     -0.07420947402715683,
@@ -6893,7 +6893,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 555,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.48378247022628784,
                     0.65803641080856323,
                     -0.08137086033821106,
@@ -6902,7 +6902,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 557,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.21897806227207184,
                     0.2855798602104187,
                     -0.07367599755525589,
@@ -6911,7 +6911,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 558,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.16860994696617126,
                     0.44401061534881592,
                     -0.063440904021263123,
@@ -6920,7 +6920,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 560,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.061574641615152359,
                     0.32059940695762634,
                     -0.06515057384967804,
@@ -6929,7 +6929,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 562,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.37930983304977417,
                     0.38041692972183228,
                     -0.10894101858139038,
@@ -6938,7 +6938,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 567,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.23206906020641327,
                     0.49425625801086426,
                     -0.12159489840269089,
@@ -6947,7 +6947,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 569,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.23511102795600891,
                     0.49085405468940735,
                     -0.1369616836309433,
@@ -6956,7 +6956,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 570,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.38128679990768433,
                     0.40336763858795166,
                     -0.061070658266544342,
@@ -6965,7 +6965,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 572,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.39243495464324951,
                     0.38852357864379883,
                     -0.08594997227191925,
@@ -6974,7 +6974,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 573,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.35829064249992371,
                     0.41033759713172913,
                     -0.089022196829319,
@@ -6983,7 +6983,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 574,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.30714690685272217,
                     0.51648914813995361,
                     -0.060311753302812576,
@@ -6992,7 +6992,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 579,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.26927846670150757,
                     0.45913222432136536,
                     -0.10674227774143219,
@@ -7001,7 +7001,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 582,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.4435545802116394,
                     0.38404381275177002,
                     -0.090698979794979095,
@@ -7010,7 +7010,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 588,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.33773252367973328,
                     0.36976355314254761,
                     -0.11172425001859665,
@@ -7019,7 +7019,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 590,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.53435647487640381,
                     0.58040714263916016,
                     0.016929734498262405,
@@ -7028,7 +7028,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 591,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.47566419839859009,
                     0.52483212947845459,
                     -0.016394278034567833,
@@ -7037,7 +7037,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 593,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.46328809857368469,
                     0.59253042936325073,
                     -0.0010652686469256878,
@@ -7046,7 +7046,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 595,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.47285604476928711,
                     0.53281241655349731,
                     -0.013912308029830456,
@@ -7055,7 +7055,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 600,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.38246741890907288,
                     0.52832847833633423,
                     -0.084426648914813995,
@@ -7064,7 +7064,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 602,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.46465009450912476,
                     0.5951959490776062,
                     -0.0039896015077829361,
@@ -7073,7 +7073,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 604,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.44157606363296509,
                     0.56328481435775757,
                     -0.020067039877176285,
@@ -7082,7 +7082,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 607,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.47553563117980957,
                     0.59825515747070312,
                     0.0095082847401499748,
@@ -7091,7 +7091,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 608,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -2.333132266998291,
                     5.5442938804626465,
                     0.53864175081253052,
@@ -7100,7 +7100,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 610,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -1.9019052982330322,
                     4.4069662094116211,
                     -0.048228185623884201,
@@ -7109,7 +7109,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 611,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -1.5811553001403809,
                     4.5177850723266602,
                     -0.067563071846961975,
@@ -7118,7 +7118,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 612,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -3.2091495990753174,
                     5.2736001014709473,
                     0.64545524120330811,
@@ -7131,7 +7131,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 614,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.076993770897388458,
                     3.2607369422912598,
                     -0.61301738023757935,
@@ -7140,7 +7140,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 615,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.062406901270151138,
                     2.7365660667419434,
                     -0.41342595219612122,
@@ -7149,7 +7149,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 616,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.11326088011264801,
                     0.86515486240386963,
                     -0.1463734358549118,
@@ -7158,7 +7158,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 617,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.028152041137218475,
                     1.2948588132858276,
                     -0.26959538459777832,
@@ -7167,7 +7167,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 619,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.22378890216350555,
                     1.1529378890991211,
                     -0.23532001674175262,
@@ -7176,7 +7176,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 622,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.26229605078697205,
                     3.6899566650390625,
                     0.17823381721973419,
@@ -7185,7 +7185,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 624,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -1.0247323513031006,
                     5.8771047592163086,
                     0.46874043345451355,
@@ -7194,7 +7194,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 627,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.54554116725921631,
                     3.4327793121337891,
                     -0.22426193952560425,
@@ -7203,7 +7203,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 635,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.13201956450939178,
                     0.22605636715888977,
                     -0.067359879612922668,
@@ -7212,7 +7212,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 639,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.1977134644985199,
                     0.26181456446647644,
                     -0.068625621497631073,
@@ -7221,7 +7221,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 640,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.18289494514465332,
                     0.25639674067497253,
                     -0.054489139467477798,
@@ -7230,7 +7230,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 641,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.10438228398561478,
                     0.6904258131980896,
                     -0.19290019571781158,
@@ -7239,7 +7239,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 646,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.2191721498966217,
                     0.50598663091659546,
                     -0.11655132472515106,
@@ -7248,7 +7248,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 647,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.25503528118133545,
                     1.1389225721359253,
                     -0.18149611353874207,
@@ -7257,7 +7257,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 648,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.27877804636955261,
                     0.82842189073562622,
                     -0.060010191053152084,
@@ -7266,7 +7266,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 649,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.076900236308574677,
                     0.51216632127761841,
                     -0.053663317114114761,
@@ -7275,7 +7275,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 653,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     2.8751015663146973,
                     6.3391242027282715,
                     -0.25891402363777161,
@@ -7284,7 +7284,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 654,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.4066609144210815,
                     4.8206620216369629,
                     -0.082184731960296631,
@@ -7293,7 +7293,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 659,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.3696440458297729,
                     4.6958680152893066,
                     -0.49224615097045898,
@@ -7302,7 +7302,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 666,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.30513313412666321,
                     0.61706924438476562,
                     -0.090771757066249847,
@@ -7311,7 +7311,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 672,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.94310647249221802,
                     1.7197796106338501,
                     0.24447377026081085,
@@ -7320,7 +7320,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 676,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.013514417223632336,
                     0.26229804754257202,
                     -0.068794913589954376,
@@ -7329,7 +7329,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 677,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.036474630236625671,
                     0.20943430066108704,
                     -0.070536814630031586,
@@ -7338,7 +7338,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 680,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.081744112074375153,
                     0.27273905277252197,
                     -0.090656206011772156,
@@ -7347,7 +7347,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 684,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.019779136404395103,
                     0.37005910277366638,
                     -0.088588327169418335,
@@ -7356,7 +7356,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 685,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.032182317227125168,
                     0.32747566699981689,
                     -0.080171428620815277,
@@ -7365,7 +7365,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 689,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.025780698284506798,
                     0.36315998435020447,
                     -0.060943443328142166,
@@ -7374,7 +7374,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 693,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.076905623078346252,
                     0.28760313987731934,
                     -0.075670845806598663,
@@ -7383,7 +7383,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 703,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.059405885636806488,
                     0.31787216663360596,
                     -0.063099123537540436,
@@ -7392,7 +7392,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 704,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.16875897347927094,
                     0.33106344938278198,
                     -0.066261626780033112,
@@ -7401,7 +7401,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 705,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.35352909564971924,
                     0.55021846294403076,
                     -0.044970884919166565,
@@ -7410,7 +7410,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 707,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.32041269540786743,
                     0.49661552906036377,
                     -0.069014124572277069,
@@ -7419,7 +7419,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 708,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.30102011561393738,
                     0.49747565388679504,
                     -0.089782536029815674,
@@ -7428,7 +7428,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 712,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.36988028883934021,
                     0.35710930824279785,
                     -0.12662062048912048,
@@ -7437,7 +7437,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 718,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.232611283659935,
                     0.49952229857444763,
                     -0.1218438446521759,
@@ -7446,7 +7446,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 724,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.31730720400810242,
                     0.42267534136772156,
                     -0.11556046456098557,
@@ -7455,7 +7455,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 733,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.5185045599937439,
                     0.52400606870651245,
                     -0.02747633308172226,
@@ -7464,7 +7464,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 738,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.28075599670410156,
                     0.4764869213104248,
                     -0.1000339686870575,
@@ -7473,7 +7473,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 741,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.36782628297805786,
                     0.4852336049079895,
                     -0.039928875863552094,
@@ -7482,7 +7482,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 742,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.33199965953826904,
                     0.5375981330871582,
                     -0.057214025408029556,
@@ -7491,7 +7491,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 743,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.35848268866539001,
                     0.48501279950141907,
                     -0.060191888362169266,
@@ -7500,7 +7500,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 744,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.33295497298240662,
                     0.47968894243240356,
                     -0.071353733539581299,
@@ -7509,7 +7509,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 747,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.25933077931404114,
                     0.49173548817634583,
                     -0.067982956767082214,
@@ -7518,7 +7518,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 749,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.46156448125839233,
                     0.56049197912216187,
                     -0.016057001426815987,
@@ -7527,7 +7527,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 750,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.40914905071258545,
                     0.58177119493484497,
                     -0.014006533659994602,
@@ -7536,7 +7536,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 751,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.40713745355606079,
                     0.45085775852203369,
                     -0.028395712375640869,
@@ -7545,7 +7545,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 754,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.40028533339500427,
                     0.6990811824798584,
                     0.030376391485333443,
@@ -7554,7 +7554,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 758,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.41393488645553589,
                     0.3845774233341217,
                     -0.056209705770015717,
@@ -7563,7 +7563,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 766,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -3.4844298362731934,
                     5.4308772087097168,
                     -1.3641314506530762,
@@ -7572,7 +7572,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 767,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.54447758197784424,
                     0.57345712184906006,
                     -0.032215047627687454,
@@ -7581,7 +7581,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 768,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.47691735625267029,
                     0.53866595029830933,
                     -0.016525216400623322,
@@ -7590,7 +7590,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 777,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.29174166917800903,
                     3.0642764568328857,
                     -0.14083883166313171,
@@ -7599,7 +7599,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 778,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.087813742458820343,
                     3.3446626663208008,
                     -0.22955770790576935,
@@ -7608,7 +7608,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 784,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.24945814907550812,
                     0.56276386976242065,
                     -0.059044752269983292,
@@ -7617,7 +7617,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 786,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.34178996086120605,
                     0.57225906848907471,
                     -0.016796357929706573,
@@ -7626,7 +7626,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 787,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.387239009141922,
                     0.56659120321273804,
                     -0.01676463894546032,
@@ -7635,7 +7635,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 792,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -1.8952304124832153,
                     4.3562045097351074,
                     -0.049398358911275864,
@@ -7644,7 +7644,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 795,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -2.7607512474060059,
                     5.210486888885498,
                     0.72116231918334961,
@@ -7653,7 +7653,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 798,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.11260157078504562,
                     0.92210620641708374,
                     -0.1714513748884201,
@@ -7662,7 +7662,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 817,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.19420437514781952,
                     0.24820056557655334,
                     -0.059467818588018417,
@@ -7671,7 +7671,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 819,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.12520308792591095,
                     0.73856222629547119,
                     -0.18014995753765106,
@@ -7680,7 +7680,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 821,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.12906874716281891,
                     0.37433597445487976,
                     -0.05229688435792923,
@@ -7689,7 +7689,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 822,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.11532149463891983,
                     0.34027832746505737,
                     -0.057850133627653122,
@@ -7698,7 +7698,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 825,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.32493171095848083,
                     1.2727726697921753,
                     -0.11814093589782715,
@@ -7707,7 +7707,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 830,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.020242184400558472,
                     0.54146653413772583,
                     -0.052602078765630722,
@@ -7716,7 +7716,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 832,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     6.0424351692199707,
                     12.97939395904541,
                     0.82146799564361572,
@@ -7725,7 +7725,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 839,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.38676559925079346,
                     0.545707106590271,
                     -0.099015824496746063,
@@ -7734,7 +7734,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 843,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.3121199905872345,
                     0.62295866012573242,
                     -0.09314582496881485,
@@ -7743,7 +7743,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 845,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     14.228055000305176,
                     14.583491325378418,
                     0.34821668267250061,
@@ -7752,7 +7752,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 847,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     12.144655227661133,
                     14.285927772521973,
                     -2.1110966205596924,
@@ -7761,7 +7761,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 850,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     7.8478732109069824,
                     10.809782028198242,
                     0.80074161291122437,
@@ -7770,7 +7770,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 860,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.059043556451797485,
                     0.24024145305156708,
                     -0.086770579218864441,
@@ -7779,7 +7779,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 865,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.06963888555765152,
                     0.4240662157535553,
                     -0.056228060275316238,
@@ -7788,7 +7788,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 867,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.023713326081633568,
                     0.36799269914627075,
                     -0.064297422766685486,
@@ -7797,7 +7797,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 872,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.075241245329380035,
                     0.2845645546913147,
                     -0.072807103395462036,
@@ -7806,7 +7806,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 873,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     0.11374866217374802,
                     0.26325696706771851,
                     -0.093355908989906311,
@@ -7815,7 +7815,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 895,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.29797688126564026,
                     0.48513558506965637,
                     -0.08384791761636734,
@@ -7824,7 +7824,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 897,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.41662290692329407,
                     0.39169386029243469,
                     -0.10294274985790253,
@@ -7833,7 +7833,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 899,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.4103817343711853,
                     0.33657854795455933,
                     -0.12387827783823013,
@@ -7842,7 +7842,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 910,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.40034976601600647,
                     0.37773433327674866,
                     -0.072869285941123962,
@@ -7851,7 +7851,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 912,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.32193642854690552,
                     0.55528658628463745,
                     -0.040192332118749619,
@@ -7860,7 +7860,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 923,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.25156658887863159,
                     0.51070570945739746,
                     -0.09516964852809906,
@@ -7869,7 +7869,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 926,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.43087854981422424,
                     0.39041844010353088,
                     -0.070490598678588867,
@@ -7878,7 +7878,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 927,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.4008878767490387,
                     0.37478488683700562,
                     -0.10505271703004837,
@@ -7887,7 +7887,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 934,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.35979875922203064,
                     0.41489621996879578,
                     -0.092975065112113953,
@@ -7896,7 +7896,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 945,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.36229640245437622,
                     0.51541471481323242,
                     -0.063960127532482147,
@@ -7905,7 +7905,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 947,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.32479876279830933,
                     0.4628717303276062,
                     -0.064236477017402649,
@@ -7914,7 +7914,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 953,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.49425545334815979,
                     0.59129297733306885,
                     0.013617772608995438,
@@ -7923,7 +7923,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 955,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.48013612627983093,
                     0.52965313196182251,
                     -0.020648406818509102,
@@ -7932,7 +7932,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 972,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.458097904920578,
                     0.61126708984375,
                     0.041249413043260574,
@@ -7941,7 +7941,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 978,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.21806767582893372,
                     2.9585978984832764,
                     -0.57966023683547974,
@@ -7950,7 +7950,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 984,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -1.8684065341949463,
                     5.3700671195983887,
                     0.41415688395500183,
@@ -7959,7 +7959,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 985,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -1.6306051015853882,
                     5.5653219223022461,
                     0.51140564680099487,
@@ -7968,7 +7968,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 987,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -1.6750065088272095,
                     5.795598030090332,
                     0.31865048408508301,
@@ -7977,7 +7977,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 988,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     1.1077948808670044,
                     4.5009059906005859,
                     -0.092580005526542664,
@@ -7986,7 +7986,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 992,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -1.856269359588623,
                     8.9113407135009766,
                     0.55936264991760254,
@@ -7995,7 +7995,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 994,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -1.5755245685577393,
                     6.1234426498413086,
                     0.19267715513706207,
@@ -8004,7 +8004,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 995,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -1.185381293296814,
                     6.4104843139648438,
                     0.21894131600856781,
@@ -8013,7 +8013,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 996,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.00518778245896101,
                     2.6345219612121582,
                     -0.61826759576797485,
@@ -8022,7 +8022,7 @@ mod imutests {
             },
             MapPointDummy {
                 id: 1002,
-                position: DVVector3::new_with(
+                position: BHVector3::new_with(
                     -0.29866626858711243,
                     3.0306007862091064,
                     -0.18461544811725616,
@@ -8574,7 +8574,7 @@ mod imutests {
         let tyc = t * twc;
         let tcy = tyc.inverse();
         let new_pose = tcy;
-        let new_velocity = DVVector3::new(*t.get_rotation() * old_velocity * s);
+        let new_velocity = BHVector3::new(*t.get_rotation() * old_velocity * s);
 
         let expected_new_vel = Vector3::new(
             0.026834471151232719,
@@ -8621,16 +8621,16 @@ mod imutests {
         //         parent: Option<Id>,
         //         imu_data: ImuDataFrame,
         //         pose: Pose,
-        //         imu_position: Option<DVVector3<f64>>,
+        //         imu_position: Option<BHVector3<f64>>,
         //     }
         //     impl KeyFrameDummy {
-        //         pub fn get_imu_rotation(&self) -> DVMatrix3<f64> {
+        //         pub fn get_imu_rotation(&self) -> BHMatrix3<f64> {
         //             // Eigen::Matrix3f KeyFrame::GetImuRotation()
         //             // Note: in Orbslam this is: (mTwc * mImuCalib.mTcb).rotationMatrix();
         //             // and mTwc is inverse of the pose
         //             (self.pose.inverse() * ImuCalib::new().tcb).get_rotation()
         //         }
-        //         pub fn get_imu_position(&self) -> DVVector3<f64> {
+        //         pub fn get_imu_position(&self) -> BHVector3<f64> {
         //             // Eigen::Vector3f KeyFrame::GetImuPosition()
         //             self.imu_position.expect("IMU position not set")
         //         }
@@ -11213,7 +11213,7 @@ mod imutests {
                     kf.imu_position - kf.prev_kf_imu_position
                 );
 
-                (DVVector3::new(
+                (BHVector3::new(
                     (kf.imu_position - kf.prev_kf_imu_position) / kf.d_t,
                 ),)
             };
@@ -11230,7 +11230,7 @@ mod imutests {
 
         rwg = {
             let unit_quat = group_exp(&nalgebra::Vector3::new(vzg.x, vzg.y, vzg.z));
-            DVMatrix3::new(*unit_quat.to_rotation_matrix().matrix())
+            BHMatrix3::new(*unit_quat.to_rotation_matrix().matrix())
         };
 
         assert!(
@@ -12299,7 +12299,7 @@ mod imutests {
         let its = 200;
 
         let prior_g = 100;
-        let mut rwg = DVMatrix3::new(nalgebra::Matrix3::new(
+        let mut rwg = BHMatrix3::new(nalgebra::Matrix3::new(
             1.0,
             -0.00016157647769432515,
             9.8132491984870285e-05,
@@ -15876,10 +15876,10 @@ mod imutests {
         );
 
         let vb = estimate.vb;
-        let res_bg: DVVector3<f64> = estimate.bg.into();
-        let res_ba: DVVector3<f64> = estimate.ba.into();
+        let res_bg: BHVector3<f64> = estimate.bg.into();
+        let res_ba: BHVector3<f64> = estimate.ba.into();
         let res_scale = estimate.scale;
-        let res_rwg: DVMatrix3<f64> = estimate.rwg.into();
+        let res_rwg: BHMatrix3<f64> = estimate.rwg.into();
 
         let res_b = ImuBias {
             bax: vb[0],

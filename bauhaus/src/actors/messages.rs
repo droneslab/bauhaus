@@ -12,7 +12,7 @@ use crate::{
     ImuInitializationData,
 };
 use core::{
-    matrix::{DVMatrix, DVVectorOfKeyPoint},
+    matrix::{BHMatrix, BHVectorOfKeyPoint},
     system::{ActorMessage, Timestamp},
 };
 use gtsam::navigation::combined_imu_factor::PreintegratedCombinedMeasurements;
@@ -74,8 +74,8 @@ impl ActorMessage for TrackingStateMsg {
 
 // * TRACKING BACKEND **//
 pub struct FeatureMsg {
-    pub keypoints: DVVectorOfKeyPoint,
-    pub descriptors: DVMatrix,
+    pub keypoints: BHVectorOfKeyPoint,
+    pub descriptors: BHMatrix,
     pub image_width: u32,
     pub image_height: u32,
     pub imu_measurements: ImuMeasurements,
@@ -183,7 +183,7 @@ impl ActorMessage for LoopClosureGBAMsg {
 
 //* VISUALIZER */
 pub struct VisFeaturesMsg {
-    pub keypoints: DVVectorOfKeyPoint,
+    pub keypoints: BHVectorOfKeyPoint,
     pub image: Mat,
     pub timestamp: Timestamp,
 }

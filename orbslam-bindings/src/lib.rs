@@ -19,7 +19,7 @@ use cxx::{type_id, ExternType};
 //   Read an image using the opencv crate:
 //     let opencv_crate_img = imgcodecs::imread(&path, imgcodecs::IMREAD_GRAYSCALE)?;
 //   Wrap the image into a struct that can be passed to the orbslam C++ code:
-//     let dv_mat_img = DVMatrix::new(opencv_crate_img);
+//     let dv_mat_img = BHMatrix::new(opencv_crate_img);
 //     let ready_for_orbslam_img: dvos3binding::ffi::WrapBindCVMat = dv_mat_img.into();
 //   Call the orbslam C++ binding:
 //     dvos3binding::ffi::send_mat(ready_for_orbslam_img);
@@ -98,8 +98,8 @@ unsafe impl<'a> ExternType for BindCVVectorOfPoint2fRef<'a> {
 // Note: Don't use this (and/or RawCVPtr below) if you can avoid it.
 // It's safer to use BindCVKeyPoints and BindCVMat because then C++
 // is sure to do the cast correctly. This is only useful in the 
-// specific circumstance where you don't have ownership of a DVMatrix
-// or a DVVectorOfKeyPoint but you also can't clone the data.
+// specific circumstance where you don't have ownership of a BHMatrix
+// or a BHVectorOfKeyPoint but you also can't clone the data.
 #[derive(Debug, Clone)]
 pub struct BindCVRawPtr {
     pub raw_ptr: *const c_void

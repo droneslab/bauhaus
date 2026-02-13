@@ -1178,7 +1178,7 @@ namespace orb_slam3 {
         // Assign data from cpp to rust variables
         // cout << "keypoints" << endl;
         // for(int i =0;i < keypoints_1.size(); i++) {
-        //     keypoints.push_back(*reinterpret_cast<orb_slam3::DVKeyPoint* >(&keypoints_1[i]));
+        //     keypoints.push_back(*reinterpret_cast<orb_slam3::BHKeyPoint* >(&keypoints_1[i]));
         //     // cout << keypoints_1[i].pt << " " << keypoints_1[i].size << " " << keypoints_1[i].angle << " " << keypoints_1[i].response << " " << keypoints_1[i].octave << "// ";
         // }
         //    cout << endl;
