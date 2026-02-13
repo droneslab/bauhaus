@@ -3,6 +3,13 @@
 <img width="1700" height="1149" alt="bauhaus orbslam" src="https://github.com/user-attachments/assets/40ea4053-0bce-43cf-9e2b-fe8c310c97e6" />
 
 
+
+
+> _Whether it be the sweeping eagle in his flight, or the open apple-blossom, the toiling work-horse, the blithe swan, the branching oak, the winding stream at its base, the drifting clouds, over all the coursing sun, **form ever follows function**, and this is the law. Where function does not change, form does not change. The granite rocks, the ever-brooding hills, remain for ages; the lightning lives, comes into shape, and dies, in a twinkling._
+>
+> -- Louis Sullivan [↗](https://en.wikipedia.org/wiki/Form_follows_function)
+
+
 # 1. Installation
 ```bash
 # Install system dependencies 
