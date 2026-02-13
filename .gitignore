@@ -11,9 +11,9 @@
 **/Vocabulary/*
 
 **/.vscode/**
-darvis/results/*
+bauhaus/results/*
 foxglove/results/*
-darvis/autogen_*
+bauhaus/autogen_*
 *.pyc
 *.g2o
 *.log

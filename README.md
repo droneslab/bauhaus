@@ -146,7 +146,7 @@ RUSTFLAGS="-Z sanitizer=address" cargo run --target x86_64-unknown-linux-gnu [DA
 Run with valgrind and save output to `log.txt`:
 ```bash
 cargo build # Either debug or release build works
-valgrind target/debug/bindarvis  [~/datasets/euroc/MH_01_easy/ config_systems/gtsam_config.yaml config_datasets/EUROC.yaml euroc] > log.txt 2>&1 #Values in [] are typical inputs to bauhaus
+valgrind target/debug/binbauhaus  [~/datasets/euroc/MH_01_easy/ config_systems/gtsam_config.yaml config_datasets/EUROC.yaml euroc] > log.txt 2>&1 #Values in [] are typical inputs to bauhaus
 ```
 
 ### Check for deadlocks
@@ -296,8 +296,8 @@ All the steps below reference the module ``Visualizer`` as an example.
                 bauhausVis {
                     traj_img: Mat::new_rows_cols_with_default(376, 500, core::CV_8UC3, core::Scalar::all(0.0)).unwrap(),
                     cam_img: Mat::default(),
-                    traj_pos: DVVector3::zeros(),
-                    traj_rot: DVMatrix3::zeros(),
+                    traj_pos: BHVector3::zeros(),
+                    traj_rot: BHMatrix3::zeros(),
                     id: id
                 }
             }

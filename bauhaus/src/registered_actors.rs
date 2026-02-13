@@ -121,7 +121,7 @@ pub fn spawn_actor(actor_tag: String, system: System, map: Option<ReadWriteMap>)
             )
         }
         str if str == "visualizer".to_string() => {
-            crate::actors::visualizer::DarvisVisualizer::spawn(
+            crate::actors::visualizer::BauhausVisualizer::spawn(
                 system,
                 map.expect("Visualizer needs the map!"),
             )

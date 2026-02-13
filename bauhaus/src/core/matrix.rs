@@ -18,8 +18,8 @@ use std::ops::{Deref, DerefMut};
 /// We can fix this but honestly I don't think it's worth it.
 // TODO (timing) ... clones in matrix
 // Lot of clones in here, a large part of them are converting
-// from a darvis structure back into nalgebra. Does it make sense to clone in
-// this case? That feels correct because then I can hold both the darvis structure
+// from a bauhaus structure back into nalgebra. Does it make sense to clone in
+// this case? That feels correct because then I can hold both the bauhaus structure
 // and the nalgebra structure without pointing to the same underlying data,
 // but that might actually not be intuitive if we expect to use into() to convert
 // rather than make copies.

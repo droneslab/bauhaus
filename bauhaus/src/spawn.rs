@@ -46,7 +46,7 @@ pub fn launch_system(
         info!("Using module '{}' as {}", module_conf.tag, module_conf.name);
     }
 
-    // Create transmitters/receivers for darvis system actors
+    // Create transmitters/receivers for bauhaus system actors
     // Don't add receivers to the receivers vec because they need to be spawned separately.
     // User-defined actors still need the transmitters to these actors.
     let (shutdown_tx, shutdown_rx) = unbounded();
@@ -71,7 +71,7 @@ pub fn launch_system(
         );
     }
 
-    // * SPAWN DARVIS SYSTEM ACTORS *//
+    // * SPAWN BAUHAUS SYSTEM ACTORS *//
     // Ctrl+c shutdown actor
     let (shutdown_join, shutdown_flag) =
         spawn_shutdown_actor(&transmitters, shutdown_rx, &writeable_map);

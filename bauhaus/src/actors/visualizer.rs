@@ -135,7 +135,7 @@ pub const DEBUG_CHANNEL: &str = "/debug";
 pub const TRACKING_TRAJECTORY_CHANNEL: &str = "/trajectory_tracking";
 pub const RAW_IMU_DATA: &str = "/raw_imu";
 
-pub struct DarvisVisualizer {
+pub struct BauhausVisualizer {
     system: System,
     map: ReadWriteMap,
 
@@ -154,7 +154,7 @@ pub struct DarvisVisualizer {
     prev_poses: Vec<Pose>,
 }
 
-impl Actor for DarvisVisualizer {
+impl Actor for BauhausVisualizer {
     type MapRef = ReadWriteMap;
 
     #[tokio::main]
@@ -181,7 +181,7 @@ impl Actor for DarvisVisualizer {
         };
 
         // Create foxglove writer, also spawns server if streaming
-        // Code in here instead of inside DarvisVisualizer to avoid making new_actorstate async
+        // Code in here instead of inside BauhausVisualizer to avoid making new_actorstate async
         let channels = HashMap::from([
             (IMAGE_CHANNEL, "foxglove.RawImage"),
             (TRANSFORM_CHANNEL, "foxglove.FrameTransform"),
@@ -241,7 +241,7 @@ impl Actor for DarvisVisualizer {
             .await
             .expect("Could not write transform");
 
-        let mut actor = DarvisVisualizer {
+        let mut actor = BauhausVisualizer {
             system,
             map,
             image_draw_type,
@@ -266,7 +266,7 @@ impl Actor for DarvisVisualizer {
     }
 }
 
-impl DarvisVisualizer {
+impl BauhausVisualizer {
     async fn handle_message(
         &mut self,
         message: MessageBox,

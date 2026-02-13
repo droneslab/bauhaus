@@ -11,7 +11,7 @@ use std::pin::Pin;
 
 
 fn main() {
-    let_cxx_string!(filename = "/home/sofiya/darvis/vocabulary/ORBvoc.txt");
+    let_cxx_string!(filename = "/home/sofiya/bauhaus/vocabulary/ORBvoc.txt");
 
     let vocabulary = dvos3binding::ffi::load_vocabulary_from_text_file(&filename);
     dvos3binding::ffi::new_feat_vec();
